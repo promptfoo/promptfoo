@@ -7,11 +7,12 @@ import yaml from 'js-yaml';
 import cliState from '../cliState';
 import logger from '../logger';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud';
+import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
 
-import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
+import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
@@ -54,7 +55,8 @@ export async function loadApiProvider(
     const modulePath = path.isAbsolute(filePath)
       ? filePath
       : path.join(basePath || process.cwd(), filePath);
-    const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+    const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
+    const fileContent = maybeLoadConfigFromExternalFile(rawContent) as ProviderOptions;
     invariant(fileContent, `Provider config ${filePath} is undefined`);
 
     // If fileContent is an array, it contains multiple providers
@@ -156,7 +158,8 @@ async function loadProvidersFromFile(
     ? relativePath
     : path.join(basePath || process.cwd(), relativePath);
 
-  const fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as
+  const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
+  const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
     | ProviderOptions
     | ProviderOptions[];
   invariant(fileContent, `Provider config ${relativePath} is undefined`);

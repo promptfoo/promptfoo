@@ -1,5 +1,6 @@
 ---
 sidebar_label: Travis CI
+description: Set up automated LLM testing in Travis CI pipelines with promptfoo. Configure environment variables, artifacts storage, and continuous evaluation of AI prompts and outputs.
 ---
 
 # Travis CI Integration

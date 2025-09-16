@@ -1,10 +1,6 @@
-import React from 'react';
-
 import './CustomMetrics.css';
 
 import Box from '@mui/material/Box';
-
-const NUM_METRICS_TO_DISPLAY_ABOVE_FOLD = 10;
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
@@ -12,6 +8,15 @@ interface CustomMetricsProps {
   metricTotals?: Record<string, number>;
   onSearchTextChange?: (searchText: string) => void;
   onMetricFilter?: (metric: string | null) => void;
+  /**
+   * How many metrics to display before truncating and rendering a "Show more" button.
+   */
+  truncationCount?: number;
+  /**
+   * Callback for the "Show more" button. If provided, overwrites the default behavior of toggling
+   * the showAll state.
+   */
+  onShowMore?: () => void;
 }
 
 interface MetricValueProps {
@@ -21,7 +26,7 @@ interface MetricValueProps {
   metricTotals?: Record<string, number>;
 }
 
-const MetricValue: React.FC<MetricValueProps> = ({ metric, score, counts, metricTotals }) => {
+const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) => {
   if (metricTotals && metricTotals[metric]) {
     if (metricTotals[metric] === 0) {
       return <span data-testid={`metric-value-${metric}`}>0%</span>;
@@ -46,20 +51,21 @@ const MetricValue: React.FC<MetricValueProps> = ({ metric, score, counts, metric
   return <span data-testid={`metric-value-${metric}`}>{score?.toFixed(2) ?? '0'}</span>;
 };
 
-const CustomMetrics: React.FC<CustomMetricsProps> = ({
+const CustomMetrics = ({
   lookup,
   counts,
   metricTotals,
   onSearchTextChange,
   onMetricFilter,
-}) => {
-  const [showAll, setShowAll] = React.useState(false);
+  truncationCount = 10,
+  onShowMore,
+}: CustomMetricsProps) => {
   if (!lookup || !Object.keys(lookup).length) {
     return null;
   }
 
   const metrics = Object.entries(lookup);
-  const displayMetrics = showAll ? metrics : metrics.slice(0, NUM_METRICS_TO_DISPLAY_ABOVE_FOLD);
+  const displayMetrics = metrics.slice(0, truncationCount);
 
   const handleMetricClick = (metric: string) => {
     if (onMetricFilter) {
@@ -97,13 +103,13 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
             </div>
           ) : null,
         )}
-      {metrics.length > 10 && (
+      {metrics.length > truncationCount && (
         <div
           className="show-more-toggle clickable"
           data-testid="toggle-show-more"
-          onClick={() => setShowAll(!showAll)}
+          onClick={onShowMore}
         >
-          {showAll ? 'Show less' : 'Show more...'}
+          Show more...
         </div>
       )}
     </Box>

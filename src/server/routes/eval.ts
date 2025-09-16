@@ -8,7 +8,8 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { deleteEval, updateResult, writeResultsToDatabase } from '../../util/database';
+import { EvalResultsFilterMode } from '../../types/index';
+import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 import type { Request, Response } from 'express';
@@ -169,7 +170,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const { id } = req.params;
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
-  const filterMode = String(req.query.filterMode || 'all');
+  const filterMode = EvalResultsFilterMode.parse(req.query.filterMode) ?? 'all';
   const searchText = req.query.search ? String(req.query.search) : '';
   const filters = Array.isArray(req.query.filter)
     ? req.query.filter
@@ -298,6 +299,92 @@ evalRouter.post('/:id/results', async (req: Request, res: Response) => {
   res.status(204).send();
 });
 
+evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> => {
+  const { evaluationId, testIndex, prompt, variables } = req.body;
+
+  if (!evaluationId || !prompt) {
+    res.status(400).json({ error: 'Missing required parameters' });
+    return;
+  }
+
+  try {
+    // Load the evaluation to get the provider configuration
+    const eval_ = await Eval.findById(evaluationId);
+    if (!eval_) {
+      res.status(404).json({ error: 'Evaluation not found' });
+      return;
+    }
+
+    // Get the provider configuration from the eval
+    const providers = eval_.config.providers;
+    if (!providers) {
+      res.status(400).json({ error: 'No providers found in evaluation' });
+      return;
+    }
+
+    // Handle different provider config formats
+    let providerConfig: any;
+    if (Array.isArray(providers)) {
+      if (providers.length === 0) {
+        res.status(400).json({ error: 'No providers found in evaluation' });
+        return;
+      }
+      // Use the first provider or the one at the specified test index
+      providerConfig = providers[testIndex % providers.length];
+    } else if (typeof providers === 'string' || typeof providers === 'function') {
+      providerConfig = providers;
+    } else {
+      // providers might be a single provider object
+      providerConfig = providers;
+    }
+
+    // Run the prompt through the provider
+    const result = await promptfoo.evaluate(
+      {
+        prompts: [
+          {
+            raw: prompt,
+            label: 'Replay', // Add required label field
+          },
+        ],
+        providers: [providerConfig],
+        tests: [
+          {
+            vars: variables || {},
+          },
+        ],
+      },
+      {
+        maxConcurrency: 1,
+        showProgressBar: false,
+        eventSource: 'web',
+        cache: false, // Always disable cache for replays to get fresh results
+      },
+    );
+
+    const summary = await result.toEvaluateSummary();
+
+    // Better output extraction - handle different response structures
+    const firstResult = summary.results[0];
+    let output = firstResult?.response?.output;
+
+    // If still no output, try the raw response
+    if (!output && firstResult?.response?.raw) {
+      output = firstResult.response.raw;
+    }
+
+    // Return both output and any error information for debugging
+    res.json({
+      output: output || '',
+      error: firstResult?.response?.error,
+      response: firstResult?.response, // Include full response for debugging
+    });
+  } catch (error) {
+    logger.error(`Failed to replay evaluation: ${error}`);
+    res.status(500).json({ error: 'Failed to replay evaluation' });
+  }
+});
+
 evalRouter.post(
   '/:evalId/results/:id/rating',
   async (req: Request, res: Response): Promise<void> => {
@@ -410,5 +497,23 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
     res.json({ message: 'Eval deleted successfully' });
   } catch {
     res.status(500).json({ error: 'Failed to delete eval' });
+  }
+});
+
+/**
+ * Bulk delete evals.
+ */
+evalRouter.delete('/', (req: Request, res: Response) => {
+  const ids = req.body.ids;
+  if (!Array.isArray(ids)) {
+    res.status(400).json({ error: 'Ids must be an array' });
+    return;
+  }
+
+  try {
+    deleteEvals(ids);
+    res.status(204).send();
+  } catch {
+    res.status(500).json({ error: 'Failed to delete evals' });
   }
 });

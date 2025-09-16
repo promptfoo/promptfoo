@@ -1,5 +1,3 @@
-import React from 'react';
-
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import Accordion from '@mui/material/Accordion';
@@ -15,6 +13,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ProviderResponse from './ProviderResponse';
 
@@ -27,13 +26,27 @@ interface TestTargetConfigurationProps {
   testResult: any;
 }
 
-const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
+const TestTargetConfiguration = ({
   testingTarget,
   handleTestTarget,
   selectedTarget,
   testResult,
-}) => {
+}: TestTargetConfigurationProps) => {
   const theme = useTheme();
+
+  const getTestButtonTooltip = () => {
+    if (testingTarget) {
+      return 'Test is currently in progress';
+    }
+    if (!selectedTarget.config.url && !selectedTarget.config.request) {
+      return 'Please configure either URL or request settings above';
+    }
+    return '';
+  };
+
+  const isButtonDisabled =
+    testingTarget || (!selectedTarget.config.url && !selectedTarget.config.request);
+  const tooltipText = getTestButtonTooltip();
 
   return (
     <Box mt={4}>
@@ -41,15 +54,19 @@ const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           Test Target Configuration
         </Typography>
-        <Button
-          variant="contained"
-          onClick={handleTestTarget}
-          disabled={testingTarget || (!selectedTarget.config.url && !selectedTarget.config.request)}
-          startIcon={testingTarget ? <CircularProgress size={20} /> : null}
-          color="primary"
-        >
-          {testingTarget ? 'Testing...' : 'Test Target'}
-        </Button>
+        <Tooltip title={tooltipText} arrow placement="top">
+          <Box component="span">
+            <Button
+              variant="contained"
+              onClick={handleTestTarget}
+              disabled={isButtonDisabled}
+              startIcon={testingTarget ? <CircularProgress size={20} /> : null}
+              color="primary"
+            >
+              {testingTarget ? 'Testing...' : 'Test Target'}
+            </Button>
+          </Box>
+        </Tooltip>
       </Stack>
 
       {!selectedTarget.config.url && !selectedTarget.config.request && (

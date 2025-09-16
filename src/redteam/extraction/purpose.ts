@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { neverGenerateRemote } from '../remoteGeneration';
 import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
-import type { ApiProvider } from '../../types';
+import type { ApiProvider } from '../../types/index';
 import type { RedTeamTask } from './util';
 
 export const DEFAULT_PURPOSE = 'An AI system';

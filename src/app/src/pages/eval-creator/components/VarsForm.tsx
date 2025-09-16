@@ -11,7 +11,7 @@ interface VarsFormProps {
   initialValues?: Record<string, string>;
 }
 
-const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList, initialValues }) => {
+const VarsForm = ({ onAdd, varsList, initialValues }: VarsFormProps) => {
   const [vars, setVars] = React.useState<Record<string, string>>(initialValues || {});
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 ---
-sidebar_label: Custom Topics
+sidebar_label: Custom Plugins
+description: Red team custom AI security tests by implementing specialized generator and grader components to detect vulnerabilities in your unique system architecture
 ---
 
 # Custom Plugin

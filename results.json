@@ -1,0 +1,565 @@
+{
+  "evalId": "eval-XpV-2025-09-15T21:36:36",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-09-15T21:36:36.651Z",
+    "prompts": [
+      {
+        "raw": "What is 2 + 2?",
+        "label": "What is 2 + 2?",
+        "id": "38d46ad3618826cf660df542bcf13a3b92b61df92854e2723efcba659af53f4b",
+        "provider": "python-basic-persistent",
+        "metrics": {
+          "score": 2.5,
+          "testPassCount": 1,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "assertPassCount": 10,
+          "assertFailCount": 2,
+          "totalLatencyMs": 227,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Generate a random number between 1 and 100",
+        "label": "Generate a random number between 1 and 100",
+        "id": "5d0de1ad7259b253758f33e209c374ec313ff54b428e1136ce85951c34f5e561",
+        "provider": "python-basic-persistent",
+        "metrics": {
+          "score": 2.25,
+          "testPassCount": 0,
+          "testFailCount": 3,
+          "testErrorCount": 0,
+          "assertPassCount": 9,
+          "assertFailCount": 3,
+          "totalLatencyMs": 3,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Return the current timestamp",
+        "label": "Return the current timestamp",
+        "id": "8614d9b0effd943d449dfd7bdab4c0c5a89d7917cbee9bd35a035a37bf679a17",
+        "provider": "python-basic-persistent",
+        "metrics": {
+          "score": 2.5,
+          "testPassCount": 1,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "assertPassCount": 10,
+          "assertFailCount": 2,
+          "totalLatencyMs": 2,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Calculate fibonacci(10)",
+        "label": "Calculate fibonacci(10)",
+        "id": "d5bccd74934ae2d3d14c6c8fcce18578133d771b7ac69b2bddf885fe802fef22",
+        "provider": "python-basic-persistent",
+        "metrics": {
+          "score": 2.5,
+          "testPassCount": 1,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "assertPassCount": 10,
+          "assertFailCount": 2,
+          "totalLatencyMs": 3,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Process this text: 'Hello World'",
+        "label": "Process this text: 'Hello World'",
+        "id": "5a42717dfa98b1054e4fca65dd48c84604db8f948aad9cf1fc2a4c19e3482507",
+        "provider": "python-basic-persistent",
+        "metrics": {
+          "score": 2.5,
+          "testPassCount": 1,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "assertPassCount": 10,
+          "assertFailCount": 2,
+          "totalLatencyMs": 3,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "What is 2 + 2?",
+        "label": "What is 2 + 2?",
+        "id": "38d46ad3618826cf660df542bcf13a3b92b61df92854e2723efcba659af53f4b",
+        "provider": "python-basic-traditional",
+        "metrics": {
+          "score": 2.5,
+          "testPassCount": 1,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "assertPassCount": 10,
+          "assertFailCount": 2,
+          "totalLatencyMs": 591,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Generate a random number between 1 and 100",
+        "label": "Generate a random number between 1 and 100",
+        "id": "5d0de1ad7259b253758f33e209c374ec313ff54b428e1136ce85951c34f5e561",
+        "provider": "python-basic-traditional",
+        "metrics": {
+          "score": 2.25,
+          "testPassCount": 0,
+          "testFailCount": 3,
+          "testErrorCount": 0,
+          "assertPassCount": 9,
+          "assertFailCount": 3,
+          "totalLatencyMs": 442,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Return the current timestamp",
+        "label": "Return the current timestamp",
+        "id": "8614d9b0effd943d449dfd7bdab4c0c5a89d7917cbee9bd35a035a37bf679a17",
+        "provider": "python-basic-traditional",
+        "metrics": {
+          "score": 2.5,
+          "testPassCount": 1,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "assertPassCount": 10,
+          "assertFailCount": 2,
+          "totalLatencyMs": 476,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Calculate fibonacci(10)",
+        "label": "Calculate fibonacci(10)",
+        "id": "d5bccd74934ae2d3d14c6c8fcce18578133d771b7ac69b2bddf885fe802fef22",
+        "provider": "python-basic-traditional",
+        "metrics": {
+          "score": 2.5,
+          "testPassCount": 1,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "assertPassCount": 10,
+          "assertFailCount": 2,
+          "totalLatencyMs": 448,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Process this text: 'Hello World'",
+        "label": "Process this text: 'Hello World'",
+        "id": "5a42717dfa98b1054e4fca65dd48c84604db8f948aad9cf1fc2a4c19e3482507",
+        "provider": "python-basic-traditional",
+        "metrics": {
+          "score": 2.5,
+          "testPassCount": 1,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "assertPassCount": 10,
+          "assertFailCount": 2,
+          "totalLatencyMs": 496,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [],
+    "stats": {
+      "successes": 8,
+      "failures": 22,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 30,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "prompts": [
+      "What is 2 + 2?",
+      "Generate a random number between 1 and 100",
+      "Return the current timestamp",
+      "Calculate fibonacci(10)",
+      "Process this text: 'Hello World'"
+    ],
+    "providers": [
+      {
+        "id": "file:///Users/mdangelo/projects/pf3/test-scripts/basic_test.py:call_api",
+        "label": "python-basic-persistent",
+        "config": {
+          "persistent": true,
+          "persistentIdleTimeout": 900000,
+          "maxRestarts": 2
+        }
+      },
+      {
+        "id": "file:///Users/mdangelo/projects/pf3/test-scripts/basic_test.py:call_api",
+        "label": "python-basic-traditional",
+        "config": {
+          "persistent": false
+        }
+      }
+    ],
+    "tests": [
+      {
+        "vars": {
+          "prompt": "What is 2 + 2?"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "4"
+          },
+          {
+            "type": "not-contains",
+            "value": "error"
+          }
+        ]
+      },
+      {
+        "vars": {
+          "prompt": "Calculate fibonacci(10)"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "55"
+          },
+          {
+            "type": "not-contains",
+            "value": "error"
+          }
+        ]
+      },
+      {
+        "vars": {
+          "prompt": "Process this text: 'Hello World'"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "Hello World"
+          },
+          {
+            "type": "not-contains",
+            "value": "error"
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "defaultTest": {
+      "assert": [
+        {
+          "type": "not-contains",
+          "value": "error"
+        },
+        {
+          "type": "latency",
+          "threshold": 10000
+        }
+      ],
+      "vars": {},
+      "options": {},
+      "metadata": {}
+    },
+    "outputPath": ["results.json"],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.118.4",
+    "nodeVersion": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-09-15T21:36:39.575Z",
+    "evaluationCreatedAt": "2025-09-15T21:36:36.651Z"
+  }
+}

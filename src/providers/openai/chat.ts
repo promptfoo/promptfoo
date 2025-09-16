@@ -5,7 +5,7 @@ import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { normalizeFinishReason } from '../../util/finishReason';
@@ -13,9 +13,13 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
@@ -170,7 +174,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4')
+      this.modelName.startsWith('o4') ||
+      this.modelName.startsWith('gpt-5')
     );
   }
 
@@ -194,12 +199,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const isReasoningModel = this.isReasoningModel();
+    const isGPT5Model = this.modelName.startsWith('gpt-5');
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
-    const maxTokens = isReasoningModel
-      ? undefined
-      : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+    const maxTokens =
+      isReasoningModel || isGPT5Model
+        ? undefined
+        : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
 
     const temperature = this.supportsTemperature()
       ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
@@ -265,14 +272,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             audio: config.audio || { voice: 'alloy', format: 'wav' },
           }
         : {}),
+      // GPT-5 only: attach verbosity if provided
+      ...(this.modelName.startsWith('gpt-5') && config.verbosity
+        ? { verbosity: config.verbosity }
+        : {}),
     };
 
-    // Handle reasoning_effort and reasoning parameters for o-series models
+    // Handle reasoning_effort and reasoning parameters for reasoning models
     if (
       config.reasoning_effort &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.startsWith('gpt-5'))
     ) {
       body.reasoning_effort = config.reasoning_effort;
     }
@@ -318,7 +330,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
-    logger.debug(`Calling ${this.getApiUrl()} API: ${JSON.stringify(body)}`);
 
     let data, status, statusText;
     let cached = false;
@@ -338,6 +349,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         REQUEST_TIMEOUT_MS,
         'json',
         context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       ));
 
       if (status < 200 || status >= 300) {
@@ -350,14 +362,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       await data?.deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
-      };
-    }
-
-    logger.debug(`\tcompletions API response: ${JSON.stringify(data)}`);
-    if (data.error) {
-      await data.deleteFromCache?.();
-      return {
-        error: formatOpenAiError(data),
       };
     }
 
@@ -406,12 +410,74 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
-      if (functionCalls && config.functionToolCallbacks) {
+      if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
         let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
-          if (config.functionToolCallbacks[functionName]) {
+
+          // Try MCP first if available
+          if (this.mcpClient) {
+            const mcpTools = this.mcpClient.getAllTools();
+            const mcpTool = mcpTools.find((tool) => tool.name === functionName);
+            if (mcpTool) {
+              try {
+                const args = functionCall.arguments || functionCall.function?.arguments || '{}';
+                const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+                const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
+
+                if (mcpResult?.error) {
+                  results.push(`MCP Tool Error (${functionName}): ${mcpResult.error}`);
+                } else {
+                  // Normalize MCP content to a readable string
+                  const normalizeContent = (content: any): string => {
+                    if (content == null) {
+                      return '';
+                    }
+                    if (typeof content === 'string') {
+                      return content;
+                    }
+                    if (Array.isArray(content)) {
+                      return content
+                        .map((part) => {
+                          if (typeof part === 'string') {
+                            return part;
+                          }
+                          if (part && typeof part === 'object') {
+                            if ('text' in part && (part as any).text != null) {
+                              return String((part as any).text);
+                            }
+                            if ('json' in part) {
+                              return JSON.stringify((part as any).json);
+                            }
+                            if ('data' in part) {
+                              return JSON.stringify((part as any).data);
+                            }
+                            return JSON.stringify(part);
+                          }
+                          return String(part);
+                        })
+                        .join('\n');
+                    }
+                    return JSON.stringify(content);
+                  };
+
+                  const content = normalizeContent(mcpResult?.content);
+                  results.push(`MCP Tool Result (${functionName}): ${content}`);
+                }
+                hasSuccessfulCallback = true;
+                continue; // Skip to next function call
+              } catch (error) {
+                logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
+                results.push(`MCP Tool Error (${functionName}): ${error}`);
+                hasSuccessfulCallback = true;
+                continue; // Skip to next function call
+              }
+            }
+          }
+
+          // Fall back to regular function callbacks
+          if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
             try {
               const functionResult = await this.executeFunctionCallback(
                 functionName,

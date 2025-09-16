@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ quiet: true });
 
 import http from 'node:http';
 import path from 'node:path';
@@ -36,10 +37,11 @@ import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
+import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary } from '../types';
+import type { EvalSummary } from '../types/index';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -224,6 +226,7 @@ export function createApp() {
   app.use('/api/configs', configsRouter);
   app.use('/api/model-audit', modelAuditRouter);
   app.use('/api/traces', tracesRouter);
+  app.use('/api/version', versionRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {

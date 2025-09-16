@@ -19,7 +19,7 @@ import {
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
 } from './prompts';
-import { loadApiProvider } from './providers';
+import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
@@ -30,6 +30,7 @@ import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
+import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
 import type {
   ApiClassificationProvider,
@@ -44,8 +45,7 @@ import type {
   ProviderType,
   ProviderTypeMap,
   TokenUsage,
-} from './types';
-import { accumulateTokenUsage } from './util/tokenUsageUtils';
+} from './types/index';
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -165,7 +165,10 @@ export async function getAndCheckProvider(
   return matchedProvider;
 }
 
-function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingResult, 'assertion'> {
+export function fail(
+  reason: string,
+  tokensUsed?: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
   return {
     pass: false,
     reason,
@@ -497,7 +500,17 @@ export async function matchesLlmRubric(
     defaultProvider,
     'llm-rubric check',
   );
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await finalProvider.callApi(prompt, {
+    prompt: {
+      raw: prompt,
+      label: 'llm-rubric',
+    },
+    vars: {
+      output: tryParse(llmOutput),
+      rubric,
+      ...(vars || {}),
+    },
+  });
   if (resp.error || !resp.output) {
     if (options?.throwOnError) {
       throw new LlmRubricProviderError(resp.error || 'No output');
@@ -978,13 +991,17 @@ export async function matchesAnswerRelevance(
   const inputEmbedding = inputEmbeddingResp.embedding;
 
   const similarities: number[] = [];
+  const questionsWithScores: { question: string; similarity: number }[] = [];
+
   for (const question of candidateQuestions) {
     const resp = await embeddingProvider.callEmbeddingApi(question);
     accumulateTokens(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
     }
-    similarities.push(cosineSimilarity(inputEmbedding, resp.embedding));
+    const questionSimilarity = cosineSimilarity(inputEmbedding, resp.embedding);
+    similarities.push(questionSimilarity);
+    questionsWithScores.push({ question, similarity: questionSimilarity });
   }
 
   const similarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
@@ -993,12 +1010,20 @@ export async function matchesAnswerRelevance(
     2,
   )} is greater than threshold ${threshold}`;
   const lessThanReason = `Relevance ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+
+  const metadata = {
+    generatedQuestions: questionsWithScores,
+    averageSimilarity: similarity,
+    threshold,
+  };
+
   if (pass) {
     return {
       pass: true,
       score: similarity,
       reason: greaterThanReason,
       tokensUsed,
+      metadata,
     };
   }
   return {
@@ -1006,6 +1031,7 @@ export async function matchesAnswerRelevance(
     score: similarity,
     reason: lessThanReason,
     tokensUsed,
+    metadata,
   };
 }
 
@@ -1037,12 +1063,33 @@ export async function matchesContextRecall(
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
   const sentences = splitIntoSentences(resp.output);
-  const numerator = sentences.reduce(
-    (acc, sentence) => acc + (sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN) ? 1 : 0),
-    0,
-  );
-  const score = numerator / sentences.length;
+  const sentenceAttributions: { sentence: string; attributed: boolean }[] = [];
+  let numerator = 0;
+
+  for (const sentence of sentences) {
+    const isAttributed = sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN);
+    if (isAttributed) {
+      numerator++;
+    }
+    // Extract the actual sentence content without the classification part
+    const sentenceMatch = sentence.match(/^\d+\.\s*([^\.]+\.)/);
+    const cleanSentence = sentenceMatch ? sentenceMatch[1].trim() : sentence.split('.')[0].trim();
+    sentenceAttributions.push({
+      sentence: cleanSentence,
+      attributed: isAttributed,
+    });
+  }
+
+  const score = sentences.length > 0 ? numerator / sentences.length : 0;
   const pass = score >= threshold - Number.EPSILON;
+
+  const metadata = {
+    sentenceAttributions,
+    totalSentences: sentences.length,
+    attributedSentences: numerator,
+    score,
+  };
+
   return {
     pass,
     score,
@@ -1061,6 +1108,7 @@ export async function matchesContextRecall(
         rejectedPrediction: 0,
       },
     },
+    metadata,
   };
 }
 
@@ -1089,13 +1137,38 @@ export async function matchesContextRelevance(
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
-  const sentences = splitIntoSentences(resp.output);
-  const numerator = sentences.reduce(
-    (acc, sentence) => acc + (sentence.includes(CONTEXT_RELEVANCE_BAD) ? 0 : 1),
-    0,
-  );
-  const score = numerator / sentences.length;
+
+  // Split the original context into sentences to get the total count
+  const contextSentences = splitIntoSentences(context);
+  const totalContextSentences = contextSentences.length;
+
+  // Parse the LLM's response to get relevant sentences
+  const extractedSentences = splitIntoSentences(resp.output);
+  const relevantSentences: string[] = [];
+  const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
+
+  let numerator = 0;
+  if (insufficientInformation) {
+    // If the entire response is "Insufficient Information", no sentences are relevant
+    numerator = 0;
+  } else {
+    // Count the extracted sentences as relevant
+    numerator = extractedSentences.length;
+    relevantSentences.push(...extractedSentences);
+  }
+
+  // RAGAS calculates: relevant sentences / total sentences in context
+  const score = totalContextSentences > 0 ? numerator / totalContextSentences : 0;
   const pass = score >= threshold - Number.EPSILON;
+
+  const metadata = {
+    extractedSentences: relevantSentences,
+    totalContextSentences,
+    relevantSentenceCount: numerator,
+    insufficientInformation,
+    score,
+  };
+
   return {
     pass,
     score,
@@ -1114,6 +1187,7 @@ export async function matchesContextRelevance(
         rejectedPrediction: 0,
       },
     },
+    metadata,
   };
 }
 
@@ -1276,6 +1350,115 @@ export async function matchesSelectBest(
         tokensUsed,
       };
     }
+  });
+}
+
+export async function selectMaxScore(
+  outputs: string[],
+  resultsWithGradingResults: Array<{
+    gradingResult?: { componentResults?: GradingResult[] } | null;
+  }>,
+  assertion: Assertion,
+): Promise<Omit<GradingResult, 'assertion'>[]> {
+  invariant(
+    outputs.length >= 2,
+    'max-score assertion must have at least two outputs to compare between',
+  );
+
+  // Parse options from assertion value
+  const value = assertion.value || {};
+  const options = {
+    method: (typeof value === 'object' && 'method' in value ? value.method : 'average') as
+      | 'average'
+      | 'sum',
+    weights: (typeof value === 'object' && 'weights' in value ? value.weights : {}) as Record<
+      string,
+      number
+    >,
+    threshold:
+      typeof value === 'object' && 'threshold' in value ? (value.threshold as number) : undefined,
+  };
+
+  // Calculate aggregate score for each output
+  const scores = resultsWithGradingResults.map((result, index) => {
+    // Get component results from gradingResult if available
+    const componentResults = result.gradingResult?.componentResults || [];
+
+    // Filter out max-score and select-best assertions
+    const relevantResults = componentResults.filter(
+      (r: GradingResult) =>
+        r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
+    );
+
+    if (relevantResults.length === 0) {
+      throw new Error(
+        'max-score requires at least one other assertion (besides max-score or select-best) to aggregate scores from',
+      );
+    }
+
+    // Calculate weighted scores for each assertion
+    let totalWeightedScore = 0;
+    let totalWeight = 0;
+
+    relevantResults.forEach((componentResult: GradingResult) => {
+      const assertionType = componentResult.assertion?.type || 'unknown';
+      const weight =
+        options.weights[assertionType] !== undefined ? options.weights[assertionType] : 1.0; // Default weight is 1
+
+      const score = componentResult.score || 0;
+      totalWeightedScore += score * weight;
+      totalWeight += weight;
+    });
+
+    // Calculate aggregate score based on method
+    let aggregateScore: number;
+    if (options.method === 'sum') {
+      aggregateScore = totalWeightedScore;
+    } else {
+      // Average method (default)
+      aggregateScore = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
+    }
+
+    return {
+      index,
+      score: aggregateScore,
+      componentCount: relevantResults.length,
+      totalWeight,
+    };
+  });
+
+  // Find max score (with deterministic tie-breaking by index)
+  let maxScore = -Infinity;
+  let winnerIndex = 0;
+
+  for (let i = 0; i < scores.length; i++) {
+    if (scores[i].score > maxScore) {
+      maxScore = scores[i].score;
+      winnerIndex = i;
+    }
+  }
+
+  // Apply threshold if specified
+  const meetsThreshold = options.threshold === undefined || maxScore >= options.threshold;
+
+  // Return results for each output
+  return scores.map(({ index, score, componentCount, totalWeight }) => {
+    const isWinner = index === winnerIndex && meetsThreshold;
+
+    return {
+      pass: isWinner,
+      score: isWinner ? 1 : 0,
+      reason: isWinner
+        ? `Selected as highest scoring output (score: ${score.toFixed(3)})`
+        : score === maxScore && !meetsThreshold
+          ? `Not selected - score ${score.toFixed(3)} below threshold ${options.threshold}`
+          : `Not selected (score: ${score.toFixed(3)}, max: ${maxScore.toFixed(3)})`,
+      namedScores: {
+        maxScore: score,
+        assertionCount: componentCount,
+        totalWeight,
+      },
+    };
   });
 }
 

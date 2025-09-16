@@ -1,4 +1,4 @@
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
 
 interface TraceSpanDurationValue {
@@ -30,12 +30,7 @@ function calculatePercentile(durations: number[], percentile: number): number {
 
 export const handleTraceSpanDuration = ({ assertion, context }: AssertionParams): GradingResult => {
   if (!context.trace || !context.trace.spans) {
-    return {
-      pass: false,
-      score: 0,
-      reason: 'No trace data available for trace-span-duration assertion',
-      assertion,
-    };
+    throw new Error('No trace data available for trace-span-duration assertion');
   }
 
   const value = assertion.value as TraceSpanDurationValue;

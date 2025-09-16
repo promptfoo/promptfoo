@@ -1,7 +1,7 @@
 import invariant from '../util/invariant';
 import { transform } from '../util/transform';
 
-import type { Assertion, AtomicTestCase } from '../types';
+import type { Assertion, AtomicTestCase } from '../types/index';
 
 /**
  * Resolves the context value for context-based assertions.
@@ -9,7 +9,7 @@ import type { Assertion, AtomicTestCase } from '../types';
  *
  * @param assertion - The assertion configuration
  * @param test - The test case
- * @param output - The provider output
+ * @param output - The provider output (after provider transform, before test transform)
  * @param prompt - The prompt text
  * @param fallbackContext - Optional fallback context (e.g., prompt for context-recall)
  * @param providerResponse - Optional full provider response for contextTransform
@@ -34,7 +34,11 @@ export async function resolveContext(
 
   if (assertion.contextTransform) {
     try {
-      const transformed = await transform(assertion.contextTransform, output, {
+      // Use providerTransformedOutput if available
+      // Otherwise fall back to output for backwards compatibility
+      const outputForTransform = providerResponse?.providerTransformedOutput ?? output;
+
+      const transformed = await transform(assertion.contextTransform, outputForTransform, {
         vars: test.vars,
         prompt: { label: prompt },
         ...(providerResponse &&

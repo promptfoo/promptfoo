@@ -17,6 +17,7 @@ import {
 import type {
   BedrockAI21GenerationOptions,
   BedrockClaudeMessagesCompletionOptions,
+  BedrockOpenAIGenerationOptions,
   IBedrockModel,
   LlamaMessage,
   TextGenerationOptions,
@@ -32,7 +33,9 @@ const { BedrockRuntime } = jest.requireMock('@aws-sdk/client-bedrock-runtime');
 
 jest.mock('@smithy/node-http-handler', () => {
   return {
-    NodeHttpHandler: jest.fn(),
+    NodeHttpHandler: jest.fn().mockImplementation(() => ({
+      handle: jest.fn(),
+    })),
   };
 });
 
@@ -73,6 +76,7 @@ describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     // Ensure proxy environment variables do not force proxy-specific code paths
     // when running tests. The container sets HTTP_PROXY by default which causes
     // getBedrockInstance to require optional dependencies that are not
@@ -83,6 +87,7 @@ describe('AwsBedrockGenericProvider', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
     process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
   });
@@ -158,6 +163,213 @@ describe('AwsBedrockGenericProvider', () => {
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+    });
+  });
+
+  it('should create Bedrock instance with custom request handler for API key authentication', async () => {
+    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
+    const mockHandler = {
+      handle: jest.fn(),
+    };
+    NodeHttpHandler.mockReturnValue(mockHandler);
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', {
+          config: {
+            region: 'us-east-1',
+            apiKey: 'test-api-key',
+          },
+        });
+      }
+    })();
+
+    await provider.getBedrockInstance();
+
+    expect(NodeHttpHandler).toHaveBeenCalled();
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+      requestHandler: expect.any(Object),
+    });
+  });
+
+  it('should create custom request handler when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
+    process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
+    const mockHandler = {
+      handle: jest.fn(),
+    };
+    NodeHttpHandler.mockReturnValue(mockHandler);
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', { config: { region: 'us-east-1' } });
+      }
+    })();
+
+    await provider.getBedrockInstance();
+
+    expect(NodeHttpHandler).toHaveBeenCalled();
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+      requestHandler: expect.any(Object),
+    });
+
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+  });
+
+  it('should add Authorization header with Bearer token to requests when using API key', async () => {
+    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
+    const mockOriginalHandle = jest.fn().mockResolvedValue('response');
+    const mockHandler = {
+      handle: mockOriginalHandle,
+    };
+    NodeHttpHandler.mockReturnValue(mockHandler);
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', {
+          config: {
+            region: 'us-east-1',
+            apiKey: 'test-api-key',
+          },
+        });
+      }
+    })();
+
+    await provider.getBedrockInstance();
+
+    // Verify the handler was modified to add Bearer token
+    expect(mockHandler.handle).toBeDefined();
+
+    // Test that the modified handler adds the Authorization header
+    const mockRequest = {
+      headers: {},
+    };
+
+    await mockHandler.handle(mockRequest, {});
+
+    expect(mockRequest.headers).toEqual({
+      Authorization: 'Bearer test-api-key',
+    });
+    expect(mockOriginalHandle).toHaveBeenCalledWith(mockRequest, {});
+  });
+
+  describe('Custom endpoint support', () => {
+    it('should use custom endpoint when endpoint is specified', async () => {
+      const provider = new (class extends AwsBedrockGenericProvider {
+        constructor() {
+          super('test-model', {
+            config: {
+              region: 'us-east-1',
+              endpoint: 'https://custom-bedrock-endpoint.example.com',
+            },
+          });
+        }
+      })();
+
+      await provider.getBedrockInstance();
+
+      expect(BedrockRuntime).toHaveBeenCalledWith(
+        expect.objectContaining({
+          region: 'us-east-1',
+          retryMode: 'adaptive',
+          maxAttempts: 10,
+          endpoint: 'https://custom-bedrock-endpoint.example.com',
+        }),
+      );
+    });
+
+    it('should not set endpoint when endpoint is not specified', async () => {
+      const provider = new (class extends AwsBedrockGenericProvider {
+        constructor() {
+          super('test-model', {
+            config: {
+              region: 'us-east-1',
+            },
+          });
+        }
+      })();
+
+      await provider.getBedrockInstance();
+
+      const callArgs = BedrockRuntime.mock.calls[0][0];
+      expect(callArgs).not.toHaveProperty('endpoint');
+    });
+  });
+
+  describe('Inference Profile ARN support', () => {
+    it('should handle inference profile ARN with claude model type', () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/claude-inference';
+      const config: any = { inferenceModelType: 'claude' };
+
+      // This test checks that getHandlerForModel correctly identifies the handler
+      // We need to import and test the actual function
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      // The handler should be CLAUDE_MESSAGES based on the inferenceModelType
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('claude');
+    });
+
+    it('should handle inference profile ARN with nova model type', () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/nova-inference';
+      const config: any = { inferenceModelType: 'nova' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('nova');
+    });
+
+    it('should handle inference profile ARN with llama model type', () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/llama-inference';
+      const config: any = { inferenceModelType: 'llama' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('llama');
+    });
+
+    it('should handle inference profile ARN with deepseek model type', () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/deepseek-inference';
+      const config: any = { inferenceModelType: 'deepseek' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('deepseek');
+    });
+
+    it('should handle inference profile ARN with openai model type', () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/openai-inference';
+      const config: any = { inferenceModelType: 'openai' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('openai');
+    });
+
+    it('should throw error for inference profile ARN without inferenceModelType', () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/some-inference';
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config: {} });
+
+      // This should throw when callApi is invoked and it tries to get the handler
+      expect(provider.modelName).toBe(arnModelName);
+      // The error will be thrown when actually trying to use the model
     });
   });
 
@@ -490,6 +702,55 @@ describe('AwsBedrockGenericProvider', () => {
       const provider = new TestBedrockProvider({});
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined();
+    });
+
+    it('should return undefined for API key authentication when apiKey is provided in config', async () => {
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-api-key',
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined();
+    });
+
+    it('should return undefined for API key authentication when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
+      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      const provider = new TestBedrockProvider({});
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined();
+      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    });
+
+    it('should prioritize config apiKey over environment variable', async () => {
+      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-config-api-key',
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
+      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    });
+
+    it('should prioritize explicit credentials over API key', async () => {
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-api-key',
+        accessKeyId: 'test-access-key',
+        secretAccessKey: 'test-secret-key',
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toEqual({
+        accessKeyId: 'test-access-key',
+        secretAccessKey: 'test-secret-key',
+        sessionToken: undefined,
+      }); // Explicit credentials take priority
+    });
+
+    it('should use API key when no explicit credentials are provided', async () => {
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-api-key',
+        // No accessKeyId/secretAccessKey provided
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
     });
   });
 });
@@ -1229,6 +1490,230 @@ describe('BEDROCK_MODEL MISTRAL', () => {
   });
 });
 
+describe('BEDROCK_MODEL OPENAI', () => {
+  const modelHandler = BEDROCK_MODEL.OPENAI;
+
+  describe('params', () => {
+    it('should include OpenAI-specific parameters', () => {
+      const config: BedrockOpenAIGenerationOptions = {
+        region: 'us-east-1',
+        max_completion_tokens: 150,
+        temperature: 0.8,
+        top_p: 0.95,
+        frequency_penalty: 0.2,
+        presence_penalty: 0.1,
+        stop: ['END', 'STOP'],
+      };
+      const prompt = 'What is artificial intelligence?';
+      const stop = ['FINISH'];
+
+      const params = modelHandler.params(config, prompt, stop);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'What is artificial intelligence?' }],
+        max_completion_tokens: 150,
+        temperature: 0.8,
+        top_p: 0.95,
+        frequency_penalty: 0.2,
+        presence_penalty: 0.1,
+        stop: ['FINISH'], // stop parameter takes precedence
+      });
+    });
+
+    it('should use config.stop when stop parameter is not provided', () => {
+      const config = {
+        stop: ['CONFIG_END'],
+        temperature: 0.5,
+      };
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Test prompt' }],
+        temperature: 0.5,
+        top_p: 1.0,
+        stop: ['CONFIG_END'],
+      });
+    });
+
+    it('should use default values when config is not provided', () => {
+      const config = {};
+      const prompt = 'Hello, how are you?';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Hello, how are you?' }],
+        temperature: 0.1,
+        top_p: 1.0,
+      });
+    });
+
+    it('should handle JSON message array input', () => {
+      const config = { temperature: 0.7 };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is machine learning?' },
+      ]);
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: 'What is machine learning?' },
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should handle reasoning_effort by adding it to system message', () => {
+      const config = {
+        temperature: 0.7,
+        reasoning_effort: 'high' as const,
+      };
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'Reasoning: high' },
+          { role: 'user', content: 'Test prompt' },
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should append reasoning_effort to existing system message', () => {
+      const config = {
+        temperature: 0.7,
+        reasoning_effort: 'medium' as const,
+      };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is machine learning?' },
+      ]);
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.\n\nReasoning: medium' },
+          { role: 'user', content: 'What is machine learning?' },
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should not modify messages when reasoning_effort is not specified', () => {
+      const config = { temperature: 0.5 };
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Test prompt' }],
+        temperature: 0.5,
+        top_p: 1.0,
+      });
+    });
+  });
+
+  describe('output', () => {
+    it('should extract output from OpenAI chat completion format', () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'This is a test response from OpenAI model.',
+            },
+          },
+        ],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        'This is a test response from OpenAI model.',
+      );
+    });
+
+    it('should throw an error for API errors', () => {
+      const mockErrorResponse = { error: 'API Error occurred' };
+      expect(() => modelHandler.output({}, mockErrorResponse)).toThrow(
+        'OpenAI API error: API Error occurred',
+      );
+    });
+
+    it('should return undefined for unrecognized formats', () => {
+      const mockResponse = { something: 'else' };
+      const result = modelHandler.output({}, mockResponse);
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from OpenAI response format', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 25,
+          completion_tokens: 75,
+          total_tokens: 100,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 75,
+        total: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle string token counts', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: '30',
+          completion_tokens: '60',
+          total_tokens: '90',
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 60,
+        total: 90,
+        numRequests: 1,
+      });
+    });
+
+    it('should return undefined token counts when usage is not provided', () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'Response without usage info',
+            },
+          },
+        ],
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
 describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
 
@@ -1352,6 +1837,181 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       expect(result).toHaveProperty('completion', undefined);
       expect(result).toHaveProperty('total', undefined);
       expect(result).toHaveProperty('numRequests', 1);
+    });
+  });
+});
+
+describe('BEDROCK_MODEL DEEPSEEK', () => {
+  const modelHandler = BEDROCK_MODEL.DEEPSEEK;
+
+  describe('params', () => {
+    it('should wrap prompt with thinking tags', () => {
+      const config = {
+        max_tokens: 1000,
+        temperature: 0.8,
+        top_p: 0.95,
+      };
+      const prompt = 'Solve this complex problem';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        prompt: '\nSolve this complex problem\n<think>\n',
+        max_tokens: 1000,
+        temperature: 0.8,
+        top_p: 0.95,
+      });
+    });
+
+    it('should use default values when config is not provided', () => {
+      const config = {};
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        prompt: '\nTest prompt\n<think>\n',
+        temperature: 0,
+        top_p: 1.0,
+      });
+    });
+
+    it('should respect environment variables', () => {
+      process.env.AWS_BEDROCK_MAX_TOKENS = '2000';
+      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
+      process.env.AWS_BEDROCK_TOP_P = '0.9';
+
+      const config = {};
+      const prompt = 'Test with env vars';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        prompt: '\nTest with env vars\n<think>\n',
+        max_tokens: 2000,
+        temperature: 0.5,
+        top_p: 0.9,
+      });
+
+      delete process.env.AWS_BEDROCK_MAX_TOKENS;
+      delete process.env.AWS_BEDROCK_TEMPERATURE;
+      delete process.env.AWS_BEDROCK_TOP_P;
+    });
+  });
+
+  describe('output', () => {
+    it('should extract text from DeepSeek response with thinking', () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: '<think>Let me think about this problem...</think>\nThe answer is 42.',
+          },
+        ],
+      };
+      const config = { showThinking: true };
+
+      const result = modelHandler.output(config, mockResponse);
+
+      expect(result).toBe('<think>Let me think about this problem...</think>\nThe answer is 42.');
+    });
+
+    it('should hide thinking when showThinking is false', () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: '<think>Let me think about this problem...</think>\nThe answer is 42.',
+          },
+        ],
+      };
+      const config = { showThinking: false };
+
+      const result = modelHandler.output(config, mockResponse);
+
+      expect(result).toBe('The answer is 42.');
+    });
+
+    it('should return full response when no thinking tags present', () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: 'Direct response without thinking',
+          },
+        ],
+      };
+      const config = { showThinking: false };
+
+      const result = modelHandler.output(config, mockResponse);
+
+      expect(result).toBe('Direct response without thinking');
+    });
+
+    it('should handle error in response', () => {
+      const mockResponse = {
+        error: 'API error occurred',
+      };
+
+      expect(() => modelHandler.output({}, mockResponse)).toThrow(
+        'DeepSeek API error: API error occurred',
+      );
+    });
+
+    it('should return undefined for unrecognized response format', () => {
+      const mockResponse = { something: 'else' };
+      const result = modelHandler.output({}, mockResponse);
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from DeepSeek response', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 30,
+          completion_tokens: 70,
+          total_tokens: 100,
+        },
+      };
+
+      const usage = modelHandler.tokenUsage(mockResponse, 'test');
+
+      expect(usage).toEqual({
+        prompt: 30,
+        completion: 70,
+        total: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle string token values', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: '30',
+          completion_tokens: '70',
+          total_tokens: '100',
+        },
+      };
+
+      const usage = modelHandler.tokenUsage(mockResponse, 'test');
+
+      expect(usage).toEqual({
+        prompt: 30,
+        completion: 70,
+        total: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('should return undefined values when token counts are not provided', () => {
+      const mockResponse = {};
+
+      const usage = modelHandler.tokenUsage(mockResponse, 'test');
+
+      expect(usage).toEqual({
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      });
     });
   });
 });
@@ -1665,13 +2325,26 @@ describe('BEDROCK_MODEL token counting functionality', () => {
 });
 
 describe('AWS_BEDROCK_MODELS mapping', () => {
-  it('should include mistral.mistral-large-2407-v1:0', () => {
+  it('should have the correct model mappings', () => {
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['meta.llama3-1-405b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
     expect(AWS_BEDROCK_MODELS['mistral.mistral-large-2407-v1:0']).toBe(
       BEDROCK_MODEL.MISTRAL_LARGE_2407,
     );
-  });
-
-  it('should include Llama 4 models with appropriate handlers', () => {
     expect(AWS_BEDROCK_MODELS['meta.llama4-scout-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
     expect(AWS_BEDROCK_MODELS['meta.llama4-maverick-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
     expect(AWS_BEDROCK_MODELS['us.meta.llama4-scout-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
@@ -1702,28 +2375,123 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     });
   });
 
-  it('should handle mistral models via startsWith fallback', () => {
-    const newMistralModel = 'mistral.some-future-model-v1:0';
-
-    // This simulates the logic in getHandlerForModel
-    let handler = AWS_BEDROCK_MODELS[newMistralModel];
-    if (!handler && newMistralModel.startsWith('mistral.')) {
-      handler = BEDROCK_MODEL.MISTRAL;
-    }
-
-    expect(handler).toBe(BEDROCK_MODEL.MISTRAL);
+  it('should map DeepSeek models correctly', () => {
+    expect(AWS_BEDROCK_MODELS['deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
+    expect(AWS_BEDROCK_MODELS['us.deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
   });
 
-  it('should handle llama4 models via includes fallback', () => {
-    const newLlama4Model = 'meta.llama4-future-model-v1:0';
+  it('should map OpenAI models correctly', () => {
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-120b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-20b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
+  });
 
-    // This simulates the logic in getHandlerForModel
-    let handler = AWS_BEDROCK_MODELS[newLlama4Model];
-    if (!handler && newLlama4Model.includes('meta.llama4')) {
-      handler = BEDROCK_MODEL.LLAMA4;
-    }
+  it('should map APAC regional models correctly', () => {
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-pro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-premier-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['apac.meta.llama4-scout-17b-instruct-v1:0']).toBe(
+      BEDROCK_MODEL.LLAMA4,
+    );
+    expect(AWS_BEDROCK_MODELS['apac.meta.llama4-maverick-17b-instruct-v1:0']).toBe(
+      BEDROCK_MODEL.LLAMA4,
+    );
+  });
 
-    expect(handler).toBe(BEDROCK_MODEL.LLAMA4);
+  it('should map EU regional models correctly', () => {
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-pro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-premier-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['eu.meta.llama3-2-1b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['eu.meta.llama3-2-3b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['eu.meta.llama4-scout-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
+    expect(AWS_BEDROCK_MODELS['eu.meta.llama4-maverick-17b-instruct-v1:0']).toBe(
+      BEDROCK_MODEL.LLAMA4,
+    );
+  });
+
+  it('should map US regional models correctly', () => {
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-pro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-premier-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-haiku-20241022-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-opus-20240229-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-20250514-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us.deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-1-405b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-1-70b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-1-8b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-11b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-1b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-3b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-2-90b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama3-3-70b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_3);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama4-scout-17b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA4);
+    expect(AWS_BEDROCK_MODELS['us.meta.llama4-maverick-17b-instruct-v1:0']).toBe(
+      BEDROCK_MODEL.LLAMA4,
+    );
+  });
+
+  it('should map US Gov Cloud models correctly', () => {
+    expect(AWS_BEDROCK_MODELS['us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['us-gov.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
   });
 });
 

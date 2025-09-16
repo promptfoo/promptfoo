@@ -48,9 +48,7 @@ describe('constants', () => {
 
   it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
     expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBeDefined();
-    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe(
-      'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
-    );
+    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe('replicate:moderation:meta/llama-guard-4-12b');
   });
 
   it('LLAMA_GUARD_ENABLED_CATEGORIES should contain expected categories', () => {
@@ -154,7 +152,7 @@ describe('constants', () => {
   });
 
   it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench']);
+    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench', 'vlguard']);
   });
 
   it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
@@ -163,6 +161,7 @@ describe('constants', () => {
       'agentic:memory-poisoning',
       'pliny',
       'unsafebench',
+      'vlguard',
     ];
 
     expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);

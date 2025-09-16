@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -10,7 +10,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161
@@ -48,6 +48,8 @@ interface OllamaCompletionOptions {
   stop?: string[];
   num_thread?: number;
   tools?: any[]; // Support for function calling/tools
+  think?: boolean; // Top-level parameter for thinking/reasoning
+  passthrough?: Record<string, any>; // Pass arbitrary fields to the API
 }
 
 const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
@@ -85,6 +87,8 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'stop',
   'num_thread',
   'tools',
+  'think',
+  'passthrough',
 ]);
 
 interface OllamaCompletionJsonL {
@@ -151,16 +155,25 @@ export class OllamaCompletionProvider implements ApiProvider {
       options: Object.keys(this.config).reduce(
         (options, key) => {
           const optionName = key as keyof OllamaCompletionOptions;
-          if (OllamaCompletionOptionKeys.has(optionName)) {
+          if (
+            OllamaCompletionOptionKeys.has(optionName) &&
+            optionName !== 'think' &&
+            optionName !== 'tools' &&
+            optionName !== 'passthrough'
+          ) {
             options[optionName] = this.config[optionName];
           }
           return options;
         },
-        {} as Partial<
-          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
-        >,
+        {} as Record<string, any>,
       ),
+      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      ...(this.config.passthrough || {}),
     };
+
+    if (this.config.think !== undefined) {
+      params.think = this.config.think;
+    }
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
@@ -270,10 +283,10 @@ export class OllamaChatProvider implements ApiProvider {
           }
           return options;
         },
-        {} as Partial<
-          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
-        >,
+        {} as Record<string, any>,
       ),
+      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      ...(this.config.passthrough || {}),
     };
 
     // Handle tools if configured
@@ -387,7 +400,6 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tOllama embeddings API response: ${JSON.stringify(response.data)}`);
 
     try {
       const embedding = response.data.embedding as number[];

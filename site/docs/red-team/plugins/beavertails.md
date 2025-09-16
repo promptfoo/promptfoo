@@ -1,5 +1,6 @@
 ---
 sidebar_label: BeaverTails
+description: Red team LLM safety boundaries using BeaverTails dataset of 330k harmful prompts to protect AI systems from abuse, hate speech, and malicious content exploitation
 ---
 
 # BeaverTails Dataset for LLM Safety Testing
@@ -27,17 +28,25 @@ The plugin:
 - Randomly selects prompts from the filtered set
 - Tests if the model appropriately refuses or handles the harmful prompts
 
-## Configuration
+## Quick Start
 
-To include the BeaverTails plugin in your LLM red teaming setup, add the following configuration to your YAML file:
+1. Set your Hugging Face API token as an environment variable:
 
-```yaml
+```bash
+export HF_TOKEN=your_huggingface_token  # or HF_API_TOKEN
+```
+
+2. Enable the plugin in your configuration:
+
+```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
     - beavertails
 ```
 
-You can control the number of test cases using the `config.numTests` parameter (defaults to 5):
+## Configuration
+
+You can control the number of test cases using the `numTests` parameter (defaults to 5):
 
 ```yaml
 redteam:

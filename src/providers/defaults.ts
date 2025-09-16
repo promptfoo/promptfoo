@@ -6,6 +6,13 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import { hasGoogleDefaultCredentials } from './google/util';
 import {
+  DefaultGradingProvider as GoogleAiStudioGradingProvider,
+  DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
+  DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
+  DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
+  DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
+} from './google/ai.studio';
+import {
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
   DefaultGradingProvider as GeminiGradingProvider,
 } from './google/vertex';
@@ -29,7 +36,7 @@ import {
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
 
-import type { ApiProvider, DefaultProviders } from '../types';
+import type { ApiProvider, DefaultProviders } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
@@ -65,7 +72,15 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
   const hasGitHubCredentials = Boolean(getEnvString('GITHUB_TOKEN') || env?.GITHUB_TOKEN);
   const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
-  const preferGitHub = !hasOpenAiCredentials && !hasAnthropicCredentials && hasGitHubCredentials;
+  const hasGoogleAiStudioCredentials = Boolean(
+    getEnvString('GEMINI_API_KEY') ||
+      env?.GEMINI_API_KEY ||
+      getEnvString('GOOGLE_API_KEY') ||
+      env?.GOOGLE_API_KEY ||
+      getEnvString('PALM_API_KEY') ||
+      env?.PALM_API_KEY,
+  );
+  // Note: preferGitHub condition is evaluated inline below due to async hasGoogleDefaultCredentials()
 
   const hasAzureApiKey =
     getEnvString('AZURE_OPENAI_API_KEY') ||
@@ -124,12 +139,24 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       suggestionsProvider: anthropicProviders.suggestionsProvider,
       synthesizeProvider: anthropicProviders.synthesizeProvider,
     };
+  } else if (!hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials) {
+    logger.debug('Using Google AI Studio default providers');
+    providers = {
+      embeddingProvider: GeminiEmbeddingProvider, // Google AI Studio doesn't support embeddings, fall back to Vertex
+      gradingJsonProvider: GoogleAiStudioGradingJsonProvider,
+      gradingProvider: GoogleAiStudioGradingProvider,
+      llmRubricProvider: GoogleAiStudioLlmRubricProvider,
+      moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: GoogleAiStudioSuggestionsProvider,
+      synthesizeProvider: GoogleAiStudioSynthesizeProvider,
+    };
   } else if (
-    !getEnvString('OPENAI_API_KEY') &&
-    !env?.OPENAI_API_KEY &&
+    !hasOpenAiCredentials &&
+    !hasAnthropicCredentials &&
+    !hasGoogleAiStudioCredentials &&
     (await hasGoogleDefaultCredentials())
   ) {
-    logger.debug('Using Google default providers');
+    logger.debug('Using Google Vertex default providers');
     providers = {
       embeddingProvider: GeminiEmbeddingProvider,
       gradingJsonProvider: GeminiGradingProvider,
@@ -139,9 +166,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       synthesizeProvider: GeminiGradingProvider,
     };
   } else if (
-    !getEnvString('OPENAI_API_KEY') &&
-    !env?.OPENAI_API_KEY &&
+    !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
+    !hasGoogleAiStudioCredentials &&
     !(await hasGoogleDefaultCredentials()) &&
     (getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY)
   ) {
@@ -154,7 +181,14 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       suggestionsProvider: MistralSuggestionsProvider,
       synthesizeProvider: MistralSynthesizeProvider,
     };
-  } else if (preferGitHub) {
+  } else if (
+    !hasOpenAiCredentials &&
+    !hasAnthropicCredentials &&
+    !hasGoogleAiStudioCredentials &&
+    !(await hasGoogleDefaultCredentials()) &&
+    !(getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY) &&
+    hasGitHubCredentials
+  ) {
     logger.debug('Using GitHub Models default providers');
     providers = {
       embeddingProvider: OpenAiEmbeddingProvider, // GitHub doesn't support embeddings yet

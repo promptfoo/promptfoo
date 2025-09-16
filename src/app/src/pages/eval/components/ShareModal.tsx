@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import CheckIcon from '@mui/icons-material/Check';
@@ -19,7 +19,7 @@ interface ShareModalProps {
   onShare: (id: string) => Promise<string>;
 }
 
-const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare }) => {
+const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
   const [showNeedsSignup, setShowNeedsSignup] = useState(false);

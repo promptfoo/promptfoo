@@ -1,6 +1,7 @@
 ---
 sidebar_label: Guardrails
 sidebar_position: 99
+description: Red team LLM guardrails by testing injection detection, content moderation, and PII filtering to protect AI systems from malicious inputs and data exposure risks
 ---
 
 # Guardrails

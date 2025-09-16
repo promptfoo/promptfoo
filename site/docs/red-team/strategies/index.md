@@ -1,7 +1,7 @@
 ---
 sidebar_label: Overview
 title: Red Team Strategies
-description: Attack techniques that systematically probe LLM applications for vulnerabilities and maximize success rates
+description: Comprehensive catalog of red team attack strategies for systematically identifying and exploiting LLM application vulnerabilities
 ---
 
 import StrategyTable from '@site/docs/\_shared/StrategyTable';
@@ -137,6 +137,26 @@ redteam:
         plugins:
           - harmful:hate
 ```
+
+### Layered Strategies
+
+Chain strategies in order with the `layer` strategy. This is useful when you want to apply a transformation first, then another technique:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  strategies:
+    - id: layer
+      config:
+        steps:
+          - { id: multilingual, config: { languages: ['es', 'fr'] } }
+          - rot13
+```
+
+Notes:
+
+- Each step respects plugin targeting and exclusions.
+- Only the final step’s outputs are kept.
+- To avoid overcounting, don’t also include top‑level `multilingual` when it already exists inside a layer.
 
 ### Custom Strategies
 

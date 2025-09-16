@@ -1,0 +1,72 @@
+# Performance metrics comparison with quantitative measurements
+# Tests latency improvements between persistent vs traditional Python providers
+
+providers:
+  - id: 'file:///Users/mdangelo/projects/pf3/test-scripts/basic_test.py:call_api'
+    label: persistent-basic
+    config:
+      persistent: true
+      persistentIdleTimeout: 900000
+      maxRestarts: 2
+
+  - id: 'file:///Users/mdangelo/projects/pf3/test-scripts/basic_test.py:call_api'
+    label: traditional-basic
+    config:
+      persistent: false
+
+prompts:
+  # Test multiple calls to measure persistent vs traditional overhead
+  - 'What is 2 + 2?'
+  - 'Calculate fibonacci(10)'
+  - 'Generate a random number between 1 and 100'
+  - 'Return the current timestamp'
+  - "Process this text: 'Hello World'"
+
+tests:
+  # Performance benchmarks - persistent mode should be faster after first call
+  - vars:
+      prompt: 'What is 2 + 2?'
+    assert:
+      - type: contains
+        value: '4'
+      - type: not-contains
+        value: 'error'
+
+  - vars:
+      prompt: 'Calculate fibonacci(10)'
+    assert:
+      - type: contains
+        value: '55'
+      - type: not-contains
+        value: 'error'
+
+  - vars:
+      prompt: 'Generate a random number between 1 and 100'
+    assert:
+      - type: regex
+        value: "\\d+"
+      - type: not-contains
+        value: 'error'
+
+  - vars:
+      prompt: 'Return the current timestamp'
+    assert:
+      - type: contains
+        value: 'T' # ISO timestamp contains T
+      - type: not-contains
+        value: 'error'
+
+  - vars:
+      prompt: "Process this text: 'Hello World'"
+    assert:
+      - type: contains
+        value: 'Hello World'
+      - type: not-contains
+        value: 'error'
+
+defaultTest:
+  assert:
+    - type: not-contains
+      value: 'error'
+    - type: latency
+      threshold: 10000 # Allow generous time for traditional mode

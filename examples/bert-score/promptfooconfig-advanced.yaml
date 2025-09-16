@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Advanced BERTScore with multiple references
+
+prompts:
+  - 'Explain: {{topic}}'
+
+providers:
+  - openai:gpt-4.1-nano
+
+tests:
+  - vars:
+      topic: 'gradient descent'
+      reference: 'An optimization algorithm that adjusts parameters to minimize error'
+    assert:
+      - type: python
+        value: |
+          # Compare against multiple valid answers
+          from bert_score import score
+
+          references = [
+              context['vars']['reference'],
+              "A method for finding the minimum of a function by moving in the direction of steepest descent",
+              "Like rolling a ball down a hill to find the lowest point"
+          ]
+
+          # Get best score across all references
+          scores = []
+          for ref in references:
+              _, _, F1 = score([output], [ref], lang='en', verbose=False)
+              scores.append(F1.item())
+
+          return max(scores)

@@ -54,11 +54,7 @@ const StyledLink = styled(Link)({
   textDecoration: 'none',
 });
 
-const YamlEditorComponent: React.FC<YamlEditorProps> = ({
-  initialConfig,
-  readOnly = false,
-  initialYaml,
-}) => {
+const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: YamlEditorProps) => {
   const darkMode = useTheme().palette.mode === 'dark';
   const [code, setCode] = React.useState('');
   const [originalCode, setOriginalCode] = React.useState('');

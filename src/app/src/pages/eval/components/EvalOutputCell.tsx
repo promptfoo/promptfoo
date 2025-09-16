@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import Tooltip from '@mui/material/Tooltip';
+import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import ReactMarkdown from 'react-markdown';
@@ -9,7 +9,7 @@ import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
-import { useResultsViewSettingsStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 
@@ -25,6 +25,10 @@ function scoreToString(score: number | null) {
   return `(${score.toFixed(2)})`;
 }
 
+const tooltipSlotProps: TooltipProps['slotProps'] = {
+  popper: { disablePortal: true },
+};
+
 export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
@@ -35,6 +39,7 @@ export interface EvalOutputCellProps {
   evaluationId?: string;
   testCaseId?: string;
   onMetricFilter?: (metric: string | null) => void;
+  isRedteam?: boolean;
 }
 
 function EvalOutputCell({
@@ -50,13 +55,16 @@ function EvalOutputCell({
   evaluationId,
   testCaseId,
   onMetricFilter,
+  isRedteam,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
-  searchText: string;
+  searchText?: string;
 }) {
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewSettingsStore();
+
+  const { shouldHighlightSearchText } = useTableStore();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -118,11 +126,16 @@ function EvalOutputCell({
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
-  // Handle failure messages by splitting the text at '---'
-  if (!output.pass && text && text.includes('---')) {
-    failReasons = (output.gradingResult?.componentResults || [])
+  // Extract failure reasons from component results
+  if (output.gradingResult?.componentResults) {
+    failReasons = output.gradingResult.componentResults
       .filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason);
+      .map((result) => result.reason)
+      .filter((reason) => reason); // Filter out empty/undefined reasons
+  }
+
+  // Handle failure messages by splitting the text at '---' if present
+  if (text && text.includes('---')) {
     text = text.split('---').slice(1).join('---');
   }
 
@@ -163,7 +176,7 @@ function EvalOutputCell({
     );
   }
 
-  if (searchText) {
+  if (searchText && shouldHighlightSearchText) {
     // Highlight search matches
     try {
       const regex = new RegExp(searchText, 'gi');
@@ -350,7 +363,7 @@ function EvalOutputCell({
 
       tokenUsageDisplay = (
         <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total & ${reasoningTokens} reasoning tokens`}
+          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`}
         >
           <span>
             {totalTokens}
@@ -514,6 +527,11 @@ function EvalOutputCell({
 
   const detail = showStats ? (
     <div className="cell-detail">
+      {tokenUsage?.numRequests !== undefined && isRedteam && (
+        <div className="stat-item">
+          <strong>Probes:</strong> {tokenUsage.numRequests}
+        </div>
+      )}
       {tokenUsageDisplay && (
         <div className="stat-item">
           <strong>Tokens:</strong> {tokenUsageDisplay}
@@ -542,38 +560,38 @@ function EvalOutputCell({
     <div className="cell-actions">
       {shiftKeyPressed && (
         <>
-          <span className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
-            <Tooltip title="Copy output to clipboard">
-              <span>{copied ? '✅' : '📋'}</span>
-            </Tooltip>
-          </span>
-          <span
-            className="action"
-            onClick={handleToggleHighlight}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            <Tooltip title="Toggle test highlight">
-              <span>🌟</span>
-            </Tooltip>
-          </span>
-          <span
-            className="action"
-            onClick={handleRowShareLink}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            <Tooltip title="Share output">
-              <span>{linked ? '✅' : '🔗'}</span>
-            </Tooltip>
-          </span>
+          <Tooltip title={'Copy output to clipboard'} slotProps={tooltipSlotProps}>
+            <button className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
+              {copied ? '✅' : '📋'}
+            </button>
+          </Tooltip>
+          <Tooltip title={'Toggle test highlight'} slotProps={tooltipSlotProps}>
+            <button
+              className="action"
+              onClick={handleToggleHighlight}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              🌟
+            </button>
+          </Tooltip>
+          <Tooltip title={'Share output'} slotProps={tooltipSlotProps}>
+            <button
+              className="action"
+              onClick={handleRowShareLink}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {linked ? '✅' : '🔗'}
+            </button>
+          </Tooltip>
         </>
       )}
       {output.prompt && (
         <>
-          <span className="action" onClick={handlePromptOpen}>
-            <Tooltip title="View output and test details">
-              <span>🔎</span>
-            </Tooltip>
-          </span>
+          <Tooltip title={'View output and test details'} slotProps={tooltipSlotProps}>
+            <button className="action" onClick={handlePromptOpen}>
+              🔎
+            </button>
+          </Tooltip>
           {openPrompt && (
             <EvalOutputPromptDialog
               open={openPrompt}
@@ -585,36 +603,38 @@ function EvalOutputCell({
               metadata={output.metadata}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
+              testIndex={rowIndex}
+              variables={output.testCase?.vars}
             />
           )}
         </>
       )}
-      <span
-        className={`action ${activeRating === true ? 'active' : ''}`}
-        onClick={() => handleRating(true)}
-      >
-        <Tooltip title="Mark test passed (score 1.0)">
-          <span>👍</span>
-        </Tooltip>
-      </span>
-      <span
-        className={`action ${activeRating === false ? 'active' : ''}`}
-        onClick={() => handleRating(false)}
-      >
-        <Tooltip title="Mark test failed (score 0.0)">
-          <span>👎</span>
-        </Tooltip>
-      </span>
-      <span className="action" onClick={handleSetScore}>
-        <Tooltip title="Set test score">
-          <span>🔢</span>
-        </Tooltip>
-      </span>
-      <span className="action" onClick={handleCommentOpen}>
-        <Tooltip title="Edit comment">
-          <span>✏️</span>
-        </Tooltip>
-      </span>
+      <Tooltip title={'Mark test passed (score 1.0)'} slotProps={tooltipSlotProps}>
+        <button
+          className={`action ${activeRating === true ? 'active' : ''}`}
+          onClick={() => handleRating(true)}
+        >
+          👍
+        </button>
+      </Tooltip>
+      <Tooltip title={'Mark test failed (score 0.0)'} slotProps={tooltipSlotProps}>
+        <button
+          className={`action ${activeRating === false ? 'active' : ''}`}
+          onClick={() => handleRating(false)}
+        >
+          👎
+        </button>
+      </Tooltip>
+      <Tooltip title={'Set test score'} slotProps={tooltipSlotProps}>
+        <button className="action" onClick={handleSetScore}>
+          🔢
+        </button>
+      </Tooltip>
+      <Tooltip title={'Edit comment'} slotProps={tooltipSlotProps}>
+        <button className="action" onClick={handleCommentOpen}>
+          ✏️
+        </button>
+      </Tooltip>
     </div>
   );
 
@@ -630,7 +650,7 @@ function EvalOutputCell({
             {providerOverride}
           </div>
           <CustomMetrics lookup={output.namedScores} onMetricFilter={onMetricFilter} />
-          {!output.pass && (
+          {failReasons.length > 0 && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />
             </span>

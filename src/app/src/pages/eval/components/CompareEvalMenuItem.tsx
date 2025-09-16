@@ -7,8 +7,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import { useTableStore } from './store';
-
-import type { ResultLightweightWithLabel } from './types';
+import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 interface CompareEvalMenuItemProps {
   initialEvals: ResultLightweightWithLabel[];

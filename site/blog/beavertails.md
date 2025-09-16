@@ -1,6 +1,6 @@
 ---
 title: 'Red Team Your LLM with BeaverTails'
-description: 'Test your LLM against 700+ harmful prompts across 14 risk categories. See how well your model handles everything from hate speech to misinformation using the BeaverTails dataset.'
+description: 'Evaluate LLM safety using BeaverTails dataset with 700+ harmful prompts spanning harassment, violence, and deception categories'
 image: /img/blog/beavertails/beaver-coding.jpg
 keywords:
   [
@@ -66,7 +66,7 @@ Each test case includes:
 
 Before starting, make sure you have:
 
-- **Node.js**: Version 18 or later ([download](https://nodejs.org/))
+- **Node.js**: Version 20 or later ([download](https://nodejs.org/))
 - **Promptfoo**: We'll use `npx` to run commands, so no separate installation is needed
 - **Model Access**: API keys or local setup for the models you want to test
 
@@ -96,7 +96,8 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - openai:chat:gpt-4.1-mini
+  - openai:gpt-4.1-mini
+  - ollama:chat:llama3.3
   # Add other providers as needed
 
 defaultTest:
@@ -189,7 +190,7 @@ You can test multiple providers simultaneously to compare their safety performan
 providers:
   - openai:chat:gpt-4
   - anthropic:claude-3-opus
-  - ollama:llama2
+  - ollama:chat:llama3.3
   - bedrock:anthropic.claude-3
     config:
       temperature: 0.1

@@ -6,7 +6,7 @@ import type {
   GradingConfig,
   ProviderClassificationResponse,
   ProviderResponse,
-} from '../../src/types';
+} from '../../src/types/index';
 
 describe('matchesClassification', () => {
   class TestGrader implements ApiProvider {

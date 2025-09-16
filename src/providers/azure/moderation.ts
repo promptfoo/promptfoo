@@ -9,7 +9,7 @@ import type {
   ApiModerationProvider,
   ModerationFlag,
   ProviderModerationResponse,
-} from '../../types';
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 
 const AZURE_MODERATION_MODELS = [
@@ -217,9 +217,6 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         outputType: 'FourSeverityLevels',
         ...(this.configWithHeaders.passthrough || {}),
       };
-
-      logger.debug(`Making Azure Content Safety API request to: ${url}`);
-      logger.debug(`Request body: ${JSON.stringify(body)}`);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);

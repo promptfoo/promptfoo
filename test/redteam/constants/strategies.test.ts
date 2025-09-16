@@ -38,7 +38,6 @@ describe('strategies constants', () => {
       'jailbreak',
       'jailbreak:tree',
       'mischievous-user',
-      'pandamonium',
     ]);
   });
 
@@ -58,6 +57,7 @@ describe('strategies constants', () => {
 
   it('should have correct additional strategies', () => {
     expect(ADDITIONAL_STRATEGIES).toEqual([
+      'layer',
       'audio',
       'base64',
       'best-of-n',
@@ -78,7 +78,6 @@ describe('strategies constants', () => {
       'mischievous-user',
       'morse',
       'multilingual',
-      'pandamonium',
       'piglatin',
       'prompt-injection',
       'retry',

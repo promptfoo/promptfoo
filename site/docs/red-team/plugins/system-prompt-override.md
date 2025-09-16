@@ -1,5 +1,6 @@
 ---
 sidebar_label: System Prompt Override
+description: Red team system prompt override attacks by simulating malicious message injection to protect LLM deployments from unauthorized behavior manipulation and security bypass
 ---
 
 # System Prompt Override Plugin

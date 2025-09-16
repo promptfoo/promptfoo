@@ -1,5 +1,6 @@
 ---
-sidebar_label: 'Configuring the Grader'
+sidebar_label: Configuring the Grader
+description: Red team LLM grading systems by validating output classification to prevent false negatives and ensure accurate vulnerability detection in AI security assessments
 ---
 
 # About the Grader
@@ -13,6 +14,8 @@ Pass and fail scores are separate from **errors**, where the output could not be
 ## Configuring the Grader
 
 Configuring your grader starts when you create a new target within Promptfoo and outline details about the application in the "Usage Details" section. The `purpose` that you provide in the target setup, as well as any additional context about external system access if applicable, informs the grader. The more information you provide, the better the red team attacks will be.
+
+For custom `llm-rubric` assertions, see [Pass vs. Score Semantics](/docs/configuration/expected-outputs/model-graded/llm-rubric#pass-vs-score-semantics) if you encounter unexpected PASS results.
 
 The purpose can include details about how the LLM application should behave, including specifications like:
 
@@ -47,7 +50,7 @@ You can override the grader model within your `promptfooconfig.yaml` file throug
 ```yaml
 defaultTest:
   options:
-    provider: 'ollama:chat:llama3:70b'
+    provider: 'ollama:chat:llama3.3:70b'
 ```
 
 In this example, we can override the default grader to use Azure OpenAI:

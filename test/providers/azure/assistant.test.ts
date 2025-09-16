@@ -247,109 +247,6 @@ describe('Azure Assistant Provider', () => {
     });
   });
 
-  describe('function callback implementation', () => {
-    it('should load external file-based callbacks', async () => {
-      // Create a provider with file-based function callback
-      provider = new AzureAssistantProvider('test-deployment', {
-        config: {
-          apiKey: 'test-key',
-          apiHost: 'test.azure.com',
-          functionToolCallbacks: {
-            testFunction: 'file://path/to/function.js:testFunction' as any,
-          },
-        },
-      });
-
-      // Mock required methods
-      jest.spyOn(provider as any, 'getHeaders').mockResolvedValue({
-        'Content-Type': 'application/json',
-        'api-key': 'test-key',
-      });
-      jest.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
-      jest.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
-      jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
-
-      // Mock the loadExternalFunction to avoid actual file loading
-      const mockLoadExternalFunction = jest
-        .spyOn(provider as any, 'loadExternalFunction')
-        .mockResolvedValue(jest.fn().mockReturnValue('external function result'));
-
-      // Test the executeFunctionCallback method directly
-      const result = await (provider as any).executeFunctionCallback(
-        'testFunction',
-        '{"test":"value"}',
-      );
-
-      // Verify the result and that loadExternalFunction was called correctly
-      expect(mockLoadExternalFunction).toHaveBeenCalledWith(
-        'file://path/to/function.js:testFunction',
-      );
-      expect(result).toBe('external function result');
-    });
-
-    it('should properly cache loaded function callbacks', async () => {
-      // Create a provider with function callbacks
-      const mockCallback = jest.fn().mockReturnValue('cached result');
-
-      provider = new AzureAssistantProvider('test-deployment', {
-        config: {
-          apiKey: 'test-key',
-          apiHost: 'test.azure.com',
-          functionToolCallbacks: {
-            testFunction: mockCallback,
-          },
-        },
-      });
-
-      // Set up spies
-      jest.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
-      jest.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
-
-      // Call executeFunctionCallback multiple times
-      await (provider as any).executeFunctionCallback('testFunction', '{"test":"value"}');
-      await (provider as any).executeFunctionCallback('testFunction', '{"test":"value2"}');
-
-      // Verify the callback was only stored once but called twice
-      expect(mockCallback).toHaveBeenCalledTimes(2);
-      expect(mockCallback).toHaveBeenNthCalledWith(1, '{"test":"value"}', undefined);
-      expect(mockCallback).toHaveBeenNthCalledWith(2, '{"test":"value2"}', undefined);
-    });
-
-    it('should handle errors when loading external functions', async () => {
-      provider = new AzureAssistantProvider('test-deployment', {
-        config: {
-          apiKey: 'test-key',
-          apiHost: 'test.azure.com',
-          functionToolCallbacks: {
-            testFunction: 'file://path/to/function.js:testFunction' as any,
-          },
-        },
-      });
-
-      // Mock required methods
-      jest.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
-      jest.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
-
-      // Mock loadExternalFunction to throw an error
-      jest
-        .spyOn(provider as any, 'loadExternalFunction')
-        .mockRejectedValue(new Error('Module not found'));
-
-      // Test executeFunctionCallback handles the error correctly
-      const result = await (provider as any).executeFunctionCallback(
-        'testFunction',
-        '{"test":"value"}',
-      );
-
-      // Get the actual error message format from the implementation
-      expect(result).toEqual(
-        JSON.stringify({
-          error: 'Error in testFunction: Module not found',
-        }),
-      );
-    });
-  });
-
   describe('function tool handling', () => {
     it('should handle function tool calls and submit outputs', async () => {
       // Set up mock responses
@@ -684,7 +581,7 @@ describe('Azure Assistant Provider', () => {
         tool_outputs: [
           {
             tool_call_id: 'call-123',
-            output: JSON.stringify({ error: 'Error in testFunction: Test error' }),
+            output: JSON.stringify({ error: 'Error in testFunction: Function callback failed' }),
           },
         ],
       });
@@ -1649,52 +1546,6 @@ describe('Azure Assistant Provider', () => {
         // Ensure they are mutually exclusive
         expect(result.guardrails.flaggedInput && result.guardrails.flaggedOutput).toBe(false);
       });
-    });
-  });
-
-  describe('Function Callbacks with Context', () => {
-    it('should pass context to function callbacks', async () => {
-      const mockCallback = jest.fn().mockResolvedValue('test result');
-
-      const provider = new AzureAssistantProvider('test-deployment', {
-        config: {
-          apiKey: 'test-key',
-          apiHost: 'test.azure.com',
-          functionToolCallbacks: {
-            test_function: mockCallback,
-          },
-        },
-      });
-
-      // Mock required methods
-      jest.spyOn(provider as any, 'getHeaders').mockResolvedValue({
-        'Content-Type': 'application/json',
-        'api-key': 'test-key',
-      });
-      jest.spyOn(provider as any, 'getApiKey').mockReturnValue('test-key');
-      jest.spyOn(provider as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
-      jest.spyOn(provider as any, 'ensureInitialized').mockResolvedValue(undefined);
-
-      // Test the executeFunctionCallback method directly with context
-      const result = await (provider as any).executeFunctionCallback(
-        'test_function',
-        '{"param": "value"}',
-        {
-          threadId: 'thread-123',
-          runId: 'run-456',
-          assistantId: 'test-deployment',
-          provider: 'azure',
-        },
-      );
-
-      // Verify the callback was called with the correct context
-      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}', {
-        threadId: 'thread-123',
-        runId: 'run-456',
-        assistantId: 'test-deployment',
-        provider: 'azure',
-      });
-      expect(result).toBe('test result');
     });
   });
 });

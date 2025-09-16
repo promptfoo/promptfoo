@@ -18,10 +18,6 @@
   transition: height 0.3s ease;
 }
 
-#results-view-container {
-  timeline-scope: --collapseTimeline;
-}
-
 .eval-header {
   /* animation-name: collapseEvalHeader;
   animation-duration: 1ms;

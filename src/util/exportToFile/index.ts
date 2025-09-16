@@ -1,5 +1,5 @@
 import type EvalResult from '../../models/evalResult';
-import type { EvaluateTableOutput, EvaluateTableRow } from '../../types';
+import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;

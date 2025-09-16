@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare facts about a topic with llm-rubric and similar assertions
+
+prompts:
+  - 'What are three concise facts about {{topic}}?'
+
+providers:
+  - id: docker:ai/llama3.2:3B-Q4_K_M
+  - id: docker:ai/gemma3:4B-Q4_K_M
+  - id: docker:ai/phi4:14B-Q4_K_M
+  - id: docker:ai/deepseek-r1-distill-llama:8B-Q4_K_M
+    config:
+      temperature: 0.1
+      max_tokens: 512
+
+tests:
+  - vars:
+      topic: 'whales'
+    assert:
+      - type: llm-rubric
+        value: 'Provide at least two of these three facts: Whales are (a) mammals, (b) live in the ocean, and (c) communicate with sound.'
+      - type: similar
+        value: 'whales are the largest animals in the world'
+        threshold: 0.6
+
+# Use local models for grading and embeddings for similarity instead of OpenAI
+defaultTest:
+  options:
+    provider:
+      id: docker:ai/smollm3:Q4_K_M
+      embedding:
+        id: docker:embeddings:ai/mxbai-embed-large:335M-F16

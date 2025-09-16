@@ -8,8 +8,12 @@ export const REDTEAM_DEFAULTS = {
 
 export const REDTEAM_MODEL = 'openai:chat:gpt-4.1-2025-04-14';
 
-export const LLAMA_GUARD_REPLICATE_PROVIDER =
-  'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
+// LlamaGuard 4 is the default on Replicate (supports S14: Code Interpreter Abuse)
+export const LLAMA_GUARD_REPLICATE_PROVIDER = 'replicate:moderation:meta/llama-guard-4-12b';
+
+// For LlamaGuard 3 compatibility:
+// export const LLAMA_GUARD_REPLICATE_PROVIDER =
+//   'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
 
 export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
   'S1', // Violent Crimes
@@ -30,6 +34,10 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
   'beavertails',
+  'bias:age',
+  'bias:disability',
+  'bias:gender',
+  'bias:race',
   'contracts',
   'cyberseceval',
   'donotanswer',
@@ -137,8 +145,14 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'harmful:privacy',
 ] as const;
 
+export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac'] as const;
+
 export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
+
+// Plugins that require HuggingFace API keys for their datasets
+export const HUGGINGFACE_GATED_PLUGINS = ['beavertails', 'unsafebench', 'aegis'] as const;
+export type HuggingFaceGatedPlugin = (typeof HUGGINGFACE_GATED_PLUGINS)[number];
 
 export const COLLECTIONS = [
   'default',
@@ -210,8 +224,22 @@ export const MEDICAL_PLUGINS = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
+  'medical:off-label-use',
   'medical:prioritization-error',
   'medical:sycophancy',
+] as const;
+
+export const FINANCIAL_PLUGINS = [
+  'financial:calculation-error',
+  'financial:compliance-violation',
+  'financial:confidential-disclosure',
+  'financial:counterfactual',
+  'financial:data-leakage',
+  'financial:defamation',
+  'financial:hallucination',
+  'financial:impartiality',
+  'financial:misconduct',
+  'financial:sycophancy',
 ] as const;
 
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
@@ -248,12 +276,18 @@ export const ADDITIONAL_PLUGINS = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
+  'medical:off-label-use',
   'medical:prioritization-error',
   'medical:sycophancy',
   'financial:calculation-error',
   'financial:compliance-violation',
+  'financial:confidential-disclosure',
+  'financial:counterfactual',
   'financial:data-leakage',
+  'financial:defamation',
   'financial:hallucination',
+  'financial:impartiality',
+  'financial:misconduct',
   'financial:sycophancy',
   'off-topic',
   'overreliance',
@@ -265,11 +299,14 @@ export const ADDITIONAL_PLUGINS = [
   'reasoning-dos',
   'religion',
   'shell-injection',
+  'special-token-injection',
   'sql-injection',
   'ssrf',
   'system-prompt-override',
   'tool-discovery',
   'unsafebench',
+  'unverifiable-claims',
+  'vlguard',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
@@ -285,7 +322,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
-export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench'] as const;
+export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench', 'vlguard'] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
@@ -321,3 +358,11 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...AGENTIC_PLUGINS,
   ]),
 ].sort() as Plugin[];
+
+export const PLUGIN_CATEGORIES = {
+  bias: BIAS_PLUGINS,
+  financial: FINANCIAL_PLUGINS,
+  harmful: Object.keys(HARM_PLUGINS),
+  pii: PII_PLUGINS,
+  medical: MEDICAL_PLUGINS,
+} as const;

@@ -1,13 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
-import {
-  type EvaluateTable,
-  type EvaluateTableOutput,
-  type EvaluateTableRow,
-  type FilterMode,
-} from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -25,6 +19,12 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
+import {
+  type EvalResultsFilterMode,
+  type EvaluateTable,
+  type EvaluateTableOutput,
+  type EvaluateTableRow,
+} from '@promptfoo/types';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -36,8 +36,8 @@ import yaml from 'js-yaml';
 import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
-import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
+import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
@@ -50,6 +50,7 @@ import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -96,9 +97,9 @@ function TableHeader({
       {expandedText && (
         <>
           <Tooltip title="View prompt">
-            <span className="action" onClick={handlePromptOpen}>
+            <button className="action" onClick={handlePromptOpen}>
               🔎
-            </span>
+            </button>
           </Tooltip>
           {promptOpen && (
             <EvalOutputPromptDialog
@@ -126,14 +127,13 @@ interface ResultsTableProps {
   maxTextLength: number;
   columnVisibility: VisibilityState;
   wordBreak: 'break-word' | 'break-all';
-  filterMode: FilterMode;
+  filterMode: EvalResultsFilterMode;
   failureFilter: { [key: string]: boolean };
-  searchText: string;
   debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
-  setFilterMode: (mode: FilterMode) => void;
+  setFilterMode: (mode: EvalResultsFilterMode) => void;
   zoom: number;
 }
 
@@ -146,14 +146,91 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
 }
 
+function ResultsTableHeader({
+  reactTable,
+  tableWidth,
+  maxTextLength,
+  wordBreak,
+  theadRef,
+  stickyHeader,
+  setStickyHeader,
+  zoom,
+}: {
+  reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
+  tableWidth: number;
+  maxTextLength: number;
+  wordBreak: 'break-word' | 'break-all';
+  theadRef: React.RefObject<HTMLTableSectionElement>;
+  stickyHeader: boolean;
+  setStickyHeader: (sticky: boolean) => void;
+  zoom: number;
+}) {
+  return (
+    <table
+      className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''} ${
+        stickyHeader && 'results-table-sticky'
+      }`}
+      style={{
+        wordBreak,
+        width: `${tableWidth}px`,
+        zoom,
+      }}
+    >
+      <thead ref={theadRef}>
+        {stickyHeader && (
+          <div className="header-dismiss">
+            <IconButton
+              onClick={() => setStickyHeader(false)}
+              size="small"
+              sx={{ color: 'text.primary' }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </div>
+        )}
+        {reactTable.getHeaderGroups().map((headerGroup) => (
+          <tr key={headerGroup.id} className="header">
+            {headerGroup.headers.map((header) => {
+              const isMetadataCol =
+                header.column.id.startsWith('Variable') || header.column.id === 'description';
+              const isFinalRow = headerGroup.depth === 1;
+
+              return (
+                <th
+                  key={header.id}
+                  tabIndex={0}
+                  colSpan={header.colSpan}
+                  style={{
+                    width: header.getSize(),
+                    borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                    height: isFinalRow ? 'fit-content' : 'auto',
+                  }}
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                  <div
+                    onMouseDown={header.getResizeHandler()}
+                    onTouchStart={header.getResizeHandler()}
+                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                  />
+                </th>
+              );
+            })}
+          </tr>
+        ))}
+      </thead>
+    </table>
+  );
+}
+
 function ResultsTable({
   maxTextLength,
   columnVisibility,
   wordBreak,
   filterMode,
   failureFilter,
-  searchText,
-  debouncedSearchText: externalDebouncedSearchText,
+  debouncedSearchText,
   showStats,
   onFailureFilterToggle,
   onSearchTextChange,
@@ -179,6 +256,10 @@ function ResultsTable({
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
+
+  const isRedteam = React.useMemo(() => {
+    return config?.redteam !== undefined;
+  }, [config?.redteam]);
 
   const visiblePromptCount = React.useMemo(
     () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
@@ -337,14 +418,6 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
-  const [localDebouncedSearchText] = useDebounce(searchText, 200);
-  const debouncedSearchText = externalDebouncedSearchText || localDebouncedSearchText;
-  const [isSearching, setIsSearching] = useState(false);
-
-  React.useEffect(() => {
-    setIsSearching(searchText !== debouncedSearchText && searchText !== '');
-  }, [searchText, debouncedSearchText]);
-
   const tableBody = React.useMemo(() => {
     return body.map((row, rowIndex) => ({
       ...row,
@@ -459,6 +532,8 @@ function ResultsTable({
   const { renderMarkdown } = useResultsViewSettingsStore();
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
+      const injectVarName = config?.redteam?.injectVar || 'prompt';
+
       return [
         columnHelper.group({
           id: 'vars',
@@ -471,9 +546,24 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 let value: string | object = info.getValue();
-
-                // Get the first output that has metadata for checking file metadata
+                const _originalValue = value; // Store original value for tooltip
                 const row = info.row.original;
+
+                // For red team evals, show the final injected prompt for the configured inject variable
+                // This replaces the original prompt with what was actually sent to the model
+                if (varName === injectVarName) {
+                  // Check all outputs to find one with redteamFinalPrompt metadata
+                  for (const output of row.outputs || []) {
+                    // Check if redteamFinalPrompt exists
+                    if (output?.metadata?.redteamFinalPrompt) {
+                      // Replace the original prompt with the injected version
+                      value = output.metadata.redteamFinalPrompt;
+                      break;
+                    }
+                  }
+                }
+
+                // Get first output for file metadata check
                 const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
 
                 const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
@@ -481,7 +571,7 @@ function ResultsTable({
                   | undefined;
                 const isMediaFile = fileMetadata && fileMetadata[varName];
 
-                if (isMediaFile) {
+                if (isMediaFile && typeof value === 'string') {
                   // Handle various media types
                   const mediaMetadata = fileMetadata[varName];
                   const mediaType = mediaMetadata.type;
@@ -541,15 +631,55 @@ function ResultsTable({
                   value.length > maxTextLength
                     ? `${value.substring(0, maxTextLength - 3).trim()}...`
                     : value;
+
+                const cellContent = renderMarkdown ? (
+                  <MarkdownErrorBoundary fallback={value}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                  </MarkdownErrorBoundary>
+                ) : (
+                  <TruncatedText text={value} maxLength={maxTextLength} />
+                );
+
+                // Determine if we should show original text (decoded) even without redteamFinalPrompt
+                const testMetadata = (row as any)?.test?.metadata || {};
+                const metadataOriginal =
+                  typeof testMetadata.originalText === 'string'
+                    ? testMetadata.originalText
+                    : undefined;
+                const strategyId = testMetadata.strategyId;
+                const shouldShowOriginal =
+                  varName === injectVarName &&
+                  isEncodingStrategy(strategyId) &&
+                  Boolean(metadataOriginal);
+
+                // Show original text for encoding strategies
+                if (shouldShowOriginal) {
+                  const originalForDisplay = metadataOriginal || '';
+                  return (
+                    <div className="cell" data-capture="true">
+                      {cellContent}
+                      {originalForDisplay && String(originalForDisplay) !== String(value) && (
+                        <Box
+                          sx={{
+                            marginTop: '6px',
+                            color: 'text.secondary',
+                            fontSize: '0.8em',
+                          }}
+                        >
+                          <strong>Original (decoded):</strong>{' '}
+                          <TruncatedText
+                            text={String(originalForDisplay)}
+                            maxLength={maxTextLength}
+                          />
+                        </Box>
+                      )}
+                    </div>
+                  );
+                }
+
                 return (
                   <div className="cell" data-capture="true">
-                    {renderMarkdown ? (
-                      <MarkdownErrorBoundary fallback={value}>
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
-                      </MarkdownErrorBoundary>
-                    ) : (
-                      <TruncatedText text={value} maxLength={maxTextLength} />
-                    )}
+                    {cellContent}
                   </div>
                 );
               },
@@ -560,7 +690,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength, renderMarkdown]);
+  }, [columnHelper, head.vars, maxTextLength, renderMarkdown, config]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -649,6 +779,12 @@ function ResultsTable({
 
               const details = showStats ? (
                 <div className="prompt-detail collapse-hidden">
+                  {prompt.metrics?.tokenUsage?.numRequests !== undefined && (
+                    <div>
+                      <strong>{isRedteam ? 'Probes:' : 'Requests:'}</strong>{' '}
+                      {prompt.metrics.tokenUsage.numRequests}
+                    </div>
+                  )}
                   {numAsserts[idx] ? (
                     <div>
                       <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
@@ -778,6 +914,7 @@ function ResultsTable({
                           metricTotals={metricTotals}
                           onSearchTextChange={onSearchTextChange}
                           onMetricFilter={handleMetricFilterClick}
+                          onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
                       </Box>
                     ) : null}
@@ -841,6 +978,7 @@ function ResultsTable({
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                     onMetricFilter={handleMetricFilterClick}
+                    isRedteam={isRedteam}
                   />
                 </ErrorBoundary>
               ) : (
@@ -1016,32 +1154,53 @@ function ResultsTable({
     return width;
   }, [descriptionColumn, head.vars.length, head.prompts.length]);
 
+  // Listen for scroll events on the table container and sync the header horizontally
+  const tableRef = useRef<HTMLDivElement>(null);
+  const theadRef = useRef<HTMLTableSectionElement>(null);
+
+  useEffect(() => {
+    if (!tableRef.current || !theadRef.current) {
+      return;
+    }
+
+    const container = tableRef.current;
+    let rafId: number | null = null;
+
+    const handleScroll = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      rafId = requestAnimationFrame(() => {
+        if (theadRef.current) {
+          const xScroll = container.scrollLeft;
+          theadRef.current.style.transform = `translateX(-${xScroll}px)`;
+        }
+      });
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+
+    // Initial sync
+    handleScroll();
+    // Keep in sync on resize
+    window.addEventListener('resize', handleScroll);
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      container.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, []);
+
+  const [customMetricsDialogOpen, setCustomMetricsDialogOpen] = React.useState(false);
+
   return (
     // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
     // of this component. This ensures that the pagination footer is always pinned to the bottom
     // of the viewport (because the parent container is a flexbox).
     <>
-      {isSearching && searchText && (
-        <Box
-          sx={{
-            position: 'fixed',
-            top: '60px',
-            right: '20px',
-            zIndex: 1000,
-            backgroundColor: 'rgba(25, 118, 210, 0.1)',
-            padding: '5px 10px',
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <Typography variant="body2" color="primary">
-            Searching...
-          </Typography>
-        </Box>
-      )}
-
       {filteredResultsCount === 0 &&
         !isFetching &&
         (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
@@ -1059,6 +1218,19 @@ function ResultsTable({
           </Box>
         )}
 
+      <Box sx={{ height: '1rem' }} />
+
+      <ResultsTableHeader
+        reactTable={reactTable}
+        tableWidth={tableWidth}
+        maxTextLength={maxTextLength}
+        wordBreak={wordBreak}
+        theadRef={theadRef}
+        stickyHeader={stickyHeader}
+        setStickyHeader={setStickyHeader}
+        zoom={zoom}
+      />
+
       <div
         id="results-table-container"
         style={{
@@ -1070,6 +1242,7 @@ function ResultsTable({
           flexGrow: 1,
           position: 'relative',
         }}
+        ref={tableRef}
       >
         <Box
           sx={{
@@ -1098,50 +1271,6 @@ function ResultsTable({
             width: `${tableWidth}px`,
           }}
         >
-          <thead className={`${stickyHeader && 'sticky'}`}>
-            {stickyHeader && (
-              // TODO: Fix this position in the CSS.
-              <div className="header-dismiss">
-                <IconButton
-                  onClick={() => setStickyHeader(false)}
-                  size="small"
-                  sx={{ color: 'text.primary' }}
-                >
-                  <CloseIcon fontSize="small" />
-                </IconButton>
-              </div>
-            )}
-            {reactTable.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="header">
-                {headerGroup.headers.map((header) => {
-                  const isMetadataCol =
-                    header.column.id.startsWith('Variable') || header.column.id === 'description';
-                  const isFinalRow = headerGroup.depth === 1;
-
-                  return (
-                    <th
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      style={{
-                        width: header.getSize(),
-                        borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
-                        height: isFinalRow ? 'fit-content' : 'auto',
-                      }}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                      />
-                    </th>
-                  );
-                })}
-              </tr>
-            ))}
-          </thead>
           <tbody>
             {reactTable.getRowModel().rows.map((row, rowIndex) => {
               let colBorderDrawn = false;
@@ -1166,6 +1295,30 @@ function ResultsTable({
                       const imgSrc = value.startsWith('data:')
                         ? value
                         : `data:image/jpeg;base64,${value}`;
+
+                      // If this is a variable column for the inject var, try to show the original image text
+                      let originalImageText: string | undefined;
+                      const columnId = String(cell.column.id);
+                      const match = columnId.match(/^Variable (\d+)$/);
+                      if (match) {
+                        const varIdx = Number(match[1]) - 1;
+                        const injectVarName = config?.redteam?.injectVar || 'prompt';
+                        const varNameForCol = head.vars[varIdx];
+                        if (varNameForCol === injectVarName) {
+                          const testMeta: any = (row.original as any)?.test?.metadata || {};
+                          const fromMeta =
+                            typeof testMeta.originalText === 'string'
+                              ? testMeta.originalText
+                              : undefined;
+                          const testVars: any = (row.original as any)?.test?.vars || {};
+                          const fromVars =
+                            typeof testVars.image_text === 'string'
+                              ? (testVars.image_text as string)
+                              : undefined;
+                          originalImageText = fromVars || fromMeta;
+                        }
+                      }
+
                       cellContent = (
                         <>
                           <img
@@ -1191,12 +1344,28 @@ function ResultsTable({
                               />
                             </div>
                           )}
+                          {originalImageText ? (
+                            <Box
+                              sx={{
+                                marginTop: '6px',
+                                color: 'text.secondary',
+                                fontSize: '0.8em',
+                              }}
+                            >
+                              <strong>Original (image text):</strong>{' '}
+                              <TruncatedText
+                                text={String(originalImageText)}
+                                maxLength={maxTextLength}
+                              />
+                            </Box>
+                          ) : null}
                         </>
                       );
                     }
 
                     return (
                       <td
+                        tabIndex={0}
                         key={cell.id}
                         style={{
                           width: cell.column.getSize(),
@@ -1219,6 +1388,9 @@ function ResultsTable({
         px={2}
         mx={-2}
         sx={{
+          position: 'sticky',
+          bottom: 0,
+          zIndex: 1000,
           display: 'flex',
           alignItems: 'center',
           gap: 2,
@@ -1374,6 +1546,10 @@ function ResultsTable({
           </ButtonGroup>
         </Box>
       </Box>
+      <CustomMetricsDialog
+        open={customMetricsDialogOpen}
+        onClose={() => setCustomMetricsDialogOpen(false)}
+      />
     </>
   );
 }

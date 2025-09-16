@@ -55,19 +55,19 @@ describe('EvalOutputPromptDialog', () => {
 
   it('displays output when provided', () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    expect(screen.getByText('Output')).toBeInTheDocument();
+    expect(screen.getByText('Original Output')).toBeInTheDocument();
     expect(screen.getByText('Test output')).toBeInTheDocument();
   });
 
-  it('displays assertion results table with metrics when provided', () => {
+  it('displays assertion results table with metrics when provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    expect(screen.getByText('Assertions')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
     expect(screen.getByText('Metric')).toBeInTheDocument();
     expect(screen.getByText('contains')).toBeInTheDocument();
     expect(screen.getByText('✅')).toBeInTheDocument();
   });
 
-  it('does not display metrics column when no metrics are present', () => {
+  it('does not display metrics column when no metrics are present', async () => {
     const propsWithoutMetrics = {
       ...defaultProps,
       gradingResults: [
@@ -81,11 +81,13 @@ describe('EvalOutputPromptDialog', () => {
       ],
     };
     render(<EvalOutputPromptDialog {...propsWithoutMetrics} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
     expect(screen.queryByText('Metric')).not.toBeInTheDocument();
   });
 
-  it('displays metadata table when provided', () => {
+  it('displays metadata table when provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
     expect(screen.getByText('Metadata')).toBeInTheDocument();
     expect(screen.getByText('testKey')).toBeInTheDocument();
     expect(screen.getByText('testValue')).toBeInTheDocument();
@@ -93,7 +95,7 @@ describe('EvalOutputPromptDialog', () => {
 
   it('calls onClose when close button is clicked', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    await userEvent.click(screen.getByText('Close'));
+    await userEvent.click(screen.getByLabelText('close'));
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
@@ -111,9 +113,11 @@ describe('EvalOutputPromptDialog', () => {
 
     fireEvent.mouseEnter(promptBox!);
 
-    // Get the button by its aria-label (updated to match new implementation)
-    const copyButton = screen.getByLabelText('Copy prompt');
-    await userEvent.click(copyButton);
+    // Find all copy buttons and select the first one (for the prompt)
+    const copyIcons = screen.getAllByTestId('ContentCopyIcon');
+    const copyButton = copyIcons[0].closest('button');
+    expect(copyButton).toBeInTheDocument();
+    await userEvent.click(copyButton!);
 
     expect(mockClipboard.writeText).toHaveBeenCalledWith('Test prompt');
     expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();
@@ -126,6 +130,8 @@ describe('EvalOutputPromptDialog', () => {
     Object.assign(navigator, { clipboard: mockClipboard });
 
     render(<EvalOutputPromptDialog {...defaultProps} />);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
 
     // Trigger the hover event on the value cell to make the copy button visible
     const valueCell = screen.getByText('expected value').closest('td');
@@ -158,6 +164,7 @@ describe('EvalOutputPromptDialog', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithLongValue} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
     const truncatedCell = screen.getByText(/^a+\.\.\.$/);
     await userEvent.click(truncatedCell);
     expect(screen.getByText(longValue)).toBeInTheDocument();
@@ -197,7 +204,7 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.queryByTestId('citations-component')).not.toBeInTheDocument();
   });
 
-  it('excludes citations from metadata table to avoid duplication', () => {
+  it('excludes citations from metadata table to avoid duplication', async () => {
     const propsWithCitations = {
       ...defaultProps,
       metadata: {
@@ -209,6 +216,7 @@ describe('EvalOutputPromptDialog', () => {
     render(<EvalOutputPromptDialog {...propsWithCitations} />);
 
     // Regular metadata should be in the table
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
     expect(screen.getByText('regularKey')).toBeInTheDocument();
     expect(screen.getByText('regular value')).toBeInTheDocument();
 
@@ -236,6 +244,9 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithLongValue} />);
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
     const truncatedCell = screen.getByText(/^a+\.\.\.$/);
 
     await act(async () => {
@@ -255,6 +266,9 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithLongValue} />);
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
     const cell = screen.getByText(/^a+\.\.\.$/);
 
     // First click to expand
@@ -281,6 +295,9 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithLongValue} />);
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
     const cell = screen.getByText(/^a+\.\.\.$/);
 
     // First click to expand

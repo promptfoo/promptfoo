@@ -23,7 +23,18 @@ import RiskCategoryDrawer from './RiskCategoryDrawer';
 import { useReportStore } from './store';
 import './RiskCard.css';
 
-const RiskCard: React.FC<{
+const RiskCard = ({
+  title,
+  subtitle,
+  progressValue,
+  numTestsPassed,
+  numTestsFailed,
+  testTypes,
+  evalId,
+  failuresByPlugin,
+  passesByPlugin,
+  strategyStats,
+}: {
   title: string;
   subtitle: string;
   progressValue: number;
@@ -40,17 +51,6 @@ const RiskCard: React.FC<{
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
   strategyStats: Record<string, { pass: number; total: number }>;
-}> = ({
-  title,
-  subtitle,
-  progressValue,
-  numTestsPassed,
-  numTestsFailed,
-  testTypes,
-  evalId,
-  failuresByPlugin,
-  passesByPlugin,
-  strategyStats,
 }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -206,8 +206,14 @@ const RiskCard: React.FC<{
             failures={failuresByPlugin[selectedCategory] || []}
             passes={passesByPlugin[selectedCategory] || []}
             evalId={evalId}
-            numPassed={testTypes.find((t) => t.name === selectedCategory)?.numPassed || 0}
-            numFailed={testTypes.find((t) => t.name === selectedCategory)?.numFailed || 0}
+            numPassed={(() => {
+              const testType = testTypes.find((t) => t.name === selectedCategory);
+              return testType?.numPassed ?? 0;
+            })()}
+            numFailed={(() => {
+              const testType = testTypes.find((t) => t.name === selectedCategory);
+              return testType?.numFailed ?? 0;
+            })()}
             strategyStats={strategyStats}
           />
         )}

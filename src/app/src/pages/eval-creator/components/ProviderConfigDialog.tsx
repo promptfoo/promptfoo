@@ -40,18 +40,19 @@ interface ProviderConfigDialogProps {
   onSave: (providerId: string, config: Record<string, any>) => void;
 }
 
-const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
+const ProviderConfigDialog = ({
   open,
   providerId,
   config = {},
   onClose,
   onSave,
-}) => {
+}: ProviderConfigDialogProps) => {
   const [localConfig, setLocalConfig] = useState<Record<string, any>>({});
   const [tabValue, setTabValue] = useState(0);
   const [showSensitive, setShowSensitive] = useState<Record<string, boolean>>({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const isAzureProvider = providerId.startsWith('azure:');
 
   // Get schema for current provider
   const schema = useMemo(() => getProviderSchema(providerId), [providerId]);

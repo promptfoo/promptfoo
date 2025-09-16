@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
@@ -18,6 +18,8 @@ import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
+import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -31,14 +33,17 @@ import {
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
-import { convertTestResultsToTableRow } from '../util/exportToFile';
+import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
+
+import type { EvalResultsFilterMode } from '../types/index';
 
 interface FilteredCountRow {
   count: number | null;
@@ -46,6 +51,34 @@ interface FilteredCountRow {
 
 interface TestIndexRow {
   test_idx: number;
+}
+
+/**
+ * Sanitizes runtime options to ensure only JSON-serializable data is persisted.
+ * Removes non-serializable fields like AbortSignal, functions, and symbols.
+ */
+function sanitizeRuntimeOptions(
+  options?: Partial<import('../types').EvaluateOptions>,
+): Partial<import('../types').EvaluateOptions> | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  // Create a deep copy to avoid mutating the original
+  const sanitized = { ...options };
+
+  // Remove known non-serializable fields
+  delete (sanitized as any).abortSignal;
+
+  // Remove any function or symbol values
+  for (const key in sanitized) {
+    const value = (sanitized as any)[key];
+    if (typeof value === 'function' || typeof value === 'symbol') {
+      delete (sanitized as any)[key];
+    }
+  }
+
+  return sanitized;
 }
 
 export function createEvalId(createdAt: Date = new Date()) {
@@ -106,6 +139,7 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
+  runtimeOptions?: Partial<import('../types').EvaluateOptions>;
 
   static async latest() {
     const db = getDb();
@@ -154,6 +188,7 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
+      runtimeOptions: (eval_ as any).runtimeOptions,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -200,6 +235,7 @@ export default class Eval {
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
+      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -219,6 +255,7 @@ export default class Eval {
           config,
           results: {},
           vars: opts?.vars || [],
+          runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
         })
         .run();
 
@@ -297,7 +334,13 @@ export default class Eval {
       }
     });
 
-    return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
+    return new Eval(config, {
+      id: evalId,
+      author: opts?.author,
+      createdAt,
+      persisted: true,
+      runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+    });
   }
 
   constructor(
@@ -311,6 +354,7 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
+      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -324,6 +368,7 @@ export default class Eval {
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
+    this.runtimeOptions = opts?.runtimeOptions;
   }
 
   version() {
@@ -353,6 +398,7 @@ export default class Eval {
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
+      runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
     };
 
     if (this.useOldResults()) {
@@ -408,14 +454,8 @@ export default class Eval {
   }
 
   async getResultsCount(): Promise<number> {
-    const db = getDb();
-    const result = db
-      .select({ count: sql<number>`count(*)` })
-      .from(evalResultsTable)
-      .where(eq(evalResultsTable.evalId, this.id))
-      .all();
-    const count = result[0]?.count ?? 0;
-    return Number(count);
+    // Use cached count for better performance
+    return getCachedResultsCount(this.id);
   }
 
   async fetchResultsByTestIdx(testIdx: number) {
@@ -428,14 +468,14 @@ export default class Eval {
   private async queryTestIndices(opts: {
     offset?: number;
     limit?: number;
-    filterMode?: string;
+    filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
     const db = getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
-    const mode = opts.filterMode ?? 'all';
+    const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
     // Build filter conditions
     const conditions = [`eval_id = '${this.id}'`];
@@ -450,18 +490,21 @@ export default class Eval {
     // Add filters
     if (opts.filters && opts.filters.length > 0) {
       const filterConditions: string[] = [];
+      // Helper function to sanitize SQL string values
+      const sanitizeValue = (val: string) => val.replace(/'/g, "''");
+
       opts.filters.forEach((filter) => {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
         if (type === 'metric' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
           // in double quotes.
           condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
         } else if (type === 'metadata' && field) {
-          const sanitizedValue = value.replace(/'/g, "''");
-          const sanitizedField = field.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
+          const sanitizedField = sanitizeValue(field);
 
           if (operator === 'equals') {
             condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
@@ -471,11 +514,19 @@ export default class Eval {
             condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
           }
         } else if (type === 'plugin' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
+          // Is the value a category? e.g. `harmful` or `bias`
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
+          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+
           // Plugin ID is stored in metadata.pluginId
-          condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+          if (isCategory) {
+            condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
+          } else {
+            condition = `${pluginIdPath} = '${sanitizedValue}'`;
+          }
         } else if (type === 'strategy' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           if (sanitizedValue === 'basic') {
             // Basic is represented by NULL in the metadata.strategyId field
             condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
@@ -483,12 +534,37 @@ export default class Eval {
             // Strategy ID is stored in metadata.strategyId
             condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
           }
+        } else if (type === 'severity' && operator === 'equals') {
+          const sanitizedValue = sanitizeValue(value);
+          // Get the severity map for all plugins
+          const severityMap = getRiskCategorySeverityMap(this.config?.redteam?.plugins);
+
+          // Find all plugin IDs that match the requested severity
+          const matchingPluginIds = Object.entries(severityMap)
+            .filter(([, severity]) => severity === sanitizedValue)
+            .map(([pluginId]) => pluginId);
+
+          if (matchingPluginIds.length > 0) {
+            const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+            // Build SQL condition to check if pluginId matches any of the plugins with this severity
+            const pluginConditions = matchingPluginIds.map((pluginId) => {
+              const sanitizedPluginId = sanitizeValue(pluginId);
+              // Check for exact match or category match (e.g., 'harmful:*')
+              if (pluginId.includes(':')) {
+                // It's a specific subcategory
+                return `${pluginIdPath} = '${sanitizedPluginId}'`;
+              } else {
+                // It's a category, match any plugin starting with this prefix
+                return `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
+              }
+            });
+            condition = `(${pluginConditions.join(' OR ')})`;
+          }
         }
 
         if (condition) {
-          // Logic operator can only be applied if there are already conditions
+          // Apply logic operator if there are already existing filter conditions
           filterConditions.push(
-            // Logic operator can only be applied if there are already conditions
             filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
           );
         }
@@ -550,7 +626,7 @@ export default class Eval {
   async getTablePage(opts: {
     offset?: number;
     limit?: number;
-    filterMode?: string;
+    filterMode?: EvalResultsFilterMode;
     testIndices?: number[];
     searchQuery?: string;
     filters?: string[];
@@ -573,14 +649,31 @@ export default class Eval {
       testIndices = opts.testIndices;
       filteredCount = testIndices.length;
     } else {
-      // Query for test indices based on filters
-      const queryResult = await this.queryTestIndices({
-        offset: opts.offset,
-        limit: opts.limit,
-        filterMode: opts.filterMode,
-        searchQuery: opts.searchQuery,
-        filters: opts.filters,
-      });
+      // Use optimized query for simple cases, fall back to original for complex filters
+      const hasComplexFilters = opts.filters && opts.filters.length > 0;
+
+      let queryResult;
+      if (hasComplexFilters) {
+        // Fall back to original query for complex filters
+        logger.debug('Using original query for complex filters');
+        queryResult = await this.queryTestIndices({
+          offset: opts.offset,
+          limit: opts.limit,
+          filterMode: opts.filterMode,
+          searchQuery: opts.searchQuery,
+          filters: opts.filters,
+        });
+      } else {
+        // Use optimized query for better performance
+        logger.debug('Using optimized query for table page');
+        queryResult = await queryTestIndicesOptimized(this.id, {
+          offset: opts.offset,
+          limit: opts.limit,
+          filterMode: opts.filterMode,
+          searchQuery: opts.searchQuery,
+          filters: opts.filters,
+        });
+      }
 
       testIndices = queryResult.testIndices;
       filteredCount = queryResult.filteredCount;

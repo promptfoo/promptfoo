@@ -4,7 +4,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval, { getEvalSummaries } from '../../src/models/eval';
 import EvalFactory from '../factories/evalFactory';
 
-import type { Prompt } from '../../src/types';
+import type { Prompt } from '../../src/types/index';
 
 jest.mock('../../src/globalConfig/accounts', () => ({
   ...jest.requireActual('../../src/globalConfig/accounts'),

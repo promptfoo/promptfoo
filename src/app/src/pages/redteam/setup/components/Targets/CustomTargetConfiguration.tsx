@@ -18,13 +18,13 @@ interface CustomTargetConfigurationProps {
   bodyError: string | null;
 }
 
-const CustomTargetConfiguration: React.FC<CustomTargetConfigurationProps> = ({
+const CustomTargetConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   rawConfigJson,
   setRawConfigJson,
   bodyError,
-}) => {
+}: CustomTargetConfigurationProps) => {
   const [targetId, setTargetId] = useState(selectedTarget.id || '');
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
@@ -46,9 +46,6 @@ const CustomTargetConfiguration: React.FC<CustomTargetConfigurationProps> = ({
 
   return (
     <Box mt={2}>
-      <Typography variant="h6" gutterBottom>
-        Custom Target Configuration
-      </Typography>
       <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
         <TextField
           fullWidth
