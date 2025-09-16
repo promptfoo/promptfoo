@@ -382,4 +382,30 @@ describe('Plugins', () => {
     // Verify basic component structure is rendered
     expect(screen.getByRole('heading', { name: /Plugins/i, level: 4 })).toBeInTheDocument();
   });
+
+  it('should display the suggestion card when exactly 80% of available plugins are selected', () => {
+    vi.mocked(useRedTeamConfig).mockReturnValue({
+      config: {
+        plugins: [
+          'plugin1',
+          'plugin2',
+          'plugin3',
+          'plugin4',
+          'plugin5',
+          'plugin6',
+          'plugin7',
+          'plugin8',
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    expect(
+      screen.getByText((content) => {
+        return content.includes("You've selected 8 plugins");
+      }),
+    ).toBeInTheDocument();
+  });
 });
