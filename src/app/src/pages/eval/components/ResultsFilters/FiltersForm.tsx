@@ -207,7 +207,12 @@ function Filter({
       }
 
       // Fetch metadata keys when user switches to metadata filter type
-      if (filterType === 'metadata' && evalId && !metadataKeysLoading && metadataKeys.length === 0) {
+      if (
+        filterType === 'metadata' &&
+        evalId &&
+        !metadataKeysLoading &&
+        metadataKeys.length === 0
+      ) {
         fetchMetadataKeys(evalId);
       }
 

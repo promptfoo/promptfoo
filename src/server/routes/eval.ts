@@ -290,12 +290,12 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
     // Validate that comparison evals exist
     if (comparisonEvalIds.length > 0) {
       const comparisonEvals = await Promise.all(
-        comparisonEvalIds.map(compId => Eval.findById(compId))
+        comparisonEvalIds.map((compId) => Eval.findById(compId)),
       );
       const missingEvals = comparisonEvalIds.filter((_, index) => !comparisonEvals[index]);
       if (missingEvals.length > 0) {
         res.status(400).json({
-          error: `Comparison evals not found: ${missingEvals.join(', ')}`
+          error: `Comparison evals not found: ${missingEvals.join(', ')}`,
         });
         return;
       }

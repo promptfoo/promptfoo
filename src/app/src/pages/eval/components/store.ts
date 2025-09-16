@@ -686,12 +686,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
         url.searchParams.append('comparisonEvalIds', compId);
       });
 
-      const resp = await callApi(
-        url.toString().replace(window.location.origin, ''),
-        {
-          signal: abortController.signal,
-        }
-      );
+      const resp = await callApi(url.toString().replace(window.location.origin, ''), {
+        signal: abortController.signal,
+      });
 
       // Clear timeout on successful response
       clearTimeout(timeoutId);
