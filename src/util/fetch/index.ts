@@ -40,6 +40,89 @@ interface SystemError extends Error {
   cause?: unknown;
 }
 
+/**
+ * Cache for agents to avoid recreating them on every request
+ */
+interface AgentCache {
+  agent: Agent | ProxyAgent;
+  proxyUrl: string;
+  tlsConfig: string; // Stringified TLS options for comparison
+  caCertPath: string | undefined;
+}
+
+let cachedAgent: AgentCache | null = null;
+
+/**
+ * Clear the cached agent - primarily for testing
+ */
+export function clearAgentCache(): void {
+  cachedAgent = null;
+}
+
+/**
+ * Get or create an agent based on the current configuration
+ */
+function getOrCreateAgent(url: string): Agent | ProxyAgent {
+  const tlsOptions: ConnectionOptions = {
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+  };
+
+  // Support custom CA certificates
+  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
+  if (caCertPath) {
+    try {
+      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
+      const ca = fs.readFileSync(resolvedPath, 'utf8');
+      tlsOptions.ca = ca;
+      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+    } catch (e) {
+      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+    }
+  }
+
+  const proxyUrl = getProxyForUrl(url);
+  const tlsConfig = JSON.stringify(tlsOptions);
+
+  // Check if we can reuse the cached agent
+  if (
+    cachedAgent &&
+    cachedAgent.proxyUrl === proxyUrl &&
+    cachedAgent.tlsConfig === tlsConfig &&
+    cachedAgent.caCertPath === caCertPath
+  ) {
+    return cachedAgent.agent;
+  }
+
+  // Create a new agent
+  let agent: Agent | ProxyAgent;
+  if (proxyUrl) {
+    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+    agent = new ProxyAgent({
+      uri: proxyUrl,
+      proxyTls: tlsOptions,
+      requestTls: tlsOptions,
+      headersTimeout: REQUEST_TIMEOUT_MS,
+    } as ProxyTlsOptions);
+  } else {
+    agent = new Agent({
+      headersTimeout: REQUEST_TIMEOUT_MS,
+    });
+  }
+
+  // Cache the agent and its configuration
+  cachedAgent = {
+    agent,
+    proxyUrl,
+    tlsConfig,
+    caCertPath,
+  };
+
+  // Set as global dispatcher
+  setGlobalDispatcher(agent);
+
+  return agent;
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: PromptfooRequestInit = {},
@@ -94,38 +177,9 @@ export async function fetchWithProxy(
     }
   }
 
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-  };
-
-  // Support custom CA certificates
-  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
-  if (caCertPath) {
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = fs.readFileSync(resolvedPath, 'utf8');
-      tlsOptions.ca = ca;
-      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
-    } catch (e) {
-      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
-    }
-  }
-  const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
-
-  if (proxyUrl) {
-    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-    const agent = new ProxyAgent({
-      uri: proxyUrl,
-      proxyTls: tlsOptions,
-      requestTls: tlsOptions,
-      headersTimeout: REQUEST_TIMEOUT_MS,
-    } as ProxyTlsOptions);
-    setGlobalDispatcher(agent);
-  } else {
-    const agent = new Agent({
-      headersTimeout: REQUEST_TIMEOUT_MS,
-    });
-    setGlobalDispatcher(agent);
+  // Get or create the appropriate agent
+  if (finalUrlString) {
+    getOrCreateAgent(finalUrlString);
   }
 
   return await monkeyPatchFetch(finalUrl, finalOptions);

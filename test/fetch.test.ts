@@ -8,6 +8,7 @@ import { getEnvBool, getEnvString } from '../src/envars';
 import logger from '../src/logger';
 import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
+  clearAgentCache,
   fetchWithProxy,
   fetchWithRetries,
   fetchWithTimeout,
@@ -131,6 +132,7 @@ jest.mock('../src/cliState', () => ({
 describe('fetchWithProxy', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearAgentCache(); // Clear the agent cache before each test
     jest.spyOn(global, 'fetch').mockImplementation();
     jest.mocked(ProxyAgent).mockClear();
     jest.mocked(setGlobalDispatcher).mockClear();
@@ -931,6 +933,7 @@ describe('fetchWithRetries', () => {
 describe('fetchWithProxy with NO_PROXY', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearAgentCache(); // Clear the agent cache before each test
     jest.spyOn(global, 'fetch').mockImplementation();
     jest.mocked(ProxyAgent).mockClear();
     jest.mocked(setGlobalDispatcher).mockClear();
