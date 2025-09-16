@@ -575,4 +575,193 @@ describe('evaluator', () => {
       expect(result.filteredCount).toBe(0);
     });
   });
+
+  describe('queryTestIndices', () => {
+    it('returns indices with default params and correct ordering', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 10,
+        resultTypes: ['success', 'error', 'failure'],
+      });
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({});
+
+      expect(filteredCount).toBe(10);
+      expect(testIndices.length).toBeLessThanOrEqual(10);
+      // Ensure ascending order
+      const sorted = [...testIndices].sort((a, b) => a - b);
+      expect(testIndices).toEqual(sorted);
+    });
+
+    it('respects offset and limit', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 12,
+        resultTypes: ['success', 'failure', 'error'],
+      });
+      const page1 = await (eval_ as any).queryTestIndices({ offset: 0, limit: 5 });
+      const page2 = await (eval_ as any).queryTestIndices({ offset: 5, limit: 5 });
+
+      expect(page1.testIndices.length).toBeLessThanOrEqual(5);
+      expect(page2.testIndices.length).toBeLessThanOrEqual(5);
+
+      // Verify disjoint sets for the first 10 indices
+      const overlap = page1.testIndices.filter((i: number) => page2.testIndices.includes(i));
+      expect(overlap).toHaveLength(0);
+    });
+
+    it('Mode Filtering: filters by errors, failures, and passes', async () => {
+      const numResults = 15;
+      const eval_ = await EvalFactory.create({
+        numResults,
+        resultTypes: ['success', 'error', 'failure'],
+      });
+
+      const errors = await (eval_ as any).queryTestIndices({ filterMode: 'errors' });
+      const failures = await (eval_ as any).queryTestIndices({ filterMode: 'failures' });
+      const passes = await (eval_ as any).queryTestIndices({ filterMode: 'passes' });
+
+      // With the cycling order, counts should roughly split by thirds
+      expect(errors.filteredCount).toBeGreaterThan(0);
+      expect(failures.filteredCount).toBeGreaterThan(0);
+      expect(passes.filteredCount).toBeGreaterThan(0);
+
+      // No index should appear in more than one mode simultaneously
+      const sErrors = new Set(errors.testIndices);
+      const sFailures = new Set(failures.testIndices);
+      const sPasses = new Set(passes.testIndices);
+      for (const idx of sErrors) {
+        expect(sFailures.has(idx)).toBe(false);
+        expect(sPasses.has(idx)).toBe(false);
+      }
+    });
+
+    it('filters by metric equals', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 8,
+        resultTypes: ['success', 'failure'],
+        withNamedScores: true,
+      });
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
+        filters: [
+          {
+            logicOperator: 'and',
+            type: 'metric',
+            operator: 'equals',
+            value: 'accuracy',
+          },
+        ],
+      });
+
+      expect(testIndices.length).toBeGreaterThan(0);
+      expect(filteredCount).toBeGreaterThan(0);
+      // With named scores on every row, all indices should match
+      expect(filteredCount).toBe(8);
+    });
+
+    it('filters by metadata equals and contains', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 6,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"unit","note":"hello world"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"integration"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+
+      // equals on source=unit should return only test 1
+      const eqRes = await (eval_ as any).queryTestIndices({
+        filters: [
+          {
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'equals',
+            field: 'source',
+            value: 'unit',
+          },
+        ],
+      });
+      expect(eqRes.filteredCount).toBe(1);
+      expect(eqRes.testIndices).toEqual([1]);
+
+      // contains on note
+      const containsRes = await (eval_ as any).queryTestIndices({
+        filters: [
+          {
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'contains',
+            field: 'note',
+            value: 'hello',
+          },
+        ],
+      });
+      expect(containsRes.filteredCount).toBe(1);
+      expect(containsRes.testIndices).toEqual([1]);
+    });
+
+    it('filters by plugin and strategy', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 6,
+        resultTypes: ['success', 'failure'],
+      });
+      const db = getDb();
+      // Set pluginId on one row and strategyId on another
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx = 3`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"strategyId":"s1"}') WHERE eval_id = '${eval_.id}' AND test_idx = 5`,
+      );
+
+      // Category filter should match pluginId that starts with harmful:
+      const pluginCategory = await (eval_ as any).queryTestIndices({
+        filters: [{ logicOperator: 'and', type: 'plugin', operator: 'equals', value: 'harmful' }],
+      });
+      expect(pluginCategory.testIndices).toEqual([3]);
+
+      // Strategy equals specific id
+      const strategyEq = await (eval_ as any).queryTestIndices({
+        filters: [{ logicOperator: 'and', type: 'strategy', operator: 'equals', value: 's1' }],
+      });
+      expect(strategyEq.testIndices).toEqual([5]);
+    });
+
+    it('filters by explicit severity override', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 4,
+        resultTypes: ['success', 'failure'],
+      });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
+        filters: [{ logicOperator: 'and', type: 'severity', operator: 'equals', value: 'high' }],
+      });
+      expect(filteredCount).toBe(1);
+      expect(testIndices).toEqual([0]);
+    });
+
+    it('searches across response, grading, named scores, metadata, and vars', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 9,
+        resultTypes: ['success', 'failure', 'error'],
+        withNamedScores: true,
+        searchableContent: 'needle',
+      });
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
+        searchQuery: 'needle',
+      });
+
+      expect(testIndices.length).toBeGreaterThan(0);
+      expect(filteredCount).toBeGreaterThan(0);
+      // Sanity: limit should still apply
+      const limited = await (eval_ as any).queryTestIndices({ searchQuery: 'needle', limit: 2 });
+      expect(limited.testIndices.length).toBeLessThanOrEqual(2);
+      expect(limited.filteredCount).toBeGreaterThanOrEqual(limited.testIndices.length);
+    });
+  });
 });
