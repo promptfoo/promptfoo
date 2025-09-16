@@ -262,10 +262,13 @@ describe('TruncatedText', () => {
     // Change to short text
     rerender(<TruncatedText text={shortText} maxLength={maxLength} />);
 
+    // Re-query the element after rerender to ensure we have the latest DOM
+    const updatedMainDiv = container.querySelector('#eval-output-cell-text');
+
     // Should not be truncated
-    expect(mainDiv).toHaveTextContent(shortText);
-    expect(mainDiv).not.toHaveTextContent('...');
-    expect(mainDiv).toHaveStyle('cursor: normal');
+    expect(updatedMainDiv).toHaveTextContent(shortText);
+    expect(updatedMainDiv).not.toHaveTextContent('...');
+    expect(updatedMainDiv).toHaveStyle('cursor: normal');
 
     // Change back to long text
     rerender(<TruncatedText text={longText} maxLength={maxLength} />);
