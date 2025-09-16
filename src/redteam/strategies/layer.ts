@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { pluginMatchesStrategyTargets } from './util';
 
-import type { Strategy } from './index';
+import type { Strategy } from './types';
 import type { TestCase, TestCaseWithPlugin } from '../../types';
 
 export async function addLayerTestCases(

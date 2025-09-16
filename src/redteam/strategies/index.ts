@@ -32,16 +32,9 @@ import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { Strategy } from './types';
 
-export interface Strategy {
-  id: string;
-  action: (
-    testCases: TestCaseWithPlugin[],
-    injectVar: string,
-    config: Record<string, any>,
-    strategyId?: string,
-  ) => Promise<TestCase[]>;
-}
+export type { Strategy };
 
 export const Strategies: Strategy[] = [
   {
