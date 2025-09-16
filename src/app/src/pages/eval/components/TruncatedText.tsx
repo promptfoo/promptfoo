@@ -91,6 +91,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   };
 
   const truncatedText = isTruncated ? truncateText(text) : text;
+
   return (
     <div style={{ position: 'relative' }}>
       <div
@@ -102,6 +103,8 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
           marginBottom: '8px',
         }}
         onClick={isOverLength ? toggleTruncate : undefined}
+        // Force re-render when isOverLength changes by adding a data attribute
+        data-over-length={isOverLength}
       >
         {truncatedText}
         {isTruncated && isOverLength && (
