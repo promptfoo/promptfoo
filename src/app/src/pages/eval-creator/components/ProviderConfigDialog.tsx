@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 
 import JsonTextField from '@app/components/JsonTextField';
 import {
@@ -11,6 +11,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -51,16 +52,28 @@ const ProviderConfigDialog = ({
   const [tabValue, setTabValue] = useState(0);
   const [showSensitive, setShowSensitive] = useState<Record<string, boolean>>({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
 
   // Get schema for current provider
-  const schema = useMemo(() => getProviderSchema(providerId), [providerId]);
+  const schema = useMemo(() => {
+    try {
+      return getProviderSchema(providerId);
+    } catch (error) {
+      setSchemaError(error instanceof Error ? error.message : 'Failed to load provider schema');
+      return null;
+    }
+  }, [providerId]);
   const hasSchema = !!schema;
 
   // Validate configuration
   const validateConfig = (configToValidate: Record<string, any>) => {
-    const { errors } = validateProviderConfig(providerId, configToValidate);
+    const { errors, warnings } = validateProviderConfig(providerId, configToValidate);
     setValidationErrors(errors);
+    setValidationWarnings(warnings);
     return errors.length === 0;
   };
 
@@ -89,6 +102,13 @@ const ProviderConfigDialog = ({
 
     setJsonError(null);
     setTabValue(hasSchema ? 0 : 1); // Default to JSON tab if no schema
+
+    // Focus first field when dialog opens
+    if (open && hasSchema) {
+      setTimeout(() => {
+        firstFieldRef.current?.focus();
+      }, 100);
+    }
   }, [open, providerId, config, schema, hasSchema]);
 
   // Handle field change
@@ -103,32 +123,40 @@ const ProviderConfigDialog = ({
   };
 
   // Handle save
-  const handleSave = () => {
-    let configToSave = localConfig;
+  const handleSave = async () => {
+    setIsLoading(true);
+    try {
+      let configToSave = localConfig;
 
-    if (tabValue === 1) {
-      // In JSON mode, localConfig is already the parsed JSON
-      configToSave = localConfig;
+      if (tabValue === 1) {
+        // In JSON mode, localConfig is already the parsed JSON
+        configToSave = localConfig;
+      }
+
+      // Clean up empty values
+      const cleanedConfig = Object.entries(configToSave).reduce(
+        (acc, [key, value]) => {
+          if (value !== '' && value !== undefined && value !== null) {
+            acc[key] = value;
+          }
+          return acc;
+        },
+        {} as Record<string, any>,
+      );
+
+      // Validate before saving
+      if (!validateConfig(cleanedConfig)) {
+        return;
+      }
+
+      onSave(providerId, cleanedConfig);
+      onClose();
+    } catch (error) {
+      console.error('Error saving configuration:', error);
+      setValidationErrors(['Failed to save configuration. Please try again.']);
+    } finally {
+      setIsLoading(false);
     }
-
-    // Clean up empty values
-    const cleanedConfig = Object.entries(configToSave).reduce(
-      (acc, [key, value]) => {
-        if (value !== '' && value !== undefined && value !== null) {
-          acc[key] = value;
-        }
-        return acc;
-      },
-      {} as Record<string, any>,
-    );
-
-    // Validate before saving
-    if (!validateConfig(cleanedConfig)) {
-      return;
-    }
-
-    onSave(providerId, cleanedConfig);
-    onClose();
   };
 
   // Toggle sensitive field visibility
@@ -201,6 +229,7 @@ const ProviderConfigDialog = ({
       default: // string
         return (
           <TextField
+            inputRef={field.name === schema?.fields[0]?.name ? firstFieldRef : undefined}
             fullWidth
             label={field.label}
             value={value}
@@ -218,6 +247,7 @@ const ProviderConfigDialog = ({
                           onClick={() => toggleSensitiveVisibility(field.name)}
                           edge="end"
                           size="small"
+                          aria-label={showSensitive[field.name] ? 'Hide password' : 'Show password'}
                         >
                           {showSensitive[field.name] ? <VisibilityOffIcon /> : <VisibilityIcon />}
                         </IconButton>
@@ -226,6 +256,22 @@ const ProviderConfigDialog = ({
                   }
                 : undefined
             }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const form = e.currentTarget.form;
+                const inputs = Array.from(form?.querySelectorAll('input, textarea, select') || []);
+                const currentIndex = inputs.indexOf(e.currentTarget);
+                const nextInput = inputs[currentIndex + 1] as HTMLElement;
+                if (nextInput) {
+                  nextInput.focus();
+                } else {
+                  // Focus save button if at last field
+                  const saveButton = document.querySelector('[data-testid="save-button"]') as HTMLElement;
+                  saveButton?.focus();
+                }
+              }
+            }}
           />
         );
     }
@@ -243,6 +289,12 @@ const ProviderConfigDialog = ({
       </DialogTitle>
 
       <DialogContent>
+        {schemaError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            Failed to load provider schema: {schemaError}
+          </Alert>
+        )}
+
         {hasSchema && (
           <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 2 }}>
             <Tab label="Form" />
@@ -250,7 +302,7 @@ const ProviderConfigDialog = ({
           </Tabs>
         )}
 
-        {!hasSchema && (
+        {!hasSchema && !schemaError && (
           <Alert severity="info" sx={{ mb: 2 }}>
             No configuration schema available for this provider. Use JSON editor to configure.
           </Alert>
@@ -264,6 +316,19 @@ const ProviderConfigDialog = ({
             <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
               {validationErrors.map((error, index) => (
                 <li key={index}>{error}</li>
+              ))}
+            </ul>
+          </Alert>
+        )}
+
+        {validationWarnings.length > 0 && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body2" fontWeight="bold">
+              Configuration warnings:
+            </Typography>
+            <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+              {validationWarnings.map((warning, index) => (
+                <li key={index}>{warning}</li>
               ))}
             </ul>
           </Alert>
@@ -311,13 +376,15 @@ const ProviderConfigDialog = ({
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose} disabled={isLoading}>Cancel</Button>
         <Button
           onClick={handleSave}
           variant="contained"
-          disabled={validationErrors.length > 0 || !!jsonError}
+          disabled={validationErrors.length > 0 || !!jsonError || isLoading || !!schemaError}
+          startIcon={isLoading ? <CircularProgress size={16} /> : undefined}
+          data-testid="save-button"
         >
-          Save
+          {isLoading ? 'Saving...' : 'Save'}
         </Button>
       </DialogActions>
     </Dialog>

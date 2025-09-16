@@ -160,6 +160,123 @@ export const providerSchemas: Record<string, ProviderSchema> = {
       },
     ],
   },
+  vertex: {
+    fields: [
+      {
+        name: 'projectId',
+        type: 'string',
+        label: 'Project ID',
+        description: 'Google Cloud Project ID',
+        required: true,
+      },
+      {
+        name: 'region',
+        type: 'string',
+        label: 'Region',
+        description: 'Vertex AI region (e.g., us-east5)',
+        defaultValue: 'us-east5',
+        required: true,
+      },
+      {
+        name: 'model',
+        type: 'string',
+        label: 'Model',
+        description: 'Model name (e.g., gemini-2.0-flash-001)',
+        required: true,
+      },
+      {
+        name: 'generationConfig',
+        type: 'object',
+        label: 'Generation Config',
+        description: 'Generation configuration object',
+        defaultValue: {
+          temperature: 0.5,
+          maxOutputTokens: 1024,
+          topP: 0.95,
+          topK: 40,
+        },
+      },
+    ],
+  },
+  bedrock: {
+    fields: [
+      {
+        name: 'region',
+        type: 'string',
+        label: 'AWS Region',
+        description: 'AWS region for Bedrock service',
+        defaultValue: 'us-east-1',
+        required: true,
+        validation: {
+          enum: ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1', 'ap-northeast-1'],
+        },
+      },
+      {
+        name: 'model',
+        type: 'string',
+        label: 'Model',
+        description: 'Bedrock model ID (e.g., us.anthropic.claude-3-5-sonnet-20241022-v2:0)',
+        required: true,
+      },
+      commonFields.temperature,
+      commonFields.maxTokens,
+      {
+        name: 'anthropic_version',
+        type: 'string',
+        label: 'Anthropic Version',
+        description: 'API version for Anthropic models',
+        defaultValue: 'bedrock-2023-05-31',
+      },
+    ],
+  },
+  openrouter: {
+    fields: [
+      commonFields.apiKey,
+      {
+        name: 'model',
+        type: 'string',
+        label: 'Model',
+        description: 'OpenRouter model (e.g., anthropic/claude-3-opus)',
+        required: true,
+      },
+      commonFields.temperature,
+      commonFields.maxTokens,
+      {
+        name: 'site_url',
+        type: 'string',
+        label: 'Site URL',
+        description: 'Optional site URL for OpenRouter tracking',
+        validation: {
+          pattern: '^https?://',
+        },
+      },
+      {
+        name: 'app_name',
+        type: 'string',
+        label: 'App Name',
+        description: 'Optional app name for OpenRouter tracking',
+      },
+    ],
+  },
+  replicate: {
+    fields: [
+      commonFields.apiKey,
+      {
+        name: 'model',
+        type: 'string',
+        label: 'Model',
+        description: 'Replicate model (e.g., meta/llama-2-70b-chat)',
+        required: true,
+      },
+      {
+        name: 'input',
+        type: 'object',
+        label: 'Input Parameters',
+        description: 'Model-specific input parameters',
+        defaultValue: {},
+      },
+    ],
+  },
 };
 
 // Get schema for a provider ID
@@ -173,13 +290,14 @@ export function getProviderSchema(providerId: string): ProviderSchema | null {
 export function validateProviderConfig(
   providerId: string,
   config: Record<string, any>,
-): { valid: boolean; errors: string[] } {
+): { valid: boolean; errors: string[]; warnings: string[] } {
   const schema = getProviderSchema(providerId);
   if (!schema) {
-    return { valid: true, errors: [] }; // No schema = no validation
+    return { valid: true, errors: [], warnings: [] }; // No schema = no validation
   }
 
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   // Check required fields
   schema.fields.forEach((field) => {
@@ -219,6 +337,27 @@ export function validateProviderConfig(
           errors.push(`${field.label} must be one of: ${field.validation.enum.join(', ')}`);
         }
       }
+
+      // Add warnings for common issues
+      if (field.name === 'apiKey' && typeof value === 'string') {
+        if (value.startsWith('sk-') && value.length < 40) {
+          warnings.push('API key appears to be incomplete or invalid format');
+        }
+        if (value === 'your-api-key-here' || value === 'INSERT_KEY_HERE') {
+          warnings.push('Please replace placeholder with your actual API key');
+        }
+      }
+
+      if (field.name === 'temperature' && typeof value === 'number') {
+        if (value > 1.5) {
+          warnings.push('High temperature values may produce unpredictable results');
+        }
+      }
+    }
+
+    // Warn about missing optional but recommended fields
+    if (!field.required && !value && field.name === 'max_tokens') {
+      warnings.push('Consider setting max_tokens to control response length and costs');
     }
   });
 
@@ -230,5 +369,5 @@ export function validateProviderConfig(
     }
   }
 
-  return { valid: errors.length === 0, errors };
+  return { valid: errors.length === 0, errors, warnings };
 }

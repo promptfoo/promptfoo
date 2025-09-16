@@ -589,8 +589,23 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
   };
 
   const allProviders = React.useMemo(() => {
+    // Lazy load and cache providers to improve performance
     return [...defaultProviders, ...customProviders];
   }, [customProviders]);
+
+  // Optimize provider filtering for large lists
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const filteredProviders = React.useMemo(() => {
+    if (!searchTerm) {
+      return allProviders;
+    }
+    const search = searchTerm.toLowerCase();
+    return allProviders.filter((provider) => {
+      const label = getOptionLabel(provider).toLowerCase();
+      const id = getProviderId(provider).toLowerCase();
+      return label.includes(search) || id.includes(search);
+    });
+  }, [allProviders, searchTerm]);
 
   const handleProviderClick = (provider: ProviderOptions | string) => {
     setSelectedProvider(typeof provider === 'string' ? { id: provider } : provider);
@@ -657,7 +672,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
           }}
           multiple
           freeSolo
-          options={allProviders}
+          options={filteredProviders}
           value={providers}
           groupBy={getProviderGroup}
           onChange={(event, newValue: (string | ProviderOptions)[]) => {
@@ -707,12 +722,19 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
             <TextField
               {...params}
               variant="outlined"
-              placeholder="Select LLM providers"
+              placeholder="Search and select LLM providers..."
+              onChange={(e) => {
+                // Handle search term change
+                const inputValue = e.target.value;
+                if (typeof inputValue === 'string') {
+                  setSearchTerm(inputValue);
+                }
+              }}
               helperText={
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                   {providers.length > 0
-                    ? 'Click a provider to configure its settings. Hover over chips to see model IDs.'
-                    : 'Select LLM providers from the dropdown or type to search'}
+                    ? `${providers.length} provider(s) selected. Click to configure settings. ${filteredProviders.length} providers available.`
+                    : `Type to search from ${filteredProviders.length} available providers`}
                   {providers.length > 0 && (
                     <Tooltip title="Model IDs are shown below options in the dropdown menu, as tooltips when hovering over selected models, and in the configuration dialog">
                       <Button size="small" sx={{ ml: 1, minWidth: 0, p: 0.5 }}>
