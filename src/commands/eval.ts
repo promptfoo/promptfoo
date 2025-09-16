@@ -51,7 +51,8 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
   // Allow --resume or --resume <id>
-  resume: z.union([z.string(), z.boolean()]).optional(),
+  // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
+  // resume: z.union([z.string(), z.boolean()]).optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -388,6 +389,8 @@ export async function doEval(
         : new Eval(config, { runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
+    // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
+    /*
     const abortController = new AbortController();
     const previousAbortSignal = evaluateOptions.abortSignal;
     evaluateOptions.abortSignal = previousAbortSignal
@@ -412,6 +415,7 @@ export async function doEval(
       };
       process.once('SIGINT', sigintHandler);
     }
+    */
 
     // Run the evaluation!!!!!!
     const ret = await evaluate(testSuite, evalRecord, {
@@ -422,6 +426,7 @@ export async function doEval(
     });
 
     // Cleanup signal handler
+    /*
     if (sigintHandler) {
       process.removeListener('SIGINT', sigintHandler);
     }
@@ -438,6 +443,7 @@ export async function doEval(
       printBorder();
       return ret;
     }
+      */
 
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
