@@ -263,6 +263,12 @@ function DownloadMenu() {
     setOpen(true);
   };
 
+  const handleKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      handleClose();
+    }
+  }, []);
+
   // Generate the command text based on filename
   const getCommandText = (fileName: string) => {
     return `promptfoo eval -c ${fileName}`;
@@ -353,7 +359,7 @@ function DownloadMenu() {
         </ListItemIcon>
         <ListItemText>Download</ListItemText>
       </MenuItem>
-      <Dialog onClose={handleClose} open={open} maxWidth="lg">
+      <Dialog onClose={handleClose} open={open} onKeyDown={handleKeyDown} maxWidth="lg">
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h5" component="h2" sx={{ fontWeight: 600 }}>
