@@ -536,6 +536,15 @@ export default class Eval {
           }
         } else if (type === 'severity' && operator === 'equals') {
           const sanitizedValue = sanitizeValue(value);
+
+          // Severity is defined in one of two ways: explicitly on metadata.severity (e.g. for overrides)
+          // or implicitly by the pluginId (e.g. for default severity values).
+
+          const severityConditions: string[] = [
+            // Construct the explicit condition
+            `json_extract(metadata, '$.severity') = '${sanitizedValue}'`,
+          ];
+
           // Get the severity map for all plugins
           const severityMap = getRiskCategorySeverityMap(this.config?.redteam?.plugins);
 
@@ -544,22 +553,24 @@ export default class Eval {
             .filter(([, severity]) => severity === sanitizedValue)
             .map(([pluginId]) => pluginId);
 
+          // Construct an implicit condition
           if (matchingPluginIds.length > 0) {
             const pluginIdPath = "json_extract(metadata, '$.pluginId')";
             // Build SQL condition to check if pluginId matches any of the plugins with this severity
-            const pluginConditions = matchingPluginIds.map((pluginId) => {
+            matchingPluginIds.forEach((pluginId) => {
               const sanitizedPluginId = sanitizeValue(pluginId);
-              // Check for exact match or category match (e.g., 'harmful:*')
-              if (pluginId.includes(':')) {
-                // It's a specific subcategory
-                return `${pluginIdPath} = '${sanitizedPluginId}'`;
-              } else {
-                // It's a category, match any plugin starting with this prefix
-                return `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
-              }
+              severityConditions.push(
+                pluginId.includes(':')
+                  ? // It's a specific subcategory
+                    `${pluginIdPath} = '${sanitizedPluginId}'`
+                  : // It's a category, match any plugin starting with this prefix
+                    `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`,
+              );
             });
-            condition = `(${pluginConditions.join(' OR ')})`;
           }
+
+          // Join the explicit and implicit conditions
+          condition = `(${severityConditions.join(' OR ')})`;
         }
 
         if (condition) {
