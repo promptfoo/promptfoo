@@ -180,33 +180,6 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
-## `llm-rubric` shows PASS even when the score is 0
-
-This usually happens when the grader doesn't return a boolean `pass` field and no `threshold` is set on the assertion:
-
-- By default, promptfoo treats a missing `pass` as `true`.
-- Without a `threshold`, PASS/FAIL depends only on `pass` (not on `score`).
-
-Fix options:
-
-- Add a `threshold` so PASS requires `score >= threshold`:
-
-  ```yaml
-  - type: llm-rubric
-    value: Return 1 if condition met, else 0
-    threshold: 1
-  ```
-
-- Or instruct the grader to return explicit `pass` and `score`:
-
-  ```yaml
-  - type: llm-rubric
-    value: |
-      Return {"pass": true, "score": 1} if condition met
-      Return {"pass": false, "score": 0} otherwise
-  ```
-
-See the [llm‑rubric docs](/docs/configuration/expected-outputs/model-graded/llm-rubric#pass-vs-score-semantics) for details.
 
 ## How to triage stuck evals
 
