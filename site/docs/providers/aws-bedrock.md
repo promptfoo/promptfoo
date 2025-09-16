@@ -47,6 +47,85 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
          temperature: 0.7
    ```
 
+## Application Inference Profiles
+
+AWS Bedrock supports Application Inference Profiles, which allow you to use a single ARN to access multiple foundation models across different regions. This helps optimize costs and availability while maintaining consistent performance.
+
+### Using Inference Profiles
+
+When using an inference profile ARN, you must specify the `inferenceModelType` in your configuration to indicate which model family the profile is configured for:
+
+```yaml
+providers:
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+    config:
+      inferenceModelType: 'claude' # Required for inference profiles
+      region: 'us-east-1'
+      max_tokens: 256
+      temperature: 0.7
+```
+
+### Supported Model Types
+
+The `inferenceModelType` config option supports the following values:
+
+- `claude` - For Anthropic Claude models
+- `nova` - For Amazon Nova models
+- `llama` - Defaults to Llama 4 (latest version)
+- `llama2` - For Meta Llama 2 models
+- `llama3` - For Meta Llama 3 models
+- `llama3.1` or `llama3_1` - For Meta Llama 3.1 models
+- `llama3.2` or `llama3_2` - For Meta Llama 3.2 models
+- `llama3.3` or `llama3_3` - For Meta Llama 3.3 models
+- `llama4` - For Meta Llama 4 models
+- `mistral` - For Mistral models
+- `cohere` - For Cohere models
+- `ai21` - For AI21 models
+- `titan` - For Amazon Titan models
+- `deepseek` - For DeepSeek models
+- `openai` - For OpenAI models
+
+### Example: Multi-Region Inference Profile
+
+```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  # Using an inference profile that routes to Claude models
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
+    config:
+      inferenceModelType: 'claude'
+      max_tokens: 1024
+      temperature: 0.7
+      anthropic_version: 'bedrock-2023-05-31'
+
+  # Using an inference profile for Llama models
+  - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/llama-profile
+    config:
+      inferenceModelType: 'llama3.3'
+      max_gen_len: 1024
+      temperature: 0.7
+
+  # Using an inference profile for Nova models
+  - id: bedrock:arn:aws:bedrock:eu-west-1:123456789012:application-inference-profile/nova-profile
+    config:
+      inferenceModelType: 'nova'
+      interfaceConfig:
+        max_new_tokens: 1024
+        temperature: 0.7
+```
+
+:::tip
+
+Application Inference Profiles provide several benefits:
+
+- **Automatic failover**: If one region is unavailable, requests automatically route to another region
+- **Cost optimization**: Routes to the most cost-effective available model
+- **Simplified management**: Use a single ARN instead of managing multiple model IDs
+
+When using inference profiles, ensure the `inferenceModelType` matches the model family your profile is configured for, as the configuration parameters differ between model types.
+
+:::
+
 ## Authentication
 
 Amazon Bedrock supports multiple authentication methods, including the new API key authentication for simplified access. Credentials are resolved in this priority order:
@@ -160,6 +239,15 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
+  # Using inference profiles (requires inferenceModelType)
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-claude-profile
+    config:
+      inferenceModelType: 'claude'
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+
+  # Using regular model IDs
   - id: bedrock:meta.llama3-1-405b-instruct-v1:0
     config:
       region: 'us-east-1'
@@ -225,6 +313,10 @@ tests:
 ## Model-specific Configuration
 
 Different models may support different configuration options. Here are some model-specific parameters:
+
+### General Configuration Options
+
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`
 
 ### Amazon Nova Models
 
@@ -478,6 +570,8 @@ OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bed
 
 You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-4.1-2025-04-14` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
 
+You can use either regular model IDs or application inference profiles for grading:
+
 :::warning
 
 Because of how model-graded evals are implemented, **the LLM grading models must support chat-formatted prompts** (except for embedding or classification models).
@@ -490,10 +584,17 @@ To set this for all your test cases, add the [`defaultTest`](/docs/configuration
 defaultTest:
   options:
     provider:
-      id: provider:chat:modelname
+      # Using a regular model ID
+      id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
       config:
         temperature: 0
         # Other provider config options
+
+      # Or using an inference profile
+      # id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/grading-profile
+      # config:
+      #   inferenceModelType: 'claude'
+      #   temperature: 0
 ```
 
 You can also do this for individual assertions:
@@ -650,6 +751,27 @@ Model-specific environment variables:
 These environment variables can be overridden by the configuration specified in the YAML file.
 
 ## Troubleshooting
+
+### Inference profile requires inferenceModelType
+
+If you see this error when using an inference profile ARN:
+
+```text
+Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai
+```
+
+This means you're using an application inference profile ARN but haven't specified which model family it's configured for. Add the `inferenceModelType` to your configuration:
+
+```yaml
+providers:
+  # Incorrect - missing inferenceModelType
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+
+  # Correct - includes inferenceModelType
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+    config:
+      inferenceModelType: 'claude' # Specify the model family
+```
 
 ### ValidationException: On-demand throughput isn't supported
 
