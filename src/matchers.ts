@@ -1177,7 +1177,6 @@ export async function matchesContextRelevance(
     relevantSentenceCount: numerator,
     insufficientInformation,
     score,
-    ragasMethod: 'context-relevance',
   };
 
   return {

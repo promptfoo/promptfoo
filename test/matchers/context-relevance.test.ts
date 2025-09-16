@@ -37,7 +37,6 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     expect(result.metadata?.extractedSentences).toEqual(['Paris is the capital of France']);
     expect(result.metadata?.totalContextUnits).toBe(3);
     expect(result.metadata?.relevantSentenceCount).toBe(1);
-    expect(result.metadata?.ragasMethod).toBe('context-relevance');
   });
 
   it('should handle insufficient information responses', async () => {
