@@ -305,55 +305,6 @@ assert:
       Return {"pass": false, "score": 0} if the response is incorrect
 ```
 
-## Binary Scoring Example: Success/Failure Detection
-
-When testing custom systems that should detect specific conditions (such as content moderation, sentiment analysis, or custom security tools), you often want tests to PASS only when the condition is correctly identified.
-
-### Option A: Keep a 0/1 rubric and add a threshold
-
-```yaml
-assert:
-  - type: llm-rubric
-    # Score 1 only when condition is detected; 0 otherwise
-    value: |
-      Return 0 if the output indicates "not detected" or "uncertain"
-      Return 1 if the output indicates "detected" or "confirmed"
-    threshold: 1 # Only PASS when score == 1 (condition detected)
-```
-
-### Option B: Make the grader control PASS explicitly
-
-```yaml
-assert:
-  - type: llm-rubric
-    value: |
-      Return {"pass": true, "score": 1} if the output indicates "detected"
-      Return {"pass": false, "score": 0} if the output indicates "not detected" or "uncertain"
-```
-
-Option B avoids relying on defaults and makes PASS/FAIL unambiguous even without a `threshold`.
-
-### Deterministic backup approach
-
-For critical evaluations like CI/CD pipelines, consider combining `llm-rubric` with a deterministic assertion as a backup:
-
-```yaml
-assert:
-  # Primary: LLM grader with explicit pass control
-  - type: llm-rubric
-    value: |
-      Return {"pass": true, "score": 1} if the output indicates "detected"
-      Return {"pass": false, "score": 0} if the output indicates "not detected"
-
-  # Backup: Deterministic string check
-  - type: contains
-    value: "detected"
-    description: Belt-and-suspenders check for detection keyword
-```
-
-This belt-and-suspenders approach provides confidence that critical detection failures won't be missed due to LLM grader inconsistencies.
-
-**Note**: For red team security testing, use the built-in plugins (like `harmful`, `pii`, `hijacking`, etc.) rather than custom `llm-rubric` assertions, as they have specialized grading logic optimized for security scenarios.
 
 ## Further reading
 
