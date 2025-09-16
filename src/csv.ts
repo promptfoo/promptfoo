@@ -1,6 +1,6 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import logger from './logger';
-import { AssertionTypeSchema, BaseAssertionTypesSchema } from './types/index';
+import { BaseAssertionTypesSchema } from './types/index';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 
@@ -136,8 +136,8 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
   const metadata: Record<string, any> = {};
-  // Store assertion-specific configurations by type
-  const assertionConfigs: Record<string, Record<string, any>> = {};
+  // Map from assertion index (or '*' for all) to config properties
+  const assertionConfigs: Record<string | number, Record<string, any>> = {};
   let providerOutput: string | object | undefined;
   let description: string | undefined;
   let metric: string | undefined;
@@ -211,23 +211,37 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
         'The "__metadata" column requires a key, e.g. "__metadata:category". This column will be ignored.',
       );
     } else if (key.startsWith('__config:')) {
-      // Parse __config:<assertion-type>:<key> columns
-      // NOTE: Does not validate whether a given key is valid for the assertion type.
+      // Parse __config columns
+      // Formats: __config:__expected:threshold or __config:__expected<N>:threshold
       const configParts = key.slice('__config:'.length).split(':');
       if (configParts.length !== 2) {
         logger.warn(
-          `Invalid __config column format: "${key}". Expected format: __config:<assertion-type>:<key>`,
+          `Invalid __config column format: "${key}". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold`,
         );
       } else {
-        const [assertionType, configKey] = configParts;
-        // Validate assertion type
-        if (!AssertionTypeSchema.safeParse(assertionType).success) {
-          logger.error(
-            `Invalid assertion type "${assertionType}" in __config column "${key}". ` +
-              `Valid assertion types include: ${AssertionTypeSchema.options.join(', ')}`,
-          );
-          throw new Error(`Invalid assertion type "${assertionType}" in __config column`);
+        const [expectedKey, configKey] = configParts;
+
+        // Parse the expected key to determine which assertion(s) to target
+        let targetIndex: number | undefined;
+        if (expectedKey === '__expected') {
+          // There is only one expected assertion, so we target it directly.
+          targetIndex = 0;
+        } else if (expectedKey.startsWith('__expected')) {
+          // Extract the numeric index (e.g., __expected1 -> 0, __expected2 -> 1)
+          const indexMatch = expectedKey.match(/^__expected(\d+)$/);
+          if (indexMatch) {
+            targetIndex = Number.parseInt(indexMatch[1], 10) - 1; // Convert to 0-based index
+          }
         }
+
+        if (targetIndex === undefined) {
+          logger.error(
+            `Invalid expected key "${expectedKey}" in __config column "${key}". ` +
+              `Must be __expected or __expected<N> where N is a positive integer.`,
+          );
+          throw new Error(`Invalid expected key "${expectedKey}" in __config column`);
+        }
+
         // Validate the config key; currently only threshold is supported
         if (!['threshold'].includes(configKey)) {
           logger.error(
@@ -237,13 +251,13 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           throw new Error(`Invalid config key "${configKey}" in __config column`);
         }
 
-        // Initialize config object for this assertion type if it doesn't exist
-        if (!assertionConfigs[assertionType]) {
-          assertionConfigs[assertionType] = {};
+        // Initialize config object for this index if it doesn't exist
+        if (!assertionConfigs[targetIndex]) {
+          assertionConfigs[targetIndex] = {};
         }
 
         // Parse the value based on the config key
-        let parsedValue: any = value;
+        let parsedValue: any = value.trim();
         if (configKey === 'threshold') {
           parsedValue = Number.parseFloat(value);
           if (!Number.isFinite(parsedValue)) {
@@ -254,7 +268,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           }
         }
 
-        assertionConfigs[assertionType][configKey] = parsedValue;
+        assertionConfigs[targetIndex][configKey] = parsedValue;
       }
     } else {
       vars[key] = value;
@@ -262,14 +276,24 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   }
 
   // Apply assertion configurations and metric to assertions
-  for (const assert of asserts) {
+  for (let i = 0; i < asserts.length; i++) {
+    const assert = asserts[i];
     assert.metric = metric;
 
-    // Apply configuration for this assertion type if it exists
-    const config = assertionConfigs[assert.type];
-    if (config) {
-      for (const [configKey, configValue] of Object.entries(config)) {
-        // Apply each configuration property
+    // Apply global configuration (if exists)
+    const globalConfig = assertionConfigs['*'];
+    if (globalConfig) {
+      for (const [configKey, configValue] of Object.entries(globalConfig)) {
+        (assert as any)[configKey] = configValue;
+        // Include each key/value on the metadata object
+        metadata[configKey] = configValue;
+      }
+    }
+
+    // Apply index-specific configuration (if exists) - overrides global
+    const indexConfig = assertionConfigs[i];
+    if (indexConfig) {
+      for (const [configKey, configValue] of Object.entries(indexConfig)) {
         (assert as any)[configKey] = configValue;
         // Include each key/value on the metadata object
         metadata[configKey] = configValue;
