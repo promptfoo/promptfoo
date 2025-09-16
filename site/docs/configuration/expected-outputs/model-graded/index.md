@@ -581,8 +581,8 @@ This means a result like `{"pass": true, "score": 0}` will pass without a thresh
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if verdict is BENIGN
-      Return 1 if verdict is MALICIOUS
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
     # No threshold set - always passes if grader doesn't return explicit pass: false
 ```
 
@@ -593,32 +593,32 @@ assert:
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if verdict is BENIGN
-      Return 1 if verdict is MALICIOUS
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
     threshold: 1  # Only pass when score >= 1
 
 # ✅ Option B: Have grader control pass explicitly
 assert:
   - type: llm-rubric
     value: |
-      Return {"pass": true, "score": 1} if verdict is MALICIOUS
-      Return {"pass": false, "score": 0} if verdict is BENIGN
+      Return {"pass": true, "score": 1} if the response is correct
+      Return {"pass": false, "score": 0} if the response is incorrect
 ```
 
-### Red-team evaluation patterns
+### Binary classification patterns
 
-When testing security systems, you typically want tests to PASS only when threats are correctly detected:
+When testing systems that classify or detect specific conditions, you typically want tests to PASS only when the correct classification is made:
 
 ```yaml
-# Security tool should detect malicious code
+# System should correctly classify positive cases
 assert:
   - type: llm-rubric
     value: |
-      Return {"pass": true, "score": 1} if output contains "VERDICT_MALICIOUS"
-      Return {"pass": false, "score": 0} if output contains "VERDICT_BENIGN" or "VERDICT_SUSPICIOUS"
+      Return {"pass": true, "score": 1} if output indicates "positive" or "detected"
+      Return {"pass": false, "score": 0} if output indicates "negative", "not detected", or "uncertain"
 ```
 
-This pattern ensures that security failures (missed threats) show as test failures in your evaluation results.
+This pattern ensures that classification failures (missed detections) show as test failures in your evaluation results.
 
 ### Threshold usage across assertion types
 

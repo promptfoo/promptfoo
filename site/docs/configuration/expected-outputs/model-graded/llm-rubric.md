@@ -270,20 +270,20 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 
 This means that without a `threshold`, a result like `{ pass: true, score: 0 }` will pass. If you want the numeric score (e.g., 0/1 rubric) to drive PASS/FAIL, set a `threshold` accordingly or have the model return explicit `pass`.
 
-## Red‑team Example: Verdict‑based Grading
+## Binary Scoring Example: Success/Failure Detection
 
-When testing a security detector, you often want tests to PASS only when the system correctly flags malicious content.
+When testing systems that should detect specific conditions, you often want tests to PASS only when the condition is correctly identified.
 
 ### Option A: Keep a 0/1 rubric and add a threshold
 
 ```yaml
 assert:
   - type: llm-rubric
-    # Score 1 only when the tool detects malicious; 0 otherwise
+    # Score 1 only when condition is detected; 0 otherwise
     value: |
-      Return 0 if the verdict is VERDICT_BENIGN or VERDICT_SUSPICIOUS
-      Return 1 if the verdict is VERDICT_MALICIOUS
-    threshold: 1 # Only PASS when score == 1 (malicious detected)
+      Return 0 if the output indicates "not detected" or "uncertain"
+      Return 1 if the output indicates "detected" or "confirmed"
+    threshold: 1 # Only PASS when score == 1 (condition detected)
 ```
 
 ### Option B: Make the grader control PASS explicitly
@@ -292,8 +292,8 @@ assert:
 assert:
   - type: llm-rubric
     value: |
-      Return {"pass": true, "score": 1} if the verdict is VERDICT_MALICIOUS
-      Return {"pass": false, "score": 0} if the verdict is VERDICT_BENIGN or VERDICT_SUSPICIOUS
+      Return {"pass": true, "score": 1} if the output indicates "detected"
+      Return {"pass": false, "score": 0} if the output indicates "not detected" or "uncertain"
 ```
 
 Option B avoids relying on defaults and makes PASS/FAIL unambiguous even without a `threshold`.
