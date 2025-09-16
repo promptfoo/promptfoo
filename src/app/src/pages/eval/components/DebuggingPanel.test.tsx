@@ -41,8 +41,14 @@ describe('DebuggingPanel', () => {
 
     render(<DebuggingPanel {...props} />);
 
-    expect(screen.queryByText('Trace Timeline')).toBeNull();
+    const traceTimelineElement = screen.queryByText('Trace Timeline');
+    expect(traceTimelineElement).toBeInTheDocument();
 
-    expect(screen.queryByTestId('mock-trace-view')).toBeNull();
+    const traceViewElement = screen.queryByTestId('mock-trace-view');
+    expect(traceViewElement).toBeInTheDocument();
+
+    // Check that the parent container (the Box with mb={2}) has display: none
+    const parentContainer = traceTimelineElement?.parentElement;
+    expect(parentContainer).toHaveStyle('display: none');
   });
 });
