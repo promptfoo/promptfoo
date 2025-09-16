@@ -501,7 +501,7 @@ describe('useTableStore', () => {
         await useTableStore.getState().fetchEvalData(evalId, { filters: [filter] });
       });
 
-      expect(mockCallApi).toHaveBeenCalledTimes(2); // table endpoint + metadata-keys endpoint
+      expect(mockCallApi).toHaveBeenCalledTimes(1); // table endpoint only (metadata-keys fetched lazily)
       const url = mockCallApi.mock.calls[0][0];
       const urlParams = new URL(url, 'http://example.com').searchParams;
       const rawFilterParam = urlParams.get('filter');

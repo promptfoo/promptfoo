@@ -211,14 +211,14 @@ function Filter({
         filterType === 'metadata' &&
         evalId &&
         !metadataKeysLoading &&
-        metadataKeys.length === 0
+        (!metadataKeys || metadataKeys.length === 0)
       ) {
         fetchMetadataKeys(evalId);
       }
 
       updateFilter(updatedFilter);
     },
-    [value, updateFilter, evalId, metadataKeysLoading, metadataKeys.length, fetchMetadataKeys],
+    [value, updateFilter, evalId, metadataKeysLoading, metadataKeys?.length, fetchMetadataKeys],
   );
 
   /**
