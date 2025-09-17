@@ -407,7 +407,7 @@ const TestSuites = ({
             size="small"
             onClick={() => {
               const pluginId = params.row.pluginName;
-              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
+              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}&mode=failures`);
             }}
           >
             View logs

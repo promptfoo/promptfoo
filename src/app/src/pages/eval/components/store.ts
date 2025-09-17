@@ -239,6 +239,9 @@ interface TableState {
       severity?: string[];
     };
   };
+
+  filterMode: EvalResultsFilterMode;
+  setFilterMode: (filterMode: EvalResultsFilterMode) => void;
 }
 
 interface SettingsState {
@@ -627,4 +630,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
       };
     });
   },
+
+  filterMode: 'all',
+  setFilterMode: (filterMode: EvalResultsFilterMode) =>
+    set((prevState) => ({ ...prevState, filterMode })),
 }));

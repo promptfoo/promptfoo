@@ -8,12 +8,16 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
+import {
+  EvalResultsFilterMode,
+  type ResultLightweightWithLabel,
+  type ResultsFile,
+} from '@promptfoo/types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import './Eval.css';
 
 interface EvalOptions {
@@ -40,6 +44,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     resetFilters,
     addFilter,
     setIsStreaming,
+    setFilterMode,
   } = useTableStore();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
@@ -135,6 +140,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Check for >=1 metric params in the URL.
     const metricParams = searchParams.getAll('metric');
 
+    // Check for a `mode` param in the URL.
+    const modeParam = searchParams.get('mode');
+
     if (pluginParams.length > 0) {
       pluginParams.forEach((pluginParam) => {
         addFilter({
@@ -155,6 +163,10 @@ export default function Eval({ fetchId }: EvalOptions) {
           logicOperator: 'or',
         });
       });
+    }
+
+    if (modeParam && EvalResultsFilterMode.safeParse(modeParam).success) {
+      setFilterMode(modeParam as EvalResultsFilterMode);
     }
 
     if (fetchId) {

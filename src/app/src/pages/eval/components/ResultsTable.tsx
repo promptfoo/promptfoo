@@ -49,8 +49,8 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
-import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
+import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -133,7 +133,6 @@ interface ResultsTableProps {
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
-  setFilterMode: (mode: EvalResultsFilterMode) => void;
   zoom: number;
 }
 
@@ -234,7 +233,6 @@ function ResultsTable({
   showStats,
   onFailureFilterToggle,
   onSearchTextChange,
-  setFilterMode,
   zoom,
 }: ResultsTableProps) {
   const {
@@ -248,6 +246,7 @@ function ResultsTable({
     isFetching,
     filters,
     addFilter,
+    setFilterMode,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
