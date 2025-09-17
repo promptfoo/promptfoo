@@ -85,10 +85,9 @@ describe('ReportIndex', () => {
     );
 
     await waitFor(() =>
-      expect(mockCallApi).toHaveBeenCalledWith(
-        '/results?type=redteam&includeProviders=true',
-        { cache: 'no-store' },
-      ),
+      expect(mockCallApi).toHaveBeenCalledWith('/results?type=redteam&includeProviders=true', {
+        cache: 'no-store',
+      }),
     );
 
     expect(await screen.findByTestId('row-eval-1')).toHaveTextContent('First Report');
