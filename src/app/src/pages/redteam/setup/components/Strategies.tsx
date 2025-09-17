@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { callApi } from '@app/utils/api';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
@@ -21,6 +22,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
 import StrategyConfigDialog from './StrategyConfigDialog';
+import { StrategySampleDialog } from './StrategySampleDialog';
 import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
@@ -75,6 +77,21 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     isOpen: false,
     selectedStrategy: null,
   });
+
+  // Strategy sample generation state
+  const [sampleDialog, setSampleDialog] = useState<{
+    isOpen: boolean;
+    strategyId: string | null;
+    isGenerating: boolean;
+    sample: any | null;
+  }>({
+    isOpen: false,
+    strategyId: null,
+    isGenerating: false,
+    sample: null,
+  });
+
+  const [generatingSampleIds, setGeneratingSampleIds] = useState<string[]>([]);
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
@@ -348,6 +365,76 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies, updateConfig],
   );
 
+  const handleSampleGenerate = useCallback(
+    async (strategyId: string) => {
+      try {
+        recordEvent('feature_used', {
+          feature: 'redteam_strategy_generate_sample',
+          strategy: strategyId,
+        });
+
+        // Set generating state
+        setGeneratingSampleIds((prev) => [...prev, strategyId]);
+        setSampleDialog({
+          isOpen: true,
+          strategyId,
+          isGenerating: true,
+          sample: null,
+        });
+
+        // Call API
+        const response = await callApi('/redteam/generate-strategy-sample', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            strategyId,
+            config: {
+              applicationDefinition: config.description,
+              injectVar: 'query',
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to generate strategy sample: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Update dialog with result
+        setSampleDialog({
+          isOpen: true,
+          strategyId,
+          isGenerating: false,
+          sample: data.sample,
+        });
+      } catch (error) {
+        console.error('Error generating strategy sample:', error);
+        setSampleDialog({
+          isOpen: true,
+          strategyId,
+          isGenerating: false,
+          sample: null,
+        });
+      } finally {
+        // Remove from generating list
+        setGeneratingSampleIds((prev) => prev.filter((id) => id !== strategyId));
+      }
+    },
+    [recordEvent, config.description, callApi],
+  );
+
+  const handleSampleDialogClose = useCallback(() => {
+    setSampleDialog({
+      isOpen: false,
+      strategyId: null,
+      isGenerating: false,
+      sample: null,
+    });
+  }, []);
+
   // ----------------------------------------------
   // Derived states
   // ----------------------------------------------
@@ -490,6 +577,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            onSampleGenerate={handleSampleGenerate}
+            generatingSampleIds={generatingSampleIds}
           />
         )}
 
@@ -503,6 +592,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            onSampleGenerate={handleSampleGenerate}
+            generatingSampleIds={generatingSampleIds}
           />
         )}
 
@@ -516,6 +607,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            onSampleGenerate={handleSampleGenerate}
+            generatingSampleIds={generatingSampleIds}
           />
         )}
 
@@ -529,6 +622,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            onSampleGenerate={handleSampleGenerate}
+            generatingSampleIds={generatingSampleIds}
           />
         )}
 
@@ -542,6 +637,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            onSampleGenerate={handleSampleGenerate}
+            generatingSampleIds={generatingSampleIds}
           />
         )}
 
@@ -576,6 +673,16 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           strategyData={
             availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
           }
+        />
+
+        {/* Strategy Sample Dialog */}
+        <StrategySampleDialog
+          open={sampleDialog.isOpen}
+          onClose={handleSampleDialogClose}
+          strategyId={sampleDialog.strategyId}
+          isGenerating={sampleDialog.isGenerating}
+          generatedSample={sampleDialog.sample}
+          onGenerate={() => sampleDialog.strategyId && handleSampleGenerate(sampleDialog.strategyId)}
         />
       </Box>
     </PageWrapper>

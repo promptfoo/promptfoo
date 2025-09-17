@@ -12,6 +12,7 @@ import {
   DEFAULT_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
 } from '@promptfoo/redteam/constants';
+import { StrategySampleGenerateButton } from '../StrategySampleDialog';
 
 import type { StrategyCardData } from './types';
 
@@ -20,10 +21,20 @@ interface StrategyItemProps {
   isSelected: boolean;
   onToggle: (id: string) => void;
   onConfigClick: (id: string) => void;
+  onSampleGenerate?: (id: string) => void;
+  isGeneratingSample?: boolean;
 }
 
-export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: StrategyItemProps) {
+export function StrategyItem({
+  strategy,
+  isSelected,
+  onToggle,
+  onConfigClick,
+  onSampleGenerate,
+  isGeneratingSample = false
+}: StrategyItemProps) {
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
+  const hasSampleButton = onSampleGenerate && strategy.id !== 'basic'; // Don't show sample button for basic strategy
 
   return (
     <Paper
@@ -67,30 +78,46 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
 
       {/* Content container */}
       <Box sx={{ flex: 1, p: 2, minWidth: 0, position: 'relative' }}>
-        {/* Settings button - positioned absolutely in the top-right corner */}
-        {hasSettingsButton && (
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onConfigClick(strategy.id);
-            }}
-            sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              opacity: 0.6,
-              '&:hover': {
-                opacity: 1,
-                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-              },
-            }}
-          >
-            <SettingsOutlinedIcon fontSize="small" />
-          </IconButton>
-        )}
+        {/* Action buttons - positioned absolutely in the top-right corner */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            display: 'flex',
+            gap: 0.5,
+          }}
+        >
+          {/* Sample generation button */}
+          {hasSampleButton && (
+            <StrategySampleGenerateButton
+              onClick={() => onSampleGenerate!(strategy.id)}
+              isGenerating={isGeneratingSample}
+              size="small"
+            />
+          )}
+          {/* Settings button */}
+          {hasSettingsButton && (
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                onConfigClick(strategy.id);
+              }}
+              sx={{
+                opacity: 0.6,
+                '&:hover': {
+                  opacity: 1,
+                  backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                },
+              }}
+            >
+              <SettingsOutlinedIcon fontSize="small" />
+            </IconButton>
+          )}
+        </Box>
 
-        {/* Title and badges section - add right padding when settings button is present */}
+        {/* Title and badges section - add right padding when action buttons are present */}
         <Box
           sx={{
             display: 'flex',
@@ -98,7 +125,7 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
             flexWrap: 'wrap',
             gap: 1,
             mb: 1,
-            pr: hasSettingsButton ? 5 : 0, // Add padding-right to avoid overlap with settings button
+            pr: hasSettingsButton || hasSampleButton ? 6 : 0, // Add padding-right to avoid overlap with action buttons
           }}
         >
           <Typography variant="subtitle1" component="div">
