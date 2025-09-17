@@ -80,10 +80,31 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
         headerName: 'Attack Success Rate',
         type: 'number',
         flex: 1,
-        renderCell: (params: GridRenderCellParams<EvalSummary>) => {
-          return `${params.value.toFixed(2)}%`;
-        },
+        renderCell: (params: GridRenderCellParams<EvalSummary>) => (
+          <>
+            <Typography
+              variant="body2"
+              color="success.main"
+              sx={{
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                // `type: number` gets overwritten by flex; manually justify content.
+                justifyContent: 'end',
+              }}
+            >
+              {params.value.toFixed(2)}%
+            </Typography>
+          </>
+        ),
         valueFormatter: (value: number) => `${value.toFixed(2)}%`,
+        cellClassName: 'dg-cursor-pointer',
+      },
+      {
+        field: 'numTests',
+        headerName: '# Tests',
+        type: 'number',
+        flex: 0.5,
         cellClassName: 'dg-cursor-pointer',
       },
       {
