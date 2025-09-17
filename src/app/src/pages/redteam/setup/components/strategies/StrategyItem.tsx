@@ -30,6 +30,14 @@ const SUPPORTED_SAMPLE_STRATEGIES = new Set([
   'prompt-injection',
 ]);
 
+// Iterative strategies supported in Milestone 2 with simulate mode
+const ITERATIVE_SAMPLE_STRATEGIES = new Set([
+  'crescendo',
+  'goat',
+  'custom',
+  'mischievous-user',
+]);
+
 interface StrategyItemProps {
   strategy: StrategyCardData;
   isSelected: boolean;
@@ -48,7 +56,8 @@ export function StrategyItem({
   isGeneratingSample = false,
 }: StrategyItemProps) {
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
-  const hasSampleButton = onSampleGenerate && SUPPORTED_SAMPLE_STRATEGIES.has(strategy.id);
+  const hasSampleButton = onSampleGenerate &&
+    (SUPPORTED_SAMPLE_STRATEGIES.has(strategy.id) || ITERATIVE_SAMPLE_STRATEGIES.has(strategy.id));
 
   return (
     <Paper

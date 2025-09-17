@@ -38,6 +38,14 @@ import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 // Types & Interfaces
 // ------------------------------------------------------------------
 
+// Iterative strategies that require simulate mode
+const ITERATIVE_STRATEGIES = new Set([
+  'crescendo',
+  'goat',
+  'custom',
+  'mischievous-user',
+]);
+
 interface StrategiesProps {
   onNext: () => void;
   onBack: () => void;
@@ -384,6 +392,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           sample: null,
         });
 
+        // Determine mode based on strategy type
+        const mode = ITERATIVE_STRATEGIES.has(strategyId) ? 'simulate' : 'template';
+
         // Call API
         const response = await callApi('/redteam/generate-strategy-sample', {
           method: 'POST',
@@ -392,6 +403,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           },
           body: JSON.stringify({
             strategyId,
+            mode,
             config: {
               applicationDefinition: config.applicationDefinition || {
                 purpose: config.description || 'general AI assistant',

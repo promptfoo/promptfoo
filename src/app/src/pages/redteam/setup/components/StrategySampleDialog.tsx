@@ -78,6 +78,12 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
                     generation. This {generatedSample.metadata.category} strategy will be supported
                     in a future milestone.
                   </>
+                ) : generatedSample.mode === 'simulate' ? (
+                  <>
+                    This demonstrates how the <code>{strategyId}</code> strategy works through a
+                    simulated conversation. The actual redteam run will use this strategy against
+                    your configured target.
+                  </>
                 ) : (
                   <>
                     This demonstrates how the <code>{strategyId}</code> strategy transforms prompts.
@@ -138,29 +144,98 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
               </Box>
             )}
 
-            {/* Transformed Prompts */}
-            <Typography variant="subtitle2" gutterBottom>
-              Transformed Prompt{generatedSample.modifiedPrompts.length > 1 ? 's' : ''}:
-            </Typography>
-            {generatedSample.modifiedPrompts.map((prompt, index) => (
-              <Box
-                key={index}
-                sx={{
-                  p: 2,
-                  mb: index < generatedSample.modifiedPrompts.length - 1 ? 2 : 0,
-                  backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
-                  borderRadius: 1,
-                  border: '1px solid',
-                  borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-                  fontFamily: 'monospace',
-                  fontSize: '0.875rem',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                }}
-              >
-                {prompt}
+            {/* Content - either transformed prompts or conversation */}
+            {generatedSample.mode === 'simulate' && generatedSample.conversation ? (
+              /* Simulated Conversation */
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Simulated Conversation ({generatedSample.conversation.length} turns):
+                </Typography>
+                {generatedSample.metadata.simulationNote && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      {generatedSample.metadata.simulationNote}
+                    </Typography>
+                  </Alert>
+                )}
+                {generatedSample.conversation.map((turn, index) => (
+                  <Box key={turn.turn} sx={{ mb: 3 }}>
+                    <Typography variant="subtitle3" component="div" sx={{ mb: 1, fontWeight: 600 }}>
+                      Turn {turn.turn}: {turn.intent}
+                    </Typography>
+                    <Box sx={{ mb: 1 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Technique: {turn.technique} | Escalation: {turn.escalationLevel}
+                      </Typography>
+                    </Box>
+
+                    {/* User Message */}
+                    <Box sx={{ mb: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+                        User:
+                      </Typography>
+                      <Box
+                        sx={{
+                          p: 1.5,
+                          backgroundColor: theme.palette.mode === 'dark' ? 'blue.900' : 'blue.50',
+                          borderRadius: 1,
+                          border: '1px solid',
+                          borderColor: theme.palette.mode === 'dark' ? 'blue.700' : 'blue.200',
+                          fontSize: '0.875rem',
+                        }}
+                      >
+                        {turn.userMessage}
+                      </Box>
+                    </Box>
+
+                    {/* Assistant Response */}
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+                        Assistant:
+                      </Typography>
+                      <Box
+                        sx={{
+                          p: 1.5,
+                          backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                          borderRadius: 1,
+                          border: '1px solid',
+                          borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                          fontSize: '0.875rem',
+                        }}
+                      >
+                        {turn.assistantResponse}
+                      </Box>
+                    </Box>
+                  </Box>
+                ))}
               </Box>
-            ))}
+            ) : (
+              /* Transformed Prompts (template mode) */
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Transformed Prompt{generatedSample.modifiedPrompts?.length > 1 ? 's' : ''}:
+                </Typography>
+                {generatedSample.modifiedPrompts?.map((prompt, index) => (
+                  <Box
+                    key={index}
+                    sx={{
+                      p: 2,
+                      mb: index < generatedSample.modifiedPrompts.length - 1 ? 2 : 0,
+                      backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                      borderRadius: 1,
+                      border: '1px solid',
+                      borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {prompt}
+                  </Box>
+                ))}
+              </Box>
+            )}
           </Box>
         ) : (
           <Box sx={{ py: 4, textAlign: 'center' }}>
