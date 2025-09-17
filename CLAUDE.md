@@ -136,6 +136,8 @@ Always follow this workflow:
    git commit -m "your commit message"
    ```
 
+   NEVER blindly `git add` everything - there might be other unrelated files lying around.
+
 3. **Push and create PR**:
 
    ```bash
