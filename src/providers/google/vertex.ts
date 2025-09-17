@@ -12,6 +12,7 @@ import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { calculateGeminiCost } from './geminiUtils';
 import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -347,6 +348,13 @@ export class VertexChatProvider extends VertexGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
+    // Enable image generation for Gemini 2.5 Flash Image models
+    if (this.modelName.includes('gemini-2.5-flash-image')) {
+      body.generationConfig = body.generationConfig || {};
+      body.generationConfig.responseModalities = ['IMAGE', 'TEXT'];
+    }
+
+    logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
     const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
 
@@ -467,10 +475,18 @@ export class VertexChatProvider extends VertexGenericProvider {
             },
           }),
         };
+
+        // Calculate cost based on token usage and model
+        let cost: number | undefined;
+        if (tokenUsage && tokenUsage.total) {
+          cost = calculateGeminiCost(this.modelName, tokenUsage.total);
+        }
+
         response = {
           cached: false,
           output,
           tokenUsage,
+          cost,
           metadata: {},
         };
 
@@ -536,9 +552,8 @@ export class VertexChatProvider extends VertexGenericProvider {
           }
           if (results.length > 0) {
             response = {
-              cached: response.cached,
+              ...response,
               output: results.join('\n'),
-              tokenUsage: response.tokenUsage,
             };
           }
         }

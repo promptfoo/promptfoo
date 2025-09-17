@@ -442,6 +442,7 @@ describe('AIStudioChatProvider', () => {
 
       expect(response).toEqual({
         output: 'response text',
+        cost: 0.00003,
         tokenUsage: {
           prompt: 10,
           completion: 5,
@@ -496,6 +497,7 @@ describe('AIStudioChatProvider', () => {
         },
         raw: mockResponse.data,
         cached: true,
+        cost: 0.00003,
         metadata: {},
       });
     });
@@ -899,6 +901,7 @@ describe('AIStudioChatProvider', () => {
           prompt: 8,
           completion: 7,
         },
+        cost: 0.00003,
         metadata: {},
       });
 
@@ -998,6 +1001,7 @@ describe('AIStudioChatProvider', () => {
           prompt: 5,
           completion: 5,
         },
+        cost: 0.00002,
         metadata: {},
       });
 
@@ -1083,6 +1087,7 @@ describe('AIStudioChatProvider', () => {
         cached: false,
         output: 'response with search results',
         raw: mockResponse.data,
+        cost: 0.00003,
         tokenUsage: {
           numRequests: 1,
           total: 15,
@@ -1179,6 +1184,7 @@ describe('AIStudioChatProvider', () => {
         cached: false,
         output: 'response with search retrieval',
         raw: mockResponse.data,
+        cost: 0.0000045,
         tokenUsage: {
           numRequests: 1,
           total: 15,
@@ -1257,6 +1263,7 @@ describe('AIStudioChatProvider', () => {
         cached: false,
         output: 'response with search results',
         raw: mockResponse.data,
+        cost: 0.00004,
         tokenUsage: {
           numRequests: 1,
           total: 20,

@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: '☁️ Vertex AI Comprehensive Test Suite for Gemini 2.5 Flash Image'
+
+prompts:
+  - 'Generate an image of {{subject}}'
+  - 'Transform this scene: {{scenario}}'
+
+providers:
+  # Test Vertex AI (requires GCP setup)
+  - id: vertex:gemini-2.5-flash-image-preview
+    label: 'Vertex AI ☁️'
+    config:
+      # These can be set via environment variables:
+      # projectId: your-gcp-project-id
+      # region: us-central1
+      # credentials: file://path/to/service-account.json
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 1024
+        responseModalities:
+          - IMAGE
+          - TEXT
+
+tests:
+  # 🌟 Vertex AI Specific Tests
+  - description: '🏢 Corporate mascot design'
+    vars:
+      subject: "a friendly corporate mascot that's a mix of a cloud and a robot"
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.05
+
+  - description: '🚂 Steampunk data center'
+    vars:
+      scenario: 'a Victorian-era data center with steam-powered servers and brass network cables'
+    assert:
+      - type: contains
+        value: 'data:image'
+      - type: cost
+        threshold: 0.05
+
+  - description: '🌊 Ocean server farm'
+    vars:
+      subject: 'an underwater data center with servers inside giant bubbles and digital fish swimming around'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.05
+      - type: javascript
+        value: |
+          // Comprehensive validation
+          const hasValidImage = /!\[Generated Image\]\(data:image\/[^;]+;base64,[A-Za-z0-9+/]+=*\)/.test(output);
+          const hasText = output.length > 100; // Should have descriptive text too
+          return { 
+            pass: hasValidImage && hasText, 
+            score: hasValidImage && hasText ? 1 : 0,
+            reason: `Image: ${hasValidImage}, Text: ${hasText}, Length: ${output.length}`
+          };
