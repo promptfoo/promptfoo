@@ -7,7 +7,6 @@ description: Transform production conversation logs into a continuous improvemen
 
 Production log analysis transforms your historical conversation data into actionable insights for security, quality, and business optimization. This guide shows how to build a **continuous improvement flywheel** that makes your LLM system better with every conversation.
 
-![Production Log Analysis Flywheel](./screenshots/production-log-flywheel.png)
 
 ## Why Production Log Analysis Matters
 
@@ -144,7 +143,7 @@ tests:
       - type: contains
         value: 'BUSINESS IMPACT'
       - type: javascript
-        value: 'context.metadata.total_revenue_impact > 0'
+        value: 'context.metadata.business_summary.total_revenue_impact !== undefined'
 ```
 
 ### 4. Run Analysis
@@ -154,7 +153,6 @@ promptfoo eval -c promptfooconfig.yaml
 promptfoo view # Open results in browser
 ```
 
-![Security Analysis Dashboard](./screenshots/security-analysis-dashboard.png)
 
 ## Security Vulnerability Detection
 
@@ -221,7 +219,6 @@ RECOMMENDED ACTIONS:
 4. Update input sanitization rules
 ```
 
-![Security Incidents Timeline](./screenshots/security-timeline.png)
 
 ## Quality Assessment & Improvement
 
@@ -327,26 +324,39 @@ Monthly Trends:
 • Churn Rate: 2.1% → 1.4% (-33% improvement)
 ```
 
-![Business Metrics Dashboard](./screenshots/business-metrics.png)
 
 ## The Continuous Improvement Flywheel
 
 ### 1. Capture: Rich Production Data
 
+Export your conversation logs in JSONL format with required fields:
+
 ```bash
-# Export from your production system
+# Export to dated folder structure
+mkdir -p logs/$(date +%Y-%m-%d)
+
+# Export conversations with required fields: session_id, role, message, timestamp, metadata
 curl -X GET "https://api.yourapp.com/conversations/export" \
   -H "Authorization: Bearer $API_TOKEN" \
-  -o production-logs.jsonl
+  -o logs/$(date +%Y-%m-%d)/production-logs.jsonl
+
+# Or copy the example data to start
+cp examples/conversation-replay/production-logs.jsonl logs/$(date +%Y-%m-%d)/
 ```
 
 ### 2. Analyze: Detect Patterns
 
 ```bash
-# Run comprehensive analysis
-promptfoo eval -c security-analysis.yaml
-promptfoo eval -c quality-analysis.yaml
-promptfoo eval -c business-analysis.yaml
+# Run comprehensive analysis using existing examples
+cd examples/conversation-replay
+promptfoo eval -c promptfooconfig.yaml
+
+# Run quality gates for pass/fail thresholds
+promptfoo eval -c gates.yaml
+
+# Analyze different conversation formats
+cd ../opentelemetry-traces
+promptfoo eval -c promptfooconfig.yaml
 ```
 
 ### 3. Insights: Identify Improvements
@@ -404,23 +414,37 @@ prompts:
 ### 5. Deploy: Roll Out Changes
 
 ```bash
-# A/B test improvements
-promptfoo eval -c ab-test-config.yaml
+# A/B test improvements by creating variants of existing configs
+cd examples/conversation-replay
+cp promptfooconfig.yaml promptfooconfig-improved.yaml
+# Edit the improved config with new prompts/assertions
 
-# Results show 23% improvement in quality score
-# Deploy to 100% of traffic
+# Run both versions to compare
+promptfoo eval -c promptfooconfig.yaml -o baseline-results.json
+promptfoo eval -c promptfooconfig-improved.yaml -o improved-results.json
+
+# Compare results
+promptfoo view baseline-results.json
+promptfoo view improved-results.json
 ```
 
 ### 6. Measure: Track Improvement
 
 ```bash
-# Compare before/after metrics
-promptfoo eval -c comparison-analysis.yaml
+# Track improvement using quality gates over time
+cd examples/conversation-replay
 
-# Results:
-# Security incidents: 23 → 8 (-65% improvement)
-# Quality score: 6.2 → 7.8 (+26% improvement)
-# Revenue impact: +$1,200 additional MRR
+# Run gates on new production data
+promptfoo eval -c gates.yaml --output weekly-gates-$(date +%Y-%m-%d).json
+
+# View trending metrics
+promptfoo view weekly-gates-*.json
+
+# Example improvement tracking:
+# Week 1: Security Gate: 4/10 conversations passed
+# Week 2: Security Gate: 8/10 conversations passed
+# Week 3: Security Gate: 10/10 conversations passed
+# Quality Gate: 6.2 → 7.8 avg score (+26% improvement)
 ```
 
 ### 7. Repeat: Continuous Optimization
@@ -496,8 +520,10 @@ The system supports multiple production log formats:
 
 ### Automated Pipeline Setup
 
+**Note**: This is an example CI/orchestration template, not a built-in Promptfoo feature. Use with your preferred CI system (GitHub Actions, cron, etc.).
+
 ```yaml title="flywheel-automation.yaml"
-# Set up automated analysis pipeline
+# Example CI/cron pipeline for automated analysis
 schedule: "daily at 2:00 AM"
 
 stages:
@@ -730,4 +756,4 @@ If analysis is too slow:
 
 ---
 
-**Ready to start analyzing your production logs?** [Download the complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/production-log-analysis) and begin transforming your conversation data into continuous improvements.
+**Ready to start analyzing your production logs?** Check out the [conversation replay example](https://github.com/promptfoo/promptfoo/tree/main/examples/conversation-replay) and other examples in the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples) to begin transforming your conversation data into continuous improvements.

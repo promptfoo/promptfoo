@@ -31,13 +31,13 @@ tests:
   # Test billing issue conversation
   - description: 'Billing issue conversation replay'
     vars:
-      conversationId: 'sess_refund_003'
+      conversationId: 'sess_billing_003'
       mode: 'full'
     assert:
       - type: contains
         value: 'refund'
       - type: contains
-        value: 'duplicate charge'
+        value: 'charged twice'
 
   # Test individual turn replay
   - description: 'Individual turn replay'

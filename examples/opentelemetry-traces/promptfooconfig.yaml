@@ -55,10 +55,9 @@ tests:
       - type: javascript
         value: |
           // Check if latency information is preserved from OTLP traces
-          const metadata = JSON.parse(context.metadata || '{}');
-          return metadata.conversationMetadata &&
-                 metadata.conversationMetadata.avgLatency !== undefined &&
-                 metadata.conversationMetadata.avgLatency > 0;
+          return context.metadata.conversationMetadata &&
+                 context.metadata.conversationMetadata.avgLatency !== undefined &&
+                 context.metadata.conversationMetadata.avgLatency > 0;
 
   # Multi-session analysis across traces
   - description: 'Cross-session conversation quality'
@@ -86,11 +85,10 @@ tests:
       - type: javascript
         value: |
           // Verify that OTLP trace metadata is properly preserved
-          const metadata = JSON.parse(context.metadata || '{}');
-          return metadata.traceId &&
-                 metadata.spanId &&
-                 metadata.originalMetadata &&
-                 metadata.originalMetadata.llmModel;
+          return context.metadata.traceId &&
+                 context.metadata.spanId &&
+                 context.metadata.originalMetadata &&
+                 context.metadata.originalMetadata.llmModel;
 
   # Intent detection from trace attributes
   - description: 'Intent classification from OTLP attributes'

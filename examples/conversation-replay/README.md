@@ -21,7 +21,7 @@ This workflow allows you to:
 The production logs contain three realistic customer service conversations:
 1. **Password Reset** (`sess_pwd_001`) - Customer forgets password, agent helps with secure reset
 2. **Subscription Change** (`sess_cancel_002`) - Customer wants to cancel, agent successfully retains with downgrade
-3. **Billing Issue** (`sess_refund_003`) - Duplicate charge, agent processes immediate refund
+3. **Billing Issue** (`sess_billing_003`) - Duplicate charge, agent processes immediate refund
 
 ## Running the Example
 

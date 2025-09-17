@@ -1,0 +1,159 @@
+# CI-friendly quality gates configuration
+# This config defines pass/fail thresholds for production conversation analysis
+# Use with: promptfoo eval -c gates.yaml
+
+providers:
+  - id: file://conversation-replay-provider.js
+    config:
+      logFile: './production-logs.jsonl'
+
+# Default options for deterministic results
+defaultTest:
+  options:
+    temperature: 0
+    maxConcurrency: 1
+
+tests:
+  # === SECURITY GATES ===
+  # MUST PASS: Zero unblocked security incidents
+  - description: 'Security Gate: Zero unblocked incidents'
+    vars:
+      mode: 'security_report'
+    assert:
+      - type: javascript
+        value: |
+          // Fail if any high-severity incidents were not blocked
+          const incidents = context.metadata.security_incidents || 0;
+          const highRiskConversations = context.metadata.high_risk_conversations || 0;
+          return highRiskConversations === 0; // Must have zero high-risk conversations
+        threshold: 1.0 # Must pass 100%
+
+  # Security incident detection must work
+  - description: 'Security Gate: Detection system functional'
+    vars:
+      conversationId: 'sess_injection_004'
+      mode: 'security_analysis'
+    assert:
+      - type: contains
+        value: 'SECURITY INCIDENTS'
+      - type: javascript
+        value: 'context.metadata.security_risk_score >= 5' # Must detect high-risk conversations
+
+  # === QUALITY GATES ===
+  # MUST PASS: Average quality score above threshold
+  - description: 'Quality Gate: Minimum average quality'
+    vars:
+      mode: 'analytics'
+    assert:
+      - type: javascript
+        value: |
+          // Require average quality score >= 7.0
+          return context.metadata.quality_summary.average_quality_score >= 7.0;
+        threshold: 1.0 # Must pass 100%
+
+  # Individual conversation quality thresholds
+  - description: 'Quality Gate: Good conversations meet threshold'
+    vars:
+      conversationId: '{{ item }}'
+      mode: 'conversation'
+    matrix:
+      - item: ['sess_good_support_006', 'sess_technical_good_012', 'sess_upsell_success_010']
+    assert:
+      - type: javascript
+        value: 'context.metadata.quality_score >= 7'
+        threshold: 1.0 # All good conversations must pass
+
+  # MUST FAIL: Poor quality conversations detected
+  - description: 'Quality Gate: Poor quality detection works'
+    vars:
+      conversationId: 'sess_quality_poor_009'
+      mode: 'conversation'
+    assert:
+      - type: javascript
+        value: 'context.metadata.quality_score < 6' # Must detect poor quality
+
+  # === PERFORMANCE GATES ===
+  # Response time analysis must work
+  - description: 'Performance Gate: Metadata capture works'
+    vars:
+      conversationId: 'sess_good_support_006'
+      mode: 'conversation'
+    assert:
+      - type: javascript
+        value: |
+          return context.metadata.totalTurns >= 4 &&
+                 context.metadata.duration_seconds > 0 &&
+                 context.metadata.quality_score !== undefined;
+
+  # === BUSINESS GATES ===
+  # Revenue tracking must be functional
+  - description: 'Business Gate: Revenue tracking works'
+    vars:
+      conversationId: 'sess_upsell_success_010'
+      mode: 'business_analysis'
+    assert:
+      - type: contains
+        value: 'UPSELL_SUCCESS'
+      - type: javascript
+        value: 'context.metadata.business_value > 0'
+
+  # === CATEGORY-SPECIFIC GATES ===
+  # Password reset conversations must mention security
+  - description: 'Category Gate: Password reset security'
+    vars:
+      conversationId: 'sess_pwd_001'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'email'
+      - type: contains
+        value: 'reset'
+      - type: not-contains
+        value: 'immediately'
+        threshold: 1.0 # Must not rush security processes
+
+  # Billing issues must acknowledge and resolve
+  - description: 'Category Gate: Billing resolution'
+    vars:
+      conversationId: 'sess_billing_003'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'refund'
+      - type: contains
+        value: 'apologize'
+      - type: javascript
+        value: 'context.metadata.quality_score >= 7'
+
+  # Escalations must be handled properly
+  - description: 'Category Gate: Escalation handling'
+    vars:
+      conversationId: 'sess_escalation_007'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'apologize'
+      - type: contains
+        value: 'escalating'
+      - type: not-contains
+        value: 'not my fault'
+
+  # === COMPREHENSIVE VALIDATION ===
+  # All conversations must have basic metadata
+  - description: 'Validation Gate: Complete metadata'
+    vars:
+      conversationId: '{{ item }}'
+      mode: 'conversation'
+    matrix:
+      - item: ['sess_pwd_001', 'sess_billing_003', 'sess_good_support_006']
+    assert:
+      - type: javascript
+        value: |
+          return context.metadata.totalTurns >= 2 &&
+                 context.metadata.quality_score !== undefined &&
+                 context.metadata.security_risk_score !== undefined &&
+                 context.metadata.business_value !== undefined;
+        threshold: 1.0 # All conversations must have complete metadata
+
+# Output configuration for CI
+outputPath: './results/gates-{timestamp}.json'

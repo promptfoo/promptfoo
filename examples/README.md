@@ -14,7 +14,6 @@ Replay conversations from JSONL log files with multi-turn conversation analysis.
 - **Data Format**: JSONL conversation logs
 - **Use Cases**: Customer service quality analysis, conversation flow validation
 - **Key Features**: Turn-by-turn replay, conversation metadata, PII sanitization
-- **Pass Rate**: ✅ 100% (6/6 tests)
 
 ```bash
 cd conversation-replay
@@ -27,7 +26,6 @@ Analyze conversations captured in OpenTelemetry distributed tracing format.
 - **Data Format**: OTLP (OpenTelemetry Protocol) traces with span attributes
 - **Use Cases**: Microservices conversation tracking, performance analysis, distributed system debugging
 - **Key Features**: Trace correlation, latency analysis, model tracking, span metadata
-- **Pass Rate**: ✅ 75% (6/8 tests)
 
 ```bash
 cd opentelemetry-traces
@@ -40,7 +38,6 @@ Replay conversations from LangChain execution logs with chain and tool analysis.
 - **Data Format**: LangChain event logs (chain_start, llm_start, tool_start, etc.)
 - **Use Cases**: Agent workflow validation, tool usage analysis, chain execution debugging
 - **Key Features**: Chain execution flow, tool call tracking, performance metrics, model usage
-- **Pass Rate**: ✅ 77.78% (7/9 tests)
 
 ```bash
 cd langchain-logs
@@ -53,7 +50,6 @@ Analyze conversations exported from production databases with business outcome t
 - **Data Format**: JSON exports from SQL conversation tables
 - **Use Cases**: Business intelligence, outcome analysis, customer service metrics
 - **Key Features**: Business outcome detection, escalation tracking, channel analysis, performance metrics
-- **Pass Rate**: ✅ 55.56% (5/9 tests)
 
 ```bash
 cd database-export
