@@ -165,4 +165,18 @@ describe('EvalsDropdown', () => {
 
     expect(clearTimeoutSpy).toHaveBeenCalled();
   });
+
+  it("should display the 'Vulnerability Reports' menu item with the correct description when the Results dropdown is open", () => {
+    render(
+      <MemoryRouter>
+        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+      </MemoryRouter>,
+    );
+
+    const evalsButton = screen.getByRole('button', { name: /Results/i });
+    fireEvent.click(evalsButton);
+
+    expect(screen.getByText('Vulnerability Reports')).toBeInTheDocument();
+    expect(screen.getByText('View findings from red teams')).toBeInTheDocument();
+  });
 });
