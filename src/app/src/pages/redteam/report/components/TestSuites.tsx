@@ -354,6 +354,12 @@ const TestSuites = ({
       },
     },
     {
+      field: 'successfulAttacks',
+      headerName: 'Successful Attacks',
+      type: 'number',
+      flex: 0.75,
+    },
+    {
       field: 'attackSuccessRate',
       headerName: 'Attack Success Rate',
       type: 'number',
