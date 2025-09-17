@@ -16,6 +16,7 @@ import { HttpProvider } from '../../providers/http';
 import telemetry from '../../telemetry';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
+import { saveDiscoveryToCloud } from '../../util/discovery';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
@@ -384,6 +385,9 @@ export function discoverCommand(
         const discoveryResult = await doTargetPurposeDiscovery(target);
 
         if (discoveryResult) {
+          // Save discovery results to cloud if applicable
+          await saveDiscoveryToCloud(target, discoveryResult, config || defaultConfig || undefined);
+
           if (discoveryResult.purpose) {
             logger.info(chalk.bold(chalk.green('\n1. The target believes its purpose is:\n')));
             logger.info(discoveryResult.purpose);
