@@ -16,6 +16,20 @@ import { StrategySampleGenerateButton } from '../StrategySampleDialog';
 
 import type { StrategyCardData } from './types';
 
+// Transform-only strategies supported in Milestone 1 (should match server-side allowlist)
+const SUPPORTED_SAMPLE_STRATEGIES = new Set([
+  'base64',
+  'hex',
+  'rot13',
+  'leetspeak',
+  'homoglyph',
+  'morse',
+  'piglatin',
+  'camelcase',
+  'emoji',
+  'prompt-injection',
+]);
+
 interface StrategyItemProps {
   strategy: StrategyCardData;
   isSelected: boolean;
@@ -34,7 +48,7 @@ export function StrategyItem({
   isGeneratingSample = false,
 }: StrategyItemProps) {
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
-  const hasSampleButton = onSampleGenerate && strategy.id !== 'basic'; // Don't show sample button for basic strategy
+  const hasSampleButton = onSampleGenerate && SUPPORTED_SAMPLE_STRATEGIES.has(strategy.id);
 
   return (
     <Paper
