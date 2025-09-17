@@ -102,6 +102,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
     );
   });
+
+  // Track if user has interacted to prevent config updates from overriding user selections
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
   const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>(() => {
@@ -175,8 +178,28 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
   }, [debouncedPlugins]);
 
+  // Sync selectedPlugins from config only on initial load or when user hasn't interacted
+  useEffect(() => {
+    if (!hasUserInteracted) {
+      const configPlugins = new Set(
+        config.plugins
+          .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
+          .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
+      );
+
+      // Only update if the sets are actually different to avoid unnecessary re-renders
+      if (
+        configPlugins.size !== selectedPlugins.size ||
+        !Array.from(configPlugins).every((plugin) => selectedPlugins.has(plugin))
+      ) {
+        setSelectedPlugins(configPlugins);
+      }
+    }
+  }, [config.plugins, hasUserInteracted, selectedPlugins]);
+
   const handlePluginToggle = useCallback(
     (plugin: Plugin) => {
+      setHasUserInteracted(true);
       setSelectedPlugins((prev) => {
         const newSet = new Set(prev);
 
@@ -223,6 +246,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       feature: 'redteam_config_plugins_preset_selected',
       preset: preset.name,
     });
+    setHasUserInteracted(true);
     if (preset.name === 'Custom') {
       setIsCustomMode(true);
     } else {
@@ -795,6 +819,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <Box
                 component="span"
                 onClick={() => {
+                  setHasUserInteracted(true);
                   filteredPlugins.forEach(({ plugin }) => {
                     if (!selectedPlugins.has(plugin)) {
                       handlePluginToggle(plugin);
@@ -807,6 +832,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <Box
                 component="span"
                 onClick={() => {
+                  setHasUserInteracted(true);
                   filteredPlugins.forEach(({ plugin }) => {
                     if (selectedPlugins.has(plugin)) {
                       handlePluginToggle(plugin);
@@ -1658,6 +1684,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     size="small"
                     fullWidth
                     onClick={() => {
+                      setHasUserInteracted(true);
                       selectedPlugins.forEach((plugin) => handlePluginToggle(plugin));
                     }}
                     sx={{ fontSize: '0.875rem' }}
