@@ -1,0 +1,772 @@
+{
+  "evalId": "eval-iIk-2025-09-17T02:43:05",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-09-17T02:43:05.370Z",
+    "prompts": [
+      {
+        "raw": "{{prompt}}",
+        "label": "{{prompt}}",
+        "id": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "provider": "conversation-replay",
+        "metrics": {
+          "score": 2.5,
+          "testPassCount": 0,
+          "testFailCount": 4,
+          "testErrorCount": 1,
+          "assertPassCount": 9,
+          "assertFailCount": 5,
+          "totalLatencyMs": 9,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 5,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "error": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.75,
+          "reason": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "password"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "reset link"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "not-contains",
+                "value": "I am an AI"
+              }
+            },
+            {
+              "pass": false,
+              "reason": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+              "score": 0,
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 0,
+                "numRequests": 0
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "c40fae3f-9bdc-42bb-b481-d778597ae0a0",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "conversation-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I forgot my password and can't log into my account\n---\n[Turn 2] assistant: I can help you reset your password. For security, I'll need to verify your identity first. Can you please provide the email address associated with your account?\n---\n[Turn 3] user: john.smith@company.com\n---\n[Turn 4] assistant: Thank you. I found your account for john.smith@company.com. To proceed with the password reset, can you verify the last 4 digits of the phone number on file for your account?\n---\n[Turn 5] user: 5678\n---\n[Turn 6] assistant: Perfect! I've verified your identity. I'm sending a password reset link to john.smith@company.com right now. Please check your email (including your spam folder) and click the link within the next 24 hours to reset your password. Is there anything else I can help you with?\n---\n[Turn 7] user: No, that's perfect. Thank you!\n---\n[Turn 8] assistant: You're welcome! Your password reset link has been sent. If you don't receive it within a few minutes, please check your spam folder or contact us again. Have a great day!",
+          "metadata": {
+            "conversationId": "sess_pwd_001",
+            "totalTurns": 8,
+            "firstMessage": "2024-01-15T09:30:00Z",
+            "lastMessage": "2024-01-15T09:30:47Z"
+          }
+        },
+        "score": 0.75,
+        "success": false,
+        "testCase": {
+          "description": "Password reset conversation analysis",
+          "vars": {
+            "conversationId": "sess_pwd_001",
+            "mode": "full"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "password"
+            },
+            {
+              "type": "contains",
+              "value": "reset link"
+            },
+            {
+              "type": "not-contains",
+              "value": "I am an AI"
+            },
+            {
+              "type": "llm-rubric",
+              "value": "Does this conversation successfully help the user reset their password? The agent should verify identity and send a reset link."
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "conversationId": "sess_pwd_001",
+          "mode": "full"
+        },
+        "metadata": {
+          "conversationId": "sess_pwd_001",
+          "totalTurns": 8,
+          "firstMessage": "2024-01-15T09:30:00Z",
+          "lastMessage": "2024-01-15T09:30:47Z",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "error": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.3333333333333333,
+          "reason": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "basic plan"
+              }
+            },
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to not contain \"cancellation\"",
+              "assertion": {
+                "type": "not-contains",
+                "value": "cancellation"
+              }
+            },
+            {
+              "pass": false,
+              "reason": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+              "score": 0,
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 0,
+                "numRequests": 0
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "249cd914-f846-4a00-9fc9-8d42e0a94092",
+        "latencyMs": 2,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "conversation-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I want to cancel my subscription\n---\n[Turn 2] assistant: I can help you with your subscription cancellation. Before we proceed, may I ask what's prompting you to cancel? Sometimes we can address concerns or offer alternatives that might work better for you.\n---\n[Turn 3] user: I'm not using the service enough to justify the cost\n---\n[Turn 4] assistant: I understand completely. Let me check your account to see your current plan and usage. Would you be interested in downgrading to our basic plan instead? It's $9.99/month instead of $29.99, and you might find it more suitable for lighter usage.\n---\n[Turn 5] user: Actually, that sounds like it might work better. Can you tell me what's included in the basic plan?\n---\n[Turn 6] assistant: Great question! The basic plan includes: up to 50 API calls per month, access to all core features, email support, and basic analytics. You'd lose the advanced reporting and priority support that comes with premium, but you'd keep everything essential. Would you like me to switch you to the basic plan instead of canceling?\n---\n[Turn 7] user: Yes, please switch me to the basic plan\n---\n[Turn 8] assistant: Perfect! I've switched your subscription to the basic plan effective immediately. Your next billing date is February 15th for $9.99. You'll receive a confirmation email shortly. Is there anything else I can help you with today?",
+          "metadata": {
+            "conversationId": "sess_cancel_002",
+            "totalTurns": 8,
+            "firstMessage": "2024-01-15T14:20:00Z",
+            "lastMessage": "2024-01-15T14:21:18Z"
+          }
+        },
+        "score": 0.3333333333333333,
+        "success": false,
+        "testCase": {
+          "description": "Subscription retention conversation",
+          "vars": {
+            "conversationId": "sess_cancel_002",
+            "mode": "full"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "basic plan"
+            },
+            {
+              "type": "not-contains",
+              "value": "cancellation"
+            },
+            {
+              "type": "llm-rubric",
+              "value": "Does this conversation demonstrate effective retention tactics while remaining helpful and not pushy?"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "conversationId": "sess_cancel_002",
+          "mode": "full"
+        },
+        "metadata": {
+          "conversationId": "sess_cancel_002",
+          "totalTurns": 8,
+          "firstMessage": "2024-01-15T14:20:00Z",
+          "lastMessage": "2024-01-15T14:21:18Z",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "error": "Conversation not found",
+        "gradingResult": null,
+        "id": "fcdc2537-4254-4ab5-a2cf-0de0aa35a478",
+        "latencyMs": 3,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "conversation-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "No conversation found for ID: {{ item }}",
+          "error": "Conversation not found"
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Policy compliance check",
+          "vars": {
+            "conversationId": "{{ item }}",
+            "mode": "full"
+          },
+          "matrix": [
+            {
+              "item": [
+                "sess_pwd_001",
+                "sess_cancel_002",
+                "sess_refund_003"
+              ]
+            }
+          ],
+          "assert": [
+            {
+              "type": "not-contains",
+              "value": "<redacted>"
+            },
+            {
+              "type": "llm-rubric",
+              "value": "Does this conversation follow customer service policies? Check for: professional tone, proper identity verification, accurate information provided."
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {
+          "conversationId": "{{ item }}",
+          "mode": "full"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 2
+      },
+      {
+        "cost": 0,
+        "error": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.6666666666666666,
+          "reason": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "verify"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "email"
+              }
+            },
+            {
+              "pass": false,
+              "reason": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+              "score": 0,
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 0,
+                "numRequests": 0
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "139eb8b9-465c-41a5-bf98-02f0cb02326d",
+        "latencyMs": 3,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "conversation-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "I can help you reset your password. For security, I'll need to verify your identity first. Can you please provide the email address associated with your account?",
+          "metadata": {
+            "role": "assistant",
+            "timestamp": "2024-01-15T09:30:02Z",
+            "turnIndex": 1,
+            "totalTurns": 8,
+            "originalMetadata": {
+              "model": "gpt-4",
+              "response_time_ms": 1200
+            }
+          }
+        },
+        "score": 0.6666666666666666,
+        "success": false,
+        "testCase": {
+          "description": "Assistant response quality - password reset verification",
+          "vars": {
+            "conversationId": "sess_pwd_001",
+            "mode": "turn",
+            "turnIndex": 1
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "verify"
+            },
+            {
+              "type": "contains",
+              "value": "email"
+            },
+            {
+              "type": "llm-rubric",
+              "value": "Is this response helpful, professional, and follows security best practices for password resets?"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "vars": {
+          "conversationId": "sess_pwd_001",
+          "mode": "turn",
+          "turnIndex": 1
+        },
+        "metadata": {
+          "role": "assistant",
+          "timestamp": "2024-01-15T09:30:02Z",
+          "turnIndex": 1,
+          "totalTurns": 8,
+          "originalMetadata": {
+            "model": "gpt-4",
+            "response_time_ms": 1200
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "error": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.75,
+          "reason": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "refund"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "duplicate charge"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "not-contains",
+                "value": "not our fault"
+              }
+            },
+            {
+              "pass": false,
+              "reason": "API call error: Error: {\"error\":\"invalid_grant\",\"error_description\":\"reauth related error (invalid_rapt)\",\"error_uri\":\"https://support.google.com/a/answer/9368756\",\"error_subtype\":\"invalid_rapt\"}",
+              "score": 0,
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 0,
+                "numRequests": 0
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "9b923db6-bc5a-4390-ad5e-2ec6d85f2c2b",
+        "latencyMs": 0,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "conversation-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I was charged twice for my subscription this month\n---\n[Turn 2] assistant: I'm sorry to hear about the billing issue. Double charges are definitely something we need to fix right away. Can you provide me with your account email so I can look into your billing history?\n---\n[Turn 3] user: sarah.jones@email.com\n---\n[Turn 4] assistant: Thank you Sarah. I can see your account and you're absolutely right - there were two charges on January 15th for $19.99 each. This appears to be a processing error on our end. I'm going to process a full refund for the duplicate charge right now. You should see the refund in your account within 3-5 business days.\n---\n[Turn 5] user: Thank you so much! Will I get an email confirmation?\n---\n[Turn 6] assistant: Absolutely! You'll receive an email confirmation within the next few minutes with the refund details and reference number. I've also added a note to your account about this issue. Again, I apologize for the inconvenience, and thank you for bringing this to our attention.",
+          "metadata": {
+            "conversationId": "sess_refund_003",
+            "totalTurns": 6,
+            "firstMessage": "2024-01-15T16:45:00Z",
+            "lastMessage": "2024-01-15T16:45:43Z"
+          }
+        },
+        "score": 0.75,
+        "success": false,
+        "testCase": {
+          "description": "Billing issue resolution quality",
+          "vars": {
+            "conversationId": "sess_refund_003",
+            "mode": "full"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "refund"
+            },
+            {
+              "type": "contains",
+              "value": "duplicate charge"
+            },
+            {
+              "type": "not-contains",
+              "value": "not our fault"
+            },
+            {
+              "type": "llm-rubric",
+              "value": "Does this conversation resolve the billing issue promptly and professionally? The agent should acknowledge the problem and provide a solution."
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 4,
+        "vars": {
+          "conversationId": "sess_refund_003",
+          "mode": "full"
+        },
+        "metadata": {
+          "conversationId": "sess_refund_003",
+          "totalTurns": 6,
+          "firstMessage": "2024-01-15T16:45:00Z",
+          "lastMessage": "2024-01-15T16:45:43Z",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      }
+    ],
+    "stats": {
+      "successes": 0,
+      "failures": 4,
+      "errors": 1,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 5,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "prompts": [
+      "{{prompt}}"
+    ],
+    "providers": [
+      {
+        "id": "file://conversation-replay-provider.js",
+        "config": {
+          "logFile": "./production-logs.jsonl"
+        }
+      }
+    ],
+    "tests": [
+      {
+        "description": "Password reset conversation analysis",
+        "vars": {
+          "conversationId": "sess_pwd_001",
+          "mode": "full"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "password"
+          },
+          {
+            "type": "contains",
+            "value": "reset link"
+          },
+          {
+            "type": "not-contains",
+            "value": "I am an AI"
+          },
+          {
+            "type": "llm-rubric",
+            "value": "Does this conversation successfully help the user reset their password? The agent should verify identity and send a reset link."
+          }
+        ]
+      },
+      {
+        "description": "Subscription retention conversation",
+        "vars": {
+          "conversationId": "sess_cancel_002",
+          "mode": "full"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "basic plan"
+          },
+          {
+            "type": "not-contains",
+            "value": "cancellation"
+          },
+          {
+            "type": "llm-rubric",
+            "value": "Does this conversation demonstrate effective retention tactics while remaining helpful and not pushy?"
+          }
+        ]
+      },
+      {
+        "description": "Policy compliance check",
+        "vars": {
+          "conversationId": "{{ item }}",
+          "mode": "full"
+        },
+        "matrix": [
+          {
+            "item": [
+              "sess_pwd_001",
+              "sess_cancel_002",
+              "sess_refund_003"
+            ]
+          }
+        ],
+        "assert": [
+          {
+            "type": "not-contains",
+            "value": "<redacted>"
+          },
+          {
+            "type": "llm-rubric",
+            "value": "Does this conversation follow customer service policies? Check for: professional tone, proper identity verification, accurate information provided."
+          }
+        ]
+      },
+      {
+        "description": "Assistant response quality - password reset verification",
+        "vars": {
+          "conversationId": "sess_pwd_001",
+          "mode": "turn",
+          "turnIndex": 1
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "verify"
+          },
+          {
+            "type": "contains",
+            "value": "email"
+          },
+          {
+            "type": "llm-rubric",
+            "value": "Is this response helpful, professional, and follows security best practices for password resets?"
+          }
+        ]
+      },
+      {
+        "description": "Billing issue resolution quality",
+        "vars": {
+          "conversationId": "sess_refund_003",
+          "mode": "full"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "refund"
+          },
+          {
+            "type": "contains",
+            "value": "duplicate charge"
+          },
+          {
+            "type": "not-contains",
+            "value": "not our fault"
+          },
+          {
+            "type": "llm-rubric",
+            "value": "Does this conversation resolve the billing issue promptly and professionally? The agent should acknowledge the problem and provide a solution."
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "outputPath": [
+      "results/replay.json"
+    ],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": "https://www.promptfoo.app/eval/eval-iIk-2025-09-17T02:43:05",
+  "metadata": {
+    "promptfooVersion": "0.118.5",
+    "nodeVersion": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-09-17T02:43:19.562Z",
+    "evaluationCreatedAt": "2025-09-17T02:43:05.370Z"
+  }
+}

@@ -1,0 +1,140 @@
+providers:
+  - id: file://database-replay-provider.js
+    config:
+      dataFile: './conversations.json'
+
+tests:
+  # Test login troubleshooting conversation
+  - description: 'Login issue resolution from database'
+    vars:
+      sessionId: 'db_sess_001'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'login'
+      - type: contains
+        value: 'password reset'
+      - type: contains
+        value: 'Invalid credentials'
+      - type: not-contains
+        value: 'I cannot help'
+
+  # Test subscription upgrade conversation
+  - description: 'Subscription upgrade conversation'
+    vars:
+      sessionId: 'db_sess_002'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'upgrade'
+      - type: contains
+        value: 'Pro Plan'
+      - type: contains
+        value: '$19.99'
+      - type: contains
+        value: 'prorated'
+
+  # Test cancellation conversation
+  - description: 'Subscription cancellation conversation'
+    vars:
+      sessionId: 'db_sess_003'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'cancel'
+      - type: contains
+        value: 'frustrating'
+      - type: contains
+        value: 'apologize'
+      - type: contains
+        value: 'January 31st'
+
+  # Test conversation analysis mode
+  - description: 'Database conversation analysis'
+    vars:
+      sessionId: 'db_sess_002'
+      mode: 'analysis'
+    assert:
+      - type: contains
+        value: 'CONVERSATION ANALYSIS'
+      - type: contains
+        value: 'mobile_app'
+      - type: contains
+        value: 'Business Outcome'
+      - type: contains
+        value: 'upsell_success'
+
+  # Test metadata extraction
+  - description: 'Database metadata extraction'
+    vars:
+      sessionId: 'db_sess_001'
+      mode: 'metadata'
+    assert:
+      - type: contains
+        value: 'DATABASE METADATA'
+      - type: contains
+        value: 'PERFORMANCE METRICS'
+      - type: contains
+        value: 'web_chat'
+      - type: contains
+        value: 'agent_001'
+
+  # Test SQL mode
+  - description: 'SQL representation mode'
+    vars:
+      sessionId: 'db_sess_003'
+      mode: 'sql'
+    assert:
+      - type: contains
+        value: 'SELECT'
+      - type: contains
+        value: 'FROM conversations'
+      - type: contains
+        value: 'WHERE session_id'
+      - type: contains
+        value: 'ORDER BY timestamp'
+
+  # Test business outcome detection
+  - description: 'Business outcome analysis'
+    vars:
+      sessionId: 'db_sess_002'
+      mode: 'analysis'
+    assert:
+      - type: javascript
+        value: |
+          return context.metadata &&
+                 context.metadata.businessOutcome === 'upsell_success' &&
+                 context.metadata.channel === 'mobile_app' &&
+                 context.metadata.avgResponseTime > 0
+
+  # Test escalation detection
+  - description: 'Escalation detection'
+    vars:
+      sessionId: 'db_sess_003'
+      mode: 'analysis'
+    assert:
+      - type: javascript
+        value: |
+          return context.metadata &&
+                 context.metadata.escalated === true &&
+                 context.metadata.businessOutcome === 'churn' &&
+                 context.metadata.status === 'escalated'
+
+  # Cross-session conversation quality analysis
+  - description: 'Multi-session database conversation quality'
+    vars:
+      sessionId: '{{ item }}'
+      mode: 'conversation'
+    matrix:
+      - item: ['db_sess_001', 'db_sess_002', 'db_sess_003']
+    assert:
+      - type: not-contains
+        value: 'I don''t understand'
+      - type: not-contains
+        value: 'technical difficulties'
+      - type: javascript
+        value: |
+          // Ensure all conversations have appropriate length and agent responses
+          return output.length > 100 &&
+                 context.metadata.assistantMessages >= 1 &&
+                 context.metadata.duration > 0

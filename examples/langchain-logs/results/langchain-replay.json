@@ -1,0 +1,1293 @@
+{
+  "evalId": "eval-2S1-2025-09-17T03:04:05",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-09-17T03:04:05.265Z",
+    "prompts": [
+      {
+        "raw": "{{prompt}}",
+        "label": "{{prompt}}",
+        "id": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "provider": "langchain-replay",
+        "metrics": {
+          "score": 7,
+          "testPassCount": 7,
+          "testFailCount": 1,
+          "testErrorCount": 1,
+          "assertPassCount": 23,
+          "assertFailCount": 1,
+          "totalLatencyMs": 17,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 9,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "order status"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "tracking number"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "shipped"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "not-contains",
+                "value": "error"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "2deda825-9519-4e87-abb0-f4ce8a2a4f81",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "langchain-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I need help with my order status\n---\n[Turn 1] assistant: I'd be happy to help you check your order status. Could you please provide your order number or the email address associated with your order?\n---\n[Turn 2] user: Order #ORD-12345\n---\n[Turn 2] assistant: Great news! Your order #ORD-12345 has been shipped and is on its way to you. Here are the details:\n\n• Status: Shipped\n• Tracking Number: 1Z999AA1234567890\n• Expected Delivery: January 17th, 2024\n\nYou can track your package using the tracking number on the carrier's website. Is there anything else I can help you with?",
+          "metadata": {
+            "sessionId": "lc_sess_001",
+            "messageCount": 4,
+            "chainCount": 4,
+            "toolCallCount": 1,
+            "models": [
+              "gpt-4"
+            ],
+            "avgLatency": null,
+            "totalTokens": 123
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Order status inquiry with tool usage",
+          "vars": {
+            "sessionId": "lc_sess_001",
+            "mode": "conversation"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "order status"
+            },
+            {
+              "type": "contains",
+              "value": "tracking number"
+            },
+            {
+              "type": "contains",
+              "value": "shipped"
+            },
+            {
+              "type": "not-contains",
+              "value": "error"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "sessionId": "lc_sess_001",
+          "mode": "conversation"
+        },
+        "metadata": {
+          "sessionId": "lc_sess_001",
+          "messageCount": 4,
+          "chainCount": 4,
+          "toolCallCount": 1,
+          "models": [
+            "gpt-4"
+          ],
+          "avgLatency": null,
+          "totalTokens": 123,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "delivery address"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "order number"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "status"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "36118ff9-1764-4f04-9826-0ebc2998991f",
+        "latencyMs": 2,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "langchain-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: Can I change the delivery address?\n---\n[Turn 1] assistant: I can help you with changing your delivery address. However, the ability to modify the address depends on your order's current status:\n\n• If your order hasn't shipped yet, we can usually update the address\n• If it's already shipped, you'll need to contact the carrier directly\n\nCould you please provide your order number so I can check the current status and see what options are available?",
+          "metadata": {
+            "sessionId": "lc_sess_002",
+            "messageCount": 2,
+            "chainCount": 2,
+            "toolCallCount": 0,
+            "models": [
+              "gpt-4"
+            ],
+            "avgLatency": null,
+            "totalTokens": 68
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Delivery address change conversation",
+          "vars": {
+            "sessionId": "lc_sess_002",
+            "mode": "conversation"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "delivery address"
+            },
+            {
+              "type": "contains",
+              "value": "order number"
+            },
+            {
+              "type": "contains",
+              "value": "status"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "sessionId": "lc_sess_002",
+          "mode": "conversation"
+        },
+        "metadata": {
+          "sessionId": "lc_sess_002",
+          "messageCount": 2,
+          "chainCount": 2,
+          "toolCallCount": 0,
+          "models": [
+            "gpt-4"
+          ],
+          "avgLatency": null,
+          "totalTokens": 68,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "return"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "30 days"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "return label"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "4bcb7115-e255-42f9-bc6c-6be8559f0440",
+        "latencyMs": 3,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "langchain-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I want to return an item from my recent order\n---\n[Turn 1] assistant: I'd be happy to help you with your return. Our return policy allows returns within 30 days of delivery for most items in their original condition.\n\nTo get started, I'll need:\n• Your order number\n• Which item(s) you'd like to return\n• The reason for the return (optional, but helps us improve)\n\nOnce I have this information, I can generate a prepaid return label and guide you through the process. What's your order number?",
+          "metadata": {
+            "sessionId": "lc_sess_003",
+            "messageCount": 2,
+            "chainCount": 2,
+            "toolCallCount": 0,
+            "models": [
+              "gpt-4"
+            ],
+            "avgLatency": null,
+            "totalTokens": 89
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Item return conversation",
+          "vars": {
+            "sessionId": "lc_sess_003",
+            "mode": "conversation"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "return"
+            },
+            {
+              "type": "contains",
+              "value": "30 days"
+            },
+            {
+              "type": "contains",
+              "value": "return label"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {
+          "sessionId": "lc_sess_003",
+          "mode": "conversation"
+        },
+        "metadata": {
+          "sessionId": "lc_sess_003",
+          "messageCount": 2,
+          "chainCount": 2,
+          "toolCallCount": 0,
+          "models": [
+            "gpt-4"
+          ],
+          "avgLatency": null,
+          "totalTokens": 89,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "refund"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "business days"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "payment method"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "b6ac60c3-7e18-4b3a-916c-47c6d0edcbb0",
+        "latencyMs": 4,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "langchain-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: What's your refund processing time?\n---\n[Turn 1] assistant: Our refund processing times depend on the payment method:\n\n• **Credit/Debit Cards**: 3-5 business days after we receive the returned item\n• **PayPal**: 1-2 business days after processing\n• **Store Credit**: Immediate (same day)\n• **Bank Transfers**: 5-7 business days\n\nWe'll send you an email confirmation once your refund has been processed. The actual time for the funds to appear in your account may vary depending on your bank or payment provider.\n\nDo you have a specific return you're tracking?",
+          "metadata": {
+            "sessionId": "lc_sess_004",
+            "messageCount": 2,
+            "chainCount": 2,
+            "toolCallCount": 0,
+            "models": [
+              "gpt-4"
+            ],
+            "avgLatency": null,
+            "totalTokens": 102
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Refund processing time inquiry",
+          "vars": {
+            "sessionId": "lc_sess_004",
+            "mode": "conversation"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "refund"
+            },
+            {
+              "type": "contains",
+              "value": "business days"
+            },
+            {
+              "type": "contains",
+              "value": "payment method"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "vars": {
+          "sessionId": "lc_sess_004",
+          "mode": "conversation"
+        },
+        "metadata": {
+          "sessionId": "lc_sess_004",
+          "messageCount": 2,
+          "chainCount": 2,
+          "toolCallCount": 0,
+          "models": [
+            "gpt-4"
+          ],
+          "avgLatency": null,
+          "totalTokens": 102,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "Chain"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "Input"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "Output"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "608453fe-1437-42b2-8cc2-591aede245ea",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "langchain-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Chain 1 Start] Input: I need help with my order status\n---\n[Chain 1 End] Output: I'd be happy to help you check your order status. Could you please provide your order number or the email address associated with your order?\n---\n[Chain 2 Start] Input: Order #ORD-12345\n---\n[Chain 2 End] Output: Great news! Your order #ORD-12345 has been shipped and is on its way to you. Here are the details:\n\n• Status: Shipped\n• Tracking Number: 1Z999AA1234567890\n• Expected Delivery: January 17th, 2024\n\nYou can track your package using the tracking number on the carrier's website. Is there anything else I can help you with?",
+          "metadata": {
+            "sessionId": "lc_sess_001",
+            "chainExecutions": 2,
+            "toolsUsed": [
+              "order_lookup"
+            ]
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Chain execution analysis for order lookup",
+          "vars": {
+            "sessionId": "lc_sess_001",
+            "mode": "chains"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "Chain"
+            },
+            {
+              "type": "contains",
+              "value": "Input"
+            },
+            {
+              "type": "contains",
+              "value": "Output"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 4,
+        "vars": {
+          "sessionId": "lc_sess_001",
+          "mode": "chains"
+        },
+        "metadata": {
+          "sessionId": "lc_sess_001",
+          "chainExecutions": 2,
+          "toolsUsed": [
+            "order_lookup"
+          ],
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "order_lookup"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "tool_start"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "ORD-12345"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "151ce3da-661f-4c60-a02e-ef8f2dbe1ed3",
+        "latencyMs": 2,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "langchain-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[tool_start] order_lookup: {\n  \"tool\": \"order_lookup\",\n  \"inputs\": {\n    \"order_id\": \"ORD-12345\"\n  }\n}\n---\n[tool_end] unknown: {\n  \"output\": {\n    \"status\": \"shipped\",\n    \"tracking\": \"1Z999AA1234567890\",\n    \"expected_delivery\": \"2024-01-17\"\n  }\n}",
+          "metadata": {
+            "sessionId": "lc_sess_001",
+            "toolCallCount": 1,
+            "uniqueTools": [
+              "order_lookup",
+              "unknown"
+            ]
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Tool usage analysis for order lookup",
+          "vars": {
+            "sessionId": "lc_sess_001",
+            "mode": "tools"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "order_lookup"
+            },
+            {
+              "type": "contains",
+              "value": "tool_start"
+            },
+            {
+              "type": "contains",
+              "value": "ORD-12345"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 5,
+        "vars": {
+          "sessionId": "lc_sess_001",
+          "mode": "tools"
+        },
+        "metadata": {
+          "sessionId": "lc_sess_001",
+          "toolCallCount": 1,
+          "uniqueTools": [
+            "order_lookup",
+            "unknown"
+          ],
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "CONVERSATION"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "CHAIN EXECUTION"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "TOOL USAGE"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "gpt-4"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "21db9d95-39af-4edc-8661-9d942b6cf441",
+        "latencyMs": 2,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "langchain-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "=== CONVERSATION ===\nuser: I need help with my order status\n\nassistant: I'd be happy to help you check your order status. Could you please provide your order number or the email address associated with your order?\n\nuser: Order #ORD-12345\n\nassistant: Great news! Your order #ORD-12345 has been shipped and is on its way to you. Here are the details:\n\n• Status: Shipped\n• Tracking Number: 1Z999AA1234567890\n• Expected Delivery: January 17th, 2024\n\nYou can track your package using the tracking number on the carrier's website. Is there anything else I can help you with?\n\n=== CHAIN EXECUTION ===\nTotal chains executed: 2\nModels used: gpt-4\nAverage latency: NaNms\nTotal tokens: 123\n\n=== TOOL USAGE ===\nTools called: order_lookup",
+          "metadata": {
+            "sessionId": "lc_sess_001",
+            "models": [
+              "gpt-4"
+            ],
+            "totalTokens": 123,
+            "avgLatency": null,
+            "toolCalls": 1
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Full session analysis with metadata",
+          "vars": {
+            "sessionId": "lc_sess_001",
+            "mode": "full"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "CONVERSATION"
+            },
+            {
+              "type": "contains",
+              "value": "CHAIN EXECUTION"
+            },
+            {
+              "type": "contains",
+              "value": "TOOL USAGE"
+            },
+            {
+              "type": "contains",
+              "value": "gpt-4"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 6,
+        "vars": {
+          "sessionId": "lc_sess_001",
+          "mode": "full"
+        },
+        "metadata": {
+          "sessionId": "lc_sess_001",
+          "models": [
+            "gpt-4"
+          ],
+          "totalTokens": 123,
+          "avgLatency": null,
+          "toolCalls": 1,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "error": "Custom function threw error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\nStack Trace: Error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\n    at validateResult (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:11:11)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async handleJavascript (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:61:16)\n    at async runAssertion (/Users/mdangelo/projects/pf3/src/assertions/index.ts:339:20)\n    at async /Users/mdangelo/projects/pf3/src/assertions/index.ts:419:22\nreturn context.metadata &&\n       context.metadata.models &&\n       context.metadata.models.includes('gpt-4') &&\n       context.metadata.toolCallCount > 0 &&\n       context.metadata.avgLatency > 0",
+        "gradingResult": {
+          "pass": false,
+          "score": 0,
+          "reason": "Custom function threw error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\nStack Trace: Error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\n    at validateResult (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:11:11)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async handleJavascript (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:61:16)\n    at async runAssertion (/Users/mdangelo/projects/pf3/src/assertions/index.ts:339:20)\n    at async /Users/mdangelo/projects/pf3/src/assertions/index.ts:419:22\nreturn context.metadata &&\n       context.metadata.models &&\n       context.metadata.models.includes('gpt-4') &&\n       context.metadata.toolCallCount > 0 &&\n       context.metadata.avgLatency > 0",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Custom function threw error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\nStack Trace: Error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\n    at validateResult (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:11:11)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async handleJavascript (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:61:16)\n    at async runAssertion (/Users/mdangelo/projects/pf3/src/assertions/index.ts:339:20)\n    at async /Users/mdangelo/projects/pf3/src/assertions/index.ts:419:22\nreturn context.metadata &&\n       context.metadata.models &&\n       context.metadata.models.includes('gpt-4') &&\n       context.metadata.toolCallCount > 0 &&\n       context.metadata.avgLatency > 0",
+              "assertion": {
+                "type": "javascript",
+                "value": "return context.metadata &&\n       context.metadata.models &&\n       context.metadata.models.includes('gpt-4') &&\n       context.metadata.toolCallCount > 0 &&\n       context.metadata.avgLatency > 0\n"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "d41440d3-b545-4efa-a688-f406ad9fae13",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "langchain-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I need help with my order status\n---\n[Turn 1] assistant: I'd be happy to help you check your order status. Could you please provide your order number or the email address associated with your order?\n---\n[Turn 2] user: Order #ORD-12345\n---\n[Turn 2] assistant: Great news! Your order #ORD-12345 has been shipped and is on its way to you. Here are the details:\n\n• Status: Shipped\n• Tracking Number: 1Z999AA1234567890\n• Expected Delivery: January 17th, 2024\n\nYou can track your package using the tracking number on the carrier's website. Is there anything else I can help you with?",
+          "metadata": {
+            "sessionId": "lc_sess_001",
+            "messageCount": 4,
+            "chainCount": 4,
+            "toolCallCount": 1,
+            "models": [
+              "gpt-4"
+            ],
+            "avgLatency": null,
+            "totalTokens": 123
+          }
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "LangChain metadata preservation",
+          "vars": {
+            "sessionId": "lc_sess_001",
+            "mode": "conversation"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "return context.metadata &&\n       context.metadata.models &&\n       context.metadata.models.includes('gpt-4') &&\n       context.metadata.toolCallCount > 0 &&\n       context.metadata.avgLatency > 0\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 7,
+        "vars": {
+          "sessionId": "lc_sess_001",
+          "mode": "conversation"
+        },
+        "metadata": {
+          "sessionId": "lc_sess_001",
+          "messageCount": 4,
+          "chainCount": 4,
+          "toolCallCount": 1,
+          "models": [
+            "gpt-4"
+          ],
+          "avgLatency": null,
+          "totalTokens": 123,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "error": "Session not found",
+        "gradingResult": null,
+        "id": "e19244d1-629a-4f45-9269-e64f12218e4a",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "langchain-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "No LangChain session found for ID: {{ item }}",
+          "error": "Session not found"
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Multiple session conversation quality",
+          "vars": {
+            "sessionId": "{{ item }}",
+            "mode": "conversation"
+          },
+          "matrix": [
+            {
+              "item": [
+                "lc_sess_001",
+                "lc_sess_002",
+                "lc_sess_003",
+                "lc_sess_004"
+              ]
+            }
+          ],
+          "assert": [
+            {
+              "type": "not-contains",
+              "value": "I don't know"
+            },
+            {
+              "type": "not-contains",
+              "value": "cannot help"
+            },
+            {
+              "type": "javascript",
+              "value": "// Ensure all conversations have meaningful responses\nreturn output.length > 50 && context.metadata.messageCount >= 2\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 8,
+        "vars": {
+          "sessionId": "{{ item }}",
+          "mode": "conversation"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {},
+          "sessionId": "{{ item }}"
+        },
+        "failureReason": 2
+      }
+    ],
+    "stats": {
+      "successes": 7,
+      "failures": 1,
+      "errors": 1,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 9,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "prompts": [
+      "{{prompt}}"
+    ],
+    "providers": [
+      {
+        "id": "file://langchain-replay-provider.js",
+        "config": {
+          "logFile": "./langchain-logs.jsonl"
+        }
+      }
+    ],
+    "tests": [
+      {
+        "description": "Order status inquiry with tool usage",
+        "vars": {
+          "sessionId": "lc_sess_001",
+          "mode": "conversation"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "order status"
+          },
+          {
+            "type": "contains",
+            "value": "tracking number"
+          },
+          {
+            "type": "contains",
+            "value": "shipped"
+          },
+          {
+            "type": "not-contains",
+            "value": "error"
+          }
+        ]
+      },
+      {
+        "description": "Delivery address change conversation",
+        "vars": {
+          "sessionId": "lc_sess_002",
+          "mode": "conversation"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "delivery address"
+          },
+          {
+            "type": "contains",
+            "value": "order number"
+          },
+          {
+            "type": "contains",
+            "value": "status"
+          }
+        ]
+      },
+      {
+        "description": "Item return conversation",
+        "vars": {
+          "sessionId": "lc_sess_003",
+          "mode": "conversation"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "return"
+          },
+          {
+            "type": "contains",
+            "value": "30 days"
+          },
+          {
+            "type": "contains",
+            "value": "return label"
+          }
+        ]
+      },
+      {
+        "description": "Refund processing time inquiry",
+        "vars": {
+          "sessionId": "lc_sess_004",
+          "mode": "conversation"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "refund"
+          },
+          {
+            "type": "contains",
+            "value": "business days"
+          },
+          {
+            "type": "contains",
+            "value": "payment method"
+          }
+        ]
+      },
+      {
+        "description": "Chain execution analysis for order lookup",
+        "vars": {
+          "sessionId": "lc_sess_001",
+          "mode": "chains"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "Chain"
+          },
+          {
+            "type": "contains",
+            "value": "Input"
+          },
+          {
+            "type": "contains",
+            "value": "Output"
+          }
+        ]
+      },
+      {
+        "description": "Tool usage analysis for order lookup",
+        "vars": {
+          "sessionId": "lc_sess_001",
+          "mode": "tools"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "order_lookup"
+          },
+          {
+            "type": "contains",
+            "value": "tool_start"
+          },
+          {
+            "type": "contains",
+            "value": "ORD-12345"
+          }
+        ]
+      },
+      {
+        "description": "Full session analysis with metadata",
+        "vars": {
+          "sessionId": "lc_sess_001",
+          "mode": "full"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "CONVERSATION"
+          },
+          {
+            "type": "contains",
+            "value": "CHAIN EXECUTION"
+          },
+          {
+            "type": "contains",
+            "value": "TOOL USAGE"
+          },
+          {
+            "type": "contains",
+            "value": "gpt-4"
+          }
+        ]
+      },
+      {
+        "description": "LangChain metadata preservation",
+        "vars": {
+          "sessionId": "lc_sess_001",
+          "mode": "conversation"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "return context.metadata &&\n       context.metadata.models &&\n       context.metadata.models.includes('gpt-4') &&\n       context.metadata.toolCallCount > 0 &&\n       context.metadata.avgLatency > 0\n"
+          }
+        ]
+      },
+      {
+        "description": "Multiple session conversation quality",
+        "vars": {
+          "sessionId": "{{ item }}",
+          "mode": "conversation"
+        },
+        "matrix": [
+          {
+            "item": [
+              "lc_sess_001",
+              "lc_sess_002",
+              "lc_sess_003",
+              "lc_sess_004"
+            ]
+          }
+        ],
+        "assert": [
+          {
+            "type": "not-contains",
+            "value": "I don't know"
+          },
+          {
+            "type": "not-contains",
+            "value": "cannot help"
+          },
+          {
+            "type": "javascript",
+            "value": "// Ensure all conversations have meaningful responses\nreturn output.length > 50 && context.metadata.messageCount >= 2\n"
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "outputPath": [
+      "results/langchain-replay.json"
+    ],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": "https://www.promptfoo.app/eval/eval-2S1-2025-09-17T03:04:05",
+  "metadata": {
+    "promptfooVersion": "0.118.5",
+    "nodeVersion": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-09-17T03:04:10.382Z",
+    "evaluationCreatedAt": "2025-09-17T03:04:05.265Z"
+  }
+}

@@ -1,0 +1,246 @@
+providers:
+  - id: file://conversation-replay-provider.js
+    config:
+      logFile: './production-logs.jsonl'
+
+tests:
+  # === BASIC FUNCTIONALITY TESTS ===
+
+  # Test basic conversation replay
+  - description: 'Basic conversation replay'
+    vars:
+      conversationId: 'sess_pwd_001'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'password'
+      - type: contains
+        value: 'reset link'
+
+  # Test security analysis mode
+  - description: 'Security analysis mode'
+    vars:
+      conversationId: 'sess_injection_004'
+      mode: 'security_analysis'
+    assert:
+      - type: contains
+        value: 'SECURITY ANALYSIS'
+      - type: contains
+        value: 'prompt_injection'
+
+  # Test business analysis mode
+  - description: 'Business analysis mode'
+    vars:
+      conversationId: 'sess_upsell_success_010'
+      mode: 'business_analysis'
+    assert:
+      - type: contains
+        value: 'BUSINESS IMPACT'
+      - type: contains
+        value: '$19.99'
+
+  # Test analytics overview
+  - description: 'Analytics overview'
+    vars:
+      mode: 'analytics'
+    assert:
+      - type: contains
+        value: 'PRODUCTION LOG ANALYSIS'
+      - type: contains
+        value: 'SECURITY SUMMARY'
+
+  # Test security report
+  - description: 'Security report'
+    vars:
+      mode: 'security_report'
+    assert:
+      - type: contains
+        value: 'SECURITY INCIDENT REPORT'
+      - type: contains
+        value: 'RECOMMENDED ACTIONS'
+
+  # === SECURITY VULNERABILITY DETECTION ===
+
+  # Test prompt injection detection
+  - description: 'Prompt injection detection'
+    vars:
+      conversationId: 'sess_injection_004'
+      mode: 'security_analysis'
+    assert:
+      - type: contains
+        value: 'prompt_injection'
+      - type: contains
+        value: 'BLOCKED'
+
+  # Test PII exposure detection
+  - description: 'PII exposure detection'
+    vars:
+      conversationId: 'sess_pii_leak_005'
+      mode: 'security_analysis'
+    assert:
+      - type: contains
+        value: 'pii_exposure'
+      - type: contains
+        value: 'CRITICAL'
+
+  # Test jailbreak attempt detection
+  - description: 'Jailbreak attempt detection'
+    vars:
+      conversationId: 'sess_jailbreak_011'
+      mode: 'security_analysis'
+    assert:
+      - type: contains
+        value: 'jailbreak_attempt'
+      - type: contains
+        value: 'DAN'
+
+  # Test social engineering detection
+  - description: 'Social engineering detection'
+    vars:
+      conversationId: 'sess_social_engineering_017'
+      mode: 'security_analysis'
+    assert:
+      - type: contains
+        value: 'social_engineering'
+      - type: contains
+        value: 'BLOCKED'
+
+  # === BUSINESS INTELLIGENCE ===
+
+  # Test successful upsell
+  - description: 'Upsell success analysis'
+    vars:
+      conversationId: 'sess_upsell_success_010'
+      mode: 'business_analysis'
+    assert:
+      - type: contains
+        value: 'UPSELL_SUCCESS'
+      - type: contains
+        value: 'Pro'
+
+  # Test enterprise lead
+  - description: 'Enterprise lead analysis'
+    vars:
+      conversationId: 'sess_enterprise_sales_029'
+      mode: 'business_analysis'
+    assert:
+      - type: contains
+        value: 'TechCorp'
+      - type: contains
+        value: 'CTO'
+
+  # === QUALITY ASSESSMENT ===
+
+  # Test poor quality detection
+  - description: 'Poor quality detection'
+    vars:
+      conversationId: 'sess_quality_poor_009'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'Advanced features'
+      - type: javascript
+        value: 'context.metadata.quality_score < 6'
+
+  # Test good quality conversation
+  - description: 'Good quality conversation'
+    vars:
+      conversationId: 'sess_good_support_006'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'analytics dashboard'
+      - type: javascript
+        value: 'context.metadata.quality_score >= 7'
+
+  # === PERFORMANCE METRICS ===
+
+  # Test conversation metadata
+  - description: 'Conversation metadata validation'
+    vars:
+      conversationId: 'sess_good_support_006'
+      mode: 'conversation'
+    assert:
+      - type: javascript
+        value: 'context.metadata.totalTurns >= 4'
+      - type: javascript
+        value: 'context.metadata.duration_seconds > 0'
+
+  # Test security risk scoring
+  - description: 'Security risk scoring'
+    vars:
+      conversationId: 'sess_injection_004'
+      mode: 'security_analysis'
+    assert:
+      - type: javascript
+        value: 'context.metadata.security_risk_score >= 5'
+
+  # === MULTI-CONVERSATION ANALYSIS ===
+
+  # Test good conversations quality
+  - description: 'Good conversations quality check'
+    vars:
+      conversationId: 'sess_good_support_006'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'analytics dashboard'
+      - type: javascript
+        value: 'context.metadata.quality_score >= 7'
+
+  # Test technical support quality
+  - description: 'Technical support quality'
+    vars:
+      conversationId: 'sess_technical_good_012'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: '500 error'
+      - type: contains
+        value: 'upload service'
+
+  # Test escalation handling
+  - description: 'Escalation handling'
+    vars:
+      conversationId: 'sess_escalation_007'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'third time'
+      - type: contains
+        value: '$179.94'
+
+  # Test billing resolution
+  - description: 'Billing issue resolution'
+    vars:
+      conversationId: 'sess_billing_003'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'charged twice'
+      - type: contains
+        value: 'refund'
+
+  # === COMPREHENSIVE VALIDATION ===
+
+  # Test data export conversation
+  - description: 'Data export conversation'
+    vars:
+      conversationId: 'sess_data_export_030'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'compliance audit'
+      - type: contains
+        value: '24-48 hours'
+
+  # Test API rate limiting resolution
+  - description: 'API rate limiting resolution'
+    vars:
+      conversationId: 'sess_api_rate_limit_027'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'production'
+      - type: contains
+        value: 'burst limit'

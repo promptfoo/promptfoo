@@ -1,0 +1,8 @@
+providers:
+  - id: file://mock-provider.js
+
+prompts:
+  - file://prompt.json
+
+tests:
+  - dataset: file://logs.csv

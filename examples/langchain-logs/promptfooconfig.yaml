@@ -1,0 +1,131 @@
+providers:
+  - id: file://langchain-replay-provider.js
+    config:
+      logFile: './langchain-logs.jsonl'
+
+tests:
+  # Analyze order status conversation
+  - description: 'Order status inquiry with tool usage'
+    vars:
+      sessionId: 'lc_sess_001'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'order status'
+      - type: contains
+        value: 'tracking number'
+      - type: contains
+        value: 'shipped'
+      - type: not-contains
+        value: 'error'
+
+  # Test delivery address change inquiry
+  - description: 'Delivery address change conversation'
+    vars:
+      sessionId: 'lc_sess_002'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'delivery address'
+      - type: contains
+        value: 'order number'
+      - type: contains
+        value: 'status'
+
+  # Test return process conversation
+  - description: 'Item return conversation'
+    vars:
+      sessionId: 'lc_sess_003'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'return'
+      - type: contains
+        value: '30 days'
+      - type: contains
+        value: 'return label'
+
+  # Test refund policy inquiry
+  - description: 'Refund processing time inquiry'
+    vars:
+      sessionId: 'lc_sess_004'
+      mode: 'conversation'
+    assert:
+      - type: contains
+        value: 'refund'
+      - type: contains
+        value: 'business days'
+      - type: contains
+        value: 'payment method'
+
+  # Test chain execution analysis
+  - description: 'Chain execution analysis for order lookup'
+    vars:
+      sessionId: 'lc_sess_001'
+      mode: 'chains'
+    assert:
+      - type: contains
+        value: 'Chain'
+      - type: contains
+        value: 'Input'
+      - type: contains
+        value: 'Output'
+
+  # Test tool usage analysis
+  - description: 'Tool usage analysis for order lookup'
+    vars:
+      sessionId: 'lc_sess_001'
+      mode: 'tools'
+    assert:
+      - type: contains
+        value: 'order_lookup'
+      - type: contains
+        value: 'tool_start'
+      - type: contains
+        value: 'ORD-12345'
+
+  # Test comprehensive analysis
+  - description: 'Full session analysis with metadata'
+    vars:
+      sessionId: 'lc_sess_001'
+      mode: 'full'
+    assert:
+      - type: contains
+        value: 'CONVERSATION'
+      - type: contains
+        value: 'CHAIN EXECUTION'
+      - type: contains
+        value: 'TOOL USAGE'
+      - type: contains
+        value: 'gpt-4'
+
+  # Test metadata preservation through JavaScript
+  - description: 'LangChain metadata preservation'
+    vars:
+      sessionId: 'lc_sess_001'
+      mode: 'conversation'
+    assert:
+      - type: javascript
+        value: |
+          return context.metadata &&
+                 context.metadata.models &&
+                 context.metadata.models.includes('gpt-4') &&
+                 context.metadata.toolCallCount > 0 &&
+                 context.metadata.avgLatency > 0
+
+  # Cross-session analysis
+  - description: 'Multiple session conversation quality'
+    vars:
+      sessionId: '{{ item }}'
+      mode: 'conversation'
+    matrix:
+      - item: ['lc_sess_001', 'lc_sess_002', 'lc_sess_003', 'lc_sess_004']
+    assert:
+      - type: not-contains
+        value: 'I don''t know'
+      - type: not-contains
+        value: 'cannot help'
+      - type: javascript
+        value: |
+          // Ensure all conversations have meaningful responses
+          return output.length > 50 && context.metadata.messageCount >= 2

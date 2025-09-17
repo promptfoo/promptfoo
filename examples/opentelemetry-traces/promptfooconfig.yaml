@@ -1,0 +1,107 @@
+providers:
+  - id: file://otlp-replay-provider.js
+    config:
+      traceFile: './production-traces.json'
+
+tests:
+  # Analyze login issue resolution from OTLP traces
+  - description: 'Login issue troubleshooting from OTLP traces'
+    vars:
+      sessionId: 'otlp_sess_001'
+      mode: 'full'
+    assert:
+      - type: contains
+        value: 'password reset'
+      - type: contains
+        value: 'cache'
+      - type: not-contains
+        value: 'contact support' # Should try to resolve first
+      - type: llm-rubric
+        value: 'Does this conversation effectively troubleshoot the login issue? The agent should first suggest common solutions like cache clearing, then escalate to password reset if needed.'
+
+  # Analyze enterprise upgrade inquiry
+  - description: 'Enterprise upgrade sales conversation'
+    vars:
+      sessionId: 'otlp_sess_002'
+      mode: 'full'
+    assert:
+      - type: contains
+        value: 'enterprise'
+      - type: contains
+        value: 'migration'
+      - type: contains
+        value: 'sales team'
+      - type: llm-rubric
+        value: 'Does this conversation properly qualify the lead and provide useful information about enterprise features? Should mention key benefits and connect with sales.'
+
+  # Test individual turn quality from traces
+  - description: 'First assistant response quality - login troubleshooting'
+    vars:
+      sessionId: 'otlp_sess_001'
+      mode: 'turn'
+      turnIndex: 1 # Second message (first assistant response)
+    assert:
+      - type: contains
+        value: 'browser cache'
+      - type: llm-rubric
+        value: 'Is this initial troubleshooting response helpful and follows logical diagnostic steps?'
+
+  # Check performance metadata from traces
+  - description: 'Response latency analysis from OTLP metadata'
+    vars:
+      sessionId: 'otlp_sess_001'
+      mode: 'full'
+    assert:
+      - type: javascript
+        value: |
+          // Check if latency information is preserved from OTLP traces
+          const metadata = JSON.parse(context.metadata || '{}');
+          return metadata.conversationMetadata &&
+                 metadata.conversationMetadata.avgLatency !== undefined &&
+                 metadata.conversationMetadata.avgLatency > 0;
+
+  # Multi-session analysis across traces
+  - description: 'Cross-session conversation quality'
+    vars:
+      sessionId: '{{ item }}'
+      mode: 'full'
+    matrix:
+      - item: ['otlp_sess_001', 'otlp_sess_002']
+    assert:
+      # Ensure all conversations maintain professional tone
+      - type: not-contains
+        value: 'I don''t know'
+      - type: not-contains
+        value: 'not my problem'
+      - type: llm-rubric
+        value: 'Does this conversation maintain a professional, helpful tone throughout? Rate the overall customer experience quality.'
+
+  # Technical metadata validation
+  - description: 'OTLP trace metadata preservation'
+    vars:
+      sessionId: 'otlp_sess_001'
+      mode: 'turn'
+      turnIndex: 1
+    assert:
+      - type: javascript
+        value: |
+          // Verify that OTLP trace metadata is properly preserved
+          const metadata = JSON.parse(context.metadata || '{}');
+          return metadata.traceId &&
+                 metadata.spanId &&
+                 metadata.originalMetadata &&
+                 metadata.originalMetadata.llmModel;
+
+  # Intent detection from trace attributes
+  - description: 'Intent classification from OTLP attributes'
+    vars:
+      sessionId: 'otlp_sess_002'
+      mode: 'full'
+    assert:
+      - type: javascript
+        value: |
+          // Check that intent from OTLP attributes is properly captured
+          const metadata = JSON.parse(context.metadata || '{}');
+          return metadata.conversationMetadata &&
+                 metadata.conversationMetadata.intents &&
+                 metadata.conversationMetadata.intents.includes('upgrade_inquiry');

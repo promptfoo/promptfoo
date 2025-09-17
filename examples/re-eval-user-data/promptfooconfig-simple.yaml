@@ -1,0 +1,63 @@
+providers:
+  # Use a mock provider for testing instead of requiring OpenAI API
+  - id: file://mock-provider.js
+
+prompts:
+  - file://prompt.json
+
+tests:
+  # Load production data and test each input
+  - dataset: file://logs.csv
+    assert:
+      # Quality checks - ensure responses are helpful
+      - type: not-contains
+        value: 'I am an AI' # No generic disclaimers
+      - type: not-contains
+        value: 'I cannot help' # Should be helpful
+      - type: not-contains
+        value: 'I don''t know' # Should provide useful information
+
+      # Category-specific assertions
+      - type: javascript
+        value: |
+          if (context.vars.category === 'password_reset') {
+            return output.toLowerCase().includes('reset') || output.toLowerCase().includes('password') || output.toLowerCase().includes('email');
+          }
+          if (context.vars.category === 'cancellation') {
+            return output.toLowerCase().includes('cancel') || output.toLowerCase().includes('subscription') || output.toLowerCase().includes('retention');
+          }
+          if (context.vars.category === 'billing_issue') {
+            return output.toLowerCase().includes('billing') || output.toLowerCase().includes('charge') || output.toLowerCase().includes('refund');
+          }
+          if (context.vars.category === 'account_deletion') {
+            return output.toLowerCase().includes('delete') || output.toLowerCase().includes('permanent') || output.toLowerCase().includes('confirm');
+          }
+          if (context.vars.category === 'escalation') {
+            return output.toLowerCase().includes('human') || output.toLowerCase().includes('agent') || output.toLowerCase().includes('connect');
+          }
+          return true; // Pass for other categories
+
+  # Test specific categories separately
+  - description: 'Password reset responses'
+    dataset: file://logs.csv
+    filter:
+      category: 'password_reset'
+    assert:
+      - type: contains
+        value: 'email'
+
+  - description: 'Billing issue responses'
+    dataset: file://logs.csv
+    filter:
+      category: 'billing_issue'
+    assert:
+      - type: contains
+        value: 'billing'
+
+  - description: 'Escalation handling'
+    dataset: file://logs.csv
+    filter:
+      category: 'escalation'
+    assert:
+      - type: contains
+        value: 'human'

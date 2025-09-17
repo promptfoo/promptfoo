@@ -1,0 +1,515 @@
+{
+  "evalId": "eval-DWy-2025-09-17T02:51:24",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-09-17T02:51:24.728Z",
+    "prompts": [
+      {
+        "raw": "[{\"role\":\"system\",\"content\":\"You are a helpful customer service assistant for a SaaS platform. Provide accurate, professional, and actionable responses to customer inquiries. Always prioritize customer satisfaction while following company policies. For sensitive operations like account deletion or billing issues, ensure proper verification procedures.\"},{\"role\":\"user\",\"content\":\"{{input}}\"}]",
+        "label": "prompt.json: [{\"role\":\"system\",\"content\":\"You are a helpful customer service assistant for a SaaS platform. Provide accurate, professional, and actionable responses to customer inquiries. Always prioritize customer satisfaction while following company policies. For sensitive operations like account deletion or billing issues, ensure proper verification procedures.\"},{\"role\":\"user\",\"content\":\"{{input}}\"}]",
+        "id": "f2fc1dc077d429e38b96fc7e17257db00aaf6f03b731cc4f31363a5ff5d6f7c4",
+        "provider": "mock-customer-service",
+        "metrics": {
+          "score": 1,
+          "testPassCount": 1,
+          "testFailCount": 3,
+          "testErrorCount": 0,
+          "assertPassCount": 4,
+          "assertFailCount": 3,
+          "totalLatencyMs": 10,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 4,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "not-contains",
+                "value": "I am an AI"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "not-contains",
+                "value": "I cannot help"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "not-contains",
+                "value": "I don't know"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "javascript",
+                "value": "if (context.vars.category === 'password_reset') {\n  return output.toLowerCase().includes('reset') || output.toLowerCase().includes('password') || output.toLowerCase().includes('email');\n}\nif (context.vars.category === 'cancellation') {\n  return output.toLowerCase().includes('cancel') || output.toLowerCase().includes('subscription') || output.toLowerCase().includes('retention');\n}\nif (context.vars.category === 'billing_issue') {\n  return output.toLowerCase().includes('billing') || output.toLowerCase().includes('charge') || output.toLowerCase().includes('refund');\n}\nif (context.vars.category === 'account_deletion') {\n  return output.toLowerCase().includes('delete') || output.toLowerCase().includes('permanent') || output.toLowerCase().includes('confirm');\n}\nif (context.vars.category === 'escalation') {\n  return output.toLowerCase().includes('human') || output.toLowerCase().includes('agent') || output.toLowerCase().includes('connect');\n}\nreturn true; // Pass for other categories\n"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "7b5fe7b1-45c0-4a95-bc8c-bae51dddf4c8",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are a helpful customer service assistant for a SaaS platform. Provide accurate, professional, and actionable responses to customer inquiries. Always prioritize customer satisfaction while following company policies. For sensitive operations like account deletion or billing issues, ensure proper verification procedures.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"\"\n  }\n]",
+          "label": "prompt.json: [{\"role\":\"system\",\"content\":\"You are a helpful customer service assistant for a SaaS platform. Provide accurate, professional, and actionable responses to customer inquiries. Always prioritize customer satisfaction while following company policies. For sensitive operations like account deletion or billing issues, ensure proper verification procedures.\"},{\"role\":\"user\",\"content\":\"{{input}}\"}]"
+        },
+        "promptId": "f2fc1dc077d429e38b96fc7e17257db00aaf6f03b731cc4f31363a5ff5d6f7c4",
+        "promptIdx": 0,
+        "provider": {
+          "id": "mock-customer-service",
+          "label": ""
+        },
+        "response": {
+          "output": "I'm here to help! Can you provide more details about what you need assistance with?",
+          "metadata": {
+            "category": "general",
+            "input": "",
+            "mockProvider": true
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "dataset": "file://logs.csv",
+          "assert": [
+            {
+              "type": "not-contains",
+              "value": "I am an AI"
+            },
+            {
+              "type": "not-contains",
+              "value": "I cannot help"
+            },
+            {
+              "type": "not-contains",
+              "value": "I don't know"
+            },
+            {
+              "type": "javascript",
+              "value": "if (context.vars.category === 'password_reset') {\n  return output.toLowerCase().includes('reset') || output.toLowerCase().includes('password') || output.toLowerCase().includes('email');\n}\nif (context.vars.category === 'cancellation') {\n  return output.toLowerCase().includes('cancel') || output.toLowerCase().includes('subscription') || output.toLowerCase().includes('retention');\n}\nif (context.vars.category === 'billing_issue') {\n  return output.toLowerCase().includes('billing') || output.toLowerCase().includes('charge') || output.toLowerCase().includes('refund');\n}\nif (context.vars.category === 'account_deletion') {\n  return output.toLowerCase().includes('delete') || output.toLowerCase().includes('permanent') || output.toLowerCase().includes('confirm');\n}\nif (context.vars.category === 'escalation') {\n  return output.toLowerCase().includes('human') || output.toLowerCase().includes('agent') || output.toLowerCase().includes('connect');\n}\nreturn true; // Pass for other categories\n"
+            }
+          ],
+          "vars": {},
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {},
+        "metadata": {
+          "category": "general",
+          "input": "",
+          "mockProvider": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "error": "Expected output to contain \"email\"",
+        "gradingResult": {
+          "pass": false,
+          "score": 0,
+          "reason": "Expected output to contain \"email\"",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to contain \"email\"",
+              "assertion": {
+                "type": "contains",
+                "value": "email"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "3f9dd164-7c0b-4348-8f9d-49a9d3a78166",
+        "latencyMs": 3,
+        "namedScores": {},
+        "prompt": {
+          "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are a helpful customer service assistant for a SaaS platform. Provide accurate, professional, and actionable responses to customer inquiries. Always prioritize customer satisfaction while following company policies. For sensitive operations like account deletion or billing issues, ensure proper verification procedures.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"\"\n  }\n]",
+          "label": "prompt.json: [{\"role\":\"system\",\"content\":\"You are a helpful customer service assistant for a SaaS platform. Provide accurate, professional, and actionable responses to customer inquiries. Always prioritize customer satisfaction while following company policies. For sensitive operations like account deletion or billing issues, ensure proper verification procedures.\"},{\"role\":\"user\",\"content\":\"{{input}}\"}]"
+        },
+        "promptId": "f2fc1dc077d429e38b96fc7e17257db00aaf6f03b731cc4f31363a5ff5d6f7c4",
+        "promptIdx": 0,
+        "provider": {
+          "id": "mock-customer-service",
+          "label": ""
+        },
+        "response": {
+          "output": "I'm here to help! Can you provide more details about what you need assistance with?",
+          "metadata": {
+            "category": "general",
+            "input": "",
+            "mockProvider": true
+          }
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Password reset responses",
+          "dataset": "file://logs.csv",
+          "filter": {
+            "category": "password_reset"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "email"
+            }
+          ],
+          "vars": {},
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {},
+        "metadata": {
+          "category": "general",
+          "input": "",
+          "mockProvider": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "error": "Expected output to contain \"billing\"",
+        "gradingResult": {
+          "pass": false,
+          "score": 0,
+          "reason": "Expected output to contain \"billing\"",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to contain \"billing\"",
+              "assertion": {
+                "type": "contains",
+                "value": "billing"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "c42e56de-de3e-47e2-a6c1-f0491a93d984",
+        "latencyMs": 3,
+        "namedScores": {},
+        "prompt": {
+          "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are a helpful customer service assistant for a SaaS platform. Provide accurate, professional, and actionable responses to customer inquiries. Always prioritize customer satisfaction while following company policies. For sensitive operations like account deletion or billing issues, ensure proper verification procedures.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"\"\n  }\n]",
+          "label": "prompt.json: [{\"role\":\"system\",\"content\":\"You are a helpful customer service assistant for a SaaS platform. Provide accurate, professional, and actionable responses to customer inquiries. Always prioritize customer satisfaction while following company policies. For sensitive operations like account deletion or billing issues, ensure proper verification procedures.\"},{\"role\":\"user\",\"content\":\"{{input}}\"}]"
+        },
+        "promptId": "f2fc1dc077d429e38b96fc7e17257db00aaf6f03b731cc4f31363a5ff5d6f7c4",
+        "promptIdx": 0,
+        "provider": {
+          "id": "mock-customer-service",
+          "label": ""
+        },
+        "response": {
+          "output": "I'm here to help! Can you provide more details about what you need assistance with?",
+          "metadata": {
+            "category": "general",
+            "input": "",
+            "mockProvider": true
+          }
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Billing issue responses",
+          "dataset": "file://logs.csv",
+          "filter": {
+            "category": "billing_issue"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "billing"
+            }
+          ],
+          "vars": {},
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {},
+        "metadata": {
+          "category": "general",
+          "input": "",
+          "mockProvider": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "error": "Expected output to contain \"human\"",
+        "gradingResult": {
+          "pass": false,
+          "score": 0,
+          "reason": "Expected output to contain \"human\"",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to contain \"human\"",
+              "assertion": {
+                "type": "contains",
+                "value": "human"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "406ed60e-1aeb-4949-9c61-9e8509f40484",
+        "latencyMs": 3,
+        "namedScores": {},
+        "prompt": {
+          "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are a helpful customer service assistant for a SaaS platform. Provide accurate, professional, and actionable responses to customer inquiries. Always prioritize customer satisfaction while following company policies. For sensitive operations like account deletion or billing issues, ensure proper verification procedures.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"\"\n  }\n]",
+          "label": "prompt.json: [{\"role\":\"system\",\"content\":\"You are a helpful customer service assistant for a SaaS platform. Provide accurate, professional, and actionable responses to customer inquiries. Always prioritize customer satisfaction while following company policies. For sensitive operations like account deletion or billing issues, ensure proper verification procedures.\"},{\"role\":\"user\",\"content\":\"{{input}}\"}]"
+        },
+        "promptId": "f2fc1dc077d429e38b96fc7e17257db00aaf6f03b731cc4f31363a5ff5d6f7c4",
+        "promptIdx": 0,
+        "provider": {
+          "id": "mock-customer-service",
+          "label": ""
+        },
+        "response": {
+          "output": "I'm here to help! Can you provide more details about what you need assistance with?",
+          "metadata": {
+            "category": "general",
+            "input": "",
+            "mockProvider": true
+          }
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Escalation handling",
+          "dataset": "file://logs.csv",
+          "filter": {
+            "category": "escalation"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "human"
+            }
+          ],
+          "vars": {},
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "vars": {},
+        "metadata": {
+          "category": "general",
+          "input": "",
+          "mockProvider": true,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      }
+    ],
+    "stats": {
+      "successes": 1,
+      "failures": 3,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 4,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "prompts": [
+      "file:///Users/mdangelo/projects/pf3/examples/re-eval-user-data/prompt.json"
+    ],
+    "providers": [
+      {
+        "id": "file://mock-provider.js"
+      }
+    ],
+    "tests": [
+      {
+        "dataset": "file://logs.csv",
+        "assert": [
+          {
+            "type": "not-contains",
+            "value": "I am an AI"
+          },
+          {
+            "type": "not-contains",
+            "value": "I cannot help"
+          },
+          {
+            "type": "not-contains",
+            "value": "I don't know"
+          },
+          {
+            "type": "javascript",
+            "value": "if (context.vars.category === 'password_reset') {\n  return output.toLowerCase().includes('reset') || output.toLowerCase().includes('password') || output.toLowerCase().includes('email');\n}\nif (context.vars.category === 'cancellation') {\n  return output.toLowerCase().includes('cancel') || output.toLowerCase().includes('subscription') || output.toLowerCase().includes('retention');\n}\nif (context.vars.category === 'billing_issue') {\n  return output.toLowerCase().includes('billing') || output.toLowerCase().includes('charge') || output.toLowerCase().includes('refund');\n}\nif (context.vars.category === 'account_deletion') {\n  return output.toLowerCase().includes('delete') || output.toLowerCase().includes('permanent') || output.toLowerCase().includes('confirm');\n}\nif (context.vars.category === 'escalation') {\n  return output.toLowerCase().includes('human') || output.toLowerCase().includes('agent') || output.toLowerCase().includes('connect');\n}\nreturn true; // Pass for other categories\n"
+          }
+        ]
+      },
+      {
+        "description": "Password reset responses",
+        "dataset": "file://logs.csv",
+        "filter": {
+          "category": "password_reset"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "email"
+          }
+        ]
+      },
+      {
+        "description": "Billing issue responses",
+        "dataset": "file://logs.csv",
+        "filter": {
+          "category": "billing_issue"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "billing"
+          }
+        ]
+      },
+      {
+        "description": "Escalation handling",
+        "dataset": "file://logs.csv",
+        "filter": {
+          "category": "escalation"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "human"
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "outputPath": [
+      "results/otlp-simple.json"
+    ],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": "https://www.promptfoo.app/eval/eval-DWy-2025-09-17T02:51:24",
+  "metadata": {
+    "promptfooVersion": "0.118.5",
+    "nodeVersion": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-09-17T02:51:29.349Z",
+    "evaluationCreatedAt": "2025-09-17T02:51:24.728Z"
+  }
+}

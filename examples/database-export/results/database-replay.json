@@ -1,0 +1,1401 @@
+{
+  "evalId": "eval-KaM-2025-09-17T03:07:11",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-09-17T03:07:11.521Z",
+    "prompts": [
+      {
+        "raw": "{{prompt}}",
+        "label": "{{prompt}}",
+        "id": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "provider": "database-replay",
+        "metrics": {
+          "score": 5.75,
+          "testPassCount": 5,
+          "testFailCount": 3,
+          "testErrorCount": 1,
+          "assertPassCount": 23,
+          "assertFailCount": 3,
+          "totalLatencyMs": 16,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 9,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "error": "Expected output to contain \"login\"",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.75,
+          "reason": "Expected output to contain \"login\"",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to contain \"login\"",
+              "assertion": {
+                "type": "contains",
+                "value": "login"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "password reset"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "Invalid credentials"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "not-contains",
+                "value": "I cannot help"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "8c00f8dc-b162-4b5d-adf3-e98f42f157ae",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "database-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I'm having trouble logging into my account. I keep getting an error message.\n---\n[Turn 1] assistant: I'm sorry to hear you're having trouble logging in. Let me help you troubleshoot this issue. What error message are you seeing exactly?\n---\n[Turn 2] user: It says 'Invalid credentials' but I'm sure I'm using the right password.\n---\n[Turn 2] assistant: That's frustrating! This can happen for a few reasons. Let's try a couple of things: 1) Make sure Caps Lock is off, 2) Try clearing your browser cache and cookies, 3) If that doesn't work, I can send you a password reset link. Would you like to try these steps first?\n---\n[Turn 3] user: I tried clearing my cache but it's still not working. Can you send me a reset link?\n---\n[Turn 3] assistant: Absolutely! I'll send a password reset link to your registered email address. Please check your inbox (and spam folder) in the next few minutes. The link will be valid for 24 hours. Once you receive it, click the link and follow the instructions to create a new password.",
+          "metadata": {
+            "messageCount": 6,
+            "userMessages": 3,
+            "assistantMessages": 3,
+            "duration": 77,
+            "avgResponseTime": 1350,
+            "channel": "web_chat",
+            "status": "completed",
+            "agents": [
+              "agent_001"
+            ],
+            "escalated": false,
+            "businessOutcome": "issue_resolved"
+          }
+        },
+        "score": 0.75,
+        "success": false,
+        "testCase": {
+          "description": "Login issue resolution from database",
+          "vars": {
+            "sessionId": "db_sess_001",
+            "mode": "conversation"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "login"
+            },
+            {
+              "type": "contains",
+              "value": "password reset"
+            },
+            {
+              "type": "contains",
+              "value": "Invalid credentials"
+            },
+            {
+              "type": "not-contains",
+              "value": "I cannot help"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "sessionId": "db_sess_001",
+          "mode": "conversation"
+        },
+        "metadata": {
+          "messageCount": 6,
+          "userMessages": 3,
+          "assistantMessages": 3,
+          "duration": 77,
+          "avgResponseTime": 1350,
+          "channel": "web_chat",
+          "status": "completed",
+          "agents": [
+            "agent_001"
+          ],
+          "escalated": false,
+          "businessOutcome": "issue_resolved",
+          "_promptfooFileMetadata": {},
+          "sessionId": "db_sess_001"
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "upgrade"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "Pro Plan"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "$19.99"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "prorated"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "da469e54-3ded-49bb-a68c-f2ae88d54d41",
+        "latencyMs": 2,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "database-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: Hi, I want to upgrade my subscription plan. What are my options?\n---\n[Turn 1] assistant: Great question! We have several subscription options available. Currently, you're on our Basic plan. You can upgrade to:\n\n• **Pro Plan** ($19.99/month) - Advanced features, priority support\n• **Premium Plan** ($39.99/month) - All Pro features plus API access and analytics\n• **Enterprise Plan** (Custom pricing) - Everything plus custom integrations and dedicated support\n\nWhich plan interests you most?\n---\n[Turn 2] user: The Pro plan sounds good. How do I upgrade and when would I be charged?\n---\n[Turn 2] assistant: Perfect choice! Here's how the upgrade works:\n\n1. I can upgrade you right now through this chat\n2. You'll be charged the prorated amount for the rest of this billing cycle\n3. Starting next month, you'll be charged $19.99 monthly\n4. You get immediate access to all Pro features\n\nThe prorated charge for the remaining 15 days would be about $9.99. Would you like me to process this upgrade for you?\n---\n[Turn 3] user: Yes, please go ahead and upgrade me to Pro.\n---\n[Turn 3] assistant: Excellent! I've successfully upgraded your account to Pro. You'll receive a confirmation email shortly with your new plan details. Your Pro features are now active, and you'll see the $9.99 prorated charge on your next statement. Welcome to Pro! Is there anything specific about your new features you'd like me to explain?",
+          "metadata": {
+            "messageCount": 6,
+            "userMessages": 3,
+            "assistantMessages": 3,
+            "duration": 82,
+            "avgResponseTime": 0,
+            "channel": "mobile_app",
+            "status": "completed",
+            "agents": [
+              "agent_002"
+            ],
+            "escalated": false,
+            "businessOutcome": "upsell_success"
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Subscription upgrade conversation",
+          "vars": {
+            "sessionId": "db_sess_002",
+            "mode": "conversation"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "upgrade"
+            },
+            {
+              "type": "contains",
+              "value": "Pro Plan"
+            },
+            {
+              "type": "contains",
+              "value": "$19.99"
+            },
+            {
+              "type": "contains",
+              "value": "prorated"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "sessionId": "db_sess_002",
+          "mode": "conversation"
+        },
+        "metadata": {
+          "messageCount": 6,
+          "userMessages": 3,
+          "assistantMessages": 3,
+          "duration": 82,
+          "avgResponseTime": 0,
+          "channel": "mobile_app",
+          "status": "completed",
+          "agents": [
+            "agent_002"
+          ],
+          "escalated": false,
+          "businessOutcome": "upsell_success",
+          "_promptfooFileMetadata": {},
+          "sessionId": "db_sess_002"
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "cancel"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "frustrating"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "apologize"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "January 31st"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "afc1ba6b-da3d-42ef-a225-995aed8690d4",
+        "latencyMs": 3,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "database-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I've been trying to cancel my subscription for weeks but your website keeps giving me errors. This is really frustrating!\n---\n[Turn 1] assistant: I sincerely apologize for the frustration you've experienced trying to cancel your subscription. That's definitely not the experience we want for our customers. I can help you cancel your subscription right now through this conversation, and I'll also make sure our technical team is aware of the website issue you encountered.\n---\n[Turn 2] user: Thank you, I just want to cancel it as soon as possible. I'm not using the service enough to justify the cost.\n---\n[Turn 2] assistant: I completely understand, and I appreciate your honesty. I've processed your cancellation request immediately. Your subscription will remain active until the end of your current billing period (January 31st), so you can continue using all features until then. You won't be charged again after that date. You'll receive a confirmation email within a few minutes.",
+          "metadata": {
+            "messageCount": 4,
+            "userMessages": 2,
+            "assistantMessages": 2,
+            "duration": 32,
+            "avgResponseTime": 0,
+            "channel": "email",
+            "status": "escalated",
+            "agents": [
+              "agent_003"
+            ],
+            "escalated": true,
+            "businessOutcome": "churn"
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Subscription cancellation conversation",
+          "vars": {
+            "sessionId": "db_sess_003",
+            "mode": "conversation"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "cancel"
+            },
+            {
+              "type": "contains",
+              "value": "frustrating"
+            },
+            {
+              "type": "contains",
+              "value": "apologize"
+            },
+            {
+              "type": "contains",
+              "value": "January 31st"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {
+          "sessionId": "db_sess_003",
+          "mode": "conversation"
+        },
+        "metadata": {
+          "messageCount": 4,
+          "userMessages": 2,
+          "assistantMessages": 2,
+          "duration": 32,
+          "avgResponseTime": 0,
+          "channel": "email",
+          "status": "escalated",
+          "agents": [
+            "agent_003"
+          ],
+          "escalated": true,
+          "businessOutcome": "churn",
+          "_promptfooFileMetadata": {},
+          "sessionId": "db_sess_003"
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "CONVERSATION ANALYSIS"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "mobile_app"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "Business Outcome"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "upsell_success"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "ad1c240e-ba64-4bed-b086-d3aecbaeb69e",
+        "latencyMs": 4,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "database-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "=== CONVERSATION ANALYSIS ===\nSession ID: db_sess_002\nChannel: mobile_app\nStatus: completed\nDuration: 82 seconds\nMessages: 6 (3 user, 3 assistant)\nAverage Response Time: 0ms\nAgents Involved: agent_002\nBusiness Outcome: upsell_success\n\n=== CONVERSATION FLOW ===\nuser: Hi, I want to upgrade my subscription plan. What are my options?\n\nassistant: Great question! We have several subscription options available. Currently, you're on our Basic plan. You can upgrade to:\n\n• **Pro Plan** ($19.99/month) - Advanced features, priority support\n• **Premium Plan** ($39.99/month) - All Pro features plus API access and analytics\n• **Enterprise Plan** (Custom pricing) - Everything plus custom integrations and dedicated support\n\nWhich plan interests you most?\n\nuser: The Pro plan sounds good. How do I upgrade and when would I be charged?\n\nassistant: Perfect choice! Here's how the upgrade works:\n\n1. I can upgrade you right now through this chat\n2. You'll be charged the prorated amount for the rest of this billing cycle\n3. Starting next month, you'll be charged $19.99 monthly\n4. You get immediate access to all Pro features\n\nThe prorated charge for the remaining 15 days would be about $9.99. Would you like me to process this upgrade for you?\n\nuser: Yes, please go ahead and upgrade me to Pro.\n\nassistant: Excellent! I've successfully upgraded your account to Pro. You'll receive a confirmation email shortly with your new plan details. Your Pro features are now active, and you'll see the $9.99 prorated charge on your next statement. Welcome to Pro! Is there anything specific about your new features you'd like me to explain?",
+          "metadata": {
+            "messageCount": 6,
+            "userMessages": 3,
+            "assistantMessages": 3,
+            "duration": 82,
+            "avgResponseTime": 0,
+            "channel": "mobile_app",
+            "status": "completed",
+            "agents": [
+              "agent_002"
+            ],
+            "escalated": false,
+            "businessOutcome": "upsell_success"
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Database conversation analysis",
+          "vars": {
+            "sessionId": "db_sess_002",
+            "mode": "analysis"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "CONVERSATION ANALYSIS"
+            },
+            {
+              "type": "contains",
+              "value": "mobile_app"
+            },
+            {
+              "type": "contains",
+              "value": "Business Outcome"
+            },
+            {
+              "type": "contains",
+              "value": "upsell_success"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "vars": {
+          "sessionId": "db_sess_002",
+          "mode": "analysis"
+        },
+        "metadata": {
+          "messageCount": 6,
+          "userMessages": 3,
+          "assistantMessages": 3,
+          "duration": 82,
+          "avgResponseTime": 0,
+          "channel": "mobile_app",
+          "status": "completed",
+          "agents": [
+            "agent_002"
+          ],
+          "escalated": false,
+          "businessOutcome": "upsell_success",
+          "_promptfooFileMetadata": {},
+          "sessionId": "db_sess_002"
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "DATABASE METADATA"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "PERFORMANCE METRICS"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "web_chat"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "agent_001"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "7fa40f45-24ea-4e12-8845-d51d53db1bd6",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "database-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "=== DATABASE METADATA ===\nSession: db_sess_001\nUser: user_abc123\nCreated: 2024-01-15T10:30:00Z\nChannel: web_chat\nStatus: completed\n\n=== PERFORMANCE METRICS ===\nTotal Messages: 6\nConversation Duration: 77 seconds\nAverage Response Time: 1350ms\n\n=== BUSINESS METRICS ===\nOutcome: issue_resolved\nEscalated: No\nAgents: agent_001\n\n=== MESSAGE METADATA ===\nMessage 1 (user): {\n  \"ip_address\": \"192.168.1.100\",\n  \"user_agent\": \"Chrome/120.0\"\n}\n\nMessage 2 (assistant): {\n  \"agent_id\": \"agent_001\",\n  \"confidence\": 0.95,\n  \"response_time_ms\": 1200\n}\n\nMessage 3 (user): {\n  \"ip_address\": \"192.168.1.100\"\n}\n\nMessage 4 (assistant): {\n  \"agent_id\": \"agent_001\",\n  \"confidence\": 0.92,\n  \"response_time_ms\": 1500\n}\n\nMessage 5 (user): {\n  \"ip_address\": \"192.168.1.100\"\n}\n\nMessage 6 (assistant): {\n  \"agent_id\": \"agent_001\",\n  \"password_reset_sent\": true,\n  \"expires_at\": \"2024-01-16T10:31:17Z\"\n}",
+          "metadata": {
+            "messageCount": 6,
+            "userMessages": 3,
+            "assistantMessages": 3,
+            "duration": 77,
+            "avgResponseTime": 1350,
+            "channel": "web_chat",
+            "status": "completed",
+            "agents": [
+              "agent_001"
+            ],
+            "escalated": false,
+            "businessOutcome": "issue_resolved"
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Database metadata extraction",
+          "vars": {
+            "sessionId": "db_sess_001",
+            "mode": "metadata"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "DATABASE METADATA"
+            },
+            {
+              "type": "contains",
+              "value": "PERFORMANCE METRICS"
+            },
+            {
+              "type": "contains",
+              "value": "web_chat"
+            },
+            {
+              "type": "contains",
+              "value": "agent_001"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 4,
+        "vars": {
+          "sessionId": "db_sess_001",
+          "mode": "metadata"
+        },
+        "metadata": {
+          "messageCount": 6,
+          "userMessages": 3,
+          "assistantMessages": 3,
+          "duration": 77,
+          "avgResponseTime": 1350,
+          "channel": "web_chat",
+          "status": "completed",
+          "agents": [
+            "agent_001"
+          ],
+          "escalated": false,
+          "businessOutcome": "issue_resolved",
+          "_promptfooFileMetadata": {},
+          "sessionId": "db_sess_001"
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "SELECT"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "FROM conversations"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "WHERE session_id"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "ORDER BY timestamp"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "2d057c30-2353-4941-98d1-4a08ed932e83",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "database-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "-- Reconstructed from database export\n-- Session: db_sess_003\n\nSELECT\n  session_id,\n  user_id,\n  message_role,\n  message_content,\n  timestamp,\n  metadata\nFROM conversations\nWHERE session_id = 'db_sess_003'\nORDER BY timestamp;\n\n-- Results:\n-- 3001 | db_sess_003 | user | \"I've been trying to cancel my subscription for wee...\" | 2024-01-15T16:45:00Z\n-- 3002 | db_sess_003 | assistant | \"I sincerely apologize for the frustration you've e...\" | 2024-01-15T16:45:02Z\n-- 3003 | db_sess_003 | user | \"Thank you, I just want to cancel it as soon as pos...\" | 2024-01-15T16:45:30Z\n-- 3004 | db_sess_003 | assistant | \"I completely understand, and I appreciate your hon...\" | 2024-01-15T16:45:32Z",
+          "metadata": {
+            "messageCount": 4,
+            "userMessages": 2,
+            "assistantMessages": 2,
+            "duration": 32,
+            "avgResponseTime": 0,
+            "channel": "email",
+            "status": "escalated",
+            "agents": [
+              "agent_003"
+            ],
+            "escalated": true,
+            "businessOutcome": "churn"
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "SQL representation mode",
+          "vars": {
+            "sessionId": "db_sess_003",
+            "mode": "sql"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "SELECT"
+            },
+            {
+              "type": "contains",
+              "value": "FROM conversations"
+            },
+            {
+              "type": "contains",
+              "value": "WHERE session_id"
+            },
+            {
+              "type": "contains",
+              "value": "ORDER BY timestamp"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 5,
+        "vars": {
+          "sessionId": "db_sess_003",
+          "mode": "sql"
+        },
+        "metadata": {
+          "messageCount": 4,
+          "userMessages": 2,
+          "assistantMessages": 2,
+          "duration": 32,
+          "avgResponseTime": 0,
+          "channel": "email",
+          "status": "escalated",
+          "agents": [
+            "agent_003"
+          ],
+          "escalated": true,
+          "businessOutcome": "churn",
+          "_promptfooFileMetadata": {},
+          "sessionId": "db_sess_003"
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "error": "Custom function threw error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\nStack Trace: Error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\n    at validateResult (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:11:11)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async handleJavascript (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:61:16)\n    at async runAssertion (/Users/mdangelo/projects/pf3/src/assertions/index.ts:339:20)\n    at async /Users/mdangelo/projects/pf3/src/assertions/index.ts:419:22\nreturn context.metadata &&\n       context.metadata.businessOutcome === 'upsell_success' &&\n       context.metadata.channel === 'mobile_app' &&\n       context.metadata.avgResponseTime > 0",
+        "gradingResult": {
+          "pass": false,
+          "score": 0,
+          "reason": "Custom function threw error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\nStack Trace: Error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\n    at validateResult (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:11:11)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async handleJavascript (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:61:16)\n    at async runAssertion (/Users/mdangelo/projects/pf3/src/assertions/index.ts:339:20)\n    at async /Users/mdangelo/projects/pf3/src/assertions/index.ts:419:22\nreturn context.metadata &&\n       context.metadata.businessOutcome === 'upsell_success' &&\n       context.metadata.channel === 'mobile_app' &&\n       context.metadata.avgResponseTime > 0",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Custom function threw error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\nStack Trace: Error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\n    at validateResult (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:11:11)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async handleJavascript (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:61:16)\n    at async runAssertion (/Users/mdangelo/projects/pf3/src/assertions/index.ts:339:20)\n    at async /Users/mdangelo/projects/pf3/src/assertions/index.ts:419:22\nreturn context.metadata &&\n       context.metadata.businessOutcome === 'upsell_success' &&\n       context.metadata.channel === 'mobile_app' &&\n       context.metadata.avgResponseTime > 0",
+              "assertion": {
+                "type": "javascript",
+                "value": "return context.metadata &&\n       context.metadata.businessOutcome === 'upsell_success' &&\n       context.metadata.channel === 'mobile_app' &&\n       context.metadata.avgResponseTime > 0\n"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "f0633211-308c-4ad0-9b54-fd6fdeb491e4",
+        "latencyMs": 2,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "database-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "=== CONVERSATION ANALYSIS ===\nSession ID: db_sess_002\nChannel: mobile_app\nStatus: completed\nDuration: 82 seconds\nMessages: 6 (3 user, 3 assistant)\nAverage Response Time: 0ms\nAgents Involved: agent_002\nBusiness Outcome: upsell_success\n\n=== CONVERSATION FLOW ===\nuser: Hi, I want to upgrade my subscription plan. What are my options?\n\nassistant: Great question! We have several subscription options available. Currently, you're on our Basic plan. You can upgrade to:\n\n• **Pro Plan** ($19.99/month) - Advanced features, priority support\n• **Premium Plan** ($39.99/month) - All Pro features plus API access and analytics\n• **Enterprise Plan** (Custom pricing) - Everything plus custom integrations and dedicated support\n\nWhich plan interests you most?\n\nuser: The Pro plan sounds good. How do I upgrade and when would I be charged?\n\nassistant: Perfect choice! Here's how the upgrade works:\n\n1. I can upgrade you right now through this chat\n2. You'll be charged the prorated amount for the rest of this billing cycle\n3. Starting next month, you'll be charged $19.99 monthly\n4. You get immediate access to all Pro features\n\nThe prorated charge for the remaining 15 days would be about $9.99. Would you like me to process this upgrade for you?\n\nuser: Yes, please go ahead and upgrade me to Pro.\n\nassistant: Excellent! I've successfully upgraded your account to Pro. You'll receive a confirmation email shortly with your new plan details. Your Pro features are now active, and you'll see the $9.99 prorated charge on your next statement. Welcome to Pro! Is there anything specific about your new features you'd like me to explain?",
+          "metadata": {
+            "messageCount": 6,
+            "userMessages": 3,
+            "assistantMessages": 3,
+            "duration": 82,
+            "avgResponseTime": 0,
+            "channel": "mobile_app",
+            "status": "completed",
+            "agents": [
+              "agent_002"
+            ],
+            "escalated": false,
+            "businessOutcome": "upsell_success"
+          }
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Business outcome analysis",
+          "vars": {
+            "sessionId": "db_sess_002",
+            "mode": "analysis"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "return context.metadata &&\n       context.metadata.businessOutcome === 'upsell_success' &&\n       context.metadata.channel === 'mobile_app' &&\n       context.metadata.avgResponseTime > 0\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 6,
+        "vars": {
+          "sessionId": "db_sess_002",
+          "mode": "analysis"
+        },
+        "metadata": {
+          "messageCount": 6,
+          "userMessages": 3,
+          "assistantMessages": 3,
+          "duration": 82,
+          "avgResponseTime": 0,
+          "channel": "mobile_app",
+          "status": "completed",
+          "agents": [
+            "agent_002"
+          ],
+          "escalated": false,
+          "businessOutcome": "upsell_success",
+          "_promptfooFileMetadata": {},
+          "sessionId": "db_sess_002"
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "error": "Custom function threw error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\nStack Trace: Error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\n    at validateResult (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:11:11)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async handleJavascript (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:61:16)\n    at async runAssertion (/Users/mdangelo/projects/pf3/src/assertions/index.ts:339:20)\n    at async /Users/mdangelo/projects/pf3/src/assertions/index.ts:419:22\nreturn context.metadata &&\n       context.metadata.escalated === true &&\n       context.metadata.businessOutcome === 'churn' &&\n       context.metadata.status === 'escalated'",
+        "gradingResult": {
+          "pass": false,
+          "score": 0,
+          "reason": "Custom function threw error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\nStack Trace: Error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\n    at validateResult (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:11:11)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async handleJavascript (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:61:16)\n    at async runAssertion (/Users/mdangelo/projects/pf3/src/assertions/index.ts:339:20)\n    at async /Users/mdangelo/projects/pf3/src/assertions/index.ts:419:22\nreturn context.metadata &&\n       context.metadata.escalated === true &&\n       context.metadata.businessOutcome === 'churn' &&\n       context.metadata.status === 'escalated'",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Custom function threw error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\nStack Trace: Error: Custom function must return a boolean, number, or GradingResult object. Got type undefined: undefined\n    at validateResult (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:11:11)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async handleJavascript (/Users/mdangelo/projects/pf3/src/assertions/javascript.ts:61:16)\n    at async runAssertion (/Users/mdangelo/projects/pf3/src/assertions/index.ts:339:20)\n    at async /Users/mdangelo/projects/pf3/src/assertions/index.ts:419:22\nreturn context.metadata &&\n       context.metadata.escalated === true &&\n       context.metadata.businessOutcome === 'churn' &&\n       context.metadata.status === 'escalated'",
+              "assertion": {
+                "type": "javascript",
+                "value": "return context.metadata &&\n       context.metadata.escalated === true &&\n       context.metadata.businessOutcome === 'churn' &&\n       context.metadata.status === 'escalated'\n"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "febac976-e146-4f3f-a8ff-8045e8481fce",
+        "latencyMs": 2,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "database-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "=== CONVERSATION ANALYSIS ===\nSession ID: db_sess_003\nChannel: email\nStatus: escalated\nDuration: 32 seconds\nMessages: 4 (2 user, 2 assistant)\nAverage Response Time: 0ms\nAgents Involved: agent_003\nBusiness Outcome: churn\n\n=== CONVERSATION FLOW ===\nuser: I've been trying to cancel my subscription for weeks but your website keeps giving me errors. This is really frustrating!\n\nassistant: I sincerely apologize for the frustration you've experienced trying to cancel your subscription. That's definitely not the experience we want for our customers. I can help you cancel your subscription right now through this conversation, and I'll also make sure our technical team is aware of the website issue you encountered.\n\nuser: Thank you, I just want to cancel it as soon as possible. I'm not using the service enough to justify the cost.\n\nassistant: I completely understand, and I appreciate your honesty. I've processed your cancellation request immediately. Your subscription will remain active until the end of your current billing period (January 31st), so you can continue using all features until then. You won't be charged again after that date. You'll receive a confirmation email within a few minutes.",
+          "metadata": {
+            "messageCount": 4,
+            "userMessages": 2,
+            "assistantMessages": 2,
+            "duration": 32,
+            "avgResponseTime": 0,
+            "channel": "email",
+            "status": "escalated",
+            "agents": [
+              "agent_003"
+            ],
+            "escalated": true,
+            "businessOutcome": "churn"
+          }
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Escalation detection",
+          "vars": {
+            "sessionId": "db_sess_003",
+            "mode": "analysis"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "return context.metadata &&\n       context.metadata.escalated === true &&\n       context.metadata.businessOutcome === 'churn' &&\n       context.metadata.status === 'escalated'\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 7,
+        "vars": {
+          "sessionId": "db_sess_003",
+          "mode": "analysis"
+        },
+        "metadata": {
+          "messageCount": 4,
+          "userMessages": 2,
+          "assistantMessages": 2,
+          "duration": 32,
+          "avgResponseTime": 0,
+          "channel": "email",
+          "status": "escalated",
+          "agents": [
+            "agent_003"
+          ],
+          "escalated": true,
+          "businessOutcome": "churn",
+          "_promptfooFileMetadata": {},
+          "sessionId": "db_sess_003"
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "error": "Session not found",
+        "gradingResult": null,
+        "id": "ee388436-e8ba-4c2e-8138-e8f68aa15d2c",
+        "latencyMs": 0,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "database-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "No database conversation found for session ID: {{ item }}",
+          "error": "Session not found"
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Multi-session database conversation quality",
+          "vars": {
+            "sessionId": "{{ item }}",
+            "mode": "conversation"
+          },
+          "matrix": [
+            {
+              "item": [
+                "db_sess_001",
+                "db_sess_002",
+                "db_sess_003"
+              ]
+            }
+          ],
+          "assert": [
+            {
+              "type": "not-contains",
+              "value": "I don't understand"
+            },
+            {
+              "type": "not-contains",
+              "value": "technical difficulties"
+            },
+            {
+              "type": "javascript",
+              "value": "// Ensure all conversations have appropriate length and agent responses\nreturn output.length > 100 &&\n       context.metadata.assistantMessages >= 1 &&\n       context.metadata.duration > 0\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 8,
+        "vars": {
+          "sessionId": "{{ item }}",
+          "mode": "conversation"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {},
+          "sessionId": "{{ item }}"
+        },
+        "failureReason": 2
+      }
+    ],
+    "stats": {
+      "successes": 5,
+      "failures": 3,
+      "errors": 1,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 9,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "prompts": [
+      "{{prompt}}"
+    ],
+    "providers": [
+      {
+        "id": "file://database-replay-provider.js",
+        "config": {
+          "dataFile": "./conversations.json"
+        }
+      }
+    ],
+    "tests": [
+      {
+        "description": "Login issue resolution from database",
+        "vars": {
+          "sessionId": "db_sess_001",
+          "mode": "conversation"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "login"
+          },
+          {
+            "type": "contains",
+            "value": "password reset"
+          },
+          {
+            "type": "contains",
+            "value": "Invalid credentials"
+          },
+          {
+            "type": "not-contains",
+            "value": "I cannot help"
+          }
+        ]
+      },
+      {
+        "description": "Subscription upgrade conversation",
+        "vars": {
+          "sessionId": "db_sess_002",
+          "mode": "conversation"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "upgrade"
+          },
+          {
+            "type": "contains",
+            "value": "Pro Plan"
+          },
+          {
+            "type": "contains",
+            "value": "$19.99"
+          },
+          {
+            "type": "contains",
+            "value": "prorated"
+          }
+        ]
+      },
+      {
+        "description": "Subscription cancellation conversation",
+        "vars": {
+          "sessionId": "db_sess_003",
+          "mode": "conversation"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "cancel"
+          },
+          {
+            "type": "contains",
+            "value": "frustrating"
+          },
+          {
+            "type": "contains",
+            "value": "apologize"
+          },
+          {
+            "type": "contains",
+            "value": "January 31st"
+          }
+        ]
+      },
+      {
+        "description": "Database conversation analysis",
+        "vars": {
+          "sessionId": "db_sess_002",
+          "mode": "analysis"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "CONVERSATION ANALYSIS"
+          },
+          {
+            "type": "contains",
+            "value": "mobile_app"
+          },
+          {
+            "type": "contains",
+            "value": "Business Outcome"
+          },
+          {
+            "type": "contains",
+            "value": "upsell_success"
+          }
+        ]
+      },
+      {
+        "description": "Database metadata extraction",
+        "vars": {
+          "sessionId": "db_sess_001",
+          "mode": "metadata"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "DATABASE METADATA"
+          },
+          {
+            "type": "contains",
+            "value": "PERFORMANCE METRICS"
+          },
+          {
+            "type": "contains",
+            "value": "web_chat"
+          },
+          {
+            "type": "contains",
+            "value": "agent_001"
+          }
+        ]
+      },
+      {
+        "description": "SQL representation mode",
+        "vars": {
+          "sessionId": "db_sess_003",
+          "mode": "sql"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "SELECT"
+          },
+          {
+            "type": "contains",
+            "value": "FROM conversations"
+          },
+          {
+            "type": "contains",
+            "value": "WHERE session_id"
+          },
+          {
+            "type": "contains",
+            "value": "ORDER BY timestamp"
+          }
+        ]
+      },
+      {
+        "description": "Business outcome analysis",
+        "vars": {
+          "sessionId": "db_sess_002",
+          "mode": "analysis"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "return context.metadata &&\n       context.metadata.businessOutcome === 'upsell_success' &&\n       context.metadata.channel === 'mobile_app' &&\n       context.metadata.avgResponseTime > 0\n"
+          }
+        ]
+      },
+      {
+        "description": "Escalation detection",
+        "vars": {
+          "sessionId": "db_sess_003",
+          "mode": "analysis"
+        },
+        "assert": [
+          {
+            "type": "javascript",
+            "value": "return context.metadata &&\n       context.metadata.escalated === true &&\n       context.metadata.businessOutcome === 'churn' &&\n       context.metadata.status === 'escalated'\n"
+          }
+        ]
+      },
+      {
+        "description": "Multi-session database conversation quality",
+        "vars": {
+          "sessionId": "{{ item }}",
+          "mode": "conversation"
+        },
+        "matrix": [
+          {
+            "item": [
+              "db_sess_001",
+              "db_sess_002",
+              "db_sess_003"
+            ]
+          }
+        ],
+        "assert": [
+          {
+            "type": "not-contains",
+            "value": "I don't understand"
+          },
+          {
+            "type": "not-contains",
+            "value": "technical difficulties"
+          },
+          {
+            "type": "javascript",
+            "value": "// Ensure all conversations have appropriate length and agent responses\nreturn output.length > 100 &&\n       context.metadata.assistantMessages >= 1 &&\n       context.metadata.duration > 0\n"
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "outputPath": [
+      "results/database-replay.json"
+    ],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": "https://www.promptfoo.app/eval/eval-KaM-2025-09-17T03:07:11",
+  "metadata": {
+    "promptfooVersion": "0.118.5",
+    "nodeVersion": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-09-17T03:07:16.384Z",
+    "evaluationCreatedAt": "2025-09-17T03:07:11.521Z"
+  }
+}

@@ -1,0 +1,11 @@
+session_id,input,last_assistant,category,expected_outcome
+sess_123,"How do I reset my password?","I can help you reset your password. Please provide your email address.","password_reset","successful"
+sess_456,"Cancel my subscription","I can help with that. Before we proceed, may I ask what's prompting you to cancel?","cancellation","retention_attempt"
+sess_789,"What is your refund policy?","Our refund policy allows for full refunds within 30 days of purchase for any reason, and partial refunds up to 90 days for unused portions of your subscription.","policy_question","successful"
+sess_101,"Transfer me to human","I understand you'd like to speak with a human agent. Let me connect you with our support team right away. Please hold for just a moment.","escalation","successful"
+sess_202,"My account is locked","I can help you unlock your account. For security, I'll need to verify your identity first. Can you provide the email address associated with your account?","account_issue","successful"
+sess_303,"I was charged twice","I'm sorry to hear about the billing issue. Double charges are definitely something we need to fix right away. Can you provide me with your account email so I can look into your billing history?","billing_issue","successful"
+sess_404,"How do I download my data?","You can download your data by going to Settings > Privacy > Download Data. The export will include all your personal information and will be ready within 24 hours.","data_export","successful"
+sess_505,"Delete my account permanently","I can help you delete your account. Please note this action is permanent and cannot be undone. To proceed, I'll need you to confirm your email address and type 'DELETE' to verify you want to continue.","account_deletion","successful"
+sess_606,"I need help with API integration","I'd be happy to help with your API integration. What specific issue are you encountering? Are you getting error messages, or do you need help with the initial setup?","technical_support","successful"
+sess_707,"Your service is too slow","I apologize for the performance issues you're experiencing. Let me look into this right away. Can you tell me what specific features seem slow, and when you first noticed this issue?","performance_complaint","acknowledgment"

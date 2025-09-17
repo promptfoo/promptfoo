@@ -1,0 +1,567 @@
+{
+  "evalId": "eval-DDi-2025-09-17T02:43:53",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-09-17T02:43:53.995Z",
+    "prompts": [
+      {
+        "raw": "{{prompt}}",
+        "label": "{{prompt}}",
+        "id": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "provider": "conversation-replay",
+        "metrics": {
+          "score": 4,
+          "testPassCount": 4,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 8,
+          "assertFailCount": 0,
+          "totalLatencyMs": 10,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 4,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "password"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "reset link"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "not-contains",
+                "value": "I am an AI"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "75f89359-d055-41aa-9c4d-fe355becf80c",
+        "latencyMs": 1,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "conversation-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I forgot my password and can't log into my account\n---\n[Turn 2] assistant: I can help you reset your password. For security, I'll need to verify your identity first. Can you please provide the email address associated with your account?\n---\n[Turn 3] user: john.smith@company.com\n---\n[Turn 4] assistant: Thank you. I found your account for john.smith@company.com. To proceed with the password reset, can you verify the last 4 digits of the phone number on file for your account?\n---\n[Turn 5] user: 5678\n---\n[Turn 6] assistant: Perfect! I've verified your identity. I'm sending a password reset link to john.smith@company.com right now. Please check your email (including your spam folder) and click the link within the next 24 hours to reset your password. Is there anything else I can help you with?\n---\n[Turn 7] user: No, that's perfect. Thank you!\n---\n[Turn 8] assistant: You're welcome! Your password reset link has been sent. If you don't receive it within a few minutes, please check your spam folder or contact us again. Have a great day!",
+          "metadata": {
+            "conversationId": "sess_pwd_001",
+            "totalTurns": 8,
+            "firstMessage": "2024-01-15T09:30:00Z",
+            "lastMessage": "2024-01-15T09:30:47Z"
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Password reset conversation replay",
+          "vars": {
+            "conversationId": "sess_pwd_001",
+            "mode": "full"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "password"
+            },
+            {
+              "type": "contains",
+              "value": "reset link"
+            },
+            {
+              "type": "not-contains",
+              "value": "I am an AI"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "conversationId": "sess_pwd_001",
+          "mode": "full"
+        },
+        "metadata": {
+          "conversationId": "sess_pwd_001",
+          "totalTurns": 8,
+          "firstMessage": "2024-01-15T09:30:00Z",
+          "lastMessage": "2024-01-15T09:30:47Z",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "basic plan"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "subscription"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "2b9ba3b5-4435-4272-bad5-06fd321c979d",
+        "latencyMs": 2,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "conversation-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I want to cancel my subscription\n---\n[Turn 2] assistant: I can help you with your subscription cancellation. Before we proceed, may I ask what's prompting you to cancel? Sometimes we can address concerns or offer alternatives that might work better for you.\n---\n[Turn 3] user: I'm not using the service enough to justify the cost\n---\n[Turn 4] assistant: I understand completely. Let me check your account to see your current plan and usage. Would you be interested in downgrading to our basic plan instead? It's $9.99/month instead of $29.99, and you might find it more suitable for lighter usage.\n---\n[Turn 5] user: Actually, that sounds like it might work better. Can you tell me what's included in the basic plan?\n---\n[Turn 6] assistant: Great question! The basic plan includes: up to 50 API calls per month, access to all core features, email support, and basic analytics. You'd lose the advanced reporting and priority support that comes with premium, but you'd keep everything essential. Would you like me to switch you to the basic plan instead of canceling?\n---\n[Turn 7] user: Yes, please switch me to the basic plan\n---\n[Turn 8] assistant: Perfect! I've switched your subscription to the basic plan effective immediately. Your next billing date is February 15th for $9.99. You'll receive a confirmation email shortly. Is there anything else I can help you with today?",
+          "metadata": {
+            "conversationId": "sess_cancel_002",
+            "totalTurns": 8,
+            "firstMessage": "2024-01-15T14:20:00Z",
+            "lastMessage": "2024-01-15T14:21:18Z"
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Subscription conversation replay",
+          "vars": {
+            "conversationId": "sess_cancel_002",
+            "mode": "full"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "basic plan"
+            },
+            {
+              "type": "contains",
+              "value": "subscription"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "conversationId": "sess_cancel_002",
+          "mode": "full"
+        },
+        "metadata": {
+          "conversationId": "sess_cancel_002",
+          "totalTurns": 8,
+          "firstMessage": "2024-01-15T14:20:00Z",
+          "lastMessage": "2024-01-15T14:21:18Z",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "refund"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "duplicate charge"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "1be66c55-874e-4c13-9efd-135427a2233f",
+        "latencyMs": 3,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "conversation-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "[Turn 1] user: I was charged twice for my subscription this month\n---\n[Turn 2] assistant: I'm sorry to hear about the billing issue. Double charges are definitely something we need to fix right away. Can you provide me with your account email so I can look into your billing history?\n---\n[Turn 3] user: sarah.jones@email.com\n---\n[Turn 4] assistant: Thank you Sarah. I can see your account and you're absolutely right - there were two charges on January 15th for $19.99 each. This appears to be a processing error on our end. I'm going to process a full refund for the duplicate charge right now. You should see the refund in your account within 3-5 business days.\n---\n[Turn 5] user: Thank you so much! Will I get an email confirmation?\n---\n[Turn 6] assistant: Absolutely! You'll receive an email confirmation within the next few minutes with the refund details and reference number. I've also added a note to your account about this issue. Again, I apologize for the inconvenience, and thank you for bringing this to our attention.",
+          "metadata": {
+            "conversationId": "sess_refund_003",
+            "totalTurns": 6,
+            "firstMessage": "2024-01-15T16:45:00Z",
+            "lastMessage": "2024-01-15T16:45:43Z"
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Billing issue conversation replay",
+          "vars": {
+            "conversationId": "sess_refund_003",
+            "mode": "full"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "refund"
+            },
+            {
+              "type": "contains",
+              "value": "duplicate charge"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {
+          "conversationId": "sess_refund_003",
+          "mode": "full"
+        },
+        "metadata": {
+          "conversationId": "sess_refund_003",
+          "totalTurns": 6,
+          "firstMessage": "2024-01-15T16:45:00Z",
+          "lastMessage": "2024-01-15T16:45:43Z",
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "email"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "9158646f-a9bf-4979-8251-b6c143b5f8e1",
+        "latencyMs": 4,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "conversation-replay",
+          "label": ""
+        },
+        "response": {
+          "output": "I can help you reset your password. For security, I'll need to verify your identity first. Can you please provide the email address associated with your account?",
+          "metadata": {
+            "role": "assistant",
+            "timestamp": "2024-01-15T09:30:02Z",
+            "turnIndex": 1,
+            "totalTurns": 8,
+            "originalMetadata": {
+              "model": "gpt-4",
+              "response_time_ms": 1200
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Individual turn replay",
+          "vars": {
+            "conversationId": "sess_pwd_001",
+            "mode": "turn",
+            "turnIndex": 1
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "email"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "vars": {
+          "conversationId": "sess_pwd_001",
+          "mode": "turn",
+          "turnIndex": 1
+        },
+        "metadata": {
+          "role": "assistant",
+          "timestamp": "2024-01-15T09:30:02Z",
+          "turnIndex": 1,
+          "totalTurns": 8,
+          "originalMetadata": {
+            "model": "gpt-4",
+            "response_time_ms": 1200
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 4,
+      "failures": 0,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 4,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "prompts": [
+      "{{prompt}}"
+    ],
+    "providers": [
+      {
+        "id": "file://conversation-replay-provider.js",
+        "config": {
+          "logFile": "./production-logs.jsonl"
+        }
+      }
+    ],
+    "tests": [
+      {
+        "description": "Password reset conversation replay",
+        "vars": {
+          "conversationId": "sess_pwd_001",
+          "mode": "full"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "password"
+          },
+          {
+            "type": "contains",
+            "value": "reset link"
+          },
+          {
+            "type": "not-contains",
+            "value": "I am an AI"
+          }
+        ]
+      },
+      {
+        "description": "Subscription conversation replay",
+        "vars": {
+          "conversationId": "sess_cancel_002",
+          "mode": "full"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "basic plan"
+          },
+          {
+            "type": "contains",
+            "value": "subscription"
+          }
+        ]
+      },
+      {
+        "description": "Billing issue conversation replay",
+        "vars": {
+          "conversationId": "sess_refund_003",
+          "mode": "full"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "refund"
+          },
+          {
+            "type": "contains",
+            "value": "duplicate charge"
+          }
+        ]
+      },
+      {
+        "description": "Individual turn replay",
+        "vars": {
+          "conversationId": "sess_pwd_001",
+          "mode": "turn",
+          "turnIndex": 1
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "email"
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "outputPath": [
+      "results/simple-replay.json"
+    ],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": "https://www.promptfoo.app/eval/eval-DDi-2025-09-17T02:43:53",
+  "metadata": {
+    "promptfooVersion": "0.118.5",
+    "nodeVersion": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-09-17T02:43:58.860Z",
+    "evaluationCreatedAt": "2025-09-17T02:43:53.995Z"
+  }
+}

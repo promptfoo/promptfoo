@@ -1,0 +1,50 @@
+providers:
+  - id: file://conversation-replay-provider.js
+    config:
+      logFile: './production-logs.jsonl'
+
+tests:
+  # Simple test without LLM rubrics - just check conversation replay works
+  - description: 'Password reset conversation replay'
+    vars:
+      conversationId: 'sess_pwd_001'
+      mode: 'full'
+    assert:
+      - type: contains
+        value: 'password'
+      - type: contains
+        value: 'reset link'
+      - type: not-contains
+        value: 'I am an AI'
+
+  # Test subscription conversation
+  - description: 'Subscription conversation replay'
+    vars:
+      conversationId: 'sess_cancel_002'
+      mode: 'full'
+    assert:
+      - type: contains
+        value: 'basic plan'
+      - type: contains
+        value: 'subscription'
+
+  # Test billing issue conversation
+  - description: 'Billing issue conversation replay'
+    vars:
+      conversationId: 'sess_refund_003'
+      mode: 'full'
+    assert:
+      - type: contains
+        value: 'refund'
+      - type: contains
+        value: 'duplicate charge'
+
+  # Test individual turn replay
+  - description: 'Individual turn replay'
+    vars:
+      conversationId: 'sess_pwd_001'
+      mode: 'turn'
+      turnIndex: 1
+    assert:
+      - type: contains
+        value: 'email'

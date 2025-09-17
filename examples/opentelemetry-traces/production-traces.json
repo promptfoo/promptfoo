@@ -1,0 +1,215 @@
+{
+  "resourceSpans": [{
+    "resource": {
+      "attributes": [{
+        "key": "service.name",
+        "value": { "stringValue": "customer-service-agent" }
+      }, {
+        "key": "service.version",
+        "value": { "stringValue": "v2.1.4" }
+      }]
+    },
+    "scopeSpans": [{
+      "spans": [
+        {
+          "traceId": "A1B2C3D4E5F67890123456789ABCDEF0",
+          "spanId": "1234567890ABCDEF",
+          "name": "conversation.turn",
+          "startTimeUnixNano": "1705312200000000000",
+          "endTimeUnixNano": "1705312202500000000",
+          "attributes": [
+            {
+              "key": "conversation.session_id",
+              "value": { "stringValue": "otlp_sess_001" }
+            },
+            {
+              "key": "conversation.turn_number",
+              "value": { "intValue": "1" }
+            },
+            {
+              "key": "conversation.role",
+              "value": { "stringValue": "user" }
+            },
+            {
+              "key": "conversation.content",
+              "value": { "stringValue": "I can't access my dashboard, it keeps saying invalid credentials" }
+            },
+            {
+              "key": "user.id",
+              "value": { "stringValue": "user_enterprise_123" }
+            },
+            {
+              "key": "conversation.channel",
+              "value": { "stringValue": "web_chat" }
+            }
+          ]
+        },
+        {
+          "traceId": "A1B2C3D4E5F67890123456789ABCDEF0",
+          "spanId": "2345678901BCDEF0",
+          "parentSpanId": "1234567890ABCDEF",
+          "name": "conversation.turn",
+          "startTimeUnixNano": "1705312203000000000",
+          "endTimeUnixNano": "1705312205800000000",
+          "attributes": [
+            {
+              "key": "conversation.session_id",
+              "value": { "stringValue": "otlp_sess_001" }
+            },
+            {
+              "key": "conversation.turn_number",
+              "value": { "intValue": "2" }
+            },
+            {
+              "key": "conversation.role",
+              "value": { "stringValue": "assistant" }
+            },
+            {
+              "key": "conversation.content",
+              "value": { "stringValue": "I can help you with the login issue. This usually happens when the password has been reset recently or there are browser caching issues. Let's start by clearing your browser cache and cookies for our site, then try logging in again." }
+            },
+            {
+              "key": "llm.model",
+              "value": { "stringValue": "gpt-4-turbo" }
+            },
+            {
+              "key": "llm.response.latency_ms",
+              "value": { "intValue": "2800" }
+            },
+            {
+              "key": "agent.id",
+              "value": { "stringValue": "ai_agent_enterprise" }
+            }
+          ]
+        },
+        {
+          "traceId": "A1B2C3D4E5F67890123456789ABCDEF0",
+          "spanId": "3456789012CDEF01",
+          "parentSpanId": "2345678901BCDEF0",
+          "name": "conversation.turn",
+          "startTimeUnixNano": "1705312220000000000",
+          "endTimeUnixNano": "1705312221200000000",
+          "attributes": [
+            {
+              "key": "conversation.session_id",
+              "value": { "stringValue": "otlp_sess_001" }
+            },
+            {
+              "key": "conversation.turn_number",
+              "value": { "intValue": "3" }
+            },
+            {
+              "key": "conversation.role",
+              "value": { "stringValue": "user" }
+            },
+            {
+              "key": "conversation.content",
+              "value": { "stringValue": "I tried that but it's still not working. I'm using Chrome on Windows." }
+            }
+          ]
+        },
+        {
+          "traceId": "A1B2C3D4E5F67890123456789ABCDEF0",
+          "spanId": "456789013DEF0123",
+          "parentSpanId": "3456789012CDEF01",
+          "name": "conversation.turn",
+          "startTimeUnixNano": "1705312222000000000",
+          "endTimeUnixNano": "1705312224500000000",
+          "attributes": [
+            {
+              "key": "conversation.session_id",
+              "value": { "stringValue": "otlp_sess_001" }
+            },
+            {
+              "key": "conversation.turn_number",
+              "value": { "intValue": "4" }
+            },
+            {
+              "key": "conversation.role",
+              "value": { "stringValue": "assistant" }
+            },
+            {
+              "key": "conversation.content",
+              "value": { "stringValue": "Thanks for trying that. Since the cache clearing didn't work, let's try a password reset. I can see your account is active, so this should resolve the credentials issue. I'll send a reset link to your registered email address. Please check both your inbox and spam folder." }
+            },
+            {
+              "key": "llm.model",
+              "value": { "stringValue": "gpt-4-turbo" }
+            },
+            {
+              "key": "resolution.action",
+              "value": { "stringValue": "password_reset_initiated" }
+            }
+          ]
+        },
+        {
+          "traceId": "B2C3D4E5F67890123456789ABCDEF01",
+          "spanId": "567890124EF01234",
+          "name": "conversation.turn",
+          "startTimeUnixNano": "1705315800000000000",
+          "endTimeUnixNano": "1705315801800000000",
+          "attributes": [
+            {
+              "key": "conversation.session_id",
+              "value": { "stringValue": "otlp_sess_002" }
+            },
+            {
+              "key": "conversation.turn_number",
+              "value": { "intValue": "1" }
+            },
+            {
+              "key": "conversation.role",
+              "value": { "stringValue": "user" }
+            },
+            {
+              "key": "conversation.content",
+              "value": { "stringValue": "Our team needs to upgrade to the enterprise plan. What's included and how do we migrate our data?" }
+            },
+            {
+              "key": "user.id",
+              "value": { "stringValue": "user_business_456" }
+            },
+            {
+              "key": "conversation.intent",
+              "value": { "stringValue": "upgrade_inquiry" }
+            }
+          ]
+        },
+        {
+          "traceId": "B2C3D4E5F67890123456789ABCDEF01",
+          "spanId": "67890125F0123456",
+          "parentSpanId": "567890124EF01234",
+          "name": "conversation.turn",
+          "startTimeUnixNano": "1705315802000000000",
+          "endTimeUnixNano": "1705315805200000000",
+          "attributes": [
+            {
+              "key": "conversation.session_id",
+              "value": { "stringValue": "otlp_sess_002" }
+            },
+            {
+              "key": "conversation.turn_number",
+              "value": { "intValue": "2" }
+            },
+            {
+              "key": "conversation.role",
+              "value": { "stringValue": "assistant" }
+            },
+            {
+              "key": "conversation.content",
+              "value": { "stringValue": "Great! The enterprise plan includes unlimited users, advanced analytics, priority support, custom integrations, and enhanced security features. Data migration is seamless - we handle the entire process with zero downtime. Would you like me to connect you with our enterprise sales team to discuss pricing and timeline?" }
+            },
+            {
+              "key": "llm.model",
+              "value": { "stringValue": "gpt-4-turbo" }
+            },
+            {
+              "key": "sales.qualified_lead",
+              "value": { "boolValue": true }
+            }
+          ]
+        }
+      ]
+    }]
+  }]
+}

@@ -1,0 +1,53 @@
+providers:
+  - id: file://otlp-replay-provider.js
+    config:
+      traceFile: './production-traces.json'
+
+tests:
+  # Test login troubleshooting conversation from OTLP traces
+  - description: 'Login issue troubleshooting from OTLP traces'
+    vars:
+      sessionId: 'otlp_sess_001'
+      mode: 'full'
+    assert:
+      - type: contains
+        value: 'password reset'
+      - type: contains
+        value: 'cache'
+      - type: not-contains
+        value: 'contact support'
+
+  # Test enterprise upgrade conversation
+  - description: 'Enterprise upgrade sales conversation'
+    vars:
+      sessionId: 'otlp_sess_002'
+      mode: 'full'
+    assert:
+      - type: contains
+        value: 'enterprise'
+      - type: contains
+        value: 'migration'
+
+  # Test individual turn from traces
+  - description: 'Individual assistant response from OTLP'
+    vars:
+      sessionId: 'otlp_sess_001'
+      mode: 'turn'
+      turnIndex: 1
+    assert:
+      - type: contains
+        value: 'browser cache'
+
+  # Test metadata preservation
+  - description: 'OTLP metadata preservation'
+    vars:
+      sessionId: 'otlp_sess_001'
+      mode: 'turn'
+      turnIndex: 1
+    assert:
+      - type: javascript
+        value: |
+          // Check that OTLP trace metadata is preserved
+          return context.metadata &&
+                 context.metadata.traceId &&
+                 context.metadata.spanId
