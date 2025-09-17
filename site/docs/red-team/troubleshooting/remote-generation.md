@@ -37,11 +37,28 @@ If this request fails or times out, it likely means your network is blocking acc
    - Mobile hotspot
    - Development environment outside corporate network
 
-3. **Configure Proxy**: If you need to use a corporate proxy, you can configure it using environment variables. Promptfoo uses Node.js's [Unidici](https://undici.nodejs.org/#/docs/api/ProxyAgent.md) to handle proxy configuration. It automatically detects and uses standard proxy environment variables. The proxy URL format is: `[protocol://][user:password@]host[:port]`
+3. **Configure Proxy**: If you need to use a corporate proxy, configure it using environment variables. Promptfoo uses Node.js's [Undici](https://undici.nodejs.org/#/docs/api/ProxyAgent.md) to handle proxy configuration with standard proxy environment variables.
+
+   **Important**: The proxy URL must include the protocol prefix:
 
    ```bash
+   # ✅ Correct - includes http:// prefix
    export HTTPS_PROXY=http://proxy.company.com:8080
-   promptfoo eval
+   export HTTPS_PROXY=http://127.0.0.1:8080  # For tools like Burp Suite
+
+   # ❌ Wrong - missing protocol prefix (common error)
+   export HTTPS_PROXY=127.0.0.1:8080
+
+   # With authentication
+   export HTTPS_PROXY=http://username:password@proxy.company.com:8080
+
+   promptfoo redteam run
+   ```
+
+   **For debugging proxy issues with tools like Burp Suite**, you may also need:
+   ```bash
+   # Custom CA certificate for HTTPS interception
+   export PROMPTFOO_CA_CERT_PATH=/path/to/burpsuite-ca.crt
    ```
 
 ## Alternative Options
