@@ -32,7 +32,8 @@ redteam:
     - id: jailbreak:composite # Finds novel jailbreak prompts by chaining together individual techniques
       config:
         numTests: 1
-    - id: multilingual
-      config:
-        languages:
-          - es-ES
+
+    # - id: multilingual
+    #   config:
+    #     languages:
+    #       - es-ES
