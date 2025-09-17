@@ -401,7 +401,15 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
         const data = await response.json();
 
-        if (!response.ok) {
+        if (response.ok) {
+          // Update dialog with successful result
+          setSampleDialog({
+            isOpen: true,
+            strategyId,
+            isGenerating: false,
+            sample: data.sample,
+          });
+        } else {
           // Check if server provided a sample in error response
           if (data.sample) {
             setSampleDialog({
@@ -413,14 +421,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           } else {
             throw new Error(data.error || `Failed to generate strategy sample: ${response.status}`);
           }
-        } else {
-          // Update dialog with successful result
-          setSampleDialog({
-            isOpen: true,
-            strategyId,
-            isGenerating: false,
-            sample: data.sample,
-          });
         }
       } catch (error) {
         console.error('Error generating strategy sample:', error);
@@ -694,7 +694,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           strategyId={sampleDialog.strategyId}
           isGenerating={sampleDialog.isGenerating}
           generatedSample={sampleDialog.sample}
-          onGenerate={() => sampleDialog.strategyId && handleSampleGenerate(sampleDialog.strategyId)}
+          onGenerate={() =>
+            sampleDialog.strategyId && handleSampleGenerate(sampleDialog.strategyId)
+          }
         />
       </Box>
     </PageWrapper>

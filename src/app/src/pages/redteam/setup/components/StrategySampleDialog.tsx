@@ -68,19 +68,21 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
         ) : generatedSample ? (
           <Box sx={{ pt: 2 }}>
             <Alert
-              severity={generatedSample.metadata.unavailable ? "warning" : "info"}
+              severity={generatedSample.metadata.unavailable ? 'warning' : 'info'}
               sx={{ mb: 3, alignItems: 'center' }}
             >
               <Typography variant="body2">
                 {generatedSample.metadata.unavailable ? (
                   <>
-                    The <code>{strategyId}</code> strategy is not yet available for sample generation.
-                    This {generatedSample.metadata.category} strategy will be supported in a future milestone.
+                    The <code>{strategyId}</code> strategy is not yet available for sample
+                    generation. This {generatedSample.metadata.category} strategy will be supported
+                    in a future milestone.
                   </>
                 ) : (
                   <>
                     This demonstrates how the <code>{strategyId}</code> strategy transforms prompts.
-                    The actual redteam run will apply this transformation to all generated test cases.
+                    The actual redteam run will apply this transformation to all generated test
+                    cases.
                   </>
                 )}
               </Typography>
@@ -104,11 +106,7 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
                 size="small"
                 variant="outlined"
               />
-              <Chip
-                label={`Mode: ${generatedSample.mode}`}
-                size="small"
-                variant="outlined"
-              />
+              <Chip label={`Mode: ${generatedSample.mode}`} size="small" variant="outlined" />
             </Box>
 
             {/* Strategy Description */}

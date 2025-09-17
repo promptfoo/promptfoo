@@ -18,12 +18,14 @@ Strategy sample generation allows users to understand how each attack strategy w
 **Strategies**: `base64`, `hex`, `rot13`, `leetspeak`, `homoglyph`, `morse`, `piglatin`, `camelcase`, `emoji`
 
 **Characteristics**:
+
 - Deterministic text transformations
 - No target interaction required
 - Fast, instant generation
 - Perfect for before/after demonstrations
 
 **Sample Generation Approach**:
+
 ```typescript
 interface EncodingSample {
   type: 'encoding-transformation';
@@ -42,6 +44,7 @@ interface EncodingSample {
 **Implementation per Strategy**:
 
 #### Base64
+
 ```typescript
 generateBase64Sample(input: string) {
   return {
@@ -60,6 +63,7 @@ generateBase64Sample(input: string) {
 ```
 
 #### Leetspeak
+
 ```typescript
 generateLeetspeakSample(input: string) {
   return {
@@ -76,6 +80,7 @@ generateLeetspeakSample(input: string) {
 ```
 
 #### Homoglyph
+
 ```typescript
 generateHomoglyphSample(input: string) {
   return {
@@ -92,6 +97,7 @@ generateHomoglyphSample(input: string) {
 ```
 
 #### Morse Code
+
 ```typescript
 generateMorseSample(input: string) {
   return {
@@ -112,12 +118,14 @@ generateMorseSample(input: string) {
 **Strategies**: `crescendo`, `goat`, `custom`, `mischievous-user`
 
 **Characteristics**:
+
 - Require multi-turn conversations
 - Adapt based on target responses
 - Benefit significantly from live target interaction
 - Complex state management
 
 **Sample Generation Approach**:
+
 ```typescript
 interface AgenticSample {
   type: 'agentic-conversation';
@@ -137,7 +145,9 @@ interface AgenticSample {
 ```
 
 #### Crescendo
+
 **Multi-Turn Demonstration**:
+
 ```typescript
 generateCrescendoSample(goal: string) {
   return {
@@ -199,6 +209,7 @@ generateCrescendoSample(goal: string) {
 ```
 
 **Live Mode** (With Target):
+
 ```typescript
 async generateCrescendoLive(goal: string, target: ProviderOptions) {
   const crescendoProvider = new CrescendoProvider({
@@ -233,7 +244,9 @@ async generateCrescendoLive(goal: string, target: ProviderOptions) {
 ```
 
 #### GOAT (Generative Offensive Agent Tester)
+
 **Template Mode**:
+
 ```typescript
 generateGoatTemplate(goal: string) {
   return {
@@ -272,7 +285,9 @@ generateGoatTemplate(goal: string) {
 ```
 
 #### Custom Strategy
+
 **User-Defined Multi-Turn Demonstration**:
+
 ```typescript
 generateCustomStrategySample(goal: string, customConfig?: { instructions?: string }) {
   const userInstructions = customConfig?.instructions ||
@@ -335,7 +350,9 @@ generateCustomStrategySample(goal: string, customConfig?: { instructions?: strin
 ```
 
 #### Mischievous User
+
 **Multi-Turn Social Engineering Demonstration**:
+
 ```typescript
 generateMischievousUserSample(goal: string) {
   return {
@@ -403,11 +420,13 @@ generateMischievousUserSample(goal: string) {
 **Strategies**: `jailbreak`, `jailbreak:composite`, `jailbreak:tree`, `jailbreak:likert`, `best-of-n`, `gcg`
 
 **Characteristics**:
+
 - Use optimization techniques to find effective prompts
 - Can work with templates but benefit from target testing
 - Often use multiple attempts/variations
 
 #### Jailbreak (Single-shot Optimization)
+
 ```typescript
 generateJailbreakSample(goal: string, target?: ProviderOptions) {
   const techniques = [
@@ -442,6 +461,7 @@ generateJailbreakSample(goal: string, target?: ProviderOptions) {
 ```
 
 #### Best-of-N
+
 ```typescript
 generateBestOfNSample(goal: string) {
   return {
@@ -471,6 +491,7 @@ generateBestOfNSample(goal: string) {
 ```
 
 #### GCG (Greedy Coordinate Gradient)
+
 ```typescript
 generateGcgSample(goal: string) {
   return {
@@ -506,11 +527,13 @@ generateGcgSample(goal: string) {
 **Strategies**: `audio`, `image`, `video`
 
 **Characteristics**:
+
 - Transform text to other media formats
 - Test multi-modal model safety
 - Require media processing capabilities
 
 #### Audio Strategy
+
 ```typescript
 generateAudioSample(goal: string) {
   return {
@@ -540,6 +563,7 @@ generateAudioSample(goal: string) {
 ```
 
 #### Image Strategy
+
 ```typescript
 generateImageSample(goal: string) {
   return {
@@ -585,6 +609,7 @@ generateImageSample(goal: string) {
 ### 5. Language/Cultural Strategies
 
 #### Multilingual
+
 ```typescript
 generateMultilingualSample(goal: string, config?: { languages?: string[] }) {
   const defaultLanguages = ['Spanish', 'French', 'German', 'Mandarin', 'Arabic'];
@@ -617,6 +642,7 @@ generateMultilingualSample(goal: string, config?: { languages?: string[] }) {
 ```
 
 #### Citation Strategy
+
 ```typescript
 generateCitationSample(goal: string) {
   return {
@@ -655,6 +681,7 @@ generateCitationSample(goal: string) {
 ### 6. Mathematical/Logical Strategies
 
 #### Math-Prompt Strategy
+
 ```typescript
 generateMathPromptSample(goal: string) {
   return {
@@ -692,6 +719,7 @@ generateMathPromptSample(goal: string) {
 ### 7. Injection/Security Strategies
 
 #### Prompt Injection
+
 ```typescript
 generatePromptInjectionSample(goal: string) {
   return {
@@ -736,6 +764,7 @@ generatePromptInjectionSample(goal: string) {
 ### 8. Meta/Utility Strategies
 
 #### Basic Strategy
+
 ```typescript
 generateBasicSample(goal: string) {
   return {
@@ -760,6 +789,7 @@ generateBasicSample(goal: string) {
 ```
 
 #### Layer Strategy
+
 ```typescript
 generateLayerSample(goal: string, config?: { strategies?: string[] }) {
   const strategies = config?.strategies || ['base64', 'jailbreak', 'multilingual'];
@@ -790,6 +820,7 @@ generateLayerSample(goal: string, config?: { strategies?: string[] }) {
 ```
 
 #### Retry Strategy
+
 ```typescript
 generateRetrySample(goal: string) {
   return {
@@ -847,8 +878,8 @@ app.post('/redteam/generate-strategy-sample', async (req, res) => {
     strategyId,
     config,
     targetConfig,
-    sampleInput = "harmful example",
-    mode = 'auto' // 'template', 'live', 'auto'
+    sampleInput = 'harmful example',
+    mode = 'auto', // 'template', 'live', 'auto'
   } = req.body;
 
   try {
@@ -857,7 +888,7 @@ app.post('/redteam/generate-strategy-sample', async (req, res) => {
       input: sampleInput,
       config,
       target: targetConfig,
-      mode
+      mode,
     });
 
     res.json(sample);
@@ -867,7 +898,7 @@ app.post('/redteam/generate-strategy-sample', async (req, res) => {
     res.json({
       ...fallbackSample,
       warning: 'Live sample generation failed, showing template',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -966,12 +997,14 @@ const StrategyItem = ({ strategy, isSelected, onToggle, onConfigClick }) => {
 ## Implementation Roadmap
 
 ### Milestone 1: Core Foundation
+
 - Implement encoding strategy samples (base64, hex, rot13, leetspeak, homoglyph)
 - Basic sample dialog UI with consistent interaction patterns
 - Template-based samples for all non-interactive strategies
 - **Success Criteria**: Users can generate instant samples for transformation strategies
 
 ### Milestone 2: Multi-Turn Attack Demonstrations
+
 - Interactive conversation flow demonstrations for all agentic strategies
 - Detailed multi-turn samples for Crescendo, GOAT, Custom, and Mischievous User
 - Turn-by-turn escalation patterns with intent and technique explanations
@@ -980,12 +1013,14 @@ const StrategyItem = ({ strategy, isSelected, onToggle, onConfigClick }) => {
 - **Success Criteria**: Users understand how multi-turn attacks progress and can configure custom strategies effectively
 
 ### Milestone 3: Enhanced User Experience
+
 - Advanced sample dialog with strategy-specific explanations
 - Integration with existing strategy configuration workflow
 - Performance optimization and response caching
 - **Success Criteria**: Seamless integration with current redteam setup flow
 
 ### Milestone 4: Quality & Documentation
+
 - Comprehensive strategy documentation and explanations
 - User experience refinements based on feedback
 - Testing coverage for all sample generation paths

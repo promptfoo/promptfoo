@@ -61,6 +61,7 @@ export function clearPythonCache(): void {
 ```
 
 Call this when:
+
 - Working directory changes detected
 - Temp directory access fails
 - User explicitly requests cache clear

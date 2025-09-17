@@ -31,7 +31,7 @@ export function StrategyItem({
   onToggle,
   onConfigClick,
   onSampleGenerate,
-  isGeneratingSample = false
+  isGeneratingSample = false,
 }: StrategyItemProps) {
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
   const hasSampleButton = onSampleGenerate && strategy.id !== 'basic'; // Don't show sample button for basic strategy
