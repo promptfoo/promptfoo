@@ -391,25 +391,37 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           body: JSON.stringify({
             strategyId,
             config: {
-              applicationDefinition: config.description,
+              applicationDefinition: config.applicationDefinition || {
+                purpose: config.description || 'general AI assistant',
+              },
               injectVar: 'query',
             },
           }),
         });
 
-        if (!response.ok) {
-          throw new Error(`Failed to generate strategy sample: ${response.status}`);
-        }
-
         const data = await response.json();
 
-        // Update dialog with result
-        setSampleDialog({
-          isOpen: true,
-          strategyId,
-          isGenerating: false,
-          sample: data.sample,
-        });
+        if (!response.ok) {
+          // Check if server provided a sample in error response
+          if (data.sample) {
+            setSampleDialog({
+              isOpen: true,
+              strategyId,
+              isGenerating: false,
+              sample: data.sample,
+            });
+          } else {
+            throw new Error(data.error || `Failed to generate strategy sample: ${response.status}`);
+          }
+        } else {
+          // Update dialog with successful result
+          setSampleDialog({
+            isOpen: true,
+            strategyId,
+            isGenerating: false,
+            sample: data.sample,
+          });
+        }
       } catch (error) {
         console.error('Error generating strategy sample:', error);
         setSampleDialog({

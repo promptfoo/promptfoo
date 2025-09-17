@@ -12,6 +12,20 @@ import { Strategies } from '../../redteam/strategies';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
+// Transform-only strategies supported in Milestone 1
+const TRANSFORM_STRATEGIES = new Set([
+  'base64',
+  'hex',
+  'rot13',
+  'leetspeak',
+  'homoglyph',
+  'morse',
+  'piglatin',
+  'camelcase',
+  'emoji',
+  'prompt-injection',
+]);
+
 export const redteamRouter = Router();
 
 // Generate a single test case for a specific plugin
@@ -174,18 +188,26 @@ redteamRouter.post('/generate-strategy-sample', async (req: Request, res: Respon
       return;
     }
 
-    // Multi-modal strategies not yet implemented
-    if (['audio', 'image', 'video'].includes(strategyId)) {
-      res.status(400).json({
-        error: 'Multi-modal strategy samples not yet implemented',
+    // Check if strategy is supported in Milestone 1
+    if (!TRANSFORM_STRATEGIES.has(strategyId)) {
+      const isMultiModal = ['audio', 'image', 'video'].includes(strategyId);
+      const isAgentic = ['jailbreak', 'jailbreak:tree', 'crescendo', 'goat', 'best-of-n', 'citation', 'multilingual'].includes(strategyId);
+
+      let category = 'advanced';
+      if (isMultiModal) category = 'multi-modal';
+      if (isAgentic) category = 'agentic';
+
+      res.json({
         sample: {
           title: `${strategyId} Strategy`,
-          summary: 'Multi-modal strategy demonstration coming soon',
+          summary: `The ${strategyId} strategy is a ${category} strategy that will be available in a future milestone`,
           mode: 'template',
-          modifiedPrompts: ['Multi-modal strategy samples will be available in a future update'],
+          modifiedPrompts: [`${category.charAt(0).toUpperCase() + category.slice(1)} strategy demonstration coming soon`],
           metadata: {
             effectiveness: 'medium',
             complexity: 'medium',
+            unavailable: true,
+            category,
           },
         },
       });
@@ -217,7 +239,7 @@ redteamRouter.post('/generate-strategy-sample', async (req: Request, res: Respon
       },
     };
 
-    logger.debug(`Generating sample for strategy ${strategyId} with config:`, config);
+    logger.debug(`Generating sample for strategy ${strategyId} with config: ${JSON.stringify(config)}`);
 
     // Apply strategy transformation
     const transformedCases = await strategy.action([seedTestCase], injectVar, config);
