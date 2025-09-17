@@ -45,6 +45,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     addFilter,
     setIsStreaming,
     setFilterMode,
+    resetFilterMode,
   } = useTableStore();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
@@ -132,6 +133,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Reset filters when navigating to a different eval; necessary because Zustand
     // is a global store.
     resetFilters();
+    resetFilterMode();
 
     // Check for a `plugin` param in the URL; we support filtering on plugins via the URL which
     // enables the "View Logs" functionality in Vulnerability reports.

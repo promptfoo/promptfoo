@@ -242,6 +242,7 @@ interface TableState {
 
   filterMode: EvalResultsFilterMode;
   setFilterMode: (filterMode: EvalResultsFilterMode) => void;
+  resetFilterMode: () => void;
 }
 
 interface SettingsState {
@@ -634,4 +635,5 @@ export const useTableStore = create<TableState>()((set, get) => ({
   filterMode: 'all',
   setFilterMode: (filterMode: EvalResultsFilterMode) =>
     set((prevState) => ({ ...prevState, filterMode })),
+  resetFilterMode: () => set((prevState) => ({ ...prevState, filterMode: 'all' })),
 }));
