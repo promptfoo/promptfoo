@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -68,6 +69,7 @@ const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter((id) => id
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
+  const toast = useToast();
   const theme = useTheme();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
@@ -418,6 +420,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               isGenerating: false,
               sample: data.sample,
             });
+            // Show error toast if there's an error message even with fallback sample
+            if (data.error) {
+              toast.showToast(`Strategy sample generation: ${data.error}`, 'warning');
+            }
           } else {
             throw new Error(data.error || `Failed to generate strategy sample: ${response.status}`);
           }

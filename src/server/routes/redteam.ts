@@ -4,9 +4,9 @@ import cliState from '../../cliState';
 import logger from '../../logger';
 import { REDTEAM_MODEL } from '../../redteam/constants';
 import { ALL_STRATEGIES } from '../../redteam/constants/strategies';
+import { subCategoryDescriptions } from '../../redteam/constants/metadata';
 import { Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
-import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies';
 import { evalJobs } from './eval';
@@ -25,6 +25,20 @@ const TRANSFORM_STRATEGIES = new Set([
   'emoji',
   'prompt-injection',
 ]);
+
+// Strategy metadata for sample generation
+const STRATEGY_METADATA = {
+  base64: { effectiveness: 'low', complexity: 'low' },
+  hex: { effectiveness: 'low', complexity: 'low' },
+  rot13: { effectiveness: 'low', complexity: 'low' },
+  leetspeak: { effectiveness: 'medium', complexity: 'low' },
+  homoglyph: { effectiveness: 'high', complexity: 'medium' },
+  morse: { effectiveness: 'low', complexity: 'low' },
+  piglatin: { effectiveness: 'low', complexity: 'low' },
+  camelcase: { effectiveness: 'low', complexity: 'low' },
+  emoji: { effectiveness: 'low', complexity: 'low' },
+  'prompt-injection': { effectiveness: 'high', complexity: 'medium' },
+} as const;
 
 export const redteamRouter = Router();
 
@@ -283,17 +297,21 @@ redteamRouter.post(
       // Convert strategy result to sample format
       const transformedCase = transformedCases[0];
       const transformedPrompt = transformedCase.vars?.[injectVar] || basePrompt;
+      const strategyMeta = STRATEGY_METADATA[strategyId as keyof typeof STRATEGY_METADATA] || {
+        effectiveness: 'medium' as const,
+        complexity: 'low' as const,
+      };
 
       const sample = {
         title: `${strategyId} Strategy Transformation`,
-        summary: `Applied ${strategyId} strategy to modify the test prompt`,
+        summary: subCategoryDescriptions[strategyId as keyof typeof subCategoryDescriptions] || `Applied ${strategyId} strategy to modify the test prompt`,
         mode: 'template' as const,
         modifiedPrompts: [transformedPrompt],
         metadata: {
           originalPrompt: basePrompt,
           strategyId,
-          effectiveness: 'medium' as const,
-          complexity: 'low' as const,
+          effectiveness: strategyMeta.effectiveness,
+          complexity: strategyMeta.complexity,
           ...(transformedCase.metadata && { strategyMetadata: transformedCase.metadata }),
         },
       };
