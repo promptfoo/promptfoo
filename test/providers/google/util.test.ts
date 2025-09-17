@@ -1589,5 +1589,66 @@ describe('util', () => {
       const result = await resolveProjectId(config, env);
       expect(result).toBe(mockProjectId);
     });
+
+    it('should handle Google Auth Library getProjectId failure gracefully', async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Mock Google Auth Library where getProjectId throws an error
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        fromJSON: jest.fn().mockResolvedValue({ name: 'mockCredentialClient' }),
+        getProjectId: jest
+          .fn()
+          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      // Test that explicit config projectId is still used even when getProjectId fails
+      const config = {
+        projectId: 'explicit-project',
+        credentials: '{"type": "service_account", "project_id": "creds-project"}',
+      };
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+
+      // Verify that getProjectId was called but failed gracefully
+      expect(mockAuth.getProjectId).toHaveBeenCalled();
+      expect(mockAuth.fromJSON).toHaveBeenCalled();
+    });
+
+    it('should return empty string when all sources fail', async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Mock Google Auth Library where getProjectId throws an error
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: jest
+          .fn()
+          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      // Test that when no projectId is available anywhere, we get empty string
+      const config = {};
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('');
+
+      // Verify that getProjectId was called but failed gracefully
+      expect(mockAuth.getProjectId).toHaveBeenCalled();
+    });
   });
 });
