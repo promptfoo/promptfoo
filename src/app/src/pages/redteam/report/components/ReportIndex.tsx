@@ -4,6 +4,7 @@ import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -18,7 +19,7 @@ import {
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
 import { useNavigate } from 'react-router-dom';
-import type { ResultLightweightWithLabel } from '@promptfoo/types';
+import type { EvalSummary } from '@promptfoo/types';
 
 function CustomToolbar() {
   return (
@@ -32,69 +33,46 @@ function CustomToolbar() {
   );
 }
 
-function ReportsDataGrid({
-  data,
-  isLoading,
-}: {
-  data: ResultLightweightWithLabel[];
-  isLoading: boolean;
-}) {
+function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: boolean }) {
   const navigate = useNavigate();
 
-  const columns: GridColDef<ResultLightweightWithLabel>[] = useMemo(
+  const columns: GridColDef<EvalSummary>[] = useMemo(
     () => [
       {
         field: 'description',
         headerName: 'Name',
         type: 'string',
         flex: 2,
-        valueGetter: (params: GridRenderCellParams<ResultLightweightWithLabel>) => {
+        valueGetter: (params: GridRenderCellParams<EvalSummary>) => {
           return params || 'Untitled Evaluation';
         },
         cellClassName: 'dg-cursor-pointer',
       },
-      // {
-      //   field: 'targetId',
-      //   headerName: 'Target',
-      //   type: 'string',
-      //   flex: 1,
-      //   valueGetter: (params: GridRenderCellParams<ResultLightweightWithLabel>) => {
-      //     return params?.row?.providerId
-      //       ? providers?.find((p) => p.id === params?.row.providerId)?.name || 'No target'
-      //       : params?.row?.targetId || 'No target';
-      //   },
-      //   renderCell: (params: GridRenderCellParams<ResultLightweightWithLabel>) => {
-      //     if (!params || !params.row) {
-      //       return <Chip label="No target" size="small" />;
-      //     }
+      {
+        field: 'providers',
+        headerName: 'Target',
+        type: 'string',
+        flex: 1,
+        valueGetter: (value: EvalSummary['providers']) =>
+          value.length > 0 ? (value[0].label ?? value[0].id) : null,
+        renderCell: (params: GridRenderCellParams<EvalSummary>) => {
+          const value = params.row.providers.length > 0 ? params.row.providers[0] : null;
 
-      //     const targetName = params.row.providerId
-      //       ? providers?.find((p) => p.id === params.row.providerId)?.name || 'No target'
-      //       : params.row.targetId || 'No target';
+          if (!params || !params.row || !value) {
+            return <Chip label="No target" size="small" />;
+          }
 
-      //     return (
-      //       <Chip
-      //         label={targetName}
-      //         size="small"
-      //         sx={{
-      //           bgcolor: params.row.targetId ? 'primary.50' : 'grey.100',
-      //           color: params.row.targetId ? 'primary.700' : 'text.secondary',
-      //           fontWeight: 500,
-      //         }}
-      //       />
-      //     );
-      //   },
-      //   cellClassName: 'dg-cursor-pointer',
-      // },
+          return <Chip label={value.label ?? value.id} size="small" sx={{ fontWeight: 500 }} />;
+        },
+        cellClassName: 'dg-cursor-pointer',
+      },
       {
         field: 'createdAt',
         headerName: 'Scanned At',
         type: 'dateTime',
         flex: 1,
-        valueGetter: (value: ResultLightweightWithLabel['createdAt']) =>
-          value ? new Date(value) : null,
-        valueFormatter: (value: ResultLightweightWithLabel['createdAt']) =>
-          formatDataGridDate(value),
+        valueGetter: (value: EvalSummary['createdAt']) => (value ? new Date(value) : null),
+        valueFormatter: (value: EvalSummary['createdAt']) => formatDataGridDate(value),
         cellClassName: 'dg-cursor-pointer',
       },
       {
@@ -102,7 +80,7 @@ function ReportsDataGrid({
         headerName: 'Eval ID',
         type: 'string',
         flex: 1,
-        renderCell: (params: GridRenderCellParams<ResultLightweightWithLabel>) => {
+        renderCell: (params: GridRenderCellParams<EvalSummary>) => {
           if (!params || params.value === undefined) {
             return null;
           }
@@ -152,21 +130,20 @@ function ReportsDataGrid({
 }
 
 export default function ReportIndex() {
-  const [data, setData] = useState<ResultLightweightWithLabel[]>([]);
+  const [data, setData] = useState<EvalSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = async () => {
     try {
-      // TODO: Pass the isReadteam as a query param?
-      const resp = await callApi('/results', { cache: 'no-store' });
+      const resp = await callApi('/results?type=redteam&includeProviders=true', {
+        cache: 'no-store',
+      });
       if (!resp.ok) {
         throw new Error(`${resp.status}: ${resp.statusText}`);
       }
-      const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
-      // Only show redteam evals
-      const redteamEvals = body.data.filter((eval_) => eval_.isRedteam);
-      setData(redteamEvals);
+      const body = (await resp.json()) as { data: EvalSummary[] };
+      setData(body.data);
     } catch (error) {
       setError(error as Error);
     } finally {
@@ -179,7 +156,7 @@ export default function ReportIndex() {
   }, []);
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4 }}>
+    <Container maxWidth="xl" sx={{ mt: 4 }}>
       <Typography variant="h4" gutterBottom>
         Vulnerability Reports
       </Typography>
