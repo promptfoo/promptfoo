@@ -133,7 +133,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Reset filters when navigating to a different eval; necessary because Zustand
     // is a global store.
     resetFilters();
-    resetFilterMode();
 
     // Check for a `plugin` param in the URL; we support filtering on plugins via the URL which
     // enables the "View Logs" functionality in Vulnerability reports.
@@ -141,9 +140,6 @@ export default function Eval({ fetchId }: EvalOptions) {
 
     // Check for >=1 metric params in the URL.
     const metricParams = searchParams.getAll('metric');
-
-    // Check for a `mode` param in the URL.
-    const modeParam = searchParams.get('mode');
 
     if (pluginParams.length > 0) {
       pluginParams.forEach((pluginParam) => {
@@ -167,8 +163,16 @@ export default function Eval({ fetchId }: EvalOptions) {
       });
     }
 
+    // Check for a `mode` param in the URL.
+    const modeParam = searchParams.get('mode');
+
+    // If a mode param is provided, set the filter mode to the provided value.
+    // Otherwise, reset the filter mode to ensure that the filter mode from the previously viewed eval
+    // is not applied (again, because Zustand is a global store).
     if (modeParam && EvalResultsFilterMode.safeParse(modeParam).success) {
       setFilterMode(modeParam as EvalResultsFilterMode);
+    } else {
+      resetFilterMode();
     }
 
     if (fetchId) {
