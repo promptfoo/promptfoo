@@ -10,7 +10,7 @@ import { redteamProviderManager } from '../../redteam/providers/shared';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies';
 import { evalJobs } from './eval';
-import { EchoProvider } from '../../providers/echo';
+import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import type { Request, Response } from 'express';
 
 // Transform-only strategies supported in Milestone 1
@@ -27,8 +27,9 @@ const TRANSFORM_STRATEGIES = new Set([
   'prompt-injection',
 ]);
 
-// Iterative strategies supported in Milestone 2
-const ITERATIVE_STRATEGIES = new Set([
+// Demonstration simulation strategies supported in Milestone 2
+// These provide realistic conversation examples without calling real providers
+const SIMULATE_STRATEGIES = new Set([
   'crescendo',
   'goat',
   'custom',
@@ -53,8 +54,8 @@ const STRATEGY_METADATA = {
   'mischievous-user': { effectiveness: 'medium', complexity: 'medium' },
 } as const;
 
-// Generate iterative strategy samples using simulated conversations
-async function generateIterativeStrategySample(
+// Generate demonstration conversation samples for visualization
+async function generateSimulatedStrategySample(
   strategyId: string,
   basePrompt: string,
   config: any
@@ -428,11 +429,11 @@ redteamRouter.post(
 
       // Check if strategy is supported
       const isTransformSupported = TRANSFORM_STRATEGIES.has(strategyId);
-      const isIterativeSupported = ITERATIVE_STRATEGIES.has(strategyId) && mode === 'simulate';
+      const isSimulateSupported = SIMULATE_STRATEGIES.has(strategyId) && mode === 'simulate';
 
-      if (!isTransformSupported && !isIterativeSupported) {
+      if (!isTransformSupported && !isSimulateSupported) {
         const isMultiModal = ['audio', 'image', 'video'].includes(strategyId);
-        const isIterative = ITERATIVE_STRATEGIES.has(strategyId);
+        const isSimulatable = SIMULATE_STRATEGIES.has(strategyId);
         const isAgentic = [
           'jailbreak',
           'jailbreak:tree',
@@ -445,8 +446,8 @@ redteamRouter.post(
         if (isMultiModal) {
           category = 'multi-modal';
         }
-        if (isIterative) {
-          category = 'iterative';
+        if (isSimulatable) {
+          category = 'conversation';
         }
         if (isAgentic) {
           category = 'agentic';
@@ -500,9 +501,9 @@ redteamRouter.post(
         `Generating sample for strategy ${strategyId} with config: ${JSON.stringify(config)}`,
       );
 
-      // Handle iterative strategies in simulate mode
-      if (ITERATIVE_STRATEGIES.has(strategyId) && mode === 'simulate') {
-        const sample = await generateIterativeStrategySample(strategyId, basePrompt, config);
+      // Handle demonstration simulation strategies in simulate mode
+      if (SIMULATE_STRATEGIES.has(strategyId) && mode === 'simulate') {
+        const sample = await generateSimulatedStrategySample(strategyId, basePrompt, config);
         res.json({ sample });
         return;
       }

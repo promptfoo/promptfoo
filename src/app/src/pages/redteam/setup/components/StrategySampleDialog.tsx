@@ -220,7 +220,7 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
                     key={index}
                     sx={{
                       p: 2,
-                      mb: index < generatedSample.modifiedPrompts.length - 1 ? 2 : 0,
+                      mb: index < (generatedSample.modifiedPrompts?.length || 0) - 1 ? 2 : 0,
                       backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
                       borderRadius: 1,
                       border: '1px solid',

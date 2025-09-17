@@ -38,8 +38,8 @@ import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 // Types & Interfaces
 // ------------------------------------------------------------------
 
-// Iterative strategies that require simulate mode
-const ITERATIVE_STRATEGIES = new Set([
+// Demonstration simulation strategies that use simulate mode
+const SIMULATE_STRATEGIES = new Set([
   'crescendo',
   'goat',
   'custom',
@@ -393,7 +393,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         });
 
         // Determine mode based on strategy type
-        const mode = ITERATIVE_STRATEGIES.has(strategyId) ? 'simulate' : 'template';
+        const mode = SIMULATE_STRATEGIES.has(strategyId) ? 'simulate' : 'template';
 
         // Call API
         const response = await callApi('/redteam/generate-strategy-sample', {
