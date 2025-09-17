@@ -354,7 +354,7 @@ jobs:
 
       - name: Run Redteam
         run: |
-          npm run test:redteam:integration --verbose
+          npm run test:redteam:integration
 
   redteam-custom-enterprise-server:
     name: Redteam Custom Enterprise Server
