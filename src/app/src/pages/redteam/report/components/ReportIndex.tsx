@@ -76,6 +76,17 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
         cellClassName: 'dg-cursor-pointer',
       },
       {
+        field: 'passRate',
+        headerName: 'Attack Success Rate',
+        type: 'number',
+        flex: 1,
+        renderCell: (params: GridRenderCellParams<EvalSummary>) => {
+          return `${params.value.toFixed(2)}%`;
+        },
+        valueFormatter: (value: number) => `${value.toFixed(2)}%`,
+        cellClassName: 'dg-cursor-pointer',
+      },
+      {
         field: 'evalId',
         headerName: 'Eval ID',
         type: 'string',
