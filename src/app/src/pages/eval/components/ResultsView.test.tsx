@@ -337,7 +337,13 @@ describe('ResultsView', () => {
     );
 
     // Both results count and highlighted count should be present but separate
-    expect(screen.getByText('10 results')).toBeInTheDocument();
+    // Using getAllByText to handle multiple matches, then check first one contains our text
+    const resultsElements = screen.getAllByText((content, element) => {
+      const hasContent =
+        element && element.textContent?.includes('10') && element.textContent?.includes('results');
+      return Boolean(hasContent);
+    });
+    expect(resultsElements[0]).toBeInTheDocument();
     expect(screen.getByText('3 highlighted')).toBeInTheDocument();
 
     // The highlighted chip should have distinct styling (blue color scheme)

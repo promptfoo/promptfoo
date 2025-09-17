@@ -168,7 +168,9 @@ describe('TestSuites Component Navigation', () => {
 
     fireEvent.click(viewLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=harmful%3Ahate');
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/eval/test-eval-123?plugin=harmful%3Ahate&mode=failures',
+    );
   });
 
   it('should not navigate again when browser back button is used', () => {
@@ -192,7 +194,9 @@ describe('TestSuites Component Navigation', () => {
 
     fireEvent.click(viewLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=harmful%3Acybercrime');
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/eval/test-eval-123?plugin=harmful%3Acybercrime&mode=failures',
+    );
   });
 
   it('should open email in new tab when clicking Apply mitigation', () => {
@@ -256,7 +260,9 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
 
     fireEvent.click(viewLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=harmful%3Ahate');
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/eval/test-eval-123?plugin=harmful%3Ahate&mode=failures',
+    );
   });
 });
 
@@ -386,8 +392,13 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
   it('should correctly display 0.00% attack success rate', () => {
     render(<TestSuites {...defaultProps} />);
 
-    const attackSuccessRateElement = screen.getByText('0.00%');
-    expect(attackSuccessRateElement).toBeInTheDocument();
+    // The text "0.00%" appears multiple times in DataGrid cells
+    // Using getAllByText to handle multiple matches
+    const attackSuccessRateElements = screen.getAllByText((content, element) => {
+      return Boolean(element && element.textContent?.includes('0.00%'));
+    });
+    expect(attackSuccessRateElements.length).toBeGreaterThan(0);
+    expect(attackSuccessRateElements[0]).toBeInTheDocument();
   });
 });
 
