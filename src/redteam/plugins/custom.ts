@@ -12,6 +12,7 @@ const CustomPluginDefinitionSchema = z
   .object({
     generator: z.string().min(1, 'Generator must not be empty').trim(),
     grader: z.string().min(1, 'Grader must not be empty').trim(),
+    threshold: z.number().optional(),
     id: z.string().optional(),
   })
   .strict();
@@ -59,11 +60,15 @@ export class CustomPlugin extends RedteamPluginBase {
     const nunjucks = getNunjucksEngine();
     const renderedGrader = nunjucks.renderString(this.definition.grader, { purpose: this.purpose });
 
-    return [
-      {
-        type: 'llm-rubric',
-        value: renderedGrader,
-      },
-    ];
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: renderedGrader,
+    };
+
+    if (this.definition.threshold !== undefined) {
+      assertion.threshold = this.definition.threshold;
+    }
+
+    return [assertion];
   }
 }

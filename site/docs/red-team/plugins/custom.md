@@ -24,12 +24,14 @@ The custom plugin YAML file should have the following structure:
 ```yaml
 generator: Your custom generator prompt here
 grader: Your custom grader prompt here
+threshold: 0.7 # Optional: minimum score required to pass
 ```
 
 The Custom Plugin loads the plugin definition from the specified YAML file and uses it to generate test cases and grade responses.
 
 1. Generator: The `generator` field in your YAML file should contain a string template that defines how to generate test prompts.
 2. Grader: The `grader` field should contain a string template that defines how to evaluate the AI's responses.
+3. Threshold: The optional `threshold` field sets a minimum score requirement for tests to pass.
 
 ## Prompt Formatting
 
