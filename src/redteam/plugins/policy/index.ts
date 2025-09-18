@@ -35,6 +35,10 @@ export class PolicyPlugin extends RedteamPluginBase {
    * The ID of the policy; available if the policy is loaded from Promptfoo Cloud.
    */
   private policyId?: PolicyObject['id'];
+  /**
+   * The name of the policy; available if the policy is loaded from Promptfoo Cloud.
+   */
+  private name?: PolicyObject['name'];
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
     super(provider, purpose, injectVar, config);
@@ -51,6 +55,7 @@ export class PolicyPlugin extends RedteamPluginBase {
 
       this.policy = config.policy.text;
       this.policyId = config.policy.id;
+      this.name = config.policy.name;
     } else if (typeof config.policy === 'string') {
       this.policy = config.policy; // The policy declaration is itself the policy text
     }
@@ -124,6 +129,7 @@ export class PolicyPlugin extends RedteamPluginBase {
         ...test.metadata,
         policy: this.policy,
         ...(this.policyId && { policyId: this.policyId }),
+        ...(this.name && { policyName: this.name }),
       },
     }));
   }

@@ -13,6 +13,7 @@ export type Intent = string | string[];
 export const PolicyObjectSchema = z.object({
   id: z.string().uuid(),
   text: z.string().optional(),
+  name: z.string().optional(),
 });
 export type PolicyObject = z.infer<typeof PolicyObjectSchema>;
 export type Policy = string | PolicyObject; // Policy Text or Policy ID
@@ -21,6 +22,7 @@ export type PoliciesById = Map<
   PolicyObject['id'],
   {
     text: Required<PolicyObject>['text'];
+    name: Required<PolicyObject>['name'];
     severity: Severity;
   }
 >;
