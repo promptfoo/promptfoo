@@ -31,6 +31,7 @@ import { getStrategyIdFromTest } from './shared';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
+import { POLICY_METRIC_PREFIX } from '@promptfoo/redteam/plugins/policy/constants';
 import {
   calculatePluginRiskScore,
   type PluginCategoryStatsByPluginId,
@@ -435,7 +436,9 @@ const TestSuites = ({
             size="small"
             onClick={() => {
               const pluginId = params.row.pluginName;
-              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
+              // Custom policies are uniquely identified using metrics, not plugin ids.
+              const key = pluginId.startsWith(`${POLICY_METRIC_PREFIX}:`) ? 'metric' : 'plugin';
+              navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}`);
             }}
           >
             View logs
