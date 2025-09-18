@@ -218,6 +218,7 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         const projectId = await parentClass.getProjectId();
         const token = await client.getAccessToken();
         gatewayEmbeddingModel = provider.embeddingModel({
+          authType: 'accessToken',
           modelName: this.modelName,
           accessToken: token.token as string,
           location: parentClass.getRegion(),
