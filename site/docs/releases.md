@@ -12,73 +12,50 @@ Full release history for Promptfoo open source can be found on [GitHub](https://
 
 ## August 2025 Release Highlights {#august-2025}
 
-This month we added support for **new models**, **model audit cloud sharing**, and **performance improvements**.
+### General
+
+- **Model audit** allows you to scan AI/LLM models before deployment. Scan results are now saved in the database; they can be viewed and searched in the model audit UI in the new History tab. Model audit scans can also be shared to the cloud. Further information about the types of security risks found and installation are on the [model audit page](/docs/model-audit/).
+
+![Model Audit UI](/img/release-notes/aug-25/model-audit-aug-25.png)
+
+- Edit prompts and re-run them from the details dialog
+
+### Assertions and metrics
+
+- **[Conversational relevancy](/docs/configuration/expected-outputs/model-graded/conversation-relevance)** - New model graded metric. Evaluates whether responses in a conversation remain relevant throughout the dialogue.
+- **[contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)** - New assertion. Checks if output contains HTML content without requiring specific tags
+- **[is-html](/docs/configuration/expected-outputs/deterministic/#is-html)** - New assertion. Validates that the entire output is valid HTML
+
+### Providers
+
+- Support for Claude Opus 4.1, gpt-5, gpt-5-mini, gpt-5-nano added. View our [foundation model security reports](https://promptfoo.dev/models/reports).
+- **Prompt config override** - Available for all providers (prompt functions that return a structured object with both prompt content and configuration to merge with the provider). [Example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-prompt-function).
+- **Gemini 2.5 Pro** - Updated Google default grading providers.
+- **Google AI Studio** - Default providers for Google AI Studio using Gemini 2.5-pro added. Google AI Studio credentials can be used natively.
+- **Ollama** - Think and passthrough parameter support added.
+- **Preset targets added** - Vertex AI, AWS Bedrock, and SageMaker added as preset targets for Enterprise.
 
 ### Evals
 
-#### New Models / Providers {#august-2025-providers}
+- _Trace visualization and citations_ - Added to eval output for Enterprise.
 
-##### New Model Support
+### Red-teaming
 
-- **[GPT-5](/docs/providers/openai/)** - Added support for OpenAI's GPT-5 model with advanced reasoning capabilities
-- **[Claude Opus 4.1](/docs/providers/anthropic/)** - Support for Anthropic's latest Claude model
-- **[xAI Grok Code Fast](/docs/providers/xai/)** - Added xAI's Grok Code Fast model for coding tasks
+- **Plugin selection** - Improved with a plugin 'cart'.
 
-##### Provider Updates
+![Plugin Cart Selection](/img/release-notes/aug-25/plugin-cart-selection-aug-25.png)
 
-- **[Enhanced Vertex AI](/docs/providers/vertex/)** - Improved credential management and authentication
-- **[Google AI Studio](/docs/providers/google/)** - Added default provider configurations for Google AI Studio models
+You can also click the magic wand to generate a test case sample.
 
-#### Model Audit Cloud Integration {#august-2025-model-audit}
+![Magic Wand Feature](/img/release-notes/aug-25/magic-wand-aug-25.png)
 
-##### Model Audit Cloud Sharing
+- **Provider selection menu** - Has been improved with better support for agents; provider types can be selected from the red team setup.
 
-Model audit results can now be shared to the cloud for team collaboration:
+![Provider Selection Menu](/img/release-notes/aug-25/provider-selection-aug-25.png)
 
-- **Persistent audit history** - Track security scans over time
-- **Team sharing** - Share audit results across teams
-- **Centralized storage** - Store audit reports in the cloud
-- **Path management** - Remove recent scan paths from history
-
-##### Enhanced Authentication
-
-Added support for advanced authentication methods:
-
-- **Certificate storage** - Store client certificates for mTLS authentication
-- **Signature authentication** - Support for uploaded signature-based authentication
-- **Credential sanitization** - Prevent credential exposure in debug logs
-
-#### Enhanced Configuration and Usability {#august-2025-usability}
-
-##### AI-Powered HTTP Configuration
-
-Added auto-fill capabilities for HTTP provider setup to reduce configuration time and errors.
-
-#### Performance and Reliability Improvements {#august-2025-performance}
-
-##### Performance Improvements
-
-- **HuggingFace dataset fetching** - Improved speed and reliability for large datasets
-- **Error handling** - Better diagnostic messages and retry suggestions
-- **UI improvements** - Streamlined interfaces and progress indicators
-
-### Red Teaming
-
-#### Healthcare AI Safety {#august-2025-healthcare}
-
-##### Medical Off-Label Use Plugin
-
-Added **[Medical Off-Label Use Detection](/docs/red-team/plugins/medical/)** plugin to identify inappropriate pharmaceutical recommendations that could endanger patients.
-
-#### Enhanced Attack Detection {#august-2025-strategies}
-
-##### Unverifiable Claims Plugin
-
-Added **[Unverifiable Claims Detection](/docs/red-team/plugins/)** plugin to test AI systems' susceptibility to generating fabricated but plausible-sounding claims.
-
-##### MCP Agent Testing
-
-Added **[MCP Agent example](/docs/red-team/mcp-security-testing/)** for red team testing with tool call results, demonstrating how to test AI systems that use Model Context Protocol.
+- **[Unverifiable claims](/docs/red-team/plugins/unverifiable-claims/)** - New plugin. Detects when AI models make claims that cannot be verified even in principle. Supports all types of LLM chatbots. Contains 8 categories of unverifiable claims.
+- **[Medical off-label use](/docs/red-team/plugins/medical/#medical-off-label-use)** - New plugin. Tests whether AI systems inappropriately recommend off-label use of medications without proper requirements.
+- **linkedTargetId configuration option** - Enterprise. Added for custom providers to link their evaluation results to existing cloud targets. Useful for guardrail workflows.
 
 ### See Also {#august-2025-see-also}
 
