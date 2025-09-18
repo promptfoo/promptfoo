@@ -174,6 +174,7 @@ describe('RedteamGoatProvider', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-promptfoo-version': expect.any(String),
         },
         body: expect.any(String),
       }),

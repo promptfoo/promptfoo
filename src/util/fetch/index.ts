@@ -5,17 +5,32 @@ import type { ConnectionOptions } from 'tls';
 import { getProxyForUrl } from 'proxy-from-env';
 import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../../cliState';
-import { VERSION } from '../../constants';
+import {
+  CONSENT_ENDPOINT,
+  EVENTS_ENDPOINT,
+  KA_ENDPOINT,
+  R_ENDPOINT,
+  VERSION,
+} from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
-import logger from '../../logger';
+import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
+import logger, { logRequestResponse } from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
-import { monkeyPatchFetch } from './monkeyPatchFetch';
 
-// Override global fetch
-global.fetch = monkeyPatchFetch;
+// Note: Global fetch override removed to prevent library users from being affected
+// All promptfoo code should use fetchWithProxy, fetchWithTimeout, or fetchWithRetries instead
+
+function isConnectionError(error: Error) {
+  return (
+    error instanceof TypeError &&
+    error.message === 'fetch failed' &&
+    // @ts-expect-error undici error cause
+    error.cause?.stack?.includes('internalConnectMultiple')
+  );
+}
 
 /**
  * Options for configuring TLS in proxy connections
@@ -47,6 +62,14 @@ export async function fetchWithProxy(
   url: RequestInfo,
   options: PromptfooRequestInit = {},
 ): Promise<Response> {
+  // Enhanced fetch with logging, authentication, proxy support, and error handling
+  const NO_LOG_URLS = [KA_ENDPOINT, R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
+  // Don't log localhost health checks to reduce startup noise
+  const isLocalHealthCheck =
+    url.toString().includes('localhost') && url.toString().includes('/health');
+  const logEnabled =
+    !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl)) && !isLocalHealthCheck;
+
   let finalUrl = url;
   let finalUrlString: string | undefined;
 
@@ -58,14 +81,35 @@ export async function fetchWithProxy(
     finalUrlString = url.url;
   }
 
+  // Determine if this is a promptfoo service that should receive version header
+  const isPromptrfooService =
+    finalUrlString &&
+    (finalUrlString.includes('promptfoo.app') ||
+      finalUrlString.includes('promptfoo.dev') ||
+      finalUrlString.includes(CLOUD_API_HOST));
+
   const finalOptions: PromptfooRequestInit = {
     ...options,
     headers: {
       ...(options.headers as Record<string, string>),
-      'x-promptfoo-version': VERSION,
+      // Only send version header to promptfoo services
+      ...(isPromptrfooService ? { 'x-promptfoo-version': VERSION } : {}),
     },
   };
 
+  // Handle cloud API authentication
+  if (
+    (typeof url === 'string' && url.startsWith(CLOUD_API_HOST)) ||
+    (url instanceof URL && url.host === CLOUD_API_HOST.replace(/^https?:\/\//, ''))
+  ) {
+    const token = cloudConfig.getApiKey();
+    finalOptions.headers = {
+      ...(finalOptions.headers as Record<string, string>),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  }
+
+  // Handle URL credentials
   if (typeof url === 'string') {
     try {
       const parsedUrl = new URL(url);
@@ -131,7 +175,40 @@ export async function fetchWithProxy(
     setGlobalDispatcher(agent);
   }
 
-  return await fetch(finalUrl, finalOptions);
+  try {
+    const response = await fetch(finalUrl, finalOptions);
+
+    if (logEnabled) {
+      logRequestResponse({
+        url: finalUrl.toString(),
+        requestBody: finalOptions.body,
+        requestMethod: finalOptions.method || 'GET',
+        response,
+      });
+    }
+
+    return response;
+  } catch (e) {
+    if (logEnabled) {
+      logRequestResponse({
+        url: finalUrl.toString(),
+        requestBody: finalOptions.body,
+        requestMethod: finalOptions.method || 'GET',
+        response: null,
+        error: true,
+      });
+      if (isConnectionError(e as Error)) {
+        logger.error(
+          `Connection error, please check your network connectivity to the host: ${finalUrl} ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY ? `or Proxy: ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY}` : ''}`,
+        );
+        throw e;
+      }
+      logger.error(
+        `Error in fetch: ${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`,
+      );
+    }
+    throw e;
+  }
 }
 
 export function fetchWithTimeout(

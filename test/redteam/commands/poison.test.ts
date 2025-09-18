@@ -75,6 +75,7 @@ describe('poison command', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-promptfoo-version': expect.any(String),
         },
         body: JSON.stringify({
           task: 'poison-document',

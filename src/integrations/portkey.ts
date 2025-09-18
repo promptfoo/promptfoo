@@ -1,5 +1,6 @@
 import { getEnvString } from '../envars';
 import invariant from '../util/invariant';
+import { fetchWithProxy } from '../util/fetch';
 
 interface PortkeyResponse {
   success: boolean;
@@ -26,7 +27,7 @@ export async function getPrompt(
   invariant(apiKey, 'PORTKEY_API_KEY is required');
 
   const url = `https://api.portkey.ai/v1/prompts/${id}/render`;
-  const response = await fetch(url, {
+  const response = await fetchWithProxy(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

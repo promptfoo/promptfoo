@@ -3,16 +3,9 @@ import path from 'path';
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
-import {
-  CONSENT_ENDPOINT,
-  EVENTS_ENDPOINT,
-  KA_ENDPOINT,
-  R_ENDPOINT,
-  VERSION,
-} from '../src/constants';
+import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
-import { CLOUD_API_HOST, cloudConfig } from '../src/globalConfig/cloud';
-import logger, { logRequestResponse } from '../src/logger';
+import logger from '../src/logger';
 import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
   fetchWithProxy,
@@ -155,8 +148,8 @@ describe('fetchWithProxy', () => {
     jest.resetAllMocks();
   });
 
-  it('should add version header to all requests', async () => {
-    const url = 'https://example.com/api';
+  it('should add version header to promptfoo services', async () => {
+    const url = 'https://api.promptfoo.app/api';
     await fetchWithProxy(url);
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -164,6 +157,20 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           'x-promptfoo-version': VERSION,
+        }),
+      }),
+    );
+  });
+
+  it('should NOT add version header to third-party services', async () => {
+    const url = 'https://api.github.com/api';
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          'x-promptfoo-version': expect.anything(),
         }),
       }),
     );
@@ -181,7 +188,6 @@ describe('fetchWithProxy', () => {
         headers: {
           'Content-Type': 'application/json',
           Authorization: expect.any(String),
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -198,7 +204,6 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           'Content-Type': 'application/json',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -231,7 +236,6 @@ describe('fetchWithProxy', () => {
         headers: {
           Authorization: 'Bearer token123',
           'Content-Type': 'application/json',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -255,7 +259,6 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           Authorization: 'Bearer token123',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -270,7 +273,6 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           Authorization: 'Basic OnBhc3N3b3Jk',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -285,7 +287,6 @@ describe('fetchWithProxy', () => {
       expect.objectContaining({
         headers: {
           Authorization: 'Basic dXNlcm5hbWU6',
-          'x-promptfoo-version': VERSION,
         },
       }),
     );
@@ -309,7 +310,6 @@ describe('fetchWithProxy', () => {
           'Content-Type': 'application/json',
           'X-Custom-Header': 'value',
           Authorization: expect.any(String),
-          'x-promptfoo-version': VERSION,
         },
       }),
     );

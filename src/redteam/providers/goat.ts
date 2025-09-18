@@ -10,6 +10,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { fetchWithProxy } from '../../util/fetch';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 
@@ -213,7 +214,7 @@ export default class GoatProvider implements ApiProvider {
             modifiers: context?.test?.metadata?.modifiers,
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-          response = await fetch(getRemoteGenerationUrl(), {
+          response = await fetchWithProxy(getRemoteGenerationUrl(), {
             body,
             headers: {
               'Content-Type': 'application/json',
@@ -248,7 +249,7 @@ export default class GoatProvider implements ApiProvider {
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-        response = await fetch(getRemoteGenerationUrl(), {
+        response = await fetchWithProxy(getRemoteGenerationUrl(), {
           body,
           headers: {
             'Content-Type': 'application/json',

@@ -64,7 +64,9 @@ describe('init command', () => {
 
       await init.downloadFile('https://example.com/file.txt', '/path/to/file.txt');
 
-      expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.txt');
+      expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.txt', {
+        headers: {}, // No version header for third-party services like GitHub
+      });
       expect(fs.writeFile).toHaveBeenCalledWith('/path/to/file.txt', 'file content');
     });
 
