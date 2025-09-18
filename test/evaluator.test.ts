@@ -3597,9 +3597,8 @@ describe('evaluator defaultTest merging', () => {
           vars: { text: 'Hello world' },
           assert: [
             {
-              type: 'similar',
-              value: 'expected output',
-              threshold: 0.8,
+              type: 'equals',
+              value: 'Test output',
             },
           ],
         },
