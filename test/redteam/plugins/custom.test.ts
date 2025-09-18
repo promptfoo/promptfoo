@@ -42,7 +42,13 @@ describe('CustomPlugin', () => {
       expect.arrayContaining([
         expect.objectContaining({
           vars: { testVar: 'Test prompt 1' },
-          assert: [{ type: 'llm-rubric', value: 'Grade the response based on test-purpose' }],
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'Grade the response based on test-purpose',
+              metric: 'custom',
+            },
+          ],
         }),
         expect.objectContaining({
           vars: { testVar: 'Test prompt 2' },
@@ -67,7 +73,7 @@ describe('CustomPlugin', () => {
   it('should render the grader template with the correct purpose', () => {
     const assertions = plugin['getAssertions']('Some prompt');
     expect(assertions).toEqual([
-      { type: 'llm-rubric', value: 'Grade the response based on test-purpose' },
+      { type: 'llm-rubric', value: 'Grade the response based on test-purpose', metric: 'custom' },
     ]);
   });
 
@@ -91,6 +97,7 @@ describe('CustomPlugin', () => {
         type: 'llm-rubric',
         value: 'Grade the response based on test-purpose',
         threshold: 0.8,
+        metric: 'custom',
       },
     ]);
   });
@@ -110,7 +117,7 @@ describe('CustomPlugin', () => {
 
     const assertions = pluginWithoutThreshold['getAssertions']('Some prompt');
     expect(assertions).toEqual([
-      { type: 'llm-rubric', value: 'Grade the response based on test-purpose' },
+      { type: 'llm-rubric', value: 'Grade the response based on test-purpose', metric: 'custom' },
     ]);
     expect(assertions[0]).not.toHaveProperty('threshold');
   });
@@ -146,6 +153,30 @@ describe('CustomPlugin', () => {
     );
 
     expect(pluginWithoutMetric['getMetricName']()).toBe('custom');
+  });
+
+  it('should include the metric name in the assertion', () => {
+    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+      generator: 'Valid generator template',
+      grader: 'Valid grader template',
+      metric: 'my-custom-metric',
+    });
+
+    const pluginWithMetric = new CustomPlugin(
+      mockProvider,
+      'test-purpose',
+      'testVar',
+      'path/to/custom-plugin.json',
+    );
+
+    const assertions = pluginWithMetric['getAssertions']('Some prompt');
+    expect(assertions).toEqual([
+      {
+        type: 'llm-rubric',
+        value: 'Valid grader template',
+        metric: 'my-custom-metric',
+      },
+    ]);
   });
 });
 
