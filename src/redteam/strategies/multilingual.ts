@@ -16,6 +16,24 @@ import type { TestCase } from '../../types/index';
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
+/**
+ * MULTILINGUAL STRATEGY PERFORMANCE CHARACTERISTICS:
+ *
+ * Local translation (per test case with L languages):
+ * - Happy path: ~ceil(L/3) provider calls (default batch size 3)
+ * - Partial results: +1 call per missing language in failed batches
+ * - Complete failures: Falls back to individual calls (up to L additional calls)
+ * - Concurrency: Up to 4 test cases processed simultaneously
+ *
+ * Remote generation (T test cases):
+ * - Happy path: ~ceil(T/8) API calls (chunk size 8)
+ * - Partial chunks: +1 call per missing test case
+ * - Failed chunks: +up to 8 calls for individual retries
+ * - Trade-off: More API calls in failure scenarios, but complete coverage
+ *
+ * The strategy prioritizes reliability and completeness over raw speed,
+ * with graceful fallbacks ensuring maximum multilingual test case generation.
+ */
 
 /**
  * Escape language code for safe use in regex
@@ -35,7 +53,7 @@ function truncateForLog(output: any, maxLength = 2000): string {
   return jsonStr.substring(0, maxLength) + '... [truncated]';
 }
 
-const DEFAULT_BATCH_SIZE = 2; // Default number of languages to process in a single batch (reduced for reliability)
+const DEFAULT_BATCH_SIZE = 3; // Default number of languages to process in a single batch (balanced for efficiency and reliability)
 
 /**
  * Helper function to get the concurrency limit from config or use default
