@@ -16,42 +16,23 @@ import type { TestCase } from '../../types/index';
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
-/**
- * Helper function for bounded retries with jitter
- */
-async function withRetries<T>(
-  fn: () => Promise<T>,
-  options: { maxAttempts?: number; baseDelayMs?: number; jitter?: boolean } = {},
-): Promise<T> {
-  const { maxAttempts = 2, baseDelayMs = 1000, jitter = true } = options;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (attempt === maxAttempts) {
-        throw error;
-      }
-
-      // Exponential backoff with optional jitter
-      let delay = baseDelayMs * Math.pow(2, attempt - 1);
-      if (jitter) {
-        delay *= 0.5 + Math.random() * 0.5; // 50-100% of base delay
-      }
-
-      logger.debug(`Retry attempt ${attempt}/${maxAttempts} failed, waiting ${Math.round(delay)}ms: ${error}`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-
-  throw new Error('Retry attempts exhausted');
-}
 
 /**
  * Escape language code for safe use in regex
  */
 function escapeLanguageCode(lang: string): string {
   return lang.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Truncate large outputs for logging to prevent log bloat
+ */
+function truncateForLog(output: any, maxLength = 2000): string {
+  const jsonStr = JSON.stringify(output, null, 2);
+  if (jsonStr.length <= maxLength) {
+    return jsonStr;
+  }
+  return jsonStr.substring(0, maxLength) + '... [truncated]';
 }
 
 const DEFAULT_BATCH_SIZE = 2; // Default number of languages to process in a single batch (reduced for reliability)
@@ -368,12 +349,12 @@ async function translateBatchCore(
     }
 
     logger.error(
-      `[translateBatch] Failed to parse batch translation result. Provider Output: ${JSON.stringify(result.output, null, 2)}`,
+      `[translateBatch] Failed to parse batch translation result. Provider Output: ${truncateForLog(result.output)}`,
     );
     return {};
   } catch (error) {
     logger.error(
-      `[translateBatch] Error parsing translation result: ${error} Provider Output: ${JSON.stringify(result.output, null, 2)}`,
+      `[translateBatch] Error parsing translation result: ${error} Provider Output: ${truncateForLog(result.output)}`,
     );
     return {};
   }
