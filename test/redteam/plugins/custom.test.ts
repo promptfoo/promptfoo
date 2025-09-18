@@ -114,6 +114,39 @@ describe('CustomPlugin', () => {
     ]);
     expect(assertions[0]).not.toHaveProperty('threshold');
   });
+
+  it('should use the correct metric name', () => {
+    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+      generator: 'Valid generator template',
+      grader: 'Valid grader template',
+      metric: 'my-custom-metric',
+    });
+
+    const pluginWithMetric = new CustomPlugin(
+      mockProvider,
+      'test-purpose',
+      'testVar',
+      'path/to/custom-plugin.json',
+    );
+
+    expect(pluginWithMetric['getMetricName']()).toBe('my-custom-metric');
+  });
+
+  it('should use the default metric name if not specified', () => {
+    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+      generator: 'Valid generator template',
+      grader: 'Valid grader template',
+    });
+
+    const pluginWithoutMetric = new CustomPlugin(
+      mockProvider,
+      'test-purpose',
+      'testVar',
+      'path/to/custom-plugin.json',
+    );
+
+    expect(pluginWithoutMetric['getMetricName']()).toBe('custom');
+  });
 });
 
 describe('loadCustomPluginDefinition', () => {
