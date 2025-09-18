@@ -13,6 +13,7 @@ const CustomPluginDefinitionSchema = z
     generator: z.string().min(1, 'Generator must not be empty').trim(),
     grader: z.string().min(1, 'Grader must not be empty').trim(),
     threshold: z.number().optional(),
+    metric: z.string().optional(),
     id: z.string().optional(),
   })
   .strict();
@@ -54,6 +55,10 @@ export class CustomPlugin extends RedteamPluginBase {
 
   protected async getTemplate(): Promise<string> {
     return this.definition.generator;
+  }
+
+  protected getMetricName(): string {
+    return this.definition.metric ?? `custom`;
   }
 
   protected getAssertions(prompt: string): Assertion[] {
