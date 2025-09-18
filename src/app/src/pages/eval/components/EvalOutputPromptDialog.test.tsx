@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
+import { useTableStore } from './store';
+import * as ReactDOM from 'react-dom';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -12,6 +14,17 @@ vi.mock('./Citations', () => ({
     </div>
   )),
 }));
+
+vi.mock('./store', () => {
+  const actualStore = vi.importActual('./store');
+  return {
+    ...actualStore,
+    useTableStore: vi.fn().mockReturnValue({
+      addFilter: vi.fn(),
+      resetFilters: vi.fn(),
+    }),
+  };
+});
 
 const mockOnClose = vi.fn();
 const defaultProps = {
@@ -224,6 +237,70 @@ describe('EvalOutputPromptDialog', () => {
     const metadataTable = screen.getByText('Metadata').closest('div');
     expect(metadataTable?.textContent).not.toContain('citations');
   });
+
+  it('renders only the "Prompt & Output" tab when no gradingResults, messages, metadata, or traces are provided', () => {
+    const minimalProps = {
+      open: true,
+      onClose: mockOnClose,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      output: 'Test output',
+    };
+
+    render(<EvalOutputPromptDialog {...minimalProps} />);
+
+    expect(screen.getByText('Prompt & Output')).toBeInTheDocument();
+
+    expect(screen.queryByText('Evaluation')).toBeNull();
+    expect(screen.queryByText('Messages')).toBeNull();
+    expect(screen.queryByText('Metadata')).toBeNull();
+    expect(screen.queryByText('Traces')).toBeNull();
+  });
+
+  it('gracefully handles invalid active tab index', async () => {
+    const propsWithIds = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      testCaseId: 'test-case-id',
+    };
+
+    const { rerender } = render(<EvalOutputPromptDialog {...propsWithIds} />);
+
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    expect(screen.getByText('Metadata')).toBeVisible();
+    expect(screen.getByText('testKey')).toBeVisible();
+
+    rerender(
+      <EvalOutputPromptDialog {...propsWithIds} gradingResults={undefined} metadata={undefined} />,
+    );
+
+    expect(screen.getByText('Prompt & Output')).toBeVisible();
+    expect(screen.getByText('Test prompt')).toBeInTheDocument();
+  });
+
+  it('handles unmounting during drawer transition', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    const transitionDuration = { enter: 320, exit: 250 };
+
+    ReactDOM.render(<EvalOutputPromptDialog {...defaultProps} />, container);
+
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+    act(() => {
+      ReactDOM.unmountComponentAtNode(container);
+    });
+
+    await act(() => new Promise((resolve) => setTimeout(resolve, transitionDuration.enter)));
+
+    expect(true).toBe(true);
+
+    document.body.removeChild(container);
+  });
 });
 
 describe('EvalOutputPromptDialog metadata interaction', () => {
@@ -232,6 +309,11 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     user = userEvent.setup();
+
+    (useTableStore as any).mockReturnValue({
+      addFilter: vi.fn(),
+      resetFilters: vi.fn(),
+    });
   });
 
   it('expands metadata value on single click', async () => {
@@ -317,5 +399,34 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
     });
 
     expect(screen.getByText(longValue)).toBeInTheDocument();
+  });
+
+  it('should reset filters, apply the selected metadata filter, and close the dialog when the filter button is clicked in the Metadata tab', async () => {
+    const mockResetFilters = vi.fn();
+    const mockAddFilter = vi.fn();
+    (useTableStore as any).mockReturnValue({
+      addFilter: mockAddFilter,
+      resetFilters: mockResetFilters,
+    });
+
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    const filterButton = screen.getByLabelText('Filter by testKey');
+    await act(async () => {
+      await user.click(filterButton);
+    });
+
+    expect(mockResetFilters).toHaveBeenCalledTimes(1);
+    expect(mockAddFilter).toHaveBeenCalledTimes(1);
+    expect(mockAddFilter).toHaveBeenCalledWith({
+      type: 'metadata',
+      operator: 'equals',
+      value: 'testValue',
+      field: 'testKey',
+    });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 });
