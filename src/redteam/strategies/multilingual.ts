@@ -411,7 +411,9 @@ async function translateBatchCore(
 
     const translations: Record<string, string> = {};
     const outputSample =
-      typeof result.output === 'string' ? result.output.slice(0, 50_000) : truncateForLog(result.output, 50_000);
+      typeof result.output === 'string'
+        ? result.output.slice(0, 50_000)
+        : truncateForLog(result.output, 50_000);
     for (const lang of languages) {
       const escapedLang = escapeLanguageCode(lang);
       const pattern = new RegExp(`["']${escapedLang}["']\\s*:\\s*["']([^"']*)["']`);
