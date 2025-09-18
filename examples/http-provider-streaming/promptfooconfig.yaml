@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI HTTP provider example (streaming not recommended)
+
+# ⚠️ WARNING: This example shows how to use OpenAI's API via HTTP provider, but this
+# approach is NOT RECOMMENDED for production use. The evaluation tool waits for the
+# entire response to complete anyway, so you get no streaming benefits.
+#
+# 🎯 RECOMMENDED: Use the built-in OpenAI provider instead: openai:gpt-4o
+# - Simpler configuration
+# - Automatic environment variable handling
+# - Better error handling
+# - Optimized performance
+
+prompts:
+  - 'Write a haiku about {{topic}}'
+  - 'Explain {{topic}} in one sentence'
+
+providers:
+  # HTTP provider approach (for demonstration only)
+  - id: https://api.openai.com/v1/responses
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+        'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
+      body:
+        model: 'gpt-5-mini'
+        input:
+          - role: 'user'
+            content: '{{prompt}}'
+        stream: true  # Demonstrates streaming, but eval waits for completion anyway
+      transformResponse: 'json.choices[0].delta.content'
+
+  # Recommended approach using built-in provider
+  - openai:responses:gpt-5-mini
+
+tests:
+  - vars:
+      topic: 'mountains'
+  - vars:
+      topic: 'artificial intelligence'
+  - vars:
+      topic: 'ocean waves'
+
+defaultTest:
+  assert:
+    # Ensure we get some content
+    - type: javascript
+      value: 'output && output.length > 0'
+    # Verify it's a string
+    - type: javascript
+      value: 'typeof output === "string"'

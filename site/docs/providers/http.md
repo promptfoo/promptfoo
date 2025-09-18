@@ -9,6 +9,12 @@ Setting the provider ID to a URL sends an HTTP request to the endpoint. This pro
 
 The provider configuration allows you to construct the HTTP request and extract the inference result from the response.
 
+:::note Streaming Not Recommended
+While you can configure HTTP endpoints that support streaming (like OpenAI's chat completions with `stream: true`), **streaming provides no performance benefits during evaluation**. The evaluation tool waits for the entire response to complete anyway, so you get the same latency as non-streaming requests with added configuration complexity.
+
+For OpenAI APIs, use the built-in provider (`openai:gpt-4o`) instead of HTTP provider for better performance and simpler configuration.
+:::
+
 ```yaml
 providers:
   - id: https
