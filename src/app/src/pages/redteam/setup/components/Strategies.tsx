@@ -4,9 +4,16 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -14,6 +21,7 @@ import {
   AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
   DEFAULT_STRATEGIES,
+  displayNameOverrides,
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   strategyDescriptions,
@@ -79,6 +87,170 @@ const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter((id) => id
   }),
 );
 
+// Plugin Sample Section Component
+interface PluginSampleSectionProps {
+  onPluginSampleGenerate: (pluginId: string) => void;
+  generatingSampleIds: string[];
+}
+
+function PluginSampleSection({
+  onPluginSampleGenerate,
+  generatingSampleIds,
+}: PluginSampleSectionProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const theme = useTheme();
+
+  // Use a subset of popular plugins for sample generation
+  const sampleablePlugins = [
+    'harmful:violent-crime',
+    'harmful:non-violent-crime',
+    'pii:direct',
+    'bias:race',
+    'bias:gender',
+    'policy',
+    'excessive-agency',
+    'overreliance',
+    'hallucination',
+  ];
+
+  const getPluginDisplayName = (pluginId: string) => {
+    return (
+      displayNameOverrides[pluginId] ||
+      pluginId
+        .split(':')
+        .map((part) =>
+          part
+            .split('-')
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' '),
+        )
+        .join(' - ')
+    );
+  };
+
+  const getPluginCategory = (pluginId: string) => {
+    if (pluginId.startsWith('harmful:')) {
+      return 'Harmful Content';
+    }
+    if (pluginId.startsWith('pii:')) {
+      return 'Privacy & PII';
+    }
+    if (pluginId.startsWith('bias:')) {
+      return 'Bias & Fairness';
+    }
+    if (pluginId.includes('policy')) {
+      return 'Policy Compliance';
+    }
+    if (pluginId.includes('agency') || pluginId.includes('overreliance')) {
+      return 'AI Safety';
+    }
+    if (pluginId.includes('hallucination')) {
+      return 'Accuracy & Truth';
+    }
+    return 'Security Testing';
+  };
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        mt: 3,
+        border: `1px solid ${theme.palette.divider}`,
+        borderRadius: 2,
+      }}
+    >
+      <Box sx={{ p: 3 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+          }}
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Plugin Sample Previews
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              Preview how plugin test cases work compared to strategy samples
+            </Typography>
+          </Box>
+          <Button variant="outlined" size="small" sx={{ minWidth: 'auto', px: 2 }}>
+            {isExpanded ? 'Hide' : 'Show'}
+          </Button>
+        </Box>
+
+        <Collapse in={isExpanded}>
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              These samples show how plugins generate test cases. Unlike strategies that modify
+              delivery methods, plugins focus on specific vulnerability categories.
+            </Typography>
+
+            <Stack spacing={2}>
+              {sampleablePlugins.map((pluginId) => {
+                const isGenerating = generatingSampleIds.includes(pluginId);
+
+                return (
+                  <Box
+                    key={pluginId}
+                    sx={{
+                      p: 2,
+                      border: `1px solid ${theme.palette.divider}`,
+                      borderRadius: 1,
+                      backgroundColor: theme.palette.background.paper,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Box sx={{ flex: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                            {getPluginDisplayName(pluginId)}
+                          </Typography>
+                          <Chip
+                            label={getPluginCategory(pluginId)}
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontSize: '0.75rem' }}
+                          />
+                        </Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                          Plugin ID: {pluginId}
+                        </Typography>
+                      </Box>
+
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={
+                          isGenerating ? <CircularProgress size={16} /> : <MagicWandIcon />
+                        }
+                        onClick={() => onPluginSampleGenerate(pluginId)}
+                        disabled={isGenerating}
+                        sx={{ minWidth: 120 }}
+                      >
+                        {isGenerating ? 'Generating...' : 'Sample'}
+                      </Button>
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Stack>
+          </Box>
+        </Collapse>
+      </Box>
+    </Paper>
+  );
+}
+
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
@@ -93,15 +265,19 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     selectedStrategy: null,
   });
 
-  // Strategy sample generation state
+  // Strategy and plugin sample generation state
   const [sampleDialog, setSampleDialog] = useState<{
     isOpen: boolean;
     strategyId: string | null;
+    pluginId: string | null;
+    sampleType: 'strategy' | 'plugin';
     isGenerating: boolean;
     sample: any | null;
   }>({
     isOpen: false,
     strategyId: null,
+    pluginId: null,
+    sampleType: 'strategy',
     isGenerating: false,
     sample: null,
   });
@@ -393,6 +569,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         setSampleDialog({
           isOpen: true,
           strategyId,
+          pluginId: null,
+          sampleType: 'strategy',
           isGenerating: true,
           sample: null,
         });
@@ -425,6 +603,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           setSampleDialog({
             isOpen: true,
             strategyId,
+            pluginId: null,
+            sampleType: 'strategy',
             isGenerating: false,
             sample: data.sample,
           });
@@ -434,6 +614,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             setSampleDialog({
               isOpen: true,
               strategyId,
+              pluginId: null,
+              sampleType: 'strategy',
               isGenerating: false,
               sample: data.sample,
             });
@@ -450,6 +632,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         setSampleDialog({
           isOpen: true,
           strategyId,
+          pluginId: null,
+          sampleType: 'strategy',
           isGenerating: false,
           sample: null,
         });
@@ -461,10 +645,82 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [recordEvent, config.description, config.applicationDefinition, callApi, toast],
   );
 
+  const handlePluginSampleGenerate = useCallback(
+    async (pluginId: string) => {
+      try {
+        recordEvent('feature_used', {
+          feature: 'redteam_plugin_generate_sample',
+          plugin: pluginId,
+        });
+
+        // Set generating state
+        setGeneratingSampleIds((prev) => [...prev, pluginId]);
+        setSampleDialog({
+          isOpen: true,
+          strategyId: null,
+          pluginId,
+          sampleType: 'plugin',
+          isGenerating: true,
+          sample: null,
+        });
+
+        // Call API
+        const response = await callApi('/redteam/generate-plugin-sample', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            pluginId,
+            config: {
+              applicationDefinition: config.applicationDefinition || {
+                purpose: config.description || 'general AI assistant',
+              },
+              injectVar: 'query',
+            },
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          // Update dialog with successful result
+          setSampleDialog({
+            isOpen: true,
+            strategyId: null,
+            pluginId,
+            sampleType: 'plugin',
+            isGenerating: false,
+            sample: data.sample,
+          });
+        } else {
+          throw new Error(data.error || `Failed to generate plugin sample: ${response.status}`);
+        }
+      } catch (error) {
+        console.error('Error generating plugin sample:', error);
+        setSampleDialog({
+          isOpen: true,
+          strategyId: null,
+          pluginId,
+          sampleType: 'plugin',
+          isGenerating: false,
+          sample: null,
+        });
+        toast.showToast(`Failed to generate plugin sample: ${error}`, 'error');
+      } finally {
+        // Remove from generating list
+        setGeneratingSampleIds((prev) => prev.filter((id) => id !== pluginId));
+      }
+    },
+    [recordEvent, config.description, config.applicationDefinition, callApi, toast],
+  );
+
   const handleSampleDialogClose = useCallback(() => {
     setSampleDialog({
       isOpen: false,
       strategyId: null,
+      pluginId: null,
+      sampleType: 'strategy',
       isGenerating: false,
       sample: null,
     });
@@ -685,6 +941,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           />
         )}
 
+        {/* Plugin Sample Previews Section */}
+        <PluginSampleSection
+          onPluginSampleGenerate={handlePluginSampleGenerate}
+          generatingSampleIds={generatingSampleIds}
+        />
+
         {/* Config Dialog */}
         <StrategyConfigDialog
           open={configDialog.isOpen}
@@ -715,11 +977,17 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           open={sampleDialog.isOpen}
           onClose={handleSampleDialogClose}
           strategyId={sampleDialog.strategyId}
+          pluginId={sampleDialog.pluginId}
+          sampleType={sampleDialog.sampleType}
           isGenerating={sampleDialog.isGenerating}
           generatedSample={sampleDialog.sample}
-          onGenerate={() =>
-            sampleDialog.strategyId && handleSampleGenerate(sampleDialog.strategyId)
-          }
+          onGenerate={() => {
+            if (sampleDialog.sampleType === 'strategy' && sampleDialog.strategyId) {
+              handleSampleGenerate(sampleDialog.strategyId);
+            } else if (sampleDialog.sampleType === 'plugin' && sampleDialog.pluginId) {
+              handlePluginSampleGenerate(sampleDialog.pluginId);
+            }
+          }}
         />
       </Box>
     </PageWrapper>
