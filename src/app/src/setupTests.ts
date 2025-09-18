@@ -9,3 +9,31 @@ import 'prismjs/components/prism-http';
 
 // We can mock the environment variables. For example:
 // process.env.PROMPTFOO_VERSION = '1.0.0';
+
+// Mock IntersectionObserver
+global.IntersectionObserver = class IntersectionObserver {
+  constructor(
+    private callback: IntersectionObserverCallback,
+    private options?: IntersectionObserverInit,
+  ) {}
+
+  observe(target: Element): void {
+    // Mock implementation
+  }
+
+  unobserve(target: Element): void {
+    // Mock implementation
+  }
+
+  disconnect(): void {
+    // Mock implementation
+  }
+
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+
+  root = null;
+  rootMargin = '';
+  thresholds = [];
+};
