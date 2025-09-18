@@ -17,46 +17,25 @@ import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import ProviderResponse from './ProviderResponse';
+import ProviderResponse from '../ProviderResponse';
 import type { ProviderOptions } from '@promptfoo/types';
 
-interface TestTargetConfigurationProps {
-  testingTarget?: boolean;
-  handleTestTarget?: () => void;
+interface TestTargetTabProps {
   selectedTarget: ProviderOptions;
-  testResult?: any;
+  testingTarget: boolean;
+  handleTestTarget: () => void;
+  testResult: any;
+  showButton?: boolean;
 }
 
-const TestTargetConfiguration = ({
-  testingTarget: testingTargetProp,
-  handleTestTarget: handleTestTargetProp,
+const TestTargetTab: React.FC<TestTargetTabProps> = ({
   selectedTarget,
-  testResult: testResultProp,
-}: TestTargetConfigurationProps) => {
+  testingTarget,
+  handleTestTarget,
+  testResult,
+  showButton = true,
+}) => {
   const theme = useTheme();
-
-  // Use internal state if props aren't provided
-  const [internalTestingTarget, setInternalTestingTarget] = React.useState(false);
-  const [internalTestResult, setInternalTestResult] = React.useState<any>(null);
-
-  const testingTarget = testingTargetProp ?? internalTestingTarget;
-  const testResult = testResultProp ?? internalTestResult;
-
-  const handleTestTarget =
-    handleTestTargetProp ||
-    (() => {
-      // Internal test handler logic would go here
-      setInternalTestingTarget(true);
-      // Simulate test completion after delay
-      setTimeout(() => {
-        setInternalTestingTarget(false);
-        setInternalTestResult({
-          success: true,
-          message: 'Test completed successfully',
-          providerResponse: {},
-        });
-      }, 2000);
-    });
 
   const getTestButtonTooltip = () => {
     if (testingTarget) {
@@ -73,25 +52,27 @@ const TestTargetConfiguration = ({
   const tooltipText = getTestButtonTooltip();
 
   return (
-    <Box mt={4}>
-      <Stack direction="row" alignItems="center" spacing={2} mb={2}>
-        <Typography variant="h6" sx={{ flexGrow: 1 }}>
-          Test Target Configuration
-        </Typography>
-        <Tooltip title={tooltipText} arrow placement="top">
-          <Box component="span">
-            <Button
-              variant="contained"
-              onClick={handleTestTarget}
-              disabled={isButtonDisabled}
-              startIcon={testingTarget ? <CircularProgress size={20} /> : null}
-              color="primary"
-            >
-              {testingTarget ? 'Testing...' : 'Test Target'}
-            </Button>
-          </Box>
-        </Tooltip>
-      </Stack>
+    <>
+      {showButton && (
+        <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Test Target Configuration
+          </Typography>
+          <Tooltip title={tooltipText} arrow placement="top">
+            <Box component="span">
+              <Button
+                variant="contained"
+                onClick={handleTestTarget}
+                disabled={isButtonDisabled}
+                startIcon={testingTarget ? <CircularProgress size={20} /> : null}
+                color="primary"
+              >
+                {testingTarget ? 'Testing...' : 'Test Target'}
+              </Button>
+            </Box>
+          </Tooltip>
+        </Stack>
+      )}
 
       {!selectedTarget.config.url && !selectedTarget.config.request && (
         <Alert severity="info">
@@ -228,8 +209,8 @@ const TestTargetConfiguration = ({
           </Accordion>
         </Box>
       )}
-    </Box>
+    </>
   );
 };
 
-export default TestTargetConfiguration;
+export default TestTargetTab;
