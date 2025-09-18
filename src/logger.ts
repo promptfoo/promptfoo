@@ -16,6 +16,14 @@ export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
 }
 
+// Global configuration for structured logging
+let useStructuredLogging = false;
+
+export function setStructuredLogging(enabled: boolean) {
+  useStructuredLogging = enabled;
+}
+
+
 export const LOG_LEVELS = {
   error: 0,
   warn: 1,
@@ -102,6 +110,7 @@ export const consoleFormatter = winston.format.printf(
       globalLogCallback(message);
     }
 
+
     const location = info.location ? `${info.location} ` : '';
 
     if (info.level === 'error') {
@@ -126,6 +135,7 @@ export const fileFormatter = winston.format.printf(
     return `${timestamp} [${info.level.toUpperCase()}]${location}: ${message}`;
   },
 );
+
 
 export const winstonLogger = winston.createLogger({
   levels: LOG_LEVELS,
@@ -270,8 +280,8 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
   };
 }
 
-// Wrapper enforces strict single-string argument logging
-const logger: StrictLogger = Object.assign({}, winstonLogger, {
+// Internal logger implementation
+let internalLogger: StrictLogger = Object.assign({}, winstonLogger, {
   error: createLogMethod('error'),
   warn: createLogMethod('warn'),
   info: createLogMethod('info'),
@@ -283,6 +293,31 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
   add: typeof winstonLogger.add;
   remove: typeof winstonLogger.remove;
   transports: typeof winstonLogger.transports;
+};
+
+/**
+ * Replace the logger instance with a custom logger
+ * Useful for integrating with external logging systems
+ */
+export function setLogger(customLogger: any) {
+  internalLogger = customLogger;
+}
+
+// Wrapper that delegates to the current logger instance
+const logger = {
+  error: (message: string) => internalLogger.error(message),
+  warn: (message: string) => internalLogger.warn(message),
+  info: (message: string) => internalLogger.info(message),
+  debug: (message: string) => internalLogger.debug(message),
+  add: (transport: any) => internalLogger.add ? internalLogger.add(transport) : undefined,
+  remove: (transport: any) => internalLogger.remove ? internalLogger.remove(transport) : undefined,
+  get transports() { return internalLogger.transports || []; },
+  get level() { return internalLogger.transports?.[0]?.level || 'info'; },
+  set level(newLevel: string) {
+    if (internalLogger.transports?.[0]) {
+      internalLogger.transports[0].level = newLevel;
+    }
+  }
 };
 
 /**
@@ -312,18 +347,36 @@ export async function logRequestResponse(options: {
     }
   }
 
-  const details = [
-    `URL: ${sanitizeUrl(url)}`,
-    `Method: ${requestMethod}`,
-    `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
-    response ? `Status: ${response.status} ${response.statusText}` : '',
-    responseText ? `Response: ${responseText}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  if (useStructuredLogging) {
 
-  const message = `API request:\n${details}`;
-  logMethod(message);
+    const logObject = {
+      message: 'API request',
+      url: sanitizeUrl(url),
+      method: requestMethod,
+      requestBody: sanitizeBody(requestBody),
+      ...(response && {
+        status: response.status,
+        statusText: response.statusText,
+      }),
+      ...(responseText && { response: responseText }),
+    };
+
+    // @ts-expect-error - the native logger expects a string but we're using a structured logger
+    logMethod(logObject);
+  } else {
+    const details = [
+      `URL: ${sanitizeUrl(url)}`,
+      `Method: ${requestMethod}`,
+      `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
+      response ? `Status: ${response.status} ${response.statusText}` : '',
+      responseText ? `Response: ${responseText}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const message = `API request:\n${details}`;
+    logMethod(message);
+  }
 }
 
 // Initialize source maps if debug is enabled at startup
