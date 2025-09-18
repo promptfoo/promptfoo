@@ -174,7 +174,6 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     setHasUnsavedChanges(code !== newCode);
     setNotification({ show: true, message: 'Reset to current configuration', severity: 'info' });
   };
-
   React.useEffect(() => {
     if (initialYaml) {
       const formattedCode = ensureSchemaComment(initialYaml);
@@ -190,8 +189,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       setCode(formattedCode);
       setOriginalCode(formattedCode);
     }
-    // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
-  }, [initialYaml, initialConfig]);
+  }, [initialYaml, initialConfig, getTestSuite]);
 
   // Track unsaved changes
   React.useEffect(() => {

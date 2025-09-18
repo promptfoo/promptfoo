@@ -10,9 +10,33 @@ vi.mock('../../../store/providersStore', () => ({
   })),
 }));
 
+vi.mock('../../../schemas/providerSchemas', () => ({
+  getProviderSchema: vi.fn((providerId: string) => {
+    if (providerId.startsWith('openai:')) {
+      return {
+        fields: [
+          {
+            name: 'temperature',
+            type: 'number',
+            label: 'Temperature',
+            description: 'Controls randomness (0-2)',
+            defaultValue: 0.7,
+            validation: {
+              min: 0,
+              max: 2,
+            },
+          },
+        ],
+      };
+    }
+    return null;
+  }),
+  validateProviderConfig: vi.fn(() => ({ valid: true, errors: [] })),
+}));
+
 const mockProviders = [
-  { id: 'provider1', config: { temperature: 0.5 } },
-  { id: 'provider2', config: { temperature: 0.75 } },
+  { id: 'openai:gpt-4', config: { temperature: 0.5 } },
+  { id: 'anthropic:claude-3', config: { temperature: 0.75 } },
 ];
 
 const mockOnChange = vi.fn();
@@ -24,7 +48,7 @@ describe('ProviderSelector', () => {
   });
 
   it('renders the component correctly', () => {
-    expect(screen.getByPlaceholderText('Select LLM providers')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search and select LLM providers...')).toBeInTheDocument();
   });
 
   it('displays the correct number of providers', () => {
@@ -36,26 +60,25 @@ describe('ProviderSelector', () => {
 
   it('calls onChange when a provider is selected', () => {
     const providerToSelect = mockProviders[0].id;
-    fireEvent.change(screen.getByPlaceholderText('Select LLM providers'), {
+    fireEvent.change(screen.getByPlaceholderText('Search and select LLM providers...'), {
       target: { value: providerToSelect },
     });
-    fireEvent.keyDown(screen.getByPlaceholderText('Select LLM providers'), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByPlaceholderText('Search and select LLM providers...'), {
+      key: 'Enter',
+    });
 
     expect(mockOnChange).toHaveBeenCalledWith([
-      { id: 'provider1', config: { temperature: 0.5 } },
-      { id: 'provider2', config: { temperature: 0.75 } },
-      { id: 'provider1' }, // This is the selected provider without config
+      { id: 'openai:gpt-4', config: { temperature: 0.5 } },
+      { id: 'anthropic:claude-3', config: { temperature: 0.75 } },
+      { id: 'openai:gpt-4' }, // This is the selected provider without config
     ]);
   });
 
   it('opens the config dialog when a provider is clicked', () => {
     const providerChip = screen.getByText(mockProviders[0].id);
     fireEvent.click(providerChip);
-    expect(
-      screen.getByText(
-        'Click a provider to configure its settings. Hover over chips to see model IDs.',
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Provider Configuration')).toBeInTheDocument();
   });
 
   it('closes the config dialog when Cancel is clicked', async () => {
