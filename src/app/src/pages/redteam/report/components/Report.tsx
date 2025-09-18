@@ -24,14 +24,13 @@ import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Modal from '@mui/material/Modal';
-import Paper from '@mui/material/Paper';
 import OutlinedInput from '@mui/material/OutlinedInput';
+import Paper from '@mui/material/Paper';
 import Select, { type SelectChangeEvent } from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { constructMetricId as constructPolicyMetricId } from '@promptfoo/redteam/plugins/policy/utils';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -239,9 +238,10 @@ const App = () => {
 
       // Custom policy plugins require special handling:
       if (pluginId.startsWith(`${POLICY_METRIC_PREFIX}:`)) {
+        // TODO(Will): Update the deserialization logic to use the display name instead of the policyId
         type = row.metadata?.policyId
           ? // Match the id used in the metric.
-            `Policy ${constructPolicyMetricId(row.metadata?.policyId)} Violation`
+            `Policy ${row.metadata?.policyId} Violation`
           : 'Policy Violation';
         description = `${row.metadata?.policy}`;
         severity = row.metadata?.severity as Severity;
