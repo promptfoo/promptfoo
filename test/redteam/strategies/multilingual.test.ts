@@ -58,7 +58,6 @@ describe('Multilingual Strategy', () => {
     jest.clearAllMocks();
   });
 
-
   describe('translateBatch', () => {
     it('should handle JSON response format', async () => {
       const mockProvider = {
@@ -344,7 +343,9 @@ describe('Multilingual Strategy', () => {
 
       // Should get all 3 languages: first batch (es, fr) + individual fallback (de)
       expect(result).toHaveLength(3);
-      expect(result.map((r) => r.vars?.text)).toEqual(expect.arrayContaining(['Hola', 'Bonjour', 'Hallo']));
+      expect(result.map((r) => r.vars?.text)).toEqual(
+        expect.arrayContaining(['Hola', 'Bonjour', 'Hallo']),
+      );
       expect(mockProvider.callApi).toHaveBeenCalledTimes(2); // One batch call + one individual call
     });
 
@@ -528,7 +529,7 @@ describe('Multilingual Strategy', () => {
     it('should escape language codes in regex fallback', async () => {
       const mockProvider = {
         callApi: jest.fn().mockResolvedValue({
-          output: '"zh-CN": "你好", "en-US": "Hello"' // Raw text with special chars
+          output: '"zh-CN": "你好", "en-US": "Hello"', // Raw text with special chars
         }),
       };
       jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
@@ -560,26 +561,24 @@ describe('Multilingual Strategy', () => {
       };
       jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
-      const testCases: TestCase[] = [
-        { vars: { prompt: 'Hello' }, metadata: {} }
-      ];
+      const testCases: TestCase[] = [{ vars: { prompt: 'Hello' }, metadata: {} }];
 
       const result = await addMultilingual(testCases, 'prompt', {
         languages: ['es', 'fr'],
         batchSize: 1, // Small batch to trigger retry logic
-        maxConcurrency: 1
+        maxConcurrency: 1,
       });
 
       // Should have exactly 2 results (one per language), not duplicates
       expect(result).toHaveLength(2);
 
       // Should have both languages
-      const resultLanguages = result.map(r => r.metadata?.language);
+      const resultLanguages = result.map((r) => r.metadata?.language);
       expect(resultLanguages).toEqual(expect.arrayContaining(['es', 'fr']));
 
       // Verify the translations are the expected ones (first occurrence wins)
-      const spanishTest = result.find(r => r.metadata?.language === 'es');
-      const frenchTest = result.find(r => r.metadata?.language === 'fr');
+      const spanishTest = result.find((r) => r.metadata?.language === 'es');
+      const frenchTest = result.find((r) => r.metadata?.language === 'fr');
 
       expect(spanishTest?.vars?.prompt).toBe('Hola');
       expect(frenchTest?.vars?.prompt).toBe('Bonjour');
@@ -598,16 +597,16 @@ describe('Multilingual Strategy', () => {
             // First call: partial success with proper originalText metadata
             return Promise.resolve({
               output: JSON.stringify({
-                es: 'Hola mundo'
+                es: 'Hola mundo',
                 // Missing French, will trigger individual retry
-              })
+              }),
             });
           } else if (callCount === 2) {
             // Second call: individual retry for missing language
             return Promise.resolve({
               output: JSON.stringify({
-                fr: 'Bonjour le monde'
-              })
+                fr: 'Bonjour le monde',
+              }),
             });
           } else {
             // Should not have additional calls for this scenario
@@ -617,25 +616,23 @@ describe('Multilingual Strategy', () => {
       };
       jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
-      const testCases: TestCase[] = [
-        { vars: { prompt: 'Hello world' }, metadata: {} }
-      ];
+      const testCases: TestCase[] = [{ vars: { prompt: 'Hello world' }, metadata: {} }];
 
       const result = await addMultilingual(testCases, 'prompt', {
         languages: ['es', 'fr'],
         batchSize: 1, // Small batch size to trigger retry logic
-        maxConcurrency: 1
+        maxConcurrency: 1,
       });
 
       // Should have exactly 2 results (one per language)
       expect(result).toHaveLength(2);
 
       // Verify both languages are present and correct
-      const resultLanguages = result.map(r => r.metadata?.language);
+      const resultLanguages = result.map((r) => r.metadata?.language);
       expect(resultLanguages).toEqual(expect.arrayContaining(['es', 'fr']));
 
-      const spanishResult = result.find(r => r.metadata?.language === 'es');
-      const frenchResult = result.find(r => r.metadata?.language === 'fr');
+      const spanishResult = result.find((r) => r.metadata?.language === 'es');
+      const frenchResult = result.find((r) => r.metadata?.language === 'fr');
 
       expect(spanishResult?.vars?.prompt).toBe('Hola mundo');
       expect(frenchResult?.vars?.prompt).toBe('Bonjour le monde');
