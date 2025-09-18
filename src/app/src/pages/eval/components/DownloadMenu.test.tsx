@@ -52,7 +52,7 @@ describe('DownloadMenu', () => {
     },
     body: [
       {
-        test: { vars: { testVar: 'value' } },
+        test: { vars: { testVar: 'value' }, description: 'Test case with description' },
         vars: ['value1', 'value2'],
         outputs: [{ pass: false, text: 'failed output' }],
       },
@@ -117,6 +117,19 @@ describe('DownloadMenu', () => {
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+    });
+  });
+
+  it('downloads CSV with Description column when descriptions are present', async () => {
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('CSV Export'));
+
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+      // The CSV should include the Description column since one row has a description
+      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(blob.type).toBe('text/csv;charset=utf-8;');
     });
   });
 
