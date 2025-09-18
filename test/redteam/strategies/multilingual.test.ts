@@ -136,7 +136,7 @@ describe('Multilingual Strategy', () => {
       };
       jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
-      const result = await translateBatch('Hello', ['es', 'fr']).catch(() => ({}));
+      const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({});
     });
 
@@ -539,7 +539,7 @@ describe('Multilingual Strategy', () => {
       expect(result).toEqual({ 'zh-CN': '你好', 'en-US': 'Hello' });
     });
 
-    it('should handle remote partial fallback and deduplication', async () => {
+    it('should handle local partial fallback and deduplication', async () => {
       // Test the deduplication logic by simulating partial results that would come from
       // remote generation fallback. Since the remote path is complex to mock properly,
       // we'll test the core deduplication logic that ensures no duplicate test cases
