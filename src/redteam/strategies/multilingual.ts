@@ -63,7 +63,7 @@ function getBatchSize(config: Record<string, any> = {}): number {
  * Helper function to get the remote chunk size - automatically determined for reliability
  */
 function getRemoteChunkSize(): number {
-  return 2; // Automatically determined for reliability
+  return 8; // Automatically determined for reliability
 }
 
 async function processRemoteChunk(
@@ -155,11 +155,32 @@ async function generateMultilingual(
           allResults = allResults.concat(chunkResults);
           logger.warn(`Chunk ${Number(index) + 1} partial success: ${chunkResults.length}/${chunk.length} test cases, retrying missing ones individually`);
 
-          // Identify missing test cases by comparing input vs output
-          const processedKeys = new Set(chunkResults.map(tc => createDedupeKey(tc, injectVar, tc.metadata?.language)));
+          // Identify missing test cases by comparing expected vs actual results
+          // Create a set of expected keys based on input test cases and languages
+          const languages = config.languages || DEFAULT_LANGUAGES;
+          const expectedKeys = new Set();
+          for (const tc of chunk) {
+            for (const lang of languages) {
+              expectedKeys.add(createDedupeKey(tc, injectVar, lang));
+            }
+          }
+
+          // Create a set of actual keys from results, using originalText when available
+          const processedKeys = new Set();
+          for (const result of chunkResults) {
+            const originalText = result.metadata?.originalText;
+            if (originalText) {
+              // Use originalText if available (preferred for accuracy)
+              processedKeys.add(`${originalText}|${result.metadata?.language || 'original'}`);
+            } else {
+              // Fallback: try to match result with input test cases
+              const resultKey = createDedupeKey(result, injectVar, result.metadata?.language);
+              processedKeys.add(resultKey);
+            }
+          }
+
+          // Find test cases that are missing any expected languages
           const missingTestCases = chunk.filter(tc => {
-            // For each language, check if we got a result
-            const languages = config.languages || DEFAULT_LANGUAGES;
             return languages.some((lang: string) => !processedKeys.has(createDedupeKey(tc, injectVar, lang)));
           });
 

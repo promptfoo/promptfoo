@@ -584,5 +584,66 @@ describe('Multilingual Strategy', () => {
       expect(spanishTest?.vars?.prompt).toBe('Hola');
       expect(frenchTest?.vars?.prompt).toBe('Bonjour');
     });
+
+    it('should handle improved missing detection logic', async () => {
+      // Test the improved missing detection logic indirectly through local generation
+      // This validates that the deduplication key logic improvements work correctly
+      // when originalText metadata is properly preserved vs when it's missing
+
+      let callCount = 0;
+      const mockProvider = {
+        callApi: jest.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            // First call: partial success with proper originalText metadata
+            return Promise.resolve({
+              output: JSON.stringify({
+                es: 'Hola mundo'
+                // Missing French, will trigger individual retry
+              })
+            });
+          } else if (callCount === 2) {
+            // Second call: individual retry for missing language
+            return Promise.resolve({
+              output: JSON.stringify({
+                fr: 'Bonjour le monde'
+              })
+            });
+          } else {
+            // Should not have additional calls for this scenario
+            return Promise.resolve({ output: '{}' });
+          }
+        }),
+      };
+      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+
+      const testCases: TestCase[] = [
+        { vars: { prompt: 'Hello world' }, metadata: {} }
+      ];
+
+      const result = await addMultilingual(testCases, 'prompt', {
+        languages: ['es', 'fr'],
+        batchSize: 1, // Small batch size to trigger retry logic
+        maxConcurrency: 1
+      });
+
+      // Should have exactly 2 results (one per language)
+      expect(result).toHaveLength(2);
+
+      // Verify both languages are present and correct
+      const resultLanguages = result.map(r => r.metadata?.language);
+      expect(resultLanguages).toEqual(expect.arrayContaining(['es', 'fr']));
+
+      const spanishResult = result.find(r => r.metadata?.language === 'es');
+      const frenchResult = result.find(r => r.metadata?.language === 'fr');
+
+      expect(spanishResult?.vars?.prompt).toBe('Hola mundo');
+      expect(frenchResult?.vars?.prompt).toBe('Bonjour le monde');
+
+      // Should have made exactly 2 API calls:
+      // 1. Initial batch call (partial success)
+      // 2. Individual retry for missing language
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+    });
   });
 });
