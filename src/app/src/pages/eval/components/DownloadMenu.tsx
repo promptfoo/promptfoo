@@ -165,7 +165,11 @@ function DownloadMenu() {
 
     const csvRows = [];
 
+    // Check if any rows have descriptions
+    const hasDescriptions = table.body.some((row) => row.test.description);
+
     const headers = [
+      ...(hasDescriptions ? ['Description'] : []),
       ...table.head.vars,
       ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
     ];
@@ -173,6 +177,7 @@ function DownloadMenu() {
 
     table.body.forEach((row) => {
       const rowValues = [
+        ...(hasDescriptions ? [row.test.description || ''] : []),
         ...row.vars,
         ...row.outputs
           .filter((output): output is EvaluateTableOutput => output != null)
