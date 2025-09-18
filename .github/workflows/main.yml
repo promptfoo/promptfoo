@@ -18,7 +18,6 @@ env:
   VITE_TELEMETRY_DISABLED: 1
 jobs:
   test:
-    if: false
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}
     timeout-minutes: 10
     runs-on: ${{ matrix.os }}
@@ -55,7 +54,6 @@ jobs:
         run: npm run test -- --ci
 
   build:
-    if: false
     name: Build on Node ${{ matrix.node }}
     env:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
@@ -99,7 +97,6 @@ jobs:
           fi
 
   style-check:
-    if: false
     name: Style Check
     timeout-minutes: 5
     runs-on: ubuntu-latest
@@ -144,7 +141,6 @@ jobs:
           npm run depcheck
 
   shell-format:
-    if: false
     name: Shell Format Check
     timeout-minutes: 5
     runs-on: ubuntu-latest
@@ -157,7 +153,6 @@ jobs:
           sh_checker_shellcheck_disable: true
 
   assets:
-    if: false
     name: Generate Assets
     timeout-minutes: 5
     runs-on: ubuntu-latest
@@ -188,7 +183,6 @@ jobs:
           fi
 
   python:
-    if: false
     name: Check Python
     timeout-minutes: 5
     runs-on: ubuntu-latest
@@ -219,7 +213,6 @@ jobs:
           python -m unittest discover -s src/python -p '*_test.py'
 
   docs:
-    if: false
     name: Build Docs
     timeout-minutes: 5
     runs-on: ubuntu-latest
@@ -246,7 +239,6 @@ jobs:
         run: npm run build
 
   webui:
-    if: false
     name: webui tests
     timeout-minutes: 5
     runs-on: ubuntu-latest
@@ -267,7 +259,6 @@ jobs:
         run: npm run test:app
 
   integration-tests:
-    if: false
     name: Run Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -295,8 +286,7 @@ jobs:
 
   share-test:
     name: Share Test
-    if: false
-    #if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -358,8 +348,7 @@ jobs:
 
   redteam-custom-enterprise-server:
     name: Redteam Custom Enterprise Server
-    if: false
-    #if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -387,7 +376,6 @@ jobs:
           npm run test:redteam:integration
 
   actionlint:
-    if: false
     name: GitHub Actions Lint
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -402,7 +390,6 @@ jobs:
         uses: raven-actions/actionlint@v2
 
   golang:
-    if: false
     name: Go Tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
