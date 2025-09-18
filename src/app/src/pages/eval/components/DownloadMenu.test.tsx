@@ -133,6 +133,124 @@ describe('DownloadMenu', () => {
     });
   });
 
+  it('downloads CSV with extremely long description text', async () => {
+    const longDescription = 'This is a very long description. '.repeat(1000);
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        head: {
+          vars: ['var1', 'var2'],
+          prompts: [{ provider: 'provider1', label: 'label1' }],
+        },
+        body: [
+          {
+            test: { vars: { testVar: 'value' }, description: longDescription },
+            vars: ['value1', 'value2'],
+            outputs: [{ pass: false, text: 'failed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('CSV Export'));
+
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(blob.type).toBe('text/csv;charset=utf-8;');
+    });
+  });
+
+  it('downloads CSV with Description column and empty string for empty descriptions', async () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        head: {
+          vars: ['var1', 'var2'],
+          prompts: [{ provider: 'provider1', label: 'label1' }],
+        },
+        body: [
+          {
+            test: { vars: { testVar: 'value' }, description: '' },
+            vars: ['value1', 'value2'],
+            outputs: [{ pass: false, text: 'failed output' }],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [{ pass: true, text: 'passed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('CSV Export'));
+
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(blob.type).toBe('text/csv;charset=utf-8;');
+    });
+  });
+
+  it('downloads CSV with Unicode and special characters in description', async () => {
+    vi.mock('csv-stringify/browser/esm/sync', () => ({
+      stringify: vi.fn().mockImplementation((data) => {
+        const header = data[0].join(',');
+        const row = data[1].join(',');
+        return `${header}\n${row}`;
+      }),
+    }));
+
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        head: {
+          vars: ['var1', 'var2'],
+          prompts: [{ provider: 'provider1', label: 'label1' }],
+        },
+        body: [
+          {
+            test: {
+              vars: { testVar: 'value' },
+              description: 'Test case with Unicode: こんにちは世界 and emoji: 😊',
+            },
+            vars: ['value1', 'value2'],
+            outputs: [{ pass: false, text: 'failed output' }],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [{ pass: true, text: 'passed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('CSV Export'));
+
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Blob;
+
+      const reader = new FileReader();
+      reader.readAsText(blob);
+      reader.onload = () => {
+        expect(reader.result).toContain('Test case with Unicode: こんにちは世界 and emoji: 😊');
+      };
+    });
+  });
+
   it('downloads Table JSON when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
