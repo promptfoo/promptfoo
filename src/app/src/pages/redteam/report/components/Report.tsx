@@ -773,6 +773,7 @@ const App = () => {
           setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
         />
         <FrameworkCompliance
+          evalId={evalId}
           categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
           strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
         />
