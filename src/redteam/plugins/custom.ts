@@ -68,6 +68,7 @@ export class CustomPlugin extends RedteamPluginBase {
     const assertion: Assertion = {
       type: 'llm-rubric',
       value: renderedGrader,
+      metric: this.getMetricName(),
     };
 
     if (this.definition.threshold !== undefined) {
