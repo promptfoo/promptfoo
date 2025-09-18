@@ -15,7 +15,6 @@ import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Collapse from '@mui/material/Collapse';
 import Container from '@mui/material/Container';
 import FormControl from '@mui/material/FormControl';
 import IconButton from '@mui/material/IconButton';
@@ -645,8 +644,8 @@ const App = () => {
             )}
           </Box>
         </Card>
-        <Collapse in={isFiltersVisible}>
-          <Card sx={{ mb: 2 }} className="print-hide">
+        {isFiltersVisible && (
+          <Card className="print-hide">
             <Box sx={{ p: 3 }}>
               <Box
                 sx={{
@@ -743,7 +742,7 @@ const App = () => {
               </Stack>
             </Box>
           </Card>
-        </Collapse>
+        )}
         <Overview
           categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
           plugins={evalData.config.redteam.plugins || []}
@@ -773,6 +772,7 @@ const App = () => {
           setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
         />
         <FrameworkCompliance
+          evalId={evalId}
           categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
           strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
         />
