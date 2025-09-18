@@ -31,7 +31,7 @@
     "@types/diff": "^7.0.2",
     "@types/fuzzysearch": "^1.0.2",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^24.5.0",
+    "@types/node": "^24.5.2",
     "@types/prismjs": "^1.26.5",
     "@types/react": "^18.3.24",
     "@types/react-dom": "^18.3.7",

@@ -117,7 +117,7 @@
     "playwright": "^1.55.0",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "sharp": "^0.34.3"
+    "sharp": "^0.34.4"
   },
   "devDependencies": {
     "@adaline/anthropic": "1.7.1",
