@@ -70,7 +70,11 @@ describe('FrameworkCompliance', () => {
     });
 
     return render(
-      <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />,
+      <FrameworkCompliance
+        evalId="test-eval-id"
+        categoryStats={categoryStats}
+        strategyStats={strategyStats}
+      />,
     );
   };
 

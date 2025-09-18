@@ -215,4 +215,116 @@ describe('TraceView', () => {
     expect(alert).toBeInTheDocument();
     expect(alert.textContent).toContain(`HTTP error! status: ${mockStatus}`);
   });
+
+  describe('Visibility Callback', () => {
+    it('should call onVisibilityChange with false when no evaluationId is provided', async () => {
+      const onVisibilityChange = vi.fn();
+
+      render(<TraceView onVisibilityChange={onVisibilityChange} />);
+
+      await waitFor(() => {
+        expect(onVisibilityChange).toHaveBeenCalledWith(false);
+      });
+    });
+
+    it('should call onVisibilityChange with true when loading', async () => {
+      const onVisibilityChange = vi.fn();
+
+      vi.mocked(callApi).mockImplementation(
+        () => new Promise(() => {}), // Never resolves to keep loading state
+      );
+
+      render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
+
+      await waitFor(() => {
+        expect(onVisibilityChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('should call onVisibilityChange with true when there is an error', async () => {
+      const onVisibilityChange = vi.fn();
+
+      vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
+
+      render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
+
+      await waitFor(() => {
+        expect(onVisibilityChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('should call onVisibilityChange with true when traces exist', async () => {
+      const onVisibilityChange = vi.fn();
+
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            traces: [{ traceId: 'trace-1', spans: [] }],
+          }),
+      } as Response);
+
+      render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
+
+      await waitFor(() => {
+        expect(onVisibilityChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('should call onVisibilityChange with false when no traces are returned', async () => {
+      const onVisibilityChange = vi.fn();
+
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            traces: [],
+          }),
+      } as Response);
+
+      render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
+
+      await waitFor(() => {
+        expect(onVisibilityChange).toHaveBeenCalledWith(false);
+      });
+    });
+
+    it('should call onVisibilityChange with false when traces is null/undefined in response', async () => {
+      const onVisibilityChange = vi.fn();
+
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      } as Response);
+
+      render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
+
+      await waitFor(() => {
+        expect(onVisibilityChange).toHaveBeenCalledWith(false);
+      });
+    });
+
+    it('should update visibility when evaluationId changes', async () => {
+      const onVisibilityChange = vi.fn();
+
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ traces: [] }),
+      } as Response);
+
+      const { rerender } = render(
+        <TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />,
+      );
+
+      await waitFor(() => {
+        expect(onVisibilityChange).toHaveBeenCalledWith(false);
+      });
+
+      onVisibilityChange.mockClear();
+
+      rerender(<TraceView evaluationId="eval-456" onVisibilityChange={onVisibilityChange} />);
+
+      expect(onVisibilityChange).toHaveBeenCalledWith(true); // Should be true during loading
+    });
+  });
 });

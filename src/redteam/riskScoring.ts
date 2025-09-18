@@ -70,6 +70,7 @@ export interface SystemRiskScore extends RiskScore {
 // to keep the scoring logic centralized
 
 const STRATEGY_METADATA: Record<string, StrategyMetadata> = {
+  layer: { humanExploitable: true, humanComplexity: 'medium' },
   basic: { humanExploitable: true, humanComplexity: 'low' },
   'prompt-injection': { humanExploitable: true, humanComplexity: 'low' },
   jailbreak: { humanExploitable: true, humanComplexity: 'medium' },

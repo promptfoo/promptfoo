@@ -11,7 +11,7 @@ import {
   type EvaluateResult,
   ResultFailureReason,
   type TestCase,
-} from '../../src/types';
+} from '../../src/types/index';
 import {
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
@@ -25,7 +25,7 @@ import {
   writeMultipleOutputs,
   writeOutput,
   createOutputMetadata,
-} from '../../src/util';
+} from '../../src/util/index';
 import { TestGrader } from './utils';
 
 jest.mock('../../src/database', () => ({

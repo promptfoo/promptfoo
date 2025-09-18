@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -10,7 +10,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161

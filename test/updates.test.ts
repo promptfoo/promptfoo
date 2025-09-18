@@ -24,7 +24,7 @@ jest.mock('../package.json', () => ({
   version: '0.11.0',
 }));
 
-import { fetchWithTimeout } from '../src/util/fetch';
+import { fetchWithTimeout } from '../src/util/fetch/index';
 import {
   checkForUpdates,
   checkModelAuditUpdates,

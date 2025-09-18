@@ -2,7 +2,7 @@ import { matchesClosedQa } from '../matchers';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleModelGradedClosedQa = async ({
   assertion,

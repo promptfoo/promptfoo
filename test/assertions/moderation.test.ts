@@ -7,7 +7,7 @@ import type {
   AssertionParams,
   AssertionValueFunctionContext,
   TestCase,
-} from '../../src/types';
+} from '../../src/types/index';
 
 jest.mock('../../src/matchers', () => ({
   matchesModeration: jest.fn(),

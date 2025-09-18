@@ -180,33 +180,48 @@ const TestSuites = ({
       'Severity',
     ];
 
-    // Get the sorted data based on current sort model
-    const sortedData = [...rows].sort((a, b) => {
+    const compareRows = (a: (typeof rows)[number], b: (typeof rows)[number]) => {
       if (sortModel.length > 0 && sortModel[0].field === 'attackSuccessRate') {
         return sortModel[0].sort === 'asc'
           ? a.attackSuccessRate - b.attackSuccessRate
           : b.attackSuccessRate - a.attackSuccessRate;
-      } else if (sortModel.length > 0 && sortModel[0].field === 'severity') {
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'severity') {
         const severityOrder = {
           [Severity.Critical]: 4,
           [Severity.High]: 3,
           [Severity.Medium]: 2,
           [Severity.Low]: 1,
-        };
+        } as const;
+
         return sortModel[0].sort === 'asc'
           ? severityOrder[a.severity] - severityOrder[b.severity]
           : severityOrder[b.severity] - severityOrder[a.severity];
-      } else if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
         return sortModel[0].sort === 'asc' ? a.riskScore - b.riskScore : b.riskScore - a.riskScore;
-      } else if (sortModel.length > 0 && sortModel[0].field === 'complexityScore') {
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'complexityScore') {
         return sortModel[0].sort === 'asc'
           ? a.complexityScore - b.complexityScore
           : b.complexityScore - a.complexityScore;
-      } else {
-        // Default sort
-        return b.riskScore - a.riskScore;
       }
-    });
+
+      return b.riskScore - a.riskScore;
+    };
+
+    const sortedData = rows.reduce<Array<(typeof rows)[number]>>((acc, current) => {
+      const insertIndex = acc.findIndex((item) => compareRows(current, item) < 0);
+      if (insertIndex === -1) {
+        acc.push(current);
+      } else {
+        acc.splice(insertIndex, 0, current);
+      }
+      return acc;
+    }, []);
 
     // Serialize the rows to CSV
     const csvData = sortedData.map((subCategory) => [
@@ -372,7 +387,7 @@ const TestSuites = ({
         const passRateWithFilter = params.row.passRateWithFilter;
         const passRate = params.row.passRate;
         return (
-          <Box className={value >= 75 ? 'asr-high' : value >= 50 ? 'asr-medium' : 'asr-low'}>
+          <Box>
             <strong>{value.toFixed(2)}%</strong>
             {passRateWithFilter !== passRate && (
               <>
@@ -388,17 +403,17 @@ const TestSuites = ({
       headerName: 'Severity',
       type: 'singleSelect',
       flex: 0.5,
-      valueFormatter: ({ value }) =>
-        severityDisplayNames[value as Severity] ?? 'Unknown',
+      // TODO(Will): Return here and confirm the merge conflict w/ the main branch was correctly resolved.
+      //valueFormatter: ({ value }) => severityDisplayNames[value as Severity] ?? 'Unknown',
       valueOptions: [
         ...Object.values(Severity).map((severity) => ({
           value: severity,
           label: severityDisplayNames[severity],
         })),
-        { value: 'unknown', label: 'Unknown' },
+        //{ value: 'unknown', label: 'Unknown' },
       ],
-      cellClassName: (params) => `vuln-${params.value.toLowerCase()} vuln`,
-      sortComparator: (v1, v2) => {
+      renderCell: (params: GridRenderCellParams) => <Box>{params.value}</Box>,
+      sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
           [Severity.High]: 3,

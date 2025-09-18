@@ -12,7 +12,7 @@ import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 const DEFAULT_BATCH_SIZE = 3; // Default number of languages to process in a single batch

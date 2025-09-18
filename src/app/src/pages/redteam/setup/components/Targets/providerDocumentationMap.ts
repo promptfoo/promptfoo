@@ -50,7 +50,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   ai21: `${BASE_DOCS_URL}/ai21`,
   aimlapi: `${BASE_DOCS_URL}/aimlapi`,
   hyperbolic: `${BASE_DOCS_URL}/hyperbolic`,
-  lambdalabs: `${BASE_DOCS_URL}/lambdalabs`,
   fal: `${BASE_DOCS_URL}/fal`,
   voyage: `${BASE_DOCS_URL}/voyage`,
 

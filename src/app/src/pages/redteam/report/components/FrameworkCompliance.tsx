@@ -26,10 +26,10 @@ import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScori
 
 interface FrameworkComplianceProps {
   categoryStats: PluginCategoryStatsByPluginId;
-  strategyStats: Record<string, { pass: number; total: number }>;
+  evalId: string;
 }
 
-const FrameworkCompliance = ({ categoryStats, strategyStats }: FrameworkComplianceProps) => {
+const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const getNonCompliantPlugins = React.useCallback(
@@ -161,28 +161,24 @@ const FrameworkCompliance = ({ categoryStats, strategyStats }: FrameworkComplian
   const sortedNonCompliantPlugins = React.useCallback(
     (plugins: string[]): string[] => {
       return [...plugins].sort((a, b) => {
-        // 1. First sort by severity (highest first)
-        const severityA =
-          riskCategorySeverityMap[a as keyof typeof riskCategorySeverityMap] || Severity.Low;
-        const severityB =
-          riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] || Severity.Low;
-
-        const severityOrder = {
-          [Severity.Critical]: 0,
-          [Severity.High]: 1,
-          [Severity.Medium]: 2,
-          [Severity.Low]: 3,
-        };
-
-        if (severityOrder[severityA] !== severityOrder[severityB]) {
-          return severityOrder[severityA] - severityOrder[severityB];
-        }
-
-        // 2. Then sort by pass rate (lowest first)
+        // Sort by pass rate (highest first)
         const passRateA = getPluginPassRate(a).rate;
         const passRateB = getPluginPassRate(b).rate;
 
-        return passRateA - passRateB;
+        return passRateB - passRateA;
+      });
+    },
+    [getPluginPassRate],
+  );
+
+  const sortedCompliantPlugins = React.useCallback(
+    (plugins: string[]): string[] => {
+      return [...plugins].sort((a, b) => {
+        // Sort by pass rate (highest first)
+        const passRateA = getPluginPassRate(a).rate;
+        const passRateB = getPluginPassRate(b).rate;
+
+        return passRateB - passRateA;
       });
     },
     [getPluginPassRate],
@@ -233,6 +229,7 @@ const FrameworkCompliance = ({ categoryStats, strategyStats }: FrameworkComplian
               return (
                 <Grid item xs={12} sm={6} md={4} key={framework}>
                   <FrameworkCard
+                    evalId={evalId}
                     framework={framework}
                     isCompliant={isCompliant}
                     frameworkSeverity={frameworkSeverity}
@@ -240,6 +237,7 @@ const FrameworkCompliance = ({ categoryStats, strategyStats }: FrameworkComplian
                     pluginPassRateThreshold={pluginPassRateThreshold}
                     nonCompliantPlugins={nonCompliantPlugins}
                     sortedNonCompliantPlugins={sortedNonCompliantPlugins}
+                    sortedCompliantPlugins={sortedCompliantPlugins}
                     getPluginPassRate={getPluginPassRate}
                     idx={idx}
                   />

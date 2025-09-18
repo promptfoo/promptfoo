@@ -291,6 +291,8 @@ describe('PolicyViolationGrader', () => {
       }),
       mockProvider,
       undefined,
+      undefined,
+      true,
     );
   });
 
@@ -333,6 +335,8 @@ describe('PolicyViolationGrader', () => {
       }),
       mockProvider,
       undefined,
+      undefined,
+      true,
     );
   });
 });

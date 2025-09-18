@@ -29,7 +29,11 @@ export default function EvalsIndexPage() {
       sx={{ py: 2 }}
       ref={containerRef}
     >
-      <EvalsDataGrid onEvalSelected={(evalId) => navigate(`/eval/${evalId}`)} showUtilityButtons />
+      <EvalsDataGrid
+        onEvalSelected={(evalId) => navigate(`/eval/${evalId}`)}
+        showUtilityButtons
+        deletionEnabled
+      />
     </Container>
   );
 }

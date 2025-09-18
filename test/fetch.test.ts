@@ -20,7 +20,7 @@ import {
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
-} from '../src/util/fetch';
+} from '../src/util/fetch/index';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 

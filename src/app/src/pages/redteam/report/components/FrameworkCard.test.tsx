@@ -7,6 +7,11 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
 
+// Mock react-router-dom
+vi.mock('react-router-dom', () => ({
+  useNavigate: vi.fn(),
+}));
+
 vi.mock('@promptfoo/redteam/constants', async () => {
   const original = await vi.importActual<typeof import('@promptfoo/redteam/constants')>(
     '@promptfoo/redteam/constants',
@@ -56,6 +61,7 @@ describe('FrameworkCard', () => {
   type FrameworkCardProps = React.ComponentProps<typeof FrameworkCard>;
 
   const defaultProps: FrameworkCardProps = {
+    evalId: 'test-eval-id',
     framework: 'test-framework',
     isCompliant: true,
     frameworkSeverity: Severity.Low,
@@ -72,6 +78,7 @@ describe('FrameworkCard', () => {
     pluginPassRateThreshold: 0.8,
     nonCompliantPlugins: [],
     sortedNonCompliantPlugins: vi.fn((plugins) => plugins),
+    sortedCompliantPlugins: vi.fn((plugins) => plugins),
     getPluginPassRate: vi.fn((plugin) => {
       const entry = (defaultProps.categoryStats as any)[plugin] || { stats: { pass: 0, total: 0 } };
       const stats = entry.stats;

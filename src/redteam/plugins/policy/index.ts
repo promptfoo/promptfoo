@@ -1,19 +1,20 @@
 import dedent from 'dedent';
 import { sha256 } from '../../../util/createHash';
 import invariant from '../../../util/invariant';
-import { type Policy, type PolicyObject, PolicyObjectSchema } from '../../types';
+import {
+  type ApiProvider,
+  type Assertion,
+  type AtomicTestCase,
+  type GradingResult,
+  type PluginConfig,
+  type Policy,
+  type PolicyObject,
+  PolicyObjectSchema,
+  type TestCase,
+} from '../../types/index';
 import { RedteamGraderBase, RedteamPluginBase } from '../base';
 import { POLICY_METRIC_PREFIX } from './constants';
 import { constructMetricId } from './utils';
-
-import type {
-  ApiProvider,
-  Assertion,
-  AtomicTestCase,
-  GradingResult,
-  PluginConfig,
-  TestCase,
-} from '../../../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 
@@ -160,6 +161,9 @@ export class PolicyViolationGrader extends RedteamGraderBase {
     provider: ApiProvider | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const { policy, ...restMetadata } = test.metadata || {};
+
+    // For custom policies, we skip the refusal check by passing skipRefusalCheck=true
+    // This allows the policy grader to evaluate refusals according to the policy rubric
     return super.getResult(
       prompt,
       llmOutput,
@@ -172,6 +176,8 @@ export class PolicyViolationGrader extends RedteamGraderBase {
       },
       provider,
       undefined,
+      undefined,
+      true, // skipRefusalCheck - custom policies should evaluate refusals
     );
   }
 }
