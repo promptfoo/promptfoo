@@ -113,7 +113,29 @@
         "useSingleVarDeclarator": "off",
         "useImportType": "off",
         "useNodejsImportProtocol": "off",
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        "noRestrictedGlobals": {
+          "level": "error",
+          "options": {
+            "deniedGlobals": {
+              "fetch": "Use fetchWithProxy() instead of global fetch()."
+            }
+          }
+        },
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "node-fetch": "Use fetchWithProxy() (do not import node-fetch directly).",
+              "undici": {
+                "importNames": ["fetch", "default"],
+                "message": "Use fetchWithProxy() instead of undici.fetch."
+              },
+              "cross-fetch": "Use fetchWithProxy() instead."
+            },
+            "patterns": [{ "group": ["whatwg-fetch", "isomorphic-fetch"] }]
+          }
+        }
       },
       "suspicious": {
         "noExplicitAny": "off",
@@ -214,6 +236,9 @@
         "rules": {
           "correctness": {
             "noUnusedVariables": "error"
+          },
+          "style": {
+            "noRestrictedGlobals": "off"
           }
         }
       }

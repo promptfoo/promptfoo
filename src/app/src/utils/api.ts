@@ -1,8 +1,9 @@
 import useApiConfig from '@app/stores/apiConfig';
+import { fetchWithProxy } from '@promptfoo/util/fetch';
 
 export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
   const { apiBaseUrl } = useApiConfig.getState();
-  return fetch(`${apiBaseUrl}/api${path}`, options);
+  return fetchWithProxy(`${apiBaseUrl}/api${path}`, options);
 }
 
 export async function fetchUserEmail(): Promise<string | null> {

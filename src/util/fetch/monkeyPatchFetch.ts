@@ -11,11 +11,10 @@ function isConnectionError(error: Error) {
   );
 }
 
-const originalFetch = global.fetch;
-
 /**
  * Enhanced fetch wrapper that adds logging, authentication, and error handling
  */
+// biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
 export async function monkeyPatchFetch(...args: Parameters<typeof fetch>): Promise<Response> {
   const [url, options] = args;
   const NO_LOG_URLS = [KA_ENDPOINT, R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
@@ -36,7 +35,8 @@ export async function monkeyPatchFetch(...args: Parameters<typeof fetch>): Promi
     };
   }
   try {
-    const response = await originalFetch(url, opts);
+    // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
+    const response = await fetch(url, opts);
 
     if (logEnabled) {
       logRequestResponse({
