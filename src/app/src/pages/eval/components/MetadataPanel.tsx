@@ -13,6 +13,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import { ellipsize } from '../../../../../util/text';
+import useCloudConfig from '../../../hooks/useCloudConfig';
 
 const isValidUrl = (str: string): boolean => {
   try {
@@ -47,6 +48,8 @@ export function MetadataPanel({
   onCopy,
   onApplyFilter,
 }: MetadataPanelProps) {
+  const { data: cloudConfig } = useCloudConfig();
+
   if (!metadata || Object.keys(metadata).filter((key) => key !== 'citations').length === 0) {
     return null;
   }
@@ -74,7 +77,15 @@ export function MetadataPanel({
 
             const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
             const truncatedValue = ellipsize(stringValue, 300);
-            const isUrl = typeof value === 'string' && isValidUrl(value);
+            let isUrl = typeof value === 'string' && isValidUrl(value);
+            let urlDisplayValue = expandedMetadata[key]?.expanded ? stringValue : truncatedValue;
+
+            // Render a link to the policy in the cloud if cloud is enabled
+            if (key === 'policyId' && cloudConfig?.isEnabled && cloudConfig?.appUrl) {
+              urlDisplayValue = value;
+              value = `${cloudConfig?.appUrl}/redteam/plugins/policies/${value}`;
+              isUrl = true;
+            }
 
             return (
               <TableRow key={key}>
@@ -88,7 +99,7 @@ export function MetadataPanel({
                 >
                   {isUrl ? (
                     <Link href={value} target="_blank" rel="noopener noreferrer">
-                      {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                      {urlDisplayValue}
                     </Link>
                   ) : expandedMetadata[key]?.expanded ? (
                     stringValue
