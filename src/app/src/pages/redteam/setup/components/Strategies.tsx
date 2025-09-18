@@ -39,12 +39,7 @@ import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 // ------------------------------------------------------------------
 
 // Demonstration simulation strategies that use simulate mode
-const SIMULATE_STRATEGIES = new Set([
-  'crescendo',
-  'goat',
-  'custom',
-  'mischievous-user',
-]);
+const SIMULATE_STRATEGIES = new Set(['crescendo', 'goat', 'custom', 'mischievous-user']);
 
 interface StrategiesProps {
   onNext: () => void;

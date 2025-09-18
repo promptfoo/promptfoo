@@ -189,10 +189,16 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
                       <Box
                         sx={{
                           p: 1.5,
-                          backgroundColor: theme.palette.mode === 'dark' ? theme.palette.info.dark : theme.palette.info.light,
+                          backgroundColor:
+                            theme.palette.mode === 'dark'
+                              ? theme.palette.info.dark
+                              : theme.palette.info.light,
                           borderRadius: 1,
                           border: '1px solid',
-                          borderColor: theme.palette.mode === 'dark' ? theme.palette.info.main : theme.palette.info.main,
+                          borderColor:
+                            theme.palette.mode === 'dark'
+                              ? theme.palette.info.main
+                              : theme.palette.info.main,
                           fontSize: '0.875rem',
                         }}
                       >

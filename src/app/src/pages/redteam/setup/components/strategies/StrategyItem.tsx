@@ -31,12 +31,7 @@ const SUPPORTED_SAMPLE_STRATEGIES = new Set([
 ]);
 
 // Demonstration simulation strategies supported in Milestone 2 with simulate mode
-const SIMULATE_SAMPLE_STRATEGIES = new Set([
-  'crescendo',
-  'goat',
-  'custom',
-  'mischievous-user',
-]);
+const SIMULATE_SAMPLE_STRATEGIES = new Set(['crescendo', 'goat', 'custom', 'mischievous-user']);
 
 interface StrategyItemProps {
   strategy: StrategyCardData;
@@ -56,7 +51,8 @@ export function StrategyItem({
   isGeneratingSample = false,
 }: StrategyItemProps) {
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
-  const hasSampleButton = onSampleGenerate &&
+  const hasSampleButton =
+    onSampleGenerate &&
     (SUPPORTED_SAMPLE_STRATEGIES.has(strategy.id) || SIMULATE_SAMPLE_STRATEGIES.has(strategy.id));
 
   return (
