@@ -403,16 +403,13 @@ const TestSuites = ({
       headerName: 'Severity',
       type: 'singleSelect',
       flex: 0.5,
-      // TODO(Will): Return here and confirm the merge conflict w/ the main branch was correctly resolved.
-      //valueFormatter: ({ value }) => severityDisplayNames[value as Severity] ?? 'Unknown',
+      valueFormatter: (value: Severity) => severityDisplayNames[value],
       valueOptions: [
         ...Object.values(Severity).map((severity) => ({
           value: severity,
           label: severityDisplayNames[severity],
         })),
-        //{ value: 'unknown', label: 'Unknown' },
       ],
-      renderCell: (params: GridRenderCellParams) => <Box>{params.value}</Box>,
       sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
