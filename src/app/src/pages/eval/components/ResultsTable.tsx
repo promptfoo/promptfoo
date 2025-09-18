@@ -48,13 +48,18 @@ import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-co
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
+import { usePylonChatViewportOffset } from '@app/hooks/usePylonChatViewportOffset';
 import ButtonGroup from '@mui/material/ButtonGroup';
-import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
+import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
 const DESCRIPTION_COLUMN_SIZE_PX = 100;
+// Offsets the Pylon chat interface by -50px (relative to the bottom of the viewport i.e. moves it up)
+// such that it does not overlap on the Z-index with the pagination footer when the footer is stuck to
+// the bottom of the viewport.
+const PYLON_OFFSET_PX = -50;
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -272,6 +277,8 @@ function ResultsTable({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+
+  usePylonChatViewportOffset(PYLON_OFFSET_PX);
 
   /**
    * Reset the pagination state when the filtered results count changes.
