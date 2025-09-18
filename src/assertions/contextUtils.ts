@@ -30,11 +30,18 @@ export async function resolveContext(
   if (test.vars?.context) {
     if (typeof test.vars.context === 'string') {
       contextValue = test.vars.context;
-    } else if (
-      Array.isArray(test.vars.context) &&
-      test.vars.context.every((item) => typeof item === 'string')
-    ) {
-      contextValue = test.vars.context;
+    } else if (Array.isArray(test.vars.context)) {
+      const invalidEntry = [...(test.vars.context as unknown[]).entries()].find(
+        ([, v]) => typeof v !== 'string',
+      ) as [number, unknown] | undefined;
+      if (invalidEntry) {
+        const [idx, val] = invalidEntry;
+        invariant(
+          false,
+          `Invalid context: expected an array of strings, but found ${typeof val} at index ${idx}`,
+        );
+      }
+      contextValue = test.vars.context as string[];
     }
   } else if (fallbackContext) {
     contextValue = fallbackContext;
@@ -81,4 +88,12 @@ export async function resolveContext(
   );
 
   return contextValue;
+}
+
+/**
+ * Serializes context (string or string[]) to a single string for prompts.
+ * Joins chunks with double newlines to preserve separation.
+ */
+export function serializeContext(context: string | string[]): string {
+  return Array.isArray(context) ? context.join('\n\n') : context;
 }

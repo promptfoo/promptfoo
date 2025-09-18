@@ -46,7 +46,7 @@ describe('resolveContext', () => {
       };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
+        'Invalid context: expected an array of strings, but found number at index 1',
       );
     });
 

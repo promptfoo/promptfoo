@@ -29,6 +29,7 @@ import { maybeLoadFromExternalFile } from './util/file';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { serializeContext } from './assertions/contextUtils';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
@@ -1049,8 +1050,8 @@ export async function matchesContextRecall(
     'context recall check',
   );
 
-  // Convert context to string for LLM prompt (join chunks if array)
-  const contextString = Array.isArray(context) ? context.join('\n\n') : context;
+  // Convert context to string for LLM prompt
+  const contextString = serializeContext(context);
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
@@ -1128,8 +1129,8 @@ export async function matchesContextRelevance(
     'context relevance check',
   );
 
-  // Convert context to string for LLM prompt (join chunks if array)
-  const contextString = Array.isArray(context) ? context.join('\n\n') : context;
+  // Convert context to string for LLM prompt
+  const contextString = serializeContext(context);
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RELEVANCE);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
@@ -1255,8 +1256,8 @@ export async function matchesContextFaithfulness(
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
-  // Convert context to string for LLM prompt (join chunks if array)
-  const contextString = Array.isArray(context) ? context.join('\n\n') : context;
+  // Convert context to string for LLM prompt
+  const contextString = serializeContext(context);
 
   const statements = splitIntoSentences(resp.output);
   promptText = await renderLlmRubricPrompt(nliPrompt, {
