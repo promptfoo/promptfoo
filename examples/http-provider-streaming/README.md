@@ -1,4 +1,4 @@
-# http-provider-streaming
+# http-provider-streaming (HTTP Provider Streaming Example)
 
 This example shows how to use OpenAI's streaming API via HTTP provider.
 
