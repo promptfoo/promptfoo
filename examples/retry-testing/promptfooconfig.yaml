@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'Retry Testing - High Error Rate Example (Offline Mode)'
+
+prompts:
+  - 'Tell me about {{topic}}'
+
+providers:
+  - id: file://errorProvider.js
+    label: 'Error-prone provider'
+
+tests:
+  # Success cases (20% success rate)
+  - vars:
+      topic: 'success case 1'
+    assert:
+      - type: not-equals
+        value: 'SHOULD_NEVER_MATCH'
+
+  - vars:
+      topic: 'success case 2'
+    assert:
+      - type: not-equals
+        value: 'SHOULD_NEVER_MATCH'
+
+  # Error cases (80% error rate)
+  - vars:
+      topic: 'ERROR_NETWORK_FAILURE'
+
+  - vars:
+      topic: 'ERROR_API_LIMIT'
+
+  - vars:
+      topic: 'ERROR_CONNECTION_REFUSED'
+
+  - vars:
+      topic: 'ERROR_AUTHENTICATION_FAILED'
+
+  - vars:
+      topic: 'ERROR_SERVICE_UNAVAILABLE'
+
+  - vars:
+      topic: 'ERROR_TIMEOUT_EXCEEDED'
+
+  - vars:
+      topic: 'ERROR_PARSE_FAILURE'
+
+  - vars:
+      topic: 'ERROR_RATE_LIMITED'
+
+outputPath: retry-test-results-offline.json
