@@ -31,7 +31,16 @@ const SUPPORTED_SAMPLE_STRATEGIES = new Set([
 ]);
 
 // Demonstration simulation strategies supported in Milestone 2 with simulate mode
-const SIMULATE_SAMPLE_STRATEGIES = new Set(['crescendo', 'goat', 'custom', 'mischievous-user']);
+const DEMO_SIMULATE_STRATEGIES = new Set(['crescendo', 'goat', 'custom', 'mischievous-user']);
+
+// Provider-backed simulation strategies supported in Milestone 3
+const PROVIDER_SIMULATE_STRATEGIES = new Set(['jailbreak', 'jailbreak:tree']);
+
+// Combined simulate strategies
+const SIMULATE_SAMPLE_STRATEGIES = new Set([
+  ...DEMO_SIMULATE_STRATEGIES,
+  ...PROVIDER_SIMULATE_STRATEGIES,
+]);
 
 interface StrategyItemProps {
   strategy: StrategyCardData;

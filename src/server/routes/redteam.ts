@@ -31,8 +31,14 @@ const TRANSFORM_STRATEGIES = new Set([
 // Demonstration simulation strategies supported in Milestone 2
 // These provide realistic conversation examples for educational purposes
 // Note: These are handcrafted demonstrations, not provider-backed simulations
-// Next milestone will implement real provider-backed simulate for jailbreak/tree strategies
-const SIMULATE_STRATEGIES = new Set(['crescendo', 'goat', 'custom', 'mischievous-user']);
+const DEMO_SIMULATE_STRATEGIES = new Set(['crescendo', 'goat', 'custom', 'mischievous-user']);
+
+// Provider-backed simulation strategies supported in Milestone 3
+// These use real iterative providers with Echo target and strict caps for safety
+const PROVIDER_SIMULATE_STRATEGIES = new Set(['jailbreak', 'jailbreak:tree']);
+
+// Combined set of all simulate strategies
+const SIMULATE_STRATEGIES = new Set([...DEMO_SIMULATE_STRATEGIES, ...PROVIDER_SIMULATE_STRATEGIES]);
 
 // Strategy metadata for sample generation
 const STRATEGY_METADATA = {
@@ -50,6 +56,8 @@ const STRATEGY_METADATA = {
   goat: { effectiveness: 'high', complexity: 'high' },
   custom: { effectiveness: 'medium', complexity: 'medium' },
   'mischievous-user': { effectiveness: 'medium', complexity: 'medium' },
+  jailbreak: { effectiveness: 'high', complexity: 'high' },
+  'jailbreak:tree': { effectiveness: 'high', complexity: 'high' },
 } as const;
 
 // Generate handcrafted demonstration conversation samples for educational visualization
@@ -287,6 +295,152 @@ async function generateSimulatedStrategySample(
 
     default:
       throw new Error(`Unsupported iterative strategy: ${strategyId}`);
+  }
+}
+
+// Generate provider-backed simulation samples using real iterative providers
+// These execute actual strategy code with Echo provider target and strict caps for safety
+async function generateProviderBackedSimulateSample(
+  strategyId: string,
+  basePrompt: string,
+  config: any,
+): Promise<any> {
+  const strategyMeta = STRATEGY_METADATA[strategyId as keyof typeof STRATEGY_METADATA] || {
+    effectiveness: 'high' as const,
+    complexity: 'high' as const,
+  };
+
+  const description =
+    subCategoryDescriptions[strategyId as keyof typeof subCategoryDescriptions] ||
+    `${strategyId} strategy live demonstration`;
+
+  // Import necessary types and providers
+  const { EchoProvider } = await import('../../providers/echo');
+  const RedteamIterativeProvider = (await import('../../redteam/providers/iterative')).default;
+  const RedteamIterativeTreeProvider = (await import('../../redteam/providers/iterativeTree'))
+    .default;
+
+  // Create Echo provider as safe target
+  const echoProvider = new EchoProvider();
+
+  // Strict caps for safety
+  const safeConfig = {
+    ...config,
+    // Override with strict safety limits
+    numIterations: 2, // Limit iterations for sample generation
+    maxDepth: 2, // Limit tree depth for jailbreak:tree
+    maxAttempts: 2, // Limit attempts per iteration
+    target: echoProvider, // Use Echo provider as safe target
+    // Disable any potentially unsafe features
+    excludeTargetOutputFromAgenticAttackGeneration: true,
+  };
+
+  try {
+    // Create the appropriate iterative provider
+    let iterativeProvider;
+    if (strategyId === 'jailbreak:tree') {
+      iterativeProvider = new RedteamIterativeTreeProvider({
+        injectVar: config.injectVar || 'query',
+        target: echoProvider,
+        ...safeConfig,
+      });
+    } else {
+      iterativeProvider = new RedteamIterativeProvider({
+        injectVar: config.injectVar || 'query',
+        target: echoProvider,
+        ...safeConfig,
+      });
+    }
+
+    // Execute the iterative strategy with the base prompt
+    const result = await iterativeProvider.callApi(basePrompt, {
+      originalProvider: echoProvider,
+      prompt: {
+        raw: basePrompt,
+        label: 'Strategy Sample Generation',
+      },
+      vars: { [config.injectVar || 'query']: basePrompt },
+    });
+
+    // Parse the conversation history from the result
+    const conversation = [];
+    const history =
+      (result.metadata as any).redteamHistory || (result.metadata as any).redteamTreeHistory || [];
+
+    for (let i = 0; i < history.length; i++) {
+      const turn = history[i];
+      conversation.push({
+        turn: i + 1,
+        intent: `Iteration ${i + 1} attack attempt`,
+        userMessage: turn.prompt || basePrompt,
+        assistantResponse: turn.output || 'Echo: ' + (turn.prompt || basePrompt),
+        technique: 'Iterative jailbreak',
+        escalationLevel: `${Math.min(i + 1, 5)}/5 - Progressive attack (Score: ${turn.score || 'N/A'})`,
+      });
+    }
+
+    // Fallback conversation if no history available
+    if (conversation.length === 0) {
+      conversation.push({
+        turn: 1,
+        intent: 'Initial jailbreak attempt',
+        userMessage: basePrompt,
+        assistantResponse: 'Echo: ' + basePrompt,
+        technique: 'Direct iterative attack',
+        escalationLevel: '1/2 - Initial attempt',
+      });
+    }
+
+    return {
+      title: `${strategyId} Strategy Live Demonstration`,
+      summary: description,
+      mode: 'simulate' as const,
+      conversation,
+      metadata: {
+        originalPrompt: basePrompt,
+        strategyId,
+        effectiveness: strategyMeta.effectiveness,
+        complexity: strategyMeta.complexity,
+        turns: conversation.length,
+        simulationNote:
+          'This is a live demonstration using real strategy code with Echo provider target and strict safety caps.',
+        providerBacked: true,
+        safetyLimits: {
+          numIterations: safeConfig.numIterations,
+          maxDepth: safeConfig.maxDepth,
+          target: 'echo',
+        },
+      },
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.warn(`Error in provider-backed simulate for ${strategyId}: ${errorMessage}`);
+
+    // Return fallback sample on error
+    return {
+      title: `${strategyId} Strategy (Error)`,
+      summary: `Error generating live demonstration: ${errorMessage}`,
+      mode: 'simulate' as const,
+      conversation: [
+        {
+          turn: 1,
+          intent: 'Demonstration attempt',
+          userMessage: basePrompt,
+          assistantResponse: 'Error: Could not complete live demonstration',
+          technique: 'Live strategy execution',
+          escalationLevel: '1/1 - Error occurred',
+        },
+      ],
+      metadata: {
+        originalPrompt: basePrompt,
+        strategyId,
+        effectiveness: strategyMeta.effectiveness,
+        complexity: strategyMeta.complexity,
+        turns: 1,
+        error: errorMessage,
+        simulationNote: 'Live demonstration failed. This is a fallback response.',
+      },
+    };
   }
 }
 
@@ -530,8 +684,15 @@ redteamRouter.post(
       );
 
       // Handle demonstration simulation strategies in simulate mode
-      if (SIMULATE_STRATEGIES.has(strategyId) && mode === 'simulate') {
+      if (DEMO_SIMULATE_STRATEGIES.has(strategyId) && mode === 'simulate') {
         const sample = await generateSimulatedStrategySample(strategyId, basePrompt, config);
+        res.json({ sample });
+        return;
+      }
+
+      // Handle provider-backed simulation strategies in simulate mode
+      if (PROVIDER_SIMULATE_STRATEGIES.has(strategyId) && mode === 'simulate') {
+        const sample = await generateProviderBackedSimulateSample(strategyId, basePrompt, config);
         res.json({ sample });
         return;
       }
