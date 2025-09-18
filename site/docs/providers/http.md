@@ -1252,6 +1252,44 @@ providers:
       maxRetries: 2 # Override default of 4 retries
 ```
 
+## Streaming Responses
+
+Promptfoo can call HTTP targets that stream responses (for example, Server-Sent Events or chunked JSON). However, streaming is usually not recommended:
+
+- Evals wait for the full response before scoring, so progressive tokens are not surfaced
+- Streaming formats vary widely and often require custom parsing logic in `transformResponse`
+- Overall test duration is typically similar to non-streaming requests
+
+If you still need to evaluate a streaming endpoint, parse and reconstruct the final text inside `transformResponse`. For SSE-style responses, you can accumulate `delta` chunks from each `data:` line:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/responses'
+      body:
+        model: 'custom-model'
+        stream: true
+      transformResponse: |
+        (json, text) => {
+          if (json && (json.output_text || json.response)) {
+            return json.output_text || json.response;
+          }
+          let out = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            try {
+              const evt = JSON.parse(trimmed.slice(6));
+              if (evt.type === 'response.output_text.delta' && typeof evt.delta === 'string') {
+                out += evt.delta;
+              }
+            } catch {}
+          }
+          return out.trim();
+        }
+```
+
 ## Reference
 
 Supported config options:

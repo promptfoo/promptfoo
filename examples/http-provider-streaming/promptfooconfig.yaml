@@ -23,21 +23,31 @@ providers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-5-mini'
+        model: 'gpt-5-nano'
         input:
           - role: 'user'
             content: '{{prompt}}'
-        stream: true  # Demonstrates streaming, but eval waits for completion anyway
-      transformResponse: 'json.choices[0].delta.content'
-
-
-tests:
-  - vars:
-      topic: 'mountains'
-  - vars:
-      topic: 'artificial intelligence'
-  - vars:
-      topic: 'ocean waves'
+        stream: true # Demonstrates streaming (no eval benefit)
+      transformResponse: |
+        (json, text) => {
+          // If non-streaming JSON with output_text/response arrives, return it
+          if (json && (json.output_text || json.response)) {
+            return json.output_text || json.response;
+          }
+          // Otherwise parse SSE text and accumulate delta chunks
+          let out = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            try {
+              const evt = JSON.parse(trimmed.slice(6));
+              if (evt && evt.type === 'response.output_text.delta' && typeof evt.delta === 'string') {
+                out += evt.delta;
+              }
+            } catch {}
+          }
+          return out.trim();
+        }
 
 defaultTest:
   assert:
@@ -47,3 +57,11 @@ defaultTest:
     # Verify it's a string
     - type: javascript
       value: 'typeof output === "string"'
+
+tests:
+  - vars:
+      topic: 'mountains'
+  - vars:
+      topic: 'artificial intelligence'
+  - vars:
+      topic: 'ocean waves'
