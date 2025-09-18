@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/dom';
 import { render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DownloadMenu from './DownloadMenu';
 import { useTableStore as useResultsViewStore } from './store';
@@ -127,8 +128,14 @@ describe('DownloadMenu', () => {
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      // The CSV should include the Description column since one row has a description
-      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      // Verify csv-stringify input contains Description header and value
+      const calls = (csvStringify as unknown as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const rows = calls[0][0] as string[][];
+      expect(rows[0][0]).toBe('Description');
+      expect(rows[1][0]).toBe('Test case with description');
+      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Blob;
       expect(blob.type).toBe('text/csv;charset=utf-8;');
     });
   });
