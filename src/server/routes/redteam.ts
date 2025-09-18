@@ -29,7 +29,9 @@ const TRANSFORM_STRATEGIES = new Set([
 ]);
 
 // Demonstration simulation strategies supported in Milestone 2
-// These provide realistic conversation examples without calling real providers
+// These provide realistic conversation examples for educational purposes
+// Note: These are handcrafted demonstrations, not provider-backed simulations
+// Next milestone will implement real provider-backed simulate for jailbreak/tree strategies
 const SIMULATE_STRATEGIES = new Set(['crescendo', 'goat', 'custom', 'mischievous-user']);
 
 // Strategy metadata for sample generation
@@ -50,7 +52,9 @@ const STRATEGY_METADATA = {
   'mischievous-user': { effectiveness: 'medium', complexity: 'medium' },
 } as const;
 
-// Generate demonstration conversation samples for visualization
+// Generate handcrafted demonstration conversation samples for educational visualization
+// These are realistic examples showing how iterative attack strategies escalate over multiple turns
+// They do not exercise real providers or make actual strategy calls
 async function generateSimulatedStrategySample(
   strategyId: string,
   basePrompt: string,

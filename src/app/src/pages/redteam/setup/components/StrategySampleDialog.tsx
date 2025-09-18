@@ -14,6 +14,7 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
 import { useTheme } from '@mui/material/styles';
+import { grey } from '@mui/material/colors';
 
 interface StrategySample {
   title: string;
@@ -141,10 +142,10 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
                 <Box
                   sx={{
                     p: 2,
-                    backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                    backgroundColor: theme.palette.mode === 'dark' ? grey[900] : grey[50],
                     borderRadius: 1,
                     border: '1px solid',
-                    borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                    borderColor: theme.palette.mode === 'dark' ? grey[700] : grey[300],
                     fontFamily: 'monospace',
                     fontSize: '0.875rem',
                     whiteSpace: 'pre-wrap',
@@ -214,10 +215,10 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
                       <Box
                         sx={{
                           p: 1.5,
-                          backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                          backgroundColor: theme.palette.mode === 'dark' ? grey[900] : grey[50],
                           borderRadius: 1,
                           border: '1px solid',
-                          borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                          borderColor: theme.palette.mode === 'dark' ? grey[700] : grey[300],
                           fontSize: '0.875rem',
                         }}
                       >
@@ -239,10 +240,10 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
                     sx={{
                       p: 2,
                       mb: index < (generatedSample.modifiedPrompts?.length || 0) - 1 ? 2 : 0,
-                      backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                      backgroundColor: theme.palette.mode === 'dark' ? grey[900] : grey[50],
                       borderRadius: 1,
                       border: '1px solid',
-                      borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                      borderColor: theme.palette.mode === 'dark' ? grey[700] : grey[300],
                       fontFamily: 'monospace',
                       fontSize: '0.875rem',
                       whiteSpace: 'pre-wrap',

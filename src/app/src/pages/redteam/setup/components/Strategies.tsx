@@ -448,7 +448,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         setGeneratingSampleIds((prev) => prev.filter((id) => id !== strategyId));
       }
     },
-    [recordEvent, config.description, callApi],
+    [recordEvent, config.description, config.applicationDefinition, callApi],
   );
 
   const handleSampleDialogClose = useCallback(() => {
