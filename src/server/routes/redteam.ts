@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import cliState from '../../cliState';
+import { VERSION } from '../../constants';
+import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REDTEAM_MODEL } from '../../redteam/constants';
 import { ALL_STRATEGIES } from '../../redteam/constants/strategies';
@@ -526,6 +528,96 @@ async function generateAdvancedStrategySample(
     };
 
     logger.debug(`Applying ${strategyId} strategy with config: ${JSON.stringify(safeConfig)}`);
+
+    // Special handling for best-of-n which requires remote generation to get actual candidates
+    if (strategyId === 'best-of-n') {
+      try {
+        // Call remote generation endpoint to get actual candidates
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+        const response = await fetch(getRemoteGenerationUrl(), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            task: 'jailbreak:best-of-n',
+            prompt: basePrompt,
+            nSteps: safeConfig.nSteps || 1,
+            maxCandidatesPerStep: safeConfig.maxCandidatesPerStep || 3,
+            version: VERSION,
+            email: getUserEmail(),
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`Remote generation failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const modifiedPrompts = data.modifiedPrompts || [];
+
+        if (modifiedPrompts.length === 0) {
+          throw new Error('No candidates generated');
+        }
+
+        // Convert candidates to conversation format
+        const conversation = [];
+        for (let i = 0; i < Math.min(modifiedPrompts.length, 5); i++) {
+          const candidatePrompt = modifiedPrompts[i];
+          conversation.push({
+            turn: i + 1,
+            intent: `Best-of-N candidate ${i + 1}`,
+            userMessage: candidatePrompt,
+            assistantResponse: `Echo: ${candidatePrompt}`, // Safe Echo response
+            technique: `Best-of-N optimization (candidate ${i + 1})`,
+            escalationLevel: `${i + 1}/${Math.min(modifiedPrompts.length, 5)} - Optimized candidate`,
+          });
+        }
+
+        return {
+          title: `${strategyId} Strategy Advanced Demonstration`,
+          summary: description,
+          mode: 'simulate' as const,
+          conversation,
+          metadata: {
+            originalPrompt: basePrompt,
+            strategyId,
+            effectiveness: strategyMeta.effectiveness,
+            complexity: strategyMeta.complexity,
+            turns: conversation.length,
+            simulationNote: `This demonstrates the ${strategyId} strategy using actual remote candidate generation.`,
+            advancedStrategy: true,
+            variations: modifiedPrompts.length,
+            configUsed: safeConfig,
+          },
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.warn(`Best-of-n remote generation failed: ${errorMessage}`);
+
+        // Return unavailable sample if remote call fails
+        return {
+          title: `${strategyId} Strategy Sample`,
+          summary: description,
+          mode: 'simulate' as const,
+          conversation: [],
+          metadata: {
+            originalPrompt: basePrompt,
+            strategyId,
+            effectiveness: strategyMeta.effectiveness,
+            complexity: strategyMeta.complexity,
+            unavailable: true,
+            category: 'advanced',
+            simulationNote: `The ${strategyId} strategy requires remote generation but encountered an error: ${errorMessage}`,
+          },
+        };
+      }
+    }
 
     const transformedCases = await strategy.action([seedTestCase], injectVar, safeConfig);
 
