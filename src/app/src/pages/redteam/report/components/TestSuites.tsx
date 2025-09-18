@@ -373,7 +373,7 @@ const TestSuites = ({
         const passRateWithFilter = params.row.passRateWithFilter;
         const passRate = params.row.passRate;
         return (
-          <Box className={value >= 75 ? 'asr-high' : value >= 50 ? 'asr-medium' : 'asr-low'}>
+          <Box>
             <strong>{value.toFixed(2)}%</strong>
             {passRateWithFilter !== passRate && (
               <>
@@ -390,9 +390,7 @@ const TestSuites = ({
       type: 'singleSelect',
       flex: 0.5,
       valueOptions: Object.values(Severity),
-      renderCell: (params: GridRenderCellParams) => (
-        <Box className={`vuln-${params.value.toLowerCase()} vuln`}>{params.value}</Box>
-      ),
+      renderCell: (params: GridRenderCellParams) => <Box>{params.value}</Box>,
       sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
