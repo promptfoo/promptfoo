@@ -19,12 +19,24 @@ interface StrategySample {
   title: string;
   summary: string;
   mode: 'template' | 'simulate';
-  modifiedPrompts: string[];
+  modifiedPrompts?: string[];
+  conversation?: Array<{
+    turn: number;
+    intent: string;
+    userMessage: string;
+    assistantResponse: string;
+    technique?: string;
+    escalationLevel?: string;
+  }>;
   metadata: {
     originalPrompt?: string;
     strategyId: string;
     effectiveness: 'low' | 'medium' | 'high';
     complexity: 'low' | 'medium' | 'high';
+    unavailable?: boolean;
+    category?: string;
+    turns?: number;
+    simulationNote?: string;
     [key: string]: any;
   };
 }
@@ -160,7 +172,7 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
                 )}
                 {generatedSample.conversation.map((turn, index) => (
                   <Box key={turn.turn} sx={{ mb: 3 }}>
-                    <Typography variant="subtitle3" component="div" sx={{ mb: 1, fontWeight: 600 }}>
+                    <Typography variant="subtitle2" component="div" sx={{ mb: 1, fontWeight: 600 }}>
                       Turn {turn.turn}: {turn.intent}
                     </Typography>
                     <Box sx={{ mb: 1 }}>
@@ -177,10 +189,10 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
                       <Box
                         sx={{
                           p: 1.5,
-                          backgroundColor: theme.palette.mode === 'dark' ? 'blue.900' : 'blue.50',
+                          backgroundColor: theme.palette.mode === 'dark' ? theme.palette.info.dark : theme.palette.info.light,
                           borderRadius: 1,
                           border: '1px solid',
-                          borderColor: theme.palette.mode === 'dark' ? 'blue.700' : 'blue.200',
+                          borderColor: theme.palette.mode === 'dark' ? theme.palette.info.main : theme.palette.info.main,
                           fontSize: '0.875rem',
                         }}
                       >
