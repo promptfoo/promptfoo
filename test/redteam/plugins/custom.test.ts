@@ -70,6 +70,50 @@ describe('CustomPlugin', () => {
       { type: 'llm-rubric', value: 'Grade the response based on test-purpose' },
     ]);
   });
+
+  it('should include threshold in assertions when specified', () => {
+    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+      generator: 'Generate {{ n }} test prompts for {{ purpose }}',
+      grader: 'Grade the response based on {{ purpose }}',
+      threshold: 0.8,
+    });
+
+    const pluginWithThreshold = new CustomPlugin(
+      mockProvider,
+      'test-purpose',
+      'testVar',
+      'path/to/custom-plugin.json',
+    );
+
+    const assertions = pluginWithThreshold['getAssertions']('Some prompt');
+    expect(assertions).toEqual([
+      {
+        type: 'llm-rubric',
+        value: 'Grade the response based on test-purpose',
+        threshold: 0.8,
+      },
+    ]);
+  });
+
+  it('should not include threshold in assertions when not specified', () => {
+    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+      generator: 'Generate {{ n }} test prompts for {{ purpose }}',
+      grader: 'Grade the response based on {{ purpose }}',
+    });
+
+    const pluginWithoutThreshold = new CustomPlugin(
+      mockProvider,
+      'test-purpose',
+      'testVar',
+      'path/to/custom-plugin.json',
+    );
+
+    const assertions = pluginWithoutThreshold['getAssertions']('Some prompt');
+    expect(assertions).toEqual([
+      { type: 'llm-rubric', value: 'Grade the response based on test-purpose' },
+    ]);
+    expect(assertions[0]).not.toHaveProperty('threshold');
+  });
 });
 
 describe('loadCustomPluginDefinition', () => {
@@ -88,6 +132,40 @@ describe('loadCustomPluginDefinition', () => {
     expect(result).toEqual({
       generator: 'Valid generator template',
       grader: 'Valid grader template',
+    });
+  });
+
+  it('should load a valid custom plugin definition with threshold', () => {
+    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+      generator: 'Valid generator template',
+      grader: 'Valid grader template',
+      threshold: 0.7,
+    });
+
+    const result = loadCustomPluginDefinition('path/to/valid-plugin.json');
+
+    expect(result).toEqual({
+      generator: 'Valid generator template',
+      grader: 'Valid grader template',
+      threshold: 0.7,
+    });
+  });
+
+  it('should load a valid custom plugin definition with optional id', () => {
+    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+      generator: 'Valid generator template',
+      grader: 'Valid grader template',
+      threshold: 1.0,
+      id: 'custom-plugin-id',
+    });
+
+    const result = loadCustomPluginDefinition('path/to/valid-plugin.json');
+
+    expect(result).toEqual({
+      generator: 'Valid generator template',
+      grader: 'Valid grader template',
+      threshold: 1.0,
+      id: 'custom-plugin-id',
     });
   });
 
@@ -117,6 +195,18 @@ describe('loadCustomPluginDefinition', () => {
       generator: 'Valid generator template',
       grader: 'Valid grader template',
       extraField: 'This should not be here',
+    });
+
+    expect(() => loadCustomPluginDefinition('path/to/invalid-plugin.json')).toThrow(
+      'Custom Plugin Schema Validation Error',
+    );
+  });
+
+  it('should throw an error when threshold is not a number', () => {
+    jest.mocked(maybeLoadFromExternalFile).mockReturnValue({
+      generator: 'Valid generator template',
+      grader: 'Valid grader template',
+      threshold: 'invalid',
     });
 
     expect(() => loadCustomPluginDefinition('path/to/invalid-plugin.json')).toThrow(
