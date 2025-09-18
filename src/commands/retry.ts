@@ -11,8 +11,12 @@ import { resolveConfigs } from '../util/config/load';
 
 import type { Command } from 'commander';
 import type { EvaluateOptions } from '../types/index';
-import type { CompletedPrompt, EvaluateResult } from '../types/index';
-import { createEmptyTokenUsage, createEmptyAssertions, accumulateResponseTokenUsage, accumulateAssertionTokenUsage } from '../util/tokenUsageUtils';
+import {
+  createEmptyTokenUsage,
+  createEmptyAssertions,
+  accumulateResponseTokenUsage,
+  accumulateAssertionTokenUsage,
+} from '../util/tokenUsageUtils';
 
 interface RetryCommandOptions {
   config?: string;
@@ -33,12 +37,12 @@ async function getErrorResultIds(evalId: string): Promise<string[]> {
     .where(
       and(
         eq(evalResultsTable.evalId, evalId),
-        eq(evalResultsTable.failureReason, ResultFailureReason.ERROR)
-      )
+        eq(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+      ),
     )
     .all();
 
-  return errorResults.map(r => r.id);
+  return errorResults.map((r) => r.id);
 }
 
 /**
@@ -48,9 +52,7 @@ async function deleteErrorResults(resultIds: string[]): Promise<void> {
   const db = getDb();
 
   for (const resultId of resultIds) {
-    await db
-      .delete(evalResultsTable)
-      .where(eq(evalResultsTable.id, resultId));
+    await db.delete(evalResultsTable).where(eq(evalResultsTable.id, resultId));
   }
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);
@@ -66,19 +68,22 @@ async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
   await evalRecord.loadResults();
 
   // Create a map to track metrics by promptIdx
-  const promptMetricsMap = new Map<number, {
-    score: number;
-    testPassCount: number;
-    testFailCount: number;
-    testErrorCount: number;
-    assertPassCount: number;
-    assertFailCount: number;
-    totalLatencyMs: number;
-    tokenUsage: any;
-    namedScores: Record<string, number>;
-    namedScoresCount: Record<string, number>;
-    cost: number;
-  }>();
+  const promptMetricsMap = new Map<
+    number,
+    {
+      score: number;
+      testPassCount: number;
+      testFailCount: number;
+      testErrorCount: number;
+      assertPassCount: number;
+      assertFailCount: number;
+      totalLatencyMs: number;
+      tokenUsage: any;
+      namedScores: Record<string, number>;
+      namedScoresCount: Record<string, number>;
+      cost: number;
+    }
+  >();
 
   // Initialize metrics for each prompt
   for (const prompt of evalRecord.prompts) {
@@ -101,7 +106,9 @@ async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
   // Recalculate metrics from current results
   for (const result of evalRecord.results) {
     const metrics = promptMetricsMap.get(result.promptIdx);
-    if (!metrics) continue;
+    if (!metrics) {
+      continue;
+    }
 
     // Update test counts
     if (result.success) {
@@ -128,13 +135,16 @@ async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
           contributingAssertions++;
         }
       });
-      metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
+      metrics.namedScoresCount[key] =
+        (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
     }
 
     // Update assertion counts
     if (result.gradingResult?.componentResults) {
-      metrics.assertPassCount += result.gradingResult.componentResults.filter(r => r.pass).length;
-      metrics.assertFailCount += result.gradingResult.componentResults.filter(r => !r.pass).length;
+      metrics.assertPassCount += result.gradingResult.componentResults.filter((r) => r.pass).length;
+      metrics.assertFailCount += result.gradingResult.componentResults.filter(
+        (r) => !r.pass,
+      ).length;
     }
 
     // Update token usage
@@ -208,7 +218,9 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   // Recalculate prompt metrics after deleting ERROR results to avoid double-counting
   await recalculatePromptMetrics(originalEval);
 
-  logger.info(`🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`);
+  logger.info(
+    `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
+  );
 
   // Enable resume mode so only the missing (deleted) results will be evaluated
   cliState.resume = true;
@@ -218,7 +230,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     maxConcurrency: cmdObj.maxConcurrency || (config as any).maxConcurrency,
     delay: cmdObj.delay || (config as any).delay,
     eventSource: 'cli',
-    showProgressBar: cmdObj.verbose ? false : true, // Show progress bar unless verbose mode
+    showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
 
   try {
@@ -240,7 +252,10 @@ export function setupRetryCommand(program: Command) {
   program
     .command('retry <evalId>')
     .description('Retry all ERROR results from a given evaluation')
-    .option('-c, --config <path>', 'Path to configuration file (optional, uses original eval config if not provided)')
+    .option(
+      '-c, --config <path>',
+      'Path to configuration file (optional, uses original eval config if not provided)',
+    )
     .option('-v, --verbose', 'Verbose output')
     .option('--max-concurrency <number>', 'Maximum number of concurrent evaluations', parseInt)
     .option('--delay <number>', 'Delay between evaluations in milliseconds', parseInt)
