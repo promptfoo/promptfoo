@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OpenAI HTTP provider example (streaming not recommended)
+description: OpenAI HTTP provider streaming example
 
-# ⚠️ WARNING: This example shows how to use OpenAI's API via HTTP provider, but this
-# approach is NOT RECOMMENDED for production use. The evaluation tool waits for the
+# This example shows how to use OpenAI's streaming API via HTTP provider, but this
+# approach is NOT RECOMMENDED. Promptfoo tool waits for the
 # entire response to complete anyway, so you get no streaming benefits.
 #
-# 🎯 RECOMMENDED: Use the built-in OpenAI provider instead: openai:gpt-4o
+# 🎯 RECOMMENDED: Use the built-in OpenAI provider instead: openai:responses:gpt-5-mini
 # - Simpler configuration
 # - Automatic environment variable handling
 # - Better error handling
@@ -16,7 +16,6 @@ prompts:
   - 'Explain {{topic}} in one sentence'
 
 providers:
-  # HTTP provider approach (for demonstration only)
   - id: https://api.openai.com/v1/responses
     config:
       method: 'POST'
@@ -31,8 +30,6 @@ providers:
         stream: true  # Demonstrates streaming, but eval waits for completion anyway
       transformResponse: 'json.choices[0].delta.content'
 
-  # Recommended approach using built-in provider
-  - openai:responses:gpt-5-mini
 
 tests:
   - vars:
