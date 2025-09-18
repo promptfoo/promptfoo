@@ -34,7 +34,7 @@ const TRANSFORM_STRATEGIES = new Set([
 const DEMO_SIMULATE_STRATEGIES = new Set(['crescendo', 'goat', 'custom', 'mischievous-user']);
 
 // Provider-backed simulation strategies supported in Milestone 3
-// These use real iterative providers with Echo target and strict caps for safety
+// These use real iterative providers with Echo target for safety
 const PROVIDER_SIMULATE_STRATEGIES = new Set(['jailbreak', 'jailbreak:tree']);
 
 // Combined set of all simulate strategies
@@ -299,7 +299,7 @@ async function generateSimulatedStrategySample(
 }
 
 // Generate provider-backed simulation samples using real iterative providers
-// These execute actual strategy code with Echo provider target and strict caps for safety
+// These execute actual strategy code with Echo provider target for safety
 async function generateProviderBackedSimulateSample(
   strategyId: string,
   basePrompt: string,
@@ -323,16 +323,10 @@ async function generateProviderBackedSimulateSample(
   // Create Echo provider as safe target
   const echoProvider = new EchoProvider();
 
-  // Strict caps for safety
+  // Use normal strategy configuration with Echo provider as safe target
   const safeConfig = {
     ...config,
-    // Override with strict safety limits
-    numIterations: 2, // Limit iterations for sample generation
-    maxDepth: 2, // Limit tree depth for jailbreak:tree
-    maxAttempts: 2, // Limit attempts per iteration
-    target: echoProvider, // Use Echo provider as safe target
-    // Disable any potentially unsafe features
-    excludeTargetOutputFromAgenticAttackGeneration: true,
+    target: echoProvider, // Use Echo provider as safe target (provides safety without limiting strategy)
   };
 
   try {
@@ -375,7 +369,7 @@ async function generateProviderBackedSimulateSample(
         userMessage: turn.prompt || basePrompt,
         assistantResponse: turn.output || 'Echo: ' + (turn.prompt || basePrompt),
         technique: 'Iterative jailbreak',
-        escalationLevel: `${Math.min(i + 1, 5)}/5 - Progressive attack (Score: ${turn.score || 'N/A'})`,
+        escalationLevel: `${i + 1}/${history.length} - Progressive attack (Score: ${turn.score || 'N/A'})`,
       });
     }
 
@@ -387,7 +381,7 @@ async function generateProviderBackedSimulateSample(
         userMessage: basePrompt,
         assistantResponse: 'Echo: ' + basePrompt,
         technique: 'Direct iterative attack',
-        escalationLevel: '1/2 - Initial attempt',
+        escalationLevel: '1/1 - Single attempt',
       });
     }
 
@@ -403,13 +397,9 @@ async function generateProviderBackedSimulateSample(
         complexity: strategyMeta.complexity,
         turns: conversation.length,
         simulationNote:
-          'This is a live demonstration using real strategy code with Echo provider target and strict safety caps.',
+          'This is a live demonstration using real strategy code with Echo provider target for safety.',
         providerBacked: true,
-        safetyLimits: {
-          numIterations: safeConfig.numIterations,
-          maxDepth: safeConfig.maxDepth,
-          target: 'echo',
-        },
+        target: 'echo',
       },
     };
   } catch (error) {
