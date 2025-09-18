@@ -1,7 +1,6 @@
+import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
-
-import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
@@ -22,7 +21,6 @@ let useStructuredLogging = false;
 export function setStructuredLogging(enabled: boolean) {
   useStructuredLogging = enabled;
 }
-
 
 export const LOG_LEVELS = {
   error: 0,
@@ -110,7 +108,6 @@ export const consoleFormatter = winston.format.printf(
       globalLogCallback(message);
     }
 
-
     const location = info.location ? `${info.location} ` : '';
 
     if (info.level === 'error') {
@@ -135,7 +132,6 @@ export const fileFormatter = winston.format.printf(
     return `${timestamp} [${info.level.toUpperCase()}]${location}: ${message}`;
   },
 );
-
 
 export const winstonLogger = winston.createLogger({
   levels: LOG_LEVELS,
@@ -298,9 +294,30 @@ let internalLogger: StrictLogger = Object.assign({}, winstonLogger, {
 /**
  * Replace the logger instance with a custom logger
  * Useful for integrating with external logging systems
+ * @param customLogger - Logger instance that implements the required interface
+ * @throws Error if customLogger is missing required methods
  */
-export function setLogger(customLogger: any) {
-  internalLogger = customLogger;
+export function setLogger(customLogger: Pick<StrictLogger, 'debug' | 'info' | 'warn' | 'error'>) {
+  // Validate that customLogger is not null or undefined
+  if (!customLogger || typeof customLogger !== 'object') {
+    throw new Error('Custom logger must be a valid object with required logging methods.');
+  }
+
+  // Runtime validation guards
+  const requiredMethods = ['debug', 'info', 'warn', 'error'] as const;
+
+  const missingMethods = requiredMethods.filter(
+    (method) => typeof customLogger[method] !== 'function',
+  );
+
+  if (missingMethods.length > 0) {
+    throw new Error(
+      `Custom logger is missing required methods: ${missingMethods.join(', ')}. ` +
+        'Logger must implement { debug: Function; info: Function; warn: Function; error: Function }',
+    );
+  }
+
+  internalLogger = customLogger as StrictLogger;
 }
 
 // Wrapper that delegates to the current logger instance
@@ -309,15 +326,21 @@ const logger = {
   warn: (message: string) => internalLogger.warn(message),
   info: (message: string) => internalLogger.info(message),
   debug: (message: string) => internalLogger.debug(message),
-  add: (transport: any) => internalLogger.add ? internalLogger.add(transport) : undefined,
-  remove: (transport: any) => internalLogger.remove ? internalLogger.remove(transport) : undefined,
-  get transports() { return internalLogger.transports || []; },
-  get level() { return internalLogger.transports?.[0]?.level || 'info'; },
+  add: (transport: winston.transport) =>
+    internalLogger.add ? internalLogger.add(transport) : undefined,
+  remove: (transport: winston.transport) =>
+    internalLogger.remove ? internalLogger.remove(transport) : undefined,
+  get transports() {
+    return internalLogger.transports || [];
+  },
+  get level() {
+    return internalLogger.transports?.[0]?.level || 'info';
+  },
   set level(newLevel: string) {
     if (internalLogger.transports?.[0]) {
       internalLogger.transports[0].level = newLevel;
     }
-  }
+  },
 };
 
 /**
@@ -329,7 +352,7 @@ const logger = {
  */
 export async function logRequestResponse(options: {
   url: string;
-  requestBody: any;
+  requestBody: Record<string, unknown> | string | null | undefined;
   requestMethod: string;
   response?: Response | null;
   error?: boolean;
@@ -348,7 +371,6 @@ export async function logRequestResponse(options: {
   }
 
   if (useStructuredLogging) {
-
     const logObject = {
       message: 'API request',
       url: sanitizeUrl(url),
