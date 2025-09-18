@@ -564,7 +564,7 @@ const FrameworkCard = ({
 
                 {/* Passing plugins */}
                 {(() => {
-                  const compliantPlugins = Object.keys(categoryStats).filter(
+                  const compliantPlugins = Object.keys(filteredCategoryStats).filter(
                     (plugin) =>
                       filteredCategoryStats[plugin].stats.total > 0 &&
                       filteredCategoryStats[plugin].stats.pass /
@@ -580,10 +580,11 @@ const FrameworkCard = ({
                   ) : null;
                 })()}
                 {(() => {
-                  const compliantPlugins = Object.keys(categoryStats).filter(
+                  const compliantPlugins = Object.keys(filteredCategoryStats).filter(
                     (plugin) =>
-                      categoryStats[plugin].stats.total > 0 &&
-                      categoryStats[plugin].stats.pass / categoryStats[plugin].stats.total >=
+                      filteredCategoryStats[plugin].stats.total > 0 &&
+                      filteredCategoryStats[plugin].stats.pass /
+                        filteredCategoryStats[plugin].stats.total >=
                         pluginPassRateThreshold,
                   );
                   return sortedCompliantPlugins(compliantPlugins);
