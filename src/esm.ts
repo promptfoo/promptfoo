@@ -3,6 +3,12 @@ import { pathToFileURL } from 'node:url';
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
 
+type DynamicImportFn = (specifier: string) => Promise<any>;
+
+const { dynamicImport } = require('./dynamic-import.cjs') as {
+  dynamicImport: DynamicImportFn;
+};
+
 // esm-specific crap that needs to get mocked out in tests
 
 //import path from 'path';
@@ -33,7 +39,7 @@ export async function importModule(modulePath: string, functionName?: string) {
     const resolvedPathStr = resolvedPath.toString();
     logger.debug(`Attempting ESM import from: ${resolvedPathStr}`);
 
-    // IMPORTANT: Use eval() to bypass dynamic import interception in both dev and production
+    // IMPORTANT: Use a CJS helper to trigger native dynamic import at runtime
     //
     // Problem: Dynamic imports get converted to require() calls by:
     // 1. ts-node during development (@cspotcode/source-map-support)
@@ -43,10 +49,10 @@ export async function importModule(modulePath: string, functionName?: string) {
     // 1. require() can't load ES modules (throws ERR_REQUIRE_ESM)
     // 2. require() doesn't understand file:// URLs (throws MODULE_NOT_FOUND)
     //
-    // Solution: eval() executes the import at runtime, after static analysis is complete,
-    // so neither ts-node nor the TypeScript compiler can intercept and transform it.
-    // This ensures the import goes through Node.js's native ES module loader.
-    const importedModule = await eval(`import('${resolvedPathStr}')`);
+    // Solution: call into a CommonJS helper that performs the import. Because the
+    // helper is plain JavaScript, neither ts-node nor the TypeScript compiler can
+    // rewrite the `import()` expression, so Node.js handles it natively.
+    const importedModule = await dynamicImport(resolvedPathStr);
 
     const mod = importedModule?.default?.default || importedModule?.default || importedModule;
     logger.debug(
