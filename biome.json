@@ -244,6 +244,16 @@
       }
     },
     {
+      "includes": ["src/app/**/*"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["examples/**/*", "site/**/*"],
       "linter": {
         "rules": {
