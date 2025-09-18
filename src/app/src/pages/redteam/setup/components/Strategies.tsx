@@ -46,6 +46,9 @@ const SIMULATE_STRATEGIES = new Set([
   'mischievous-user',
   'jailbreak',
   'jailbreak:tree',
+  'best-of-n',
+  'citation',
+  'multilingual',
 ]);
 
 interface StrategiesProps {
@@ -455,7 +458,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         setGeneratingSampleIds((prev) => prev.filter((id) => id !== strategyId));
       }
     },
-    [recordEvent, config.description, config.applicationDefinition, callApi],
+    [recordEvent, config.description, config.applicationDefinition, callApi, toast],
   );
 
   const handleSampleDialogClose = useCallback(() => {

@@ -28,17 +28,24 @@ const TRANSFORM_STRATEGIES = new Set([
   'prompt-injection',
 ]);
 
-// Demonstration simulation strategies supported in Milestone 2
-// These provide realistic conversation examples for educational purposes
-// Note: These are handcrafted demonstrations, not provider-backed simulations
+// MILESTONE 2: Demonstration simulation strategies (handcrafted conversations)
+// These return pre-written conversations showing how the strategy would work
 const DEMO_SIMULATE_STRATEGIES = new Set(['crescendo', 'goat', 'custom', 'mischievous-user']);
 
-// Provider-backed simulation strategies supported in Milestone 3
-// These use real iterative providers with Echo target for safety
+// MILESTONE 3: Provider-backed simulation strategies (real strategy execution)
+// These use actual iterative providers with Echo target for safety and capped configurations
 const PROVIDER_SIMULATE_STRATEGIES = new Set(['jailbreak', 'jailbreak:tree']);
 
+// MILESTONE 4: Advanced provider-backed strategies (agentic and multi-step)
+// These use actual strategy implementations with safe execution parameters
+const ADVANCED_SIMULATE_STRATEGIES = new Set(['best-of-n', 'citation', 'multilingual']);
+
 // Combined set of all simulate strategies
-const SIMULATE_STRATEGIES = new Set([...DEMO_SIMULATE_STRATEGIES, ...PROVIDER_SIMULATE_STRATEGIES]);
+const SIMULATE_STRATEGIES = new Set([
+  ...DEMO_SIMULATE_STRATEGIES,
+  ...PROVIDER_SIMULATE_STRATEGIES,
+  ...ADVANCED_SIMULATE_STRATEGIES,
+]);
 
 // Strategy metadata for sample generation
 const STRATEGY_METADATA = {
@@ -323,10 +330,17 @@ async function generateProviderBackedSimulateSample(
   // Create Echo provider as safe target
   const echoProvider = new EchoProvider();
 
-  // Use normal strategy configuration with Echo provider as safe target
+  // Use strategy configuration with Echo provider as safe target and apply caps for samples
   const safeConfig = {
     ...config,
     target: echoProvider, // Use Echo provider as safe target (provides safety without limiting strategy)
+    // Apply caps for sample generation to keep execution reasonable
+    numIterations: Math.min(config.numIterations || 2, 4), // Cap iterations for samples
+    maxDepth: Math.min(config.maxDepth || 2, 3), // Cap tree depth for samples
+    maxAttempts: Math.min(config.maxAttempts || 3, 5), // Cap attempts for samples
+    maxWidth: Math.min(config.maxWidth || 2, 3), // Cap tree width for samples
+    branchingFactor: Math.min(config.branchingFactor || 2, 3), // Cap branching for samples
+    maxNoImprovement: Math.min(config.maxNoImprovement || 2, 3), // Cap no-improvement threshold
   };
 
   try {
@@ -400,6 +414,14 @@ async function generateProviderBackedSimulateSample(
           'This is a live demonstration using real strategy code with Echo provider target for safety.',
         providerBacked: true,
         target: 'echo',
+        configUsed: {
+          numIterations: safeConfig.numIterations,
+          maxDepth: safeConfig.maxDepth,
+          maxAttempts: safeConfig.maxAttempts,
+          maxWidth: safeConfig.maxWidth,
+          branchingFactor: safeConfig.branchingFactor,
+          maxNoImprovement: safeConfig.maxNoImprovement,
+        },
       },
     };
   } catch (error) {
@@ -429,6 +451,145 @@ async function generateProviderBackedSimulateSample(
         turns: 1,
         error: errorMessage,
         simulationNote: 'Live demonstration failed. This is a fallback response.',
+      },
+    };
+  }
+}
+
+// Generate samples for advanced strategies using actual strategy implementations
+async function generateAdvancedStrategySample(
+  strategyId: string,
+  basePrompt: string,
+  config: any,
+): Promise<any> {
+  const strategyMeta = STRATEGY_METADATA[strategyId as keyof typeof STRATEGY_METADATA] || {
+    effectiveness: 'high' as const,
+    complexity: 'high' as const,
+  };
+
+  const description =
+    subCategoryDescriptions[strategyId as keyof typeof subCategoryDescriptions] ||
+    `${strategyId} strategy live demonstration using actual implementation`;
+
+  try {
+    // Find the strategy implementation
+    const strategy = Strategies.find((s) => s.id === strategyId);
+    if (!strategy) {
+      throw new Error(`Strategy ${strategyId} not found in implementations`);
+    }
+
+    // Create seed test case
+    const injectVar = config.injectVar || 'query';
+    const seedTestCase: TestCaseWithPlugin = {
+      vars: { [injectVar]: basePrompt },
+      assert: [],
+      metadata: {
+        pluginId: strategyId,
+        purpose: config.applicationDefinition?.purpose,
+        strategyId,
+      },
+    };
+
+    // Apply the strategy with safe configuration
+    const safeConfig = {
+      ...config,
+      // Limit the number of variations for sample purposes
+      numCandidates: Math.min(config.numCandidates || 3, 5),
+      maxBatch: Math.min(config.maxBatch || 2, 3),
+      // For multilingual, limit languages
+      languages: (config.languages || ['spanish', 'french']).slice(0, 3),
+    };
+
+    logger.debug(`Applying ${strategyId} strategy with config: ${JSON.stringify(safeConfig)}`);
+
+    const transformedCases = await strategy.action([seedTestCase], injectVar, safeConfig);
+
+    // Convert the strategy results into a conversation format
+    const conversation = [];
+
+    for (let i = 0; i < Math.min(transformedCases.length, 4); i++) {
+      const testCase = transformedCases[i];
+      const transformedPrompt = testCase.vars?.[injectVar] || basePrompt;
+
+      let technique = strategyId;
+      let intent = `${strategyId} variation ${i + 1}`;
+
+      // Strategy-specific formatting
+      if (strategyId === 'best-of-n') {
+        technique = `Best-of-N candidate selection (${i + 1})`;
+        intent = `Generate optimal candidate prompt ${i + 1}`;
+      } else if (strategyId === 'citation') {
+        technique = `Authority bias exploitation (${i + 1})`;
+        intent = `Leverage academic authority pattern ${i + 1}`;
+      } else if (strategyId === 'multilingual') {
+        const lang = testCase.metadata?.language || 'unknown';
+        technique = `Cross-language attack (${lang})`;
+        intent = `Attack in ${lang} language`;
+      }
+
+      conversation.push({
+        turn: i + 1,
+        intent,
+        userMessage: transformedPrompt,
+        assistantResponse: `Echo: ${transformedPrompt}`, // Safe Echo response
+        technique,
+        escalationLevel: `${i + 1}/${Math.min(transformedCases.length, 4)} - Strategy variation`,
+      });
+    }
+
+    // Fallback if no variations generated
+    if (conversation.length === 0) {
+      conversation.push({
+        turn: 1,
+        intent: `${strategyId} demonstration`,
+        userMessage: basePrompt,
+        assistantResponse: `Echo: ${basePrompt}`,
+        technique: strategyId,
+        escalationLevel: '1/1 - Single demonstration',
+      });
+    }
+
+    return {
+      title: `${strategyId} Strategy Advanced Demonstration`,
+      summary: description,
+      mode: 'simulate' as const,
+      conversation,
+      metadata: {
+        originalPrompt: basePrompt,
+        strategyId,
+        effectiveness: strategyMeta.effectiveness,
+        complexity: strategyMeta.complexity,
+        turns: conversation.length,
+        simulationNote: `This demonstrates the ${strategyId} strategy using actual implementation with safe Echo responses.`,
+        advancedStrategy: true,
+        variations: transformedCases.length,
+        configUsed: safeConfig,
+      },
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Error in advanced strategy sample generation: ${errorMessage}`);
+    return {
+      title: `${strategyId} Strategy Error`,
+      summary: `Error generating ${strategyId} strategy demonstration`,
+      mode: 'simulate' as const,
+      conversation: [
+        {
+          turn: 1,
+          intent: 'Error recovery',
+          userMessage: basePrompt,
+          assistantResponse: `Error: ${errorMessage}`,
+          technique: 'Error handling',
+          escalationLevel: 'N/A - Error state',
+        },
+      ],
+      metadata: {
+        originalPrompt: basePrompt,
+        strategyId,
+        effectiveness: 'medium' as const,
+        complexity: 'high' as const,
+        turns: 1,
+        error: errorMessage,
       },
     };
   }
@@ -687,6 +848,13 @@ redteamRouter.post(
         return;
       }
 
+      // Handle advanced simulation strategies in simulate mode
+      if (ADVANCED_SIMULATE_STRATEGIES.has(strategyId) && mode === 'simulate') {
+        const sample = await generateAdvancedStrategySample(strategyId, basePrompt, config);
+        res.json({ sample });
+        return;
+      }
+
       // Apply strategy transformation for transform strategies
       const transformedCases = await strategy.action([seedTestCase], injectVar, config);
 
@@ -716,11 +884,13 @@ redteamRouter.post(
         complexity: 'low' as const,
       };
 
+      const summary =
+        subCategoryDescriptions?.[strategyId as keyof typeof subCategoryDescriptions] ||
+        `Applied ${strategyId} strategy to modify the test prompt`;
+
       const sample = {
         title: `${strategyId} Strategy Transformation`,
-        summary:
-          subCategoryDescriptions[strategyId as keyof typeof subCategoryDescriptions] ||
-          `Applied ${strategyId} strategy to modify the test prompt`,
+        summary,
         mode: 'template' as const,
         modifiedPrompts: [transformedPrompt],
         metadata: {

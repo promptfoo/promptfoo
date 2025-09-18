@@ -1,6 +1,8 @@
 import React from 'react';
 
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -60,6 +62,62 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
   onGenerate,
 }) => {
   const theme = useTheme();
+
+  const handleCopyToClipboard = () => {
+    if (!generatedSample) {
+      return;
+    }
+
+    let content = `# ${generatedSample.title}\n\n`;
+    content += `**Strategy:** ${strategyId}\n`;
+    content += `**Mode:** ${generatedSample.mode}\n`;
+    content += `**Effectiveness:** ${generatedSample.metadata.effectiveness}\n`;
+    content += `**Complexity:** ${generatedSample.metadata.complexity}\n\n`;
+    content += `${generatedSample.summary}\n\n`;
+
+    if (generatedSample.metadata.originalPrompt) {
+      content += `## Original Prompt\n\`\`\`\n${generatedSample.metadata.originalPrompt}\n\`\`\`\n\n`;
+    }
+
+    if (generatedSample.mode === 'simulate' && generatedSample.conversation) {
+      content += `## Conversation (${generatedSample.conversation.length} turns)\n\n`;
+      generatedSample.conversation.forEach((turn) => {
+        content += `### Turn ${turn.turn}: ${turn.intent}\n`;
+        content += `**Technique:** ${turn.technique} | **Escalation:** ${turn.escalationLevel}\n\n`;
+        content += `**User:** ${turn.userMessage}\n\n`;
+        content += `**Assistant:** ${turn.assistantResponse}\n\n`;
+      });
+    } else if (generatedSample.modifiedPrompts) {
+      content += `## Transformed Prompts\n\n`;
+      generatedSample.modifiedPrompts.forEach((prompt, index) => {
+        content += `### Prompt ${index + 1}\n\`\`\`\n${prompt}\n\`\`\`\n\n`;
+      });
+    }
+
+    navigator.clipboard.writeText(content);
+  };
+
+  const handleExportAsJson = () => {
+    if (!generatedSample) {
+      return;
+    }
+
+    const exportData = {
+      strategyId,
+      timestamp: new Date().toISOString(),
+      sample: generatedSample,
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `strategy-sample-${strategyId}-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -161,72 +219,135 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
             {generatedSample.mode === 'simulate' && generatedSample.conversation ? (
               /* Simulated Conversation */
               <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Simulated Conversation ({generatedSample.conversation.length} turns):
-                </Typography>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    mb: 2,
+                  }}
+                >
+                  <Typography variant="subtitle2" gutterBottom>
+                    Simulated Conversation ({generatedSample.conversation.length} turns):
+                  </Typography>
+                </Box>
                 {generatedSample.metadata.simulationNote && (
-                  <Alert severity="info" sx={{ mb: 2 }}>
+                  <Alert severity="info" sx={{ mb: 3 }}>
                     <Typography variant="body2">
                       {generatedSample.metadata.simulationNote}
                     </Typography>
                   </Alert>
                 )}
-                {generatedSample.conversation.map((turn, index) => (
-                  <Box key={turn.turn} sx={{ mb: 3 }}>
-                    <Typography variant="subtitle2" component="div" sx={{ mb: 1, fontWeight: 600 }}>
-                      Turn {turn.turn}: {turn.intent}
-                    </Typography>
-                    <Box sx={{ mb: 1 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Technique: {turn.technique} | Escalation: {turn.escalationLevel}
-                      </Typography>
-                    </Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {generatedSample.conversation.map((turn, index) => (
+                    <Box
+                      key={turn.turn}
+                      sx={{
+                        p: 2,
+                        backgroundColor: theme.palette.mode === 'dark' ? grey[900] : grey[50],
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: theme.palette.mode === 'dark' ? grey[700] : grey[200],
+                      }}
+                    >
+                      {/* Turn Header */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                        <Chip
+                          label={`Turn ${turn.turn}`}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                        />
+                        <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>
+                          {turn.intent}
+                        </Typography>
+                      </Box>
 
-                    {/* User Message */}
-                    <Box sx={{ mb: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
-                        User:
-                      </Typography>
-                      <Box
-                        sx={{
-                          p: 1.5,
-                          backgroundColor:
-                            theme.palette.mode === 'dark'
-                              ? theme.palette.info.dark
-                              : theme.palette.info.light,
-                          borderRadius: 1,
-                          border: '1px solid',
-                          borderColor:
-                            theme.palette.mode === 'dark'
-                              ? theme.palette.info.main
-                              : theme.palette.info.main,
-                          fontSize: '0.875rem',
-                        }}
-                      >
-                        {turn.userMessage}
+                      {/* Technique & Escalation Tags */}
+                      <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                        <Chip
+                          label={`Technique: ${turn.technique}`}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontSize: '0.75rem' }}
+                        />
+                        <Chip
+                          label={`Escalation: ${turn.escalationLevel}`}
+                          size="small"
+                          variant="outlined"
+                          color={
+                            turn.escalationLevel === 'high'
+                              ? 'error'
+                              : turn.escalationLevel === 'medium'
+                                ? 'warning'
+                                : 'default'
+                          }
+                          sx={{ fontSize: '0.75rem' }}
+                        />
+                      </Box>
+
+                      {/* User Message */}
+                      <Box sx={{ mb: 2 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 600, mb: 1, color: 'primary.main' }}
+                        >
+                          👤 User:
+                        </Typography>
+                        <Box
+                          sx={{
+                            p: 2,
+                            backgroundColor:
+                              theme.palette.mode === 'dark'
+                                ? theme.palette.primary.dark
+                                : theme.palette.primary.light,
+                            borderRadius: 1.5,
+                            border: '1px solid',
+                            borderColor:
+                              theme.palette.mode === 'dark'
+                                ? theme.palette.primary.main
+                                : theme.palette.primary.main,
+                            fontSize: '0.875rem',
+                            lineHeight: 1.5,
+                            '& pre': {
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                            },
+                          }}
+                        >
+                          {turn.userMessage}
+                        </Box>
+                      </Box>
+
+                      {/* Assistant Response */}
+                      <Box>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 600, mb: 1, color: 'text.primary' }}
+                        >
+                          🤖 Assistant:
+                        </Typography>
+                        <Box
+                          sx={{
+                            p: 2,
+                            backgroundColor: theme.palette.mode === 'dark' ? grey[800] : grey[100],
+                            borderRadius: 1.5,
+                            border: '1px solid',
+                            borderColor: theme.palette.mode === 'dark' ? grey[600] : grey[300],
+                            fontSize: '0.875rem',
+                            lineHeight: 1.5,
+                            '& pre': {
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                            },
+                          }}
+                        >
+                          {turn.assistantResponse}
+                        </Box>
                       </Box>
                     </Box>
-
-                    {/* Assistant Response */}
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
-                        Assistant:
-                      </Typography>
-                      <Box
-                        sx={{
-                          p: 1.5,
-                          backgroundColor: theme.palette.mode === 'dark' ? grey[900] : grey[50],
-                          borderRadius: 1,
-                          border: '1px solid',
-                          borderColor: theme.palette.mode === 'dark' ? grey[700] : grey[300],
-                          fontSize: '0.875rem',
-                        }}
-                      >
-                        {turn.assistantResponse}
-                      </Box>
-                    </Box>
-                  </Box>
-                ))}
+                  ))}
+                </Box>
               </Box>
             ) : (
               /* Transformed Prompts (template mode) */
@@ -266,6 +387,30 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
+        {generatedSample && !isGenerating && (
+          <>
+            <Tooltip title="Copy as Markdown">
+              <Button
+                startIcon={<ContentCopyIcon />}
+                onClick={handleCopyToClipboard}
+                variant="outlined"
+                size="small"
+              >
+                Copy
+              </Button>
+            </Tooltip>
+            <Tooltip title="Export as JSON file">
+              <Button
+                startIcon={<FileDownloadIcon />}
+                onClick={handleExportAsJson}
+                variant="outlined"
+                size="small"
+              >
+                Export
+              </Button>
+            </Tooltip>
+          </>
+        )}
         {!generatedSample && !isGenerating && (
           <Button variant="contained" onClick={onGenerate} disabled={isGenerating}>
             Retry

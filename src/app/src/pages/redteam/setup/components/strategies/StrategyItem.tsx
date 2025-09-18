@@ -36,10 +36,14 @@ const DEMO_SIMULATE_STRATEGIES = new Set(['crescendo', 'goat', 'custom', 'mischi
 // Provider-backed simulation strategies supported in Milestone 3
 const PROVIDER_SIMULATE_STRATEGIES = new Set(['jailbreak', 'jailbreak:tree']);
 
+// Advanced simulation strategies supported in Milestone 4
+const ADVANCED_SIMULATE_STRATEGIES = new Set(['best-of-n', 'citation', 'multilingual']);
+
 // Combined simulate strategies
-const SIMULATE_SAMPLE_STRATEGIES = new Set([
+const SIMULATE_STRATEGIES = new Set([
   ...DEMO_SIMULATE_STRATEGIES,
   ...PROVIDER_SIMULATE_STRATEGIES,
+  ...ADVANCED_SIMULATE_STRATEGIES,
 ]);
 
 interface StrategyItemProps {
@@ -62,7 +66,7 @@ export function StrategyItem({
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
   const hasSampleButton =
     onSampleGenerate &&
-    (SUPPORTED_SAMPLE_STRATEGIES.has(strategy.id) || SIMULATE_SAMPLE_STRATEGIES.has(strategy.id));
+    (SUPPORTED_SAMPLE_STRATEGIES.has(strategy.id) || SIMULATE_STRATEGIES.has(strategy.id));
 
   return (
     <Paper
