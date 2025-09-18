@@ -16,7 +16,11 @@
       "**/*.mjs",
       "**/*.cjs",
       "!drizzle/**/*",
-      "!src/app/src/polyfills/**/*"
+      "!src/app/src/polyfills/**/*",
+      "!**/node_modules/**",
+      "!**/dist/**",
+      "!**/build/**",
+      "!**/public/**"
     ]
   },
   "formatter": {
