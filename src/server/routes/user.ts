@@ -8,6 +8,7 @@ import {
   getUserId,
   setUserEmail,
 } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { ApiSchemas } from '../apiSchemas';
@@ -94,5 +95,25 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
     } else {
       res.status(500).json({ error: 'Failed to check email status' });
     }
+  }
+});
+
+/**
+ * Returns information about the Promptfoo Cloud config for the current user.
+ */
+userRouter.get('/cloud-config', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const cloudConfigData = {
+      appUrl: cloudConfig.getAppUrl(),
+      isEnabled: cloudConfig.isEnabled(),
+    };
+
+    res.json({
+      appUrl: cloudConfigData.appUrl,
+      isEnabled: cloudConfigData.isEnabled,
+    });
+  } catch (error) {
+    logger.error(`Error getting cloud config: ${error}`);
+    res.status(500).json({ error: 'Failed to get cloud config' });
   }
 });
