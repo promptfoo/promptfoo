@@ -17,7 +17,7 @@ import {
   TextField,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
+import { displayNameOverrides, severityDisplayNames } from '@promptfoo/redteam/constants/metadata';
 import { useDebounce } from 'use-debounce';
 import { type ResultsFilter, useTableStore } from '../store';
 
@@ -386,30 +386,35 @@ function Filter({
                     displayName = displayNameOverrides[
                       optionValue as keyof typeof displayNameOverrides
                     ] as string;
-                    if (displayName) {
-                      label = (
-                        <div
+                  }
+                  if (value.type === 'severity') {
+                    displayName = severityDisplayNames[
+                      optionValue as keyof typeof severityDisplayNames
+                    ] as string;
+                  }
+                  if (displayName) {
+                    label = (
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          width: '100%',
+                          gap: 16,
+                        }}
+                      >
+                        {displayName}
+                        <code
                           style={{
-                            display: 'flex',
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            width: '100%',
-                            gap: 16,
+                            fontSize: '0.8em',
+                            color: theme.palette.text.secondary,
                           }}
                         >
-                          {displayName}
-                          <code
-                            style={{
-                              fontSize: '0.8em',
-                              color: theme.palette.text.secondary,
-                            }}
-                          >
-                            {optionValue}
-                          </code>
-                        </div>
-                      );
-                    }
+                          {optionValue}
+                        </code>
+                      </div>
+                    );
                   }
                   return { label, value: optionValue, sortValue: displayName ?? optionValue };
                 })
