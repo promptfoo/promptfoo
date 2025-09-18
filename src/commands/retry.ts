@@ -148,8 +148,8 @@ async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
     }
 
     // Update token usage
-    if (result.tokenUsage) {
-      accumulateResponseTokenUsage(metrics.tokenUsage, { tokenUsage: result.tokenUsage });
+    if (result.response?.tokenUsage) {
+      accumulateResponseTokenUsage(metrics.tokenUsage, { tokenUsage: result.response.tokenUsage });
     }
 
     // Update assertion token usage
