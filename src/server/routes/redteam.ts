@@ -10,7 +10,7 @@ import { redteamProviderManager } from '../../redteam/providers/shared';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies';
 import { evalJobs } from './eval';
-import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
+import { getRemoteGenerationUrl, shouldGenerateRemote } from '../../redteam/remoteGeneration';
 import type { Request, Response } from 'express';
 import type { TestCaseWithPlugin } from '../../types';
 
@@ -375,7 +375,7 @@ async function generateProviderBackedSimulateSample(
     const history =
       (result.metadata as any).redteamHistory || (result.metadata as any).redteamTreeHistory || [];
 
-    for (let i = 0; i < history.length; i++) {
+    for (let i = 0; i < Math.min(history.length, 5); i++) {
       const turn = history[i];
       conversation.push({
         turn: i + 1,
@@ -383,7 +383,7 @@ async function generateProviderBackedSimulateSample(
         userMessage: turn.prompt || basePrompt,
         assistantResponse: turn.output || 'Echo: ' + (turn.prompt || basePrompt),
         technique: 'Iterative jailbreak',
-        escalationLevel: `${i + 1}/${history.length} - Progressive attack (Score: ${turn.score || 'N/A'})`,
+        escalationLevel: `${i + 1}/${Math.min(history.length, 5)} - Progressive attack (Score: ${turn.score || 'N/A'})`,
       });
     }
 
@@ -472,6 +472,25 @@ async function generateAdvancedStrategySample(
     `${strategyId} strategy live demonstration using actual implementation`;
 
   try {
+    // Check remote availability for strategies that require it
+    if ((strategyId === 'best-of-n' || strategyId === 'citation') && !shouldGenerateRemote()) {
+      return {
+        title: `${strategyId} Strategy Sample`,
+        summary: description,
+        mode: 'simulate' as const,
+        conversation: [],
+        metadata: {
+          originalPrompt: basePrompt,
+          strategyId,
+          effectiveness: strategyMeta.effectiveness,
+          complexity: strategyMeta.complexity,
+          unavailable: true,
+          category: 'advanced',
+          simulationNote: `The ${strategyId} strategy requires remote generation but it's currently disabled. Enable remote generation to see strategy samples.`,
+        },
+      };
+    }
+
     // Find the strategy implementation
     const strategy = Strategies.find((s) => s.id === strategyId);
     if (!strategy) {
@@ -496,8 +515,14 @@ async function generateAdvancedStrategySample(
       // Limit the number of variations for sample purposes
       numCandidates: Math.min(config.numCandidates || 3, 5),
       maxBatch: Math.min(config.maxBatch || 2, 3),
-      // For multilingual, limit languages
-      languages: (config.languages || ['spanish', 'french']).slice(0, 3),
+      // For multilingual, limit languages (use language codes, not names)
+      languages: (config.languages || ['es', 'fr']).slice(0, 2),
+      // For best-of-n, constrain remote calls
+      nSteps: strategyId === 'best-of-n' ? Math.min(config.nSteps || 1, 1) : config.nSteps,
+      maxCandidatesPerStep:
+        strategyId === 'best-of-n'
+          ? Math.min(config.maxCandidatesPerStep || 3, 3)
+          : config.maxCandidatesPerStep,
     };
 
     logger.debug(`Applying ${strategyId} strategy with config: ${JSON.stringify(safeConfig)}`);
@@ -507,7 +532,7 @@ async function generateAdvancedStrategySample(
     // Convert the strategy results into a conversation format
     const conversation = [];
 
-    for (let i = 0; i < Math.min(transformedCases.length, 4); i++) {
+    for (let i = 0; i < Math.min(transformedCases.length, 5); i++) {
       const testCase = transformedCases[i];
       const transformedPrompt = testCase.vars?.[injectVar] || basePrompt;
 
@@ -533,7 +558,7 @@ async function generateAdvancedStrategySample(
         userMessage: transformedPrompt,
         assistantResponse: `Echo: ${transformedPrompt}`, // Safe Echo response
         technique,
-        escalationLevel: `${i + 1}/${Math.min(transformedCases.length, 4)} - Strategy variation`,
+        escalationLevel: `${i + 1}/${Math.min(transformedCases.length, 5)} - Strategy variation`,
       });
     }
 

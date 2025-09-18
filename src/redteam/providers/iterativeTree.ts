@@ -428,12 +428,13 @@ export async function selectNodes(
   redteamProvider: ApiProvider,
   onTopicSystemPrompt: string,
   goal: string,
+  maxWidth: number = MAX_WIDTH,
 ): Promise<TreeNode[]> {
   // First do Phase 1 pruning (off-topic check)
   const onTopicNodes = await pruneOffTopicNodes(nodes, redteamProvider, onTopicSystemPrompt, goal);
 
   // Then do Phase 2 pruning (keep top w scoring nodes)
-  return pruneToWidth(onTopicNodes, MAX_WIDTH);
+  return pruneToWidth(onTopicNodes, maxWidth);
 }
 
 /**
@@ -491,6 +492,7 @@ async function runRedteamConversation({
   test,
   vars,
   excludeTargetOutputFromAgenticAttackGeneration,
+  config = {},
 }: {
   context: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -503,7 +505,15 @@ async function runRedteamConversation({
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  config?: Record<string, string | object>;
 }): Promise<RedteamTreeResponse> {
+  // Use config values with fallbacks to constants
+  const maxAttempts = Math.min(Number(config.maxAttempts) || MAX_ATTEMPTS, 500);
+  const maxDepth = Math.min(Number(config.maxDepth) || MAX_DEPTH, 50);
+  const maxNoImprovement = Math.min(Number(config.maxNoImprovement) || MAX_NO_IMPROVEMENT, 50);
+  const maxWidth = Math.min(Number(config.maxWidth) || MAX_WIDTH, 20);
+  const branchingFactor = Math.min(Number(config.branchingFactor) || BRANCHING_FACTOR, 10);
+
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
 
@@ -516,7 +526,7 @@ async function runRedteamConversation({
   let maxScore = 0;
 
   logger.debug(
-    `Starting red team conversation. Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHING_FACTOR=${BRANCHING_FACTOR}, MAX_ATTEMPTS=${MAX_ATTEMPTS}, TARGET_SCORE=${TARGET_SCORE} Goal: "${goal.substring(0, 50)}...".`,
+    `Starting red team conversation. Exploration parameters: maxDepth=${maxDepth}, branchingFactor=${branchingFactor}, maxAttempts=${maxAttempts}, TARGET_SCORE=${TARGET_SCORE} Goal: "${goal.substring(0, 50)}...".`,
   );
 
   const { redteamSystemPrompt, onTopicSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
@@ -555,7 +565,7 @@ async function runRedteamConversation({
 
   const treeOutputs: TreeSearchOutput[] = [];
 
-  for (let depth = 0; depth < MAX_DEPTH; depth++) {
+  for (let depth = 0; depth < maxDepth; depth++) {
     logger.debug(
       `[Depth ${depth}] Starting exploration. Nodes to explore: ${currentBestNodes.length}. Max score so far: ${maxScore}`,
     );
@@ -564,10 +574,10 @@ async function runRedteamConversation({
 
     for (const node of currentBestNodes) {
       logger.debug(
-        `[Depth ${depth}] Exploring node: prompt="${node.prompt.substring(0, 30)}...", score=${node.score}, branches=${BRANCHING_FACTOR}. Max score so far: ${maxScore}`,
+        `[Depth ${depth}] Exploring node: prompt="${node.prompt.substring(0, 30)}...", score=${node.score}, branches=${branchingFactor}. Max score so far: ${maxScore}`,
       );
 
-      for (let i = 0; i < BRANCHING_FACTOR; i++) {
+      for (let i = 0; i < branchingFactor; i++) {
         // Use the shared utility function to create iteration context
         const { iterationVars, iterationContext } = await createIterationContext({
           originalVars,
@@ -745,9 +755,9 @@ async function runRedteamConversation({
           };
         }
 
-        if (noImprovementCount >= MAX_NO_IMPROVEMENT) {
+        if (noImprovementCount >= maxNoImprovement) {
           logger.debug(
-            `[Depth ${depth}, Attempt ${attempts}] No improvement for ${MAX_NO_IMPROVEMENT} consecutive iterations. Max score: ${maxScore}. Stopping.`,
+            `[Depth ${depth}, Attempt ${attempts}] No improvement for ${maxNoImprovement} consecutive iterations. Max score: ${maxScore}. Stopping.`,
           );
           stoppingReason = 'NO_IMPROVEMENT';
           treeOutputs.push({
@@ -783,9 +793,9 @@ async function runRedteamConversation({
           };
         }
 
-        if (attempts >= MAX_ATTEMPTS) {
+        if (attempts >= maxAttempts) {
           logger.debug(
-            `[Depth ${depth}, Attempt ${attempts}] Reached maximum attempts (${MAX_ATTEMPTS}). Max score: ${maxScore}. Stopping.`,
+            `[Depth ${depth}, Attempt ${attempts}] Reached maximum attempts (${maxAttempts}). Max score: ${maxScore}. Stopping.`,
           );
           stoppingReason = 'MAX_ATTEMPTS';
           treeOutputs.push({
@@ -860,6 +870,7 @@ async function runRedteamConversation({
       redteamProvider,
       onTopicSystemPrompt,
       goal,
+      maxWidth,
     );
     logger.debug(
       `[Depth ${depth}] Exploration complete. Selected ${currentBestNodes.length} diverse nodes for next depth. Current best score: ${bestScore}. Max score: ${maxScore}`,
@@ -897,7 +908,7 @@ async function runRedteamConversation({
     output: bestResponse,
     score: maxScore,
     isOnTopic: true,
-    depth: MAX_DEPTH - 1,
+    depth: maxDepth - 1,
     parentId: bestNode.id,
     wasSelected: false,
     guardrails: finalTargetResponse.guardrails,
@@ -1000,6 +1011,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       vars: context.vars,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
+      config: this.config,
     });
   }
 }

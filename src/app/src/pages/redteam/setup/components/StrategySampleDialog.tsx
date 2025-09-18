@@ -184,6 +184,17 @@ export const StrategySampleDialog: React.FC<StrategySampleDialogProps> = ({
                 variant="outlined"
               />
               <Chip label={`Mode: ${generatedSample.mode}`} size="small" variant="outlined" />
+              {generatedSample.metadata.providerBacked && (
+                <Chip
+                  label="Provider-backed"
+                  size="small"
+                  color="secondary"
+                  sx={{
+                    backgroundColor: (theme) => theme.palette.secondary.main,
+                    color: (theme) => theme.palette.secondary.contrastText,
+                  }}
+                />
+              )}
             </Box>
 
             {/* Strategy Description */}
