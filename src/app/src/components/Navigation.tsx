@@ -336,7 +336,7 @@ function EvalsDropdown({
     },
     {
       href: '/reports',
-      label: 'Vulnerability Reports',
+      label: 'Red Team Vulnerability Reports',
       description: 'View findings from red teams',
     },
   ];

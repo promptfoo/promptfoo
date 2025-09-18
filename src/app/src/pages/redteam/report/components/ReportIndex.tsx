@@ -6,6 +6,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
+import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import {
@@ -18,7 +19,6 @@ import {
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
-import { useNavigate } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
 
 function CustomToolbar() {
@@ -34,19 +34,20 @@ function CustomToolbar() {
 }
 
 function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: boolean }) {
-  const navigate = useNavigate();
-
   const columns: GridColDef<EvalSummary>[] = useMemo(
     () => [
       {
         field: 'description',
         headerName: 'Name',
         type: 'string',
-        flex: 2,
+        flex: 1,
         valueGetter: (params: GridRenderCellParams<EvalSummary>) => {
           return params || 'Untitled Evaluation';
         },
         cellClassName: 'dg-cursor-pointer',
+        renderCell: (params: GridRenderCellParams<EvalSummary>) => {
+          return <Link href={`/reports?evalId=${params.row.evalId}`}>{params.value}</Link>;
+        },
       },
       {
         field: 'providers',
@@ -145,9 +146,6 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
       loading={isLoading}
       columns={columns}
       getRowId={(row) => row.evalId}
-      onCellClick={(params: any) => {
-        navigate(`/reports?evalId=${params.row.evalId}`);
-      }}
       sx={{
         '--DataGrid-overlayHeight': '300px',
         boxShadow: 0,
@@ -189,9 +187,6 @@ export default function ReportIndex() {
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        Vulnerability Reports
-      </Typography>
       {error && <Alert severity="error">{error.message}</Alert>}
       <Box
         sx={{
