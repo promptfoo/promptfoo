@@ -47,9 +47,10 @@ import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
+import { VLGuardPlugin } from './vlguard';
 import { XSTestPlugin } from './xstest';
 
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
 import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
@@ -98,7 +99,6 @@ async function fetchRemoteTestCases(
       },
       REQUEST_TIMEOUT_MS,
     );
-
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
@@ -198,11 +198,13 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
+  createPluginFactory(VLGuardPlugin, 'vlguard'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {
       if (neverGenerateRemote()) {
-        throw new Error(`${category} plugin requires remote generation to be enabled`);
+        logger.error(`${category} plugin requires remote generation to be enabled`);
+        return [];
       }
 
       const testCases = await getHarmfulTests(params, category);
@@ -252,7 +254,8 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
   key: category,
   action: async (params: PluginActionParams) => {
     if (neverGenerateRemote()) {
-      throw new Error(`${category} plugin requires remote generation to be enabled`);
+      logger.error(`${category} plugin requires remote generation to be enabled`);
+      return [];
     }
 
     const testCases = await fetchRemoteTestCases(
@@ -281,7 +284,8 @@ function createRemotePlugin<T extends PluginConfig>(
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ purpose, injectVar, n, config }: PluginActionParams) => {
       if (neverGenerateRemote()) {
-        throw new Error(`${key} plugin requires remote generation to be enabled`);
+        logger.error(`${key} plugin requires remote generation to be enabled`);
+        return [];
       }
       const testCases: TestCase[] = await fetchRemoteTestCases(
         key,

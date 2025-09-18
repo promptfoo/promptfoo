@@ -81,6 +81,29 @@ npm run local -- eval -c path/to/config.yaml
 
 This ensures you're testing with your current changes instead of the installed version.
 
+## Documentation Testing
+
+When testing documentation changes that require building the site, you can speed up the process by skipping OG (Open Graph) image generation:
+
+```bash
+cd site
+SKIP_OG_GENERATION=true npm run build
+```
+
+The OG image generation process can take several minutes and may cause CI timeouts. For documentation-only changes, skipping it is safe and recommended.
+
+**When to use `SKIP_OG_GENERATION=true`:**
+
+- Testing documentation changes locally
+- CI builds timing out due to OG image generation
+- Documentation-only PRs where OG images aren't critical
+
+**When NOT to skip OG generation:**
+
+- Final production builds
+- When OG image changes are specifically needed
+- When testing social media sharing functionality
+
 ## Code Style Guidelines
 
 - Use TypeScript with strict type checking
@@ -112,6 +135,8 @@ Always follow this workflow:
    git add .
    git commit -m "your commit message"
    ```
+
+   NEVER blindly `git add` everything - there might be other unrelated files lying around.
 
 3. **Push and create PR**:
 

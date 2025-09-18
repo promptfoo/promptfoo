@@ -7,7 +7,7 @@ import { checkModelAuditUpdates } from '../updates';
 import type { Command } from 'commander';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
-import { parseModelAuditArgs, DEPRECATED_OPTIONS_MAP } from '../utils/modelAuditCliParser';
+import { parseModelAuditArgs, DEPRECATED_OPTIONS_MAP } from '../util/modelAuditCliParser';
 import { z } from 'zod';
 
 export async function checkModelAuditInstalled(): Promise<boolean> {

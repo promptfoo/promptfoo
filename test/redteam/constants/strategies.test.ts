@@ -57,6 +57,7 @@ describe('strategies constants', () => {
 
   it('should have correct additional strategies', () => {
     expect(ADDITIONAL_STRATEGIES).toEqual([
+      'layer',
       'audio',
       'base64',
       'best-of-n',

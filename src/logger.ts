@@ -300,7 +300,8 @@ export async function logRequestResponse(options: {
   error?: boolean;
 }): Promise<void> {
   const { url, requestBody, requestMethod, response, error } = options;
-  const logMethod = error || (response && !response.ok) ? logger.error : logger.debug;
+
+  const logMethod = error ? logger.error : logger.debug;
 
   let responseText = '';
   if (response) {

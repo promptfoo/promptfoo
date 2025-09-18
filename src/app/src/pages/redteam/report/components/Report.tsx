@@ -4,21 +4,31 @@ import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
+import ClearIcon from '@mui/icons-material/Clear';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import PrintIcon from '@mui/icons-material/Print';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
+import FormControl from '@mui/material/FormControl';
 import IconButton from '@mui/material/IconButton';
+import InputLabel from '@mui/material/InputLabel';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
+import MenuItem from '@mui/material/MenuItem';
 import Modal from '@mui/material/Modal';
 import Paper from '@mui/material/Paper';
+import OutlinedInput from '@mui/material/OutlinedInput';
+import Select, { type SelectChangeEvent } from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
@@ -35,6 +45,8 @@ import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable
 import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
+import './Report.css';
+
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -42,11 +54,10 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import './Report.css';
 
 import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 
-const App: React.FC = () => {
+const App = () => {
   const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
@@ -54,6 +65,12 @@ const App: React.FC = () => {
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
   const { recordEvent } = useTelemetry();
+
+  const [isFiltersVisible, setIsFiltersVisible] = React.useState(false);
+  const [selectedCategories, setSelectedCategories] = React.useState<string[]>([]);
+  const [selectedStrategies, setSelectedStrategies] = React.useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = React.useState<'all' | 'pass' | 'fail'>('all');
+  const [searchQuery, setSearchQuery] = React.useState('');
 
   // Vulnerabilities DataGrid
   const vulnerabilitiesDataGridRef = React.useRef<HTMLDivElement>(null);
@@ -265,6 +282,155 @@ const App: React.FC = () => {
     return stats;
   }, [failuresByPlugin, passesByPlugin]);
 
+  const availableCategories = React.useMemo(() => {
+    return Object.keys(categoryStats).sort();
+  }, [categoryStats]);
+
+  const availableStrategies = React.useMemo(() => {
+    return Object.keys(strategyStats).sort();
+  }, [strategyStats]);
+
+  const filteredFailuresByPlugin = React.useMemo(() => {
+    if (!failuresByPlugin) {
+      return {} as typeof failuresByPlugin;
+    }
+
+    const filtered: typeof failuresByPlugin = {};
+
+    Object.entries(failuresByPlugin).forEach(([pluginId, tests]) => {
+      if (selectedCategories.length > 0 && !selectedCategories.includes(pluginId)) {
+        return;
+      }
+
+      if (statusFilter === 'pass') {
+        return;
+      }
+
+      const filteredTests = tests.filter((test) => {
+        if (searchQuery) {
+          const searchLower = searchQuery.toLowerCase();
+          const promptMatches = test.prompt?.toLowerCase().includes(searchLower);
+          const outputMatches = test.output?.toLowerCase().includes(searchLower);
+          if (!promptMatches && !outputMatches) {
+            return false;
+          }
+        }
+
+        if (selectedStrategies.length > 0) {
+          const strategyId =
+            test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+          if (!selectedStrategies.includes(strategyId)) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      if (filteredTests.length > 0) {
+        filtered[pluginId] = filteredTests;
+      }
+    });
+
+    return filtered;
+  }, [failuresByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
+
+  const filteredPassesByPlugin = React.useMemo(() => {
+    if (!passesByPlugin) {
+      return {} as typeof passesByPlugin;
+    }
+
+    const filtered: typeof passesByPlugin = {};
+
+    Object.entries(passesByPlugin).forEach(([pluginId, tests]) => {
+      if (selectedCategories.length > 0 && !selectedCategories.includes(pluginId)) {
+        return;
+      }
+
+      if (statusFilter === 'fail') {
+        return;
+      }
+
+      const filteredTests = tests.filter((test) => {
+        if (searchQuery) {
+          const searchLower = searchQuery.toLowerCase();
+          const promptMatches = test.prompt?.toLowerCase().includes(searchLower);
+          const outputMatches = test.output?.toLowerCase().includes(searchLower);
+          if (!promptMatches && !outputMatches) {
+            return false;
+          }
+        }
+
+        if (selectedStrategies.length > 0) {
+          const strategyId =
+            test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+          if (!selectedStrategies.includes(strategyId)) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      if (filteredTests.length > 0) {
+        filtered[pluginId] = filteredTests;
+      }
+    });
+
+    return filtered;
+  }, [passesByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
+
+  const filteredCategoryStats = React.useMemo(() => {
+    const stats: Record<string, { pass: number; total: number; passWithFilter: number }> = {};
+
+    Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
+      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      stats[pluginId].total += tests.length;
+    });
+
+    Object.entries(filteredPassesByPlugin).forEach(([pluginId, tests]) => {
+      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      stats[pluginId].pass += tests.length;
+      stats[pluginId].passWithFilter += tests.length;
+      stats[pluginId].total += tests.length;
+    });
+
+    return stats;
+  }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
+
+  const filteredStrategyStats = React.useMemo(() => {
+    const stats: Record<string, { pass: number; total: number }> = {};
+
+    Object.values(filteredFailuresByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const strategyId =
+          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+
+        if (!stats[strategyId]) {
+          stats[strategyId] = { pass: 0, total: 0 };
+        }
+
+        stats[strategyId].pass += 1;
+        stats[strategyId].total += 1;
+      });
+    });
+
+    Object.values(filteredPassesByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const strategyId =
+          test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
+
+        if (!stats[strategyId]) {
+          stats[strategyId] = { pass: 0, total: 0 };
+        }
+
+        stats[strategyId].total += 1;
+      });
+    });
+
+    return stats;
+  }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
+
   usePageMeta({
     title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
     description: 'Red team evaluation report',
@@ -342,6 +508,19 @@ const App: React.FC = () => {
     setIsPromptModalOpen(false);
   };
 
+  const clearAllFilters = () => {
+    setSelectedCategories([]);
+    setSelectedStrategies([]);
+    setStatusFilter('all');
+    setSearchQuery('');
+  };
+
+  const hasActiveFilters =
+    selectedCategories.length > 0 ||
+    selectedStrategies.length > 0 ||
+    statusFilter !== 'all' ||
+    Boolean(searchQuery);
+
   return (
     <Container maxWidth="xl">
       <Stack spacing={4} pb={8} pt={2}>
@@ -383,6 +562,16 @@ const App: React.FC = () => {
                 <PrintIcon />
               </IconButton>
             </Tooltip>
+            <Tooltip title="Filter results" placement="top">
+              <IconButton
+                sx={{ position: 'relative' }}
+                aria-label="filter results"
+                onClick={() => setIsFiltersVisible(!isFiltersVisible)}
+                color={hasActiveFilters ? 'primary' : 'default'}
+              >
+                <FilterListIcon />
+              </IconButton>
+            </Tooltip>
             <ReportSettingsDialogButton />
           </Box>
           <Typography variant="h4">
@@ -390,11 +579,7 @@ const App: React.FC = () => {
             {evalData.config.description && `: ${evalData.config.description}`}
           </Typography>
           <Typography variant="subtitle1" mb={2}>
-            {new Date(evalData.createdAt).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
+            {formatDataGridDate(evalData.createdAt)}
           </Typography>
           <Box className="report-details">
             {selectedPrompt && (
@@ -459,33 +644,138 @@ const App: React.FC = () => {
             )}
           </Box>
         </Card>
+        {isFiltersVisible && (
+          <Card className="print-hide">
+            <Box sx={{ p: 3 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  mb: 2,
+                }}
+              >
+                <Typography variant="h6">Filters</Typography>
+                {hasActiveFilters && (
+                  <Button startIcon={<ClearIcon />} onClick={clearAllFilters} size="small">
+                    Clear All
+                  </Button>
+                )}
+              </Box>
+
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <TextField
+                  label="Search prompts & outputs"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  variant="outlined"
+                  size="small"
+                  sx={{ minWidth: 200 }}
+                />
+
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    value={statusFilter}
+                    label="Status"
+                    onChange={(event: SelectChangeEvent<'all' | 'pass' | 'fail'>) =>
+                      setStatusFilter(event.target.value as 'all' | 'pass' | 'fail')
+                    }
+                  >
+                    <MenuItem value="all">All</MenuItem>
+                    <MenuItem value="pass">Pass Only</MenuItem>
+                    <MenuItem value="fail">Fail Only</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>Risk Categories</InputLabel>
+                  <Select
+                    multiple
+                    value={selectedCategories}
+                    onChange={(event: SelectChangeEvent<string[]>) => {
+                      const value = event.target.value as string | string[];
+                      setSelectedCategories(typeof value === 'string' ? [value] : value);
+                    }}
+                    input={<OutlinedInput label="Risk Categories" />}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {selected.map((value) => (
+                          <Chip key={value} label={value} size="small" />
+                        ))}
+                      </Box>
+                    )}
+                  >
+                    {availableCategories.map((category) => (
+                      <MenuItem key={category} value={category}>
+                        {category}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>Strategies</InputLabel>
+                  <Select
+                    multiple
+                    value={selectedStrategies}
+                    onChange={(event: SelectChangeEvent<string[]>) => {
+                      const value = event.target.value as string | string[];
+                      setSelectedStrategies(typeof value === 'string' ? [value] : value);
+                    }}
+                    input={<OutlinedInput label="Strategies" />}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {selected.map((value) => (
+                          <Chip key={value} label={value} size="small" />
+                        ))}
+                      </Box>
+                    )}
+                  >
+                    {availableStrategies.map((strategy) => (
+                      <MenuItem key={strategy} value={strategy}>
+                        {strategy}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Stack>
+            </Box>
+          </Card>
+        )}
         <Overview
-          categoryStats={categoryStats}
+          categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
           plugins={evalData.config.redteam.plugins || []}
           vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
           setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
         />
         <StrategyStats
-          strategyStats={strategyStats}
-          failuresByPlugin={failuresByPlugin}
-          passesByPlugin={passesByPlugin}
+          strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
+          failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
+          passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
         />
         <RiskCategories
-          categoryStats={categoryStats}
-          strategyStats={strategyStats}
+          categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
+          strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
           evalId={evalId}
-          failuresByPlugin={failuresByPlugin}
-          passesByPlugin={passesByPlugin}
+          failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
+          passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
         />
         <TestSuites
           evalId={evalId}
-          categoryStats={categoryStats}
+          categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
           plugins={evalData.config.redteam.plugins || []}
+          failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
+          passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
           vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
           vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
           setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
         />
-        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
+        <FrameworkCompliance
+          evalId={evalId}
+          categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
+          strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
+        />
       </Stack>
       <Modal
         open={isPromptModalOpen}

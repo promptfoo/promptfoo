@@ -65,7 +65,7 @@ const DangerLinearProgress = styled(LinearProgress)(({ theme }) => ({
     backgroundColor:
       theme.palette.mode === 'light' ? theme.palette.error.main : theme.palette.error.light,
   },
-})) as React.FC<React.ComponentProps<typeof LinearProgress>>;
+}));
 
 const StyledCard = styled(Card)(({ theme }) => ({
   transition: 'all 0.3s ease',
@@ -113,11 +113,11 @@ const StyledStrategyDescription = styled(Typography)(({ theme }) => ({
   marginBottom: theme.spacing(2),
 }));
 
-const StrategyStats: React.FC<StrategyStatsProps> = ({
+const StrategyStats = ({
   strategyStats,
   failuresByPlugin = {},
   passesByPlugin = {},
-}) => {
+}: StrategyStatsProps) => {
   const [selectedStrategy, setSelectedStrategy] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<Error | null>(null);

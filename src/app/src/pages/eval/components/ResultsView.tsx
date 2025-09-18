@@ -49,10 +49,8 @@ import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import type { StackProps } from '@mui/material/Stack';
+import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
-
-import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -65,7 +63,7 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
   [theme.breakpoints.down('sm')]: {
     flexDirection: 'column',
   },
-})) as React.FC<StackProps>;
+}));
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
@@ -220,10 +218,10 @@ export default function ResultsView({
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
 
-  const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
+  const [filterMode, setFilterMode] = React.useState<EvalResultsFilterMode>('all');
 
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
-    const mode = event.target.value as FilterMode;
+    const mode = event.target.value as EvalResultsFilterMode;
     setFilterMode(mode);
 
     const newFailureFilter: { [key: string]: boolean } = {};

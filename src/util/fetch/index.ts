@@ -213,9 +213,9 @@ export async function fetchWithRetries(
   url: RequestInfo,
   options: PromptfooRequestInit = {},
   timeout: number,
-  retries: number = 4,
+  maxRetries?: number,
 ): Promise<Response> {
-  const maxRetries = Math.max(0, retries);
+  maxRetries = Math.max(0, maxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);

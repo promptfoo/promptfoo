@@ -1,5 +1,3 @@
-import React from 'react';
-
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -12,11 +10,11 @@ interface WebSocketEndpointConfigurationProps {
   urlError: string | null;
 }
 
-const WebSocketEndpointConfiguration: React.FC<WebSocketEndpointConfigurationProps> = ({
+const WebSocketEndpointConfiguration = ({
   selectedTarget,
   updateWebSocketTarget,
   urlError,
-}) => {
+}: WebSocketEndpointConfigurationProps) => {
   return (
     <Box mt={2}>
       <Typography variant="h6" gutterBottom>

@@ -592,4 +592,115 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.persistentConnection).toBeNull();
     });
   });
+
+  describe('WebSocket URL configuration', () => {
+    beforeEach(() => {
+      (MockWebSocket as any).mockClear();
+    });
+
+    const simulateMinimalFlow = () => {
+      const messageHandlers = mockHandlers.message;
+      const lastHandler = messageHandlers[messageHandlers.length - 1];
+
+      // Simulate server creating user item so client will proceed
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.created',
+            item: { id: 'msg_x', role: 'user' },
+          }),
+        ),
+      );
+
+      // Simulate response created and text events to resolve promises
+      lastHandler(
+        Buffer.from(JSON.stringify({ type: 'response.created', response: { id: 'r1' } })),
+      );
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.delta', delta: 'ok' })));
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.done', text: 'ok' })));
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+    };
+
+    it('uses default OpenAI base for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.directWebSocketRequest('hi');
+
+      // Trigger open to allow client to send
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      expect(constructedUrl).toBe(
+        'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+      );
+    });
+
+    it('converts custom https apiBaseUrl to wss for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(constructedUrl).toBe(
+        'wss://my-custom-api.com/v1/realtime?model=' +
+          encodeURIComponent('gpt-4o-realtime-preview'),
+      );
+      expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
+    });
+
+    it('converts custom http apiBaseUrl to ws for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { apiBaseUrl: 'http://localhost:8080/v1' },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(constructedUrl).toBe(
+        'ws://localhost:8080/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+      );
+      expect(wsOptions.headers.Origin).toBe('http://localhost:8080');
+    });
+
+    it('uses apiBaseUrl for client-secret socket URL', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
+      });
+      const promise = provider.webSocketRequest('secret123', 'hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(constructedUrl).toBe(
+        'wss://my-custom-api.com/v1/realtime/socket?client_secret=' +
+          encodeURIComponent('secret123'),
+      );
+      expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
+    });
+  });
 });

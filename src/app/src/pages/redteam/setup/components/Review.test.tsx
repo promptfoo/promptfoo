@@ -40,7 +40,6 @@ vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
     plugins: [],
     strategies: [],
   }),
-  getEstimatedProbes: vi.fn().mockReturnValue(10),
 }));
 
 vi.mock('../utils/yamlHelpers', () => ({
@@ -94,7 +93,7 @@ describe('Review Component', () => {
       expect(screen.getByText('Review & Run')).toBeInTheDocument();
       expect(screen.getByText('Configuration Summary')).toBeInTheDocument();
       expect(screen.getByTestId('default-test-variables')).toBeInTheDocument();
-      expect(screen.getByText('Running Your Configuration')).toBeInTheDocument();
+      expect(screen.getByText('Run Options')).toBeInTheDocument();
     });
 
     it('renders configuration description field', () => {

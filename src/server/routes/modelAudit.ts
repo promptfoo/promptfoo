@@ -8,7 +8,7 @@ import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
-import { parseModelAuditArgs } from '../../utils/modelAuditCliParser';
+import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
 import type { Request, Response } from 'express';
 
 import type { ModelAuditScanResults } from '../../types/modelAudit';

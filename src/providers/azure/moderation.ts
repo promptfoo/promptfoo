@@ -9,7 +9,7 @@ import type {
   ApiModerationProvider,
   ModerationFlag,
   ProviderModerationResponse,
-} from '../../types';
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 
 const AZURE_MODERATION_MODELS = [

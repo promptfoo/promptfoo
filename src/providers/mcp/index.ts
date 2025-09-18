@@ -6,7 +6,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-} from '../../types';
+} from '../../types/index';
 import type { MCPConfig } from './types';
 
 interface MCPProviderOptions {

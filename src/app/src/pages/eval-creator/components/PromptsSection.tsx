@@ -23,7 +23,7 @@ import Typography from '@mui/material/Typography';
 import PromptDialog from './PromptDialog';
 import './PromptsSection.css';
 
-const PromptsSection: React.FC = () => {
+const PromptsSection = () => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);

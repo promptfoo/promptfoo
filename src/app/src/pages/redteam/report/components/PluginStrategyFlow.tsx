@@ -135,11 +135,11 @@ const CustomLink = (props: any) => {
   );
 };
 
-const PluginStrategyFlow: React.FC<PluginStrategyFlowProps> = ({
+const PluginStrategyFlow = ({
   failuresByPlugin,
   passesByPlugin,
   strategyStats,
-}) => {
+}: PluginStrategyFlowProps) => {
   // Extract plugin -> strategy -> outcome mappings from the test records
   const data = useMemo(() => {
     // We'll aggregate counts of tests by (plugin, strategy, outcome)

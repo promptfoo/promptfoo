@@ -565,6 +565,12 @@ module.exports = function (context, options) {
     },
 
     async postBuild({ siteConfig, routesPaths, outDir, plugins, content, routes }) {
+      // Skip OG image generation if disabled via environment variable
+      if (process.env.SKIP_OG_GENERATION === 'true') {
+        console.log('⏭️  Skipping OG image generation (SKIP_OG_GENERATION=true)');
+        return;
+      }
+
       console.log('Generating OG images for documentation pages...');
 
       const generatedImages = new Map();

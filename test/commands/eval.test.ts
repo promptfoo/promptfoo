@@ -14,13 +14,13 @@ import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { checkCloudPermissions, ConfigPermissionError } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');

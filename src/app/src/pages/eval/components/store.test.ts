@@ -1,11 +1,10 @@
 import { callApi } from '@app/utils/api';
-import { act } from '@testing-library/react';
 import { Severity } from '@promptfoo/redteam/constants';
+import { act } from '@testing-library/react';
 import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
-
-import type { EvaluateTable, PromptMetrics, ResultsFile } from './types';
+import type { EvaluateTable, PromptMetrics, ResultsFile } from '@promptfoo/types';
 
 vi.mock('uuid', () => ({
   v4: vi.fn(),
@@ -70,6 +69,40 @@ describe('useTableStore', () => {
       });
     });
     vi.clearAllMocks();
+  });
+
+  describe('extractUniqueStrategyIds', () => {
+    it('should handle strategies with special characters and long IDs', () => {
+      const strategies = [
+        'strategy-with-!@#$%^&*()_+=-`~[]\{}|;\':",./<>?characters',
+        's'.repeat(200),
+        { id: 'another-strategy-with-!@#$%^&*()_+=-`~[]\{}|;\':",./<>?characters' },
+        { id: 's'.repeat(200) },
+      ];
+
+      useTableStore.getState().setTableFromResultsFile({
+        version: 4,
+        config: {
+          redteam: {
+            strategies: strategies,
+          },
+        },
+        results: {
+          results: [],
+        },
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      } as any);
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual([
+        'strategy-with-!@#$%^&*()_+=-`~[]{}|;\':",./<>?characters',
+        's'.repeat(200),
+        'another-strategy-with-!@#$%^&*()_+=-`~[]{}|;\':",./<>?characters',
+        'basic',
+      ]);
+    });
   });
 
   describe('filters', () => {
@@ -260,7 +293,7 @@ describe('useTableStore', () => {
       expect(state.filters.values[mockFilterId].value).toBe('');
     });
 
-    it("should update `filters.options.strategy` with unique strategy IDs (from both strings and objects) and always include 'basic' when `fetchEvalData` receives a config with mixed strategy types", async () => {
+    it("should update `filters.options.strategy` with unique strategy IDs and include 'basic' when `fetchEvalData` receives redteam config with strategies", async () => {
       const mockEvalId = 'test-eval-id';
       const mockStrategies = ['strategy1', { id: 'strategy2' }, 'strategy1', { id: 'strategy3' }];
 
@@ -289,6 +322,141 @@ describe('useTableStore', () => {
         'strategy3',
         'basic',
       ]);
+    });
+
+    it('should not populate strategy options when no redteam config is present in fetchEvalData', async () => {
+      const mockEvalId = 'standard-eval-id';
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: {
+            // No redteam config
+            providers: [],
+          },
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toBeUndefined();
+      expect(state.filters.options.plugin).toBeUndefined();
+      expect(state.filters.options.severity).toBeUndefined();
+    });
+
+    it('should populate strategy options including basic when redteam config is present in fetchEvalData', async () => {
+      const mockEvalId = 'redteam-eval-id';
+      const mockStrategies = ['jailbreak', 'prompt-injection'];
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: {
+            redteam: {
+              strategies: mockStrategies,
+              plugins: [{ id: 'harmful-content' }],
+            },
+          },
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual(['jailbreak', 'prompt-injection', 'basic']);
+      expect(state.filters.options.plugin).toEqual(['harmful-content']);
+    });
+
+    it('should handle empty redteam config correctly in fetchEvalData', async () => {
+      const mockEvalId = 'empty-redteam-eval-id';
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: {
+            redteam: {
+              // Empty strategies and plugins
+              strategies: [],
+              plugins: [],
+            },
+          },
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      // Even with empty arrays, 'basic' is still added by extractUniqueStrategyIds
+      expect(state.filters.options.strategy).toEqual(['basic']);
+      expect(state.filters.options.plugin).toEqual([]);
+      expect(state.filters.options.severity).toEqual([]);
+    });
+
+    it('should not populate strategy options when setTableFromResultsFile receives non-redteam config', () => {
+      const mockResultsFile = {
+        version: 4,
+        config: {
+          providers: [],
+          // No redteam section
+        },
+        prompts: [],
+        results: {
+          results: [],
+        },
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toBeUndefined();
+      expect(state.filters.options.plugin).toBeUndefined();
+      expect(state.filters.options.severity).toBeUndefined();
+    });
+
+    it('should populate strategy options when setTableFromResultsFile receives redteam config', () => {
+      const mockResultsFile = {
+        version: 4,
+        config: {
+          redteam: {
+            strategies: ['multilingual', 'retry'],
+            plugins: [{ id: 'pii' }, { id: 'bias' }],
+          },
+        },
+        prompts: [],
+        results: {
+          results: [],
+        },
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual(['multilingual', 'retry', 'basic']);
+      expect(state.filters.options.plugin).toEqual(['pii', 'bias']);
     });
   });
 
@@ -1348,6 +1516,85 @@ describe('useTableStore', () => {
 
       const state = useTableStore.getState();
       expect(state.filters.options.severity).toContain(Severity.Critical);
+    });
+
+    it('should populate plugin options when redteam plugins are provided as string IDs (fetchEvalData)', async () => {
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: { redteam: { strategies: [], plugins: ['pii', 'jailbreak'] } },
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData('eval-id');
+      });
+
+      expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'jailbreak']);
+    });
+
+    it('should populate plugin options when resultsFile redteam plugins are string IDs (setTableFromResultsFile)', () => {
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: { redteam: { strategies: [], plugins: ['pii', 'bias'] } },
+        results: { results: [] } as any,
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      } as any;
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'bias']);
+    });
+
+    it('should allow metadata filtering on plugin/strategy/severity fields for non-redteam evaluations', () => {
+      // This test documents that metadata filtering (field/value pairs) is separate
+      // from redteam filtering (predefined types). Users can still filter on metadata
+      // fields named "plugin", "strategy", or "severity" using metadata filters.
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: { providers: [] }, // No redteam config
+        results: { results: [] } as any,
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      } as any;
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      const state = useTableStore.getState();
+
+      // Redteam-specific filter types should not be available
+      expect(state.filters.options.plugin).toBeUndefined();
+      expect(state.filters.options.strategy).toBeUndefined();
+      expect(state.filters.options.severity).toBeUndefined();
+
+      // But metadata filtering is still available for any field names
+      expect(state.filters.options.metadata).toEqual([]);
+
+      // User can still add metadata filters for fields named "plugin", "strategy", etc.
+      act(() => {
+        useTableStore.getState().addFilter({
+          type: 'metadata',
+          field: 'plugin',
+          operator: 'equals',
+          value: 'my-custom-plugin',
+        });
+      });
+
+      const updatedState = useTableStore.getState();
+      const metadataFilter = Object.values(updatedState.filters.values)[0];
+      expect(metadataFilter?.type).toBe('metadata');
+      expect(metadataFilter?.field).toBe('plugin');
+      expect(metadataFilter?.value).toBe('my-custom-plugin');
     });
   });
 });

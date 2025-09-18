@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
@@ -56,7 +56,7 @@ interface GeneratedConfig {
   };
 }
 
-const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
+const HttpEndpointConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   bodyError,
@@ -64,7 +64,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   setUrlError,
   updateFullTarget,
-}): JSX.Element => {
+}: HttpEndpointConfigurationProps): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
@@ -362,7 +362,7 @@ ${exampleRequest}`;
             },
           }}
         >
-          AI Auto-fill from Example
+          Auto-fill from Example
         </Button>
       </Box>
       {selectedTarget.config.request ? (

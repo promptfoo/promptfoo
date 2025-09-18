@@ -15,7 +15,7 @@ import type {
   ModerationFlag,
   ProviderModerationResponse,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 interface ReplicateCompletionOptions {

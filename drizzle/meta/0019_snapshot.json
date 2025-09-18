@@ -958,7 +958,7 @@
           "name": "end_time",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "attributes": {
@@ -1161,65 +1161,5 @@
     "schemas": {},
     "tables": {},
     "columns": {}
-  },
-  "internal": {
-    "indexes": {
-      "eval_result_grading_result_reason_idx": {
-        "columns": {
-          "json_extract(\"grading_result\", '$.reason')": {
-            "isExpression": true
-          }
-        }
-      },
-      "eval_result_grading_result_comment_idx": {
-        "columns": {
-          "json_extract(\"grading_result\", '$.comment')": {
-            "isExpression": true
-          }
-        }
-      },
-      "eval_result_test_case_vars_idx": {
-        "columns": {
-          "json_extract(\"test_case\", '$.vars')": {
-            "isExpression": true
-          }
-        }
-      },
-      "eval_result_test_case_metadata_idx": {
-        "columns": {
-          "json_extract(\"metadata\", '$')": {
-            "isExpression": true
-          }
-        }
-      },
-      "eval_result_named_scores_idx": {
-        "columns": {
-          "json_extract(\"named_scores\", '$')": {
-            "isExpression": true
-          }
-        }
-      },
-      "eval_result_metadata_idx": {
-        "columns": {
-          "json_extract(\"metadata\", '$')": {
-            "isExpression": true
-          }
-        }
-      },
-      "eval_result_metadata_plugin_id_idx": {
-        "columns": {
-          "json_extract(\"metadata\", '$.pluginId')": {
-            "isExpression": true
-          }
-        }
-      },
-      "eval_result_metadata_strategy_id_idx": {
-        "columns": {
-          "json_extract(\"metadata\", '$.strategyId')": {
-            "isExpression": true
-          }
-        }
-      }
-    }
   }
 }
