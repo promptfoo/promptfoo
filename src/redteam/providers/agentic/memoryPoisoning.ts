@@ -1,8 +1,8 @@
 import { VERSION } from '../../../constants';
 import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
-import invariant from '../../../util/invariant';
 import { fetchWithProxy } from '../../../util/fetch';
+import invariant from '../../../util/invariant';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationUrl } from '../../remoteGeneration';
 import { messagesToRedteamHistory } from '../shared';
