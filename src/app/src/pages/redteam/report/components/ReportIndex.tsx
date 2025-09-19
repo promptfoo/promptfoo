@@ -19,6 +19,7 @@ import {
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
+import { useNavigate } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
 
 function CustomToolbar() {
@@ -34,6 +35,8 @@ function CustomToolbar() {
 }
 
 function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: boolean }) {
+  const navigate = useNavigate();
+
   const columns: GridColDef<EvalSummary>[] = useMemo(
     () => [
       {
@@ -159,6 +162,11 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
         sorting: {
           sortModel: [{ field: 'createdAt', sort: 'desc' }],
         },
+      }}
+      onCellClick={(params) => {
+        if (params.row.evalId) {
+          navigate(`/reports?evalId=${params.row.evalId}`);
+        }
       }}
     />
   );
