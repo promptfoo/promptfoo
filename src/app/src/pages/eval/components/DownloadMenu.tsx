@@ -10,14 +10,14 @@ import CardContent from '@mui/material/CardContent';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import useTheme from '@mui/material/styles/useTheme';
+import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
@@ -379,7 +379,7 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ xs: 12, md: 6 }}>
                     <Box sx={{ height: '100%' }}>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         Complete configuration file for this evaluation
@@ -400,7 +400,7 @@ function DownloadMenu() {
                     </Box>
                   </Grid>
 
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ xs: 12, md: 6 }}>
                     <Box sx={{ height: '100%' }}>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         Configuration with only failed tests for focused debugging
@@ -441,7 +441,7 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <Button
                       onClick={downloadCsv}
                       startIcon={<DownloadIcon />}
@@ -453,7 +453,7 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <Button
                       onClick={downloadTable}
                       startIcon={<DownloadIcon />}
@@ -481,7 +481,7 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={12} md={4}>
+                  <Grid size={{ xs: 12, md: 4 }}>
                     <Button
                       onClick={downloadBurpPayloads}
                       startIcon={<DownloadIcon />}
@@ -493,7 +493,7 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid item xs={12} md={4}>
+                  <Grid size={{ xs: 12, md: 4 }}>
                     <Button
                       onClick={downloadDpoJson}
                       startIcon={<DownloadIcon />}
@@ -505,7 +505,7 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid item xs={12} md={4}>
+                  <Grid size={{ xs: 12, md: 4 }}>
                     <Button
                       onClick={downloadHumanEvalTestCases}
                       startIcon={<DownloadIcon />}
