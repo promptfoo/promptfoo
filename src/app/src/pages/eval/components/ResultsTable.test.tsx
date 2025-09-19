@@ -379,6 +379,86 @@ describe('ResultsTable Metrics Display', () => {
       expect(element).toBeInTheDocument();
     });
   });
+
+  describe('ResultsTable Media Rendering', () => {
+    const mockTableWithMedia = {
+      body: [
+        {
+          outputs: [
+            {
+              pass: true,
+              score: 1,
+              text: 'test output',
+              metadata: {
+                file: {
+                  imageVar: {
+                    path: '/path/to/image.jpg',
+                    type: 'image',
+                    format: 'jpeg',
+                  },
+                },
+                [Symbol.for('promptfoo:file')]: {
+                  imageVar: {
+                    path: '/path/to/image.jpg',
+                    type: 'image',
+                    format: 'jpeg',
+                  },
+                },
+              },
+            },
+          ],
+          test: {},
+          vars: ['data:image/jpeg;base64,encodedImage'],
+        },
+      ],
+      head: {
+        prompts: [{}],
+        vars: ['imageVar'],
+      },
+    };
+
+    const defaultProps = {
+      columnVisibility: {},
+      failureFilter: {},
+      filterMode: 'all' as const,
+      maxTextLength: 100,
+      onFailureFilterToggle: vi.fn(),
+      onSearchTextChange: vi.fn(),
+      searchText: '',
+      showStats: true,
+      wordBreak: 'break-word' as const,
+      setFilterMode: vi.fn(),
+      zoom: 1,
+      onResultsContainerScroll: vi.fn(),
+      atInitialVerticalScrollPosition: true,
+    };
+
+    beforeEach(() => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: mockTableWithMedia,
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+    });
+
+    it('should render media elements in variable cells without truncation', () => {
+      render(<ResultsTable {...defaultProps} />);
+
+      const imageElement = screen.getByRole('img', { name: 'Base64 encoded image' });
+      expect(imageElement).toBeInTheDocument();
+      expect(imageElement.closest('div')).not.toHaveTextContent('TruncatedText');
+    });
+  });
 });
 
 describe('ResultsTable Metadata Search', () => {
@@ -888,7 +968,6 @@ describe('ResultsTable handleRating', () => {
       setTable: mockSetTable,
       table: createMockTable(),
       version: 4,
-      renderMarkdown: true,
       fetchEvalData: vi.fn(),
       filters: {
         values: {},
@@ -1462,6 +1541,82 @@ describe('ResultsTable Regex Handling', () => {
     const evalOutputCell = screen.getByTestId('eval-output-cell');
     expect(evalOutputCell).toBeInTheDocument();
     expect(evalOutputCell).toHaveAttribute('data-searchtext', specialRegexChars);
+  });
+});
+
+describe('ResultsTable Malformed Markdown Handling', () => {
+  const malformedMarkdown = 'This is a test with some \n unclosed <tag>';
+
+  const mockTable = {
+    body: [
+      {
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [malformedMarkdown],
+      },
+    ],
+    head: {
+      prompts: [
+        {
+          provider: 'test-provider',
+        },
+      ],
+      vars: ['testVar'],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  it('should render variable cells containing malformed markdown without breaking the UI', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    expect(
+      screen.getByText((content, element) => {
+        if (!element) {
+          return false;
+        }
+        return (
+          element?.textContent?.includes('This is a test with some') &&
+          element?.textContent?.includes('unclosed <tag>')
+        );
+      }),
+    ).toBeInTheDocument();
   });
 });
 
