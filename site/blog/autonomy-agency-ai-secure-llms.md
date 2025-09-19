@@ -45,6 +45,8 @@ Practically, it's more important to focus on consequences of using evolving AI t
 
 Let's get into the weeds of security concerns revolving around autonomy and agency in LLMs.
 
+<!--truncate-->
+
 ## Personification is a b\*\*\*\*
 
 Both autonomy and agency are still widely discussed and unfortunately misunderstood in the process. This isn't a big surprise, what with AI's future having not just humanity's hopes and dreams stuffed into it like a chipmunk hoarding nuts but also being fueled by a ludicrous amount of money. AI spending is to hit [USD 375 billion this year alone, and USD 500 billion next year](https://www.ubs.com/us/en/wealth-management/insights/market-news/article.2515967.html).
