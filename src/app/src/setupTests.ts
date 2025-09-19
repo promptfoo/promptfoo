@@ -60,7 +60,7 @@ CSSStyleDeclaration.prototype.setProperty = function (
   try {
     // Call original method first
     return originalSetProperty.call(this, property, value, priority);
-  } catch (error) {
+  } catch (_error) {
     // If it fails with CSS custom properties, handle gracefully
     if (typeof value === 'string' && value.includes('var(--')) {
       // For CSS custom properties, set them directly without parsing
