@@ -237,13 +237,6 @@ const allProviderOptions = [
     description: "JFrog's LLM Model Library",
     tag: 'cloud',
   },
-  // Lambda Labs
-  {
-    value: 'lambdalabs',
-    label: 'Lambda Labs',
-    description: 'Lambda Labs models via Inference API',
-    tag: 'specialized',
-  },
   // llama.cpp
   {
     value: 'llama.cpp',

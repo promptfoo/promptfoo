@@ -122,7 +122,7 @@ describe('plugins constants', () => {
   });
 
   it('should define DATASET_EXEMPT_PLUGINS array', () => {
-    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench']);
+    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench', 'vlguard']);
   });
 
   it('should define STRATEGY_EXEMPT_PLUGINS array', () => {

@@ -10,7 +10,7 @@ import { Vertex as GatewayVertex } from '@adaline/vertex';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
-import { maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { calculateAnthropicCost } from './anthropic/util';
@@ -49,7 +49,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { OpenAiCompletionOptions } from './openai/types';
 
@@ -462,6 +462,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           throw new Error('Vertex API token is not set. Please configure the Google Cloud SDK');
         }
         gatewayChatModel = provider.chatModel({
+          authType: 'accessToken',
           modelName: this.modelName,
           accessToken: token.token as string,
           location: parentClass.getRegion(),

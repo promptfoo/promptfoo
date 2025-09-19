@@ -7,10 +7,9 @@ import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import { createShareableUrl } from '../share';
-import { isRunningUnderNpx } from '../util';
+import { isRunningUnderNpx } from '../util/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
-import { checkMonthlyProbeLimit, formatProbeUsageMessage } from '../util/redteamProbeLimit';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
 
@@ -114,19 +113,6 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   );
 
   logger.info(chalk.green('\nRed team scan complete!'));
-
-  // Display remaining probe usage after completion
-  try {
-    const probeStatus = await checkMonthlyProbeLimit();
-    const msg = formatProbeUsageMessage(probeStatus);
-    if (msg) {
-      logger.info('\n' + msg + '\n');
-    }
-  } catch (err) {
-    logger.debug(
-      `Probe usage check failed: ${err instanceof Error ? err.message + '\n' + err.stack : String(err)}`,
-    );
-  }
   const command = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
   if (options.loadedFromCloud) {
     const url = await createShareableUrl(evalResult, false);

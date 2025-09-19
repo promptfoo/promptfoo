@@ -33,7 +33,7 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
 import { checkForUpdates } from './updates';
-import { setupEnv } from './util';
+import { setupEnv } from './util/index';
 import { loadDefaultConfig } from './util/config/default';
 
 /**

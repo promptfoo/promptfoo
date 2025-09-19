@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 import Delete from '@mui/icons-material/Delete';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -70,7 +70,7 @@ const assertTypes: AssertionType[] = [
   'finish-reason',
 ];
 
-const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
+const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
 
   const handleAdd = () => {

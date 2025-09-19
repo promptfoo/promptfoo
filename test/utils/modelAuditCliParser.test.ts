@@ -9,7 +9,7 @@ import {
   VALID_MODELAUDIT_OPTIONS,
   DEPRECATED_OPTIONS_MAP,
   type ModelAuditCliOptions,
-} from '../../src/utils/modelAuditCliParser';
+} from '../../src/util/modelAuditCliParser';
 
 describe('ModelAudit CLI Parser', () => {
   describe('parseModelAuditArgs', () => {

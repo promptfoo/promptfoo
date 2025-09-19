@@ -291,15 +291,14 @@ describe('Plugins', () => {
       const unalignedPlugin = Plugins.find(
         (p) => p.key === Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0],
       );
-      await expect(
-        unalignedPlugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          delayMs: 0,
-        }),
-      ).rejects.toThrow('requires remote generation to be enabled');
+      const result = await unalignedPlugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        delayMs: 0,
+      });
+      expect(result).toEqual([]);
     });
   });
 

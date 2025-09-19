@@ -4,6 +4,7 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -213,7 +214,7 @@ export default class GoatProvider implements ApiProvider {
             modifiers: context?.test?.metadata?.modifiers,
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-          response = await fetch(getRemoteGenerationUrl(), {
+          response = await fetchWithProxy(getRemoteGenerationUrl(), {
             body,
             headers: {
               'Content-Type': 'application/json',
@@ -248,7 +249,7 @@ export default class GoatProvider implements ApiProvider {
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-        response = await fetch(getRemoteGenerationUrl(), {
+        response = await fetchWithProxy(getRemoteGenerationUrl(), {
           body,
           headers: {
             'Content-Type': 'application/json',

@@ -61,11 +61,11 @@ const highlightJS = (code: string): string => {
   }
 };
 
-const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
+const HttpAdvancedConfiguration = ({
   selectedTarget,
   defaultRequestTransform,
   updateCustomTarget,
-}) => {
+}: HttpAdvancedConfigurationProps) => {
   const theme = useTheme();
   const { showToast } = useToast();
   const darkMode = theme.palette.mode === 'dark';

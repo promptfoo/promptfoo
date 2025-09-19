@@ -2,8 +2,7 @@ import { Command } from 'commander';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
 import { doRedteamRun } from '../../../src/redteam/shared';
-import { getConfigFromCloud, isEnterpriseCustomer } from '../../../src/util/cloud';
-import { getDb } from '../../../src/database';
+import { getConfigFromCloud } from '../../../src/util/cloud';
 
 jest.mock('../../../src/cliState', () => ({
   remote: false,
@@ -23,11 +22,6 @@ jest.mock('../../../src/redteam/shared', () => ({
 
 jest.mock('../../../src/util/cloud', () => ({
   getConfigFromCloud: jest.fn(),
-  isEnterpriseCustomer: jest.fn(),
-}));
-
-jest.mock('../../../src/database', () => ({
-  getDb: jest.fn(),
 }));
 
 describe('redteamRunCommand', () => {
@@ -36,17 +30,6 @@ describe('redteamRunCommand', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-
-    // Mock database functions
-    const mockDb = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      all: jest.fn().mockResolvedValue([]),
-    };
-    (getDb as jest.Mock).mockReturnValue(mockDb);
-    (isEnterpriseCustomer as jest.Mock).mockResolvedValue(false);
-
     program = new Command();
     redteamRunCommand(program);
     // Store original exitCode to restore later

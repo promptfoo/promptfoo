@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export function validateXml(
   xmlString: string,

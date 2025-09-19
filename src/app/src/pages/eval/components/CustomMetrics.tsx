@@ -1,5 +1,3 @@
-import React from 'react';
-
 import './CustomMetrics.css';
 
 import Box from '@mui/material/Box';
@@ -28,7 +26,7 @@ interface MetricValueProps {
   metricTotals?: Record<string, number>;
 }
 
-const MetricValue: React.FC<MetricValueProps> = ({ metric, score, counts, metricTotals }) => {
+const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) => {
   if (metricTotals && metricTotals[metric]) {
     if (metricTotals[metric] === 0) {
       return <span data-testid={`metric-value-${metric}`}>0%</span>;
@@ -53,7 +51,7 @@ const MetricValue: React.FC<MetricValueProps> = ({ metric, score, counts, metric
   return <span data-testid={`metric-value-${metric}`}>{score?.toFixed(2) ?? '0'}</span>;
 };
 
-const CustomMetrics: React.FC<CustomMetricsProps> = ({
+const CustomMetrics = ({
   lookup,
   counts,
   metricTotals,
@@ -61,7 +59,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
   onMetricFilter,
   truncationCount = 10,
   onShowMore,
-}) => {
+}: CustomMetricsProps) => {
   if (!lookup || !Object.keys(lookup).length) {
     return null;
   }

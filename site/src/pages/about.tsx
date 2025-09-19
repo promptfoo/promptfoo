@@ -87,7 +87,7 @@ const AboutPageContent = () => {
                 name: 'Lily Liu',
                 title: 'Business Operations Lead',
                 image: '/img/team/lily.jpeg',
-                bio: 'Lily brings investment and operational expertise from CVC Capital Partners and Evercore, where she spent five years evaluating software companies and tech M&A deals. At Promptfoo, she builds the systems and processes that enable our rapid growth while maintaining operational excellence. She holds a BS in Computer Science from Stanford.',
+                bio: 'Lily brings investment and operational expertise from CVC Capital Partners and Evercore. At Promptfoo, she designs the systems and processes that power rapid growth and long-term scalability.',
               },
               {
                 name: 'Steve Klein',

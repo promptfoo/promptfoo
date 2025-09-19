@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Code from '@app/components/Code';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
-import { useProbeLimit } from '@app/hooks/useProbeLimit';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
@@ -13,7 +12,6 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
-import ScienceIcon from '@mui/icons-material/Science';
 import SearchIcon from '@mui/icons-material/Search';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
@@ -38,17 +36,9 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import {
-  isFoundationModelProvider,
-  PROBE_LIMIT_EMAIL,
-  PROBE_LIMIT_URL,
-} from '@promptfoo/constants';
-import {
-  ALLOWED_PROBE_LIMIT_EXCEEDANCE,
-  REDTEAM_DEFAULTS,
-  strategyDisplayNames,
-} from '@promptfoo/redteam/constants';
-import { getEstimatedProbes, getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
+import { isFoundationModelProvider } from '@promptfoo/constants';
+import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
+import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
@@ -56,7 +46,8 @@ import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
-import { RunOptions } from './RunOptions';
+import { RunOptionsContent } from './RunOptions';
+import type { RedteamRunOptions } from '@promptfoo/types';
 import { getEstimatedDuration } from './strategies/utils';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
@@ -89,16 +80,8 @@ export default function Review({
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
-  const { probeLimit } = useProbeLimit();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
-  const estimatedProbes = useMemo(() => getEstimatedProbes(config), [config]);
-  const exceedsProbeLimit = useMemo(() => {
-    if (!probeLimit) {
-      return false;
-    }
-    return estimatedProbes > probeLimit.remainingProbes + ALLOWED_PROBE_LIMIT_EXCEEDANCE;
-  }, [estimatedProbes, probeLimit]);
 
   const [isRunning, setIsRunning] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
@@ -116,6 +99,7 @@ export default function Review({
   const { checkEmailStatus } = useEmailVerification();
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
   const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
+  const [isRunOptionsExpanded, setIsRunOptionsExpanded] = useState(true);
 
   // Auto-expand advanced config if there are existing test variables
   const hasTestVariables =
@@ -705,195 +689,162 @@ export default function Review({
           )}
 
           <Grid size={12}>
-            <Accordion
-              expanded={isPurposeExpanded}
-              onChange={(e, expanded) => {
-                setIsPurposeExpanded(expanded);
-              }}
-              sx={{
-                '&:before': { display: 'none' },
-                boxShadow: theme.shadows[1],
-                borderRadius: 1,
-              }}
-            >
-              <AccordionSummary
-                expandIcon={<ExpandMoreIcon />}
+            <Box sx={{ boxShadow: theme.shadows[1], borderRadius: 1, overflow: 'hidden' }}>
+              <Accordion
+                expanded={isPurposeExpanded}
+                onChange={(e, expanded) => {
+                  setIsPurposeExpanded(expanded);
+                }}
                 sx={{
-                  '& .MuiAccordionSummary-content': {
-                    alignItems: 'center',
-                    gap: 2,
-                  },
+                  '&:before': { display: 'none' },
+                  boxShadow: 'none',
+                  borderRadius: 0,
+                  borderBottom: `1px solid ${theme.palette.divider}`,
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <InfoOutlinedIcon fontSize="small" color="action" />
-                  <Typography variant="h6">Application Details</Typography>
-                  {parsedPurposeSections.length > 0 && (
-                    <Chip
-                      label={`${parsedPurposeSections.length} section${parsedPurposeSections.length !== 1 ? 's' : ''}`}
-                      size="small"
-                      variant="outlined"
-                      sx={{ height: 20, fontSize: '0.75rem' }}
-                    />
-                  )}
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails sx={{ pt: 0 }}>
-                <Grid size={12}>
-                  <Box
-                    sx={{
-                      display: 'flex',
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    '& .MuiAccordionSummary-content': {
                       alignItems: 'center',
-                      justifyContent: 'flex-end',
-                      mb: 1,
-                    }}
-                  >
-                    {parsedPurposeSections.length > 1 && (
-                      <Button
+                      gap: 2,
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <InfoOutlinedIcon fontSize="small" color="action" />
+                    <Typography variant="h6">Application Details</Typography>
+                    {config.purpose && (
+                      <Chip
+                        label={config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
                         size="small"
-                        onClick={() => {
-                          if (expandedPurposeSections.size === parsedPurposeSections.length) {
-                            setExpandedPurposeSections(new Set());
-                          } else {
-                            setExpandedPurposeSections(
-                              new Set(parsedPurposeSections.map((s) => s.title)),
-                            );
-                          }
-                        }}
-                        sx={{ textTransform: 'none' }}
-                      >
-                        {expandedPurposeSections.size === parsedPurposeSections.length
-                          ? 'Collapse All'
-                          : 'Expand All'}
-                      </Button>
+                        variant="outlined"
+                        color={config.purpose.length < 100 ? 'warning' : 'success'}
+                        sx={{ height: 20, fontSize: '0.75rem' }}
+                      />
+                    )}
+                    {!config.purpose && (
+                      <Chip
+                        label="Not configured"
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        sx={{ height: 20, fontSize: '0.75rem' }}
+                      />
                     )}
                   </Box>
-
-                  {(!config.purpose?.trim() || config.purpose.length < 100) &&
-                  !isFoundationModelProvider(config.target.id) ? (
-                    <Box sx={{ mb: 2 }}>
-                      <Alert severity="warning">
-                        Application details are required to generate a high quality red team. Go to
-                        the Application Details section and add a purpose.{' '}
-                        <Link
-                          style={{ textDecoration: 'underline' }}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
-                        >
-                          Learn more about red team best practices.
-                        </Link>
-                      </Alert>
-                      <Button onClick={navigateToPurpose} sx={{ mt: 2 }} variant="contained">
-                        Add application details
-                      </Button>
-                    </Box>
-                  ) : null}
-
-                  {parsedPurposeSections.length > 0 ? (
-                    <Stack spacing={2} sx={{ mt: 1 }}>
-                      {parsedPurposeSections.map((section, index) => (
-                        <Box
-                          key={index}
-                          sx={{
-                            border: `1px solid ${theme.palette.divider}`,
-                            borderRadius: 1,
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <Box
-                            onClick={() => togglePurposeSection(section.title)}
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              p: 1.5,
-                              backgroundColor: theme.palette.action.hover,
-                              cursor: 'pointer',
-                              '&:hover': {
-                                backgroundColor: theme.palette.action.selected,
-                              },
-                            }}
-                          >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="body2" fontWeight="medium">
-                                {section.title}
-                              </Typography>
-                            </Box>
-                            <ExpandMoreIcon
-                              sx={{
-                                transform: expandedPurposeSections.has(section.title)
-                                  ? 'rotate(180deg)'
-                                  : 'rotate(0deg)',
-                                transition: 'transform 0.2s',
-                              }}
-                            />
-                          </Box>
-                          {expandedPurposeSections.has(section.title) && (
-                            <Box sx={{ p: 2, backgroundColor: 'background.paper' }}>
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  whiteSpace: 'pre-wrap',
-                                  color: 'text.secondary',
-                                }}
-                              >
-                                {section.content}
-                              </Typography>
-                            </Box>
-                          )}
-                        </Box>
-                      ))}
-                    </Stack>
-                  ) : config.purpose ? (
-                    <Typography
-                      variant="body2"
-                      onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 0 }}>
+                  <Grid size={12}>
+                    <Box
                       sx={{
-                        whiteSpace: 'pre-wrap',
-                        padding: 1,
-                        borderRadius: 1,
-                        backgroundColor: 'background.paper',
-                        cursor: 'pointer',
-                        display: '-webkit-box',
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
-                        '&:hover': {
-                          backgroundColor: 'action.hover',
-                        },
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        mb: 1,
                       }}
                     >
-                      {config.purpose}
-                    </Typography>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      Not specified
-                    </Typography>
-                  )}
-                  {config.purpose &&
-                    parsedPurposeSections.length === 0 &&
-                    config.purpose.split('\n').length > 6 && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: 'primary.main',
-                          cursor: 'pointer',
-                          mt: 0.5,
-                          display: 'block',
-                        }}
-                        onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                      >
-                        {isPurposeExpanded ? 'Show less' : 'Show more'}
-                      </Typography>
-                    )}
+                      {parsedPurposeSections.length > 1 && (
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            if (expandedPurposeSections.size === parsedPurposeSections.length) {
+                              setExpandedPurposeSections(new Set());
+                            } else {
+                              setExpandedPurposeSections(
+                                new Set(parsedPurposeSections.map((s) => s.title)),
+                              );
+                            }
+                          }}
+                          sx={{ textTransform: 'none' }}
+                        >
+                          {expandedPurposeSections.size === parsedPurposeSections.length
+                            ? 'Collapse All'
+                            : 'Expand All'}
+                        </Button>
+                      )}
+                    </Box>
 
-                  {config.testGenerationInstructions && (
-                    <Grid size={12}>
-                      <Typography variant="subtitle2">Test Generation Instructions</Typography>
+                    {(!config.purpose?.trim() || config.purpose.length < 100) &&
+                    !isFoundationModelProvider(config.target.id) ? (
+                      <Box sx={{ mb: 2 }}>
+                        <Alert severity="warning">
+                          Application details are required to generate a high quality red team. Go
+                          to the Application Details section and add a purpose.{' '}
+                          <Link
+                            style={{ textDecoration: 'underline' }}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
+                          >
+                            Learn more about red team best practices.
+                          </Link>
+                        </Alert>
+                        <Button onClick={navigateToPurpose} sx={{ mt: 2 }} variant="contained">
+                          Add application details
+                        </Button>
+                      </Box>
+                    ) : null}
+
+                    {parsedPurposeSections.length > 0 ? (
+                      <Stack spacing={2} sx={{ mt: 1 }}>
+                        {parsedPurposeSections.map((section, index) => (
+                          <Box
+                            key={index}
+                            sx={{
+                              border: `1px solid ${theme.palette.divider}`,
+                              borderRadius: 1,
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <Box
+                              onClick={() => togglePurposeSection(section.title)}
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                p: 1.5,
+                                backgroundColor: theme.palette.action.hover,
+                                cursor: 'pointer',
+                                '&:hover': {
+                                  backgroundColor: theme.palette.action.selected,
+                                },
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="body2" fontWeight="medium">
+                                  {section.title}
+                                </Typography>
+                              </Box>
+                              <ExpandMoreIcon
+                                sx={{
+                                  transform: expandedPurposeSections.has(section.title)
+                                    ? 'rotate(180deg)'
+                                    : 'rotate(0deg)',
+                                  transition: 'transform 0.2s',
+                                }}
+                              />
+                            </Box>
+                            {expandedPurposeSections.has(section.title) && (
+                              <Box sx={{ p: 2, backgroundColor: 'background.paper' }}>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    whiteSpace: 'pre-wrap',
+                                    color: 'text.secondary',
+                                  }}
+                                >
+                                  {section.content}
+                                </Typography>
+                              </Box>
+                            )}
+                          </Box>
+                        ))}
+                      </Stack>
+                    ) : config.purpose ? (
                       <Typography
                         variant="body2"
-                        onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                        onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
                         sx={{
                           whiteSpace: 'pre-wrap',
                           padding: 1,
@@ -903,104 +854,178 @@ export default function Review({
                           display: '-webkit-box',
                           WebkitBoxOrient: 'vertical',
                           overflow: 'hidden',
-                          WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
+                          WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
                           '&:hover': {
                             backgroundColor: 'action.hover',
                           },
                         }}
                       >
-                        {config.testGenerationInstructions}
+                        {config.purpose}
                       </Typography>
-                      {config.testGenerationInstructions &&
-                        config.testGenerationInstructions.split('\n').length > 6 && (
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              color: 'primary.main',
-                              cursor: 'pointer',
-                              mt: 0.5,
-                              display: 'block',
-                            }}
-                            onClick={() =>
-                              setIsTestInstructionsExpanded(!isTestInstructionsExpanded)
-                            }
-                          >
-                            {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
-                          </Typography>
-                        )}
-                    </Grid>
-                  )}
-                </Grid>
-              </AccordionDetails>
-            </Accordion>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        Not specified
+                      </Typography>
+                    )}
+                    {config.purpose &&
+                      parsedPurposeSections.length === 0 &&
+                      config.purpose.split('\n').length > 6 && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: 'primary.main',
+                            cursor: 'pointer',
+                            mt: 0.5,
+                            display: 'block',
+                          }}
+                          onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                        >
+                          {isPurposeExpanded ? 'Show less' : 'Show more'}
+                        </Typography>
+                      )}
+
+                    {config.testGenerationInstructions && (
+                      <Grid size={12}>
+                        <Typography variant="subtitle2">Test Generation Instructions</Typography>
+                        <Typography
+                          variant="body2"
+                          onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                          sx={{
+                            whiteSpace: 'pre-wrap',
+                            padding: 1,
+                            borderRadius: 1,
+                            backgroundColor: 'background.paper',
+                            cursor: 'pointer',
+                            display: '-webkit-box',
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
+                            '&:hover': {
+                              backgroundColor: 'action.hover',
+                            },
+                          }}
+                        >
+                          {config.testGenerationInstructions}
+                        </Typography>
+                        {config.testGenerationInstructions &&
+                          config.testGenerationInstructions.split('\n').length > 6 && (
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: 'primary.main',
+                                cursor: 'pointer',
+                                mt: 0.5,
+                                display: 'block',
+                              }}
+                              onClick={() =>
+                                setIsTestInstructionsExpanded(!isTestInstructionsExpanded)
+                              }
+                            >
+                              {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
+                            </Typography>
+                          )}
+                      </Grid>
+                    )}
+                  </Grid>
+                </AccordionDetails>
+              </Accordion>
+
+              <Accordion
+                expanded={isAdvancedConfigExpanded}
+                onChange={(e, expanded) => {
+                  setIsAdvancedConfigExpanded(expanded);
+                }}
+                sx={{
+                  '&:before': { display: 'none' },
+                  boxShadow: 'none',
+                  borderRadius: 0,
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    '& .MuiAccordionSummary-content': {
+                      alignItems: 'center',
+                      gap: 2,
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TuneIcon fontSize="small" color="action" />
+                    <Typography variant="h6">Advanced Configuration</Typography>
+                    <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1 }} />
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 0 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    Configure advanced options that apply to all test cases. These settings are for
+                    power users who need fine-grained control over their red team evaluation.
+                  </Typography>
+                  <DefaultTestVariables />
+                </AccordionDetails>
+              </Accordion>
+
+              <Accordion
+                expanded={isRunOptionsExpanded}
+                onChange={(e, expanded) => {
+                  setIsRunOptionsExpanded(expanded);
+                }}
+                sx={{
+                  '&:before': { display: 'none' },
+                  boxShadow: 'none',
+                  borderRadius: 0,
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    '& .MuiAccordionSummary-content': {
+                      alignItems: 'center',
+                      gap: 2,
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PlayArrowIcon fontSize="small" color="action" />
+                    <Typography variant="h6">Run Options</Typography>
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 0 }}>
+                  <RunOptionsContent
+                    numTests={config.numTests}
+                    runOptions={{
+                      maxConcurrency: config.maxConcurrency,
+                      delay: config.target.config.delay,
+                    }}
+                    updateConfig={updateConfig}
+                    updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
+                      if (key === 'delay') {
+                        updateConfig('target', {
+                          ...config.target,
+                          config: { ...config.target.config, delay: value },
+                        });
+                      } else if (key === 'maxConcurrency') {
+                        updateConfig('maxConcurrency', value);
+                      } else if (key === 'verbose') {
+                        updateConfig('target', {
+                          ...config.target,
+                          config: { ...config.target.config, verbose: value },
+                        });
+                      }
+                    }}
+                  />
+                </AccordionDetails>
+              </Accordion>
+            </Box>
           </Grid>
         </Grid>
 
         <Divider sx={{ my: 4 }} />
 
-        <Accordion
-          expanded={isAdvancedConfigExpanded}
-          onChange={(e, expanded) => {
-            setIsAdvancedConfigExpanded(expanded);
-          }}
-          sx={{
-            mb: 4,
-            '&:before': { display: 'none' },
-            boxShadow: theme.shadows[1],
-            borderRadius: 1,
-          }}
-        >
-          <AccordionSummary
-            expandIcon={<ExpandMoreIcon />}
-            sx={{
-              '& .MuiAccordionSummary-content': {
-                alignItems: 'center',
-                gap: 2,
-              },
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <TuneIcon fontSize="small" color="action" />
-              <Typography variant="h6">Advanced Configuration</Typography>
-              <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1 }} />
-            </Box>
-          </AccordionSummary>
-          <AccordionDetails sx={{ pt: 0 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Configure advanced options that apply to all test cases. These settings are for power
-              users who need fine-grained control over their red team evaluation.
-            </Typography>
-            <DefaultTestVariables />
-          </AccordionDetails>
-        </Accordion>
-
         <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-          Running Your Configuration
+          Run Your Scan
         </Typography>
-
-        <RunOptions
-          numTests={config.numTests}
-          runOptions={{
-            maxConcurrency: config.maxConcurrency,
-            delay: config.target.config.delay,
-          }}
-          updateConfig={updateConfig}
-          updateRunOption={(key, value) => {
-            if (key === 'delay') {
-              updateConfig('target', {
-                ...config.target,
-                config: { ...config.target.config, delay: value },
-              });
-            } else if (key === 'maxConcurrency') {
-              updateConfig('maxConcurrency', value);
-            } else if (key === 'verbose') {
-              updateConfig('target', {
-                ...config.target,
-                config: { ...config.target.config, verbose: value },
-              });
-            }
-          }}
-        />
 
         <Box
           sx={{
@@ -1016,153 +1041,16 @@ export default function Review({
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Typography variant="body1" color="text.secondary">
-              Estimated Probes:
+              Estimated Duration:
             </Typography>
           </Box>
           <Typography variant="body1" fontWeight="bold" color="primary.main">
-            {getEstimatedProbes(config).toLocaleString()}
+            {getEstimatedDuration(config)}
           </Typography>
-          <Tooltip title="Probes are the number of requests to target application">
+          <Tooltip title="Estimated time includes test generation and probe execution. Actual time may vary based on target response times and network conditions.">
             <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
           </Tooltip>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Typography variant="body1" color="text.secondary">
-                Estimated Duration:
-              </Typography>
-            </Box>
-            <Typography variant="body1" fontWeight="bold" color="primary.main">
-              {getEstimatedDuration(config)}
-            </Typography>
-            <Tooltip title="Estimated time includes test generation and probe execution. Actual time may vary based on target response times and network conditions.">
-              <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
-            </Tooltip>
-          </Box>
         </Box>
-
-        {probeLimit && probeLimit.enabled && (
-          <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <ScienceIcon color="action" />
-              <Typography variant="h6">Red Team Usage</Typography>
-            </Box>
-
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 2 }}>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  Used This Month
-                </Typography>
-                <Typography variant="h6">{probeLimit.usedProbes.toLocaleString()}</Typography>
-              </Box>
-              <Divider orientation="vertical" flexItem />
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  Remaining
-                </Typography>
-                <Typography
-                  variant="h6"
-                  color={
-                    probeLimit.hasExceeded
-                      ? 'error.main'
-                      : probeLimit.remainingProbes < 5000
-                        ? 'warning.main'
-                        : 'text.primary'
-                  }
-                >
-                  {probeLimit.remainingProbes.toLocaleString()}
-                </Typography>
-              </Box>
-              <Divider orientation="vertical" flexItem />
-
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  Est. for This Scan
-                </Typography>
-                <Typography
-                  variant="h6"
-                  color={
-                    estimatedProbes > probeLimit.remainingProbes
-                      ? 'error.main'
-                      : estimatedProbes > probeLimit.remainingProbes * 0.5
-                        ? 'warning.main'
-                        : 'success.main'
-                  }
-                >
-                  {estimatedProbes.toLocaleString()}
-                </Typography>
-              </Box>
-            </Box>
-
-            {estimatedProbes > probeLimit.remainingProbes && (
-              <Alert severity={exceedsProbeLimit ? 'error' : 'warning'} sx={{ mb: 2 }}>
-                <Typography variant="body2">
-                  This scan requires approximately {estimatedProbes.toLocaleString()} probes, but
-                  you only have {probeLimit.remainingProbes.toLocaleString()} remaining.
-                  {exceedsProbeLimit
-                    ? ` The scan cannot be started as it exceeds your limit by more than ${ALLOWED_PROBE_LIMIT_EXCEEDANCE.toLocaleString()} probes.`
-                    : ' The scan may be limited. Consider reducing the number of tests.'}
-                </Typography>
-              </Alert>
-            )}
-
-            <Alert severity="info" sx={{ mt: 2 }}>
-              <Box>
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  Red teaming uses an LLM to generate probes and grade responses. Our community plan
-                  includes 10,000 probes per month.
-                </Typography>
-
-                <Box
-                  sx={{
-                    p: 2,
-                    borderRadius: 1,
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                  }}
-                >
-                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                    Need more capacity?
-                  </Typography>
-
-                  <Stack spacing={1}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2">📧</Typography>
-                      <Typography variant="body2">
-                        Contact our sales team at{' '}
-                        <Link
-                          to={`mailto:${PROBE_LIMIT_EMAIL}`}
-                          style={{ color: 'inherit', textDecoration: 'underline' }}
-                        >
-                          {PROBE_LIMIT_EMAIL}
-                        </Link>
-                      </Typography>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2">🌐</Typography>
-                      <Typography variant="body2">
-                        Visit{' '}
-                        <Link
-                          to={PROBE_LIMIT_URL}
-                          style={{ color: 'inherit', textDecoration: 'underline' }}
-                        >
-                          {PROBE_LIMIT_URL}
-                        </Link>
-                      </Typography>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2">💬</Typography>
-                      <Typography variant="body2">
-                        Use the chat in the bottom right corner
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </Box>
-              </Box>
-            </Alert>
-          </Paper>
-        )}
 
         <Paper elevation={2} sx={{ p: 3 }}>
           <Box sx={{ mb: 4 }}>
@@ -1207,65 +1095,19 @@ export default function Review({
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
             </Typography>
-            {probeLimit && probeLimit.hasExceeded && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                You have exceeded your monthly probe limit ({probeLimit.limit.toLocaleString()}{' '}
-                probes). Please contact {PROBE_LIMIT_EMAIL} to upgrade your account.
-              </Alert>
-            )}
-            {exceedsProbeLimit && !probeLimit?.hasExceeded && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {probeLimit?.remainingProbes && probeLimit?.remainingProbes > 0
-                  ? `This scan requires ${estimatedProbes.toLocaleString()} probes but you only have ${probeLimit?.remainingProbes.toLocaleString()} remaining. Please reduce the number of tests or plugins to continue. `
-                  : `You have no probes remaining this month.`}{' '}
-              </Alert>
-            )}
-            {probeLimit &&
-              !probeLimit.hasExceeded &&
-              !exceedsProbeLimit &&
-              probeLimit.remainingProbes < 5000 && (
-                <Alert severity="warning" sx={{ mb: 2 }}>
-                  You have {probeLimit.remainingProbes.toLocaleString()} probes remaining this month
-                  ({Math.round((probeLimit.remainingProbes / probeLimit.limit) * 100)}% of your
-                  monthly limit).
-                </Alert>
-              )}
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Tooltip
-                  title={
-                    probeLimit?.hasExceeded
-                      ? 'Monthly probe limit exceeded. Please contact inquiries@promptfoo.dev to upgrade.'
-                      : exceedsProbeLimit
-                        ? `This scan requires ${estimatedProbes.toLocaleString()} probes but you only have ${probeLimit?.remainingProbes.toLocaleString()} remaining. Please reduce the number of tests.`
-                        : ''
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleRunWithSettings}
+                  disabled={isRunning}
+                  startIcon={
+                    isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
                   }
-                  placement="top"
                 >
-                  <span>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      onClick={handleRunWithSettings}
-                      disabled={isRunning || probeLimit?.hasExceeded || exceedsProbeLimit}
-                      startIcon={
-                        isRunning ? (
-                          <CircularProgress size={20} color="inherit" />
-                        ) : (
-                          <PlayArrowIcon />
-                        )
-                      }
-                    >
-                      {isRunning
-                        ? 'Running...'
-                        : probeLimit?.hasExceeded
-                          ? 'Limit Exceeded'
-                          : exceedsProbeLimit
-                            ? 'Exceeds Limit'
-                            : 'Run Now'}
-                    </Button>
-                  </span>
-                </Tooltip>
+                  {isRunning ? 'Running...' : 'Run Now'}
+                </Button>
                 {isRunning && (
                   <Button
                     variant="contained"

@@ -6,7 +6,7 @@ interface EvalSelectorProps {
   onEvalSelected: (evalId: string) => void;
 }
 
-const EvalSelector: React.FC<EvalSelectorProps> = ({ onEvalSelected }) => {
+const EvalSelector = ({ onEvalSelected }: EvalSelectorProps) => {
   const [open, setOpen] = useState(false);
   //const isMac =
   //  typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);

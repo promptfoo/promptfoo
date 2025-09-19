@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { formatDataGridDate } from '@app/utils/date';
 import {
   CheckCircle as CheckCircleIcon,
   Delete as DeleteIcon,
@@ -73,7 +74,7 @@ export default function HistoryTab() {
   };
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString();
+    return formatDataGridDate(timestamp);
   };
 
   const getSeverityColor = (hasErrors: boolean) => {

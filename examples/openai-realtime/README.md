@@ -22,6 +22,32 @@ export OPENAI_API_KEY=your-api-key-here
 
 2. Ensure you have access to the OpenAI Realtime API (Beta), which may require specific permissions from OpenAI.
 
+### Custom endpoints and local development
+
+You can point the Realtime provider at custom/proxy endpoints (including Azure-compatible gateways) or local/dev servers by setting `apiBaseUrl`. The provider automatically converts `https://` → `wss://` and `http://` → `ws://` for the WebSocket connection.
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview
+    config:
+      # Custom hosted gateway
+      apiBaseUrl: 'https://my-custom-api.com/v1' # connects to wss://my-custom-api.com/v1/realtime
+      modalities: ['text']
+      temperature: 0.7
+```
+
+For local development:
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview
+    config:
+      apiBaseUrl: 'http://localhost:8080/v1' # connects to ws://localhost:8080/v1/realtime
+      modalities: ['text']
+```
+
+You can also use environment variables like `OPENAI_API_BASE_URL` or `OPENAI_BASE_URL` instead of `apiBaseUrl`.
+
 ## Files
 
 - `promptfooconfig.yaml`: Configuration file defining the providers and tests

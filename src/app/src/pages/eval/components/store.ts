@@ -5,16 +5,15 @@ import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { VisibilityState } from '@tanstack/table-core';
-
 import type {
+  EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTable,
-  FilterMode,
   ResultsFile,
   UnifiedConfig,
-} from './types';
+} from '@promptfoo/types';
+import type { VisibilityState } from '@tanstack/table-core';
 
 function computeHighlightCount(table: EvaluateTable | null): number {
   if (!table) {
@@ -50,6 +49,34 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
   return Array.from(new Set([...strategyIds, 'basic']));
 }
 
+/**
+ * The `plugin`, `strategy`, and `severity` filter options are only available for redteam evaluations.
+ * This function conditionally constructs these based on whether the evaluation was a red team. If it was not,
+ * it returns an empty object.
+ */
+function buildRedteamFilterOptions(
+  config?: Partial<UnifiedConfig> | null,
+): { plugin: string[]; strategy: string[]; severity: string[] } | {} {
+  const isRedteam = Boolean(config?.redteam);
+
+  // For non-redteam evaluations, don't provide redteam-specific filter options.
+  // Note: This is separate from metadata filtering - if users have metadata fields
+  // named "plugin", "strategy", or "severity", they can still filter on them using
+  // the metadata filter type (which uses field/value pairs).
+  if (!isRedteam) {
+    return {};
+  }
+
+  return {
+    plugin:
+      config?.redteam?.plugins?.map((plugin) =>
+        typeof plugin === 'string' ? plugin : plugin.id,
+      ) ?? [],
+    strategy: extractUniqueStrategyIds(config?.redteam?.strategies),
+    severity: computeAvailableSeverities(config?.redteam?.plugins),
+  };
+}
+
 function computeAvailableSeverities(
   plugins?: Array<string | { id: string; severity?: string }> | null,
 ): string[] {
@@ -78,7 +105,7 @@ function computeAvailableSeverities(
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
-  filterMode?: FilterMode;
+  filterMode?: EvalResultsFilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
   skipLoadingState?: boolean;
@@ -204,7 +231,12 @@ interface TableState {
      * The options for each filter type.
      */
     options: {
-      [key in ResultsFilterType]: string[];
+      metric: string[];
+      metadata: string[];
+      // Redteam-specific filter options are only available for redteam evaluations.
+      plugin?: string[];
+      strategy?: string[];
+      severity?: string[];
     };
   };
 }
@@ -323,9 +355,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(table),
             metadata: [],
-            plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-            strategy: extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies),
-            severity: computeAvailableSeverities(resultsFile.config?.redteam?.plugins),
+            ...buildRedteamFilterOptions(resultsFile.config),
           },
         },
       }));
@@ -340,9 +370,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(results.table),
             metadata: [],
-            plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-            strategy: extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies),
-            severity: computeAvailableSeverities(resultsFile.config?.redteam?.plugins),
+            ...buildRedteamFilterOptions(resultsFile.config),
           },
         },
       }));
@@ -443,9 +471,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             options: {
               metric: computeAvailableMetrics(data.table),
               metadata: [],
-              plugin: data.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-              strategy: extractUniqueStrategyIds(data.config?.redteam?.strategies),
-              severity: computeAvailableSeverities(data.config?.redteam?.plugins),
+              ...buildRedteamFilterOptions(data.config),
             },
           },
         }));
@@ -474,9 +500,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
     options: {
       metric: [],
       metadata: [],
-      plugin: [],
-      strategy: [],
-      severity: [],
     },
   },
 

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -16,15 +17,15 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import type { ResultLightweightWithLabel } from '@promptfoo/types';
 import fuzzysearch from 'fuzzysearch';
 import { useNavigate } from 'react-router-dom';
-import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 type SortField = 'description' | 'createdAt' | 'evalId';
 
 const ROWS_PER_PAGE = 50;
 
-const ReportIndex: React.FC = () => {
+const ReportIndex = () => {
   const navigate = useNavigate();
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -192,15 +193,7 @@ const ReportIndex: React.FC = () => {
                   </Typography>
                 </TableCell>
                 <TableCell>
-                  <Typography variant="body2">
-                    {new Date(eval_.createdAt).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </Typography>
+                  <Typography variant="body2">{formatDataGridDate(eval_.createdAt)}</Typography>
                 </TableCell>
                 <TableCell>
                   <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>

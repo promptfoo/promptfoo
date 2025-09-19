@@ -27,7 +27,7 @@ export default function MCPProxyDiagram() {
         boxShadow: 3,
       }}
     >
-      <Grid container alignItems="center" justifyContent="center">
+      <Grid container spacing={0} alignItems="center" justifyContent="center">
         {/* Left column: Users & Apps */}
         <Grid size={{ xs: 12, sm: 3 }}>
           <Stack

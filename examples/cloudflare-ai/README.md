@@ -28,16 +28,16 @@ export CLOUDFLARE_API_KEY=your_api_key_here
 
 ### Basic Usage (`chat_config.yaml`)
 
-Compares chat and completion providers using current state-of-the-art models:
+Compares the latest flagship chat models:
 
-- `cloudflare-ai:completion:@cf/qwen/qwen2.5-coder-32b-instruct` - Advanced code generation model
-- `cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` - Reasoning and conversation model
+- `cloudflare-ai:chat:@cf/openai/gpt-oss-120b` - OpenAI's production, general purpose, high reasoning model
+- `cloudflare-ai:chat:@cf/meta/llama-4-scout-17b-16e-instruct` - Meta's Llama 4 Scout with native multimodal capabilities
 
 ### Advanced Configuration (`chat_advanced_configuration.yaml`)
 
 Demonstrates OpenAI-compatible parameters with Cloudflare AI:
 
-- Uses `@cf/google/gemma-3-12b-it` (latest Gemma with 128K context)
+- Uses `@cf/mistralai/mistral-small-3.1-24b-instruct` (enhanced vision understanding and 128K context)
 - Custom `max_tokens`, `temperature`, `seed` parameters
 - Environment variable configuration patterns
 
@@ -45,8 +45,8 @@ Demonstrates OpenAI-compatible parameters with Cloudflare AI:
 
 Shows embedding generation and similarity testing:
 
-- Chat: `@cf/hf/nousresearch/hermes-2-pro-mistral-7b` (function calling support)
-- Embedding: `@cf/baai/bge-large-en-v1.5` (high-quality embeddings)
+- Chat: `@cf/meta/llama-3.3-70b-instruct-fp8-fast` (optimized 70B model with fp8 quantization)
+- Embedding: `@cf/google/embeddinggemma-300m` (state-of-the-art embedding model trained on 100+ languages)
 - Similarity assertion testing with configurable thresholds
 
 ## Provider Types
@@ -59,13 +59,13 @@ Cloudflare AI supports three provider types:
 
 ## Featured Models (2025)
 
-This example showcases current state-of-the-art models:
+This example showcases the latest flagship models:
 
-- **DeepSeek R1 Distilled** (`@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`) - Advanced reasoning
-- **Qwen 2.5 Coder** (`@cf/qwen/qwen2.5-coder-32b-instruct`) - Code generation leader
-- **Gemma 3** (`@cf/google/gemma-3-12b-it`) - 128K context, multilingual
-- **Hermes 2 Pro** (`@cf/hf/nousresearch/hermes-2-pro-mistral-7b`) - Function calling
-- **BGE Large** (`@cf/baai/bge-large-en-v1.5`) - High-quality embeddings
+- **OpenAI GPT-OSS-120B** (`@cf/openai/gpt-oss-120b`) - Production-ready, high reasoning capabilities
+- **Meta Llama 4 Scout** (`@cf/meta/llama-4-scout-17b-16e-instruct`) - Multimodal with mixture-of-experts
+- **Meta Llama 3.3 70B Fast** (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) - Speed-optimized 70B model
+- **Mistral Small 3.1** (`@cf/mistralai/mistral-small-3.1-24b-instruct`) - Enhanced vision and 128K context
+- **EmbeddingGemma-300M** (`@cf/google/embeddinggemma-300m`) - Multilingual embeddings (100+ languages)
 
 ## OpenAI Compatibility
 

@@ -5,7 +5,7 @@ import cliState from '../cliState';
 import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
 
-import type { TestCase, Vars } from '../types';
+import type { TestCase, Vars } from '../types/index';
 
 /**
  * Safely casts HuggingFace row data to Vars type

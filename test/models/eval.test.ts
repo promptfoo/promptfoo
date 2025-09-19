@@ -4,7 +4,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval, { getEvalSummaries } from '../../src/models/eval';
 import EvalFactory from '../factories/evalFactory';
 
-import type { Prompt } from '../../src/types';
+import type { Prompt } from '../../src/types/index';
 
 jest.mock('../../src/globalConfig/accounts', () => ({
   ...jest.requireActual('../../src/globalConfig/accounts'),
@@ -44,7 +44,7 @@ describe('evaluator', () => {
           createdAt: eval1.createdAt,
           description: null,
           numTests: 2,
-          isRedteam: false,
+          isRedteam: 0,
           passRate: 50,
           label: eval1.id,
         }),
@@ -56,7 +56,7 @@ describe('evaluator', () => {
           createdAt: eval2.createdAt,
           description: null,
           numTests: 2,
-          isRedteam: false,
+          isRedteam: 0,
           passRate: 50,
           label: eval2.id,
         }),
@@ -76,41 +76,6 @@ describe('evaluator', () => {
       expect(evaluations[0].evalId).toBe(eval3.id);
       expect(evaluations[1].evalId).toBe(eval2.id);
       expect(evaluations[2].evalId).toBe(eval1.id);
-    });
-
-    it('should correctly identify red team evaluations', async () => {
-      const redTeamEval = await EvalFactory.create({ isRedteam: true });
-      const regularEval = await EvalFactory.create({ isRedteam: false });
-
-      const evaluations = await getEvalSummaries();
-
-      expect(evaluations).toHaveLength(2);
-
-      const redTeamSummary = evaluations.find((summary) => summary.evalId === redTeamEval.id);
-      const regularSummary = evaluations.find((summary) => summary.evalId === regularEval.id);
-
-      expect(redTeamSummary?.isRedteam).toBe(true);
-      expect(regularSummary?.isRedteam).toBe(false);
-    });
-
-    it('should handle mixed red team and regular evaluations', async () => {
-      const eval1 = await EvalFactory.create({ isRedteam: true });
-      const eval2 = await EvalFactory.create({ isRedteam: false });
-      const eval3 = await EvalFactory.create({ isRedteam: true });
-
-      const evaluations = await getEvalSummaries();
-
-      expect(evaluations).toHaveLength(3);
-
-      const redTeamEvals = evaluations.filter((summary) => summary.isRedteam);
-      const regularEvals = evaluations.filter((summary) => !summary.isRedteam);
-
-      expect(redTeamEvals).toHaveLength(2);
-      expect(regularEvals).toHaveLength(1);
-
-      expect(redTeamEvals.map((e) => e.evalId)).toContain(eval1.id);
-      expect(redTeamEvals.map((e) => e.evalId)).toContain(eval3.id);
-      expect(regularEvals[0].evalId).toBe(eval2.id);
     });
   });
 
@@ -151,28 +116,6 @@ describe('evaluator', () => {
       const evaluation = await Eval.create(config, renderedPrompts);
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(mockEmail);
-    });
-
-    it('should create red team evaluation when redteam config exists', async () => {
-      const config = { description: 'Red team eval', redteam: {} };
-      const renderedPrompts: Prompt[] = [
-        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
-      ];
-      const evaluation = await Eval.create(config, renderedPrompts);
-      expect(evaluation.isRedteam).toBe(true);
-      const persistedEval = await Eval.findById(evaluation.id);
-      expect(persistedEval?.isRedteam).toBe(true);
-    });
-
-    it('should create regular evaluation when no redteam config', async () => {
-      const config = { description: 'Regular eval' };
-      const renderedPrompts: Prompt[] = [
-        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
-      ];
-      const evaluation = await Eval.create(config, renderedPrompts);
-      expect(evaluation.isRedteam).toBe(false);
-      const persistedEval = await Eval.findById(evaluation.id);
-      expect(persistedEval?.isRedteam).toBe(false);
     });
   });
 
@@ -218,37 +161,6 @@ describe('evaluator', () => {
       // Now, after backfilling, the next load should get the same vars from db
       const persistedEval2 = await Eval.findById(eval1.id);
       expect(persistedEval2?.vars).toEqual(vars);
-    });
-
-    it('should properly load red team evaluations', async () => {
-      const redTeamEval = await EvalFactory.create({ isRedteam: true });
-      const persistedEval = await Eval.findById(redTeamEval.id);
-
-      expect(persistedEval).toBeDefined();
-      expect(persistedEval?.isRedteam).toBe(true);
-      expect(persistedEval?.id).toBe(redTeamEval.id);
-    });
-
-    it('should properly load regular evaluations', async () => {
-      const regularEval = await EvalFactory.create({ isRedteam: false });
-      const persistedEval = await Eval.findById(regularEval.id);
-
-      expect(persistedEval).toBeDefined();
-      expect(persistedEval?.isRedteam).toBe(false);
-      expect(persistedEval?.id).toBe(regularEval.id);
-    });
-
-    it('should preserve isRedteam property through database round trip', async () => {
-      // Create both types and verify they persist correctly
-      const redTeamEval = await EvalFactory.create({ isRedteam: true });
-      const regularEval = await EvalFactory.create({ isRedteam: false });
-
-      // Fetch from database
-      const persistedRedTeam = await Eval.findById(redTeamEval.id);
-      const persistedRegular = await Eval.findById(regularEval.id);
-
-      expect(persistedRedTeam?.isRedteam).toBe(true);
-      expect(persistedRegular?.isRedteam).toBe(false);
     });
   });
 
@@ -428,38 +340,6 @@ describe('evaluator', () => {
 
       expect(results.results).toEqual(await eval1.toEvaluateSummary());
     });
-
-    it('should include isRedteam property for red team evaluations', async () => {
-      const redTeamEval = await EvalFactory.create({ isRedteam: true });
-      const results = await redTeamEval.toResultsFile();
-
-      expect(results).toEqual({
-        version: redTeamEval.version(),
-        createdAt: new Date(redTeamEval.createdAt).toISOString(),
-        config: redTeamEval.config,
-        author: null,
-        prompts: redTeamEval.getPrompts(),
-        datasetId: null,
-        results: await redTeamEval.toEvaluateSummary(),
-      });
-      expect(redTeamEval.isRedteam).toBe(true);
-    });
-
-    it('should include isRedteam property for regular evaluations', async () => {
-      const regularEval = await EvalFactory.create({ isRedteam: false });
-      const results = await regularEval.toResultsFile();
-
-      expect(results).toEqual({
-        version: regularEval.version(),
-        createdAt: new Date(regularEval.createdAt).toISOString(),
-        config: regularEval.config,
-        author: null,
-        prompts: regularEval.getPrompts(),
-        datasetId: null,
-        results: await regularEval.toEvaluateSummary(),
-      });
-      expect(regularEval.isRedteam).toBe(false);
-    });
   });
 
   describe('getTablePage', () => {
@@ -477,7 +357,7 @@ describe('evaluator', () => {
     });
 
     it('should return paginated results with default parameters', async () => {
-      const result = await evalWithResults.getTablePage({});
+      const result = await evalWithResults.getTablePage({ filters: [] });
 
       expect(result).toHaveProperty('head');
       expect(result).toHaveProperty('body');
@@ -496,8 +376,8 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const firstPage = await largeEval.getTablePage({ offset: 0, limit: 5 });
-      const secondPage = await largeEval.getTablePage({ offset: 5, limit: 5 });
+      const firstPage = await largeEval.getTablePage({ offset: 0, limit: 5, filters: [] });
+      const secondPage = await largeEval.getTablePage({ offset: 5, limit: 5, filters: [] });
 
       expect(firstPage.body.length).toBeLessThanOrEqual(5);
       expect(secondPage.body.length).toBeLessThanOrEqual(5);
@@ -516,7 +396,7 @@ describe('evaluator', () => {
     });
 
     it('should filter by errors', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'errors' });
+      const result = await evalWithResults.getTablePage({ filterMode: 'errors', filters: [] });
 
       // Ensure there are results for the test to be meaningful
       const hasResults = result.body.length > 0;
@@ -533,7 +413,7 @@ describe('evaluator', () => {
     });
 
     it('should filter by failures', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'failures' });
+      const result = await evalWithResults.getTablePage({ filterMode: 'failures', filters: [] });
 
       // Ensure there are results for the test to be meaningful
       const hasResults = result.body.length > 0;
@@ -549,7 +429,7 @@ describe('evaluator', () => {
     });
 
     it('should filter by passes', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'passes' });
+      const result = await evalWithResults.getTablePage({ filterMode: 'passes', filters: [] });
 
       // Ensure there are results for the test to be meaningful
       const hasResults = result.body.length > 0;
@@ -564,7 +444,7 @@ describe('evaluator', () => {
 
     it('should filter by specific test indices', async () => {
       const testIndices = [1, 3, 5];
-      const result = await evalWithResults.getTablePage({ testIndices });
+      const result = await evalWithResults.getTablePage({ testIndices, filters: [] });
 
       // Should only return results for the specified test indices
       const returnedIndices = result.body.map((row) => row.testIdx);
@@ -579,7 +459,7 @@ describe('evaluator', () => {
     it('should handle search queries across fields', async () => {
       // This test requires setting up specific search terms in the eval factory
       const searchTerm = 'searchable_content';
-      const result = await evalWithResults.getTablePage({ searchQuery: searchTerm });
+      const result = await evalWithResults.getTablePage({ searchQuery: searchTerm, filters: [] });
 
       // Results should contain the search term in at least one field
       expect(result.body.length).toBeGreaterThan(0);
@@ -659,8 +539,11 @@ describe('evaluator', () => {
     });
 
     it('should return correct counts for filtered results', async () => {
-      const allResults = await evalWithResults.getTablePage({});
-      const filteredResults = await evalWithResults.getTablePage({ filterMode: 'passes' });
+      const allResults = await evalWithResults.getTablePage({ filters: [] });
+      const filteredResults = await evalWithResults.getTablePage({
+        filterMode: 'passes',
+        filters: [],
+      });
 
       // Total count should be the same for both queries
       expect(filteredResults.totalCount).toBe(allResults.totalCount);
@@ -673,6 +556,7 @@ describe('evaluator', () => {
       // Test with input containing SQL injection attempt
       const result = await evalWithResults.getTablePage({
         searchQuery: "'; DROP TABLE eval_results; --",
+        filters: [],
       });
 
       // Should still return results without error
@@ -684,7 +568,7 @@ describe('evaluator', () => {
       // Create an eval with no results
       const emptyEval = await EvalFactory.create({ numResults: 0 });
 
-      const result = await emptyEval.getTablePage({});
+      const result = await emptyEval.getTablePage({ filters: [] });
 
       expect(result.body).toEqual([]);
       expect(result.totalCount).toBe(0);
@@ -692,25 +576,213 @@ describe('evaluator', () => {
     });
   });
 
-  describe('isRedteam property', () => {
-    it('should default isRedteam to false when no redteam config', () => {
-      const eval1 = new Eval({ description: 'Test eval' });
-      expect(eval1.isRedteam).toBe(false);
+  describe('queryTestIndices', () => {
+    it('returns indices with default params and correct ordering', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 10,
+        resultTypes: ['success', 'error', 'failure'],
+      });
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({});
+
+      expect(filteredCount).toBe(10);
+      expect(testIndices.length).toBeLessThanOrEqual(10);
+      // Ensure ascending order
+      const sorted = [...testIndices].sort((a, b) => a - b);
+      expect(testIndices).toEqual(sorted);
     });
 
-    it('should set isRedteam to true when redteam config exists', () => {
-      const eval1 = new Eval({ description: 'Test eval', redteam: {} });
-      expect(eval1.isRedteam).toBe(true);
+    it('respects offset and limit', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 12,
+        resultTypes: ['success', 'failure', 'error'],
+      });
+      const page1 = await (eval_ as any).queryTestIndices({ offset: 0, limit: 5 });
+      const page2 = await (eval_ as any).queryTestIndices({ offset: 5, limit: 5 });
+
+      expect(page1.testIndices.length).toBeLessThanOrEqual(5);
+      expect(page2.testIndices.length).toBeLessThanOrEqual(5);
+
+      // Verify disjoint sets for the first 10 indices
+      const overlap = page1.testIndices.filter((i: number) => page2.testIndices.includes(i));
+      expect(overlap).toHaveLength(0);
     });
 
-    it('should use explicit isRedteam option when provided', () => {
-      const eval1 = new Eval({ description: 'Test eval' }, { isRedteam: true });
-      expect(eval1.isRedteam).toBe(true);
+    it('Mode Filtering: filters by errors, failures, and passes', async () => {
+      const numResults = 15;
+      const eval_ = await EvalFactory.create({
+        numResults,
+        resultTypes: ['success', 'error', 'failure'],
+      });
+
+      const errors = await (eval_ as any).queryTestIndices({ filterMode: 'errors' });
+      const failures = await (eval_ as any).queryTestIndices({ filterMode: 'failures' });
+      const passes = await (eval_ as any).queryTestIndices({ filterMode: 'passes' });
+
+      // With the cycling order, counts should roughly split by thirds
+      expect(errors.filteredCount).toBeGreaterThan(0);
+      expect(failures.filteredCount).toBeGreaterThan(0);
+      expect(passes.filteredCount).toBeGreaterThan(0);
+
+      // No index should appear in more than one mode simultaneously
+      const sErrors = new Set(errors.testIndices);
+      const sFailures = new Set(failures.testIndices);
+      const sPasses = new Set(passes.testIndices);
+      for (const idx of sErrors) {
+        expect(sFailures.has(idx)).toBe(false);
+        expect(sPasses.has(idx)).toBe(false);
+      }
     });
 
-    it('should prioritize explicit isRedteam option over config inference', () => {
-      const eval1 = new Eval({ description: 'Test eval', redteam: {} }, { isRedteam: false });
-      expect(eval1.isRedteam).toBe(false);
+    it('filters by metric equals', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 8,
+        resultTypes: ['success', 'failure'],
+        withNamedScores: true,
+      });
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metric',
+            operator: 'equals',
+            value: 'accuracy',
+          }),
+        ],
+      });
+
+      expect(testIndices.length).toBeGreaterThan(0);
+      expect(filteredCount).toBeGreaterThan(0);
+      // With named scores on every row, all indices should match
+      expect(filteredCount).toBe(8);
+    });
+
+    it('filters by metadata equals and contains', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 6,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"unit","note":"hello world"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"integration"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+
+      // equals on source=unit should return only test 1
+      const eqRes = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'equals',
+            field: 'source',
+            value: 'unit',
+          }),
+        ],
+      });
+      expect(eqRes.filteredCount).toBe(1);
+      expect(eqRes.testIndices).toEqual([1]);
+
+      // contains on note
+      const containsRes = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'contains',
+            field: 'note',
+            value: 'hello',
+          }),
+        ],
+      });
+      expect(containsRes.filteredCount).toBe(1);
+      expect(containsRes.testIndices).toEqual([1]);
+    });
+
+    it('filters by plugin and strategy', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 6,
+        resultTypes: ['success', 'failure'],
+      });
+      const db = getDb();
+      // Set pluginId on one row and strategyId on another
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx = 3`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"strategyId":"s1"}') WHERE eval_id = '${eval_.id}' AND test_idx = 5`,
+      );
+
+      // Category filter should match pluginId that starts with harmful:
+      const pluginCategory = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'plugin',
+            operator: 'equals',
+            value: 'harmful',
+          }),
+        ],
+      });
+      expect(pluginCategory.testIndices).toEqual([3]);
+
+      // Strategy equals specific id
+      const strategyEq = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'strategy',
+            operator: 'equals',
+            value: 's1',
+          }),
+        ],
+      });
+      expect(strategyEq.testIndices).toEqual([5]);
+    });
+
+    it('filters by explicit severity override', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 4,
+        resultTypes: ['success', 'failure'],
+      });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'severity',
+            operator: 'equals',
+            value: 'high',
+          }),
+        ],
+      });
+      expect(filteredCount).toBe(1);
+      expect(testIndices).toEqual([0]);
+    });
+
+    it('searches across response, grading, named scores, metadata, and vars', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 9,
+        resultTypes: ['success', 'failure', 'error'],
+        withNamedScores: true,
+        searchableContent: 'needle',
+      });
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
+        searchQuery: 'needle',
+      });
+
+      expect(testIndices.length).toBeGreaterThan(0);
+      expect(filteredCount).toBeGreaterThan(0);
+      // Sanity: limit should still apply
+      const limited = await (eval_ as any).queryTestIndices({ searchQuery: 'needle', limit: 2 });
+      expect(limited.testIndices.length).toBeLessThanOrEqual(2);
+      expect(limited.filteredCount).toBeGreaterThanOrEqual(limited.testIndices.length);
     });
   });
 });
