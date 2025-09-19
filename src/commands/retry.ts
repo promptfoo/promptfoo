@@ -28,7 +28,7 @@ interface RetryCommandOptions {
 /**
  * Gets all ERROR results from an evaluation and returns their IDs
  */
-async function getErrorResultIds(evalId: string): Promise<string[]> {
+export async function getErrorResultIds(evalId: string): Promise<string[]> {
   const db = getDb();
 
   const errorResults = await db
@@ -48,7 +48,7 @@ async function getErrorResultIds(evalId: string): Promise<string[]> {
 /**
  * Deletes ERROR results to prepare for retry
  */
-async function deleteErrorResults(resultIds: string[]): Promise<void> {
+export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   const db = getDb();
 
   for (const resultId of resultIds) {
@@ -61,7 +61,7 @@ async function deleteErrorResults(resultIds: string[]): Promise<void> {
 /**
  * Recalculates prompt metrics based on current results after ERROR results have been deleted
  */
-async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
+export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
   logger.debug('Recalculating prompt metrics after deleting ERROR results');
 
   // Load current results from database
