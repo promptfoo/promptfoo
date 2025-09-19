@@ -91,8 +91,8 @@ export async function checkServerRunning(port = getDefaultPort()): Promise<boole
   try {
     const response = await fetchWithProxy(`http://localhost:${port}/health`, {
       headers: {
-        'x-promptfoo-silent': 'true'
-      }
+        'x-promptfoo-silent': 'true',
+      },
     });
     const data = await response.json();
     return data.status === 'OK' && data.version === VERSION;
