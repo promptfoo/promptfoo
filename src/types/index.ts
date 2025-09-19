@@ -1144,7 +1144,15 @@ export interface ResultLightweight {
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
-export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
+export type EvalSummary = ResultLightweightWithLabel & {
+  isRedteam: boolean;
+  passRate: number;
+  label: string;
+  providers: {
+    id: string;
+    label: string | null;
+  }[];
+};
 
 export interface OutputMetadata {
   promptfooVersion: string;

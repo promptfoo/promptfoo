@@ -27,9 +27,9 @@ We have both as humans, and unfortunately LLMs would need both to have true arti
 
 ![AGI meme](/img/blog/autonomy-agency-ai/AGI_meme_ladyofcode.png)
 
-*Sorry.*
+_Sorry._
 
-I'll make one thing clear: AGI isn't on the horizon unless (*until?*) LLMs have human-level autonomy and agency, and are capable of human-level metacognition.
+I'll make one thing clear: AGI isn't on the horizon unless (_until?_) LLMs have human-level autonomy and agency, and are capable of human-level metacognition.
 
 I'll make another thing clear: We're still deliberately trying to improve autonomy and agency in LLMs, so we should treat them with the same caution we would give any human.
 
@@ -45,7 +45,10 @@ Practically, it's more important to focus on consequences of using evolving AI t
 
 Let's get into the weeds of security concerns revolving around autonomy and agency in LLMs.
 
-## Personification is a b****
+<!--truncate-->
+
+## Personification is a b\*\*\*\*
+
 Both autonomy and agency are still widely discussed and unfortunately misunderstood in the process. This isn't a big surprise, what with AI's future having not just humanity's hopes and dreams stuffed into it like a chipmunk hoarding nuts but also being fueled by a ludicrous amount of money. AI spending is to hit [USD 375 billion this year alone, and USD 500 billion next year](https://www.ubs.com/us/en/wealth-management/insights/market-news/article.2515967.html).
 
 I appreciate many things AI does for me, particularly as a developer. Coexisting with that are qualms with the culture surrounding AI and the relationship we've developed with it. One such issue: our tendency to personify AI heavily.
@@ -58,7 +61,7 @@ Ultimately, the way we talk about AI systems has influenced our perception on th
 
 ![Ex Machina movie protagonist watching the robot on a TV screen](/img/blog/autonomy-agency-ai/screenshot_ex_machina_ladyofcode.png)
 
-*An LLM wanting to experience the world also probably wouldn't be minimalist. Image source: Ex Machina (2014).*
+_An LLM wanting to experience the world also probably wouldn't be minimalist. Image source: Ex Machina (2014)._
 
 ## AI autonomy
 
@@ -111,6 +114,7 @@ Here's the best part: goal misalignment is less of a problem if an LLM simply ca
 - Clearly define access controls using authentication and authorization mechanisms, such as requiring human confirmation before receiving access
 - Audit LLM activity trails to detect misuse
 - Reduce trust in LLMs through educating users
+
 ## What AI is actually capable of right now
 
 I don't know about meetups your end of the world, but people seem keen to demonstrate how their LLM of choice can order a pizza.
@@ -118,7 +122,7 @@ I don't know about meetups your end of the world, but people seem keen to demons
 In the real world, we're witnessing an escalation of actual crime, in part due to the lowering bar for exploiting security vulnerabilities. Anthropic recently released a [fantastic article on the misuse of AI](https://www.anthropic.com/news/detecting-countering-misuse-aug-2025), which lists quite a few issues:
 
 - Developing ransomware
-- AI-generated ransomware-*as-a-service*
+- AI-generated ransomware-_as-a-service_
 - Profiling victims
 - Analyzing data... Which was stolen
 - Credit card information theft
