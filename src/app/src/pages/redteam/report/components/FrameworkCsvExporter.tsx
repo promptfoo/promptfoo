@@ -9,15 +9,15 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
-import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 import {
+  type CategoryStats,
   categorizePlugins,
   expandPluginCollections,
   getPluginDisplayName,
 } from './FrameworkComplianceUtils';
 
 interface CSVExporterProps {
-  categoryStats: PluginCategoryStatsByPluginId;
+  categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
 }
 
@@ -69,7 +69,7 @@ const CSVExporter = ({ categoryStats, pluginPassRateThreshold }: CSVExporterProp
 
             // Add tested plugins
             testedPlugins.forEach((plugin) => {
-              const { stats } = categoryStats[plugin];
+              const stats = categoryStats[plugin];
               const pluginSeverity =
                 riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
                 Severity.Low;
@@ -132,7 +132,7 @@ const CSVExporter = ({ categoryStats, pluginPassRateThreshold }: CSVExporterProp
 
         // Add tested plugins
         testedPlugins.forEach((plugin) => {
-          const { stats } = categoryStats[plugin];
+          const stats = categoryStats[plugin];
           const pluginSeverity =
             riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
           const pluginName = getPluginDisplayName(plugin);

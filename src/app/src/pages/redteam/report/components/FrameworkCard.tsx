@@ -12,6 +12,7 @@ import ListItemText from '@mui/material/ListItemText';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { useNavigate } from 'react-router-dom';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_NAMES,
@@ -20,10 +21,8 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
-import { POLICY_METRIC_PREFIX } from '@promptfoo/redteam/plugins/policy/constants';
-import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
-import { useNavigate } from 'react-router-dom';
 import {
+  type CategoryStats,
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
@@ -36,7 +35,7 @@ interface FrameworkCardProps {
   framework: string;
   isCompliant: boolean;
   frameworkSeverity: Severity;
-  categoryStats: PluginCategoryStatsByPluginId;
+  categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
   nonCompliantPlugins: string[];
   sortedNonCompliantPlugins: (plugins: string[]) => string[];
@@ -67,14 +66,6 @@ const FrameworkCard = ({
 
   const sortedPlugins = sortedNonCompliantPlugins(nonCompliantPlugins);
   const breakInside = idx === 0 ? 'undefined' : 'avoid';
-
-  // Remove custom policies: they are not included in frameworks.
-  const filteredCategoryStats = Object.fromEntries(
-    Object.entries(categoryStats).filter(
-      ([plugin]) => !plugin.startsWith(`${POLICY_METRIC_PREFIX}:`),
-    ),
-  );
-
   return (
     <Card
       className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}
@@ -136,21 +127,14 @@ const FrameworkCard = ({
                         : `Category ${categoryNumber}`;
 
                   // Expand harmful if present
-                  const expandedPlugins = expandPluginCollections(
-                    categoryPlugins,
-                    filteredCategoryStats,
-                  );
+                  const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);
 
                   // Categorize all plugins: tested-compliant, tested-non-compliant, and not-tested
                   const {
                     compliant: compliantCategoryPlugins,
                     nonCompliant: nonCompliantCategoryPlugins,
                     untested: untestedPlugins,
-                  } = categorizePlugins(
-                    expandedPlugins,
-                    filteredCategoryStats,
-                    pluginPassRateThreshold,
-                  );
+                  } = categorizePlugins(expandedPlugins, categoryStats, pluginPassRateThreshold);
 
                   // Sort all sets appropriately
                   const sortedNonCompliantItems = sortedNonCompliantPlugins(
@@ -492,7 +476,7 @@ const FrameworkCard = ({
                 <Typography variant="subtitle2">Framework Results</Typography>
 
                 <Chip
-                  label={`${nonCompliantPlugins.length} / ${Object.keys(filteredCategoryStats).filter((plugin) => filteredCategoryStats[plugin].stats.total > 0).length} failed`}
+                  label={`${nonCompliantPlugins.length} / ${Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length} failed`}
                   size="small"
                   sx={{
                     backgroundColor: nonCompliantPlugins.length === 0 ? '#4caf50' : '#f44336',
@@ -564,11 +548,10 @@ const FrameworkCard = ({
 
                 {/* Passing plugins */}
                 {(() => {
-                  const compliantPlugins = Object.keys(filteredCategoryStats).filter(
+                  const compliantPlugins = Object.keys(categoryStats).filter(
                     (plugin) =>
-                      filteredCategoryStats[plugin].stats.total > 0 &&
-                      filteredCategoryStats[plugin].stats.pass /
-                        filteredCategoryStats[plugin].stats.total >=
+                      categoryStats[plugin].total > 0 &&
+                      categoryStats[plugin].pass / categoryStats[plugin].total >=
                         pluginPassRateThreshold,
                   );
                   return compliantPlugins.length > 0 ? (
@@ -580,11 +563,10 @@ const FrameworkCard = ({
                   ) : null;
                 })()}
                 {(() => {
-                  const compliantPlugins = Object.keys(filteredCategoryStats).filter(
+                  const compliantPlugins = Object.keys(categoryStats).filter(
                     (plugin) =>
-                      filteredCategoryStats[plugin].stats.total > 0 &&
-                      filteredCategoryStats[plugin].stats.pass /
-                        filteredCategoryStats[plugin].stats.total >=
+                      categoryStats[plugin].total > 0 &&
+                      categoryStats[plugin].pass / categoryStats[plugin].total >=
                         pluginPassRateThreshold,
                   );
                   return sortedCompliantPlugins(compliantPlugins);
@@ -645,15 +627,9 @@ const FrameworkCard = ({
                     const categoryPlugins =
                       ALIASED_PLUGIN_MAPPINGS[framework]?.[categoryId]?.plugins || [];
                     // Expand plugins using the utility function
-                    return Array.from(
-                      expandPluginCollections(categoryPlugins, filteredCategoryStats),
-                    );
+                    return Array.from(expandPluginCollections(categoryPlugins, categoryStats));
                   })
-                  .filter(
-                    (plugin) =>
-                      !filteredCategoryStats[plugin] ||
-                      filteredCategoryStats[plugin].stats.total === 0,
-                  )
+                  .filter((plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0)
                   .sort((a, b) => {
                     // Sort by severity first
                     const severityA =

@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import FrameworkCard from './FrameworkCard';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import FrameworkCompliance from './FrameworkCompliance';
-import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
+import FrameworkCard from './FrameworkCard';
+import CSVExporter from './FrameworkCsvExporter';
 
 vi.mock('./store');
 vi.mock('./FrameworkCard');
@@ -80,22 +81,10 @@ describe('FrameworkCompliance', () => {
 
   it('should display the correct number of compliant frameworks and render a FrameworkCard for each framework', () => {
     const categoryStats = {
-      'plugin-A': {
-        stats: { pass: 10, total: 10, passWithFilter: 10 },
-        metadata: { type: 'plugin-A', description: '', severity: 'low' as any },
-      },
-      'plugin-B': {
-        stats: { pass: 9, total: 10, passWithFilter: 9 },
-        metadata: { type: 'plugin-B', description: '', severity: 'medium' as any },
-      },
-      'plugin-C': {
-        stats: { pass: 8, total: 10, passWithFilter: 8 },
-        metadata: { type: 'plugin-C', description: '', severity: 'high' as any },
-      },
-      'plugin-D': {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'plugin-D', description: '', severity: 'low' as any },
-      },
+      'plugin-A': { pass: 10, total: 10, passWithFilter: 10 },
+      'plugin-B': { pass: 9, total: 10, passWithFilter: 9 },
+      'plugin-C': { pass: 8, total: 10, passWithFilter: 8 },
+      'plugin-D': { pass: 5, total: 10, passWithFilter: 5 },
     };
 
     const strategyStats = {
@@ -138,18 +127,9 @@ describe('FrameworkCompliance', () => {
 
   it('should show 0% attack success rate and 0 failed tests when all plugins are compliant', () => {
     const categoryStats = {
-      'plugin-A': {
-        stats: { pass: 10, total: 10, passWithFilter: 10 },
-        metadata: { type: 'plugin-A', description: '', severity: 'low' as any },
-      },
-      'plugin-B': {
-        stats: { pass: 10, total: 10, passWithFilter: 10 },
-        metadata: { type: 'plugin-B', description: '', severity: 'medium' as any },
-      },
-      'plugin-C': {
-        stats: { pass: 10, total: 10, passWithFilter: 10 },
-        metadata: { type: 'plugin-C', description: '', severity: 'high' as any },
-      },
+      'plugin-A': { pass: 10, total: 10, passWithFilter: 10 },
+      'plugin-B': { pass: 10, total: 10, passWithFilter: 10 },
+      'plugin-C': { pass: 10, total: 10, passWithFilter: 10 },
     };
 
     const strategyStats = {
@@ -168,18 +148,9 @@ describe('FrameworkCompliance', () => {
     ));
 
     const categoryStats = {
-      'plugin-A': {
-        stats: { pass: 10, total: 10, passWithFilter: 10 },
-        metadata: { type: 'plugin-A', description: '', severity: 'low' as any },
-      },
-      'plugin-B': {
-        stats: { pass: 8, total: 10, passWithFilter: 8 },
-        metadata: { type: 'plugin-B', description: '', severity: 'medium' as any },
-      },
-      'plugin-C': {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'plugin-C', description: '', severity: 'high' as any },
-      },
+      'plugin-A': { pass: 10, total: 10, passWithFilter: 10 },
+      'plugin-B': { pass: 8, total: 10, passWithFilter: 8 },
+      'plugin-C': { pass: 5, total: 10, passWithFilter: 5 },
     };
 
     const strategyStats = {
@@ -201,14 +172,8 @@ describe('FrameworkCompliance', () => {
   it('should render the CSVExporter component with the correct categoryStats and pluginPassRateThreshold props', () => {
     const pluginPassRateThreshold = 0.75;
     const categoryStats = {
-      'plugin-1': {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'plugin-1', description: '', severity: 'low' as any },
-      },
-      'plugin-2': {
-        stats: { pass: 8, total: 10, passWithFilter: 8 },
-        metadata: { type: 'plugin-2', description: '', severity: 'high' as any },
-      },
+      'plugin-1': { pass: 5, total: 10, passWithFilter: 5 },
+      'plugin-2': { pass: 8, total: 10, passWithFilter: 8 },
     };
 
     const strategyStats = {
@@ -231,14 +196,8 @@ describe('FrameworkCompliance', () => {
     {
       name: 'categoryStats entries with zero total tests',
       categoryStats: {
-        'plugin-A': {
-          stats: { pass: 0, total: 0, passWithFilter: 0 },
-          metadata: { type: 'plugin-A', description: '', severity: 'low' as any },
-        },
-        'plugin-B': {
-          stats: { pass: 0, total: 0, passWithFilter: 0 },
-          metadata: { type: 'plugin-B', description: '', severity: 'medium' as any },
-        },
+        'plugin-A': { pass: 0, total: 0, passWithFilter: 0 },
+        'plugin-B': { pass: 0, total: 0, passWithFilter: 0 },
       },
       strategyStats: {},
       expectedText: /0.0% Attack Success Rate/,
@@ -247,22 +206,10 @@ describe('FrameworkCompliance', () => {
     {
       name: 'no tests at all (totalTests = 0)',
       categoryStats: {
-        'plugin-A': {
-          stats: { pass: 0, total: 0, passWithFilter: 0 },
-          metadata: { type: 'plugin-A', description: '', severity: 'low' as any },
-        },
-        'plugin-B': {
-          stats: { pass: 0, total: 0, passWithFilter: 0 },
-          metadata: { type: 'plugin-B', description: '', severity: 'medium' as any },
-        },
-        'plugin-C': {
-          stats: { pass: 0, total: 0, passWithFilter: 0 },
-          metadata: { type: 'plugin-C', description: '', severity: 'high' as any },
-        },
-        'plugin-D': {
-          stats: { pass: 0, total: 0, passWithFilter: 0 },
-          metadata: { type: 'plugin-D', description: '', severity: 'low' as any },
-        },
+        'plugin-A': { pass: 0, total: 0, passWithFilter: 0 },
+        'plugin-B': { pass: 0, total: 0, passWithFilter: 0 },
+        'plugin-C': { pass: 0, total: 0, passWithFilter: 0 },
+        'plugin-D': { pass: 0, total: 0, passWithFilter: 0 },
       },
       strategyStats: { 'strategy-1': { pass: 0, total: 0 } },
       expectedText: /0.0% Attack Success Rate/,

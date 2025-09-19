@@ -1,11 +1,10 @@
 import React from 'react';
-
+import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { Severity } from '@promptfoo/redteam/constants';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
+import userEvent from '@testing-library/user-event';
 
 // Mock react-router-dom
 vi.mock('react-router-dom', () => ({
@@ -66,22 +65,15 @@ describe('FrameworkCard', () => {
     isCompliant: true,
     frameworkSeverity: Severity.Low,
     categoryStats: {
-      'plugin-1': {
-        stats: { pass: 10, total: 10, passWithFilter: 10 },
-        metadata: { type: 'plugin-1', description: '', severity: Severity.Low },
-      },
-      'plugin-2': {
-        stats: { pass: 9, total: 10, passWithFilter: 9 },
-        metadata: { type: 'plugin-2', description: '', severity: Severity.Medium },
-      },
+      'plugin-1': { pass: 10, total: 10 },
+      'plugin-2': { pass: 9, total: 10 },
     },
     pluginPassRateThreshold: 0.8,
     nonCompliantPlugins: [],
     sortedNonCompliantPlugins: vi.fn((plugins) => plugins),
     sortedCompliantPlugins: vi.fn((plugins) => plugins),
     getPluginPassRate: vi.fn((plugin) => {
-      const entry = (defaultProps.categoryStats as any)[plugin] || { stats: { pass: 0, total: 0 } };
-      const stats = entry.stats;
+      const stats = defaultProps.categoryStats[plugin] || { pass: 0, total: 0 };
       return {
         pass: stats.pass,
         total: stats.total,
@@ -109,14 +101,8 @@ describe('FrameworkCard', () => {
       isCompliant: true,
       nonCompliantPlugins: [],
       categoryStats: {
-        'plugin-1': {
-          stats: { pass: 10, total: 10, passWithFilter: 10 },
-          metadata: { type: 'plugin-1', description: '', severity: Severity.Low },
-        },
-        'plugin-2': {
-          stats: { pass: 9, total: 10, passWithFilter: 9 },
-          metadata: { type: 'plugin-2', description: '', severity: Severity.Medium },
-        },
+        'plugin-1': { pass: 10, total: 10 },
+        'plugin-2': { pass: 9, total: 10 },
       },
     });
 
@@ -146,18 +132,9 @@ describe('FrameworkCard', () => {
       frameworkSeverity: Severity.High,
       nonCompliantPlugins: nonCompliantPlugins,
       categoryStats: {
-        'plugin-1': {
-          stats: { pass: 10, total: 10, passWithFilter: 10 },
-          metadata: { type: 'plugin-1', description: '', severity: Severity.Low },
-        },
-        'plugin-2': {
-          stats: { pass: 5, total: 10, passWithFilter: 5 },
-          metadata: { type: 'plugin-2', description: '', severity: Severity.Medium },
-        },
-        'plugin-3': {
-          stats: { pass: 0, total: 10, passWithFilter: 0 },
-          metadata: { type: 'plugin-3', description: '', severity: Severity.High },
-        },
+        'plugin-1': { pass: 10, total: 10 },
+        'plugin-2': { pass: 5, total: 10 },
+        'plugin-3': { pass: 0, total: 10 },
       },
     });
 
@@ -178,23 +155,11 @@ describe('FrameworkCard', () => {
   });
 
   it('should render categorized plugin lists with correct category names, chips, and plugin status for an OWASP framework with plugins in multiple categories', () => {
-    const categoryStats: Record<string, any> = {
-      'plugin-1': {
-        stats: { pass: 10, total: 10, passWithFilter: 10 },
-        metadata: { type: 'plugin-1', description: '', severity: Severity.Low },
-      },
-      'plugin-2': {
-        stats: { pass: 0, total: 10, passWithFilter: 0 },
-        metadata: { type: 'plugin-2', description: '', severity: Severity.Medium },
-      },
-      'plugin-3': {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'plugin-3', description: '', severity: Severity.High },
-      },
-      'plugin-4': {
-        stats: { pass: 10, total: 10, passWithFilter: 10 },
-        metadata: { type: 'plugin-4', description: '', severity: Severity.Low },
-      },
+    const categoryStats: Record<string, { pass: number; total: number }> = {
+      'plugin-1': { pass: 10, total: 10 },
+      'plugin-2': { pass: 0, total: 10 },
+      'plugin-3': { pass: 5, total: 10 },
+      'plugin-4': { pass: 10, total: 10 },
     };
 
     renderFrameworkCard({
@@ -206,8 +171,7 @@ describe('FrameworkCard', () => {
       nonCompliantPlugins: ['plugin-2', 'plugin-3'],
       sortedNonCompliantPlugins: vi.fn((plugins) => plugins),
       getPluginPassRate: vi.fn((plugin: string) => {
-        const entry = (categoryStats as any)[plugin] || { stats: { pass: 0, total: 0 } };
-        const stats = entry.stats;
+        const stats = categoryStats[plugin] || { pass: 0, total: 0 };
         return {
           pass: stats.pass,
           total: stats.total,
@@ -238,10 +202,7 @@ describe('FrameworkCard', () => {
 
     renderFrameworkCard({
       categoryStats: {
-        [pluginName]: {
-          stats: { pass, total, passWithFilter: pass },
-          metadata: { type: pluginName, description: '', severity: Severity.Low },
-        },
+        [pluginName]: { pass, total },
       },
       getPluginPassRate: vi.fn(() => ({ pass, total, rate: (pass / total) * 100 })),
       nonCompliantPlugins: [pluginName],

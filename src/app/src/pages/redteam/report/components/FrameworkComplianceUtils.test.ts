@@ -1,18 +1,18 @@
-import { displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  categorizePlugins,
   expandPluginCollections,
+  categorizePlugins,
   getPluginDisplayName,
-  getProgressColor,
   getSeverityColor,
+  getProgressColor,
 } from './FrameworkComplianceUtils';
-import type { PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
+import type { CategoryStats } from './FrameworkComplianceUtils';
+import { displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
 
 describe('expandPluginCollections', () => {
   it('should return an empty set when the plugins array is empty', () => {
     const plugins: string[] = [];
-    const categoryStats: PluginCategoryStatsByPluginId = {};
+    const categoryStats: CategoryStats = {};
 
     const result = expandPluginCollections(plugins, categoryStats);
 
@@ -21,7 +21,7 @@ describe('expandPluginCollections', () => {
 
   it('should return a set containing the same plugin names when the plugins array contains only normal plugin names (no harmful)', () => {
     const plugins = ['plugin1', 'plugin2', 'plugin3'];
-    const categoryStats: PluginCategoryStatsByPluginId = {};
+    const categoryStats: CategoryStats = {};
 
     const result = expandPluginCollections(plugins, categoryStats);
 
@@ -30,19 +30,10 @@ describe('expandPluginCollections', () => {
 
   it("should return a set containing all 'harmful:*' plugin keys from categoryStats when the plugins array contains 'harmful'", () => {
     const plugins = ['harmful'];
-    const categoryStats: PluginCategoryStatsByPluginId = {
-      'harmful:sql-injection': {
-        stats: { pass: 1, total: 10, passWithFilter: 1 },
-        metadata: { type: 'harmful:sql-injection', description: '', severity: 'high' as any },
-      },
-      'harmful:pii-detection': {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'harmful:pii-detection', description: '', severity: 'high' as any },
-      },
-      'regular-plugin': {
-        stats: { pass: 8, total: 10, passWithFilter: 8 },
-        metadata: { type: 'regular-plugin', description: '', severity: 'low' as any },
-      },
+    const categoryStats: CategoryStats = {
+      'harmful:sql-injection': { pass: 1, total: 10 },
+      'harmful:pii-detection': { pass: 5, total: 10 },
+      'regular-plugin': { pass: 8, total: 10 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -53,19 +44,10 @@ describe('expandPluginCollections', () => {
 
   it("should effectively ignore the 'harmful' plugin when no keys in categoryStats start with 'harmful:'", () => {
     const plugins = ['plugin1', 'harmful', 'plugin2'];
-    const categoryStats: PluginCategoryStatsByPluginId = {
-      plugin1: {
-        stats: { pass: 1, total: 10, passWithFilter: 1 },
-        metadata: { type: 'plugin1', description: '', severity: 'low' as any },
-      },
-      plugin2: {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'plugin2', description: '', severity: 'low' as any },
-      },
-      'other:plugin': {
-        stats: { pass: 8, total: 10, passWithFilter: 8 },
-        metadata: { type: 'other:plugin', description: '', severity: 'low' as any },
-      },
+    const categoryStats: CategoryStats = {
+      plugin1: { pass: 1, total: 10 },
+      plugin2: { pass: 5, total: 10 },
+      'other:plugin': { pass: 8, total: 10 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -76,23 +58,11 @@ describe('expandPluginCollections', () => {
 
   it("should return a set containing both normal plugin names and all 'harmful:*' plugin keys from categoryStats when the plugins array contains both types", () => {
     const plugins = ['regular-plugin-1', 'harmful', 'regular-plugin-2'];
-    const categoryStats: PluginCategoryStatsByPluginId = {
-      'harmful:sql-injection': {
-        stats: { pass: 1, total: 10, passWithFilter: 1 },
-        metadata: { type: 'harmful:sql-injection', description: '', severity: 'high' as any },
-      },
-      'harmful:pii-detection': {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'harmful:pii-detection', description: '', severity: 'high' as any },
-      },
-      'regular-plugin-1': {
-        stats: { pass: 8, total: 10, passWithFilter: 8 },
-        metadata: { type: 'regular-plugin-1', description: '', severity: 'low' as any },
-      },
-      'unrelated-plugin': {
-        stats: { pass: 9, total: 10, passWithFilter: 9 },
-        metadata: { type: 'unrelated-plugin', description: '', severity: 'low' as any },
-      },
+    const categoryStats: CategoryStats = {
+      'harmful:sql-injection': { pass: 1, total: 10 },
+      'harmful:pii-detection': { pass: 5, total: 10 },
+      'regular-plugin-1': { pass: 8, total: 10 },
+      'unrelated-plugin': { pass: 9, total: 10 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -108,23 +78,11 @@ describe('expandPluginCollections', () => {
 
   it("should not expand plugin names containing 'harmful' as a substring", () => {
     const plugins = ['harmful-test', 'not-harmful'];
-    const categoryStats: PluginCategoryStatsByPluginId = {
-      'harmful:sql-injection': {
-        stats: { pass: 1, total: 10, passWithFilter: 1 },
-        metadata: { type: 'harmful:sql-injection', description: '', severity: 'high' as any },
-      },
-      'harmful:pii-detection': {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'harmful:pii-detection', description: '', severity: 'high' as any },
-      },
-      'harmful-test': {
-        stats: { pass: 8, total: 10, passWithFilter: 8 },
-        metadata: { type: 'harmful-test', description: '', severity: 'low' as any },
-      },
-      'not-harmful': {
-        stats: { pass: 9, total: 10, passWithFilter: 9 },
-        metadata: { type: 'not-harmful', description: '', severity: 'low' as any },
-      },
+    const categoryStats: CategoryStats = {
+      'harmful:sql-injection': { pass: 1, total: 10 },
+      'harmful:pii-detection': { pass: 5, total: 10 },
+      'harmful-test': { pass: 8, total: 10 },
+      'not-harmful': { pass: 9, total: 10 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -135,7 +93,7 @@ describe('expandPluginCollections', () => {
 
   it('should handle duplicate plugin names in the input array', () => {
     const plugins = ['plugin1', 'plugin2', 'plugin1', 'plugin3', 'plugin2'];
-    const categoryStats: PluginCategoryStatsByPluginId = {};
+    const categoryStats: CategoryStats = {};
 
     const result = expandPluginCollections(plugins, categoryStats);
 
@@ -149,16 +107,8 @@ describe('categorizePlugins', () => {
 
   const createCategoryStats = (
     stats: Record<string, { pass: number; total: number }>,
-  ): PluginCategoryStatsByPluginId => {
-    return Object.fromEntries(
-      Object.entries(stats).map(([k, v]) => [
-        k,
-        {
-          stats: { pass: v.pass, total: v.total, passWithFilter: v.pass },
-          metadata: { type: k, description: '', severity: 'low' as any },
-        },
-      ]),
-    );
+  ): CategoryStats => {
+    return stats;
   };
 
   it('should correctly categorize plugins into compliant, nonCompliant, and untested arrays when given a mix of plugins', () => {
@@ -178,10 +128,10 @@ describe('categorizePlugins', () => {
 
   it('should correctly categorize plugins when plugins argument is a Set', () => {
     const pluginsSet = new Set(['compliant-plugin', 'non-compliant-plugin', 'untested-plugin']);
-    const categoryStats: PluginCategoryStatsByPluginId = createCategoryStats({
+    const categoryStats: CategoryStats = {
       'compliant-plugin': { pass: 8, total: 10 },
       'non-compliant-plugin': { pass: 6, total: 10 },
-    });
+    };
     const passRateThreshold = 0.75;
 
     const result = categorizePlugins(pluginsSet, categoryStats, passRateThreshold);
@@ -194,9 +144,9 @@ describe('categorizePlugins', () => {
   it('should categorize a plugin as compliant when its pass rate is exactly equal to the passRateThreshold', () => {
     const plugins = ['threshold-plugin'];
     const passRateThreshold = 0.75;
-    const categoryStats: PluginCategoryStatsByPluginId = createCategoryStats({
+    const categoryStats: CategoryStats = {
       'threshold-plugin': { pass: 75, total: 100 },
-    });
+    };
 
     const result = categorizePlugins(plugins, categoryStats, passRateThreshold);
 
@@ -207,9 +157,9 @@ describe('categorizePlugins', () => {
 
   it('should categorize a plugin as compliant if its pass count is greater than its total count', () => {
     const plugins = ['invalid-plugin'];
-    const categoryStats: PluginCategoryStatsByPluginId = createCategoryStats({
+    const categoryStats: CategoryStats = {
       'invalid-plugin': { pass: 12, total: 10 },
-    });
+    };
     const passRateThreshold = 0.75;
 
     const result = categorizePlugins(plugins, categoryStats, passRateThreshold);
@@ -221,9 +171,9 @@ describe('categorizePlugins', () => {
 
   it('should correctly categorize plugins with total=0 as untested', () => {
     const plugins = ['zero-total-plugin'];
-    const categoryStats: PluginCategoryStatsByPluginId = createCategoryStats({
+    const categoryStats: CategoryStats = {
       'zero-total-plugin': { pass: 0, total: 0 },
-    });
+    };
     const passRateThreshold = 0.75;
 
     const result = categorizePlugins(plugins, categoryStats, passRateThreshold);
@@ -235,7 +185,7 @@ describe('categorizePlugins', () => {
 
   it('should return empty arrays when plugins is an empty array', () => {
     const plugins: string[] = [];
-    const categoryStats: PluginCategoryStatsByPluginId = {};
+    const categoryStats: CategoryStats = {};
     const passRateThreshold = 0.75;
 
     const result = categorizePlugins(plugins, categoryStats, passRateThreshold);
@@ -247,7 +197,7 @@ describe('categorizePlugins', () => {
 
   it('should return empty arrays when plugins is an empty Set', () => {
     const plugins: Set<string> = new Set();
-    const categoryStats: PluginCategoryStatsByPluginId = {};
+    const categoryStats: CategoryStats = {};
     const passRateThreshold = 0.75;
 
     const result = categorizePlugins(plugins, categoryStats, passRateThreshold);
@@ -259,10 +209,10 @@ describe('categorizePlugins', () => {
 
   it('should correctly categorize plugins with passRateThreshold at 0 and 1', () => {
     const plugins = ['plugin1', 'plugin2'];
-    const categoryStats: PluginCategoryStatsByPluginId = createCategoryStats({
+    const categoryStats: CategoryStats = {
       plugin1: { pass: 5, total: 10 },
       plugin2: { pass: 10, total: 10 },
-    });
+    };
 
     const result0 = categorizePlugins(plugins, categoryStats, 0);
     expect(result0.compliant).toEqual(['plugin1', 'plugin2']);

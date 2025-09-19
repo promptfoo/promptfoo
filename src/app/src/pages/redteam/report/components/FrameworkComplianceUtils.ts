@@ -1,9 +1,11 @@
 import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
-import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 import type { Theme } from '@mui/material/styles';
 
 // Types for utility functions
-
+export type CategoryStats = Record<
+  string,
+  { pass: number; total: number; passWithFilter?: number }
+>;
 type PluginCategories = {
   compliant: string[];
   nonCompliant: string[];
@@ -15,7 +17,7 @@ type PluginCategories = {
  */
 export const expandPluginCollections = (
   plugins: string[],
-  categoryStats: PluginCategoryStatsByPluginId,
+  categoryStats: CategoryStats,
 ): Set<string> => {
   const expandedPlugins = new Set<string>();
   plugins.forEach((plugin) => {
@@ -36,7 +38,7 @@ export const expandPluginCollections = (
  */
 export const categorizePlugins = (
   plugins: Set<string> | string[],
-  categoryStats: PluginCategoryStatsByPluginId,
+  categoryStats: CategoryStats,
   passRateThreshold: number,
 ): PluginCategories => {
   const compliantPlugins: string[] = [];
@@ -46,9 +48,9 @@ export const categorizePlugins = (
   // Process all plugins in the category
   Array.from(plugins).forEach((plugin) => {
     // Check if plugin has test data
-    if (categoryStats[plugin] && categoryStats[plugin].stats.total > 0) {
+    if (categoryStats[plugin] && categoryStats[plugin].total > 0) {
       // Plugin was tested
-      const { stats } = categoryStats[plugin];
+      const stats = categoryStats[plugin];
       if (stats.pass / stats.total >= passRateThreshold) {
         compliantPlugins.push(plugin);
       } else {

@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import { GridLogicOperator, GridFilterModel } from '@mui/x-data-grid';
 import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -72,30 +72,12 @@ describe('Overview', () => {
     });
 
     const categoryStats = {
-      'critical-fail': {
-        stats: { pass: 1, total: 10, passWithFilter: 1 },
-        metadata: { type: 'critical-fail', description: '', severity: Severity.Critical },
-      },
-      'critical-pass': {
-        stats: { pass: 9, total: 10, passWithFilter: 9 },
-        metadata: { type: 'critical-pass', description: '', severity: Severity.Critical },
-      },
-      'high-fail-1': {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'high-fail-1', description: '', severity: Severity.High },
-      },
-      'high-fail-2': {
-        stats: { pass: 0, total: 5, passWithFilter: 0 },
-        metadata: { type: 'high-fail-2', description: '', severity: Severity.High },
-      },
-      'medium-fail': {
-        stats: { pass: 7, total: 10, passWithFilter: 7 },
-        metadata: { type: 'medium-fail', description: '', severity: Severity.Medium },
-      },
-      'low-pass': {
-        stats: { pass: 10, total: 10, passWithFilter: 10 },
-        metadata: { type: 'low-pass', description: '', severity: Severity.Low },
-      },
+      'critical-fail': { pass: 1, total: 10 },
+      'critical-pass': { pass: 9, total: 10 },
+      'high-fail-1': { pass: 5, total: 10 },
+      'high-fail-2': { pass: 0, total: 5 },
+      'medium-fail': { pass: 7, total: 10 },
+      'low-pass': { pass: 10, total: 10 },
     };
 
     const plugins: RedteamPluginObject[] = [
@@ -124,10 +106,7 @@ describe('Overview', () => {
     });
 
     const categoryStats = {
-      'zero-total': {
-        stats: { pass: 0, total: 0, passWithFilter: 0 },
-        metadata: { type: 'zero-total', description: '', severity: Severity.Critical },
-      },
+      'zero-total': { pass: 0, total: 0 },
     };
 
     const plugins: RedteamPluginObject[] = [{ id: 'zero-total', severity: Severity.Critical }];
@@ -139,14 +118,8 @@ describe('Overview', () => {
 
   it('should display zero issue counts for all severities when plugins array is empty but categoryStats contains data', () => {
     const categoryStats = {
-      plugin1: {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'plugin1', description: '', severity: Severity.Critical },
-      },
-      plugin2: {
-        stats: { pass: 3, total: 7, passWithFilter: 3 },
-        metadata: { type: 'plugin2', description: '', severity: Severity.High },
-      },
+      plugin1: { pass: 5, total: 10 },
+      plugin2: { pass: 3, total: 7 },
     };
     const plugins: RedteamPluginObject[] = [];
 
@@ -159,14 +132,8 @@ describe('Overview', () => {
 
   it('should handle missing severity mappings gracefully', () => {
     const categoryStats = {
-      'known-category': {
-        stats: { pass: 0, total: 10, passWithFilter: 0 },
-        metadata: { type: 'known-category', description: '', severity: Severity.Critical },
-      },
-      'unknown-category': {
-        stats: { pass: 5, total: 10, passWithFilter: 5 },
-        metadata: { type: 'unknown-category', description: '', severity: Severity.High },
-      },
+      'known-category': { pass: 0, total: 10 },
+      'unknown-category': { pass: 5, total: 10 },
     };
 
     const plugins: RedteamPluginObject[] = [{ id: 'known-category', severity: Severity.Critical }];
@@ -227,22 +194,10 @@ describe('Overview', () => {
     'should apply the correct background and text colors for each severity card in $mode mode',
     ({ theme, styles }) => {
       const categoryStats = {
-        plugin1: {
-          stats: { pass: 0, total: 1, passWithFilter: 0 },
-          metadata: { type: 'plugin1', description: '', severity: Severity.Critical },
-        },
-        plugin2: {
-          stats: { pass: 0, total: 1, passWithFilter: 0 },
-          metadata: { type: 'plugin2', description: '', severity: Severity.High },
-        },
-        plugin3: {
-          stats: { pass: 0, total: 1, passWithFilter: 0 },
-          metadata: { type: 'plugin3', description: '', severity: Severity.Medium },
-        },
-        plugin4: {
-          stats: { pass: 0, total: 1, passWithFilter: 0 },
-          metadata: { type: 'plugin4', description: '', severity: Severity.Low },
-        },
+        plugin1: { pass: 0, total: 1 },
+        plugin2: { pass: 0, total: 1 },
+        plugin3: { pass: 0, total: 1 },
+        plugin4: { pass: 0, total: 1 },
       };
       const plugins: RedteamPluginObject[] = [
         { id: 'plugin1', severity: Severity.Critical },
@@ -272,10 +227,7 @@ describe('Overview', () => {
     });
 
     const categoryStats = {
-      'existing-category': {
-        stats: { pass: 0, total: 10, passWithFilter: 0 },
-        metadata: { type: 'existing-category', description: '', severity: Severity.Critical },
-      },
+      'existing-category': { pass: 0, total: 10 },
     };
 
     const plugins: RedteamPluginObject[] = [
@@ -293,18 +245,9 @@ describe('Overview', () => {
 
   it('should correctly update the filter when different severity cards are clicked in succession', () => {
     const categoryStats = {
-      plugin1: {
-        stats: { pass: 0, total: 1, passWithFilter: 0 },
-        metadata: { type: 'plugin1', description: '', severity: Severity.Critical },
-      },
-      plugin2: {
-        stats: { pass: 0, total: 1, passWithFilter: 0 },
-        metadata: { type: 'plugin2', description: '', severity: Severity.High },
-      },
-      plugin3: {
-        stats: { pass: 0, total: 1, passWithFilter: 0 },
-        metadata: { type: 'plugin3', description: '', severity: Severity.Medium },
-      },
+      plugin1: { pass: 0, total: 1 },
+      plugin2: { pass: 0, total: 1 },
+      plugin3: { pass: 0, total: 1 },
     };
 
     const plugins: RedteamPluginObject[] = [
@@ -375,10 +318,7 @@ describe('Overview', () => {
     });
 
     const categoryStats = {
-      plugin1: {
-        stats: { pass: 1, total: 10, passWithFilter: 1 },
-        metadata: { type: 'plugin1', description: '', severity: Severity.Critical },
-      },
+      plugin1: { pass: 1, total: 10 },
     };
 
     const plugins: RedteamPluginObject[] = [{ id: 'plugin1', severity: Severity.Critical }];

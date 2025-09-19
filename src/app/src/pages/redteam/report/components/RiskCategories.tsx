@@ -1,7 +1,6 @@
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
-import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 import RiskCard from './RiskCard';
 import type { TopLevelCategory } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';
@@ -13,7 +12,7 @@ const RiskCategories = ({
   passesByPlugin,
   strategyStats,
 }: {
-  categoryStats: PluginCategoryStatsByPluginId;
+  categoryStats: Record<string, { pass: number; total: number }>;
   evalId: string;
   failuresByPlugin: Record<
     string,
@@ -28,8 +27,7 @@ const RiskCategories = ({
   const categories = Object.keys(riskCategories).map((category) => ({
     name: category,
     passed: riskCategories[category as TopLevelCategory].every(
-      (subCategory) =>
-        categoryStats[subCategory]?.stats?.pass === categoryStats[subCategory]?.stats?.total,
+      (subCategory) => categoryStats[subCategory]?.pass === categoryStats[subCategory]?.total,
     ),
   }));
 
@@ -41,11 +39,11 @@ const RiskCategories = ({
         const subCategories = riskCategories[categoryName];
 
         const totalPasses = subCategories.reduce(
-          (acc, subCategory) => acc + (categoryStats[subCategory]?.stats?.pass || 0),
+          (acc, subCategory) => acc + (categoryStats[subCategory]?.pass || 0),
           0,
         );
         const totalTests = subCategories.reduce(
-          (acc, subCategory) => acc + (categoryStats[subCategory]?.stats?.total || 0),
+          (acc, subCategory) => acc + (categoryStats[subCategory]?.total || 0),
           0,
         );
 
@@ -58,9 +56,9 @@ const RiskCategories = ({
             numTestsPassed={totalPasses}
             numTestsFailed={totalTests - totalPasses}
             testTypes={subCategories.map((subCategory) => {
-              const { stats } = categoryStats[subCategory] ?? { stats: { pass: 0, total: 0 } };
-              const numPassed = stats?.pass;
-              const totalForSubcategory = stats?.total;
+              const stats = categoryStats[subCategory];
+              const numPassed = stats?.pass || 0;
+              const totalForSubcategory = stats?.total || 0;
               const numFailed = totalForSubcategory - numPassed;
 
               return {

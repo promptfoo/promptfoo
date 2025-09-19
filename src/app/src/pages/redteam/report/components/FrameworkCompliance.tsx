@@ -3,7 +3,7 @@ import React from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import {
@@ -22,14 +22,17 @@ import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
 import './FrameworkCompliance.css';
 
-import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
-
 interface FrameworkComplianceProps {
-  categoryStats: PluginCategoryStatsByPluginId;
   evalId: string;
+  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  strategyStats: Record<string, { pass: number; total: number }>;
 }
 
-const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps) => {
+const FrameworkCompliance = ({
+  evalId,
+  categoryStats,
+  strategyStats,
+}: FrameworkComplianceProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const getNonCompliantPlugins = React.useCallback(
@@ -59,7 +62,7 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
 
   const getPluginPassRate = React.useCallback(
     (plugin: string): { pass: number; total: number; rate: number } => {
-      const { stats } = categoryStats[plugin] || { stats: { pass: 0, total: 0 } };
+      const stats = categoryStats[plugin] || { pass: 0, total: 0 };
       return {
         pass: stats.pass,
         total: stats.total,
@@ -71,9 +74,7 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
 
   const getFrameworkSeverity = React.useCallback(
     (framework: string): Severity => {
-      //console.log('framework', framework);
       const nonCompliantPlugins = getNonCompliantPlugins(framework);
-      //console.log('nonCompliantPlugins', nonCompliantPlugins);
 
       if (nonCompliantPlugins.length === 0) {
         return Severity.Low;
@@ -131,14 +132,14 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
 
     // Filter for plugins that have test data
     const pluginsWithData = Array.from(allFrameworkPlugins).filter(
-      (plugin) => categoryStats[plugin] && categoryStats[plugin].stats.total > 0,
+      (plugin) => categoryStats[plugin] && categoryStats[plugin].total > 0,
     );
 
     // Count compliant plugins and calculate actual attack success rate
     let totalTests = 0;
     let totalFailedTests = 0;
     const compliantPlugins = pluginsWithData.filter((plugin) => {
-      const { stats } = categoryStats[plugin];
+      const stats = categoryStats[plugin];
       totalTests += stats.total;
       totalFailedTests += stats.total - stats.pass;
       return stats.pass / stats.total >= pluginPassRateThreshold;
@@ -227,7 +228,7 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
               const frameworkSeverity = getFrameworkSeverity(framework);
 
               return (
-                <Grid item xs={12} sm={6} md={4} key={framework}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }} key={framework}>
                   <FrameworkCard
                     evalId={evalId}
                     framework={framework}
