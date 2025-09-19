@@ -3,7 +3,7 @@ import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
-import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
+import { Agent, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -22,14 +22,6 @@ interface ProxyTlsOptions {
   proxyTls: ConnectionOptions;
   requestTls: ConnectionOptions;
   headersTimeout?: number;
-}
-
-/**
- * Extended options for fetch requests with promptfoo-specific headers
- */
-interface PromptfooRequestInit extends RequestInit {
-  // Make headers type compatible with standard HeadersInit
-  headers?: HeadersInit;
 }
 
 /**
@@ -76,7 +68,7 @@ function getAgentCacheKey(
 /**
  * Get or create an agent based on the current configuration
  */
-function getOrCreateAgent(url: string) {
+function getOrCreateAgent(url: string): Agent | ProxyAgent {
   const tlsOptions: ConnectionOptions = {
     rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
   };
@@ -101,8 +93,8 @@ function getOrCreateAgent(url: string) {
     if (proxyUrl) {
       logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)} (cached agent)`);
     }
-    setGlobalDispatcher(cachedEntry.agent);
-    return;
+
+    return cachedEntry.agent;
   }
 
   // Create a new agent
@@ -125,16 +117,15 @@ function getOrCreateAgent(url: string) {
   // Cache the agent
   agentCache.set(cacheKey, { agent });
 
-  // Set as global dispatcher
-  setGlobalDispatcher(agent);
+  return agent;
 }
 
 export async function fetchWithProxy(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: RequestInit = {},
 ): Promise<Response> {
   let finalUrl = url;
-  let finalUrlString: string | undefined;
+  let finalUrlString: string | undefined = undefined;
 
   if (typeof url === 'string') {
     finalUrlString = url;
@@ -144,12 +135,17 @@ export async function fetchWithProxy(
     finalUrlString = url.url;
   }
 
-  const finalOptions: PromptfooRequestInit = {
+  if (!finalUrlString) {
+    throw new Error('Invalid URL');
+  }
+
+  const finalOptions: RequestInit = {
     ...options,
     headers: {
       ...(options.headers as Record<string, string>),
       'x-promptfoo-version': VERSION,
     },
+    dispatcher: getOrCreateAgent(finalUrlString),
   };
 
   if (typeof url === 'string') {
@@ -183,17 +179,12 @@ export async function fetchWithProxy(
     }
   }
 
-  // Get or create the appropriate agent
-  if (finalUrlString) {
-    getOrCreateAgent(finalUrlString);
-  }
-
   return await monkeyPatchFetch(finalUrl, finalOptions);
 }
 
 export function fetchWithTimeout(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: RequestInit = {},
   timeout: number,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
@@ -268,7 +259,7 @@ export async function handleRateLimit(response: Response): Promise<void> {
  */
 export async function fetchWithRetries(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: RequestInit = {},
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {

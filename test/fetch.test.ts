@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { ProxyAgent } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
@@ -65,7 +65,6 @@ jest.mock('undici', () => {
   return {
     ProxyAgent: mockProxyAgentConstructor,
     Agent: mockAgentConstructor,
-    setGlobalDispatcher: jest.fn(),
   };
 });
 
@@ -132,7 +131,6 @@ describe('fetchWithProxy', () => {
     clearAgentCache(); // Clear the agent cache before each test
     jest.spyOn(global, 'fetch').mockImplementation();
     jest.mocked(ProxyAgent).mockClear();
-    jest.mocked(setGlobalDispatcher).mockClear();
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -159,6 +157,7 @@ describe('fetchWithProxy', () => {
         headers: expect.objectContaining({
           'x-promptfoo-version': VERSION,
         }),
+        dispatcher: expect.any(Object),
       }),
     );
   });
@@ -177,6 +176,7 @@ describe('fetchWithProxy', () => {
           Authorization: expect.any(String),
           'x-promptfoo-version': VERSION,
         },
+        dispatcher: expect.any(Object),
       }),
     );
   });
@@ -194,6 +194,7 @@ describe('fetchWithProxy', () => {
           'Content-Type': 'application/json',
           'x-promptfoo-version': VERSION,
         },
+        dispatcher: expect.any(Object),
       }),
     );
   });
@@ -232,7 +233,8 @@ describe('fetchWithProxy', () => {
   });
 
   it('should cache agents and reuse them for duplicate requests', async () => {
-    const { Agent, ProxyAgent } = require('undici');
+    const undici = jest.requireMock('undici');
+    const { Agent, ProxyAgent } = undici;
 
     // Test 1: Multiple requests without proxy should only create one agent
     await fetchWithProxy('https://api.example.com/endpoint1');
@@ -278,7 +280,8 @@ describe('fetchWithProxy', () => {
   });
 
   it('should create different agents for different TLS configurations', async () => {
-    const { Agent, ProxyAgent } = require('undici');
+    const undici = jest.requireMock('undici');
+    const { Agent, ProxyAgent } = undici;
 
     // Reset mocks to ensure clean state
     jest.mocked(Agent).mockClear();
@@ -437,7 +440,6 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('should handle missing CA certificate file gracefully', async () => {
@@ -479,7 +481,6 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
@@ -516,7 +517,6 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('should resolve CA certificate path relative to basePath when available', async () => {
@@ -577,7 +577,6 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
     cliState.basePath = undefined;
   });
@@ -643,7 +642,6 @@ describe('fetchWithProxy', () => {
         },
         headersTimeout: REQUEST_TIMEOUT_MS,
       });
-      expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
       const debugCalls = jest.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
@@ -680,7 +678,6 @@ describe('fetchWithProxy', () => {
         },
         headersTimeout: REQUEST_TIMEOUT_MS,
       });
-      expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
       const debugCalls = jest.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
@@ -708,7 +705,6 @@ describe('fetchWithProxy', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 });
 
@@ -1015,7 +1011,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
     clearAgentCache(); // Clear the agent cache before each test
     jest.spyOn(global, 'fetch').mockImplementation();
     jest.mocked(ProxyAgent).mockClear();
-    jest.mocked(setGlobalDispatcher).mockClear();
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -1095,7 +1090,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('should use proxy for domains not in NO_PROXY', async () => {
@@ -1111,7 +1105,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('should handle wildcard patterns in NO_PROXY', async () => {
