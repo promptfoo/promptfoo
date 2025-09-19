@@ -14,7 +14,7 @@ jest.mock('../src/util/config/manage', () => ({
 }));
 
 // Mock fetchWithRetries to return proper Response objects
-jest.mock('../src/util/fetch/index.ts', () => ({
+jest.mock('../src/util/fetch/index', () => ({
   fetchWithRetries: jest.fn(),
 }));
 
