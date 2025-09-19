@@ -38,7 +38,7 @@ export async function monkeyPatchFetch(
   }
   try {
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
-    const response = await fetch(url, opts as RequestInit);
+    const response = await fetch(url, opts);
 
     if (logEnabled) {
       logRequestResponse({
