@@ -7,6 +7,7 @@ import {
   fetchWithCache,
   isCacheEnabled,
 } from '../src/cache';
+import { fetchWithRetries } from '../src/util/fetch/index';
 
 jest.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: jest.fn().mockReturnValue('/mock/config/path'),
@@ -16,13 +17,11 @@ jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithRetries: jest.fn(),
 }));
 
-// Mock fetch with retries
-jest.mock('../src/util/fetch/index.ts', () => ({
-  fetchWithRetries: jest.fn().mockImplementation(async (url, options) => {
-    const result = await global.fetch(url, options);
-    return result;
-  }),
-}));
+// Mock fetch
+const mockFetch = jest.fn();
+global.fetch = mockFetch;
+
+const mockFetchWithRetries = jest.mocked(fetchWithRetries);
 
 // Mock cache-manager
 jest.mock('cache-manager', () => ({

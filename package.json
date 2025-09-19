@@ -68,6 +68,8 @@
     "test:integration": "jest --config jest.integration.config.ts integration",
     "test:watch": "jest --watch",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
+    "test:network-isolated": "JEST_ENVIRONMENT=./jest-network-isolated.environment.js jest --verbose",
+    "test:validate-network-isolation": "node scripts/validate-network-isolation.js",
     "test": "jest",
     "tsc": "tsc",
     "mcp": "node dist/src/main.js mcp",
