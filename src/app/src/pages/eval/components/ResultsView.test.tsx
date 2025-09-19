@@ -78,9 +78,9 @@ vi.mock('./store', () => ({
 }));
 
 vi.mock('./ShareModal', () => ({
-  default: vi.fn(({ open, onClose }) => (
-    open ? <div data-testid="share-modal">Share Modal</div> : null
-  )),
+  default: vi.fn(({ open, onClose }) =>
+    open ? <div data-testid="share-modal">Share Modal</div> : null,
+  ),
 }));
 
 vi.mock('./ResultsTable', () => ({
@@ -151,11 +151,7 @@ const mockRecentEvals: ResultLightweightWithLabel[] = [
 ];
 
 const renderWithRouter = (component: React.ReactElement) => {
-  return render(
-    <MemoryRouter>
-      {component}
-    </MemoryRouter>
-  );
+  return render(<MemoryRouter>{component}</MemoryRouter>);
 };
 
 describe('ResultsView Share Button', () => {
@@ -171,7 +167,7 @@ describe('ResultsView Share Button', () => {
         recentEvals={mockRecentEvals}
         onRecentEvalSelected={mockOnRecentEvalSelected}
         defaultEvalId="test-eval-id"
-      />
+      />,
     );
 
     // Click on Eval actions to open the dropdown
@@ -190,7 +186,7 @@ describe('ResultsView Share Button', () => {
         recentEvals={mockRecentEvals}
         onRecentEvalSelected={mockOnRecentEvalSelected}
         defaultEvalId="test-eval-id"
-      />
+      />,
     );
 
     const evalActionsButton = screen.getByText('Eval actions');
@@ -210,7 +206,7 @@ describe('ResultsView Share Button', () => {
         recentEvals={mockRecentEvals}
         onRecentEvalSelected={mockOnRecentEvalSelected}
         defaultEvalId="test-eval-id"
-      />
+      />,
     );
 
     const evalActionsButton = screen.getByText('Eval actions');

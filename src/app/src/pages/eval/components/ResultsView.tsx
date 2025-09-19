@@ -749,10 +749,7 @@ export default function ResultsView({
                       </MenuItem>
                     </Tooltip>
                     <DownloadMenu />
-                    <Tooltip
-                      title="Generate a unique URL that others can access"
-                      placement="left"
-                    >
+                    <Tooltip title="Generate a unique URL that others can access" placement="left">
                       <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
                         <ListItemIcon>
                           {shareLoading ? (

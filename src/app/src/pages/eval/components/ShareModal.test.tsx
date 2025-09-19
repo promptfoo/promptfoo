@@ -200,5 +200,4 @@ describe('ShareModal', () => {
       expect(screen.getByText('Shared URLs are deleted after 2 weeks.')).toBeInTheDocument();
     });
   });
-
 });
