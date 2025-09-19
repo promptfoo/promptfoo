@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, cleanup } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Navigation from './Navigation';
@@ -176,7 +176,7 @@ describe('EvalsDropdown', () => {
     const evalsButton = screen.getByRole('button', { name: /Results/i });
     fireEvent.click(evalsButton);
 
-    expect(screen.getByText('Vulnerability Reports')).toBeInTheDocument();
+    expect(screen.getByText('Red Team Vulnerability Reports')).toBeInTheDocument();
     expect(screen.getByText('View findings from red teams')).toBeInTheDocument();
   });
 });
