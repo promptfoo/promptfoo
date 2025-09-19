@@ -9,7 +9,6 @@ import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
-import { fetchWithProxy } from '../util/fetch';
 import { isRunningUnderNpx } from '../util/index';
 import { fetchWithProxy } from '../util/fetch';
 import type { Command } from 'commander';

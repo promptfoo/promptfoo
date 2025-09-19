@@ -8,7 +8,6 @@ import cliState from '../../cliState';
 import {
   CONSENT_ENDPOINT,
   EVENTS_ENDPOINT,
-  KA_ENDPOINT,
   R_ENDPOINT,
   VERSION,
 } from '../../constants';
@@ -142,7 +141,7 @@ export async function fetchWithProxy(
   options: RequestInit = {},
 ): Promise<Response> {
   // Enhanced fetch with logging, authentication, proxy support, and error handling
-  const NO_LOG_URLS = [KA_ENDPOINT, R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
+  const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
   // Don't log localhost health checks to reduce startup noise
   const isLocalHealthCheck =
     url.toString().includes('localhost') && url.toString().includes('/health');
@@ -226,6 +225,7 @@ export async function fetchWithProxy(
   }
 
   try {
+    // biome-ignore lint/style/noRestrictedGlobals: we need to use global fetch in this enhanced wrapper
     const response = await fetch(finalUrl, finalOptions);
 
     if (logEnabled) {

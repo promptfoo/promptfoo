@@ -1,7 +1,6 @@
 import { VERSION } from '../../../constants';
 import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
-import { fetchWithProxy } from '../../../util/fetch';
 import invariant from '../../../util/invariant';
 import { fetchWithProxy } from '../../../util/fetch';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';

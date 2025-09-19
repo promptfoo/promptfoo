@@ -6,7 +6,6 @@ import yaml from 'js-yaml';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { fetchWithProxy } from '../../util/fetch';
 import { setupEnv } from '../../util/index';
 import { fetchWithProxy } from '../../util/fetch';
 import { getRemoteGenerationUrl } from '../remoteGeneration';

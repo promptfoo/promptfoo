@@ -71,19 +71,22 @@ describe('poison command', () => {
 
       const result = await generatePoisonedDocument('test doc', 'test goal');
 
-      expect(fetch).toHaveBeenCalledWith(getRemoteGenerationUrl(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-promptfoo-version': expect.any(String),
-        },
-        body: JSON.stringify({
-          task: 'poison-document',
-          document: 'test doc',
-          goal: 'test goal',
-          email: getUserEmail(),
-        }),
-      });
+      expect(fetch).toHaveBeenCalledWith(getRemoteGenerationUrl(),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'x-promptfoo-version': expect.any(String),
+          }),
+          body: JSON.stringify({
+            task: 'poison-document',
+            document: 'test doc',
+            goal: 'test goal',
+            email: getUserEmail(),
+          }),
+          dispatcher: expect.any(Object),
+        })
+      );
 
       expect(result).toEqual({
         poisonedDocument: 'poisoned content',
