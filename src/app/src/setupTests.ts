@@ -49,6 +49,29 @@ function resizeObserverMock(callback: ResizeObserverCallback): ResizeObserver {
 // Set ResizeObserver mock globally
 global.ResizeObserver = resizeObserverMock as any;
 
+// Fix CSS custom property parsing for jsdom v27 + MUI DataGrid compatibility
+// Patch CSS style property setting to handle CSS custom properties
+const originalSetProperty = CSSStyleDeclaration.prototype.setProperty;
+CSSStyleDeclaration.prototype.setProperty = function (
+  property: string,
+  value: string,
+  priority?: string,
+) {
+  try {
+    // Call original method first
+    return originalSetProperty.call(this, property, value, priority);
+  } catch (error) {
+    // If it fails with CSS custom properties, handle gracefully
+    if (typeof value === 'string' && value.includes('var(--')) {
+      // For CSS custom properties, set them directly without parsing
+      (this as any)[property] = value;
+      return;
+    }
+    // Silently ignore other CSS parsing errors in test environment
+    return;
+  }
+};
+
 
 
 // We can mock the environment variables. For example:
