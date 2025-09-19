@@ -79,7 +79,9 @@ const RiskCard = ({
           }}
         >
           <Grid
-            item xs={12} md={6}
+            item
+            xs={12}
+            md={6}
             style={{
               display: 'flex',
               flexDirection: 'column',
