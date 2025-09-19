@@ -807,7 +807,7 @@ const App = () => {
             p: 4,
           }}
         >
-          <Typography id="prompt-modal-title" variant="h6" component="h2" gutterBottom>
+          <Typography id="prompt-modal-title" variant="h6" component="h6" gutterBottom>
             View results for...
           </Typography>
           <List>

@@ -794,8 +794,11 @@ function ResultsTable({
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
-                          maximumFractionDigits: prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
-                        }).format(prompt.metrics.cost / testCounts[idx])} per test`}
+                          maximumFractionDigits:
+                            testCounts[idx] && prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
+                        }).format(
+                          testCounts[idx] ? prompt.metrics.cost / testCounts[idx] : 0,
+                        )} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
@@ -821,7 +824,9 @@ function ResultsTable({
                       <strong>Avg Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / testCounts[idx])}
+                      }).format(
+                        testCounts[idx] ? prompt.metrics.tokenUsage.total / testCounts[idx] : 0,
+                      )}
                     </div>
                   ) : null}
                   {prompt.metrics?.totalLatencyMs ? (
@@ -829,7 +834,9 @@ function ResultsTable({
                       <strong>Avg Latency:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / testCounts[idx])}{' '}
+                      }).format(
+                        testCounts[idx] ? prompt.metrics.totalLatencyMs / testCounts[idx] : 0,
+                      )}{' '}
                       ms
                     </div>
                   ) : null}
@@ -1506,7 +1513,7 @@ function ResultsTable({
               slotProps={{
                 htmlInput: {
                   min: 1,
-                  max: pageCount,
+                  max: pageCount || 1,
                 },
               }}
               disabled={pageCount === 1}
