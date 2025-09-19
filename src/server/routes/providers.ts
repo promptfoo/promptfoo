@@ -10,6 +10,7 @@ import {
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { fetchWithProxy } from '../../util/fetch';
 import invariant from '../../util/invariant';
 import { fetchWithProxy } from '../../util/fetch';
 import { ProviderOptionsSchema } from '../../validators/providers';

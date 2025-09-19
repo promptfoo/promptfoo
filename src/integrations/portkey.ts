@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import { fetchWithProxy } from '../util/fetch';
 import invariant from '../util/invariant';
 import { fetchWithProxy } from '../util/fetch';
 
