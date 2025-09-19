@@ -82,15 +82,9 @@ beforeEach(() => {
     .reply(200, { status: 'ok' });
 
   // Mock telemetry endpoints
-  nock('https://r.promptfoo.app')
-    .persist()
-    .post('/')
-    .reply(200, { status: 'success' });
+  nock('https://r.promptfoo.app').persist().post('/').reply(200, { status: 'success' });
 
-  nock('https://a.promptfoo.app')
-    .persist()
-    .post(/.*/)
-    .reply(200, { status: 'success' });
+  nock('https://a.promptfoo.app').persist().post(/.*/).reply(200, { status: 'success' });
 
   nock('https://api.promptfoo.dev')
     .persist()
@@ -113,8 +107,8 @@ afterEach(() => {
     networkCalls.forEach((call) => {
       console.log(`  - ${call.method} ${call.host}${call.path}`);
     });
-    networkCalls.length = 0; // Clear for next test
   }
+  networkCalls.length = 0; // Clear for next test
 });
 
 afterAll(async () => {
@@ -124,6 +118,7 @@ afterAll(async () => {
   }
 
   // Clean up nock
+  nock.abortPendingRequests();
   nock.cleanAll();
   nock.enableNetConnect();
 
