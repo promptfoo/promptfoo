@@ -8,8 +8,8 @@ import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-http';
 
 // Mock ResizeObserver for MUI DataGrid compatibility with jsdom
-function resizeObserverMock(callback: ResizeObserverCallback) {
-  return {
+function resizeObserverMock(callback: ResizeObserverCallback): ResizeObserver {
+  const observer = {
     observe: (element: Element) => {
       setTimeout(() => {
         callback(
@@ -36,17 +36,18 @@ function resizeObserverMock(callback: ResizeObserverCallback) {
               ],
             },
           ] as ResizeObserverEntry[],
-          this,
+          observer as ResizeObserver,
         );
       }, 0);
     },
     disconnect: () => {},
     unobserve: () => {},
   };
+  return observer as ResizeObserver;
 }
 
 // Set ResizeObserver mock globally
-global.ResizeObserver = resizeObserverMock as unknown as typeof ResizeObserver;
+global.ResizeObserver = resizeObserverMock as any;
 
 // Patch CSS style property setter to handle CSS custom properties in jsdom v27
 // This fixes the "Cannot create property 'border-width' on string..." error with MUI DataGrid
