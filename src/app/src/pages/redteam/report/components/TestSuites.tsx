@@ -197,8 +197,8 @@ const TestSuites = ({
         } as const;
 
         return sortModel[0].sort === 'asc'
-          ? severityOrder[a.severity] - severityOrder[b.severity]
-          : severityOrder[b.severity] - severityOrder[a.severity];
+          ? severityOrder[a.severity as Severity] - severityOrder[b.severity as Severity]
+          : severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity];
       }
 
       if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
