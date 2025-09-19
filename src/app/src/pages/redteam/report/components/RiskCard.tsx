@@ -79,7 +79,7 @@ const RiskCard = ({
           }}
         >
           <Grid
-            size={{ xs: 12, md: 6 }}
+            item xs={12} md={6}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -136,7 +136,7 @@ const RiskCard = ({
               {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
             </Typography>
           </Grid>
-          <Grid size={{ xs: 6, md: 4 }}>
+          <Grid item xs={6} md={4}>
             <List dense>
               {filteredTestTypes.map((test, index) => {
                 const percentage = test.numPassed / (test.numPassed + test.numFailed);

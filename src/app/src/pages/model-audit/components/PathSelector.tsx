@@ -500,7 +500,7 @@ export default function PathSelector({
           </Box>
 
           <Grid container spacing={3}>
-            <Grid size={{ xs: 12, md: 4 }}>
+            <Grid item xs={12} md={4}>
               <Paper
                 sx={{
                   p: 3,
@@ -523,7 +523,7 @@ export default function PathSelector({
                 </Typography>
               </Paper>
             </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
+            <Grid item xs={12} md={4}>
               <Paper
                 sx={{
                   p: 3,
@@ -546,7 +546,7 @@ export default function PathSelector({
                 </Typography>
               </Paper>
             </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
+            <Grid item xs={12} md={4}>
               <Paper
                 sx={{
                   p: 3,

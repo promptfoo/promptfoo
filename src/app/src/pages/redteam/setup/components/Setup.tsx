@@ -64,7 +64,7 @@ export default function Setup({ open, onClose }: SetupProps) {
           </li>
         </ul>
         <Grid container>
-          <Grid size={12}>
+          <Grid item xs={12}>
             <Box
               sx={{
                 display: 'flex',

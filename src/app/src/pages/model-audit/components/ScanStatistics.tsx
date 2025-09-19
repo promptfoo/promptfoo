@@ -55,7 +55,7 @@ export default function ScanStatistics({
   return (
     <Grid container spacing={3} sx={{ mb: 4 }}>
       {severityStats.map(({ severity, icon: Icon, label, color, count }) => (
-        <Grid size={{ xs: 12, sm: 6, md: 3 }} key={severity}>
+        <Grid item xs={12} sm={6} md={3} key={severity}>
           <Tooltip
             title={
               selectedSeverity === severity
@@ -90,7 +90,7 @@ export default function ScanStatistics({
           </Tooltip>
         </Grid>
       ))}
-      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+      <Grid item xs={12} sm={6} md={3}>
         <Tooltip title="Click to see which files were scanned" placement="top">
           <StatCard
             elevation={0}

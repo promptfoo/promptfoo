@@ -309,7 +309,7 @@ const StrategyStats = ({
             }}
           >
             <Grid container spacing={3}>
-              <Grid size={4}>
+              <Grid item xs={4}>
                 <Typography variant="h6" align="center">
                   {selectedStrategy && strategyStats[selectedStrategy]?.total}
                 </Typography>
@@ -317,7 +317,7 @@ const StrategyStats = ({
                   Total Attempts
                 </Typography>
               </Grid>
-              <Grid size={4}>
+              <Grid item xs={4}>
                 <Typography variant="h6" align="center" color="error.main">
                   {selectedStrategy &&
                     strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass}
@@ -326,7 +326,7 @@ const StrategyStats = ({
                   Flagged Attempts
                 </Typography>
               </Grid>
-              <Grid size={4}>
+              <Grid item xs={4}>
                 <Typography variant="h6" align="center">
                   {selectedStrategy &&
                     `${(

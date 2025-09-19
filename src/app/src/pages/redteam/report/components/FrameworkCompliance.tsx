@@ -228,7 +228,7 @@ const FrameworkCompliance = ({
               const frameworkSeverity = getFrameworkSeverity(framework);
 
               return (
-                <Grid size={{ xs: 12, sm: 6, md: 4 }} key={framework}>
+                <Grid item xs={12} sm={6} md={4} key={framework}>
                   <FrameworkCard
                     evalId={evalId}
                     framework={framework}

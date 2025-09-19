@@ -92,7 +92,7 @@ export default function Review({
     String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
   );
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
-  const [pollInterval, setPollInterval] = useState<ReturnType<typeof setInterval> | null>(null);
+  const [pollInterval, setPollInterval] = useState<number | null>(null);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
@@ -469,7 +469,7 @@ export default function Review({
         </Typography>
 
         <Grid container spacing={3}>
-          <Grid size={6}>
+          <Grid item xs={6}>
             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Plugins ({pluginSummary.length})
@@ -510,7 +510,7 @@ export default function Review({
             </Paper>
           </Grid>
 
-          <Grid size={6}>
+          <Grid item xs={6}>
             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Strategies ({strategySummary.length})
@@ -553,7 +553,7 @@ export default function Review({
           </Grid>
 
           {customPolicies.length > 0 && (
-            <Grid size={6}>
+            <Grid item xs={6}>
               <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
                   Custom Policies ({customPolicies.length})
@@ -612,7 +612,7 @@ export default function Review({
           )}
 
           {intents.length > 0 && (
-            <Grid size={6}>
+            <Grid item xs={6}>
               <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
                   Intents ({intents.length})
@@ -688,7 +688,7 @@ export default function Review({
             </Grid>
           )}
 
-          <Grid size={12}>
+          <Grid item xs={12}>
             <Box sx={{ boxShadow: theme.shadows[1], borderRadius: 1, overflow: 'hidden' }}>
               <Accordion
                 expanded={isPurposeExpanded}
@@ -735,7 +735,7 @@ export default function Review({
                   </Box>
                 </AccordionSummary>
                 <AccordionDetails sx={{ pt: 0 }}>
-                  <Grid size={12}>
+                  <Grid item xs={12}>
                     <Box
                       sx={{
                         display: 'flex',
@@ -885,7 +885,7 @@ export default function Review({
                       )}
 
                     {config.testGenerationInstructions && (
-                      <Grid size={12}>
+                      <Grid item xs={12}>
                         <Typography variant="subtitle2">Test Generation Instructions</Typography>
                         <Typography
                           variant="body2"
