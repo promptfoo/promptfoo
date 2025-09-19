@@ -1,12 +1,13 @@
 ---
+title: Sharing Eval Results
 sidebar_position: 40
-description: Collaborate on LLM evaluations by sharing results via cloud platform, enterprise deployment, or self-hosted infrastructure
+description: Share your promptfoo evaluation results with teams via cloud platform, enterprise deployment, or self-hosted infrastructure
 keywords: [eval sharing, LLM testing, promptfoo sharing, collaboration, team sharing]
 ---
 
 # Sharing
 
-Share your eval results with others using the `share` command.
+Share your eval results with others using the `share` command or the web interface.
 
 ## Quick Start (Cloud)
 
@@ -23,8 +24,36 @@ promptfoo share
 ```
 
 :::note
+
 Cloud sharing creates private links only visible to you and your organization. If you don't have an account, visit https://promptfoo.app/welcome to create one and get your API key.
+
 :::
+
+## Web Interface Sharing
+
+Share evaluations directly from the web interface with a single click. The **Share** button appears in the "Eval actions" dropdown menu for all evaluations.
+
+![Share button location in web interface](/img/docs/usage/sharing-webui.png)
+
+### Share an Eval via Web Interface
+
+1. Open your evaluation results in the web interface
+2. Click **"Eval actions"** in the top toolbar
+3. Select **"Share"** from the dropdown menu
+4. Follow the prompts to generate your shareable URL
+
+:::tip
+
+The share button is visible by default for all evaluations. If sharing isn't configured, you'll see helpful setup instructions instead of errors.
+
+:::
+
+### Sharing Behavior by Setup Type
+
+- **Cloud users**: Generates private sharing URLs automatically
+- **Enterprise users**: Creates team-accessible links with proper permissions
+- **Self-hosted users**: Uses your configured sharing endpoints
+- **Unconfigured setups**: Displays clear setup instructions with next steps
 
 ## Sharing Specific Evals
 
@@ -101,7 +130,9 @@ sharing:
 ```
 
 :::tip
+
 Self-hosted sharing doesn't require `promptfoo auth login` when these environment variables or config settings are present.
+
 :::
 
 ### Troubleshooting Upload Issues
@@ -130,11 +161,25 @@ For multi-tenant environments, reducing the chunk size on the client is usually 
 
 ## Disabling Sharing
 
-To disable sharing completely:
+By default, the share button appears in the web interface for all evaluations. Disable sharing functionality completely with configuration or environment variables.
+
+### Disable via Configuration
 
 ```yaml title="promptfooconfig.yaml"
 sharing: false
 ```
+
+### Disable via Environment Variable
+
+```sh
+export PROMPTFOO_DISABLE_SHARING=true
+```
+
+:::warning
+
+When sharing is disabled, the share functionality becomes unavailable in both the CLI and web interface.
+
+:::
 
 ## See Also
 
