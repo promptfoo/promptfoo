@@ -140,7 +140,7 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
         cellClassName: 'dg-cursor-pointer',
       },
     ],
-    [data],
+    [],
   );
 
   return (
