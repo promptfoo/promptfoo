@@ -60,7 +60,7 @@ describe('ReportPage', () => {
     });
   });
 
-  it("should set page metadata to 'Red team report' when evalId is present", () => {
+  it("should set page metadata to 'Red Team Vulnerability Reports' when evalId is present", () => {
     const url = 'http://localhost/reports?evalId=test-eval-123';
     Object.defineProperty(window, 'location', {
       writable: true,
@@ -75,7 +75,7 @@ describe('ReportPage', () => {
 
     expect(mockedUsePageMeta).toHaveBeenCalledTimes(1);
     expect(mockedUsePageMeta).toHaveBeenCalledWith({
-      title: 'Red team report',
+      title: 'Red Team Vulnerability Reports',
       description: 'View or browse red team results',
     });
 
@@ -225,7 +225,7 @@ describe('ReportPage', () => {
 
     expect(mockedUsePageMeta).toHaveBeenCalledTimes(1);
     expect(mockedUsePageMeta).toHaveBeenCalledWith({
-      title: 'Red team report',
+      title: 'Red Team Vulnerability Reports',
       description: 'View or browse red team results',
     });
     expect(screen.getByText('Report Component')).toBeInTheDocument();
