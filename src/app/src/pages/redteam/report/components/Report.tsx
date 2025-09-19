@@ -411,26 +411,55 @@ const App = () => {
   }, [passesByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
 
   const filteredCategoryStats = React.useMemo(() => {
-    const stats: Record<string, { pass: number; total: number; passWithFilter: number }> = {};
-
-    Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
-      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
-      stats[pluginId].total += tests.length;
+    // Start with all categories from the original stats, preserving metadata
+    const stats: PluginCategoryStatsByPluginId = {};
+    
+    // Initialize all categories with zero counts to preserve the structure and metadata
+    Object.entries(categoryStats).forEach(([pluginId, originalStats]) => {
+      stats[pluginId] = {
+        ...originalStats,  // Preserve all metadata from original stats
+        stats: {
+          ...originalStats.stats,  // Preserve any additional stats properties
+          pass: 0,
+          total: 0,
+          passWithFilter: 0,
+        },
+      };
     });
 
+    // Count failures from filtered data
+    Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
+      if (stats[pluginId]) {
+        stats[pluginId].stats.total += tests.length;
+      }
+    });
+
+    // Count passes from filtered data
     Object.entries(filteredPassesByPlugin).forEach(([pluginId, tests]) => {
-      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
-      stats[pluginId].pass += tests.length;
-      stats[pluginId].passWithFilter += tests.length;
-      stats[pluginId].total += tests.length;
+      if (stats[pluginId]) {
+        stats[pluginId].stats.pass += tests.length;
+        stats[pluginId].stats.passWithFilter += tests.length;
+        stats[pluginId].stats.total += tests.length;
+      }
     });
 
     return stats;
-  }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
+  }, [categoryStats, filteredFailuresByPlugin, filteredPassesByPlugin]);
 
   const filteredStrategyStats = React.useMemo(() => {
+    // Start with all strategies from the original stats, preserving metadata
     const stats: Record<string, { pass: number; total: number }> = {};
+    
+    // Initialize all strategies with zero counts to preserve the structure
+    Object.entries(strategyStats).forEach(([strategyId, originalStats]) => {
+      stats[strategyId] = {
+        ...originalStats,  // Preserve any metadata from original stats
+        pass: 0,
+        total: 0,
+      };
+    });
 
+    // Process filtered failures (attack successes)
     Object.values(filteredFailuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const strategyId =
@@ -445,6 +474,7 @@ const App = () => {
       });
     });
 
+    // Process filtered passes (attack failures)
     Object.values(filteredPassesByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const strategyId =
@@ -459,7 +489,7 @@ const App = () => {
     });
 
     return stats;
-  }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
+  }, [strategyStats, filteredFailuresByPlugin, filteredPassesByPlugin]);
 
   usePageMeta({
     title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
@@ -804,7 +834,6 @@ const App = () => {
         <FrameworkCompliance
           evalId={evalId}
           categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
-          strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
         />
       </Stack>
       <Modal
