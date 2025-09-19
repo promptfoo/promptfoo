@@ -160,11 +160,12 @@ describe('init command', () => {
       const mockResponse = createMockResponse({
         ok: true,
         status: 200,
-        json: () => Promise.resolve([
-          { name: 'example1', type: 'dir' },
-          { name: 'example2', type: 'dir' },
-          { name: 'not-an-example', type: 'file' },
-        ]),
+        json: () =>
+          Promise.resolve([
+            { name: 'example1', type: 'dir' },
+            { name: 'example2', type: 'dir' },
+            { name: 'not-an-example', type: 'file' },
+          ]),
       });
       mockFetchWithProxy.mockResolvedValue(mockResponse);
 
