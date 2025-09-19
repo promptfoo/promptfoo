@@ -76,7 +76,7 @@ function getAgentCacheKey(
 /**
  * Get or create an agent based on the current configuration
  */
-function getOrCreateAgent(url: string): Agent | ProxyAgent {
+function getOrCreateAgent(url: string) {
   const tlsOptions: ConnectionOptions = {
     rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
   };
@@ -96,14 +96,13 @@ function getOrCreateAgent(url: string): Agent | ProxyAgent {
 
   const proxyUrl = getProxyForUrl(url);
   const cacheKey = getAgentCacheKey(proxyUrl, tlsOptions, caCertPath);
-
-  // Check if we have a cached agent for this configuration
   const cachedEntry = agentCache.get(cacheKey);
   if (cachedEntry) {
     if (proxyUrl) {
       logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)} (cached agent)`);
     }
-    return cachedEntry.agent;
+    setGlobalDispatcher(cachedEntry.agent);
+    return;
   }
 
   // Create a new agent
@@ -128,8 +127,6 @@ function getOrCreateAgent(url: string): Agent | ProxyAgent {
 
   // Set as global dispatcher
   setGlobalDispatcher(agent);
-
-  return agent;
 }
 
 export async function fetchWithProxy(
