@@ -47,8 +47,9 @@ export function PresetSelector({ presets, selectedPreset, onSelect }: PresetSele
           size={{
             xs: 12,
             sm: 6,
-            md: 3
-          }}>
+            md: 3,
+          }}
+        >
           <PresetCard
             name="Custom"
             description="Configure your own set of strategies"

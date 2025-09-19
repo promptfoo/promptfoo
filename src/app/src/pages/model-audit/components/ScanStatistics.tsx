@@ -60,8 +60,9 @@ export default function ScanStatistics({
           size={{
             xs: 12,
             sm: 6,
-            md: 3
-          }}>
+            md: 3,
+          }}
+        >
           <Tooltip
             title={
               selectedSeverity === severity

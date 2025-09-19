@@ -87,8 +87,9 @@ const RiskCard = ({
             }}
             size={{
               xs: 12,
-              md: 6
-            }}>
+              md: 6,
+            }}
+          >
             <Typography variant="h5" className="risk-card-title">
               {title}
             </Typography>

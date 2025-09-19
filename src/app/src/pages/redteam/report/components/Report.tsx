@@ -813,7 +813,7 @@ const App = () => {
           <List>
             {prompts.map((prompt, index) => (
               // @ts-ignore
-              (<ListItem
+              <ListItem
                 key={index}
                 button
                 onClick={() => handlePromptSelect(index)}
@@ -829,7 +829,7 @@ const App = () => {
                     </pre>
                   }
                 />
-              </ListItem>)
+              </ListItem>
             ))}
           </List>
         </Box>

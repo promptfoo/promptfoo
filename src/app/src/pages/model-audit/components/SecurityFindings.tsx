@@ -422,7 +422,7 @@ export default function SecurityFindings({
         </Stack>
       ) : (
         // Original flat list view
-        (<Stack spacing={2}>
+        <Stack spacing={2}>
           {filteredIssues.map((issue, index) => (
             <Paper
               key={index}
@@ -471,7 +471,7 @@ export default function SecurityFindings({
               </Stack>
             </Paper>
           ))}
-        </Stack>)
+        </Stack>
       )}
       {/* Raw Output Dialog */}
       <Dialog
