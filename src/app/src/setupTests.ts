@@ -12,25 +12,32 @@ function resizeObserverMock(callback: ResizeObserverCallback) {
   return {
     observe: (element: Element) => {
       setTimeout(() => {
-        callback([
-          {
-            target: element,
-            borderBoxSize: [{ blockSize: element.clientHeight, inlineSize: element.clientWidth }],
-            contentBoxSize: [{ blockSize: element.clientHeight, inlineSize: element.clientWidth }],
-            contentRect: {
-              x: 0,
-              y: 0,
-              width: element.clientWidth,
-              height: element.clientHeight,
-              top: 0,
-              right: element.clientWidth,
-              bottom: element.clientHeight,
-              left: 0,
-              toJSON: () => ({}),
+        callback(
+          [
+            {
+              target: element,
+              borderBoxSize: [{ blockSize: element.clientHeight, inlineSize: element.clientWidth }],
+              contentBoxSize: [
+                { blockSize: element.clientHeight, inlineSize: element.clientWidth },
+              ],
+              contentRect: {
+                x: 0,
+                y: 0,
+                width: element.clientWidth,
+                height: element.clientHeight,
+                top: 0,
+                right: element.clientWidth,
+                bottom: element.clientHeight,
+                left: 0,
+                toJSON: () => ({}),
+              },
+              devicePixelContentBoxSize: [
+                { blockSize: element.clientHeight, inlineSize: element.clientWidth },
+              ],
             },
-            devicePixelContentBoxSize: [{ blockSize: element.clientHeight, inlineSize: element.clientWidth }],
-          },
-        ] as ResizeObserverEntry[], this);
+          ] as ResizeObserverEntry[],
+          this,
+        );
       }, 0);
     },
     disconnect: () => {},
@@ -44,7 +51,11 @@ global.ResizeObserver = resizeObserverMock as unknown as typeof ResizeObserver;
 // Patch CSS style property setter to handle CSS custom properties in jsdom v27
 // This fixes the "Cannot create property 'border-width' on string..." error with MUI DataGrid
 const originalSetProperty = CSSStyleDeclaration.prototype.setProperty;
-CSSStyleDeclaration.prototype.setProperty = function(property: string, value: string, priority?: string) {
+CSSStyleDeclaration.prototype.setProperty = function (
+  property: string,
+  value: string,
+  priority?: string,
+) {
   try {
     // For CSS custom properties or values containing var(), skip the error-prone parsing
     if (property.startsWith('--') || (typeof value === 'string' && value.includes('var('))) {
