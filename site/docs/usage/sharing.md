@@ -1,5 +1,4 @@
 ---
-title: Sharing Eval Results
 sidebar_position: 40
 description: Share your promptfoo eval results with teams via cloud platform, enterprise deployment, or self-hosted infrastructure
 keywords: [eval sharing, model testing, promptfoo sharing, collaboration, team sharing]
@@ -161,7 +160,7 @@ For multi-tenant environments, reducing the chunk size on the client is usually 
 
 ## Disabling Sharing
 
-By default, the share button appears in the web interface for all evals. Disable sharing functionality completely with configuration or environment variables.
+To disable sharing completely:
 
 ### Disable via Configuration
 
@@ -174,12 +173,6 @@ sharing: false
 ```sh
 export PROMPTFOO_DISABLE_SHARING=true
 ```
-
-:::warning
-
-When sharing is disabled, the share functionality becomes unavailable in both the CLI and web interface.
-
-:::
 
 ## See Also
 
