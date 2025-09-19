@@ -83,7 +83,15 @@ function TableHeader({
   expandedText,
   resourceId,
   className,
-}: TruncatedTextProps & { expandedText?: string; resourceId?: string; className?: string }) {
+  evaluationId,
+  provider,
+}: TruncatedTextProps & {
+  expandedText?: string;
+  resourceId?: string;
+  className?: string;
+  evaluationId?: string;
+  provider?: string;
+}) {
   const [promptOpen, setPromptOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setPromptOpen(true);
@@ -106,6 +114,8 @@ function TableHeader({
               open={promptOpen}
               onClose={handlePromptClose}
               prompt={expandedText}
+              evaluationId={evaluationId}
+              provider={provider}
             />
           )}
           {resourceId && (
@@ -933,6 +943,12 @@ function ResultsTable({
                     expandedText={prompt.raw}
                     maxLength={maxTextLength}
                     resourceId={prompt.id}
+                    evaluationId={evalId || undefined}
+                    provider={
+                      typeof prompt.provider === 'string'
+                        ? prompt.provider
+                        : (prompt.provider as any)?.id || 'Unknown provider'
+                    }
                   />
                   {details}
                   {filterMode === 'failures' && head.prompts.length > 1 && (
