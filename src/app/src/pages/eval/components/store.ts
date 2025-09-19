@@ -400,7 +400,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
     const {
       pageIndex = 0,
       pageSize = 50,
-      filterMode = 'all',
+      // Default to current store value to keep initial load consistent with UI state
+      filterMode = get().filterMode,
       searchText = '',
       skipSettingEvalId = false,
       skipLoadingState = false,

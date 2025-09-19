@@ -86,11 +86,12 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         setEvalId(id);
 
-        const { filters } = useTableStore.getState();
+        const { filters, filterMode } = useTableStore.getState();
 
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
+          filterMode,
           filters: Object.values(filters.values).filter((filter) =>
             filter.type === 'metadata'
               ? Boolean(filter.value && filter.field)
