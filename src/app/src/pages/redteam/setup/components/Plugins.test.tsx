@@ -168,7 +168,7 @@ describe('Plugins', () => {
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     expect(
-      screen.getByText('Presets').closest('div')?.querySelector('.MuiGrid-container'),
+      screen.getByText('Presets').closest('div')?.querySelector('.MuiGrid2-root'),
     ).toBeInTheDocument();
 
     expect(screen.getByText('Recommended')).toBeInTheDocument();

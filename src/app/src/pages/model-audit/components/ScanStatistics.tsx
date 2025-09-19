@@ -90,7 +90,7 @@ export default function ScanStatistics({
           </Tooltip>
         </Grid>
       ))}
-      <Grid item xs={12} sm={6} md={3}>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Tooltip title="Click to see which files were scanned" placement="top">
           <StatCard
             elevation={0}

@@ -379,7 +379,7 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ xs: 12, md: 6 }}>
                     <Box sx={{ height: '100%' }}>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         Complete configuration file for this evaluation
@@ -400,7 +400,7 @@ function DownloadMenu() {
                     </Box>
                   </Grid>
 
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ xs: 12, md: 6 }}>
                     <Box sx={{ height: '100%' }}>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         Configuration with only failed tests for focused debugging
