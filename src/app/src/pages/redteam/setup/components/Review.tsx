@@ -16,7 +16,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -92,7 +92,7 @@ export default function Review({
     String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
   );
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
-  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const [pollInterval, setPollInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
@@ -312,7 +312,7 @@ export default function Review({
     }
 
     if (pollInterval) {
-      clearInterval(pollInterval);
+      window.clearInterval(pollInterval);
       setPollInterval(null);
     }
 
@@ -360,7 +360,7 @@ export default function Review({
 
       const { id } = await response.json();
 
-      const interval = setInterval(async () => {
+      const interval = window.setInterval(async () => {
         const statusResponse = await callApi(`/eval/job/${id}`);
         const status = (await statusResponse.json()) as Job;
 
@@ -369,7 +369,7 @@ export default function Review({
         }
 
         if (status.status === 'complete' || status.status === 'error') {
-          clearInterval(interval);
+          window.clearInterval(interval);
           setPollInterval(null);
           setIsRunning(false);
 
@@ -417,7 +417,7 @@ export default function Review({
       });
 
       if (pollInterval) {
-        clearInterval(pollInterval);
+        window.clearInterval(pollInterval);
         setPollInterval(null);
       }
 
@@ -445,7 +445,7 @@ export default function Review({
   useEffect(() => {
     return () => {
       if (pollInterval) {
-        clearInterval(pollInterval);
+        window.clearInterval(pollInterval);
       }
     };
   }, [pollInterval]);

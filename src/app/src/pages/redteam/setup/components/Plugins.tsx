@@ -21,7 +21,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Link from '@mui/material/Link';
@@ -725,14 +725,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       ? isCustomMode
                       : preset.name === currentlySelectedPreset?.name;
                   return (
-                    <Box key={preset.name}>
+                    <Grid key={preset.name} size={{ xs: 12, sm: 6, md: 3 }}>
                       <PresetCard
                         name={preset.name}
                         description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
                         isSelected={isSelected}
                         onClick={() => handlePresetSelect(preset)}
                       />
-                    </Box>
+                    </Grid>
                   );
                 })}
               </Grid>

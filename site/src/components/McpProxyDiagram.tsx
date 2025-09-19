@@ -7,7 +7,7 @@ import SecurityIcon from '@mui/icons-material/Security';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 

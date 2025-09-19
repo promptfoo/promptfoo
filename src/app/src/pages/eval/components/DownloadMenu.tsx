@@ -10,7 +10,7 @@ import CardContent from '@mui/material/CardContent';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
@@ -143,7 +143,7 @@ function DownloadMenu() {
       prompts: table.head.prompts.map((prompt) => prompt.label || prompt.display || prompt.raw),
     }));
     const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, `${evalId}-dpo.json`);
+    openDownloadDialog(blob, `${evalId ?? 'eval'}-dpo.json`);
     handleClose();
   };
 
@@ -153,7 +153,7 @@ function DownloadMenu() {
       return;
     }
     const blob = new Blob([JSON.stringify(table, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, `${evalId}-table.json`);
+    openDownloadDialog(blob, `${evalId ?? 'eval'}-table.json`);
     handleClose();
   };
 
@@ -195,7 +195,7 @@ function DownloadMenu() {
 
     const output = csvStringify(csvRows);
     const blob = new Blob([output], { type: 'text/csv;charset=utf-8;' });
-    openDownloadDialog(blob, `${evalId}-table.csv`);
+    openDownloadDialog(blob, `${evalId ?? 'eval'}-table.csv`);
     handleClose();
   };
 
@@ -229,7 +229,7 @@ function DownloadMenu() {
 
     const yamlContent = yaml.dump(humanEvalCases);
     const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
-    openDownloadDialog(blob, `${evalId}-human-eval-cases.yaml`);
+    openDownloadDialog(blob, `${evalId ?? 'eval'}-human-eval-cases.yaml`);
     handleClose();
   };
 
@@ -260,7 +260,7 @@ function DownloadMenu() {
 
     const content = uniquePayloads.join('\n');
     const blob = new Blob([content], { type: 'text/plain' });
-    openDownloadDialog(blob, `${evalId}-burp-payloads.burp`);
+    openDownloadDialog(blob, `${evalId ?? 'eval'}-burp-payloads.burp`);
     handleClose();
   };
 

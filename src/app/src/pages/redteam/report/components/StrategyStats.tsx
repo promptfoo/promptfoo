@@ -6,7 +6,7 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Drawer from '@mui/material/Drawer';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
