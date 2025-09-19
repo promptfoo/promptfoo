@@ -243,7 +243,7 @@ describe('fetchWithCache', () => {
       const mockTimeoutPromise = new Promise((resolve) => {
         setTimeout(() => resolve(mockFetchWithRetriesResponse(true, response)), 2000);
       });
-      mockFetchWithRetries.mockImplementationOnce(() => mockTimeoutPromise);
+      mockFetchWithRetries.mockImplementationOnce(() => mockTimeoutPromise as Promise<Response>);
 
       const fetchPromise = fetchWithCache(url, {}, 100);
 
