@@ -14,9 +14,6 @@ import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
 
-// Override global fetch
-global.fetch = monkeyPatchFetch;
-
 /**
  * Options for configuring TLS in proxy connections
  */
@@ -131,7 +128,7 @@ export async function fetchWithProxy(
     setGlobalDispatcher(agent);
   }
 
-  return await fetch(finalUrl, finalOptions);
+  return await monkeyPatchFetch(finalUrl, finalOptions);
 }
 
 export function fetchWithTimeout(
