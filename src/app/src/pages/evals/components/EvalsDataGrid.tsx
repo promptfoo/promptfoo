@@ -1,4 +1,5 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
@@ -6,6 +7,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -20,8 +22,11 @@ import {
   type GridCellParams,
   type GridColDef,
   GridCsvExportMenuItem,
+  type GridFilterModel,
+  type GridPaginationModel,
   type GridRenderCellParams,
   type GridRowSelectionModel,
+  type GridSortModel,
   GridToolbarColumnsButton,
   GridToolbarContainer,
   GridToolbarDensitySelector,
@@ -31,14 +36,30 @@ import {
   type GridToolbarQuickFilterProps,
 } from '@mui/x-data-grid';
 import invariant from '@promptfoo/util/invariant';
-import { useLocation } from 'react-router-dom';
+
+// Custom hook for debouncing values
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 type Eval = {
   createdAt: number;
   datasetId: string;
   description: string | null;
   evalId: string;
-  isRedteam: number;
+  isRedteam: boolean;
   label: string;
   numTests: number;
   passRate: number;
@@ -164,79 +185,119 @@ export default function EvalsDataGrid({
   const [evals, setEvals] = useState<Eval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [total, setTotal] = useState(0);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  // Server-side state management
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 50,
+  });
+
+  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'createdAt', sort: 'desc' }]);
+
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
+  const quickFilterValues = filterModel.quickFilterValues || [];
+  const searchText = quickFilterValues.join(' ');
+  const debouncedSearchText = useDebounce(searchText, 300);
 
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
     focusedEvalId ? [focusedEvalId] : [],
   );
 
   /**
-   * Fetch evals from the API.
+   * Fetch evals from the API with server-side pagination.
    */
-  const fetchEvals = async (signal: AbortSignal) => {
-    try {
-      setIsLoading(true);
-      const response = await callApi('/results', { cache: 'no-store', signal });
-      if (!response.ok) {
-        throw new Error('Failed to fetch evals');
-      }
-      const body = (await response.json()) as { data: Eval[] };
-      setEvals(body.data);
-      setError(null);
-    } catch (error) {
-      // Don't set error state if the request was aborted
-      if ((error as Error).name !== 'AbortError') {
-        setError(error as Error);
-      }
-    } finally {
-      // Don't set loading to false if the request was aborted
-      if (signal && !signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  };
+  const fetchEvals = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        setIsLoading(true);
 
-  // Use React Router's location to detect navigation
+        // Build query parameters
+        const params = new URLSearchParams();
+
+        // Pagination parameters
+        params.set('limit', paginationModel.pageSize.toString());
+        params.set('offset', (paginationModel.page * paginationModel.pageSize).toString());
+
+        // Search parameter
+        if (debouncedSearchText) {
+          params.set('search', debouncedSearchText);
+        }
+
+        // Sort parameters
+        if (sortModel.length > 0 && sortModel[0].sort) {
+          params.set('sort', sortModel[0].field as string);
+          params.set('order', sortModel[0].sort);
+        }
+
+        // Dataset filtering via focusedEvalId - handled server-side
+        if (filterByDatasetId && focusedEvalId) {
+          params.set('focusedEvalId', focusedEvalId);
+        }
+
+        const response = await callApi(`/results?${params.toString()}`, {
+          cache: 'no-store',
+          signal,
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch evals');
+        }
+
+        const body = (await response.json()) as {
+          data: Eval[];
+          total: number;
+          limit: number;
+          offset: number;
+        };
+
+        setEvals(body.data);
+        setTotal(body.total);
+        setError(null);
+      } catch (error) {
+        // Don't set error state if the request was aborted
+        if ((error as Error).name !== 'AbortError') {
+          setError(error as Error);
+        }
+      } finally {
+        // Don't set loading to false if the request was aborted
+        if (signal && !signal.aborted) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [paginationModel, sortModel, debouncedSearchText, filterByDatasetId, focusedEvalId],
+  );
+
+  // Track location changes for navigation-based refetching
   const location = useLocation();
 
   useEffect(() => {
     // Create AbortController for this fetch
     const abortController = new AbortController();
 
-    // Fetch evals whenever we navigate to this page
+    // Fetch evals whenever pagination, sort, or search changes
     fetchEvals(abortController.signal);
 
-    // Cleanup: abort any in-flight request when location changes or component unmounts
+    // Cleanup: abort any in-flight request when dependencies change or component unmounts
     return () => {
       abortController.abort();
     };
-  }, [location.pathname, location.search]); // Refetch when the pathname or query params change
+  }, [fetchEvals, location]); // Include location to trigger refetch on navigation
+
+  // Reset to first page when search or sort changes (only if not already on page 0)
+  useEffect(() => {
+    setPaginationModel((prev) => (prev.page !== 0 ? { ...prev, page: 0 } : prev));
+  }, [debouncedSearchText, sortModel]);
 
   /**
-   * Construct dataset rows:
-   * 1. Filter out the focused eval from the list.
-   * 2. Filter by dataset ID if enabled.
+   * For server-side pagination, we use the rows as-is from the server.
+   * All filtering (including dataset filtering) is handled server-side.
    */
-  const rows = useMemo(() => {
-    let rows_ = evals;
+  const rows = useMemo(() => evals, [evals]);
 
-    if (focusedEvalId && rows_.length > 0) {
-      // Filter out the focused eval from the list; first find it for downstream filtering.
-      const focusedEval = rows_.find(({ evalId }: Eval) => evalId === focusedEvalId);
-      invariant(focusedEval, 'focusedEvalId is not a valid eval ID');
-
-      // Filter by dataset ID if enabled
-      if (filterByDatasetId) {
-        rows_ = rows_.filter(({ datasetId }: Eval) => datasetId === focusedEval.datasetId);
-      }
-    }
-
-    return rows_;
-  }, [evals, filterByDatasetId, focusedEvalId]);
-
-  const hasRedteamEvals = useMemo(() => {
-    return evals.some(({ isRedteam }) => isRedteam === 1);
-  }, [evals]);
+  const hasRedteamEvals = useMemo(() => evals.some(({ isRedteam }) => !!isRedteam), [evals]);
 
   const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
 
@@ -330,7 +391,7 @@ export default function EvalsDataGrid({
                   { value: true, label: 'Red Team' },
                   { value: false, label: 'Eval' },
                 ],
-                valueGetter: (value: Eval['isRedteam'], row: Eval) => value === 1,
+                valueGetter: (value: Eval['isRedteam']) => Boolean(value),
                 renderCell: (params: GridRenderCellParams<Eval>) => {
                   const isRedteam = params.value as Eval['isRedteam'];
                   const displayType = isRedteam ? 'Red Team' : 'Eval';
@@ -379,6 +440,7 @@ export default function EvalsDataGrid({
           headerName: 'Pass Rate',
           flex: 0.5,
           type: 'number',
+          sortable: false,
           renderCell: (params: GridRenderCellParams<Eval>) => (
             <>
               <Typography
@@ -408,6 +470,7 @@ export default function EvalsDataGrid({
           headerName: '# Tests',
           type: 'number',
           flex: 0.5,
+          sortable: false,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
     [focusedEvalId, onEvalSelected, hasRedteamEvals],
@@ -425,6 +488,23 @@ export default function EvalsDataGrid({
           checkboxSelection={deletionEnabled}
           slots={{
             toolbar: CustomToolbar,
+            loadingOverlay: () => (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  gap: 2,
+                }}
+              >
+                <CircularProgress />
+                <Typography variant="body2" color="text.secondary">
+                  Loading evaluations...
+                </Typography>
+              </Box>
+            ),
             noRowsOverlay: () => (
               <Box
                 sx={{
@@ -462,6 +542,18 @@ export default function EvalsDataGrid({
               </Box>
             ),
           }}
+          // Server-side pagination and sorting
+          paginationMode="server"
+          sortingMode="server"
+          filterMode="server"
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          sortModel={sortModel}
+          onSortModelChange={setSortModel}
+          rowCount={total}
+          // Filter model for server-side search
+          filterModel={filterModel}
+          onFilterModelChange={setFilterModel}
           slotProps={{
             toolbar: {
               showUtilityButtons,
@@ -469,9 +561,6 @@ export default function EvalsDataGrid({
               focusQuickFilterOnMount,
               selectedCount: rowSelectionModel.length,
               onDeleteSelected: handleDeleteSelected,
-            },
-            loadingOverlay: {
-              variant: 'linear-progress',
             },
           }}
           onCellClick={(params) => {
@@ -515,14 +604,6 @@ export default function EvalsDataGrid({
           }}
           onRowSelectionModelChange={setRowSelectionModel}
           rowSelectionModel={rowSelectionModel}
-          initialState={{
-            sorting: {
-              sortModel: [{ field: 'createdAt', sort: 'desc' }],
-            },
-            pagination: {
-              paginationModel: { pageSize: 50 },
-            },
-          }}
           pageSizeOptions={[10, 25, 50, 100]}
           isRowSelectable={(params) => params.id !== focusedEvalId}
         />

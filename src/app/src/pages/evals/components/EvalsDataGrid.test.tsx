@@ -19,6 +19,7 @@ vi.mock('@mui/x-data-grid', () => ({
     getRowClassName,
     rowSelectionModel = [],
     onRowSelectionModelChange,
+    filterModel,
   }: any) => {
     if (loading && slots?.loadingOverlay) {
       const LoadingOverlay = slots.loadingOverlay;
@@ -26,6 +27,13 @@ vi.mock('@mui/x-data-grid', () => ({
     }
 
     if (!loading && rows.length === 0 && slots?.noRowsOverlay) {
+      const NoRowsOverlay = slots.noRowsOverlay;
+      return <NoRowsOverlay />;
+    }
+
+    const filterByDatasetId = filterModel?.items?.some((item: any) => item.field === 'datasetId');
+
+    if (!loading && filterByDatasetId && rows.length === 0 && slots?.noRowsOverlay) {
       const NoRowsOverlay = slots.noRowsOverlay;
       return <NoRowsOverlay />;
     }
@@ -79,7 +87,7 @@ const mockEvals = [
     createdAt: Date.now(),
     description: 'Original Description',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-1',
     numTests: 10,
     passRate: 90,
@@ -89,7 +97,7 @@ const mockEvals = [
     createdAt: Date.now(),
     description: 'Another Eval',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-2',
     numTests: 5,
     passRate: 100,
@@ -102,7 +110,7 @@ const mockEvalsWithMultipleDatasets = [
     createdAt: Date.now(),
     description: 'Eval 1 - Dataset 1',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-1',
     numTests: 10,
     passRate: 90,
@@ -112,7 +120,7 @@ const mockEvalsWithMultipleDatasets = [
     createdAt: Date.now(),
     description: 'Eval 2 - Dataset 1',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-2',
     numTests: 5,
     passRate: 100,
@@ -122,7 +130,7 @@ const mockEvalsWithMultipleDatasets = [
     createdAt: Date.now(),
     description: 'Eval 3 - Dataset 2',
     datasetId: 'dataset-2',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-3',
     numTests: 8,
     passRate: 75,
@@ -135,7 +143,7 @@ const mockEvalsWithDifferentDatasets = [
     createdAt: Date.now(),
     description: 'Original Description',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-1',
     numTests: 10,
     passRate: 90,
@@ -145,7 +153,7 @@ const mockEvalsWithDifferentDatasets = [
     createdAt: Date.now(),
     description: 'Another Eval',
     datasetId: 'dataset-2',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-2',
     numTests: 5,
     passRate: 100,
@@ -160,7 +168,9 @@ describe('EvalsDataGrid', () => {
   it('should fetch data on initial mount', async () => {
     const mockResponse = {
       ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+      json: vi
+        .fn()
+        .mockResolvedValue({ data: mockEvals, total: mockEvals.length, limit: 50, offset: 0 }),
     };
     vi.mocked(callApi).mockResolvedValue(mockResponse as any);
 
@@ -172,7 +182,7 @@ describe('EvalsDataGrid', () => {
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
-        '/results',
+        '/results?limit=50&offset=0&sort=createdAt&order=desc',
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
@@ -195,7 +205,9 @@ describe('EvalsDataGrid', () => {
       if (callCount === 1) {
         return {
           ok: true,
-          json: vi.fn().mockResolvedValue({ data: mockEvals }),
+          json: vi
+            .fn()
+            .mockResolvedValue({ data: mockEvals, total: mockEvals.length, limit: 50, offset: 0 }),
         } as any;
       }
 
@@ -274,7 +286,9 @@ describe('EvalsDataGrid', () => {
       if (callCount === 1) {
         return {
           ok: true,
-          json: vi.fn().mockResolvedValue({ data: mockEvals }),
+          json: vi
+            .fn()
+            .mockResolvedValue({ data: mockEvals, total: mockEvals.length, limit: 50, offset: 0 }),
         } as any;
       }
 
@@ -352,9 +366,18 @@ describe('EvalsDataGrid', () => {
   });
 
   it('should display only evals with the same datasetId as the focused eval when filterByDatasetId is true', async () => {
+    // Server should filter to only return evals from dataset-1 (same as eval-1)
+    const filteredMockData = mockEvalsWithMultipleDatasets.filter(
+      (item) => item.datasetId === 'dataset-1',
+    );
     const mockResponse = {
       ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvalsWithMultipleDatasets }),
+      json: vi.fn().mockResolvedValue({
+        data: filteredMockData,
+        total: filteredMockData.length,
+        limit: 50,
+        offset: 0,
+      }),
     };
     vi.mocked(callApi).mockResolvedValue(mockResponse as any);
 
@@ -366,7 +389,7 @@ describe('EvalsDataGrid', () => {
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
-        '/results',
+        '/results?limit=50&offset=0&sort=createdAt&order=desc&focusedEvalId=eval-1',
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
@@ -384,7 +407,9 @@ describe('EvalsDataGrid', () => {
   it('should visually mark the row corresponding to focusedEvalId as focused when focusedEvalId is provided', async () => {
     const mockResponse = {
       ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+      json: vi
+        .fn()
+        .mockResolvedValue({ data: mockEvals, total: mockEvals.length, limit: 50, offset: 0 }),
     };
     vi.mocked(callApi).mockResolvedValue(mockResponse as any);
 
@@ -396,7 +421,7 @@ describe('EvalsDataGrid', () => {
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
-        '/results',
+        '/results?limit=50&offset=0&sort=createdAt&order=desc',
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
@@ -410,11 +435,32 @@ describe('EvalsDataGrid', () => {
   });
 
   it('should filter data when filterByDatasetId changes from false to true after initial load', async () => {
-    const mockResponse = {
+    // First call (filterByDatasetId=false) returns all data
+    // Second call (filterByDatasetId=true) returns only filtered data
+    const mockResponse1 = {
       ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvalsWithDifferentDatasets }),
+      json: vi.fn().mockResolvedValue({
+        data: mockEvalsWithDifferentDatasets,
+        total: mockEvalsWithDifferentDatasets.length,
+        limit: 50,
+        offset: 0,
+      }),
     };
-    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+    const filteredData = mockEvalsWithDifferentDatasets.filter(
+      (item) => item.datasetId === 'dataset-1',
+    );
+    const mockResponse2 = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: filteredData,
+        total: filteredData.length,
+        limit: 50,
+        offset: 0,
+      }),
+    };
+    vi.mocked(callApi)
+      .mockResolvedValueOnce(mockResponse1 as any)
+      .mockResolvedValueOnce(mockResponse2 as any);
 
     const { rerender } = render(
       <MemoryRouter>
@@ -424,7 +470,7 @@ describe('EvalsDataGrid', () => {
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
-        '/results',
+        '/results?limit=50&offset=0&sort=createdAt&order=desc',
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
@@ -449,10 +495,36 @@ describe('EvalsDataGrid', () => {
     });
   });
 
+  it('should display "No evals found" when filterByDatasetId is true and the focused eval is not in the current page', async () => {
+    // Server should return empty results when focused eval's dataset doesn't match any results
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: [],
+        total: 0,
+        limit: 50,
+        offset: 0,
+      }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} focusedEvalId="eval-1" filterByDatasetId={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('No evals found')).toBeInTheDocument();
+    });
+  });
+
   it('should fetch data on remount without pathname change', async () => {
     const mockResponse = {
       ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+      json: vi
+        .fn()
+        .mockResolvedValue({ data: mockEvals, total: mockEvals.length, limit: 50, offset: 0 }),
     };
     vi.mocked(callApi).mockResolvedValue(mockResponse as any);
 
