@@ -3,7 +3,7 @@ import { sha256 } from '../../../util/createHash';
 import invariant from '../../../util/invariant';
 import { type Policy, type PolicyObject, PolicyObjectSchema } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from '../base';
-import { POLICY_METRIC_PREFIX } from './constants';
+import { serializePolicyObjectAsMetric } from './utils';
 
 import type {
   ApiProvider,
@@ -107,18 +107,20 @@ export class PolicyPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(prompt: string): Assertion[] {
-    const metricId = this.policyId
-      ? // Use the policyId as the metricId
-        this.policyId
-      : // Otherwise, hash the policy text to ensure duplicate policies counted as different metrics.
-        sha256(this.policy).slice(0, 8);
+    const data: PolicyObject = {
+      id: this.policyId
+        ? // Use the policyId as the metricId
+          this.policyId
+        : // Otherwise, hash the policy text to ensure duplicate policies counted as different metrics.
+          sha256(this.policy).slice(0, 8),
+      text: this.policy,
+    };
 
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: `${POLICY_METRIC_PREFIX}:${metricId}`,
-      },
-    ];
+    if (this.name) {
+      data.name = this.name;
+    }
+
+    return [{ type: PLUGIN_ID, metric: serializePolicyObjectAsMetric(data) }];
   }
 
   async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
