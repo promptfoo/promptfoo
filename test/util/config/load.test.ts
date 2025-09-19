@@ -1591,6 +1591,162 @@ describe('resolveConfigs', () => {
   });
 });
 
+describe('CLI redact argument processing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should process --redact comma-separated values', async () => {
+    const mockConfig = {
+      prompts: ['test'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { key: 'value' } }]
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
+    jest.mocked(fs.existsSync).mockImplementation((path: any) => {
+      return path.toString().endsWith('config.json');
+    });
+    jest.mocked(globSync).mockReturnValue(['config.json']);
+
+    const cmdObj = {
+      config: ['config.json'],
+      redact: 'api_key,secret_token,password'
+    };
+
+    const result = await resolveConfigs(cmdObj, {});
+
+    expect(result.config.redact).toEqual(['api_key', 'secret_token', 'password']);
+  });
+
+
+  it('should handle --redact with whitespace', async () => {
+    const mockConfig = {
+      prompts: ['test'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { key: 'value' } }]
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
+    jest.mocked(fs.existsSync).mockImplementation((path: any) => {
+      return path.toString().endsWith('config.json');
+    });
+    jest.mocked(globSync).mockReturnValue(['config.json']);
+
+    const cmdObj = {
+      config: ['config.json'],
+      redact: 'api_key, secret_token , password '
+    };
+
+    const result = await resolveConfigs(cmdObj, {});
+
+    // Should trim whitespace
+    expect(result.config.redact).toEqual(['api_key', 'secret_token', 'password']);
+  });
+
+  it('should merge CLI redact with config redact', async () => {
+    const mockConfig = {
+      prompts: ['test'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { key: 'value' } }],
+      redact: ['config_secret']
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
+    jest.mocked(fs.existsSync).mockImplementation((path: any) => {
+      return path.toString().endsWith('config.json');
+    });
+    jest.mocked(globSync).mockReturnValue(['config.json']);
+
+    const cmdObj = {
+      config: ['config.json'],
+      redact: 'cli_secret,another_secret'
+    };
+
+    const result = await resolveConfigs(cmdObj, {});
+
+    // CLI redact should be merged with config redact and deduplicated
+    expect(result.config.redact).toEqual(['config_secret', 'cli_secret', 'another_secret']);
+  });
+
+  it('should work without --redact flag', async () => {
+    const mockConfig = {
+      prompts: ['test'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { key: 'value' } }],
+      redact: ['config_only']
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
+    jest.mocked(fs.existsSync).mockImplementation((path: any) => {
+      return path.toString().endsWith('config.json');
+    });
+    jest.mocked(globSync).mockReturnValue(['config.json']);
+
+    const cmdObj = {
+      config: ['config.json']
+      // No redact flag
+    };
+
+    const result = await resolveConfigs(cmdObj, {});
+
+    // Should preserve config redact when no CLI flag provided
+    expect(result.config.redact).toEqual(['config_only']);
+  });
+
+  it('should work with only CLI redact', async () => {
+    const mockConfig = {
+      prompts: ['test'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { key: 'value' } }]
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
+    jest.mocked(fs.existsSync).mockImplementation((path: any) => {
+      return path.toString().endsWith('config.json');
+    });
+    jest.mocked(globSync).mockReturnValue(['config.json']);
+
+    const cmdObj = {
+      config: ['config.json'],
+      redact: 'cli_only'
+    };
+
+    const result = await resolveConfigs(cmdObj, {});
+
+    expect(result.config.redact).toEqual(['cli_only']);
+  });
+
+  it('should work with no redact anywhere', async () => {
+    const mockConfig = {
+      prompts: ['test'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { key: 'value' } }]
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
+    jest.mocked(fs.existsSync).mockImplementation((path: any) => {
+      return path.toString().endsWith('config.json');
+    });
+    jest.mocked(globSync).mockReturnValue(['config.json']);
+
+    const cmdObj = {
+      config: ['config.json']
+      // No redact flag and no redact in config
+    };
+
+    const result = await resolveConfigs(cmdObj, {});
+
+    // Should have empty redact array when no redact anywhere
+    expect(result.config.redact).toEqual([]);
+  });
+});
+
 describe('readConfig', () => {
   beforeEach(() => {
     jest.clearAllMocks();

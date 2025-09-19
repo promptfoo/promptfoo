@@ -9,6 +9,8 @@ import { type EvaluateResult } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { getCurrentTimestamp } from '../util/time';
+import cliState from '../cliState';
+import logger from '../logger';
 
 import type {
   ApiProvider,
@@ -57,6 +59,191 @@ export function sanitizeProvider(
   return JSON.parse(safeJsonStringify(provider) as string);
 }
 
+// Provider config denylist (normalized keys for exact matching)
+const PROVIDER_SENSITIVE_FIELDS = new Set([
+  'apikey', 'api_key', 'api-key',
+  'token', 'accesstoken', 'access_token', 'access-token',
+  'password', 'secret', 'clientsecret', 'client_secret', 'client-secret',
+  'accesskey', 'access_key', 'access-key',
+  'signingkey', 'signing_key', 'signing-key',
+  'privatekey', 'private_key', 'private-key',
+  'bearer', 'authorization', 'bearertoken', 'bearer_token', 'bearer-token'
+]);
+
+// Common header names that contain sensitive data (normalized)
+const SENSITIVE_HEADERS = new Set([
+  'authorization', 'x-api-key', 'x-auth-token', 'x-access-token',
+  'cookie', 'set-cookie', 'x-auth', 'x-token'
+].map(k => k.toLowerCase().replace(/[-_]/g, '')));
+
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[-_]/g, '');
+}
+
+function isProviderSensitiveField(key: string): boolean {
+  const normalized = normalizeKey(key);
+  return PROVIDER_SENSITIVE_FIELDS.has(normalized);
+}
+
+function isSensitiveHeaderField(key: string): boolean {
+  const normalized = normalizeKey(key);
+  return SENSITIVE_HEADERS.has(normalized);
+}
+
+function sanitizeConfigDeep(obj: any, visited = new WeakSet()): any {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  // Prevent circular references
+  if (visited.has(obj)) {
+    // For circular references, return just the essential provider fields
+    // We can extract these from the current object since it's likely a provider
+    const simplified: any = {};
+    if (typeof obj === 'object' && obj !== null) {
+      const objWithProps = obj as any;
+      if (objWithProps.id) simplified.id = objWithProps.id;
+      if (objWithProps.label) simplified.label = objWithProps.label;
+    }
+    return simplified;
+  }
+  visited.add(obj);
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeConfigDeep(item, visited));
+  }
+
+  const sanitized: any = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    // Check if this key should be redacted
+    if (isProviderSensitiveField(key)) {
+      continue; // Skip this key entirely
+    }
+
+    // Special handling for headers object
+    if (key.toLowerCase() === 'headers' && typeof value === 'object' && value !== null) {
+      const sanitizedHeaders: any = {};
+      for (const [headerKey, headerValue] of Object.entries(value)) {
+        if (!isSensitiveHeaderField(headerKey)) {
+          sanitizedHeaders[headerKey] = headerValue;
+        }
+      }
+      sanitized[key] = sanitizedHeaders;
+    } else {
+      // Recursively sanitize nested objects
+      const sanitizedValue = sanitizeConfigDeep(value, visited);
+
+      // Only add the key if the sanitized value is not empty
+      if (sanitizedValue !== undefined && sanitizedValue !== null) {
+        // Skip empty objects unless they have meaningful content
+        if (typeof sanitizedValue === 'object' && !Array.isArray(sanitizedValue)) {
+          if (Object.keys(sanitizedValue).length > 0) {
+            sanitized[key] = sanitizedValue;
+          }
+        } else {
+          sanitized[key] = sanitizedValue;
+        }
+      }
+    }
+  }
+
+  return sanitized;
+}
+
+function buildRedactionSet(testCase: AtomicTestCase): Set<string> {
+  const redactSet = new Set<string>();
+
+  // 1. Global config redact list (includes CLI args)
+  const globalRedactions = cliState.config?.redact || [];
+  globalRedactions.forEach((key: string) => redactSet.add(key));
+
+  // 2. Per-test excludeFromDb
+  const perTestRedactions = testCase.excludeFromDb || [];
+  perTestRedactions.forEach(key => redactSet.add(key));
+
+  // 3. File-level redact from metadata (support both _redact and _redactColumns for backwards compatibility)
+  const fileRedactions = testCase.metadata?._redact || testCase.metadata?._redactColumns || [];
+  fileRedactions.forEach((key: string) => redactSet.add(key));
+
+
+  return redactSet;
+}
+
+function redactObject(obj: Record<string, any>, redactSet: Set<string>): Record<string, any> {
+  if (!obj) {
+    return obj;
+  }
+
+  const redacted = { ...obj };
+  redactSet.forEach(key => delete redacted[key]);
+  return redacted;
+}
+
+function sanitizeProviderConfig(provider: any): any {
+  // Handle circular reference objects
+  if (provider?.__isCircularRef) {
+    const { __isCircularRef, ...cleanProvider } = provider;
+    return cleanProvider;
+  }
+
+  if (!provider?.config) {
+    return provider;
+  }
+
+  const sanitizedConfig = sanitizeConfigDeep(provider.config);
+
+  // If sanitization resulted in an empty object, omit the config field
+  if (sanitizedConfig && typeof sanitizedConfig === 'object' && Object.keys(sanitizedConfig).length === 0) {
+    const { config, ...providerWithoutConfig } = provider;
+    return providerWithoutConfig;
+  }
+
+  return {
+    ...provider,
+    config: sanitizedConfig
+  };
+}
+
+function sanitizeForDb(testCase: AtomicTestCase, provider: any, resultMetadata?: any): {
+  sanitizedTestCase: AtomicTestCase;
+  sanitizedProvider: any;
+  sanitizedMetadata: any;
+  redactSet: Set<string>;
+} {
+  const redactSet = buildRedactionSet(testCase);
+
+  // Sanitize test case vars
+  const sanitizedVars = redactObject(testCase.vars || {}, redactSet);
+
+  // Sanitize test case metadata (same rules as vars)
+  const sanitizedTestCaseMetadata = redactObject(testCase.metadata || {}, redactSet);
+
+  // Strip internal metadata keys
+  const cleanedTestCaseMetadata = { ...sanitizedTestCaseMetadata };
+  delete (cleanedTestCaseMetadata as any)._redact;
+  delete (cleanedTestCaseMetadata as any)._redactColumns;
+
+  const sanitizedTestCase = {
+    ...testCase,
+    vars: sanitizedVars,
+    metadata: cleanedTestCaseMetadata
+  };
+
+  // Sanitize provider config
+  const sanitizedProvider = sanitizeProviderConfig(provider);
+
+  // Sanitize result metadata (from provider responses, etc.)
+  const sanitizedMetadata = redactObject(resultMetadata || {}, redactSet);
+
+  // Debug logging (key names only, never values)
+  if (redactSet.size > 0) {
+    logger.debug(`Redacted ${redactSet.size} variables: ${Array.from(redactSet).join(', ')}`);
+  }
+
+  return { sanitizedTestCase, sanitizedProvider, sanitizedMetadata, redactSet };
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -79,13 +266,16 @@ export default class EvalResult {
       testCase,
     } = result;
 
+    // Sanitize testCase and provider for database storage
+    const { sanitizedTestCase, sanitizedProvider, sanitizedMetadata } = sanitizeForDb(testCase, provider, metadata);
+
     const args = {
       id: randomUUID(),
       evalId,
       testCase: {
-        ...testCase,
-        ...(testCase.provider && {
-          provider: sanitizeProvider(testCase.provider),
+        ...sanitizedTestCase,
+        ...(sanitizedTestCase.provider && {
+          provider: sanitizeProviderConfig(sanitizedTestCase.provider),
         }),
       },
       promptIdx: result.promptIdx,
@@ -98,10 +288,10 @@ export default class EvalResult {
       response: result.response || null,
       gradingResult: gradingResult || null,
       namedScores,
-      provider: sanitizeProvider(provider),
+      provider: sanitizedProvider,
       latencyMs,
       cost,
-      metadata,
+      metadata: sanitizedMetadata,
       failureReason,
     };
     if (persist) {
@@ -114,17 +304,12 @@ export default class EvalResult {
   }
 
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
-    const db = getDb();
     const returnResults: EvalResult[] = [];
-    await db.transaction(async (tx) => {
-      for (const result of results) {
-        const dbResult = await tx
-          .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
-          .returning();
-        returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
-      }
-    });
+    for (const result of results) {
+      // Use createFromEvaluateResult to ensure consistent sanitization for imported data
+      const evalResult = await EvalResult.createFromEvaluateResult(evalId, result, { persist: true });
+      returnResults.push(evalResult);
+    }
     return returnResults;
   }
 

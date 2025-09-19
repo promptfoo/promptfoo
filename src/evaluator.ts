@@ -197,6 +197,29 @@ class ProgressBarManager {
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
 /**
+ * Check if a variable should be redacted from UI (table headers, search, etc.)
+ */
+function shouldRedactFromUI(varName: string, varValue: any, testCase?: any): boolean {
+  // Check CLI redact list
+  const globalRedactions = cliState.config?.redact || [];
+  if (globalRedactions.includes(varName)) {
+    return true;
+  }
+
+  // Check per-test excludeFromDb
+  if (testCase?.excludeFromDb?.includes(varName)) {
+    return true;
+  }
+
+  // Check file-level redact (support both _redact and _redactColumns for backwards compatibility)
+  if (testCase?.metadata?._redact?.includes(varName) || testCase?.metadata?._redactColumns?.includes(varName)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Update token usage metrics with assertion token usage
  */
 function updateAssertionMetrics(
@@ -1131,7 +1154,11 @@ class Evaluator {
 
       for (const row of rows) {
         for (const varName of Object.keys(row.vars)) {
-          vars.add(varName);
+          // Check if variable should be redacted from UI
+          const shouldRedact = shouldRedactFromUI(varName, row.vars[varName], row.testCase);
+          if (!shouldRedact) {
+            vars.add(varName);
+          }
         }
         // Print token usage for model-graded assertions and add to stats
         if (row.gradingResult?.tokensUsed && row.testCase?.assert) {

@@ -196,7 +196,7 @@ describe('EvalResult', () => {
         id: 'test-provider',
         label: 'Test Provider',
         config: {
-          apiKey: 'secret-key',
+          endpoint: 'https://api.example.com',
           options: {
             temperature: 0.7,
             maxTokens: 100,

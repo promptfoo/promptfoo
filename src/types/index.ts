@@ -66,6 +66,7 @@ export const CommandLineOptionsSchema = z.object({
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string()).optional(),
+  redact: z.string().optional(),
 
   generateSuggestions: z.boolean().optional(),
   promptPrefix: z.string().optional(),
@@ -694,6 +695,9 @@ export const TestCaseSchema = z.object({
       }),
     )
     .optional(),
+
+  // Variables to exclude from database storage
+  excludeFromDb: z.array(z.string()).optional(),
 });
 
 export type TestCase = z.infer<typeof TestCaseSchema>;
@@ -1009,6 +1013,7 @@ export const TestSuiteConfigSchema = z.object({
   // Any other information about this configuration.
   metadata: MetadataSchema.optional(),
 
+
   // Redteam configuration - used only when generating redteam tests
   redteam: RedteamConfigSchema.optional(),
 
@@ -1058,6 +1063,9 @@ export const TestSuiteConfigSchema = z.object({
         .optional(),
     })
     .optional(),
+
+  // Variables to redact from database storage
+  redact: z.array(z.string()).optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;

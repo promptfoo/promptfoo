@@ -466,6 +466,9 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       return sharingConfig ? sharingConfig.sharing : false;
     })(),
     tracing: configs.find((config) => config.tracing)?.tracing,
+    ...(configs.some((config) => config.redact) && {
+      redact: configs.flatMap((config) => config.redact || []),
+    }),
   };
 
   return combinedConfig;
@@ -566,6 +569,11 @@ export async function resolveConfigs(
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: fileConfig.extensions || defaultConfig.extensions || [],
     metadata: fileConfig.metadata || defaultConfig.metadata,
+    redact: (() => {
+      const cliRedact = cmdObj.redact ? cmdObj.redact.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const fileRedact = fileConfig.redact || defaultConfig.redact || [];
+      return Array.from(new Set([...fileRedact, ...cliRedact]));
+    })(),
     redteam: fileConfig.redteam || defaultConfig.redteam,
     tracing: fileConfig.tracing || defaultConfig.tracing,
     evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,

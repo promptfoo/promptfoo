@@ -77,6 +77,7 @@ export async function readStandaloneTestsFile(
   config?: Record<string, any>,
 ): Promise<TestCase[]> {
   const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
+  const redactColumns = finalConfig?.redact || finalConfig?.redactColumns || [];
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
   // Split on the last colon to handle Windows drive letters correctly
   const colonCount = resolvedVarsPath.split(':').length - 1;
@@ -219,6 +220,15 @@ export async function readStandaloneTestsFile(
   return rows.map((row, idx) => {
     const test = testCaseFromCsvRow(row);
     test.description ||= `Row #${idx + 1}`;
+
+    // Add redact metadata if specified
+    if (redactColumns.length > 0) {
+      test.metadata = {
+        ...test.metadata,
+        _redact: redactColumns
+      };
+    }
+
     return test;
   });
 }

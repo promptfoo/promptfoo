@@ -940,6 +940,9 @@ export function evalCommand(
     )
     .option('-w, --watch', 'Watch for changes in config and re-run')
 
+    // Security
+    .option('--redact <variables>', 'Comma-separated list of variables to redact from database storage')
+
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
     .option('--no-progress-bar', 'Do not show progress bar')
