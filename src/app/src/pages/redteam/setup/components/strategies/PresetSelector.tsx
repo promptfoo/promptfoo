@@ -1,5 +1,5 @@
 import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import PresetCard from '../PresetCard';
 import { STRATEGY_PRESETS } from './types';
 
