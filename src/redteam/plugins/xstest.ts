@@ -3,10 +3,10 @@ import fs from 'fs';
 import { parse } from 'csv-parse/sync';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import { fetchWithTimeout } from '../../util/fetch';
+import { fetchWithTimeout } from '../../util/fetch/index';
 import { RedteamPluginBase } from './base';
 
-import type { Assertion, TestCase } from '../../types';
+import type { Assertion, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:xstest';
 

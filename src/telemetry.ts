@@ -1,13 +1,11 @@
-import { randomUUID } from 'crypto';
-
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
-import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, KA_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
+import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
 import { POSTHOG_KEY } from './constants/build';
 import { getEnvBool, getEnvString, isCI } from './envars';
 import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
-import { fetchWithTimeout } from './util/fetch';
+import { fetchWithProxy, fetchWithTimeout } from './util/fetch';
 
 export const TelemetryEventSchema = z.object({
   event: z.enum([
@@ -38,6 +36,7 @@ function getPostHogClient(): PostHog | null {
     try {
       posthogClient = new PostHog(POSTHOG_KEY, {
         host: EVENTS_ENDPOINT,
+        fetch: fetchWithProxy,
       });
     } catch {
       posthogClient = null;
@@ -83,20 +82,6 @@ export class Telemetry {
         logger.debug(`PostHog identify error: ${error}`);
       }
     }
-
-    fetchWithTimeout(
-      KA_ENDPOINT,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ profile_id: this.id, email: this.email }),
-      },
-      TELEMETRY_TIMEOUT_MS,
-    ).catch(() => {
-      // pass
-    });
   }
 
   get disabled() {
@@ -141,32 +126,7 @@ export class Telemetry {
       }
     }
 
-    const kaBody = {
-      profile_id: this.id,
-      email: this.email,
-      events: [
-        {
-          message_id: randomUUID(),
-          type: 'track',
-          event: eventName,
-          properties: propertiesWithMetadata,
-          sent_at: new Date().toISOString(),
-        },
-      ],
-    };
-
-    fetch(KA_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': `promptfoo/${VERSION}`,
-      },
-      body: JSON.stringify(kaBody),
-    }).catch(() => {
-      // pass
-    });
-
-    fetch(R_ENDPOINT, {
+    fetchWithProxy(R_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

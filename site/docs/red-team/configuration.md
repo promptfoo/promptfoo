@@ -77,6 +77,10 @@ plugins:
       modifiers: Record<string, string> # Additional requirements for test generation
 ```
 
+:::info HuggingFace Authentication
+Some plugins (beavertails, unsafebench, aegis) require HuggingFace datasets that need authentication. Set your HuggingFace token: `export HF_TOKEN=your_huggingface_token`
+:::
+
 #### Examples
 
 The `examples` field allows you to provide specific examples that guide how the plugin generates tests:

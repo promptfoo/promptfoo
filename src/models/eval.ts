@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
@@ -33,17 +33,17 @@ import {
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
-import { convertTestResultsToTableRow } from '../util/exportToFile';
+import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
 
-import type { EvalResultsFilterMode } from '../types';
+import type { EvalResultsFilterMode } from '../types/index';
 
 interface FilteredCountRow {
   count: number | null;
@@ -51,6 +51,34 @@ interface FilteredCountRow {
 
 interface TestIndexRow {
   test_idx: number;
+}
+
+/**
+ * Sanitizes runtime options to ensure only JSON-serializable data is persisted.
+ * Removes non-serializable fields like AbortSignal, functions, and symbols.
+ */
+function sanitizeRuntimeOptions(
+  options?: Partial<import('../types').EvaluateOptions>,
+): Partial<import('../types').EvaluateOptions> | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  // Create a deep copy to avoid mutating the original
+  const sanitized = { ...options };
+
+  // Remove known non-serializable fields
+  delete (sanitized as any).abortSignal;
+
+  // Remove any function or symbol values
+  for (const key in sanitized) {
+    const value = (sanitized as any)[key];
+    if (typeof value === 'function' || typeof value === 'symbol') {
+      delete (sanitized as any)[key];
+    }
+  }
+
+  return sanitized;
 }
 
 export function createEvalId(createdAt: Date = new Date()) {
@@ -111,6 +139,7 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
+  runtimeOptions?: Partial<import('../types').EvaluateOptions>;
 
   static async latest() {
     const db = getDb();
@@ -159,6 +188,7 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
+      runtimeOptions: (eval_ as any).runtimeOptions,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -205,6 +235,7 @@ export default class Eval {
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
+      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -224,6 +255,7 @@ export default class Eval {
           config,
           results: {},
           vars: opts?.vars || [],
+          runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
         })
         .run();
 
@@ -302,7 +334,13 @@ export default class Eval {
       }
     });
 
-    return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
+    return new Eval(config, {
+      id: evalId,
+      author: opts?.author,
+      createdAt,
+      persisted: true,
+      runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+    });
   }
 
   constructor(
@@ -316,6 +354,7 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
+      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -329,6 +368,7 @@ export default class Eval {
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
+    this.runtimeOptions = opts?.runtimeOptions;
   }
 
   version() {
@@ -358,6 +398,7 @@ export default class Eval {
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
+      runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
     };
 
     if (this.useOldResults()) {
@@ -495,6 +536,11 @@ export default class Eval {
           }
         } else if (type === 'severity' && operator === 'equals') {
           const sanitizedValue = sanitizeValue(value);
+
+          // Severity can be explicit (metadata.severity) or implied by pluginId.
+          // When implied by pluginId, ignore cases where an explicit override disagrees.
+          const explicit = `json_extract(metadata, '$.severity') = '${sanitizedValue}'`;
+
           // Get the severity map for all plugins
           const severityMap = getRiskCategorySeverityMap(this.config?.redteam?.plugins);
 
@@ -503,21 +549,25 @@ export default class Eval {
             .filter(([, severity]) => severity === sanitizedValue)
             .map(([pluginId]) => pluginId);
 
-          if (matchingPluginIds.length > 0) {
-            const pluginIdPath = "json_extract(metadata, '$.pluginId')";
-            // Build SQL condition to check if pluginId matches any of the plugins with this severity
-            const pluginConditions = matchingPluginIds.map((pluginId) => {
-              const sanitizedPluginId = sanitizeValue(pluginId);
-              // Check for exact match or category match (e.g., 'harmful:*')
-              if (pluginId.includes(':')) {
-                // It's a specific subcategory
-                return `${pluginIdPath} = '${sanitizedPluginId}'`;
-              } else {
-                // It's a category, match any plugin starting with this prefix
-                return `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
-              }
-            });
-            condition = `(${pluginConditions.join(' OR ')})`;
+          // Build pluginId match conditions for this severity
+          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+          const pluginConditions: string[] = matchingPluginIds.map((pluginId) => {
+            const sanitizedPluginId = sanitizeValue(pluginId);
+            return pluginId.includes(':')
+              ? // It's a specific subcategory
+                `${pluginIdPath} = '${sanitizedPluginId}'`
+              : // It's a category, match any plugin starting with this prefix
+                `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
+          });
+
+          // Final condition: explicit OR (plugin match AND no conflicting override)
+          if (pluginConditions.length > 0) {
+            // Plugin-derived severity is only applied when there's no conflicting explicitly-defined override
+            // in the row's metadata.
+            const overrideOk = `(json_extract(metadata, '$.severity') IS NULL OR json_extract(metadata, '$.severity') = '${sanitizedValue}')`;
+            condition = `(${explicit} OR ((${pluginConditions.join(' OR ')}) AND ${overrideOk}))`;
+          } else {
+            condition = `(${explicit})`;
           }
         }
 

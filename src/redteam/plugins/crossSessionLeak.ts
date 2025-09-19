@@ -7,7 +7,7 @@ import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 

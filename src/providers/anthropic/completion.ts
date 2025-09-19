@@ -5,7 +5,7 @@ import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AnthropicGenericProvider } from './generic';
 
-import type { ProviderResponse } from '../../types';
+import type { ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { AnthropicCompletionOptions } from './types';
 

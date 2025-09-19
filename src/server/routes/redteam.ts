@@ -3,10 +3,11 @@ import { v4 as uuidv4 } from 'uuid';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { REDTEAM_MODEL } from '../../redteam/constants';
-import { Plugins } from '../../redteam/plugins';
+import { Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
+import { fetchWithProxy } from '../../util/fetch';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
@@ -274,7 +275,7 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
 
   try {
     logger.debug(`Sending request to cloud function: ${cloudFunctionUrl}`);
-    const response = await fetch(cloudFunctionUrl, {
+    const response = await fetchWithProxy(cloudFunctionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

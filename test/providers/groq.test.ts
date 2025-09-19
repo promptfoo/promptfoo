@@ -1,6 +1,6 @@
 import { clearCache } from '../../src/cache';
 import { GroqProvider } from '../../src/providers/groq';
-import * as fetchModule from '../../src/util/fetch';
+import * as fetchModule from '../../src/util/fetch/index';
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
 

@@ -5,7 +5,7 @@ import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
 import { getDefaultTeam } from '../../src/util/cloud';
-import { fetchWithProxy } from '../../src/util/fetch';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 import { createMockResponse } from '../util/utils';
 
 const mockCloudUser = {

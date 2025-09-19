@@ -10,14 +10,22 @@ import TraceTimeline from './TraceTimeline';
 interface TraceViewProps {
   evaluationId?: string;
   testCaseId?: string;
+  onVisibilityChange?: (shouldShow: boolean) => void;
 }
 
-export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) {
+export default function TraceView({
+  evaluationId,
+  testCaseId,
+  onVisibilityChange,
+}: TraceViewProps) {
   const [traces, setTraces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let isActive = true;
+    const controller = new AbortController();
+
     const fetchTraces = async () => {
       if (!evaluationId) {
         setLoading(false);
@@ -27,24 +35,47 @@ export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) 
       try {
         setLoading(true);
         setError(null);
-        const response = await callApi(`/traces/evaluation/${evaluationId}`);
+        const response = await callApi(`/traces/evaluation/${evaluationId}`, {
+          signal: controller.signal,
+        });
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
-        setTraces(data.traces || []);
+        if (!isActive) {
+          return;
+        }
+        setTraces(Array.isArray(data.traces) ? data.traces : []);
       } catch (err) {
         console.error('Error fetching traces:', err);
+        if (!isActive) {
+          return;
+        }
         setError(err instanceof Error ? err.message : 'Failed to fetch traces');
       } finally {
+        if (!isActive) {
+          return;
+        }
         setLoading(false);
       }
     };
 
     fetchTraces();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
   }, [evaluationId]);
+
+  useEffect(() => {
+    if (onVisibilityChange) {
+      const shouldShow = !!evaluationId && (loading || !!error || traces.length > 0);
+      onVisibilityChange(shouldShow);
+    }
+  }, [evaluationId, loading, error, traces, onVisibilityChange]);
 
   if (!evaluationId) {
     return null;

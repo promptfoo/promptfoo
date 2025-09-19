@@ -2,7 +2,7 @@ import { handleConversationRelevance } from '../../src/external/assertions/deepe
 import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { ConversationRelevancyTemplate } from '../../src/external/matchers/conversationRelevancyTemplate';
 import { getDefaultProviders } from '../../src/providers/defaults';
-import type { AssertionParams, AtomicTestCase } from '../../src/types';
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 jest.mock('../../src/providers/defaults', () => ({
   getDefaultProviders: jest.fn(),
