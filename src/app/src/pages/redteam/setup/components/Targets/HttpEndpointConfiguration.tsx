@@ -566,12 +566,12 @@ ${exampleRequest}`;
               </Paper>
             </Grid>
             {error && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Typography color="error">Error: {error}</Typography>
               </Grid>
             )}
             {generatedConfig && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
                   <Typography variant="h6" sx={{ flexGrow: 1 }}>
                     Generated Configuration

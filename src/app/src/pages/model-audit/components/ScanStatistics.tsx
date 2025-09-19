@@ -55,7 +55,13 @@ export default function ScanStatistics({
   return (
     <Grid container spacing={3} sx={{ mb: 4 }}>
       {severityStats.map(({ severity, icon: Icon, label, color, count }) => (
-        <Grid item xs={12} sm={6} md={3} key={severity}>
+        <Grid
+          key={severity}
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Tooltip
             title={
               selectedSeverity === severity

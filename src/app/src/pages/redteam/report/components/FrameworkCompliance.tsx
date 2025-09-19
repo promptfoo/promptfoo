@@ -197,7 +197,6 @@ const FrameworkCompliance = ({
           pluginPassRateThreshold={pluginPassRateThreshold}
         />
       </Box>
-
       <Card className="framework-compliance-card">
         <CardContent>
           <Box display="flex" alignItems="center" sx={{ mb: 1 }}>
@@ -228,7 +227,13 @@ const FrameworkCompliance = ({
               const frameworkSeverity = getFrameworkSeverity(framework);
 
               return (
-                <Grid item xs={12} sm={6} md={4} key={framework}>
+                <Grid
+                  key={framework}
+                  size={{
+                    xs: 12,
+                    sm: 6,
+                    md: 4
+                  }}>
                   <FrameworkCard
                     evalId={evalId}
                     framework={framework}

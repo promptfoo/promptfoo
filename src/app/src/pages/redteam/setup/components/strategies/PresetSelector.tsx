@@ -40,15 +40,15 @@ export function PresetSelector({ presets, selectedPreset, onSelect }: PresetSele
           </Box>
         ))}
         <Grid
-          item
-          xs={12}
-          sm={6}
-          md={3}
           sx={{
             minWidth: { xs: '280px', sm: '280px' },
             maxWidth: { xs: '100%', sm: '280px' },
           }}
-        >
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <PresetCard
             name="Custom"
             description="Configure your own set of strategies"

@@ -178,7 +178,6 @@ export default function SecurityFindings({
           {getIssueSummaryText(scanResults.issues)}
         </Alert>
       )}
-
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
         <Typography variant="h6">Security Findings</Typography>
         <Box sx={{ flexGrow: 1 }} />
@@ -230,9 +229,7 @@ export default function SecurityFindings({
           {showRawOutput ? 'Hide' : 'Show'} Raw Output
         </Button>
       </Stack>
-
       <Divider sx={{ mb: 3 }} />
-
       {filteredIssues.length === 0 ? (
         <Paper
           sx={{
@@ -425,7 +422,7 @@ export default function SecurityFindings({
         </Stack>
       ) : (
         // Original flat list view
-        <Stack spacing={2}>
+        (<Stack spacing={2}>
           {filteredIssues.map((issue, index) => (
             <Paper
               key={index}
@@ -474,9 +471,8 @@ export default function SecurityFindings({
               </Stack>
             </Paper>
           ))}
-        </Stack>
+        </Stack>)
       )}
-
       {/* Raw Output Dialog */}
       <Dialog
         open={showRawOutput}

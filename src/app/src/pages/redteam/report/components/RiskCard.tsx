@@ -79,16 +79,16 @@ const RiskCard = ({
           }}
         >
           <Grid
-            item
-            xs={12}
-            md={6}
             style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               textAlign: 'center',
             }}
-          >
+            size={{
+              xs: 12,
+              md: 6
+            }}>
             <Typography variant="h5" className="risk-card-title">
               {title}
             </Typography>

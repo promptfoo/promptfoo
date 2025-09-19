@@ -115,7 +115,7 @@ const FrameworkCard = ({
           {(framework === 'owasp:api' || framework === 'owasp:llm') &&
           Object.keys(ALIASED_PLUGIN_MAPPINGS[framework]).length > 0 ? (
             // Show categorized plugins for OWASP frameworks
-            <div>
+            (<div>
               {Object.entries(ALIASED_PLUGIN_MAPPINGS[framework]).map(
                 ([categoryId, { plugins: categoryPlugins }]) => {
                   const categoryNumber = categoryId.split(':').pop();
@@ -453,10 +453,10 @@ const FrameworkCard = ({
                   );
                 },
               )}
-            </div>
+            </div>)
           ) : (
             // Standard list view for other frameworks but with same format
-            <Box
+            (<Box
               sx={{
                 border: '1px solid rgba(0, 0, 0, 0.08)',
                 borderRadius: 1,
@@ -486,7 +486,6 @@ const FrameworkCard = ({
                   }}
                 />
               </Box>
-
               <List dense sx={{ py: 0 }}>
                 {/* Failed plugins first */}
                 {nonCompliantPlugins.length > 0 && (
@@ -697,7 +696,7 @@ const FrameworkCard = ({
                     );
                   })}
               </List>
-            </Box>
+            </Box>)
           )}
         </Box>
       </CardContent>

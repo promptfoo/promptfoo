@@ -441,7 +441,11 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Button
                       onClick={downloadCsv}
                       startIcon={<DownloadIcon />}
@@ -453,7 +457,11 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Button
                       onClick={downloadTable}
                       startIcon={<DownloadIcon />}
@@ -481,7 +489,11 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={12} md={4}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      md: 4
+                    }}>
                     <Button
                       onClick={downloadBurpPayloads}
                       startIcon={<DownloadIcon />}
@@ -493,7 +505,11 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid item xs={12} md={4}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      md: 4
+                    }}>
                     <Button
                       onClick={downloadDpoJson}
                       startIcon={<DownloadIcon />}
@@ -505,7 +521,11 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid item xs={12} md={4}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      md: 4
+                    }}>
                     <Button
                       onClick={downloadHumanEvalTestCases}
                       startIcon={<DownloadIcon />}

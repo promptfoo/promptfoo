@@ -563,13 +563,13 @@ describe('useTableStore', () => {
         body: null,
         bodyUsed: false,
         clone: () =>
-          ({
+          (({
             json: async () => ({
               table: { head: { prompts: [] }, body: [] },
               totalCount: 0,
               filteredCount: 0,
-            }),
-          }) as any,
+            })
+          }) as any),
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
         blob: () => Promise.resolve(new Blob()),
         formData: () => Promise.resolve(new FormData()),
@@ -605,13 +605,13 @@ describe('useTableStore', () => {
         body: null,
         bodyUsed: false,
         clone: () =>
-          ({
+          (({
             json: async () => ({
               table: { head: { prompts: [] }, body: [] },
               totalCount: 0,
               filteredCount: 0,
-            }),
-          }) as any,
+            })
+          }) as any),
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
         blob: () => Promise.resolve(new Blob()),
         formData: () => Promise.resolve(new FormData()),
@@ -638,13 +638,13 @@ describe('useTableStore', () => {
           body: null,
           bodyUsed: false,
           clone: () =>
-            ({
+            (({
               json: async () => ({
                 table: { head: { prompts: [] }, body: [] },
                 totalCount: 0,
                 filteredCount: 0,
-              }),
-            }) as any,
+              })
+            }) as any),
           arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
           blob: () => Promise.resolve(new Blob()),
           formData: () => Promise.resolve(new FormData()),
