@@ -10,6 +10,7 @@ import {
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { fetchWithProxy } from '../../util/fetch';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
 import type { Request, Response } from 'express';
@@ -81,7 +82,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
         result: ${JSON.stringify(result)}
         providerOptions: ${JSON.stringify(providerOptions)}`,
     );
-    const testAnalyzerResponse = await fetch(`${HOST}/api/v1/providers/test`, {
+    const testAnalyzerResponse = await fetchWithProxy(`${HOST}/api/v1/providers/test`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -206,7 +207,7 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
         hasResponseExample: ${!!responseExample}`,
     );
 
-    const response = await fetch(`${HOST}/api/v1/http-provider-generator`, {
+    const response = await fetchWithProxy(`${HOST}/api/v1/http-provider-generator`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

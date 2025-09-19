@@ -1,16 +1,17 @@
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 
 import type { EnvVarKey } from '../../envars';
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiModerationProvider,
   ModerationFlag,
   ProviderModerationResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 
 const AZURE_MODERATION_MODELS = [
   { id: 'text-content-safety', maxTokens: 10000, capabilities: ['text'] },
@@ -221,7 +222,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-      const response = await fetch(url, {
+      const response = await fetchWithProxy(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),

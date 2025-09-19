@@ -64,7 +64,12 @@ describe('init command', () => {
 
       await init.downloadFile('https://example.com/file.txt', '/path/to/file.txt');
 
-      expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.txt');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://example.com/file.txt',
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'x-promptfoo-version': expect.any(String) }),
+        }),
+      );
       expect(fs.writeFile).toHaveBeenCalledWith('/path/to/file.txt', 'file content');
     });
 
