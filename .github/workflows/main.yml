@@ -230,7 +230,10 @@ jobs:
 
       - name: Install Dependencies
         working-directory: site
-        run: npm install
+        run: |
+          npm install
+          # Ensure platform-specific @resvg binaries are available
+          npm install @resvg/resvg-js-linux-x64-gnu --save-optional || true
 
       - name: Type Check
         working-directory: site
