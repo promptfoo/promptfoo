@@ -14,9 +14,11 @@ function isConnectionError(error: Error) {
 /**
  * Enhanced fetch wrapper that adds logging, authentication, and error handling
  */
-// biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
-export async function monkeyPatchFetch(...args: Parameters<typeof fetch>): Promise<Response> {
-  const [url, options] = args;
+
+export async function monkeyPatchFetch(
+  url: string | URL | Request,
+  options?: RequestInit,
+): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
   const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl));
 
