@@ -23,5 +23,5 @@
     "strict": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["./src"]
+  "include": ["./src", "./src/types/globals.d.ts"]
 }

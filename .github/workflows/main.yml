@@ -333,7 +333,7 @@ jobs:
           node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
 
   redteam:
-    name: Redteam
+    name: Redteam (Production API)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -342,12 +342,12 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Redteam
+      - name: Run Redteam (Production API)
         run: |
           npm run test:redteam:integration
 
-  redteam-custom-enterprise-server:
-    name: Redteam Custom Enterprise Server
+  redteam-staging:
+    name: Redteam (Staging API)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
@@ -371,7 +371,7 @@ jobs:
         run: |
           npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
 
-      - name: Run Redteam
+      - name: Run Redteam with Staging API
         run: |
           npm run test:redteam:integration
 
