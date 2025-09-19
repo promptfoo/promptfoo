@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import * as init from '../../src/commands/init';
 import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';
+import { createMockResponse } from '../util/utils';
 
 jest.mock('../../src/redteam/commands/init', () => ({
   redteamInit: jest.fn(),
@@ -38,34 +39,6 @@ jest.mock('@inquirer/select');
 
 const mockFetchWithProxy = jest.mocked(fetchWithProxy);
 
-// Helper to create proper Response mocks
-function createMockResponse(options: {
-  ok?: boolean;
-  status?: number;
-  statusText?: string;
-  text?: string;
-  json?: any;
-}): Response {
-  return {
-    ok: options.ok ?? true,
-    status: options.status ?? 200,
-    statusText: options.statusText ?? 'OK',
-    headers: new Headers(),
-    redirected: false,
-    type: 'basic' as ResponseType,
-    url: 'https://example.com',
-    clone: jest.fn(),
-    body: null,
-    bodyUsed: false,
-    arrayBuffer: jest.fn(),
-    blob: jest.fn(),
-    formData: jest.fn(),
-    text: jest.fn().mockResolvedValue(options.text ?? ''),
-    json: jest.fn().mockResolvedValue(options.json ?? {}),
-    bytes: jest.fn(),
-  } as unknown as Response;
-}
-
 describe('init command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -81,7 +54,7 @@ describe('init command', () => {
       const mockResponse = createMockResponse({
         ok: true,
         status: 200,
-        text: 'file content',
+        text: () => Promise.resolve('file content'),
       });
       mockFetchWithProxy.mockResolvedValue(mockResponse);
 
@@ -138,7 +111,7 @@ describe('init command', () => {
 
       const mockSuccessResponse = createMockResponse({
         ok: true,
-        json: [],
+        json: () => Promise.resolve([]),
       });
 
       mockFetchWithProxy
@@ -187,11 +160,11 @@ describe('init command', () => {
       const mockResponse = createMockResponse({
         ok: true,
         status: 200,
-        json: [
+        json: () => Promise.resolve([
           { name: 'example1', type: 'dir' },
           { name: 'example2', type: 'dir' },
           { name: 'not-an-example', type: 'file' },
-        ],
+        ]),
       });
       mockFetchWithProxy.mockResolvedValue(mockResponse);
 
