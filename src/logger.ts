@@ -1,6 +1,7 @@
-import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
+
+import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
@@ -352,7 +353,7 @@ const logger = {
  */
 export async function logRequestResponse(options: {
   url: string;
-  requestBody: Record<string, unknown> | string | null | undefined;
+  requestBody: BodyInit | null | undefined;
   requestMethod: string;
   response?: Response | null;
   error?: boolean;
