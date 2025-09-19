@@ -68,7 +68,7 @@ CSSStyleDeclaration.prototype.setProperty = function (
   } catch (error) {
     // If the property setting fails, silently ignore it for test environments
     // This prevents CSS parsing errors from breaking MUI component tests
-    console.debug('CSS property setting failed:', property, value, error);
+    // Removed console.debug to prevent flooding test output with CSS errors
   }
 };
 
