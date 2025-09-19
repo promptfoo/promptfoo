@@ -27,19 +27,22 @@ function runCommand(command, description) {
     const output = execSync(command, {
       encoding: 'utf-8',
       stdio: 'pipe',
-      env: { ...process.env, NODE_ENV: 'test' }
+      env: { ...process.env, NODE_ENV: 'test' },
     });
 
     // Check for network-related warnings in output
-    const networkWarnings = output.split('\n').filter(line =>
-      line.includes('🚫 Blocked') ||
-      line.includes('Network call') ||
-      line.includes('📊 Network calls')
-    );
+    const networkWarnings = output
+      .split('\n')
+      .filter(
+        (line) =>
+          line.includes('🚫 Blocked') ||
+          line.includes('Network call') ||
+          line.includes('📊 Network calls'),
+      );
 
     if (networkWarnings.length > 0) {
       log(YELLOW, `⚠️  Network attempts detected:`);
-      networkWarnings.forEach(warning => {
+      networkWarnings.forEach((warning) => {
         log(YELLOW, `   ${warning.trim()}`);
       });
     } else {
@@ -60,29 +63,32 @@ function validateNetworkIsolation() {
   const results = [];
 
   // Test 1: Run normal Jest tests
-  results.push(runCommand(
-    'npm test test/fetch.test.ts -- --maxWorkers=1 --forceExit',
-    'Testing standard Jest configuration'
-  ));
+  results.push(
+    runCommand(
+      'npm test test/fetch.test.ts -- --maxWorkers=1 --forceExit',
+      'Testing standard Jest configuration',
+    ),
+  );
 
   // Test 2: Run with network isolated environment
-  results.push(runCommand(
-    'npm run test:network-isolated test/fetch.test.ts -- --maxWorkers=1 --forceExit',
-    'Testing with network isolated environment'
-  ));
+  results.push(
+    runCommand(
+      'npm run test:network-isolated test/fetch.test.ts -- --maxWorkers=1 --forceExit',
+      'Testing with network isolated environment',
+    ),
+  );
 
   // Test 3: Run a sample of different test types
-  const testSamples = [
-    'test/providers/openai/chat.test.ts',
-    'test/evaluator.test.ts'
-  ];
+  const testSamples = ['test/providers/openai/chat.test.ts', 'test/evaluator.test.ts'];
 
-  testSamples.forEach(testFile => {
+  testSamples.forEach((testFile) => {
     if (fs.existsSync(testFile)) {
-      results.push(runCommand(
-        `npm test ${testFile} -- --maxWorkers=1 --forceExit`,
-        `Testing ${path.basename(testFile)}`
-      ));
+      results.push(
+        runCommand(
+          `npm test ${testFile} -- --maxWorkers=1 --forceExit`,
+          `Testing ${path.basename(testFile)}`,
+        ),
+      );
     }
   });
 
@@ -90,9 +96,10 @@ function validateNetworkIsolation() {
   log(BLUE, '\n📊 Network Isolation Summary');
   log(BLUE, '============================');
 
-  const successful = results.filter(r => r.success).length;
-  const totalNetworkWarnings = results.reduce((sum, r) =>
-    sum + (r.networkWarnings ? r.networkWarnings.length : 0), 0
+  const successful = results.filter((r) => r.success).length;
+  const totalNetworkWarnings = results.reduce(
+    (sum, r) => sum + (r.networkWarnings ? r.networkWarnings.length : 0),
+    0,
   );
 
   log(GREEN, `✅ Tests completed: ${successful}/${results.length}`);

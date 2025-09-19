@@ -15,20 +15,12 @@ class NetworkIsolatedEnvironment extends TestEnvironment {
     await super.setup();
 
     // Block common network modules at the environment level
-    const blockedModules = [
-      'http',
-      'https',
-      'net',
-      'tls',
-      'dgram',
-      'dns',
-      'url'
-    ];
+    const blockedModules = ['http', 'https', 'net', 'tls', 'dgram', 'dns', 'url'];
 
     // Store original modules
     this.originalModules = new Map();
 
-    blockedModules.forEach(moduleName => {
+    blockedModules.forEach((moduleName) => {
       try {
         const originalModule = require(moduleName);
         this.originalModules.set(moduleName, originalModule);
@@ -41,9 +33,9 @@ class NetworkIsolatedEnvironment extends TestEnvironment {
                 this.networkAttempts.push({
                   module: moduleName,
                   method: prop,
-                  args: args.map(arg => typeof arg === 'function' ? '[Function]' : arg),
+                  args: args.map((arg) => (typeof arg === 'function' ? '[Function]' : arg)),
                   timestamp: Date.now(),
-                  stack: new Error().stack
+                  stack: new Error().stack,
                 });
 
                 console.warn(`🚫 Blocked ${moduleName}.${prop}() call in test environment`);
@@ -51,12 +43,12 @@ class NetworkIsolatedEnvironment extends TestEnvironment {
               };
             }
             return target[prop];
-          }
+          },
         });
 
         // Override in global context
         this.global[moduleName] = moduleWrapper;
-      } catch (error) {
+      } catch {
         // Module might not be available, that's okay
       }
     });
@@ -75,7 +67,7 @@ class NetworkIsolatedEnvironment extends TestEnvironment {
             type: 'XMLHttpRequest',
             method,
             url,
-            timestamp: Date.now()
+            timestamp: Date.now(),
           });
           console.warn(`🚫 Blocked XMLHttpRequest: ${method} ${url}`);
           throw new Error(`XMLHttpRequest blocked: ${method} ${url}`);
@@ -92,7 +84,7 @@ class NetworkIsolatedEnvironment extends TestEnvironment {
             type: 'WebSocket',
             url,
             protocols,
-            timestamp: Date.now()
+            timestamp: Date.now(),
           });
           throw new Error(`WebSocket blocked: ${url}`);
         }
@@ -108,7 +100,9 @@ class NetworkIsolatedEnvironment extends TestEnvironment {
 
       const groupedAttempts = this.networkAttempts.reduce((acc, attempt) => {
         const key = attempt.module || attempt.type || 'unknown';
-        if (!acc[key]) acc[key] = [];
+        if (!acc[key]) {
+          acc[key] = [];
+        }
         acc[key].push(attempt);
         return acc;
       }, {});

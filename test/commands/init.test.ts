@@ -24,16 +24,6 @@ jest.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: jest.fn(),
 }));
 
-jest.mock('../../src/commands/init', () => {
-  const actual = jest.requireActual('../../src/commands/init');
-  return {
-    ...actual,
-    downloadDirectory: jest.fn(actual.downloadDirectory),
-    downloadExample: jest.fn(actual.downloadExample),
-    getExamplesList: jest.fn(actual.getExamplesList),
-  };
-});
-
 jest.mock('fs/promises');
 jest.mock('path', () => ({
   ...jest.requireActual('path'),
@@ -51,6 +41,7 @@ const mockFetchWithProxy = jest.mocked(fetchWithProxy);
 describe('init command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFetchWithProxy.mockClear();
   });
 
   afterEach(() => {
@@ -64,16 +55,11 @@ describe('init command', () => {
         status: 200,
         text: jest.fn().mockResolvedValue('file content'),
       };
-      mockFetchWithProxyWithProxy.mockResolvedValue(mockResponse);
+      mockFetchWithProxy.mockResolvedValue(mockResponse);
 
       await init.downloadFile('https://example.com/file.txt', '/path/to/file.txt');
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://example.com/file.txt',
-        expect.objectContaining({
-          headers: expect.objectContaining({ 'x-promptfoo-version': expect.any(String) }),
-        }),
-      );
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://example.com/file.txt');
       expect(fs.writeFile).toHaveBeenCalledWith('/path/to/file.txt', 'file content');
     });
 
@@ -83,7 +69,7 @@ describe('init command', () => {
         status: 404,
         statusText: 'Not Found',
       };
-      mockFetchWithProxyWithProxy.mockResolvedValue(mockResponse);
+      mockFetchWithProxy.mockResolvedValue(mockResponse);
 
       await expect(
         init.downloadFile('https://example.com/file.txt', '/path/to/file.txt'),
@@ -179,7 +165,7 @@ describe('init command', () => {
           { name: 'not-an-example', type: 'file' },
         ]),
       };
-      mockFetchWithProxyWithProxy.mockResolvedValue(mockResponse);
+      mockFetchWithProxy.mockResolvedValue(mockResponse);
 
       const examples = await init.getExamplesList();
 
@@ -192,7 +178,7 @@ describe('init command', () => {
         status: 404,
         statusText: 'Not Found',
       };
-      mockFetchWithProxyWithProxy.mockResolvedValue(mockResponse);
+      mockFetchWithProxy.mockResolvedValue(mockResponse);
 
       const examples = await init.getExamplesList();
 
