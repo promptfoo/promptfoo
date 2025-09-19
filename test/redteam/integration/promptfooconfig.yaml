@@ -32,10 +32,7 @@ redteam:
     - id: jailbreak:composite # Finds novel jailbreak prompts by chaining together individual techniques
       config:
         numTests: 1
-
-    # FIXME(mldangelo) temporarily disabled on 2025-09-18 due to intermittent generation failures
-    # It normally adds ~12 test cases but is currently failing in CI
-    # - id: multilingual
-    #   config:
-    #     languages:
-    #       - es-ES
+    - id: multilingual
+      config:
+        languages:
+          - es-ES

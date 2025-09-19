@@ -2888,7 +2888,7 @@ describe('runAssertion', () => {
           providerResponse: { output: 'Some output' },
         }),
       ).rejects.toThrow(
-        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
       );
     });
   });
@@ -2979,7 +2979,7 @@ describe('runAssertion', () => {
           providerResponse: { output: 'Some output' },
         }),
       ).rejects.toThrow(
-        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
       );
     });
 

@@ -15,11 +15,11 @@ else
   echo "Confirmed: No promptfoo-errors.log file exists"
 fi
 
-# Check for expected output patterns (reduced count due to disabled multilingual strategy)
-if echo "$output" | grep -q "Wrote 12 test cases to redteam.yaml"; then
-  echo "Expected line (Wrote 12 test cases to redteam.yaml) found for promptfoo redteam generate"
+# Check for expected output patterns
+if echo "$output" | grep -q "Wrote 2[34] test cases to redteam.yaml"; then
+  echo "Expected line (Wrote 2[34] test cases to redteam.yaml) found for promptfoo redteam generate"
 else
-  echo "ERROR: Expected line (Wrote 12 test cases to redteam.yaml) not found in output."
+  echo "ERROR: Expected line (Wrote 2[34] test cases to redteam.yaml) not found in output."
   echo "$output"
   exit 1
 fi
