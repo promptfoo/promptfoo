@@ -139,7 +139,8 @@ export async function fetchWithProxy(
     throw new Error('Invalid URL');
   }
 
-  const finalOptions: RequestInit = {
+  // This is overridden globablly but Node v20 is still complaining so we need to add it here too
+  const finalOptions: RequestInit & { dispatcher?: any } = {
     ...options,
     headers: {
       ...(options.headers as Record<string, string>),
