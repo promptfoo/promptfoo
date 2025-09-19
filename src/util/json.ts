@@ -1,10 +1,10 @@
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
-import { getEnvBool, getEnvString } from '../envars';
-import invariant from '../util/invariant';
 
+import { getEnvBool, getEnvString } from '../envars';
 import type { EvaluateResult, ResultFailureReason } from '../types/index';
+import invariant from '../util/invariant';
 
 let ajvInstance: Ajv | null = null;
 
@@ -240,6 +240,21 @@ export function extractJsonObjects(str: string): object[] {
 export function extractFirstJsonObject<T>(str: string): T {
   const jsonObjects = extractJsonObjects(str);
   invariant(jsonObjects.length >= 1, `Expected a JSON object, but got ${JSON.stringify(str)}`);
+  return jsonObjects[0] as T;
+}
+
+export function extractFirstJsonObjectWithKeys<T>(str: string, requiredKeys: string[]): T {
+  const jsonObjects = extractJsonObjects(str);
+  const match = jsonObjects.find((o: any) =>
+    requiredKeys.every((k) => Object.prototype.hasOwnProperty.call(o, k)),
+  );
+  if (match) {
+    return match as T;
+  }
+  invariant(
+    jsonObjects.length >= 1,
+    `Expected a JSON object with keys ${requiredKeys.join(', ')}, got: ${JSON.stringify(str).slice(0, 300)}...`,
+  );
   return jsonObjects[0] as T;
 }
 
