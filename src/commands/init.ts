@@ -9,13 +9,14 @@ import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
+import { fetchWithProxy } from '../util/fetch';
 import { isRunningUnderNpx } from '../util/index';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
 export async function downloadFile(url: string, filePath: string): Promise<void> {
-  const response = await fetch(url);
+  const response = await fetchWithProxy(url);
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.statusText}`);
   }
@@ -26,7 +27,7 @@ export async function downloadFile(url: string, filePath: string): Promise<void>
 export async function downloadDirectory(dirPath: string, targetDir: string): Promise<void> {
   // First try with VERSION
   const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${VERSION}`;
-  let response = await fetch(url, {
+  let response = await fetchWithProxy(url, {
     headers: {
       Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'promptfoo-cli',
@@ -36,7 +37,7 @@ export async function downloadDirectory(dirPath: string, targetDir: string): Pro
   // If VERSION fails, try with 'main'
   if (!response.ok) {
     const mainUrl = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=main`;
-    response = await fetch(mainUrl, {
+    response = await fetchWithProxy(mainUrl, {
       headers: {
         Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'promptfoo-cli',
@@ -75,7 +76,7 @@ export async function downloadExample(exampleName: string, targetDir: string): P
 
 export async function getExamplesList(): Promise<string[]> {
   try {
-    const response = await fetch(
+    const response = await fetchWithProxy(
       `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples?ref=${VERSION}`,
       {
         headers: {
