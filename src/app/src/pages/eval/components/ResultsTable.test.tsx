@@ -1607,17 +1607,16 @@ describe('ResultsTable Malformed Markdown Handling', () => {
 
     render(<ResultsTable {...defaultProps} />);
 
-    expect(
-      screen.getByText((content, element) => {
-        if (!element) {
-          return false;
-        }
-        return (
-          element?.textContent?.includes('This is a test with some') &&
-          element?.textContent?.includes('unclosed <tag>')
-        );
-      }),
-    ).toBeInTheDocument();
+    const elementsWithMalformedMarkdown = screen.getAllByText((content, element) => {
+      if (!element) {
+        return false;
+      }
+      return (
+        element?.textContent?.includes('This is a test with some') &&
+        element?.textContent?.includes('unclosed <tag>')
+      );
+    });
+    expect(elementsWithMalformedMarkdown.length).toBeGreaterThan(0);
   });
 });
 
