@@ -24,8 +24,8 @@ import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Modal from '@mui/material/Modal';
-import OutlinedInput from '@mui/material/OutlinedInput';
 import Paper from '@mui/material/Paper';
+import OutlinedInput from '@mui/material/OutlinedInput';
 import Select, { type SelectChangeEvent } from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -47,15 +47,6 @@ import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import './Report.css';
 
-import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
-import {
-  categoryAliases,
-  riskCategorySeverityMap,
-  type Severity,
-  subCategoryDescriptions,
-} from '@promptfoo/redteam/constants';
-import { POLICY_METRIC_PREFIX } from '@promptfoo/redteam/plugins/policy/constants';
-import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -63,6 +54,8 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
+
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 
 const App = () => {
   const navigate = useNavigate();
@@ -219,60 +212,37 @@ const App = () => {
       return {};
     }
 
-    return evalData.results.results.reduce((acc, row) => {
-      const pluginId = getPluginIdFromResult(row);
+    return evalData.results.results.reduce(
+      (acc, row) => {
+        const pluginId = getPluginIdFromResult(row);
+        if (!pluginId) {
+          return acc;
+        }
 
-      if (!pluginId) {
+        // Exclude results with errors from statistics
+        if (row.error && row.failureReason === ResultFailureReason.ERROR) {
+          return acc;
+        }
+
+        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+        acc[pluginId].total++;
+
+        // Check if moderation tests failed but other tests passed - this indicates content was
+        // flagged by moderation but would have passed otherwise
+        const moderationPassed = row.gradingResult?.componentResults?.some(
+          (result) => result.assertion?.type === 'moderation' && !result.pass,
+        );
+
+        if (row.success) {
+          acc[pluginId].pass++;
+          acc[pluginId].passWithFilter++; // Both regular and filtered pass counts increment
+        } else if (moderationPassed) {
+          acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
+        }
         return acc;
-      }
-
-      // Exclude results with errors from statistics
-      if (row.error && row.failureReason === ResultFailureReason.ERROR) {
-        return acc;
-      }
-
-      // Determine the description for the plugin based on its type
-      let type = '';
-      let description = '';
-      let severity: Severity | undefined;
-
-      // Custom policy plugins require special handling:
-      if (pluginId.startsWith(`${POLICY_METRIC_PREFIX}:`)) {
-        // TODO(Will): Update the deserialization logic to use the display name instead of the policyId
-        type = row.metadata?.policyId
-          ? // Match the id used in the metric.
-            `Policy ${row.metadata?.policyId} Violation`
-          : 'Policy Violation';
-        description = `${row.metadata?.policy}`;
-        severity = row.metadata?.severity as Severity;
-      } else {
-        type = categoryAliases[pluginId as keyof typeof categoryAliases] || pluginId;
-        description =
-          subCategoryDescriptions[pluginId as keyof typeof subCategoryDescriptions] ?? '';
-        severity = riskCategorySeverityMap[pluginId as keyof typeof riskCategorySeverityMap];
-      }
-
-      acc[pluginId] = acc[pluginId] || {
-        // TODO: We're calculating pass rate in several places; do it once here!
-        stats: { pass: 0, total: 0, passWithFilter: 0 },
-        metadata: { type, description, severity },
-      };
-      acc[pluginId].stats.total++;
-
-      // Check if moderation tests failed but other tests passed - this indicates content was
-      // flagged by moderation but would have passed otherwise
-      const moderationPassed = row.gradingResult?.componentResults?.some(
-        (result) => result.assertion?.type === 'moderation' && !result.pass,
-      );
-
-      if (row.success) {
-        acc[pluginId].stats.pass++;
-        acc[pluginId].stats.passWithFilter++; // Both regular and filtered pass counts increment
-      } else if (moderationPassed) {
-        acc[pluginId].stats.passWithFilter++; // Only filtered pass count increments (partial success under moderation)
-      }
-      return acc;
-    }, {} as PluginCategoryStatsByPluginId);
+      },
+      {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
+    );
   }, [evalData]);
 
   const strategyStats = React.useMemo(() => {
@@ -411,55 +381,26 @@ const App = () => {
   }, [passesByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
 
   const filteredCategoryStats = React.useMemo(() => {
-    // Start with all categories from the original stats, preserving metadata
-    const stats: PluginCategoryStatsByPluginId = {};
-    
-    // Initialize all categories with zero counts to preserve the structure and metadata
-    Object.entries(categoryStats).forEach(([pluginId, originalStats]) => {
-      stats[pluginId] = {
-        ...originalStats,  // Preserve all metadata from original stats
-        stats: {
-          ...originalStats.stats,  // Preserve any additional stats properties
-          pass: 0,
-          total: 0,
-          passWithFilter: 0,
-        },
-      };
-    });
+    const stats: Record<string, { pass: number; total: number; passWithFilter: number }> = {};
 
-    // Count failures from filtered data
     Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
-      if (stats[pluginId]) {
-        stats[pluginId].stats.total += tests.length;
-      }
+      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      stats[pluginId].total += tests.length;
     });
 
-    // Count passes from filtered data
     Object.entries(filteredPassesByPlugin).forEach(([pluginId, tests]) => {
-      if (stats[pluginId]) {
-        stats[pluginId].stats.pass += tests.length;
-        stats[pluginId].stats.passWithFilter += tests.length;
-        stats[pluginId].stats.total += tests.length;
-      }
+      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      stats[pluginId].pass += tests.length;
+      stats[pluginId].passWithFilter += tests.length;
+      stats[pluginId].total += tests.length;
     });
 
     return stats;
-  }, [categoryStats, filteredFailuresByPlugin, filteredPassesByPlugin]);
+  }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
 
   const filteredStrategyStats = React.useMemo(() => {
-    // Start with all strategies from the original stats, preserving metadata
     const stats: Record<string, { pass: number; total: number }> = {};
-    
-    // Initialize all strategies with zero counts to preserve the structure
-    Object.entries(strategyStats).forEach(([strategyId, originalStats]) => {
-      stats[strategyId] = {
-        ...originalStats,  // Preserve any metadata from original stats
-        pass: 0,
-        total: 0,
-      };
-    });
 
-    // Process filtered failures (attack successes)
     Object.values(filteredFailuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const strategyId =
@@ -474,7 +415,6 @@ const App = () => {
       });
     });
 
-    // Process filtered passes (attack failures)
     Object.values(filteredPassesByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const strategyId =
@@ -489,7 +429,7 @@ const App = () => {
     });
 
     return stats;
-  }, [strategyStats, filteredFailuresByPlugin, filteredPassesByPlugin]);
+  }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
 
   usePageMeta({
     title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
@@ -834,6 +774,7 @@ const App = () => {
         <FrameworkCompliance
           evalId={evalId}
           categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
+          strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
         />
       </Stack>
       <Modal
