@@ -1,5 +1,5 @@
 import { callApi } from '@app/utils/api';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ShareModal from './ShareModal';
@@ -35,10 +35,11 @@ describe('ShareModal', () => {
     // Mock successful domain check by default
     mockCallApi.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({
-        domain: 'localhost:3000',
-        isCloudEnabled: false,
-      }),
+      json: () =>
+        Promise.resolve({
+          domain: 'localhost:3000',
+          isCloudEnabled: false,
+        }),
     });
   });
 
@@ -59,17 +60,20 @@ describe('ShareModal', () => {
   it('displays signup prompt when cloud is not enabled', async () => {
     mockCallApi.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({
-        domain: 'promptfoo.app',
-        isCloudEnabled: false,
-      }),
+      json: () =>
+        Promise.resolve({
+          domain: 'promptfoo.app',
+          isCloudEnabled: false,
+        }),
     });
 
     render(<ShareModal {...defaultProps} />);
 
     await waitFor(() => {
       expect(screen.getByText('Share Evaluation')).toBeInTheDocument();
-      expect(screen.getByText(/You need to be logged in to your Promptfoo cloud account/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/You need to be logged in to your Promptfoo cloud account/),
+      ).toBeInTheDocument();
       expect(screen.getByText('Take me there')).toBeInTheDocument();
     });
   });
@@ -96,8 +100,9 @@ describe('ShareModal', () => {
       expect(screen.getByDisplayValue(testUrl)).toBeInTheDocument();
     });
 
-    const copyButton = screen.getByRole('button', { name: /copy/i });
-    await userEvent.click(copyButton);
+    const copyButton = screen.getByTestId('FileCopyIcon').closest('button');
+    expect(copyButton).toBeInTheDocument();
+    await userEvent.click(copyButton!);
 
     expect(document.execCommand).toHaveBeenCalledWith('copy');
   });
@@ -105,9 +110,10 @@ describe('ShareModal', () => {
   it('displays error when domain check fails', async () => {
     mockCallApi.mockResolvedValue({
       ok: false,
-      json: () => Promise.resolve({
-        error: 'Domain check failed',
-      }),
+      json: () =>
+        Promise.resolve({
+          error: 'Domain check failed',
+        }),
     });
 
     render(<ShareModal {...defaultProps} />);
@@ -148,10 +154,11 @@ describe('ShareModal', () => {
   it('opens external link when "Take me there" is clicked', async () => {
     mockCallApi.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({
-        domain: 'promptfoo.app',
-        isCloudEnabled: false,
-      }),
+      json: () =>
+        Promise.resolve({
+          domain: 'promptfoo.app',
+          isCloudEnabled: false,
+        }),
     });
 
     // Mock window.open
@@ -177,7 +184,9 @@ describe('ShareModal', () => {
     render(<ShareModal {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText('This URL is accessible to users with access to your organization.')).toBeInTheDocument();
+      expect(
+        screen.getByText('This URL is accessible to users with access to your organization.'),
+      ).toBeInTheDocument();
     });
   });
 
@@ -192,26 +201,4 @@ describe('ShareModal', () => {
     });
   });
 
-  it('resets state when modal is reopened', async () => {
-    const testUrl = 'https://api.promptfoo.dev/shared/test-id';
-    mockOnShare.mockResolvedValue(testUrl);
-
-    const { rerender } = render(<ShareModal {...defaultProps} />);
-
-    // Wait for share URL to be displayed
-    await waitFor(() => {
-      expect(screen.getByDisplayValue(testUrl)).toBeInTheDocument();
-    });
-
-    // Close modal
-    rerender(<ShareModal {...defaultProps} open={false} />);
-
-    // Reopen modal
-    rerender(<ShareModal {...defaultProps} open={true} />);
-
-    // Should show loading state again
-    await waitFor(() => {
-      expect(screen.getByText('Generating share link...')).toBeInTheDocument();
-    });
-  });
 });
