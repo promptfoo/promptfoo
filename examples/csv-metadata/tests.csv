@@ -1,4 +1,4 @@
-topic,__expected1,__expected2,__metadata:category,__metadata:tags[]
-"machine learning","contains: algorithm","llm-rubric:Does this describe {{topic}} accurately?","technology","ai,data science,algorithms"
-"quantum physics","contains: quantum","llm-rubric:Does this describe {{topic}} accurately?","science","physics,advanced\,theory,quantum"
-"climate change","contains: temperature","llm-rubric:Does this describe {{topic}} accurately?","environment","science,global\,warming,research"
+topic,__expected1,__expected2,__metadata:category,__metadata:tags[],__config:__expected:threshold,__config:__expected2:threshold
+"machine learning","contains: algorithm","llm-rubric:Does this describe {{topic}} accurately?","technology","ai,data science,algorithms",0.9,0.8
+"quantum physics","contains: quantum","llm-rubric:Does this describe {{topic}} accurately?","science","physics,advanced\,theory,quantum",0.85,0.75
+"climate change","contains: temperature","llm-rubric:Does this describe {{topic}} inaccurately?","environment","science,global\,warming,research",0.7,0.675

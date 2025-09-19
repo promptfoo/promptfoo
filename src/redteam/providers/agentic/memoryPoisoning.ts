@@ -1,6 +1,7 @@
 import { VERSION } from '../../../constants';
 import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
+import { fetchWithProxy } from '../../../util/fetch';
 import invariant from '../../../util/invariant';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationUrl } from '../../remoteGeneration';
@@ -47,7 +48,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
       invariant(purpose, 'Expected purpose to be set');
 
       // Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
-      const scenarioRes = await fetch(getRemoteGenerationUrl(), {
+      const scenarioRes = await fetchWithProxy(getRemoteGenerationUrl(), {
         body: JSON.stringify({
           task: 'agentic:memory-poisoning-scenario',
           purpose,

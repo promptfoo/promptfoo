@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI HTTP provider streaming example
+
+# This example shows how to use OpenAI's streaming API via HTTP provider, but this
+# approach is NOT RECOMMENDED. Promptfoo tool waits for the
+# entire response to complete anyway, so you get no streaming benefits.
+#
+# 🎯 RECOMMENDED: Use the built-in OpenAI provider instead: openai:responses:gpt-5-mini
+# - Simpler configuration
+# - Automatic environment variable handling
+# - Better error handling
+# - Optimized performance
+
+prompts:
+  - 'Write a haiku about {{topic}}'
+  - 'Explain {{topic}} in one sentence'
+
+providers:
+  - id: https://api.openai.com/v1/responses
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+        'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
+      body:
+        model: 'gpt-5-nano'
+        input:
+          - role: 'user'
+            content: '{{prompt}}'
+        stream: true # Demonstrates streaming (no eval benefit)
+      transformResponse: |
+        (json, text) => {
+          // If non-streaming JSON with output_text/response arrives, return it
+          if (json && (json.output_text || json.response)) {
+            return json.output_text || json.response;
+          }
+          // Otherwise parse SSE text and accumulate delta chunks
+          let out = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            try {
+              const evt = JSON.parse(trimmed.slice(6));
+              if (evt && evt.type === 'response.output_text.delta' && typeof evt.delta === 'string') {
+                out += evt.delta;
+              }
+            } catch {}
+          }
+          return out.trim();
+        }
+
+defaultTest:
+  assert:
+    # Ensure we get some content
+    - type: javascript
+      value: 'output && output.length > 0'
+    # Verify it's a string
+    - type: javascript
+      value: 'typeof output === "string"'
+
+tests:
+  - vars:
+      topic: 'mountains'
+  - vars:
+      topic: 'artificial intelligence'
+  - vars:
+      topic: 'ocean waves'
