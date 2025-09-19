@@ -1,6 +1,7 @@
 import fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import yaml from 'js-yaml';
 
 /**
  * Represents the structure of package.json file
