@@ -5,6 +5,7 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
@@ -66,7 +67,7 @@ export default class BestOfNProvider implements ApiProvider {
 
     try {
       // Get candidate prompts from the server
-      const response = await fetch(getRemoteGenerationUrl(), {
+      const response = await fetchWithProxy(getRemoteGenerationUrl(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,8 +1,9 @@
 import { Telemetry } from '../src/telemetry';
-import { fetchWithTimeout } from '../src/util/fetch/index';
+import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
 
 jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+  fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 jest.mock('crypto', () => ({
@@ -73,7 +74,7 @@ jest.mock('../src/constants/build', () => ({
 
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
-  let fetchSpy: jest.SpyInstance;
+  let fetchWithProxySpy: jest.MockedFunction<typeof fetchWithProxy>;
   let sendEventSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -81,9 +82,10 @@ describe('Telemetry', () => {
     process.env = { ...originalEnv };
     process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
-    fetchSpy = jest
-      .spyOn(global, 'fetch')
-      .mockImplementation(() => Promise.resolve({ ok: true } as Response));
+    // Get the mocked fetchWithProxy function
+    fetchWithProxySpy = fetchWithProxy as jest.MockedFunction<typeof fetchWithProxy>;
+    fetchWithProxySpy.mockClear();
+    fetchWithProxySpy.mockResolvedValue({ ok: true } as any);
 
     sendEventSpy = jest.spyOn(Telemetry.prototype, 'sendEvent' as any);
 
@@ -110,14 +112,14 @@ describe('Telemetry', () => {
     _telemetry.record('eval_ran', { foo: 'bar' });
 
     expect(sendEventSpy).toHaveBeenCalledWith('eval_ran', { foo: 'bar' });
-    expect(fetchSpy).toHaveBeenCalledWith(
+    expect(fetchWithProxySpy).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         method: 'POST',
       }),
     );
 
-    const fetchCalls = fetchSpy.mock.calls;
+    const fetchCalls = fetchWithProxySpy.mock.calls;
     let foundVersion = false;
 
     for (const call of fetchCalls) {
@@ -143,14 +145,14 @@ describe('Telemetry', () => {
 
     const isCI = jest.requireMock('../src/envars').isCI;
     isCI.mockReturnValue(true);
-    fetchSpy.mockClear();
+    fetchWithProxySpy.mockClear();
 
     const _telemetry = new Telemetry();
     _telemetry.record('feature_used', { test: 'value' });
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const fetchCalls = fetchSpy.mock.calls;
+    const fetchCalls = fetchWithProxySpy.mock.calls;
     expect(fetchCalls.length).toBeGreaterThan(0);
 
     let foundExpectedProperties = false;
@@ -160,14 +162,12 @@ describe('Telemetry', () => {
         try {
           const data = JSON.parse(call[1].body);
 
-          if (data.events && data.events.length > 0) {
-            const properties = data.events[0].properties;
-
+          // Check for the structure sent to R_ENDPOINT
+          if (data.meta) {
             if (
-              properties &&
-              properties.test === 'value' &&
-              properties.packageVersion === '1.0.0' &&
-              properties.isRunningInCi === true
+              data.meta.test === 'value' &&
+              data.meta.packageVersion === '1.0.0' &&
+              data.meta.isRunningInCi === true
             ) {
               foundExpectedProperties = true;
               break;
@@ -260,6 +260,7 @@ describe('Telemetry', () => {
 
       expect(mockPostHog).toHaveBeenCalledWith('test-posthog-key', {
         host: 'https://a.promptfoo.app',
+        fetch: expect.any(Function),
       });
     });
 
@@ -456,58 +457,6 @@ describe('Telemetry', () => {
         },
         1000,
       );
-    });
-  });
-
-  describe('KA endpoint calls', () => {
-    beforeEach(() => {
-      jest.useRealTimers(); // Use real timers for these tests
-    });
-
-    afterEach(() => {
-      jest.useFakeTimers(); // Restore fake timers
-    });
-
-    it('should send identify data to KA endpoint', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING; // Clear IS_TESTING to allow telemetry
-
-      // Need to reset modules to pick up the env change
-      jest.resetModules();
-
-      // Re-mock fetchWithTimeout
-      jest.doMock('../src/util/fetch', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-      }));
-
-      const { fetchWithTimeout } = await import('../src/util/fetch');
-      const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
-
-      // Wait for constructor identify to complete
-      await new Promise((resolve) => setTimeout(resolve, 20));
-
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://ka.promptfoo.app/',
-        expect.objectContaining({
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ profile_id: 'test-user-id', email: 'test@example.com' }),
-        }),
-        1000,
-      );
-    });
-
-    it('should handle KA endpoint errors silently', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      fetchSpy.mockRejectedValue(new Error('KA endpoint error'));
-
-      const _telemetry = new Telemetry();
-
-      // Should not throw error
-      expect(() => _telemetry.identify()).not.toThrow();
     });
   });
 });

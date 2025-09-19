@@ -1,4 +1,4 @@
-import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, KA_ENDPOINT, R_ENDPOINT } from '../../constants';
+import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
 
@@ -11,14 +11,15 @@ function isConnectionError(error: Error) {
   );
 }
 
-const originalFetch = global.fetch;
-
 /**
  * Enhanced fetch wrapper that adds logging, authentication, and error handling
  */
-export async function monkeyPatchFetch(...args: Parameters<typeof fetch>): Promise<Response> {
-  const [url, options] = args;
-  const NO_LOG_URLS = [KA_ENDPOINT, R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
+
+export async function monkeyPatchFetch(
+  url: string | URL | Request,
+  options?: RequestInit,
+): Promise<Response> {
+  const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
   const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl));
 
   const opts = {
@@ -36,7 +37,8 @@ export async function monkeyPatchFetch(...args: Parameters<typeof fetch>): Promi
     };
   }
   try {
-    const response = await originalFetch(url, opts);
+    // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
+    const response = await fetch(url, opts);
 
     if (logEnabled) {
       logRequestResponse({

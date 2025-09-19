@@ -563,6 +563,71 @@ tests:
         threshold: 0.85
 ```
 
+## Common patterns and troubleshooting
+
+### Understanding pass vs. score behavior
+
+Model-graded assertions like `llm-rubric` determine PASS/FAIL using two mechanisms:
+
+1. **Without threshold**: PASS depends only on the grader's `pass` field (defaults to `true` if omitted)
+2. **With threshold**: PASS requires both `pass === true` AND `score >= threshold`
+
+This means a result like `{"pass": true, "score": 0}` will pass without a threshold, but fail with `threshold: 1`.
+
+**Common issue**: Tests show PASS even when scores are low
+
+```yaml
+# ❌ Problem: All tests pass regardless of score
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    # No threshold set - always passes if grader doesn't return explicit pass: false
+```
+
+**Solutions**:
+
+```yaml
+# ✅ Option A: Add threshold to make score drive PASS/FAIL
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    threshold: 1  # Only pass when score >= 1
+
+# ✅ Option B: Have grader control pass explicitly
+assert:
+  - type: llm-rubric
+    value: |
+      Return {"pass": true, "score": 1} if the response is correct
+      Return {"pass": false, "score": 0} if the response is incorrect
+```
+
+### Threshold usage across assertion types
+
+Different assertion types use thresholds differently:
+
+```yaml
+assert:
+  # Similarity-based (0-1 range)
+  - type: context-faithfulness
+    threshold: 0.8 # Requires 80%+ faithfulness
+
+  # Binary scoring (0 or 1)
+  - type: llm-rubric
+    value: 'Is helpful and accurate'
+    threshold: 1 # Requires perfect score
+
+  # Custom scoring (any range)
+  - type: pi
+    value: 'Quality of response'
+    threshold: 0.7
+```
+
+For more details on pass/score semantics, see the [llm-rubric documentation](/docs/configuration/expected-outputs/model-graded/llm-rubric#pass-vs-score-semantics).
+
 ## Other assertion types
 
 For more info on assertions, see [Test assertions](/docs/configuration/expected-outputs).
