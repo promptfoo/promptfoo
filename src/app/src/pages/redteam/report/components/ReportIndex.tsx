@@ -155,6 +155,11 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
         },
       }}
       slots={{ toolbar: CustomToolbar }}
+      initialState={{
+        sorting: {
+          sortModel: [{ field: 'createdAt', sort: 'desc' }],
+        },
+      }}
     />
   );
 }
