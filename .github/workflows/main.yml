@@ -216,8 +216,6 @@ jobs:
     name: Build Docs
     timeout-minutes: 5
     runs-on: ubuntu-latest
-    env:
-      SKIP_OG_GENERATION: true
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -230,10 +228,7 @@ jobs:
 
       - name: Install Dependencies
         working-directory: site
-        run: |
-          npm install
-          # Ensure platform-specific @resvg binaries are available
-          npm install @resvg/resvg-js-linux-x64-gnu --save-optional || true
+        run: npm install
 
       - name: Type Check
         working-directory: site
@@ -245,7 +240,7 @@ jobs:
 
   webui:
     name: webui tests
-    timeout-minutes: 10
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
