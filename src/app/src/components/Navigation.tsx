@@ -1,8 +1,8 @@
 import React, { forwardRef, useState } from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EngineeringIcon from '@mui/icons-material/Engineering';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
@@ -336,8 +336,8 @@ function EvalsDropdown({
     },
     {
       href: '/reports',
-      label: 'Reports',
-      description: 'View red team reports',
+      label: 'Red Team Vulnerability Reports',
+      description: 'View findings from red teams',
     },
   ];
 

@@ -16,7 +16,7 @@ export default function ReportPage() {
   const searchParams = new URLSearchParams(window.location.search);
   const evalId = searchParams.get('evalId');
   usePageMeta({
-    title: evalId ? 'Red team report' : 'Red team reports',
+    title: evalId ? 'Red team report' : 'Red Team Vulnerability Reports',
     description: 'View or browse red team results',
   });
 
