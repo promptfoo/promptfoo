@@ -206,8 +206,8 @@ function shouldRedactFromUI(varName: string, varValue: any, testCase?: any): boo
     return true;
   }
 
-  // Check per-test excludeFromDb
-  if (testCase?.excludeFromDb?.includes(varName)) {
+  // Check per-test redact
+  if (testCase?.redact?.includes(varName)) {
     return true;
   }
 

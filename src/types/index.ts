@@ -696,8 +696,8 @@ export const TestCaseSchema = z.object({
     )
     .optional(),
 
-  // Variables to exclude from database storage
-  excludeFromDb: z.array(z.string()).optional(),
+  // Variables to redact from database storage
+  redact: z.array(z.string()).optional(),
 });
 
 export type TestCase = z.infer<typeof TestCaseSchema>;

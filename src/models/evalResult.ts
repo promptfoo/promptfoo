@@ -158,8 +158,8 @@ function buildRedactionSet(testCase: AtomicTestCase): Set<string> {
   const globalRedactions = cliState.config?.redact || [];
   globalRedactions.forEach((key: string) => redactSet.add(key));
 
-  // 2. Per-test excludeFromDb
-  const perTestRedactions = testCase.excludeFromDb || [];
+  // 2. Per-test redact
+  const perTestRedactions = testCase.redact || [];
   perTestRedactions.forEach(key => redactSet.add(key));
 
   // 3. File-level redact from metadata (support both _redact and _redactColumns for backwards compatibility)
