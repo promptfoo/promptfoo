@@ -133,6 +133,9 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
 
   const { spans, totalDuration } = processedSpans;
 
+  // Calculate the maximum span duration once for proportional scaling
+  const maxSpanDuration = spans.length > 0 ? Math.max(...spans.map(s => s.duration)) : 0;
+
   return (
     <Box pt={2}>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -146,9 +149,12 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
       <Paper variant="outlined" sx={{ p: 2, overflow: 'auto' }}>
         {spans.map((span, index) => {
           const status = getSpanStatus(span.statusCode);
-          const spanDurationPercent = totalDuration > 0 ? (span.duration / totalDuration) * 100 : 0;
-          const spanStartPercent =
-            totalDuration > 0 ? (span.relativeStart / totalDuration) * 100 : 0;
+
+          // Scale span width based on its duration relative to the longest span
+          const spanDurationPercent = maxSpanDuration > 0 ? (span.duration / maxSpanDuration) * 100 : 0;
+
+          // Position span based on its start time relative to trace start
+          const spanStartPercent = totalDuration > 0 ? (span.relativeStart / totalDuration) * 100 : 0;
 
           return (
             <Box
@@ -229,7 +235,7 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                     sx={{
                       position: 'absolute',
                       left: `${spanStartPercent}%`,
-                      width: `${Math.max(spanDurationPercent, 0.5)}%`,
+                      width: `${Math.max(spanDurationPercent, 2)}%`, // Minimum 2% width for visibility
                       height: '100%',
                       backgroundColor:
                         status.color === 'error'
