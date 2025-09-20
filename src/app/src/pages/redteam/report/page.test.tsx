@@ -60,7 +60,7 @@ describe('ReportPage', () => {
     });
   });
 
-  it("should set page metadata to 'Red team report' when evalId is present", () => {
+  it("should set page metadata to 'Red Team Vulnerability Reports' when evalId is present", () => {
     const url = 'http://localhost/reports?evalId=test-eval-123';
     Object.defineProperty(window, 'location', {
       writable: true,
@@ -75,7 +75,7 @@ describe('ReportPage', () => {
 
     expect(mockedUsePageMeta).toHaveBeenCalledTimes(1);
     expect(mockedUsePageMeta).toHaveBeenCalledWith({
-      title: 'Red team report',
+      title: 'Red Team Vulnerability Reports',
       description: 'View or browse red team results',
     });
 
@@ -102,6 +102,23 @@ describe('ReportPage', () => {
 
   it('should render ReportIndex component when evalId is not present in URL search parameters', () => {
     const url = 'http://localhost/reports';
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: new URL(url),
+    });
+
+    render(
+      <MemoryRouter>
+        <ReportPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('ReportIndex Component')).toBeInTheDocument();
+    expect(screen.queryByText('Report Component')).not.toBeInTheDocument();
+  });
+
+  it('should render ReportIndex component when evalId is an empty string in URL search parameters', () => {
+    const url = 'http://localhost/reports?evalId=';
     Object.defineProperty(window, 'location', {
       writable: true,
       value: new URL(url),
@@ -225,7 +242,7 @@ describe('ReportPage', () => {
 
     expect(mockedUsePageMeta).toHaveBeenCalledTimes(1);
     expect(mockedUsePageMeta).toHaveBeenCalledWith({
-      title: 'Red team report',
+      title: 'Red Team Vulnerability Reports',
       description: 'View or browse red team results',
     });
     expect(screen.getByText('Report Component')).toBeInTheDocument();
