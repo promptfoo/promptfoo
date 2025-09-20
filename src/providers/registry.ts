@@ -1247,6 +1247,7 @@ export const providerMap: ProviderFactory[] = [
       return createLivekitProvider(providerPath, {
         config: providerOptions,
         env: context.env,
+        basePath: context.basePath,
       });
     },
   },

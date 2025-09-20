@@ -1,0 +1,66 @@
+# Example promptfoo configuration for testing LiveKit agents
+# This demonstrates how to use the LiveKit provider with agent definitions
+
+description: Testing LiveKit Agent Integration
+
+prompts:
+  - "Hello, how are you today?"
+  - "What is the weather like?"
+  - "Can you help me with a task?"
+  - "Tell me a joke"
+
+providers:
+  # Basic LiveKit agent provider
+  - id: livekit:agent:examples/livekit-agent-example.js
+    label: LiveKit Example Agent
+
+  # LiveKit agent with custom configuration
+  - id: livekit:agent:examples/livekit-agent-example.js
+    label: LiveKit Agent with Audio
+    config:
+      enableAudio: true
+      enableChat: true
+      sessionTimeout: 45000
+      roomName: test-audio-room
+
+  # LiveKit agent with multimodal capabilities
+  - id: livekit:agent:examples/livekit-agent-example.js
+    label: LiveKit Multimodal Agent
+    config:
+      enableAudio: true
+      enableVideo: true
+      enableChat: true
+      sessionTimeout: 60000
+      roomName: test-multimodal-room
+
+tests:
+  - description: "Agent responds to greeting"
+    vars: {}
+    assert:
+      - type: contains
+        value: "Echo from LiveKit agent"
+      - type: contains
+        value: "Hello, how are you today?"
+
+  - description: "Agent handles weather query"
+    vars: {}
+    assert:
+      - type: contains
+        value: "Echo from LiveKit agent"
+      - type: contains
+        value: "weather"
+
+  - description: "Agent provides helpful response"
+    vars: {}
+    assert:
+      - type: contains
+        value: "Echo from LiveKit agent"
+      - type: not-empty
+
+  - description: "Agent tells a joke"
+    vars: {}
+    assert:
+      - type: contains
+        value: "Echo from LiveKit agent"
+      - type: contains
+        value: "joke"
