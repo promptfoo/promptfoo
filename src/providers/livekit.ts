@@ -95,16 +95,47 @@ export interface RecordingConfig {
   output?: 'mp4' | 'webm';              // Output format (default: 'mp4')
 }
 
+interface AudioData {
+  data: Buffer | string;                     // Audio data (Buffer for binary, string for base64/URL)
+  format: 'wav' | 'mp3' | 'opus' | 'raw';    // Audio format
+  sampleRate: number;                        // Sample rate in Hz
+  channels: number;                          // Number of audio channels
+  duration?: number;                         // Duration in seconds
+  url?: string;                              // Optional URL for hosted audio
+}
+
+interface VideoData {
+  data: Buffer | string;                     // Video data (Buffer for binary, string for base64/URL)
+  format: 'mp4' | 'webm' | 'raw';           // Video format
+  width: number;                             // Video width in pixels
+  height: number;                            // Video height in pixels
+  framerate: number;                         // Framerate in fps
+  duration?: number;                         // Duration in seconds
+  url?: string;                              // Optional URL for hosted video
+}
+
+interface MultiModalInput {
+  text?: string;                             // Text input
+  audio?: AudioData;                         // Audio input
+  video?: VideoData;                         // Video input
+  metadata?: Record<string, any>;            // Additional metadata
+}
+
 interface LivekitResponse {
   text?: string;
-  audio?: string;
-  video?: string;
+  audio?: AudioData;                         // Enhanced audio response
+  video?: VideoData;                         // Enhanced video response
   metadata?: Record<string, any>;
   usage?: {
     total_tokens?: number;
     prompt_tokens?: number;
     completion_tokens?: number;
   };
+  // Standardized response fields
+  timestamp?: string;                        // ISO timestamp of response
+  responseId?: string;                       // Unique response identifier
+  status?: 'success' | 'partial' | 'error'; // Response status
+  warnings?: string[];                       // Non-fatal warnings
 }
 
 interface AgentDefinition {
@@ -312,29 +343,21 @@ export class LivekitProvider implements ApiProvider {
         await this.initializeAgent();
       }
 
+      // Parse multi-modal input
+      const multiModalInput = await this.parseMultiModalInput(prompt, context);
+
       // Create session for this test
       const session = await this.createSession();
 
-      // Send prompt and get response
-      const response = await this.sendMessage(session, prompt, options?.abortSignal);
+      // Send multi-modal message and get response
+      const response = await this.sendMultiModalMessage(session, multiModalInput, options?.abortSignal);
 
       // Cleanup session
       await this.cleanupSession(session);
 
-      return {
-        output: response.text || '',
-        tokenUsage: response.usage ? {
-          total: response.usage.total_tokens || 0,
-          prompt: response.usage.prompt_tokens || 0,
-          completion: response.usage.completion_tokens || 0,
-        } : undefined,
-        metadata: {
-          sessionId: session?.id,
-          audioUrl: response.audio,
-          videoUrl: response.video,
-          ...response.metadata,
-        },
-      };
+      // Format response with enhanced multi-modal support
+      return this.formatProviderResponse(response, session);
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`LiveKit provider error: ${errorMessage}`);
@@ -343,6 +366,232 @@ export class LivekitProvider implements ApiProvider {
         output: '',
       };
     }
+  }
+
+  /**
+   * Parses multi-modal input from prompt and context
+   */
+  private async parseMultiModalInput(prompt: string, context?: CallApiContextParams): Promise<MultiModalInput> {
+    const input: MultiModalInput = {
+      text: prompt,
+      metadata: context?.vars || {},
+    };
+
+    // Parse audio input if enabled and available
+    if (this.config.enableAudio && this.config.audioConfig) {
+      // Check if prompt contains audio reference
+      const audioMatch = prompt.match(/audio:([^\s]+)/);
+      if (audioMatch) {
+        const audioReference = audioMatch[1];
+        const audioData = await AudioProcessor.parseAudioInput(audioReference, this.config.audioConfig);
+        if (audioData) {
+          input.audio = audioData;
+        }
+        // Remove audio reference from text
+        input.text = prompt.replace(/audio:[^\s]+\s*/, '').trim();
+      }
+
+      // Check context for audio data
+      if (context?.vars?.audio) {
+        const audioData = await AudioProcessor.parseAudioInput(
+          String(context.vars.audio),
+          this.config.audioConfig
+        );
+        if (audioData) {
+          input.audio = audioData;
+        }
+      }
+    }
+
+    // Parse video input if enabled and available
+    if (this.config.enableVideo && this.config.videoConfig) {
+      // Check if prompt contains video reference
+      const videoMatch = prompt.match(/video:([^\s]+)/);
+      if (videoMatch) {
+        const videoReference = videoMatch[1];
+        const videoData = await VideoProcessor.parseVideoInput(videoReference, this.config.videoConfig);
+        if (videoData) {
+          input.video = videoData;
+        }
+        // Remove video reference from text
+        input.text = input.text?.replace(/video:[^\s]+\s*/, '').trim();
+      }
+
+      // Check context for video data
+      if (context?.vars?.video) {
+        const videoData = await VideoProcessor.parseVideoInput(
+          String(context.vars.video),
+          this.config.videoConfig
+        );
+        if (videoData) {
+          input.video = videoData;
+        }
+      }
+    }
+
+    // TODO: Add other multi-modal inputs (images, documents, etc.)
+
+    return input;
+  }
+
+  /**
+   * Formats the provider response with enhanced multi-modal data
+   */
+  private formatProviderResponse(response: LivekitResponse, session: LivekitSession): ProviderResponse {
+    // Build the primary text output
+    const outputParts = [];
+    if (response.text) {
+      outputParts.push(response.text);
+    }
+
+    // Add descriptions of non-text modalities to the output for visibility
+    if (response.audio) {
+      outputParts.push(`[Audio: ${response.audio.format}, ${response.audio.duration || 'unknown'}s]`);
+    }
+    if (response.video) {
+      outputParts.push(`[Video: ${response.video.format}, ${response.video.width}x${response.video.height}]`);
+    }
+
+    const formattedResponse: ProviderResponse = {
+      output: outputParts.join('\n'),
+      tokenUsage: response.usage ? {
+        total: response.usage.total_tokens || 0,
+        prompt: response.usage.prompt_tokens || 0,
+        completion: response.usage.completion_tokens || 0,
+      } : undefined,
+      metadata: {
+        sessionId: session?.id,
+        ...response.metadata,
+      },
+    };
+
+    // Enhanced audio metadata processing
+    if (response.audio) {
+      formattedResponse.metadata!.audio = {
+        format: response.audio.format,
+        sampleRate: response.audio.sampleRate,
+        channels: response.audio.channels,
+        duration: response.audio.duration,
+        url: response.audio.url,
+        // Don't include raw data in metadata to avoid huge responses
+        hasData: Boolean(response.audio.data),
+        // Additional audio quality indicators
+        bitrate: this.config.audioConfig?.bitrate,
+        codec: this.config.audioConfig?.codec,
+      };
+
+      // For backward compatibility, also include audioUrl
+      if (response.audio.url) {
+        formattedResponse.metadata!.audioUrl = response.audio.url;
+      }
+    }
+
+    // Enhanced video metadata processing
+    if (response.video) {
+      formattedResponse.metadata!.video = {
+        format: response.video.format,
+        width: response.video.width,
+        height: response.video.height,
+        framerate: response.video.framerate,
+        duration: response.video.duration,
+        url: response.video.url,
+        // Don't include raw data in metadata to avoid huge responses
+        hasData: Boolean(response.video.data),
+        // Additional video quality indicators
+        bitrate: this.config.videoConfig?.bitrate,
+        codec: this.config.videoConfig?.codec,
+      };
+
+      // For backward compatibility, also include videoUrl
+      if (response.video.url) {
+        formattedResponse.metadata!.videoUrl = response.video.url;
+      }
+    }
+
+    // Add modality summary for easy inspection
+    const modalities = [];
+    if (response.text) modalities.push('text');
+    if (response.audio) modalities.push('audio');
+    if (response.video) modalities.push('video');
+    if (response.metadata?.toolCalls) modalities.push('tools');
+    if (response.metadata?.functionCalls) modalities.push('functions');
+
+    formattedResponse.metadata!.responseModalities = modalities;
+    formattedResponse.metadata!.isMultiModal = modalities.length > 1;
+
+    // Add processing statistics
+    formattedResponse.metadata!.processing = {
+      sessionStatus: session.status,
+      enabledFeatures: {
+        audio: this.config.enableAudio,
+        video: this.config.enableVideo,
+        chat: this.config.enableChat,
+        tools: Boolean(this.agentDefinition?.tools?.length),
+      },
+    };
+
+    // Add standardized response metadata
+    if (response.timestamp) {
+      formattedResponse.metadata!.timestamp = response.timestamp;
+    }
+    if (response.responseId) {
+      formattedResponse.metadata!.responseId = response.responseId;
+    }
+    if (response.status) {
+      formattedResponse.metadata!.status = response.status;
+    }
+    if (response.warnings && response.warnings.length > 0) {
+      formattedResponse.metadata!.warnings = response.warnings;
+    }
+
+    // Add response quality indicators
+    formattedResponse.metadata!.quality = {
+      hasText: Boolean(response.text),
+      hasAudio: Boolean(response.audio),
+      hasVideo: Boolean(response.video),
+      hasMetadata: Boolean(response.metadata && Object.keys(response.metadata).length > 0),
+      completeness: this.calculateResponseCompleteness(response),
+    };
+
+    return formattedResponse;
+  }
+
+  /**
+   * Calculates response completeness as a percentage
+   */
+  private calculateResponseCompleteness(response: LivekitResponse): number {
+    let score = 0;
+    let maxScore = 0;
+
+    // Text response (always expected)
+    maxScore += 25;
+    if (response.text && response.text.trim().length > 0) {
+      score += 25;
+    }
+
+    // Audio response (if enabled)
+    if (this.config.enableAudio) {
+      maxScore += 25;
+      if (response.audio) {
+        score += 25;
+      }
+    }
+
+    // Video response (if enabled)
+    if (this.config.enableVideo) {
+      maxScore += 25;
+      if (response.video) {
+        score += 25;
+      }
+    }
+
+    // Metadata and usage information
+    maxScore += 25;
+    if (response.metadata || response.usage) {
+      score += 25;
+    }
+
+    return maxScore > 0 ? Math.round((score / maxScore) * 100) : 100;
   }
 
   private async initializeAgent(): Promise<void> {
@@ -591,9 +840,9 @@ export class LivekitProvider implements ApiProvider {
     }
   }
 
-  private async sendMessage(
+  private async sendMultiModalMessage(
     session: LivekitSession,
-    prompt: string,
+    input: MultiModalInput,
     abortSignal?: AbortSignal,
   ): Promise<LivekitResponse> {
     try {
@@ -607,13 +856,13 @@ export class LivekitProvider implements ApiProvider {
         throw new Error(`Cannot send message to session in status: ${session.status}`);
       }
 
-      logger.debug(`Sending message to agent in session ${session.id}: ${prompt}`);
+      logger.debug(`Sending multi-modal message to agent in session ${session.id} (text: ${Boolean(input.text)}, audio: ${Boolean(input.audio)}, video: ${Boolean(input.video)})`);
 
-      // Process the message through the agent context
-      const agentResponse = await this.processAgentMessage(session, prompt, abortSignal);
+      // Process the multi-modal message through the agent context
+      const agentResponse = await this.processAgentMultiModalMessage(session, input, abortSignal);
 
       // Simulate realistic response time for agent processing
-      const processingDelay = this.calculateProcessingDelay(prompt);
+      const processingDelay = this.calculateProcessingDelay(input.text || '');
       await this.waitWithAbort(processingDelay, abortSignal);
 
       // Create structured response
@@ -645,39 +894,78 @@ export class LivekitProvider implements ApiProvider {
     }
   }
 
-  private async processAgentMessage(
+  private async processAgentMultiModalMessage(
     session: LivekitSession,
-    prompt: string,
+    input: MultiModalInput,
     abortSignal?: AbortSignal,
-  ): Promise<{
-    text: string;
-    audio?: string;
-    video?: string;
-    metadata?: Record<string, any>;
-    usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number };
-  }> {
+  ): Promise<LivekitResponse> {
     try {
       // Check for abort signal
       if (abortSignal?.aborted) {
         throw new Error('Request was aborted');
       }
 
-      // Use the session context to send the message
+      // Use the session context to send the multi-modal message
       let agentText = '';
+      let agentAudio: AudioData | undefined;
+      let agentVideo: VideoData | undefined;
       let agentMetadata: Record<string, any> = {};
 
       if (session.context?.sendMessage) {
-        // Use the session's sendMessage method if available
-        const result = await session.context.sendMessage(prompt);
-        agentText = result.response || `Agent processed: ${prompt}`;
+        // Enhanced sendMessage to handle multi-modal input
+        const messageData = {
+          text: input.text,
+          audio: input.audio,
+          video: input.video,
+          metadata: input.metadata,
+        };
+
+        const result = await session.context.sendMessage(messageData);
+        agentText = result.response || `Echo from LiveKit agent: ${input.text}`;
         agentMetadata = result.metadata || {};
+
+        // Process tool calls if present
+        if (result.toolCalls && Array.isArray(result.toolCalls)) {
+          agentMetadata.toolCalls = await this.processToolCalls(result.toolCalls, session);
+        }
+
+        // Process function calls if present (alternative format)
+        if (result.functionCalls && Array.isArray(result.functionCalls)) {
+          agentMetadata.functionCalls = await this.processFunctionCalls(result.functionCalls, session);
+        }
+
+        // Process agent's audio response if available and audio is enabled
+        if (result.audio && this.config.enableAudio && this.config.audioConfig) {
+          agentAudio = AudioProcessor.formatAudioOutput(result.audio, this.config.audioConfig);
+        }
+
+        // Process agent's video response if available and video is enabled
+        if (result.video && this.config.enableVideo && this.config.videoConfig) {
+          agentVideo = VideoProcessor.formatVideoOutput(result.video, this.config.videoConfig);
+        }
       } else {
-        // Fallback to simple echo response
-        agentText = `LiveKit agent response to: ${prompt}`;
+        // Enhanced fallback to handle multi-modal echo response
+        const parts = [];
+        if (input.text) parts.push(`text: "${input.text}"`);
+        if (input.audio) parts.push(`audio: ${input.audio.format} (${input.audio.duration || 'unknown'}s)`);
+        if (input.video) parts.push(`video: ${input.video.format} (${input.video.duration || 'unknown'}s)`);
+
+        agentText = `Echo from LiveKit agent: ${parts.join(', ')}`;
+
+        // Echo audio back if enabled and provided
+        if (input.audio && this.config.enableAudio) {
+          agentAudio = input.audio;
+        }
+
+        // Echo video back if enabled and provided
+        if (input.video && this.config.enableVideo) {
+          agentVideo = input.video;
+        }
       }
 
       // Generate mock usage statistics
-      const promptTokens = Math.ceil(prompt.length / 4); // Rough token estimation
+      const inputText = input.text || '';
+      const promptTokens = Math.ceil(inputText.length / 4); // Rough token estimation
       const completionTokens = Math.ceil(agentText.length / 4);
 
       const usage = {
@@ -686,36 +974,145 @@ export class LivekitProvider implements ApiProvider {
         total_tokens: promptTokens + completionTokens,
       };
 
-      const response: {
-        text: string;
-        audio?: string;
-        video?: string;
-        metadata?: Record<string, any>;
-        usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number };
-      } = {
+      return {
         text: agentText,
+        audio: agentAudio,
+        video: agentVideo,
         metadata: {
           agentId: this.providerId,
           agentDefinitionPath: this.config?.agentPath,
           ...agentMetadata,
         },
         usage,
+        // Standardized response fields
+        timestamp: new Date().toISOString(),
+        responseId: `${session.id}-${Date.now()}`,
+        status: 'success',
+        warnings: [],
       };
-
-      // Add audio/video responses if enabled
-      if (this.config?.enableAudio) {
-        response.audio = this.generateMockAudioResponse(agentText);
-      }
-
-      if (this.config?.enableVideo) {
-        response.video = this.generateMockVideoResponse(agentText);
-      }
-
-      return response;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Agent message processing failed: ${errorMessage}`);
     }
+  }
+
+  /**
+   * Processes tool calls from the agent
+   */
+  private async processToolCalls(toolCalls: any[], session: LivekitSession): Promise<any[]> {
+    const processedCalls = [];
+
+    for (const toolCall of toolCalls) {
+      try {
+        const { id, name, arguments: args } = toolCall;
+
+        logger.debug(`Processing tool call: ${name} with args: ${JSON.stringify(args)}`);
+
+        // Look for the tool in the agent definition
+        const tool = this.agentDefinition?.tools?.find(t => t.name === name);
+
+        if (tool && typeof tool.function === 'function') {
+          // Execute the tool function
+          const startTime = Date.now();
+          const result = await tool.function(args);
+          const executionTime = Date.now() - startTime;
+
+          processedCalls.push({
+            id,
+            name,
+            arguments: args,
+            result,
+            executionTime,
+            status: 'success',
+          });
+
+          logger.debug(`Tool ${name} executed successfully in ${executionTime}ms`);
+        } else {
+          // Tool not found or not executable
+          const errorMessage = `Tool '${name}' not found or not executable`;
+          processedCalls.push({
+            id,
+            name,
+            arguments: args,
+            error: errorMessage,
+            status: 'error',
+          });
+
+          logger.warn(errorMessage);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        processedCalls.push({
+          id: toolCall.id,
+          name: toolCall.name,
+          arguments: toolCall.arguments,
+          error: errorMessage,
+          status: 'error',
+        });
+
+        logger.error(`Tool call ${toolCall.name} failed: ${errorMessage}`);
+      }
+    }
+
+    return processedCalls;
+  }
+
+  /**
+   * Processes function calls from the agent (alternative format)
+   */
+  private async processFunctionCalls(functionCalls: any[], session: LivekitSession): Promise<any[]> {
+    const processedCalls = [];
+
+    for (const functionCall of functionCalls) {
+      try {
+        const { name, parameters } = functionCall;
+
+        logger.debug(`Processing function call: ${name} with parameters: ${JSON.stringify(parameters)}`);
+
+        // Look for the function in the agent definition tools
+        const tool = this.agentDefinition?.tools?.find(t => t.name === name);
+
+        if (tool && typeof tool.function === 'function') {
+          // Execute the function
+          const startTime = Date.now();
+          const result = await tool.function(parameters);
+          const executionTime = Date.now() - startTime;
+
+          processedCalls.push({
+            name,
+            parameters,
+            result,
+            executionTime,
+            status: 'success',
+          });
+
+          logger.debug(`Function ${name} executed successfully in ${executionTime}ms`);
+        } else {
+          // Function not found or not executable
+          const errorMessage = `Function '${name}' not found or not executable`;
+          processedCalls.push({
+            name,
+            parameters,
+            error: errorMessage,
+            status: 'error',
+          });
+
+          logger.warn(errorMessage);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        processedCalls.push({
+          name: functionCall.name,
+          parameters: functionCall.parameters,
+          error: errorMessage,
+          status: 'error',
+        });
+
+        logger.error(`Function call ${functionCall.name} failed: ${errorMessage}`);
+      }
+    }
+
+    return processedCalls;
   }
 
   private calculateProcessingDelay(prompt: string): number {
@@ -913,6 +1310,313 @@ export class LivekitProvider implements ApiProvider {
   }
 }
 
+// Audio processing utilities
+class AudioProcessor {
+  /**
+   * Detects audio format from Buffer or string data
+   */
+  static detectAudioFormat(data: Buffer | string): 'wav' | 'mp3' | 'opus' | 'raw' {
+    if (typeof data === 'string') {
+      // Check if it's a URL or base64
+      if (data.startsWith('http://') || data.startsWith('https://')) {
+        // Try to detect from URL extension
+        const url = new URL(data);
+        const extension = path.extname(url.pathname).toLowerCase();
+        switch (extension) {
+          case '.mp3': return 'mp3';
+          case '.wav': return 'wav';
+          case '.opus': return 'opus';
+          default: return 'raw';
+        }
+      }
+      // Assume base64 for now
+      return 'raw';
+    }
+
+    // Detect from Buffer magic bytes
+    if (data.length >= 4) {
+      // WAV file header
+      if (data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WAVE') {
+        return 'wav';
+      }
+      // MP3 file header
+      if ((data[0] === 0xFF && (data[1] & 0xE0) === 0xE0) || data.toString('ascii', 0, 3) === 'ID3') {
+        return 'mp3';
+      }
+      // Opus file header
+      if (data.toString('ascii', 0, 8) === 'OpusHead') {
+        return 'opus';
+      }
+    }
+
+    return 'raw';
+  }
+
+  /**
+   * Parses audio input from various formats
+   */
+  static async parseAudioInput(input: string, audioConfig: AudioConfig): Promise<AudioData | null> {
+    if (!input) return null;
+
+    try {
+      // Check if input is a file path
+      if (input.startsWith('file://') || (!input.startsWith('http') && !input.includes('base64'))) {
+        const filePath = input.startsWith('file://') ? input.slice(7) : input;
+
+        try {
+          const audioBuffer = await fs.readFile(filePath);
+          const format = AudioProcessor.detectAudioFormat(audioBuffer);
+
+          return {
+            data: audioBuffer,
+            format,
+            sampleRate: audioConfig.sampleRate || 48000,
+            channels: audioConfig.channels || 1,
+          };
+        } catch (error) {
+          logger.warn(`Failed to read audio file: ${filePath}`);
+          return null;
+        }
+      }
+
+      // Check if input is a URL
+      if (input.startsWith('http://') || input.startsWith('https://')) {
+        const format = AudioProcessor.detectAudioFormat(input);
+        return {
+          data: input,
+          format,
+          sampleRate: audioConfig.sampleRate || 48000,
+          channels: audioConfig.channels || 1,
+          url: input,
+        };
+      }
+
+      // Check if input is base64 encoded
+      if (input.includes('base64,')) {
+        const base64Data = input.split('base64,')[1];
+        const audioBuffer = Buffer.from(base64Data, 'base64');
+        const format = AudioProcessor.detectAudioFormat(audioBuffer);
+
+        return {
+          data: audioBuffer,
+          format,
+          sampleRate: audioConfig.sampleRate || 48000,
+          channels: audioConfig.channels || 1,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      logger.error(`Error parsing audio input: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Formats audio output for response
+   */
+  static formatAudioOutput(audioData: any, audioConfig: AudioConfig): AudioData | undefined {
+    if (!audioData) return undefined;
+
+    try {
+      // Handle different audio data formats from LiveKit agent
+      if (typeof audioData === 'string') {
+        // URL or base64
+        const format = AudioProcessor.detectAudioFormat(audioData);
+        return {
+          data: audioData,
+          format,
+          sampleRate: audioConfig.sampleRate || 48000,
+          channels: audioConfig.channels || 1,
+          url: audioData.startsWith('http') ? audioData : undefined,
+        };
+      }
+
+      if (Buffer.isBuffer(audioData)) {
+        // Raw audio buffer
+        const format = AudioProcessor.detectAudioFormat(audioData);
+        return {
+          data: audioData,
+          format,
+          sampleRate: audioConfig.sampleRate || 48000,
+          channels: audioConfig.channels || 1,
+        };
+      }
+
+      if (typeof audioData === 'object' && audioData.data) {
+        // Structured audio object
+        return {
+          data: audioData.data,
+          format: audioData.format || 'raw',
+          sampleRate: audioData.sampleRate || audioConfig.sampleRate || 48000,
+          channels: audioData.channels || audioConfig.channels || 1,
+          duration: audioData.duration,
+          url: audioData.url,
+        };
+      }
+
+      return undefined;
+    } catch (error) {
+      logger.error(`Error formatting audio output: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
+  }
+}
+
+// Video processing utilities
+class VideoProcessor {
+  /**
+   * Detects video format from Buffer or string data
+   */
+  static detectVideoFormat(data: Buffer | string): 'mp4' | 'webm' | 'raw' {
+    if (typeof data === 'string') {
+      // Check if it's a URL
+      if (data.startsWith('http://') || data.startsWith('https://')) {
+        // Try to detect from URL extension
+        const url = new URL(data);
+        const extension = path.extname(url.pathname).toLowerCase();
+        switch (extension) {
+          case '.mp4': return 'mp4';
+          case '.webm': return 'webm';
+          default: return 'raw';
+        }
+      }
+      // Assume base64 for now
+      return 'raw';
+    }
+
+    // Detect from Buffer magic bytes
+    if (data.length >= 8) {
+      // MP4 file header (ftyp box)
+      if (data.toString('ascii', 4, 8) === 'ftyp') {
+        return 'mp4';
+      }
+      // WebM file header
+      if (data[0] === 0x1A && data[1] === 0x45 && data[2] === 0xDF && data[3] === 0xA3) {
+        return 'webm';
+      }
+    }
+
+    return 'raw';
+  }
+
+  /**
+   * Parses video input from various formats
+   */
+  static async parseVideoInput(input: string, videoConfig: VideoConfig): Promise<VideoData | null> {
+    if (!input) return null;
+
+    try {
+      // Check if input is a file path
+      if (input.startsWith('file://') || (!input.startsWith('http') && !input.includes('base64'))) {
+        const filePath = input.startsWith('file://') ? input.slice(7) : input;
+
+        try {
+          const videoBuffer = await fs.readFile(filePath);
+          const format = VideoProcessor.detectVideoFormat(videoBuffer);
+
+          return {
+            data: videoBuffer,
+            format,
+            width: videoConfig.width || 1280,
+            height: videoConfig.height || 720,
+            framerate: videoConfig.framerate || 30,
+          };
+        } catch (error) {
+          logger.warn(`Failed to read video file: ${filePath}`);
+          return null;
+        }
+      }
+
+      // Check if input is a URL
+      if (input.startsWith('http://') || input.startsWith('https://')) {
+        const format = VideoProcessor.detectVideoFormat(input);
+        return {
+          data: input,
+          format,
+          width: videoConfig.width || 1280,
+          height: videoConfig.height || 720,
+          framerate: videoConfig.framerate || 30,
+          url: input,
+        };
+      }
+
+      // Check if input is base64 encoded
+      if (input.includes('base64,')) {
+        const base64Data = input.split('base64,')[1];
+        const videoBuffer = Buffer.from(base64Data, 'base64');
+        const format = VideoProcessor.detectVideoFormat(videoBuffer);
+
+        return {
+          data: videoBuffer,
+          format,
+          width: videoConfig.width || 1280,
+          height: videoConfig.height || 720,
+          framerate: videoConfig.framerate || 30,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      logger.error(`Error parsing video input: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Formats video output for response
+   */
+  static formatVideoOutput(videoData: any, videoConfig: VideoConfig): VideoData | undefined {
+    if (!videoData) return undefined;
+
+    try {
+      // Handle different video data formats from LiveKit agent
+      if (typeof videoData === 'string') {
+        // URL or base64
+        const format = VideoProcessor.detectVideoFormat(videoData);
+        return {
+          data: videoData,
+          format,
+          width: videoConfig.width || 1280,
+          height: videoConfig.height || 720,
+          framerate: videoConfig.framerate || 30,
+          url: videoData.startsWith('http') ? videoData : undefined,
+        };
+      }
+
+      if (Buffer.isBuffer(videoData)) {
+        // Raw video buffer
+        const format = VideoProcessor.detectVideoFormat(videoData);
+        return {
+          data: videoData,
+          format,
+          width: videoConfig.width || 1280,
+          height: videoConfig.height || 720,
+          framerate: videoConfig.framerate || 30,
+        };
+      }
+
+      if (typeof videoData === 'object' && videoData.data) {
+        // Structured video object
+        return {
+          data: videoData.data,
+          format: videoData.format || 'raw',
+          width: videoData.width || videoConfig.width || 1280,
+          height: videoData.height || videoConfig.height || 720,
+          framerate: videoData.framerate || videoConfig.framerate || 30,
+          duration: videoData.duration,
+          url: videoData.url,
+        };
+      }
+
+      return undefined;
+    } catch (error) {
+      logger.error(`Error formatting video output: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
+  }
+}
+
 export function createLivekitProvider(
   providerPath: string,
   options: { config?: ProviderOptions; env?: any; basePath?: string },
@@ -974,10 +1678,9 @@ export function createLivekitProvider(
   const mergedConfig: LivekitProviderOptions = {
     ...config,
     config: {
-      agentPath: agentName,
       ...cleanedEnvConfig,
       ...config.config,
-      // Ensure agentPath is set from user config if provided
+      // Ensure agentPath is set from user config if provided, otherwise use parsed name
       agentPath: config.config?.agentPath || agentName,
     },
   };

@@ -8,6 +8,10 @@ prompts:
   - "What is the weather like?"
   - "Can you help me with a task?"
   - "Tell me a joke"
+  - "audio:https://example.com/sample.wav Process this audio file"
+  - "video:https://example.com/sample.mp4 Analyze this video content"
+  - "What is the current timestamp?"
+  - "Can you echo this message for me?"
 
 providers:
   # Basic LiveKit agent provider
@@ -64,3 +68,118 @@ tests:
         value: "Echo from LiveKit agent"
       - type: contains
         value: "joke"
+
+  - description: "Agent processes audio input"
+    vars: {}
+    assert:
+      - type: contains
+        value: "Echo from LiveKit agent"
+      - type: contains
+        value: "audio:"
+      - type: javascript
+        value: |
+          // Check that audio metadata is present
+          const metadata = output.metadata || {};
+          return metadata.audio && metadata.audio.format;
+
+  - description: "Agent processes video input"
+    vars: {}
+    assert:
+      - type: contains
+        value: "Echo from LiveKit agent"
+      - type: contains
+        value: "video:"
+      - type: javascript
+        value: |
+          // Check that video metadata is present
+          const metadata = output.metadata || {};
+          return metadata.video && metadata.video.format;
+
+  - description: "Agent uses tools when requested"
+    vars: {}
+    assert:
+      - type: contains
+        value: "Echo from LiveKit agent"
+      - type: javascript
+        value: |
+          // Check that tool calls are present in metadata
+          const metadata = output.metadata || {};
+          return metadata.toolCalls && Array.isArray(metadata.toolCalls) && metadata.toolCalls.length > 0;
+
+  - description: "Tool execution includes results"
+    vars: {}
+    assert:
+      - type: javascript
+        value: |
+          // Check that tool calls have results or timestamps
+          const metadata = output.metadata || {};
+          if (!metadata.toolCalls || !Array.isArray(metadata.toolCalls)) return false;
+          return metadata.toolCalls.some(call =>
+            call.result !== undefined || call.status === 'success'
+          );
+
+  - description: "Mixed-mode response includes all modalities"
+    vars: {}
+    assert:
+      - type: javascript
+        value: |
+          // Check for comprehensive multi-modal response metadata
+          const metadata = output.metadata || {};
+
+          // Should have modality summary
+          if (!metadata.responseModalities || !Array.isArray(metadata.responseModalities)) {
+            return false;
+          }
+
+          // Should be marked as multi-modal if more than text
+          if (metadata.responseModalities.length > 1 && !metadata.isMultiModal) {
+            return false;
+          }
+
+          // Should have processing info
+          if (!metadata.processing || !metadata.processing.enabledFeatures) {
+            return false;
+          }
+
+          return true;
+
+  - description: "Response format handles modality descriptions"
+    vars: {}
+    assert:
+      - type: javascript
+        value: |
+          // Check that output includes modality descriptions when available
+          const hasAudioRef = output.output && output.output.includes('[Audio:');
+          const hasVideoRef = output.output && output.output.includes('[Video:');
+          const metadata = output.metadata || {};
+
+          // If we have audio/video metadata, output should reference it
+          if (metadata.audio && !hasAudioRef) return false;
+          if (metadata.video && !hasVideoRef) return false;
+
+          return true;
+
+  - description: "Response format follows standardization requirements"
+    vars: {}
+    assert:
+      - type: javascript
+        value: |
+          // Check standardized response format
+          const metadata = output.metadata || {};
+
+          // Should have quality indicators
+          if (!metadata.quality || typeof metadata.quality.completeness !== 'number') {
+            return false;
+          }
+
+          // Should have response ID and timestamp
+          if (!metadata.responseId || !metadata.timestamp) {
+            return false;
+          }
+
+          // Completeness should be reasonable (>= 25% for basic text response)
+          if (metadata.quality.completeness < 25) {
+            return false;
+          }
+
+          return true;
