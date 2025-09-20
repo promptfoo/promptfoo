@@ -8,7 +8,6 @@ providers:
   - id: https://api.openai.com/v1/chat/completions
     label: 'gpt-5-nano'
     config:
-      enableStreamingMetrics: true
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
@@ -51,7 +50,6 @@ providers:
   - id: https://api.openai.com/v1/chat/completions
     label: 'gpt-5'
     config:
-      enableStreamingMetrics: true
       method: 'POST'
       headers:
         'Content-Type': 'application/json'

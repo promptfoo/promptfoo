@@ -1578,54 +1578,6 @@ export class HttpProvider implements ApiProvider {
   }
 
   /**
-   * Auto-detect if streaming metrics should be enabled based on configuration
-   *
-   * @param context - Call context that may contain assertions
-   * @returns True if streaming metrics should be automatically enabled
-   */
-  private shouldEnableStreamingMetrics(context?: CallApiContextParams): boolean {
-    // If explicitly set, respect the user's choice
-    if (this.config.enableStreamingMetrics !== undefined) {
-      return this.config.enableStreamingMetrics;
-    }
-
-    // Auto-enable if request body configures streaming
-    if (this.bodyConfiguresStreaming()) {
-      return true;
-    }
-
-    // Auto-enable if context has TTFT assertions
-    if (context && this.hasStreamingAssertions(context)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Check if the request body is configured for streaming
-   */
-  private bodyConfiguresStreaming(): boolean {
-    if (!this.config.body || typeof this.config.body !== 'object') {
-      return false;
-    }
-
-    // Check if stream is explicitly enabled in body
-    const body = this.config.body as Record<string, any>;
-    return body.stream === true;
-  }
-
-  /**
-   * Check if the test context contains TTFT assertions
-   */
-  private hasStreamingAssertions(context: CallApiContextParams): boolean {
-    // Check if any test case has TTFT assertions
-    // This is a simplified check - in practice, we'd need access to the test configuration
-    // For now, we'll rely on body.stream detection and explicit enableStreamingMetrics
-    return false; // TODO: Implement when assertion context is available
-  }
-
-  /**
    * Unified response fetching that handles both streaming and non-streaming cases
    *
    * When enableStreamingMetrics is true:
@@ -1647,7 +1599,14 @@ export class HttpProvider implements ApiProvider {
     fetchOptions: RequestInit,
     context?: CallApiContextParams,
   ): Promise<{ response: FetchWithCacheResult<string>; streamingMetrics?: StreamingMetrics }> {
-    if (this.shouldEnableStreamingMetrics(context)) {
+    // Auto-enable TTFT measurement when stream is explicitly enabled
+    const shouldMeasureTTFT =
+      this.config.enableStreamingMetrics ||
+      (this.config.body &&
+        typeof this.config.body === 'object' &&
+        (this.config.body as Record<string, any>).stream === true);
+
+    if (shouldMeasureTTFT) {
       // Streaming path: Get raw response and process as stream
       // Note: Caching is disabled for streaming responses to ensure live TTFT measurement
       const rawResponse = await fetchWithRetries(

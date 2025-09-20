@@ -21,7 +21,6 @@ prompts:
 providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
-      enableStreamingMetrics: true # Enable TTFT measurement
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
