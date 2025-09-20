@@ -106,7 +106,8 @@ textarea {
   .MuiContainer-root nav,
   [role='navigation'],
   .MuiAppBar-positionStatic,
-  .print-hide {
+  .print-hide,
+  .pagination {
     display: none !important;
     visibility: hidden !important;
   }

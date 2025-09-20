@@ -477,7 +477,14 @@ export default function ResultsView({
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
   return (
-    <>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+        '@supports (height: 100dvh)': { minHeight: '100dvh' },
+      }}
+    >
       <Box px={2} pt={2}>
         <Box sx={{ transition: 'all 0.3s ease' }}>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
@@ -796,19 +803,21 @@ export default function ResultsView({
             <ResultsCharts handleHideCharts={() => setRenderResultsCharts(false)} />
           )}
         </Box>
-        <ResultsTable
-          maxTextLength={maxTextLength}
-          columnVisibility={currentColumnState.columnVisibility}
-          wordBreak={wordBreak}
-          showStats={showInferenceDetails}
-          filterMode={filterMode}
-          failureFilter={failureFilter}
-          debouncedSearchText={debouncedSearchValue}
-          onFailureFilterToggle={handleFailureFilterToggle}
-          onSearchTextChange={handleSearchTextChange}
-          setFilterMode={setFilterMode}
-          zoom={resultsTableZoom}
-        />
+        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <ResultsTable
+            maxTextLength={maxTextLength}
+            columnVisibility={currentColumnState.columnVisibility}
+            wordBreak={wordBreak}
+            showStats={showInferenceDetails}
+            filterMode={filterMode}
+            failureFilter={failureFilter}
+            debouncedSearchText={debouncedSearchValue}
+            onFailureFilterToggle={handleFailureFilterToggle}
+            onSearchTextChange={handleSearchTextChange}
+            setFilterMode={setFilterMode}
+            zoom={resultsTableZoom}
+          />
+        </Box>
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
@@ -819,6 +828,6 @@ export default function ResultsView({
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
-    </>
+    </Box>
   );
 }

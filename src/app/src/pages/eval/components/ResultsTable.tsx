@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
@@ -268,6 +268,7 @@ function ResultsTable({
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+  const [isScrolled, setIsScrolled] = React.useState(false);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
@@ -1164,6 +1165,7 @@ function ResultsTable({
   // Listen for scroll events on the table container and sync the header horizontally
   const tableRef = useRef<HTMLDivElement>(null);
   const theadRef = useRef<HTMLTableSectionElement>(null);
+  const paginationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!tableRef.current || !theadRef.current) {
@@ -1182,6 +1184,8 @@ function ResultsTable({
           const xScroll = container.scrollLeft;
           theadRef.current.style.transform = `translateX(-${xScroll}px)`;
         }
+        // Track scroll position for footer elevation
+        setIsScrolled(container.scrollTop > 10);
       });
     };
 
@@ -1198,6 +1202,30 @@ function ResultsTable({
       }
       container.removeEventListener('scroll', handleScroll);
       window.removeEventListener('resize', handleScroll);
+    };
+  }, []);
+
+  // Track pagination height dynamically to prevent footer overlap
+  useLayoutEffect(() => {
+    if (!tableRef.current || !paginationRef.current) {
+      return;
+    }
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const height = entries[0]?.contentRect.height || 96;
+      if (tableRef.current) {
+        tableRef.current.style.setProperty('--pagination-height', `${Math.ceil(height)}px`);
+      }
+    });
+
+    resizeObserver.observe(paginationRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
     };
   }, []);
 
@@ -1248,6 +1276,7 @@ function ResultsTable({
           // won't extend to the bottom of the viewport.
           flexGrow: 1,
           position: 'relative',
+          paddingBottom: 'calc(var(--pagination-height, 96px) + env(safe-area-inset-bottom, 0px))',
         }}
         ref={tableRef}
       >
@@ -1262,7 +1291,7 @@ function ResultsTable({
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: (theme) => alpha(theme.palette.background.default, 0.7),
-            zIndex: 1000,
+            zIndex: (theme) => theme.zIndex.modal + 100,
             opacity: isFetching ? 1 : 0,
             pointerEvents: isFetching ? 'auto' : 'none',
             transition: 'opacity 0.3s ease-in-out',
@@ -1394,10 +1423,15 @@ function ResultsTable({
         className="pagination"
         px={2}
         mx={-2}
+        ref={paginationRef}
+        aria-label="Pagination controls"
+        role="region"
         sx={{
           position: 'sticky',
           bottom: 0,
-          zIndex: 1000,
+          left: 0,
+          right: 0,
+          zIndex: (theme) => theme.zIndex.appBar + 1,
           display: 'flex',
           alignItems: 'center',
           gap: 2,
@@ -1406,11 +1440,14 @@ function ResultsTable({
           backgroundColor: 'background.paper',
           borderTop: '1px solid',
           borderColor: 'divider',
-          width: '100vw',
-          boxShadow: 3,
+          width: '100%',
+          boxShadow: isScrolled ? 4 : 3,
+          backdropFilter: isScrolled ? 'blur(6px)' : 'none',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          transition: 'box-shadow 0.2s ease-in-out, backdrop-filter 0.2s ease-in-out',
         }}
       >
-        <Box>
+        <Box aria-live="polite">
           Showing{' '}
           {filteredResultsCount === 0 ? (
             <Typography component="span" sx={{ fontWeight: 600 }}>

@@ -7,9 +7,11 @@ pre {
 }
 
 #results-table-container {
-  overflow: scroll;
+  overflow: auto;
   margin: 0 -1rem;
   padding: 0 1rem;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
 }
 
 table.results-table,
