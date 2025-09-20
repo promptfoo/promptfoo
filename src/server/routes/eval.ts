@@ -6,7 +6,7 @@ import { fromZodError } from 'zod-validation-error';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import promptfoo from '../../index';
 import logger from '../../logger';
-import Eval from '../../models/eval';
+import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
@@ -274,6 +274,49 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     author: eval_.author || null,
     version: eval_.version(),
   } as EvalTableDTO);
+});
+
+evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = ApiSchemas.Eval.MetadataKeys.Params.parse(req.params);
+    const { comparisonEvalIds = [] } = ApiSchemas.Eval.MetadataKeys.Query.parse(req.query);
+
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    // Validate that comparison evals exist
+    if (comparisonEvalIds.length > 0) {
+      const comparisonEvals = await Promise.all(
+        comparisonEvalIds.map((compId) => Eval.findById(compId)),
+      );
+      const missingEvals = comparisonEvalIds.filter((_, index) => !comparisonEvals[index]);
+      if (missingEvals.length > 0) {
+        res.status(400).json({
+          error: `Comparison evals not found: ${missingEvals.join(', ')}`,
+        });
+        return;
+      }
+    }
+
+    const keys = await EvalQueries.getMetadataKeysFromEval(id, comparisonEvalIds);
+
+    const response = ApiSchemas.Eval.MetadataKeys.Response.parse({ keys });
+    res.json(response);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+      return;
+    }
+
+    const { id } = req.params;
+    logger.error(
+      `Error fetching metadata keys for eval ${id}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    res.status(500).json({ error: 'Failed to fetch metadata keys' });
+  }
 });
 
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {

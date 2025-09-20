@@ -13,6 +13,7 @@ dist
 .vite
 *.tsbuildinfo
 src/generated/
+task.md
 
 # pnpm-specific
 .pnpm-store/

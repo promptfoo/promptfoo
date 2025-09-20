@@ -45,6 +45,9 @@ describe('FiltersForm', () => {
         },
         appliedCount: 0,
       },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
       addFilter: mockAddFilter,
       updateFilter: mockUpdateFilter,
       removeFilter: mockRemoveFilter,
@@ -81,6 +84,9 @@ describe('FiltersForm', () => {
         },
         appliedCount: 0,
       },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
       addFilter: mockAddFilter,
       removeAllFilters: mockRemoveAllFilters,
       updateFilter: mockUpdateFilter,
@@ -133,6 +139,9 @@ describe('FiltersForm', () => {
         },
         appliedCount: 2,
       },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
       removeAllFilters: mockRemoveAllFilters,
       addFilter: mockAddFilter,
       updateFilter: mockUpdateFilter,
@@ -189,6 +198,9 @@ describe('FiltersForm', () => {
         },
         appliedCount: 2,
       },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
       addFilter: mockAddFilter,
       removeFilter: mockRemoveFilter,
       updateFilter: mockUpdateFilter,
@@ -246,6 +258,9 @@ describe('FiltersForm', () => {
         },
         appliedCount: 1,
       },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
       addFilter: mockAddFilter,
       updateFilter: mockUpdateFilter,
       removeFilter: mockRemoveFilter,
@@ -262,6 +277,154 @@ describe('FiltersForm', () => {
     );
 
     expect(useTableStore).toHaveBeenCalled();
+  });
+
+  it('should allow manual entry of a metadata key when metadataKeysError is true', async () => {
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      field: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+        appliedCount: 0,
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: true,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const keyInput = screen.getByLabelText('Key');
+    const testKey = 'test-metadata-key';
+    fireEvent.change(keyInput, { target: { value: testKey } });
+
+    expect(mockUpdateFilter).toHaveBeenLastCalledWith({
+      ...initialFilter,
+      field: testKey,
+    });
+  });
+
+  it('should handle extremely long metadata key names in the dropdown without breaking the layout', async () => {
+    const longMetadataKey = 'a'.repeat(200);
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      field: longMetadataKey,
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+        appliedCount: 0,
+      },
+      metadataKeys: [longMetadataKey],
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const metadataKeyDropdown = screen.getByRole('combobox', { name: /Key/i });
+    expect(metadataKeyDropdown).toBeInTheDocument();
+
+    await userEvent.click(metadataKeyDropdown);
+
+    const metadataKeyOption = await screen.findByRole('option', { name: longMetadataKey });
+    expect(metadataKeyOption).toBeInTheDocument();
+  });
+
+  it("Filter should render a Dropdown with all metadataKeys as selectable options when value.type is 'metadata', metadataKeysLoading is false, and metadataKeys contains at least one key", () => {
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    const metadataKeys = ['key1', 'key2', 'key3'];
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+        appliedCount: 0,
+      },
+      metadataKeys: metadataKeys,
+      metadataKeysLoading: false,
+      metadataKeysError: null,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const keyDropdown = screen.getByRole('combobox', { name: /Key/i });
+    expect(keyDropdown).toBeInTheDocument();
   });
 
   it('should render each Filter row container with overflow set to "hidden"', () => {
@@ -395,6 +558,9 @@ describe('FiltersForm', () => {
           },
           appliedCount: 0,
         },
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: null,
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -446,6 +612,9 @@ describe('FiltersForm', () => {
           },
           appliedCount: 0,
         },
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: null,
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -500,6 +669,9 @@ describe('FiltersForm', () => {
           },
           appliedCount: 0,
         },
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: null,
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -552,6 +724,9 @@ describe('FiltersForm', () => {
           },
           appliedCount: 0,
         },
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: null,
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -600,6 +775,9 @@ describe('FiltersForm', () => {
           },
           appliedCount: 0,
         },
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: null,
         updateFilter: mockUpdateFilter,
         removeFilter: mockRemoveFilter,
         updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
@@ -629,6 +807,148 @@ describe('FiltersForm', () => {
           value: '',
         }),
       );
+    });
+
+    it("Filter should render a disabled TextField with a loading spinner and 'Loading keys...' placeholder when value.type is 'metadata' and metadataKeysLoading is true", () => {
+      const initialFilter: ResultsFilter = {
+        id: 'filter-1',
+        type: 'metadata',
+        operator: 'equals',
+        value: '',
+        sortIndex: 0,
+        logicOperator: 'and',
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: { 'filter-1': initialFilter },
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: [],
+        metadataKeysLoading: true,
+        metadataKeysError: null,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      const textField = screen.getByPlaceholderText('Loading keys...');
+      expect(textField).toBeInTheDocument();
+      expect(textField).toBeDisabled();
+
+      const circularProgress = textField
+        .closest('.MuiInputBase-root')
+        ?.querySelector('.MuiCircularProgress-root');
+      expect(circularProgress).toBeInTheDocument();
+    });
+
+    it("Filter should render a TextField with error indication and 'Failed to load available keys' helper text when value.type is 'metadata', metadataKeysLoading is false, metadataKeys is empty, and metadataKeysError is true", () => {
+      const initialFilter: ResultsFilter = {
+        id: 'filter-1',
+        type: 'metadata',
+        operator: 'equals',
+        value: '',
+        sortIndex: 0,
+        logicOperator: 'and',
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: { 'filter-1': initialFilter },
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: true,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      const textField = screen.getByRole('textbox', { name: /Key/i });
+      expect(textField).toBeInTheDocument();
+      expect(textField).toHaveAttribute('aria-invalid', 'true');
+
+      const helperText = screen.getByText('Failed to load available keys');
+      expect(helperText).toBeInTheDocument();
+    });
+
+    it("Filter should render a TextField with 'Enter metadata key' placeholder and no error indication when value.type is 'metadata', metadataKeysLoading is false, metadataKeys is empty, and metadataKeysError is false", () => {
+      const initialFilter: ResultsFilter = {
+        id: 'filter-1',
+        type: 'metadata',
+        operator: 'equals',
+        value: '',
+        sortIndex: 0,
+        logicOperator: 'and',
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: { 'filter-1': initialFilter },
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      const textField = screen.getByPlaceholderText('Enter metadata key');
+      expect(textField).toBeInTheDocument();
     });
 
     it('should default to metadata filter for standard evaluations (no strategy options)', () => {

@@ -1,7 +1,7 @@
 import { getDb } from '../../src/database';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
-import Eval, { getEvalSummaries } from '../../src/models/eval';
+import Eval, { EvalQueries, getEvalSummaries } from '../../src/models/eval';
 import EvalFactory from '../factories/evalFactory';
 
 import type { Prompt } from '../../src/types/index';
@@ -642,6 +642,54 @@ describe('evaluator', () => {
       expect(result.body).toEqual([]);
       expect(result.totalCount).toBe(0);
       expect(result.filteredCount).toBe(0);
+    });
+  });
+
+  describe('EvalQueries.getMetadataKeysFromEval', () => {
+    it('should return unique metadata keys from all eval results', async () => {
+      const eval_ = await EvalFactory.create();
+
+      // Add eval results with different metadata
+      const db = getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{"key1": "value1", "key2": "value2"}'),
+        ('result2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}'),
+        ('result3', '${eval_.id}', 0, 2, '{}', '{}', '{}', 1, 1.0, '{"key1": "value5", "key4": "value6"}')`,
+      );
+
+      const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
+
+      expect(keys).toEqual(['key1', 'key2', 'key3', 'key4']);
+    });
+
+    it('should return empty array for eval with no metadata', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
+
+      expect(keys).toEqual([]);
+    });
+
+    it('should handle empty metadata objects gracefully', async () => {
+      const eval_ = await EvalFactory.create();
+
+      // Add eval result with empty metadata
+      const db = getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{}')`,
+      );
+
+      const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
+
+      expect(keys).toEqual([]);
     });
   });
 
