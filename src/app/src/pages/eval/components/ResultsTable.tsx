@@ -1422,12 +1422,11 @@ function ResultsTable({
       <Box
         className="pagination"
         px={2}
-        mx={-2}
         ref={paginationRef}
         aria-label="Pagination controls"
         role="region"
         sx={{
-          position: 'sticky',
+          position: 'fixed',
           bottom: 0,
           left: 0,
           right: 0,
