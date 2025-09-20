@@ -117,6 +117,23 @@ describe('ReportPage', () => {
     expect(screen.queryByText('Report Component')).not.toBeInTheDocument();
   });
 
+  it('should render ReportIndex component when evalId is an empty string in URL search parameters', () => {
+    const url = 'http://localhost/reports?evalId=';
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: new URL(url),
+    });
+
+    render(
+      <MemoryRouter>
+        <ReportPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('ReportIndex Component')).toBeInTheDocument();
+    expect(screen.queryByText('Report Component')).not.toBeInTheDocument();
+  });
+
   it('should redirect to the login page when the user is not logged in and email is null', () => {
     const navigate = vi.fn();
     mockedUseNavigate.mockReturnValue(navigate);
