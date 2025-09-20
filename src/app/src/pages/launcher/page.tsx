@@ -135,10 +135,21 @@ export default function LauncherPage() {
   }, [darkMode]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    // Simple delay to allow server startup, then start health checks
+    let interval: NodeJS.Timeout;
+    const timeout = setTimeout(() => {
       checkHealth();
-    }, 2000);
-    return () => clearInterval(interval);
+      interval = setInterval(() => {
+        checkHealth();
+      }, 2000);
+    }, 3000);
+
+    return () => {
+      clearTimeout(timeout);
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
   }, [checkHealth]);
 
   useEffect(() => {
