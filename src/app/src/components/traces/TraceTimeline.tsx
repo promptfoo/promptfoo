@@ -133,9 +133,6 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
 
   const { spans, totalDuration } = processedSpans;
 
-  // Calculate the maximum span duration once for proportional scaling
-  const maxSpanDuration = spans.length > 0 ? Math.max(...spans.map(s => s.duration)) : 0;
-
   return (
     <Box pt={2}>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -146,14 +143,12 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
         {/* Convert milliseconds to microseconds */}
       </Typography>
 
-      <Paper variant="outlined" sx={{ p: 2 }}>
+      <Paper variant="outlined" sx={{ p: 2, overflow: 'auto' }}>
         {spans.map((span, index) => {
           const status = getSpanStatus(span.statusCode);
 
-          // Scale span width based on its duration relative to the longest span
-          const spanDurationPercent = maxSpanDuration > 0 ? (span.duration / maxSpanDuration) * 100 : 0;
-
-          // Position span based on its start time relative to trace start
+          // Original temporal timeline approach - both position AND width based on time
+          const spanDurationPercent = totalDuration > 0 ? (span.duration / totalDuration) * 100 : 0;
           const spanStartPercent = totalDuration > 0 ? (span.relativeStart / totalDuration) * 100 : 0;
 
           return (
@@ -193,7 +188,6 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                   height: 24,
                   backgroundColor: theme.palette.action.hover,
                   borderRadius: 1,
-                  maxWidth: '100%', // Prevent overflow
                 }}
               >
                 <Tooltip
@@ -235,8 +229,8 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                   <Box
                     sx={{
                       position: 'absolute',
-                      left: `${Math.min(spanStartPercent, 95)}%`, // Cap at 95% to prevent overflow
-                      width: `${Math.min(Math.max(spanDurationPercent, 2), 50)}%`, // Cap at 50% max width
+                      left: `${spanStartPercent}%`,
+                      width: `${Math.max(spanDurationPercent, 0.5)}%`, // Minimum width for visibility
                       height: '100%',
                       backgroundColor:
                         status.color === 'error'
