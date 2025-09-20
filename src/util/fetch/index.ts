@@ -257,6 +257,7 @@ export async function handleRateLimit(response: Response): Promise<void> {
 
 /**
  * Fetch with automatic retries and rate limit handling
+ * Returns raw Response object for unified processing
  */
 export async function fetchWithRetries(
   url: RequestInfo,
@@ -337,75 +338,13 @@ export interface StreamingFetchOptions {
   enableMetrics?: boolean;
 }
 
-/**
- * Fetch with automatic retries and streaming support for TTFT measurement
- */
-export async function fetchWithRetriesAndStreaming(
-  url: RequestInfo,
-  options: RequestInit = {},
-  timeout: number,
-  maxRetries?: number,
-  streamingOptions?: StreamingFetchOptions,
-): Promise<{ response: Response; streamingMetrics?: StreamingMetrics }> {
-  maxRetries = Math.max(0, maxRetries ?? 4);
-
-  let lastErrorMessage: string | undefined;
-  const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
-
-  for (let i = 0; i <= maxRetries; i++) {
-    let response;
-    try {
-      response = await fetchWithTimeout(url, options, timeout);
-
-      if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
-        throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
-      }
-
-      if (response && isRateLimited(response)) {
-        logger.debug(
-          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${maxRetries}`,
-        );
-        await handleRateLimit(response);
-        continue;
-      }
-
-      // If streaming options are provided and metrics are enabled, return immediately
-      // The actual streaming will be handled by the caller
-      if (streamingOptions?.enableMetrics) {
-        return { response, streamingMetrics: {} };
-      }
-
-      return { response };
-    } catch (error) {
-      let errorMessage;
-      if (error instanceof Error) {
-        // Extract as much detail as possible from the error
-        const typedError = error as SystemError;
-        errorMessage = `${typedError.name}: ${typedError.message}`;
-        if (typedError.cause) {
-          errorMessage += ` (Cause: ${typedError.cause})`;
-        }
-        if (typedError.code) {
-          // Node.js system errors often have error codes
-          errorMessage += ` (Code: ${typedError.code})`;
-        }
-      } else {
-        errorMessage = String(error);
-      }
-
-      logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
-      if (i < maxRetries) {
-        const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-        await sleep(waitTime);
-      }
-      lastErrorMessage = errorMessage;
-    }
-  }
-  throw new Error(`Request failed after ${maxRetries} retries: ${lastErrorMessage}`);
-}
 
 /**
  * Process a streaming response and extract TTFT metrics
+ *
+ * @param response - The Response object to process as a stream
+ * @param onFirstToken - Optional callback triggered when first token is detected
+ * @returns Object containing the full response text and streaming metrics
  */
 export async function processStreamingResponse(
   response: Response,
@@ -437,8 +376,10 @@ export async function processStreamingResponse(
       text += chunk;
       chunkCount++;
 
-      // Detect first meaningful token - this is a simple heuristic
-      // More sophisticated detection should be handled in the transform function
+      // Detect first meaningful token using a simple heuristic
+      // Limitation: This may not be accurate if the stream includes preambles,
+      // comments, or other non-content chunks. More sophisticated detection
+      // should be implemented in the provider's transformResponse function.
       if (!hasCalledFirstToken && chunk.trim().length > 0) {
         firstTokenTime = Date.now() - streamStart;
         hasCalledFirstToken = true;
@@ -447,7 +388,10 @@ export async function processStreamingResponse(
         }
       }
 
-      // Count approximate tokens (rough estimate: 4 chars per token)
+      // Approximate token counting using character-based estimation
+      // Note: This is a rough approximation (4 chars ≈ 1 token) and may be
+      // inaccurate for non-English text, code, or tokens with special formatting.
+      // For more accurate token counting, integrate with a proper tokenizer.
       tokenCount += Math.ceil(chunk.length / 4);
     }
   } finally {

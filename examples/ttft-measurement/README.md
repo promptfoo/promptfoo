@@ -77,10 +77,14 @@ The evaluation will show:
 - **Model Selection**: The example uses `gpt-5-nano` with the completions API endpoint
 - **Threshold Tuning**: Adjust TTFT/latency thresholds based on your requirements
 - **Network Impact**: TTFT includes network latency, not just model processing time
-- **Accuracy**: Token estimation is approximate; actual tokenization may vary
+- **Token Counting**: Uses rough approximation (4 chars ≈ 1 token); inaccurate for non-English text or code
+- **Caching Behavior**: When `enableStreamingMetrics: true`, response caching is disabled to ensure live TTFT measurement
+- **Performance Trade-off**: Streaming responses sacrifice caching for real-time timing metrics
 
 ## Troubleshooting
 
 - **"TTFT assertion requires streaming metrics"**: Ensure `enableStreamingMetrics: true` is set
 - **High TTFT values**: Check network latency and API response times
 - **Streaming not working**: Verify your `transformResponse` correctly parses the streaming format
+- **Inconsistent TTFT measurements**: Remember that caching is disabled for streaming - each request hits the live API
+- **Performance concerns**: Use streaming metrics only when measuring TTFT; standard requests benefit from caching
