@@ -183,7 +183,6 @@ export default function EvalOutputPromptDialog({
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
-  const [showTraceSection, setShowTraceSection] = useState(true);
   const { addFilter, resetFilters } = useTableStore();
 
   useEffect(() => {
@@ -508,8 +507,6 @@ export default function EvalOutputPromptDialog({
                 testCaseId={testCaseId}
                 testIndex={testIndex}
                 promptIndex={promptIndex}
-                showTraceSection={showTraceSection}
-                onTraceSectionVisibilityChange={setShowTraceSection}
               />
             </Box>
           )}

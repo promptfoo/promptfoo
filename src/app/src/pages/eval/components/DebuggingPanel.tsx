@@ -14,8 +14,6 @@ interface DebuggingPanelProps {
   testCaseId?: string;
   testIndex?: number;
   promptIndex?: number;
-  showTraceSection: boolean;
-  onTraceSectionVisibilityChange: (visible: boolean) => void;
 }
 
 export function DebuggingPanel({
@@ -23,14 +21,12 @@ export function DebuggingPanel({
   testCaseId,
   testIndex,
   promptIndex,
-  showTraceSection,
-  onTraceSectionVisibilityChange,
 }: DebuggingPanelProps) {
   return (
     <Box>
       {evaluationId && (
-        <Box mb={2} sx={{ display: showTraceSection ? 'block' : 'none' }}>
-          <Typography variant="subtitle1" sx={subtitleTypographySx}>
+        <Box mb={2}>
+          <Typography variant="subtitle1" sx={subtitleTypographySx} aria-label="Trace Timeline">
             Trace Timeline
           </Typography>
           <ErrorBoundary fallback={<Alert severity="error">Error loading traces</Alert>}>
@@ -39,7 +35,6 @@ export function DebuggingPanel({
               testCaseId={testCaseId}
               testIndex={testIndex}
               promptIndex={promptIndex}
-              onVisibilityChange={onTraceSectionVisibilityChange}
             />
           </ErrorBoundary>
         </Box>

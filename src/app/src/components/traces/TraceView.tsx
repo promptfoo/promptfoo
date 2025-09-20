@@ -112,6 +112,17 @@ export default function TraceView({
   }
 
   // Filter traces with try-direct-match then fallback approach
+  const isComposedId = (id: unknown): id is string =>
+    typeof id === 'string' && /^\d+-\d+$/.test(id);
+
+  const matchesIndices = (id: unknown, ti?: number, pi?: number) => {
+    if (!isComposedId(id) || ti === undefined || pi === undefined) {
+      return false;
+    }
+    const [a, b] = id.split('-');
+    return Number.parseInt(a, 10) === ti && Number.parseInt(b, 10) === pi;
+  };
+
   let filteredTraces: any[] = traces;
 
   if (traces.length > 0) {
@@ -123,46 +134,18 @@ export default function TraceView({
         filteredTraces = directMatches;
       } else if (testIndex !== undefined && promptIndex !== undefined) {
         // Fallback: try index-based matching on composed trace.testCaseId
-        filteredTraces = traces.filter((trace) => {
-          if (!trace.testCaseId || typeof trace.testCaseId !== 'string') {
-            return false;
-          }
-          const parts = trace.testCaseId.split('-');
-          if (parts.length !== 2) {
-            return false;
-          }
-          const traceTestIndex = Number.parseInt(parts[0], 10);
-          const tracePromptIndex = Number.parseInt(parts[1], 10);
-          return (
-            !Number.isNaN(traceTestIndex) &&
-            !Number.isNaN(tracePromptIndex) &&
-            traceTestIndex === testIndex &&
-            tracePromptIndex === promptIndex
-          );
-        });
+        filteredTraces = traces.filter((trace) =>
+          matchesIndices(trace.testCaseId, testIndex, promptIndex),
+        );
       } else {
         // No direct match and no indices for fallback
         filteredTraces = [];
       }
     } else if (testIndex !== undefined && promptIndex !== undefined) {
       // No testCaseId but indices provided - try index-based filtering
-      filteredTraces = traces.filter((trace) => {
-        if (!trace.testCaseId || typeof trace.testCaseId !== 'string') {
-          return false;
-        }
-        const parts = trace.testCaseId.split('-');
-        if (parts.length !== 2) {
-          return false;
-        }
-        const traceTestIndex = Number.parseInt(parts[0], 10);
-        const tracePromptIndex = Number.parseInt(parts[1], 10);
-        return (
-          !Number.isNaN(traceTestIndex) &&
-          !Number.isNaN(tracePromptIndex) &&
-          traceTestIndex === testIndex &&
-          tracePromptIndex === promptIndex
-        );
-      });
+      filteredTraces = traces.filter((trace) =>
+        matchesIndices(trace.testCaseId, testIndex, promptIndex),
+      );
     }
     // If no testCaseId and no indices, show all traces for the evaluation
   }

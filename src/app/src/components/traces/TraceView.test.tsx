@@ -643,4 +643,33 @@ describe('TraceView', () => {
       expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
     });
   });
+
+  it('filters by indices when no testCaseId is provided', async () => {
+    const mockTraces = [
+      { traceId: 't-a', testCaseId: '1-2', spans: [{ spanId: 's1' }] },
+      { traceId: 't-b', testCaseId: '3-1', spans: [{ spanId: 's2' }] },
+    ];
+    vi.mocked(callApi).mockResolvedValue({ ok: true, json: () => Promise.resolve({ traces: mockTraces }) } as Response);
+
+    render(<TraceView evaluationId="eval-1" testIndex={3} promptIndex={1} />);
+
+    const timelines = await screen.findAllByTestId('trace-timeline');
+    expect(timelines).toHaveLength(1);
+    expect(screen.getByText('Trace ID: t-b')).toBeInTheDocument();
+  });
+
+  it('prefers direct testCaseId match over index fallback', async () => {
+    const mockTraces = [
+      { traceId: 't-direct', testCaseId: 'uuid-123', spans: [{ spanId: 's1' }] },
+      { traceId: 't-fallback', testCaseId: '3-1', spans: [{ spanId: 's2' }] },
+    ];
+    vi.mocked(callApi).mockResolvedValue({ ok: true, json: () => Promise.resolve({ traces: mockTraces }) } as Response);
+
+    render(<TraceView evaluationId="eval-1" testCaseId="uuid-123" testIndex={3} promptIndex={1} />);
+
+    const timelines = await screen.findAllByTestId('trace-timeline');
+    expect(timelines).toHaveLength(1);
+    expect(screen.getByText('Trace ID: t-direct')).toBeInTheDocument();
+    expect(screen.queryByText('Trace ID: t-fallback')).not.toBeInTheDocument();
+  });
 });
