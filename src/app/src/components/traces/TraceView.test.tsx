@@ -113,7 +113,7 @@ describe('TraceView', () => {
     expect(alert).toHaveTextContent(/traces were created but no spans were received/i);
   });
 
-  it('should render an error message when the API call returns malformed JSON', async () => {
+  it('should render an error message when the API returns malformed JSON', async () => {
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
       json: () => Promise.reject(new Error('Unexpected token < in JSON at position 0')),
