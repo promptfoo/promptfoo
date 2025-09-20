@@ -71,6 +71,80 @@ describe('useTableStore', () => {
     vi.clearAllMocks();
   });
 
+  it('should set `filterMode` to the provided value when `setFilterMode` is called', () => {
+    const newFilterMode = 'failures';
+
+    act(() => {
+      useTableStore.getState().setFilterMode(newFilterMode);
+    });
+
+    const state = useTableStore.getState();
+    expect(state.filterMode).toBe(newFilterMode);
+  });
+
+  it('should reset filterMode to "all" when resetFilterMode is called', () => {
+    act(() => {
+      useTableStore.getState().setFilterMode('failures');
+    });
+
+    act(() => {
+      useTableStore.getState().resetFilterMode();
+    });
+
+    const state = useTableStore.getState();
+    expect(state.filterMode).toBe('all');
+  });
+
+  describe('filterMode', () => {
+    it('should handle interaction between URL-based filterMode setting and direct calls to setFilterMode/resetFilterMode', () => {
+      act(() => {
+        useTableStore.setState({ filterMode: 'failures' });
+      });
+
+      let state = useTableStore.getState();
+      expect(state.filterMode).toBe('failures');
+
+      act(() => {
+        useTableStore.getState().setFilterMode('all');
+      });
+
+      state = useTableStore.getState();
+      expect(state.filterMode).toBe('all');
+
+      act(() => {
+        useTableStore.getState().resetFilterMode();
+      });
+
+      state = useTableStore.getState();
+      expect(state.filterMode).toBe('all');
+    });
+  });
+
+  describe('filterMode persistence', () => {
+    it('should persist the existing filterMode when fetchEvalData is called without a filterMode option', async () => {
+      const mockEvalId = 'test-eval-id';
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+        }),
+      });
+
+      act(() => {
+        useTableStore.getState().setFilterMode('failures');
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filterMode).toBe('failures');
+    });
+  });
+
   describe('extractUniqueStrategyIds', () => {
     it('should handle strategies with special characters and long IDs', () => {
       const strategies = [
