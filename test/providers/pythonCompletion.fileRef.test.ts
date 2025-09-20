@@ -11,6 +11,7 @@ import type { Logger } from 'winston';
 jest.mock('fs');
 jest.mock('path');
 jest.mock('../../src/python/pythonUtils');
+jest.mock('../../src/python/persistentPythonManager');
 jest.mock('../../src/util/file');
 jest.mock('../../src/logger');
 jest.mock('../../src/esm');
@@ -89,6 +90,7 @@ describe('PythonProvider with file references', () => {
       id: 'test',
       config: {
         basePath: '/base/path',
+        persistent: false,
         ...mockConfig,
       },
     });
@@ -142,6 +144,7 @@ describe('PythonProvider with file references', () => {
       id: 'test',
       config: {
         basePath: '/base/path',
+        persistent: false,
         ...mockConfig,
       },
     });
@@ -181,6 +184,7 @@ describe('PythonProvider with file references', () => {
       id: 'test',
       config: {
         basePath: '/base/path',
+        persistent: false,
         ...mockConfig,
       },
     });
@@ -211,6 +215,7 @@ describe('PythonProvider with file references', () => {
       id: 'test',
       config: {
         basePath: '/base/path',
+        persistent: false,
         ...mockConfig,
       },
     });
