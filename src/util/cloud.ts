@@ -397,10 +397,11 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     const body = await response.json();
 
     const policiesById = new Map();
-    body.forEach((policy: { id: string; text: string; severity: Severity }) => {
+    body.forEach((policy: { id: string; text: string; severity: Severity; name: string }) => {
       policiesById.set(policy.id, {
         text: policy.text,
         severity: policy.severity,
+        name: policy.name,
       });
     });
 

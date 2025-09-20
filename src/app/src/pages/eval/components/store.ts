@@ -68,10 +68,14 @@ function buildRedteamFilterOptions(
   }
 
   return {
-    plugin:
-      config?.redteam?.plugins?.map((plugin) =>
-        typeof plugin === 'string' ? plugin : plugin.id,
-      ) ?? [],
+    // Deduplicate plugins (handles custom plugins)
+    plugin: Array.from(
+      new Set(
+        config?.redteam?.plugins?.map((plugin) =>
+          typeof plugin === 'string' ? plugin : plugin.id,
+        ) ?? [],
+      ),
+    ),
     strategy: extractUniqueStrategyIds(config?.redteam?.strategies),
     severity: computeAvailableSeverities(config?.redteam?.plugins),
   };

@@ -21,11 +21,11 @@ export const handleRedteam = async ({
   ) {
     const storedResult = providerResponse.metadata.storedGraderResult;
     return {
+      ...storedResult,
       assertion: {
         ...assertion,
         value: storedResult.assertion?.value || assertion.value,
       },
-      ...storedResult,
       metadata: {
         ...test.metadata,
         ...storedResult.metadata,
@@ -44,11 +44,11 @@ export const handleRedteam = async ({
     renderedValue,
   );
   return {
+    ...grade,
     assertion: {
       ...assertion,
       value: rubric,
     },
-    ...grade,
     suggestions,
     metadata: {
       // Pass through all test metadata for redteam

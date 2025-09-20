@@ -88,7 +88,7 @@ describe('PolicyPlugin', () => {
     expect(assertions).toEqual([
       expect.objectContaining({
         type: 'promptfoo:redteam:policy',
-        metric: 'PolicyViolation',
+        metric: expect.stringMatching(/^PolicyViolation:/),
       }),
     ]);
   });

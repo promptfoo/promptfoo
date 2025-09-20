@@ -10,15 +10,15 @@ import {
   Severity,
   severityDisplayNames,
 } from '@promptfoo/redteam/constants';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
 
 import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 
 interface OverviewProps {
-  categoryStats: Record<PluginType, { pass: number; total: number }>;
+  categoryStats: PluginCategoryStatsByPluginId;
   plugins: RedteamPluginObject[];
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
@@ -59,6 +59,9 @@ const DARK_MODE_SECONDARY_TEXT_COLORS = {
   [Severity.Low]: '#00e676',
 };
 
+const isKnownSeverity = (value: unknown): value is Severity =>
+  Object.values(Severity).includes(value as Severity);
+
 const Overview = ({
   categoryStats,
   plugins,
@@ -67,23 +70,29 @@ const Overview = ({
 }: OverviewProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
-  const severityCounts = Object.values(Severity).reduce(
-    (acc, severity) => {
-      acc[severity] = Object.keys(categoryStats).reduce((count, category) => {
-        const stats = categoryStats[category as PluginType];
-        const passRate = stats.pass / stats.total;
-        if (
-          getRiskCategorySeverityMap(plugins)[category as PluginType] === severity &&
-          passRate < pluginPassRateThreshold
-        ) {
-          return count + 1;
-        }
+  const severityCounts = Object.values(Severity).reduce((acc, severity) => {
+    acc[severity] = plugins.reduce((count, plugin) => {
+      const pluginEntry = categoryStats[plugin.id as PluginType];
+      const stats = pluginEntry?.stats;
+      if (!stats || stats.total <= 0) {
         return count;
-      }, 0);
-      return acc;
-    },
-    {} as Record<Severity, number>,
-  );
+      }
+
+      const pluginSeverity = isKnownSeverity(plugin.severity)
+        ? plugin.severity
+        : isKnownSeverity(pluginEntry?.metadata?.severity)
+          ? pluginEntry?.metadata?.severity
+          : undefined;
+
+      if (pluginSeverity !== severity) {
+        return count;
+      }
+
+      const passRate = stats.total > 0 ? stats.pass / stats.total : 1;
+      return passRate < pluginPassRateThreshold ? count + 1 : count;
+    }, 0);
+    return acc;
+  }, {} as Record<Severity, number>);
 
   const handleNavigateToVulnerabilities = ({ severity }: { severity: Severity }) => {
     setVulnerabilitiesDataGridFilterModel({

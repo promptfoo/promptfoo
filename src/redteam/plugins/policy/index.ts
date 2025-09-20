@@ -1,7 +1,9 @@
 import dedent from 'dedent';
-import invariant from '../../util/invariant';
-import { type Policy, type PolicyObject, PolicyObjectSchema } from '../types';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { sha256 } from '../../../util/createHash';
+import invariant from '../../../util/invariant';
+import { type Policy, type PolicyObject, PolicyObjectSchema } from '../../types';
+import { RedteamGraderBase, RedteamPluginBase } from '../base';
+import { serializePolicyObjectAsMetric } from './utils';
 
 import type {
   ApiProvider,
@@ -10,7 +12,7 @@ import type {
   GradingResult,
   PluginConfig,
   TestCase,
-} from '../../types/index';
+} from '../../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 
@@ -33,6 +35,10 @@ export class PolicyPlugin extends RedteamPluginBase {
    * The ID of the policy; available if the policy is loaded from Promptfoo Cloud.
    */
   private policyId?: PolicyObject['id'];
+  /**
+   * The name of the policy; available if the policy is loaded from Promptfoo Cloud.
+   */
+  private name?: PolicyObject['name'];
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
     super(provider, purpose, injectVar, config);
@@ -49,6 +55,7 @@ export class PolicyPlugin extends RedteamPluginBase {
 
       this.policy = config.policy.text;
       this.policyId = config.policy.id;
+      this.name = config.policy.name;
     } else if (typeof config.policy === 'string') {
       this.policy = config.policy; // The policy declaration is itself the policy text
     }
@@ -100,12 +107,20 @@ export class PolicyPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'PolicyViolation',
-      },
-    ];
+    const data: PolicyObject = {
+      id: this.policyId
+        ? // Use the policyId as the metricId
+          this.policyId
+        : // Otherwise, hash the policy text to ensure duplicate policies counted as different metrics.
+          sha256(this.policy).slice(0, 8),
+      text: this.policy,
+    };
+
+    if (this.name) {
+      data.name = this.name;
+    }
+
+    return [{ type: PLUGIN_ID, metric: serializePolicyObjectAsMetric(data) }];
   }
 
   async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
@@ -116,6 +131,7 @@ export class PolicyPlugin extends RedteamPluginBase {
         ...test.metadata,
         policy: this.policy,
         ...(this.policyId && { policyId: this.policyId }),
+        ...(this.name && { policyName: this.name }),
       },
     }));
   }
