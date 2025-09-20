@@ -226,6 +226,7 @@ export default function EvalOutputPromptDialog({
       return;
     }
 
+
     setReplayLoading(true);
     setReplayError(null);
     setReplayOutput(null);
@@ -238,9 +239,9 @@ export default function EvalOutputPromptDialog({
         },
         body: JSON.stringify({
           evaluationId,
-          testIndex,
+          testIndex: testIndex || 0,
           prompt: editedPrompt,
-          variables,
+          variables: variables || {},
         }),
       });
 
