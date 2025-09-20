@@ -202,6 +202,46 @@ describe('TraceView', () => {
     expect(screen.queryByText('Trace ID: trace-4')).not.toBeInTheDocument();
   });
 
+  it('should reconcile testCaseId formats using indices when traces use composed IDs', async () => {
+    const mockTraces = [
+      {
+        traceId: 't-0',
+        testCaseId: '3-1',
+        spans: [{ spanId: 's1', name: 'a', startTime: 1, endTime: 2 }],
+      },
+      {
+        traceId: 't-1',
+        testCaseId: '2-5',
+        spans: [{ spanId: 's2', name: 'b', startTime: 3, endTime: 4 }],
+      },
+      {
+        traceId: 't-2',
+        testCaseId: '4-0',
+        spans: [{ spanId: 's3', name: 'c', startTime: 5, endTime: 7 }],
+      },
+    ];
+
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ traces: mockTraces }),
+    } as Response);
+
+    render(
+      <TraceView
+        evaluationId="eval-xyz-789"
+        testCaseId="550e8400-e29b-41d4-a716-446655440000"
+        testIndex={3}
+        promptIndex={1}
+      />,
+    );
+
+    const timelines = await screen.findAllByTestId('trace-timeline');
+    expect(timelines).toHaveLength(1);
+    expect(screen.getByText('Trace ID: t-0')).toBeInTheDocument();
+    expect(screen.queryByText('Trace ID: t-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Trace ID: t-2')).not.toBeInTheDocument();
+  });
+
   it('should display an error message when the API call returns a non-OK response', async () => {
     const mockStatus = 500;
     vi.mocked(callApi).mockResolvedValue({
@@ -326,5 +366,53 @@ describe('TraceView', () => {
 
       expect(onVisibilityChange).toHaveBeenCalledWith(true); // Should be true during loading
     });
+  });
+
+  it('should handle mixed arrays with index fallback when testCaseId (UUID) is provided and indices are present', async () => {
+    const mockTraces = [
+      {
+        traceId: 'trace-1',
+        testCaseId: '550e8400-e29b-41d4-a716-446655440000', // UUID format
+        spans: [{ spanId: 'span-1', name: 'span-name-1', startTime: 1, endTime: 2 }],
+      },
+      {
+        traceId: 'trace-2',
+        testCaseId: '3-1', // Composed format
+        spans: [{ spanId: 'span-2', name: 'span-name-2', startTime: 3, endTime: 4 }],
+      },
+      {
+        traceId: 'trace-3',
+        // Missing testCaseId entirely
+        spans: [{ spanId: 'span-3', name: 'span-name-3', startTime: 5, endTime: 6 }],
+      },
+      {
+        traceId: 'trace-4',
+        testCaseId: '3-1', // Another composed format matching our indices
+        spans: [{ spanId: 'span-4', name: 'span-name-4', startTime: 7, endTime: 8 }],
+      },
+    ];
+
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ traces: mockTraces }),
+    } as Response);
+
+    // Test with UUID testCaseId that won't match directly, but we have indices for fallback
+    render(
+      <TraceView
+        evaluationId="eval-xyz-789"
+        testCaseId="different-uuid-12345678-1234-1234-1234-123456789abc"
+        testIndex={3}
+        promptIndex={1}
+      />,
+    );
+
+    // Should fall back to index-based matching and find traces with testCaseId "3-1"
+    const timelines = await screen.findAllByTestId('trace-timeline');
+    expect(timelines).toHaveLength(2);
+    expect(screen.getByText('Trace ID: trace-2')).toBeInTheDocument();
+    expect(screen.getByText('Trace ID: trace-4')).toBeInTheDocument();
+    expect(screen.queryByText('Trace ID: trace-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Trace ID: trace-3')).not.toBeInTheDocument();
   });
 });

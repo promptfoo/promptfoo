@@ -155,6 +155,7 @@ interface EvalOutputPromptDialogProps {
   evaluationId?: string;
   testCaseId?: string;
   testIndex?: number;
+  promptIndex?: number;
   variables?: Record<string, any>;
 }
 
@@ -169,6 +170,7 @@ export default function EvalOutputPromptDialog({
   evaluationId,
   testCaseId,
   testIndex,
+  promptIndex,
   variables,
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
@@ -182,7 +184,6 @@ export default function EvalOutputPromptDialog({
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
   const [showTraceSection, setShowTraceSection] = useState(true);
-  const [hasTraces, setHasTraces] = useState(false);
   const { addFilter, resetFilters } = useTableStore();
 
   useEffect(() => {
@@ -197,8 +198,6 @@ export default function EvalOutputPromptDialog({
 
   useEffect(() => {
     setShowTraceSection(true);
-    // Don't assume traces exist - let DebuggingPanel determine this
-    setHasTraces(false);
   }, [evaluationId]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -355,8 +354,9 @@ export default function EvalOutputPromptDialog({
     visibleTabs.push('metadata');
   }
 
-  // Only show traces tab if we have actual traces to display
-  const hasTracesData = Boolean(hasTraces && evaluationId);
+  // Always show traces tab when evaluationId exists - TraceView will handle empty state messaging
+  // This prevents tab indices from shifting when TraceView reports no content
+  const hasTracesData = Boolean(evaluationId);
 
   // Put Traces tab last if it should be shown
   if (hasTracesData) {
@@ -506,12 +506,10 @@ export default function EvalOutputPromptDialog({
               <DebuggingPanel
                 evaluationId={evaluationId}
                 testCaseId={testCaseId}
+                testIndex={testIndex}
+                promptIndex={promptIndex}
                 showTraceSection={showTraceSection}
-                onTraceSectionVisibilityChange={(hasContent) => {
-                  setShowTraceSection(hasContent);
-                  // Update whether we have traces based on the TraceView callback
-                  setHasTraces(hasContent);
-                }}
+                onTraceSectionVisibilityChange={setShowTraceSection}
               />
             </Box>
           )}

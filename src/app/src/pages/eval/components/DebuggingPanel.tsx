@@ -12,6 +12,8 @@ const subtitleTypographySx = {
 interface DebuggingPanelProps {
   evaluationId?: string;
   testCaseId?: string;
+  testIndex?: number;
+  promptIndex?: number;
   showTraceSection: boolean;
   onTraceSectionVisibilityChange: (visible: boolean) => void;
 }
@@ -19,6 +21,8 @@ interface DebuggingPanelProps {
 export function DebuggingPanel({
   evaluationId,
   testCaseId,
+  testIndex,
+  promptIndex,
   showTraceSection,
   onTraceSectionVisibilityChange,
 }: DebuggingPanelProps) {
@@ -33,6 +37,8 @@ export function DebuggingPanel({
             <TraceView
               evaluationId={evaluationId}
               testCaseId={testCaseId}
+              testIndex={testIndex}
+              promptIndex={promptIndex}
               onVisibilityChange={onTraceSectionVisibilityChange}
             />
           </ErrorBoundary>
