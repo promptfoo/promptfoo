@@ -210,7 +210,6 @@ const PromptsSection = () => {
           setPromptDialogOpen(false);
         }}
       />
-
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}

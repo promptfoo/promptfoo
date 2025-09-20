@@ -1,9 +1,9 @@
-import { Editor } from '@monaco-editor/react';
 import React, { useState, useEffect } from 'react';
+import { Editor } from '@monaco-editor/react';
 import Link from '@docusaurus/Link';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { AggregateAjvError } from '@segment/ajv-human-errors';
@@ -42,6 +42,7 @@ const ConfigValidator = () => {
   const [schema, setSchema] = useState(null);
 
   useEffect(() => {
+    // biome-ignore lint/style/noRestrictedGlobals: Site documentation file, fetch is acceptable here
     fetch('/config-schema.json')
       .then((response) => response.json())
       .then((data) => setSchema(data))

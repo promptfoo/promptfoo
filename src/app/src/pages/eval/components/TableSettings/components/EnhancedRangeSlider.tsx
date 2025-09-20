@@ -260,7 +260,6 @@ const EnhancedRangeSlider = ({
           </Tooltip>
         )}
       </Stack>
-
       <Slider
         min={min}
         max={max}

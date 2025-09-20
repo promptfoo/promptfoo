@@ -17,7 +17,7 @@ import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import useTheme from '@mui/material/styles/useTheme';
+import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
@@ -143,7 +143,7 @@ function DownloadMenu() {
       prompts: table.head.prompts.map((prompt) => prompt.label || prompt.display || prompt.raw),
     }));
     const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, `${evalId}-dpo.json`);
+    openDownloadDialog(blob, `${evalId ?? 'eval'}-dpo.json`);
     handleClose();
   };
 
@@ -153,7 +153,7 @@ function DownloadMenu() {
       return;
     }
     const blob = new Blob([JSON.stringify(table, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, `${evalId}-table.json`);
+    openDownloadDialog(blob, `${evalId ?? 'eval'}-table.json`);
     handleClose();
   };
 
@@ -195,7 +195,7 @@ function DownloadMenu() {
 
     const output = csvStringify(csvRows);
     const blob = new Blob([output], { type: 'text/csv;charset=utf-8;' });
-    openDownloadDialog(blob, `${evalId}-table.csv`);
+    openDownloadDialog(blob, `${evalId ?? 'eval'}-table.csv`);
     handleClose();
   };
 
@@ -229,7 +229,7 @@ function DownloadMenu() {
 
     const yamlContent = yaml.dump(humanEvalCases);
     const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
-    openDownloadDialog(blob, `${evalId}-human-eval-cases.yaml`);
+    openDownloadDialog(blob, `${evalId ?? 'eval'}-human-eval-cases.yaml`);
     handleClose();
   };
 
@@ -260,7 +260,7 @@ function DownloadMenu() {
 
     const content = uniquePayloads.join('\n');
     const blob = new Blob([content], { type: 'text/plain' });
-    openDownloadDialog(blob, `${evalId}-burp-payloads.burp`);
+    openDownloadDialog(blob, `${evalId ?? 'eval'}-burp-payloads.burp`);
     handleClose();
   };
 
@@ -379,7 +379,7 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ xs: 12, md: 6 }}>
                     <Box sx={{ height: '100%' }}>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         Complete configuration file for this evaluation
@@ -400,7 +400,7 @@ function DownloadMenu() {
                     </Box>
                   </Grid>
 
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ xs: 12, md: 6 }}>
                     <Box sx={{ height: '100%' }}>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         Configuration with only failed tests for focused debugging
@@ -441,7 +441,12 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6,
+                    }}
+                  >
                     <Button
                       onClick={downloadCsv}
                       startIcon={<DownloadIcon />}
@@ -453,7 +458,12 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6,
+                    }}
+                  >
                     <Button
                       onClick={downloadTable}
                       startIcon={<DownloadIcon />}
@@ -481,7 +491,12 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid item xs={12} md={4}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      md: 4,
+                    }}
+                  >
                     <Button
                       onClick={downloadBurpPayloads}
                       startIcon={<DownloadIcon />}
@@ -493,7 +508,12 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid item xs={12} md={4}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      md: 4,
+                    }}
+                  >
                     <Button
                       onClick={downloadDpoJson}
                       startIcon={<DownloadIcon />}
@@ -505,7 +525,12 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid item xs={12} md={4}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      md: 4,
+                    }}
+                  >
                     <Button
                       onClick={downloadHumanEvalTestCases}
                       startIcon={<DownloadIcon />}

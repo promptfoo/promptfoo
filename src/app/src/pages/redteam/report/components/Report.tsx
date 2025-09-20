@@ -693,14 +693,14 @@ const App = () => {
                   <Select
                     multiple
                     value={selectedCategories}
-                    onChange={(event: SelectChangeEvent<string[]>) => {
-                      const value = event.target.value as string | string[];
-                      setSelectedCategories(typeof value === 'string' ? [value] : value);
+                    onChange={(event) => {
+                      const value = event.target.value as string[];
+                      setSelectedCategories(value);
                     }}
                     input={<OutlinedInput label="Risk Categories" />}
-                    renderValue={(selected) => (
+                    renderValue={(selected: string[]) => (
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((value) => (
+                        {selected.map((value: string) => (
                           <Chip key={value} label={value} size="small" />
                         ))}
                       </Box>
@@ -719,14 +719,14 @@ const App = () => {
                   <Select
                     multiple
                     value={selectedStrategies}
-                    onChange={(event: SelectChangeEvent<string[]>) => {
-                      const value = event.target.value as string | string[];
-                      setSelectedStrategies(typeof value === 'string' ? [value] : value);
+                    onChange={(event) => {
+                      const value = event.target.value as string[];
+                      setSelectedStrategies(value);
                     }}
                     input={<OutlinedInput label="Strategies" />}
-                    renderValue={(selected) => (
+                    renderValue={(selected: string[]) => (
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((value) => (
+                        {selected.map((value: string) => (
                           <Chip key={value} label={value} size="small" />
                         ))}
                       </Box>
