@@ -21,7 +21,6 @@ The key configuration options for TTFT measurement:
 providers:
   - id: https://api.openai.com/v1/completions
     config:
-      enableStreamingMetrics: true # Enable TTFT measurement
       body:
         model: 'gpt-5-nano'
         stream: true # Enable streaming from the API
@@ -79,12 +78,12 @@ The evaluation will show:
 - **Threshold Tuning**: Adjust TTFT/latency thresholds based on your requirements
 - **Network Impact**: TTFT includes network latency, not just model processing time
 - **Token Counting**: Uses rough approximation (4 chars ≈ 1 token); inaccurate for non-English text or code
-- **Caching Behavior**: When `enableStreamingMetrics: true`, response caching is disabled to ensure live TTFT measurement
+- **Caching Behavior**: When `stream: true` is set, response caching is disabled to ensure live TTFT measurement
 - **Performance Trade-off**: Streaming responses sacrifice caching for real-time timing metrics
 
 ## Troubleshooting
 
-- **"TTFT assertion requires streaming metrics"**: Ensure `enableStreamingMetrics: true` is set
+- **"TTFT assertion requires streaming metrics"**: Ensure `stream: true` is set in the request body
 - **High TTFT values**: Check network latency and API response times
 - **Streaming not working**: Verify your `transformResponse` correctly parses the streaming format
 - **Inconsistent TTFT measurements**: Remember that caching is disabled for streaming - each request hits the live API

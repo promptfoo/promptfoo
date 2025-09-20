@@ -51,13 +51,13 @@ OPENAI_API_KEY=your-openai-api-key
 
 ### TTFT Measurement
 
-This example uses `enableStreamingMetrics: true` to measure Time to First Token:
+This example uses `stream: true` in the request body to measure Time to First Token:
 
 ```yaml
 providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
-      enableStreamingMetrics: true # Enable TTFT measurement
+      # TTFT measurement is automatically enabled when stream: true
       stream: true # Enable streaming from API
 ```
 
@@ -77,6 +77,6 @@ The configuration includes three types of performance tests:
 
 ## Caching Behavior
 
-When `enableStreamingMetrics` is enabled, response caching is disabled to ensure accurate live measurements. This trade-off provides real performance metrics at the cost of caching benefits.
+When `stream: true` is set, response caching is disabled to ensure accurate live measurements. This trade-off provides real performance metrics at the cost of caching benefits.
 
 For more HTTP provider configuration options, see the docs: `https://promptfoo.dev/docs/providers/http`.

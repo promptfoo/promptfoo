@@ -1318,7 +1318,7 @@ defaultTest:
 
 ### Caching Behavior
 
-When `enableStreamingMetrics: true` is enabled:
+When `stream: true` is enabled in the request body:
 
 - Response caching is automatically disabled to ensure live TTFT measurements
 - Each evaluation request hits the API directly for accurate timing
@@ -1360,22 +1360,21 @@ providers:
 
 Supported config options:
 
-| Option                 | Type                    | Description                                                                                                                                                                                                                |
-| ---------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url                    | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                                                       |
-| request                | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                                                          |
-| method                 | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                                                         |
-| headers                | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                                                                 |
-| body                   | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                                                        |
-| queryParams            | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                                                                  |
-| transformRequest       | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                                                            |
-| transformResponse      | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field.                                        |
-| tokenEstimation        | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                                                         |
-| maxRetries             | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                                                       |
-| validateStatus         | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                                                                |
-| signatureAuth          | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                                                                      |
-| tls                    | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                                                          |
-| enableStreamingMetrics | boolean                 | Enable Time to First Token (TTFT) measurement for streaming responses. This is enabled automatically if `body.stream` is `true`, but can be set explicitly. When enabled, caching is disabled to ensure live measurements. |
+| Option            | Type                    | Description                                                                                                                                                                         |
+| ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| url               | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                |
+| request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
+| method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
+| headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
+| body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
+| queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
+| transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
+| transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
+| tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
+| maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
+| validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
+| signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
+| tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
 
 ### Signature Auth Options
 

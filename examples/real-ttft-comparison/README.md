@@ -12,24 +12,28 @@ This example demonstrates how to compare Time to First Token (TTFT) performance 
 ## Configuration
 
 The example tests both models with:
+
 - **GPT-5 nano**: Fastest, most cost-efficient model
 - **GPT-5**: Flagship model with advanced capabilities
 
 Each provider is configured with:
+
 ```yaml
 config:
-  enableStreamingMetrics: true  # Required for TTFT measurement
-  stream: true                  # Enable streaming from OpenAI API
+  # TTFT measurement is automatically enabled when stream: true
+  stream: true # Enable streaming from OpenAI API
 ```
 
 ## Running the Example
 
 1. **Set your OpenAI API key**:
+
    ```bash
    export OPENAI_API_KEY="your-api-key"
    ```
 
 2. **Run the comparison**:
+
    ```bash
    promptfoo eval -c examples/real-ttft-comparison/promptfooconfig.yaml
    ```
@@ -42,11 +46,13 @@ config:
 ## Expected Results
 
 ### Performance Characteristics
+
 - **GPT-5 nano TTFT**: ~100-400ms (optimized for speed)
 - **GPT-5 TTFT**: ~200-600ms (balanced performance)
 - **Total Response Time**: 2-8 seconds depending on complexity
 
 ### Test Coverage
+
 - 10 diverse topics across different domains
 - Multiple assertion types (content quality + performance)
 - Comprehensive TTFT vs latency comparison
@@ -54,6 +60,7 @@ config:
 ## Understanding the Results
 
 The evaluation provides insights into:
+
 - **User Experience**: How quickly users see responses start
 - **Cost vs Performance**: Speed differences between model tiers
 - **Production Planning**: Which model meets your latency requirements
@@ -61,6 +68,7 @@ The evaluation provides insights into:
 ## Use Cases
 
 This example is valuable for:
+
 - **Model Selection**: Choose the right model for your latency requirements
 - **Performance Benchmarking**: Establish baseline TTFT metrics
 - **Production Readiness**: Validate streaming performance before deployment

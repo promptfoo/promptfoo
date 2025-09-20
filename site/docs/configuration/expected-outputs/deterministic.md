@@ -601,7 +601,7 @@ Example:
 providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
-      enableStreamingMetrics: true # Required for TTFT measurement
+      # TTFT measurement is automatically enabled when stream: true
       # ... other config
 
 assert:
@@ -612,7 +612,7 @@ assert:
 
 **Requirements:**
 
-- The provider must have `enableStreamingMetrics: true` in its configuration
+- The provider must have `stream: true` in its request body
 - The API endpoint must support streaming responses
 - Caching is automatically disabled when streaming metrics are enabled
 

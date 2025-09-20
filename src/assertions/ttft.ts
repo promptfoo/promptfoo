@@ -9,7 +9,7 @@ export const handleTtft = ({ assertion, providerResponse }: AssertionParams): Gr
 
   if (!streamingMetrics) {
     throw new Error(
-      'TTFT assertion requires streaming metrics. Enable streaming with enableStreamingMetrics: true in your provider config',
+      'TTFT assertion requires streaming metrics. Enable streaming with stream: true in your request body',
     );
   }
 

@@ -1,4 +1,4 @@
-description: Test TTFT fix with reliable endpoints
+description: Test HTTP provider with reliable endpoints
 
 prompts:
   - 'Test prompt: {{topic}}'
@@ -8,7 +8,6 @@ providers:
   - id: https://httpbin.org/post
     label: 'POST test'
     config:
-      enableStreamingMetrics: true
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
@@ -24,7 +23,6 @@ providers:
   - id: https://httpbin.org/json
     label: 'JSON test'
     config:
-      enableStreamingMetrics: true
       method: 'GET'
       transformResponse: |
         (json, text) => {
@@ -36,10 +34,6 @@ defaultTest:
     # Test that we get meaningful content
     - type: javascript
       value: 'output && output.length > 10'
-
-    # TTFT should be captured (generous threshold)
-    - type: ttft
-      threshold: 10000
 
     # Total latency should be reasonable
     - type: latency

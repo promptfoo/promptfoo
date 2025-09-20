@@ -906,8 +906,6 @@ export const HttpProviderConfigSchema = z.object({
     .transform(preprocessSignatureAuthConfig),
   // TLS Certificate configuration for HTTPS connections
   tls: TlsCertificateSchema.optional(),
-  // Streaming configuration for TTFT measurement
-  enableStreamingMetrics: z.boolean().optional(),
 });
 
 type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -1580,12 +1578,12 @@ export class HttpProvider implements ApiProvider {
   /**
    * Unified response fetching that handles both streaming and non-streaming cases
    *
-   * When enableStreamingMetrics is true:
+   * When body.stream is true:
    * - Uses fetchWithRetries to get raw Response object
    * - Processes the response as a stream to capture TTFT metrics
    * - Disables caching to ensure live measurements
    *
-   * When enableStreamingMetrics is false:
+   * When body.stream is false or not set:
    * - Uses existing fetchWithCache for standard behavior
    * - Maintains backward compatibility and caching functionality
    *
@@ -1601,10 +1599,9 @@ export class HttpProvider implements ApiProvider {
   ): Promise<{ response: FetchWithCacheResult<string>; streamingMetrics?: StreamingMetrics }> {
     // Auto-enable TTFT measurement when stream is explicitly enabled
     const shouldMeasureTTFT =
-      this.config.enableStreamingMetrics ||
-      (this.config.body &&
-        typeof this.config.body === 'object' &&
-        (this.config.body as Record<string, any>).stream === true);
+      this.config.body &&
+      typeof this.config.body === 'object' &&
+      (this.config.body as Record<string, any>).stream === true;
 
     if (shouldMeasureTTFT) {
       // Streaming path: Get raw response and process as stream
