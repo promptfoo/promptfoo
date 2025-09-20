@@ -313,6 +313,11 @@ type EnvVars = {
 
   // xAI
   XAI_API_KEY?: string;
+
+  // LiveKit
+  LIVEKIT_URL?: string;
+  LIVEKIT_API_KEY?: string;
+  LIVEKIT_API_SECRET?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed
