@@ -5,21 +5,94 @@ import type { ProviderResponse } from '../types';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { importModule } from '../esm';
+import { getEnvString, getEnvInt, getEnvBool } from '../envars';
 
 export interface LivekitProviderOptions extends ProviderOptions {
-  config?: {
-    agentPath?: string;          // Path to agent definition file
-    sessionTimeout?: number;     // Session timeout in ms (default: 30000)
-    roomName?: string;          // LiveKit room name
-    serverUrl?: string;         // LiveKit server URL
-    apiKey?: string;            // LiveKit API key
-    apiSecret?: string;         // LiveKit API secret
-    enableAudio?: boolean;      // Enable audio processing (default: false)
-    enableVideo?: boolean;      // Enable video processing (default: false)
-    enableChat?: boolean;       // Enable text chat (default: true)
-    tools?: any[];              // Custom agent tools
-    agentConfig?: any;          // Additional agent configuration
-  };
+  config?: LivekitProviderConfig;
+}
+
+export interface LivekitProviderConfig {
+  // Agent Configuration
+  agentPath?: string;                    // Path to agent definition file
+  agentConfig?: Record<string, any>;     // Additional agent configuration
+  tools?: AgentTool[];                   // Custom agent tools
+
+  // Connection Configuration
+  serverUrl?: string;                    // LiveKit server URL (default: from LIVEKIT_URL)
+  apiKey?: string;                       // LiveKit API key (default: from LIVEKIT_API_KEY)
+  apiSecret?: string;                    // LiveKit API secret (default: from LIVEKIT_API_SECRET)
+  region?: string;                       // LiveKit server region
+
+  // Room Configuration
+  roomName?: string;                     // LiveKit room name (auto-generated if not provided)
+  roomConfig?: RoomConfig;               // Additional room configuration
+  participantIdentity?: string;          // Agent participant identity
+  participantName?: string;              // Agent participant display name
+  participantMetadata?: Record<string, any>; // Agent participant metadata
+
+  // Session Configuration
+  sessionTimeout?: number;               // Session timeout in ms (default: 30000)
+  maxConcurrentSessions?: number;        // Maximum concurrent sessions (default: 1)
+  retryAttempts?: number;                // Connection retry attempts (default: 3)
+  retryDelay?: number;                   // Delay between retries in ms (default: 1000)
+
+  // Media Configuration
+  enableAudio?: boolean;                 // Enable audio processing (default: false)
+  enableVideo?: boolean;                 // Enable video processing (default: false)
+  enableChat?: boolean;                  // Enable text chat (default: true)
+  enableScreenShare?: boolean;           // Enable screen sharing (default: false)
+
+  // Audio Configuration
+  audioConfig?: AudioConfig;             // Audio-specific settings
+
+  // Video Configuration
+  videoConfig?: VideoConfig;             // Video-specific settings
+
+  // Advanced Configuration
+  debug?: boolean;                       // Enable debug logging (default: false)
+  logLevel?: 'error' | 'warn' | 'info' | 'debug'; // Log level (default: 'info')
+  enableMetrics?: boolean;               // Enable performance metrics (default: false)
+  enableTracing?: boolean;               // Enable request tracing (default: false)
+}
+
+export interface AgentTool {
+  name: string;
+  description: string;
+  parameters?: Record<string, any>;
+  function: (input: any) => any | Promise<any>;
+}
+
+export interface RoomConfig {
+  maxParticipants?: number;              // Maximum participants in room
+  emptyTimeout?: number;                 // Room timeout when empty (seconds)
+  enableRecording?: boolean;             // Enable room recording
+  recordingConfig?: RecordingConfig;     // Recording configuration
+}
+
+export interface AudioConfig {
+  sampleRate?: number;                   // Audio sample rate (default: 48000)
+  channels?: number;                     // Audio channels (default: 1)
+  bitrate?: number;                      // Audio bitrate (default: 64000)
+  codec?: 'opus' | 'aac';               // Audio codec (default: 'opus')
+  enableNoiseSuppression?: boolean;      // Enable noise suppression (default: true)
+  enableEchoCancellation?: boolean;      // Enable echo cancellation (default: true)
+  enableAutoGainControl?: boolean;       // Enable auto gain control (default: true)
+}
+
+export interface VideoConfig {
+  width?: number;                        // Video width (default: 1280)
+  height?: number;                       // Video height (default: 720)
+  framerate?: number;                    // Video framerate (default: 30)
+  bitrate?: number;                      // Video bitrate (default: 1000000)
+  codec?: 'vp8' | 'vp9' | 'h264' | 'av1'; // Video codec (default: 'vp8')
+  enableHardwareAcceleration?: boolean;  // Enable hardware acceleration (default: true)
+}
+
+export interface RecordingConfig {
+  audio?: boolean;                       // Record audio (default: true)
+  video?: boolean;                       // Record video (default: true)
+  preset?: 'low' | 'medium' | 'high';   // Recording quality preset (default: 'medium')
+  output?: 'mp4' | 'webm';              // Output format (default: 'mp4')
 }
 
 interface LivekitResponse {
@@ -53,7 +126,7 @@ interface LivekitSession {
 
 export class LivekitProvider implements ApiProvider {
   private providerId: string;
-  config?: LivekitProviderOptions['config'];
+  config: LivekitProviderConfig;
   private agent: any = null;
   private worker: any = null;
   private agentDefinition: AgentDefinition | null = null;
@@ -62,13 +135,166 @@ export class LivekitProvider implements ApiProvider {
   constructor(options: LivekitProviderOptions, basePath?: string) {
     this.providerId = options.id || 'livekit-provider';
     this.basePath = basePath || process.cwd();
-    this.config = {
+
+    // Apply default configuration values
+    this.config = this.mergeWithDefaults(options.config || {});
+
+    // Validate configuration
+    this.validateConfiguration();
+  }
+
+  private mergeWithDefaults(userConfig: Partial<LivekitProviderConfig>): LivekitProviderConfig {
+    const defaults: LivekitProviderConfig = {
+      // Session defaults
       sessionTimeout: 30000,
+      maxConcurrentSessions: 1,
+      retryAttempts: 3,
+      retryDelay: 1000,
+
+      // Media defaults
       enableAudio: false,
       enableVideo: false,
       enableChat: true,
-      ...options.config,
+      enableScreenShare: false,
+
+      // Audio defaults
+      audioConfig: {
+        sampleRate: 48000,
+        channels: 1,
+        bitrate: 64000,
+        codec: 'opus',
+        enableNoiseSuppression: true,
+        enableEchoCancellation: true,
+        enableAutoGainControl: true,
+      },
+
+      // Video defaults
+      videoConfig: {
+        width: 1280,
+        height: 720,
+        framerate: 30,
+        bitrate: 1000000,
+        codec: 'vp8',
+        enableHardwareAcceleration: true,
+      },
+
+      // Room defaults
+      roomConfig: {
+        maxParticipants: 50,
+        emptyTimeout: 300, // 5 minutes
+        enableRecording: false,
+        recordingConfig: {
+          audio: true,
+          video: true,
+          preset: 'medium',
+          output: 'mp4',
+        },
+      },
+
+      // Advanced defaults
+      debug: false,
+      logLevel: 'info',
+      enableMetrics: false,
+      enableTracing: false,
     };
+
+    // Deep merge user config with defaults
+    return this.deepMerge(defaults, userConfig);
+  }
+
+  private deepMerge(target: any, source: any): any {
+    const result = { ...target };
+
+    for (const key in source) {
+      if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+        result[key] = this.deepMerge(result[key] || {}, source[key]);
+      } else {
+        result[key] = source[key];
+      }
+    }
+
+    return result;
+  }
+
+  private validateConfiguration(): void {
+    // Validate session timeout
+    if (this.config.sessionTimeout && (this.config.sessionTimeout < 1000 || this.config.sessionTimeout > 300000)) {
+      throw new Error('sessionTimeout must be between 1000ms and 300000ms (5 minutes)');
+    }
+
+    // Validate max concurrent sessions
+    if (this.config.maxConcurrentSessions && (this.config.maxConcurrentSessions < 1 || this.config.maxConcurrentSessions > 100)) {
+      throw new Error('maxConcurrentSessions must be between 1 and 100');
+    }
+
+    // Validate retry attempts
+    if (this.config.retryAttempts && (this.config.retryAttempts < 0 || this.config.retryAttempts > 10)) {
+      throw new Error('retryAttempts must be between 0 and 10');
+    }
+
+    // Validate retry delay
+    if (this.config.retryDelay && (this.config.retryDelay < 100 || this.config.retryDelay > 30000)) {
+      throw new Error('retryDelay must be between 100ms and 30000ms');
+    }
+
+    // Validate audio configuration
+    if (this.config.audioConfig) {
+      this.validateAudioConfig(this.config.audioConfig);
+    }
+
+    // Validate video configuration
+    if (this.config.videoConfig) {
+      this.validateVideoConfig(this.config.videoConfig);
+    }
+
+    // Validate room configuration
+    if (this.config.roomConfig) {
+      this.validateRoomConfig(this.config.roomConfig);
+    }
+
+    logger.debug('LiveKit provider configuration validated successfully');
+  }
+
+  private validateAudioConfig(audioConfig: AudioConfig): void {
+    if (audioConfig.sampleRate && ![8000, 16000, 24000, 48000].includes(audioConfig.sampleRate)) {
+      throw new Error('audioConfig.sampleRate must be one of: 8000, 16000, 24000, 48000');
+    }
+
+    if (audioConfig.channels && (audioConfig.channels < 1 || audioConfig.channels > 2)) {
+      throw new Error('audioConfig.channels must be 1 or 2');
+    }
+
+    if (audioConfig.bitrate && (audioConfig.bitrate < 8000 || audioConfig.bitrate > 320000)) {
+      throw new Error('audioConfig.bitrate must be between 8000 and 320000');
+    }
+  }
+
+  private validateVideoConfig(videoConfig: VideoConfig): void {
+    if (videoConfig.width && (videoConfig.width < 160 || videoConfig.width > 3840)) {
+      throw new Error('videoConfig.width must be between 160 and 3840');
+    }
+
+    if (videoConfig.height && (videoConfig.height < 120 || videoConfig.height > 2160)) {
+      throw new Error('videoConfig.height must be between 120 and 2160');
+    }
+
+    if (videoConfig.framerate && (videoConfig.framerate < 1 || videoConfig.framerate > 60)) {
+      throw new Error('videoConfig.framerate must be between 1 and 60');
+    }
+
+    if (videoConfig.bitrate && (videoConfig.bitrate < 100000 || videoConfig.bitrate > 50000000)) {
+      throw new Error('videoConfig.bitrate must be between 100000 and 50000000');
+    }
+  }
+
+  private validateRoomConfig(roomConfig: RoomConfig): void {
+    if (roomConfig.maxParticipants && (roomConfig.maxParticipants < 2 || roomConfig.maxParticipants > 500)) {
+      throw new Error('roomConfig.maxParticipants must be between 2 and 500');
+    }
+
+    if (roomConfig.emptyTimeout && (roomConfig.emptyTimeout < 30 || roomConfig.emptyTimeout > 3600)) {
+      throw new Error('roomConfig.emptyTimeout must be between 30 and 3600 seconds');
+    }
   }
 
   id(): string {
@@ -707,15 +933,52 @@ export function createLivekitProvider(
     }
   }
 
-  // Merge configuration with parsed path information
+  // Build configuration from environment variables, user config, and path
+  const envConfig: Partial<LivekitProviderConfig> = {
+    // Connection configuration
+    serverUrl: getEnvString('LIVEKIT_URL'),
+    apiKey: getEnvString('LIVEKIT_API_KEY'),
+    apiSecret: getEnvString('LIVEKIT_API_SECRET'),
+    region: getEnvString('LIVEKIT_REGION'),
+
+    // Room configuration
+    roomName: getEnvString('LIVEKIT_ROOM_NAME'),
+    participantIdentity: getEnvString('LIVEKIT_PARTICIPANT_IDENTITY'),
+    participantName: getEnvString('LIVEKIT_PARTICIPANT_NAME'),
+
+    // Session configuration
+    sessionTimeout: getEnvInt('LIVEKIT_SESSION_TIMEOUT'),
+    maxConcurrentSessions: getEnvInt('LIVEKIT_MAX_CONCURRENT_SESSIONS'),
+    retryAttempts: getEnvInt('LIVEKIT_RETRY_ATTEMPTS'),
+    retryDelay: getEnvInt('LIVEKIT_RETRY_DELAY'),
+
+    // Media configuration
+    enableAudio: getEnvBool('LIVEKIT_ENABLE_AUDIO'),
+    enableVideo: getEnvBool('LIVEKIT_ENABLE_VIDEO'),
+    enableChat: getEnvBool('LIVEKIT_ENABLE_CHAT'),
+    enableScreenShare: getEnvBool('LIVEKIT_ENABLE_SCREEN_SHARE'),
+
+    // Advanced configuration
+    debug: getEnvBool('LIVEKIT_DEBUG'),
+    logLevel: getEnvString('LIVEKIT_LOG_LEVEL') as 'error' | 'warn' | 'info' | 'debug' | undefined,
+    enableMetrics: getEnvBool('LIVEKIT_ENABLE_METRICS'),
+    enableTracing: getEnvBool('LIVEKIT_ENABLE_TRACING'),
+  };
+
+  // Remove undefined values from envConfig
+  const cleanedEnvConfig = Object.fromEntries(
+    Object.entries(envConfig).filter(([_, value]) => value !== undefined)
+  );
+
+  // Merge configuration with precedence: user config > env config > parsed path
   const mergedConfig: LivekitProviderOptions = {
     ...config,
     config: {
+      agentPath: agentName,
+      ...cleanedEnvConfig,
       ...config.config,
+      // Ensure agentPath is set from user config if provided
       agentPath: config.config?.agentPath || agentName,
-      serverUrl: config.config?.serverUrl || env?.LIVEKIT_URL,
-      apiKey: config.config?.apiKey || env?.LIVEKIT_API_KEY,
-      apiSecret: config.config?.apiSecret || env?.LIVEKIT_API_SECRET,
     },
   };
 

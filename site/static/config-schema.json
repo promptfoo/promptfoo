@@ -353,6 +353,60 @@
                             },
                             "PROMPTFOO_EVAL_TIMEOUT_MS": {
                               "type": "string"
+                            },
+                            "LIVEKIT_URL": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_API_KEY": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_API_SECRET": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_REGION": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_ENABLE_AUDIO": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_ENABLE_VIDEO": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_ENABLE_CHAT": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_SESSION_TIMEOUT": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_ROOM_NAME": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_PARTICIPANT_NAME": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_AUDIO_SAMPLE_RATE": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_AUDIO_CHANNELS": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_AUDIO_BITRATE": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_VIDEO_WIDTH": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_VIDEO_HEIGHT": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_VIDEO_FRAMERATE": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_VIDEO_BITRATE": {
+                              "type": "string"
+                            },
+                            "LIVEKIT_LOG_LEVEL": {
+                              "type": "string"
                             }
                           },
                           "additionalProperties": false
