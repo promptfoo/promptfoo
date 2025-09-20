@@ -62,6 +62,7 @@ import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
+import { handleTtft } from './ttft';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
@@ -326,6 +327,7 @@ export async function runAssertion({
     'trace-error-spans': handleTraceErrorSpans,
     'trace-span-count': handleTraceSpanCount,
     'trace-span-duration': handleTraceSpanDuration,
+    ttft: handleTtft,
     webhook: handleWebhook,
   };
 

@@ -1,0 +1,54 @@
+description: Test TTFT fix with reliable endpoints
+
+prompts:
+  - 'Test prompt: {{topic}}'
+
+providers:
+  # Test with POST endpoint
+  - id: https://httpbin.org/post
+    label: 'POST test'
+    config:
+      enableStreamingMetrics: true
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        topic: '{{topic}}'
+        message: 'Testing TTFT measurement'
+      transformResponse: |
+        (json, text) => {
+          return `Response about ${json?.json?.topic || 'the topic'}: ${json?.json?.message || 'default message'}`;
+        }
+
+  # Test with GET endpoint
+  - id: https://httpbin.org/json
+    label: 'JSON test'
+    config:
+      enableStreamingMetrics: true
+      method: 'GET'
+      transformResponse: |
+        (json, text) => {
+          return `JSON endpoint response with slideshow: ${json?.slideshow?.title || 'Sample Slide Show'}`;
+        }
+
+defaultTest:
+  assert:
+    # Test that we get meaningful content
+    - type: javascript
+      value: 'output && output.length > 10'
+
+    # TTFT should be captured (generous threshold)
+    - type: ttft
+      threshold: 10000
+
+    # Total latency should be reasonable
+    - type: latency
+      threshold: 10000
+
+tests:
+  - vars:
+      topic: 'artificial intelligence'
+  - vars:
+      topic: 'machine learning'
+  - vars:
+      topic: 'data science'

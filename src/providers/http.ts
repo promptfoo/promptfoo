@@ -21,6 +21,11 @@ import { safeResolve } from '../util/pathUtils';
 import { sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  fetchWithRetriesAndStreaming,
+  processStreamingResponse,
+  type StreamingMetrics,
+} from '../util/fetch';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -905,6 +910,8 @@ export const HttpProviderConfigSchema = z.object({
     .transform(preprocessSignatureAuthConfig),
   // TLS Certificate configuration for HTTPS connections
   tls: TlsCertificateSchema.optional(),
+  // Streaming configuration for TTFT measurement
+  enableStreamingMetrics: z.boolean().optional(),
 });
 
 type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -1837,14 +1844,39 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    const response = await fetchWithCache(
-      url,
-      fetchOptions,
-      REQUEST_TIMEOUT_MS,
-      'text',
-      context?.bustCache ?? context?.debug,
-      this.config.maxRetries,
-    );
+    let response: FetchWithCacheResult<string>;
+    let streamingMetrics: StreamingMetrics | undefined;
+
+    // Use streaming fetch if metrics are enabled
+    if (this.config.enableStreamingMetrics) {
+      const streamingResult = await fetchWithRetriesAndStreaming(
+        url,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        this.config.maxRetries,
+        { enableMetrics: true },
+      );
+
+      const streamingResponse = await processStreamingResponse(streamingResult.response);
+      response = {
+        data: streamingResponse.text,
+        cached: false,
+        status: streamingResult.response.status,
+        statusText: streamingResult.response.statusText,
+        headers: Object.fromEntries(streamingResult.response.headers.entries()),
+        deleteFromCache: async () => {}, // Not applicable for streaming
+      };
+      streamingMetrics = streamingResponse.streamingMetrics;
+    } else {
+      response = await fetchWithCache(
+        url,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        'text',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      );
+    }
 
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
@@ -1864,6 +1896,11 @@ export class HttpProvider implements ApiProvider {
         headers: sanitizeAuthHeaders(response.headers),
       },
     };
+
+    // Add streaming metrics if available
+    if (streamingMetrics) {
+      ret.streamingMetrics = streamingMetrics;
+    }
 
     const rawText = response.data as string;
     let parsedData;

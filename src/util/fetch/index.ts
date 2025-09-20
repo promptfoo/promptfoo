@@ -314,3 +314,164 @@ export async function fetchWithRetries(
   }
   throw new Error(`Request failed after ${maxRetries} retries: ${lastErrorMessage}`);
 }
+
+/**
+ * Streaming metrics to track timing information during streaming responses
+ */
+export interface StreamingMetrics {
+  timeToFirstToken?: number;
+  tokensPerSecond?: number;
+  totalStreamTime?: number;
+}
+
+/**
+ * Callback for first token detection during streaming
+ */
+export type FirstTokenCallback = () => void;
+
+/**
+ * Options for streaming fetch requests
+ */
+export interface StreamingFetchOptions {
+  onFirstToken?: FirstTokenCallback;
+  enableMetrics?: boolean;
+}
+
+/**
+ * Fetch with automatic retries and streaming support for TTFT measurement
+ */
+export async function fetchWithRetriesAndStreaming(
+  url: RequestInfo,
+  options: RequestInit = {},
+  timeout: number,
+  maxRetries?: number,
+  streamingOptions?: StreamingFetchOptions,
+): Promise<{ response: Response; streamingMetrics?: StreamingMetrics }> {
+  maxRetries = Math.max(0, maxRetries ?? 4);
+
+  let lastErrorMessage: string | undefined;
+  const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+
+  for (let i = 0; i <= maxRetries; i++) {
+    let response;
+    try {
+      response = await fetchWithTimeout(url, options, timeout);
+
+      if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
+        throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
+      }
+
+      if (response && isRateLimited(response)) {
+        logger.debug(
+          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${maxRetries}`,
+        );
+        await handleRateLimit(response);
+        continue;
+      }
+
+      // If streaming options are provided and metrics are enabled, return immediately
+      // The actual streaming will be handled by the caller
+      if (streamingOptions?.enableMetrics) {
+        return { response, streamingMetrics: {} };
+      }
+
+      return { response };
+    } catch (error) {
+      let errorMessage;
+      if (error instanceof Error) {
+        // Extract as much detail as possible from the error
+        const typedError = error as SystemError;
+        errorMessage = `${typedError.name}: ${typedError.message}`;
+        if (typedError.cause) {
+          errorMessage += ` (Cause: ${typedError.cause})`;
+        }
+        if (typedError.code) {
+          // Node.js system errors often have error codes
+          errorMessage += ` (Code: ${typedError.code})`;
+        }
+      } else {
+        errorMessage = String(error);
+      }
+
+      logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
+      if (i < maxRetries) {
+        const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
+        await sleep(waitTime);
+      }
+      lastErrorMessage = errorMessage;
+    }
+  }
+  throw new Error(`Request failed after ${maxRetries} retries: ${lastErrorMessage}`);
+}
+
+/**
+ * Process a streaming response and extract TTFT metrics
+ */
+export async function processStreamingResponse(
+  response: Response,
+  onFirstToken?: FirstTokenCallback,
+): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
+  const streamStart = Date.now();
+  let firstTokenTime: number | undefined;
+  let hasCalledFirstToken = false;
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('Response body is not readable');
+  }
+
+  const decoder = new TextDecoder();
+  let text = '';
+  let tokenCount = 0;
+  let chunkCount = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      const chunk = decoder.decode(value, { stream: true });
+      text += chunk;
+      chunkCount++;
+
+      // Detect first meaningful token - this is a simple heuristic
+      // More sophisticated detection should be handled in the transform function
+      if (!hasCalledFirstToken && chunk.trim().length > 0) {
+        firstTokenTime = Date.now() - streamStart;
+        hasCalledFirstToken = true;
+        if (onFirstToken) {
+          onFirstToken();
+        }
+      }
+
+      // Count approximate tokens (rough estimate: 4 chars per token)
+      tokenCount += Math.ceil(chunk.length / 4);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const totalStreamTime = Date.now() - streamStart;
+  const tokensPerSecond = totalStreamTime > 0 ? (tokenCount / totalStreamTime) * 1000 : 0;
+
+  // For non-streaming responses (single chunk), TTFT is essentially the entire response time
+  if (chunkCount === 1 && !firstTokenTime) {
+    firstTokenTime = totalStreamTime;
+  }
+
+  // Ensure we always have a valid TTFT value for streaming metrics
+  // If no first token time was captured, use the total stream time
+  const finalTtft = firstTokenTime || totalStreamTime;
+
+  return {
+    text,
+    streamingMetrics: {
+      timeToFirstToken: finalTtft,
+      tokensPerSecond,
+      totalStreamTime,
+    },
+  };
+}

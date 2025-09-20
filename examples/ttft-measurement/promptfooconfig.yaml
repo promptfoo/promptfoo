@@ -1,0 +1,70 @@
+# Time to First Token (TTFT) measurement example
+# This example demonstrates how to measure TTFT using the HTTP provider with OpenAI's Realtime API
+
+description: TTFT measurement with gpt-5-nano streaming
+
+prompts:
+  - 'Write a short story about {{topic}}'
+  - 'Explain {{topic}} in detail with examples'
+
+providers:
+  - id: https://api.openai.com/v1/completions
+    config:
+      enableStreamingMetrics: true  # Enable TTFT measurement
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+        'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
+      body:
+        model: 'gpt-5-nano'
+        prompt: '{{prompt}}'
+        stream: true  # Enable streaming
+        max_tokens: 150
+      transformResponse: |
+        (json, text) => {
+          // Handle streaming SSE response format for completions API
+          if (json && json.choices?.[0]?.text) {
+            // Non-streaming response
+            return json.choices[0].text;
+          }
+
+          // Parse Server-Sent Events format
+          let content = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            if (trimmed === 'data: [DONE]') break;
+
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              if (data.choices?.[0]?.text) {
+                content += data.choices[0].text;
+              }
+            } catch (e) {
+              // Skip malformed JSON
+            }
+          }
+          return content.trim();
+        }
+
+defaultTest:
+  assert:
+    # Test that we get meaningful content
+    - type: javascript
+      value: 'output && output.length > 10'
+
+    # Test TTFT is under 2 seconds
+    - type: ttft
+      threshold: 2000
+
+    # Test total latency is under 10 seconds
+    - type: latency
+      threshold: 10000
+
+tests:
+  - vars:
+      topic: 'artificial intelligence'
+  - vars:
+      topic: 'climate change'
+  - vars:
+      topic: 'space exploration'
