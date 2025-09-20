@@ -589,6 +589,37 @@ assert:
 
 Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
 
+### TTFT
+
+The `ttft` assertion measures Time to First Token (TTFT) for streaming responses and fails if it exceeds the specified threshold. Duration is specified in milliseconds.
+
+TTFT measures how quickly an AI model starts generating a response, which is crucial for user experience in streaming applications.
+
+Example:
+
+```yaml
+providers:
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      enableStreamingMetrics: true  # Required for TTFT measurement
+      # ... other config
+
+assert:
+  # Fail if the model takes longer than 2 seconds to start responding
+  - type: ttft
+    threshold: 2000
+```
+
+**Requirements:**
+- The provider must have `enableStreamingMetrics: true` in its configuration
+- The API endpoint must support streaming responses
+- Caching is automatically disabled when streaming metrics are enabled
+
+**Use Cases:**
+- Measuring user-perceived responsiveness in chat applications
+- Comparing streaming performance across different models
+- Setting performance requirements for production deployments
+
 ### Levenshtein distance
 
 The `levenshtein` assertion checks if the LLM output is within a given edit distance from an expected value.

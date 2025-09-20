@@ -1254,13 +1254,79 @@ providers:
 
 ## Streaming Responses
 
-Promptfoo can call HTTP targets that stream responses (for example, Server-Sent Events or chunked JSON). However, streaming is usually not recommended:
+Promptfoo supports HTTP endpoints that stream responses and can measure **Time to First Token (TTFT)** for performance evaluation.
 
-- Evals wait for the full response before scoring, so progressive tokens are not surfaced
-- Streaming formats vary widely and often require custom parsing logic in `transformResponse`
-- Overall test duration is typically similar to non-streaming requests
+While evaluations wait for complete responses, streaming now provides valuable benefits:
 
-If you still need to evaluate a streaming endpoint, parse and reconstruct the final text inside `transformResponse`. For SSE-style responses, you can accumulate `delta` chunks from each `data:` line:
+- **TTFT Measurement**: Track how quickly models start responding
+- **User-Perceived Performance**: Measure streaming responsiveness
+- **Model Comparison**: Compare streaming performance across providers
+- **Production Insights**: Test streaming implementations before deployment
+
+### Enabling TTFT Measurement
+
+To measure TTFT, enable streaming metrics in your provider configuration:
+
+```yaml
+providers:
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      enableStreamingMetrics: true  # Enable TTFT measurement
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+        'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
+      body:
+        model: 'gpt-4o-mini'
+        messages:
+          - role: 'user'
+            content: '{{prompt}}'
+        stream: true  # Enable streaming from the API
+      transformResponse: |
+        (json, text) => {
+          // Handle non-streaming JSON response
+          if (json && json.choices?.[0]?.message?.content) {
+            return json.choices[0].message.content;
+          }
+
+          // Parse OpenAI streaming SSE format
+          let content = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            if (trimmed === 'data: [DONE]') break;
+
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              if (data.choices?.[0]?.delta?.content) {
+                content += data.choices[0].delta.content;
+              }
+            } catch {
+              // Skip malformed JSON
+            }
+          }
+          return content.trim();
+        }
+
+# Use TTFT assertions in your tests
+defaultTest:
+  assert:
+    - type: ttft
+      threshold: 2000  # Fail if TTFT > 2 seconds
+    - type: latency
+      threshold: 10000 # Fail if total response > 10 seconds
+```
+
+### Caching Behavior
+
+When `enableStreamingMetrics: true` is enabled:
+- Response caching is automatically disabled to ensure live TTFT measurements
+- Each evaluation request hits the API directly for accurate timing
+- This trade-off provides real performance metrics at the cost of caching benefits
+
+### Legacy Streaming Support
+
+For custom streaming formats, parse and reconstruct the final text inside `transformResponse`. For SSE-style responses, you can accumulate `delta` chunks from each `data:` line:
 
 ```yaml
 providers:
@@ -1309,6 +1375,7 @@ Supported config options:
 | validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
 | signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
 | tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
+| enableStreamingMetrics | boolean             | Enable Time to First Token (TTFT) measurement for streaming responses. When enabled, caching is disabled to ensure live measurements. Requires streaming API support.               |
 
 ### Signature Auth Options
 
