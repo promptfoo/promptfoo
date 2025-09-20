@@ -338,7 +338,6 @@ export interface StreamingFetchOptions {
   enableMetrics?: boolean;
 }
 
-
 /**
  * Process a streaming response and extract TTFT metrics
  *

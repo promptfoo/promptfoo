@@ -27,7 +27,7 @@ providers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-4o-mini'
+        model: 'gpt-5-mini'
         messages:
           - role: 'user'
             content: '{{prompt}}'

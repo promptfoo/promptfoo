@@ -21,10 +21,10 @@ The key configuration options for TTFT measurement:
 providers:
   - id: https://api.openai.com/v1/completions
     config:
-      enableStreamingMetrics: true  # Enable TTFT measurement
+      enableStreamingMetrics: true # Enable TTFT measurement
       body:
         model: 'gpt-5-nano'
-        stream: true  # Enable streaming from the API
+        stream: true # Enable streaming from the API
       transformResponse: |
         # Parse Server-Sent Events format for completions API
         # Extract content from streaming chunks
@@ -67,6 +67,7 @@ promptfoo view
 ## Understanding the Results
 
 The evaluation will show:
+
 - **TTFT**: Time to first token in milliseconds
 - **Latency**: Total response time in milliseconds
 - **Tokens/sec**: Approximate streaming throughput

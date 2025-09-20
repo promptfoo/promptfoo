@@ -1,12 +1,12 @@
-description: Real TTFT comparison between OpenAI models
+description: Real TTFT comparison between current OpenAI models (Sept 2025)
 
 prompts:
   - 'Write a brief explanation of {{topic}}'
 
 providers:
-  # Use actual OpenAI Chat API with gpt-4o-mini (fast model)
+  # Use actual OpenAI Chat API with GPT-5 nano (fastest, cheapest)
   - id: https://api.openai.com/v1/chat/completions
-    label: 'gpt-4o-mini'
+    label: 'gpt-5-nano'
     config:
       enableStreamingMetrics: true
       method: 'POST'
@@ -14,7 +14,7 @@ providers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-4o-mini'
+        model: 'gpt-5-nano'
         messages:
           - role: 'user'
             content: '{{prompt}}'
@@ -47,9 +47,9 @@ providers:
           return content.trim();
         }
 
-  # Use actual OpenAI Chat API with gpt-4o (larger model)
+  # Use actual OpenAI Chat API with GPT-5 (flagship model)
   - id: https://api.openai.com/v1/chat/completions
-    label: 'gpt-4o'
+    label: 'gpt-5'
     config:
       enableStreamingMetrics: true
       method: 'POST'
@@ -57,7 +57,7 @@ providers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-4o'
+        model: 'gpt-5'
         messages:
           - role: 'user'
             content: '{{prompt}}'

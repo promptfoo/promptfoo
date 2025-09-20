@@ -50,17 +50,19 @@ OPENAI_API_KEY=your-openai-api-key
 ## Key Features
 
 ### TTFT Measurement
+
 This example uses `enableStreamingMetrics: true` to measure Time to First Token:
 
 ```yaml
 providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
-      enableStreamingMetrics: true  # Enable TTFT measurement
-      stream: true                  # Enable streaming from API
+      enableStreamingMetrics: true # Enable TTFT measurement
+      stream: true # Enable streaming from API
 ```
 
 ### Performance Assertions
+
 The configuration includes three types of performance tests:
 
 - **Content Quality**: Ensures meaningful output (> 10 characters)
@@ -68,7 +70,8 @@ The configuration includes three types of performance tests:
 - **Total Latency**: Measures end-to-end response time (< 10000ms)
 
 ### Expected Results
-- **TTFT**: Typically 200-1000ms for OpenAI models
+
+- **TTFT**: Typically 100-600ms for current OpenAI models (GPT-5 series)
 - **Total Latency**: Usually 2-8 seconds depending on response length
 - **Streaming Benefits**: Real-time performance insights
 

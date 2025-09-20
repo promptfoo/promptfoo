@@ -10,7 +10,7 @@ prompts:
 providers:
   - id: https://api.openai.com/v1/completions
     config:
-      enableStreamingMetrics: true  # Enable TTFT measurement
+      enableStreamingMetrics: true # Enable TTFT measurement
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
@@ -18,7 +18,7 @@ providers:
       body:
         model: 'gpt-5-nano'
         prompt: '{{prompt}}'
-        stream: true  # Enable streaming
+        stream: true # Enable streaming
         max_tokens: 150
       transformResponse: |
         (json, text) => {
