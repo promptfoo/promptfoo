@@ -150,8 +150,11 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
         {spans.map((span, index) => {
           const status = getSpanStatus(span.statusCode);
 
-          // Scale span width based on its duration relative to the longest span (max 70% width)
-          const spanDurationPercent = maxSpanDuration > 0 ? Math.min((span.duration / maxSpanDuration) * 70, 70) : 0;
+          // Scale span width based on its duration relative to the longest span
+          const spanDurationPercent = maxSpanDuration > 0 ? (span.duration / maxSpanDuration) * 100 : 0;
+
+          // Position span based on its start time relative to trace start
+          const spanStartPercent = totalDuration > 0 ? (span.relativeStart / totalDuration) * 100 : 0;
 
           return (
             <Box
@@ -159,66 +162,67 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-                mb: 1.5,
+                mb: 1,
                 minHeight: 40,
+                position: 'relative',
               }}
             >
-              {/* Span name with indentation and better styling */}
+              {/* Span name with indentation */}
               <Box
                 sx={{
-                  width: '25%',
+                  width: '30%',
                   pr: 2,
-                  pl: span.depth * 1.5,
+                  pl: span.depth * 2,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}
               >
-                <Tooltip title={`${span.name} (${formatDuration(span.duration * 1000)})`}>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontFamily: 'monospace',
-                      fontWeight: 500,
-                      color: theme.palette.text.primary,
-                    }}
-                  >
+                <Tooltip title={span.name}>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                     {span.name}
                   </Typography>
                 </Tooltip>
               </Box>
 
-              {/* Duration bar - no background container needed */}
-              <Box sx={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+              {/* Timeline bar */}
+              <Box
+                sx={{
+                  flex: 1,
+                  position: 'relative',
+                  height: 24,
+                  backgroundColor: theme.palette.action.hover,
+                  borderRadius: 1,
+                  maxWidth: '100%', // Prevent overflow
+                }}
+              >
                 <Tooltip
                   title={
                     <Box>
                       <Typography variant="caption">
-                        <strong>Duration:</strong> {formatDuration(span.duration * 1000)}
+                        Duration: {formatDuration(span.duration * 1000)}
                       </Typography>
                       <br />
                       <Typography variant="caption">
-                        <strong>Start:</strong> {formatTimestamp(span.startTime)}
+                        Start: {formatTimestamp(span.startTime)}
                       </Typography>
                       {span.endTime && (
                         <>
                           <br />
                           <Typography variant="caption">
-                            <strong>End:</strong> {formatTimestamp(span.endTime)}
+                            End: {formatTimestamp(span.endTime)}
                           </Typography>
                         </>
                       )}
                       {span.attributes && Object.keys(span.attributes).length > 0 && (
                         <>
                           <br />
-                          <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-                            <strong>Attributes:</strong>
-                          </Typography>
+                          <Typography variant="caption">Attributes:</Typography>
                           {Object.entries(span.attributes).map(([key, value]) => (
                             <Typography
                               key={key}
                               variant="caption"
-                              sx={{ display: 'block', ml: 1, fontFamily: 'monospace' }}
+                              sx={{ display: 'block', ml: 1 }}
                             >
                               {key}: {JSON.stringify(value)}
                             </Typography>
@@ -230,24 +234,21 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                 >
                   <Box
                     sx={{
-                      width: `${Math.max(spanDurationPercent, 5)}%`, // Minimum 5% width for visibility
-                      height: 28,
+                      position: 'absolute',
+                      left: `${Math.min(spanStartPercent, 95)}%`, // Cap at 95% to prevent overflow
+                      width: `${Math.min(Math.max(spanDurationPercent, 2), 50)}%`, // Cap at 50% max width
+                      height: '100%',
                       backgroundColor:
                         status.color === 'error'
                           ? theme.palette.error.main
                           : status.color === 'success'
                             ? theme.palette.success.main
                             : theme.palette.primary.main,
-                      borderRadius: 2,
+                      borderRadius: 1,
                       display: 'flex',
                       alignItems: 'center',
-                      px: 1.5,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      '&:hover': {
-                        transform: 'scale(1.02)',
-                        boxShadow: theme.shadows[2],
-                      },
+                      px: 1,
+                      overflow: 'hidden',
                     }}
                   >
                     <Typography
@@ -260,7 +261,6 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                               ? theme.palette.success.main
                               : theme.palette.primary.main,
                         ),
-                        fontWeight: 600,
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
