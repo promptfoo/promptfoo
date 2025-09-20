@@ -195,9 +195,6 @@ export default function EvalOutputPromptDialog({
     setActiveTab(0); // Reset to first tab when dialog opens
   }, [prompt]);
 
-  useEffect(() => {
-    setShowTraceSection(true);
-  }, [evaluationId]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
