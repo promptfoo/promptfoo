@@ -3,7 +3,17 @@ import { describe, it, expect, vi } from 'vitest';
 import { DebuggingPanel } from './DebuggingPanel';
 
 vi.mock('../../../components/traces/TraceView', () => ({
-  default: ({ evaluationId, testCaseId, testIndex, promptIndex }: { evaluationId?: string; testCaseId?: string; testIndex?: number; promptIndex?: number }) => (
+  default: ({
+    evaluationId,
+    testCaseId,
+    testIndex,
+    promptIndex,
+  }: {
+    evaluationId?: string;
+    testCaseId?: string;
+    testIndex?: number;
+    promptIndex?: number;
+  }) => (
     <div data-testid="mock-trace-view">
       <span>Evaluation ID: {evaluationId}</span>
       <span>Test Case ID: {testCaseId}</span>

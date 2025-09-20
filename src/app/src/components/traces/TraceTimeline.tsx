@@ -149,7 +149,8 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
 
           // Original temporal timeline approach - both position AND width based on time
           const spanDurationPercent = totalDuration > 0 ? (span.duration / totalDuration) * 100 : 0;
-          const spanStartPercent = totalDuration > 0 ? (span.relativeStart / totalDuration) * 100 : 0;
+          const spanStartPercent =
+            totalDuration > 0 ? (span.relativeStart / totalDuration) * 100 : 0;
 
           return (
             <Box
