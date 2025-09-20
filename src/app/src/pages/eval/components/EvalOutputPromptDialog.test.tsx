@@ -15,6 +15,24 @@ vi.mock('./Citations', () => ({
   )),
 }));
 
+vi.mock('./DebuggingPanel', () => {
+  const MockDebuggingPanel = vi.fn((props) => {
+    if (props.onTraceSectionVisibilityChange) {
+      setTimeout(() => {
+        props.onTraceSectionVisibilityChange(false);
+      }, 0);
+    }
+    return (
+      <div data-testid="mock-debugging-panel" data-prompt-index={props.promptIndex}>
+        Mock DebuggingPanel
+      </div>
+    );
+  });
+  return { DebuggingPanel: MockDebuggingPanel };
+});
+
+import { DebuggingPanel as MockDebuggingPanel } from './DebuggingPanel';
+
 vi.mock('./store', () => {
   const actualStore = vi.importActual('./store');
   return {
@@ -48,6 +66,8 @@ const defaultProps = {
   metadata: {
     testKey: 'testValue',
   },
+  evaluationId: 'test-eval-id',
+  testCaseId: 'test-case-id',
 };
 
 describe('EvalOutputPromptDialog', () => {
@@ -300,6 +320,58 @@ describe('EvalOutputPromptDialog', () => {
     expect(true).toBe(true);
 
     document.body.removeChild(container);
+  });
+
+  it('passes the promptIndex prop to DebuggingPanel when provided', async () => {
+    const promptIndex = 5;
+    render(<EvalOutputPromptDialog {...defaultProps} promptIndex={promptIndex} />);
+
+    const tracesTab = screen.getByText('Traces');
+    await userEvent.click(tracesTab);
+
+    expect(MockDebuggingPanel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptIndex: promptIndex,
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('passes undefined promptIndex to DebuggingPanel when promptIndex is not provided', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} promptIndex={undefined} />);
+
+    const tracesTab = screen.getByRole('tab', { name: /traces/i });
+    fireEvent.click(tracesTab);
+
+    const debuggingPanel = screen.getByTestId('mock-debugging-panel');
+    expect(debuggingPanel.getAttribute('data-prompt-index')).toBeNull();
+  });
+
+  it('passes promptIndex to DebuggingPanel when testIndex is undefined', () => {
+    const promptIndex = 1;
+    render(
+      <EvalOutputPromptDialog {...defaultProps} testIndex={undefined} promptIndex={promptIndex} />,
+    );
+
+    const tracesTab = screen.getByText('Traces');
+    fireEvent.click(tracesTab);
+
+    expect(MockDebuggingPanel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptIndex: promptIndex,
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('hides trace section but keeps Traces tab visible when onTraceSectionVisibilityChange is called with false', async () => {
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(screen.queryByTestId('mock-debugging-panel')).not.toBeInTheDocument();
+
+    expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
   });
 });
 
