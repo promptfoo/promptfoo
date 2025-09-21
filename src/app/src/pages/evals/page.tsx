@@ -1,39 +1,33 @@
-import { useCallback, useState } from 'react';
-
 import { usePageMeta } from '@app/hooks/usePageMeta';
+import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import { useNavigate } from 'react-router-dom';
 import EvalsDataGrid from './components/EvalsDataGrid';
 
 export default function EvalsIndexPage() {
   const navigate = useNavigate();
-  const [offsetTop, setOffsetTop] = useState(0);
 
   usePageMeta({ title: 'Evals', description: 'Browse evaluation runs' });
 
-  /**
-   * Calculate the offset top of the container once it's mounted.
-   */
-  const containerRef = useCallback((node: HTMLDivElement) => {
-    if (node) {
-      setOffsetTop(node.offsetTop);
-    }
-  }, []);
-
   return (
-    <Container
-      maxWidth="xl"
-      style={{
-        height: offsetTop > 0 ? `calc(100vh - ${offsetTop}px)` : '100%',
-      }}
-      sx={{ py: 2 }}
-      ref={containerRef}
-    >
-      <EvalsDataGrid
-        onEvalSelected={(evalId) => navigate(`/eval/${evalId}`)}
-        showUtilityButtons
-        deletionEnabled
-      />
-    </Container>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        <Container
+          maxWidth="xl"
+          sx={{
+            height: '100%',
+            py: 2,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <EvalsDataGrid
+            onEvalSelected={(evalId) => navigate(`/eval/${evalId}`)}
+            showUtilityButtons
+            deletionEnabled
+          />
+        </Container>
+      </Box>
+    </Box>
   );
 }
