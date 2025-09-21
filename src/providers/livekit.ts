@@ -7,6 +7,162 @@ import invariant from '../util/invariant';
 import { importModule } from '../esm';
 import { getEnvString, getEnvInt, getEnvBool } from '../envars';
 
+// Error handling types and classes
+export enum LivekitErrorType {
+  CONFIGURATION_ERROR = 'CONFIGURATION_ERROR',
+  AGENT_LOAD_ERROR = 'AGENT_LOAD_ERROR',
+  SESSION_ERROR = 'SESSION_ERROR',
+  CONNECTION_ERROR = 'CONNECTION_ERROR',
+  TIMEOUT_ERROR = 'TIMEOUT_ERROR',
+  PROCESSING_ERROR = 'PROCESSING_ERROR',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  TOOL_EXECUTION_ERROR = 'TOOL_EXECUTION_ERROR',
+  MULTIMODAL_ERROR = 'MULTIMODAL_ERROR',
+  NETWORK_ERROR = 'NETWORK_ERROR',
+}
+
+export class LivekitError extends Error {
+  public readonly type: LivekitErrorType;
+  public readonly code: string;
+  public readonly retryable: boolean;
+  public readonly context?: Record<string, any>;
+  public readonly cause?: Error;
+
+  constructor(
+    type: LivekitErrorType,
+    message: string,
+    options: {
+      code?: string;
+      retryable?: boolean;
+      context?: Record<string, any>;
+      cause?: Error;
+    } = {}
+  ) {
+    super(message);
+    this.name = 'LivekitError';
+    this.type = type;
+    this.code = options.code || type;
+    this.retryable = options.retryable ?? false;
+    this.context = options.context;
+    this.cause = options.cause;
+
+    // Maintain proper stack trace
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, LivekitError);
+    }
+  }
+
+  toJSON() {
+    return {
+      name: this.name,
+      type: this.type,
+      code: this.code,
+      message: this.message,
+      retryable: this.retryable,
+      context: this.context,
+      stack: this.stack,
+      cause: this.cause?.message,
+    };
+  }
+}
+
+// Error handling utilities
+class ErrorHandler {
+  /**
+   * Wraps errors with appropriate LivekitError types
+   */
+  static wrapError(error: unknown, type: LivekitErrorType, context?: Record<string, any>): LivekitError {
+    if (error instanceof LivekitError) {
+      return error;
+    }
+
+    if (error instanceof Error) {
+      return new LivekitError(type, error.message, {
+        cause: error,
+        context: { ...context, originalStack: error.stack },
+        retryable: ErrorHandler.isRetryableError(error, type),
+      });
+    }
+
+    const message = String(error);
+    return new LivekitError(type, message, {
+      context,
+      retryable: ErrorHandler.isRetryableByType(type),
+    });
+  }
+
+  /**
+   * Determines if an error is retryable based on type and content
+   */
+  static isRetryableError(error: Error, type: LivekitErrorType): boolean {
+    const message = error.message.toLowerCase();
+
+    // Network-related errors are usually retryable
+    if (type === LivekitErrorType.NETWORK_ERROR || type === LivekitErrorType.CONNECTION_ERROR) {
+      return true;
+    }
+
+    // Timeout errors are retryable
+    if (type === LivekitErrorType.TIMEOUT_ERROR) {
+      return true;
+    }
+
+    // Check for specific retryable error patterns
+    const retryablePatterns = [
+      'timeout',
+      'connection refused',
+      'network error',
+      'econnreset',
+      'enotfound',
+      'temporary failure',
+      'rate limit',
+      'too many requests',
+      'service unavailable',
+      'internal server error',
+    ];
+
+    return retryablePatterns.some(pattern => message.includes(pattern));
+  }
+
+  /**
+   * Determines if an error type is generally retryable
+   */
+  static isRetryableByType(type: LivekitErrorType): boolean {
+    const retryableTypes = [
+      LivekitErrorType.NETWORK_ERROR,
+      LivekitErrorType.CONNECTION_ERROR,
+      LivekitErrorType.TIMEOUT_ERROR,
+      LivekitErrorType.SESSION_ERROR,
+    ];
+
+    return retryableTypes.includes(type);
+  }
+
+  /**
+   * Formats error for logging with context
+   */
+  static formatErrorForLogging(error: LivekitError): string {
+    const parts = [
+      `[${error.type}]`,
+      error.message,
+    ];
+
+    if (error.code !== error.type) {
+      parts.push(`(code: ${error.code})`);
+    }
+
+    if (error.context) {
+      parts.push(`Context: ${JSON.stringify(error.context)}`);
+    }
+
+    if (error.cause) {
+      parts.push(`Caused by: ${error.cause.message}`);
+    }
+
+    return parts.join(' ');
+  }
+}
+
 export interface LivekitProviderOptions extends ProviderOptions {
   config?: LivekitProviderConfig;
 }
@@ -162,6 +318,8 @@ export class LivekitProvider implements ApiProvider {
   private worker: any = null;
   private agentDefinition: AgentDefinition | null = null;
   private basePath: string;
+  private lastSessionId: string | null = null;
+  private connectionMonitor: ConnectionMonitor = new ConnectionMonitor();
 
   constructor(options: LivekitProviderOptions, basePath?: string) {
     this.providerId = options.id || 'livekit-provider';
@@ -171,7 +329,18 @@ export class LivekitProvider implements ApiProvider {
     this.config = this.mergeWithDefaults(options.config || {});
 
     // Validate configuration
-    this.validateConfiguration();
+    try {
+      this.validateConfiguration();
+    } catch (error) {
+      throw ErrorHandler.wrapError(
+        error,
+        LivekitErrorType.CONFIGURATION_ERROR,
+        {
+          providerId: this.providerId,
+          configKeys: Object.keys(this.config),
+        }
+      );
+    }
   }
 
   private mergeWithDefaults(userConfig: Partial<LivekitProviderConfig>): LivekitProviderConfig {
@@ -337,33 +506,94 @@ export class LivekitProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const startTime = Date.now();
+    this.connectionMonitor.setConnecting();
+
     try {
-      // Initialize agent if not already done
+      // Initialize agent if not already done with timeout
       if (!this.agent) {
-        await this.initializeAgent();
+        await TimeoutHandler.withTimeout(
+          this.initializeAgent(),
+          this.config.sessionTimeout || 30000,
+          'initializeAgent'
+        );
       }
 
       // Parse multi-modal input
       const multiModalInput = await this.parseMultiModalInput(prompt, context);
 
-      // Create session for this test
-      const session = await this.createSession();
+      // Create session for this test with timeout and retry
+      const session = await RetryHandler.withRetry(
+        () => TimeoutHandler.withTimeout(
+          this.createSession(),
+          this.config.sessionTimeout || 30000,
+          'createSession'
+        ),
+        {
+          ...RetryHandler.getRetryOptions('session'),
+          operationName: 'createSession',
+        }
+      );
 
-      // Send multi-modal message and get response
-      const response = await this.sendMultiModalMessage(session, multiModalInput, options?.abortSignal);
+      // Send multi-modal message and get response with timeout
+      const response = await TimeoutHandler.withTimeout(
+        this.sendMultiModalMessage(session, multiModalInput, options?.abortSignal),
+        this.config.sessionTimeout || 30000,
+        'sendMultiModalMessage'
+      );
 
       // Cleanup session
       await this.cleanupSession(session);
 
+      // Record successful operation
+      const responseTime = Date.now() - startTime;
+      this.connectionMonitor.recordSuccess(responseTime);
+
       // Format response with enhanced multi-modal support
-      return this.formatProviderResponse(response, session);
+      const formattedResponse = this.formatProviderResponse(response, session);
+
+      // Add connection health to metadata
+      formattedResponse.metadata!.connectionHealth = this.connectionMonitor.getHealth();
+
+      return formattedResponse;
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`LiveKit provider error: ${errorMessage}`);
+      // Wrap and classify the error
+      const livekitError = ErrorHandler.wrapError(
+        error,
+        LivekitErrorType.PROCESSING_ERROR,
+        {
+          operation: 'callApi',
+          prompt: prompt?.substring(0, 100), // First 100 chars for context
+          sessionId: this.getLastSessionId(),
+        }
+      );
+
+      // Record failed operation
+      this.connectionMonitor.recordFailure(livekitError);
+
+      // Log with comprehensive context
+      logger.error(ErrorHandler.formatErrorForLogging(livekitError));
+
+      // Check if recovery is needed
+      if (this.connectionMonitor.needsRecovery()) {
+        logger.warn('Connection needs recovery, resetting agent state');
+        await this.performRecovery();
+      }
+
+      // Return structured error response
       return {
-        error: errorMessage,
+        error: livekitError.message,
         output: '',
+        metadata: {
+          error: {
+            type: livekitError.type,
+            code: livekitError.code,
+            retryable: livekitError.retryable,
+            context: livekitError.context,
+            timestamp: new Date().toISOString(),
+          },
+        },
       };
     }
   }
@@ -557,6 +787,45 @@ export class LivekitProvider implements ApiProvider {
   }
 
   /**
+   * Gets the last session ID for error context
+   */
+  private getLastSessionId(): string | null {
+    return this.lastSessionId;
+  }
+
+  /**
+   * Performs connection recovery
+   */
+  private async performRecovery(): Promise<void> {
+    try {
+      logger.info('Starting connection recovery process');
+
+      // Reset connection monitor
+      this.connectionMonitor.reset();
+
+      // Reset agent state
+      this.agent = null;
+      this.worker = null;
+      this.agentDefinition = null;
+      this.lastSessionId = null;
+
+      // Clear any cached states
+      // (In a real implementation, this might involve closing connections, clearing caches, etc.)
+
+      logger.info('Connection recovery completed successfully');
+    } catch (error) {
+      const recoveryError = ErrorHandler.wrapError(
+        error,
+        LivekitErrorType.CONNECTION_ERROR,
+        {
+          operation: 'performRecovery',
+        }
+      );
+      logger.error(`Recovery failed: ${ErrorHandler.formatErrorForLogging(recoveryError)}`);
+    }
+  }
+
+  /**
    * Calculates response completeness as a percentage
    */
   private calculateResponseCompleteness(response: LivekitResponse): number {
@@ -613,9 +882,14 @@ export class LivekitProvider implements ApiProvider {
 
       logger.info(`LiveKit agent initialized from ${this.config.agentPath}`);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Failed to initialize LiveKit agent: ${errorMessage}`);
-      throw new Error(`LiveKit agent initialization failed: ${errorMessage}`);
+      throw ErrorHandler.wrapError(
+        error,
+        LivekitErrorType.AGENT_LOAD_ERROR,
+        {
+          agentPath: this.config.agentPath,
+          operation: 'initializeAgent',
+        }
+      );
     }
   }
 
@@ -731,6 +1005,7 @@ export class LivekitProvider implements ApiProvider {
   private async createSession(): Promise<LivekitSession> {
     try {
       const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      this.lastSessionId = sessionId;
 
       const session: LivekitSession = {
         id: sessionId,
@@ -739,10 +1014,24 @@ export class LivekitProvider implements ApiProvider {
         status: 'created',
       };
 
+      logger.debug(`Creating LiveKit session: ${sessionId}`);
+
       // Initialize session context if agent definition has entry point
       if (this.agentDefinition?.entry) {
-        session.context = await this.initializeSessionContext(session);
-        session.status = 'connected';
+        try {
+          session.context = await this.initializeSessionContext(session);
+          session.status = 'connected';
+          logger.debug(`Session ${sessionId} context initialized successfully`);
+        } catch (contextError) {
+          throw ErrorHandler.wrapError(
+            contextError,
+            LivekitErrorType.SESSION_ERROR,
+            {
+              sessionId,
+              operation: 'initializeSessionContext',
+            }
+          );
+        }
       }
 
       // Set up room and participant connections
@@ -1012,9 +1301,14 @@ export class LivekitProvider implements ApiProvider {
         const tool = this.agentDefinition?.tools?.find(t => t.name === name);
 
         if (tool && typeof tool.function === 'function') {
-          // Execute the tool function
+          // Execute the tool function with timeout
           const startTime = Date.now();
-          const result = await tool.function(args);
+          const toolTimeout = this.config.sessionTimeout ? Math.min(this.config.sessionTimeout / 2, 10000) : 10000;
+          const result = await TimeoutHandler.withTimeout(
+            tool.function(args),
+            toolTimeout,
+            `tool_${name}`
+          );
           const executionTime = Date.now() - startTime;
 
           processedCalls.push({
@@ -1041,16 +1335,26 @@ export class LivekitProvider implements ApiProvider {
           logger.warn(errorMessage);
         }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const livekitError = ErrorHandler.wrapError(
+          error,
+          LivekitErrorType.TOOL_EXECUTION_ERROR,
+          {
+            toolName: toolCall.name,
+            toolId: toolCall.id,
+            arguments: toolCall.arguments,
+          }
+        );
+
         processedCalls.push({
           id: toolCall.id,
           name: toolCall.name,
           arguments: toolCall.arguments,
-          error: errorMessage,
+          error: livekitError.message,
           status: 'error',
+          retryable: livekitError.retryable,
         });
 
-        logger.error(`Tool call ${toolCall.name} failed: ${errorMessage}`);
+        logger.error(ErrorHandler.formatErrorForLogging(livekitError));
       }
     }
 
@@ -1310,6 +1614,467 @@ export class LivekitProvider implements ApiProvider {
   }
 }
 
+// Timeout handling utilities
+class TimeoutHandler {
+  /**
+   * Creates a timeout promise that rejects with LivekitError
+   */
+  static createTimeoutPromise(timeoutMs: number, operation: string): Promise<never> {
+    return new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new LivekitError(
+          LivekitErrorType.TIMEOUT_ERROR,
+          `Operation '${operation}' timed out after ${timeoutMs}ms`,
+          {
+            code: 'OPERATION_TIMEOUT',
+            retryable: true,
+            context: { timeoutMs, operation },
+          }
+        ));
+      }, timeoutMs);
+    });
+  }
+
+  /**
+   * Wraps a promise with timeout handling
+   */
+  static withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    operation: string
+  ): Promise<T> {
+    if (timeoutMs <= 0) {
+      return promise;
+    }
+
+    return Promise.race([
+      promise,
+      TimeoutHandler.createTimeoutPromise(timeoutMs, operation),
+    ]);
+  }
+
+  /**
+   * Creates an AbortController with timeout
+   */
+  static createTimeoutController(timeoutMs: number): {
+    controller: AbortController;
+    timeoutId: NodeJS.Timeout;
+  } {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+
+    return { controller, timeoutId };
+  }
+
+  /**
+   * Cleans up timeout controller
+   */
+  static cleanupTimeoutController(timeoutId: NodeJS.Timeout): void {
+    clearTimeout(timeoutId);
+  }
+}
+
+// Retry logic utilities
+class RetryHandler {
+  /**
+   * Executes an operation with exponential backoff retry
+   */
+  static async withRetry<T>(
+    operation: () => Promise<T>,
+    options: {
+      maxAttempts?: number;
+      initialDelay?: number;
+      maxDelay?: number;
+      backoffMultiplier?: number;
+      retryCondition?: (error: any) => boolean;
+      onRetry?: (error: any, attempt: number) => void;
+      operationName?: string;
+    } = {}
+  ): Promise<T> {
+    const {
+      maxAttempts = 3,
+      initialDelay = 1000,
+      maxDelay = 10000,
+      backoffMultiplier = 2,
+      retryCondition = (error) => RetryHandler.isRetryableError(error),
+      onRetry,
+      operationName = 'unknown',
+    } = options;
+
+    let lastError: any;
+    let delay = initialDelay;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+
+        // Check if we should retry
+        if (attempt === maxAttempts || !retryCondition(error)) {
+          throw error;
+        }
+
+        // Call retry callback if provided
+        if (onRetry) {
+          onRetry(error, attempt);
+        }
+
+        // Log retry attempt
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.warn(`Retry attempt ${attempt}/${maxAttempts} for ${operationName} failed: ${errorMessage}. Retrying in ${delay}ms...`);
+
+        // Wait before next attempt
+        await RetryHandler.delay(delay);
+
+        // Increase delay for next attempt (exponential backoff)
+        delay = Math.min(delay * backoffMultiplier, maxDelay);
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
+   * Determines if an error is retryable
+   */
+  static isRetryableError(error: any): boolean {
+    // If it's a LivekitError, use its retryable flag
+    if (error instanceof LivekitError) {
+      return error.retryable;
+    }
+
+    // Check for common retryable error patterns
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+      const retryablePatterns = [
+        'timeout',
+        'econnreset',
+        'econnrefused',
+        'enotfound',
+        'network error',
+        'connection error',
+        'service unavailable',
+        'internal server error',
+        'rate limit',
+        'too many requests',
+        'temporary failure',
+      ];
+
+      return retryablePatterns.some(pattern => message.includes(pattern));
+    }
+
+    return false;
+  }
+
+  /**
+   * Creates a delay promise
+   */
+  static delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Creates retry options for different operation types
+   */
+  static getRetryOptions(operationType: 'connection' | 'tool' | 'file' | 'session'): {
+    maxAttempts: number;
+    initialDelay: number;
+    maxDelay: number;
+  } {
+    switch (operationType) {
+      case 'connection':
+        return { maxAttempts: 5, initialDelay: 1000, maxDelay: 15000 };
+      case 'tool':
+        return { maxAttempts: 3, initialDelay: 500, maxDelay: 5000 };
+      case 'file':
+        return { maxAttempts: 3, initialDelay: 1000, maxDelay: 5000 };
+      case 'session':
+        return { maxAttempts: 3, initialDelay: 2000, maxDelay: 10000 };
+      default:
+        return { maxAttempts: 3, initialDelay: 1000, maxDelay: 5000 };
+    }
+  }
+}
+
+// Connection state monitoring utilities
+enum ConnectionState {
+  DISCONNECTED = 'disconnected',
+  CONNECTING = 'connecting',
+  CONNECTED = 'connected',
+  RECONNECTING = 'reconnecting',
+  FAILED = 'failed',
+}
+
+interface ConnectionHealth {
+  state: ConnectionState;
+  lastSuccessfulOperation: Date | null;
+  consecutiveFailures: number;
+  totalOperations: number;
+  successRate: number;
+  averageResponseTime: number;
+  lastError: LivekitError | null;
+}
+
+class ConnectionMonitor {
+  private health: ConnectionHealth;
+  private operationTimes: number[] = [];
+  private readonly maxOperationTimes = 50; // Keep last 50 operation times
+
+  constructor() {
+    this.health = {
+      state: ConnectionState.DISCONNECTED,
+      lastSuccessfulOperation: null,
+      consecutiveFailures: 0,
+      totalOperations: 0,
+      successRate: 100,
+      averageResponseTime: 0,
+      lastError: null,
+    };
+  }
+
+  /**
+   * Records a successful operation
+   */
+  recordSuccess(responseTimeMs: number): void {
+    this.health.lastSuccessfulOperation = new Date();
+    this.health.consecutiveFailures = 0;
+    this.health.totalOperations++;
+    this.health.state = ConnectionState.CONNECTED;
+
+    // Track response times
+    this.operationTimes.push(responseTimeMs);
+    if (this.operationTimes.length > this.maxOperationTimes) {
+      this.operationTimes.shift();
+    }
+
+    // Update metrics
+    this.updateMetrics();
+  }
+
+  /**
+   * Records a failed operation
+   */
+  recordFailure(error: LivekitError): void {
+    this.health.consecutiveFailures++;
+    this.health.totalOperations++;
+    this.health.lastError = error;
+
+    // Update connection state based on failure type and count
+    if (this.health.consecutiveFailures >= 3) {
+      this.health.state = ConnectionState.FAILED;
+    } else if (error.retryable) {
+      this.health.state = ConnectionState.RECONNECTING;
+    }
+
+    // Update metrics
+    this.updateMetrics();
+  }
+
+  /**
+   * Sets connection state to connecting
+   */
+  setConnecting(): void {
+    this.health.state = ConnectionState.CONNECTING;
+  }
+
+  /**
+   * Sets connection state to reconnecting
+   */
+  setReconnecting(): void {
+    this.health.state = ConnectionState.RECONNECTING;
+  }
+
+  /**
+   * Gets current connection health
+   */
+  getHealth(): ConnectionHealth {
+    return { ...this.health };
+  }
+
+  /**
+   * Checks if connection is healthy
+   */
+  isHealthy(): boolean {
+    const health = this.getHealth();
+    return (
+      health.state === ConnectionState.CONNECTED &&
+      health.consecutiveFailures === 0 &&
+      health.successRate >= 80
+    );
+  }
+
+  /**
+   * Checks if connection needs recovery
+   */
+  needsRecovery(): boolean {
+    const health = this.getHealth();
+    return (
+      health.state === ConnectionState.FAILED ||
+      health.consecutiveFailures >= 3 ||
+      health.successRate < 50
+    );
+  }
+
+  /**
+   * Resets connection health (for recovery scenarios)
+   */
+  reset(): void {
+    this.health.consecutiveFailures = 0;
+    this.health.lastError = null;
+    this.health.state = ConnectionState.DISCONNECTED;
+  }
+
+  private updateMetrics(): void {
+    // Calculate success rate
+    const failures = this.health.totalOperations > 0
+      ? this.health.totalOperations - this.operationTimes.length
+      : 0;
+    this.health.successRate = this.health.totalOperations > 0
+      ? ((this.health.totalOperations - failures) / this.health.totalOperations) * 100
+      : 100;
+
+    // Calculate average response time
+    if (this.operationTimes.length > 0) {
+      this.health.averageResponseTime =
+        this.operationTimes.reduce((sum, time) => sum + time, 0) / this.operationTimes.length;
+    }
+  }
+}
+
+// Graceful degradation utilities
+class GracefulDegradation {
+  /**
+   * Handles missing audio capabilities gracefully
+   */
+  static handleMissingAudio(operation: string): {
+    warning: string;
+    fallback: string;
+  } {
+    const warning = `Audio processing not available for ${operation}`;
+    const fallback = `[Audio input detected but audio processing is disabled. Enable audio in configuration to process audio content.]`;
+
+    logger.warn(warning);
+    return { warning, fallback };
+  }
+
+  /**
+   * Handles missing video capabilities gracefully
+   */
+  static handleMissingVideo(operation: string): {
+    warning: string;
+    fallback: string;
+  } {
+    const warning = `Video processing not available for ${operation}`;
+    const fallback = `[Video input detected but video processing is disabled. Enable video in configuration to process video content.]`;
+
+    logger.warn(warning);
+    return { warning, fallback };
+  }
+
+  /**
+   * Handles missing tool capabilities gracefully
+   */
+  static handleMissingTool(toolName: string): {
+    warning: string;
+    fallback: any;
+  } {
+    const warning = `Tool '${toolName}' not available`;
+    const fallback = {
+      id: `missing_${Date.now()}`,
+      name: toolName,
+      arguments: {},
+      error: `Tool '${toolName}' is not available in this agent configuration`,
+      status: 'unavailable',
+      fallback: true,
+    };
+
+    logger.warn(warning);
+    return { warning, fallback };
+  }
+
+  /**
+   * Handles missing agent features gracefully
+   */
+  static handleMissingAgentFeature(feature: string, context?: Record<string, any>): {
+    warning: string;
+    fallback: string;
+  } {
+    const warning = `Agent feature '${feature}' not available`;
+    const fallback = `[Agent feature '${feature}' is not available. This is expected in test mode.]`;
+
+    logger.warn(warning, context);
+    return { warning, fallback };
+  }
+
+  /**
+   * Creates a degraded response when full functionality is not available
+   */
+  static createDegradedResponse(
+    originalInput: string,
+    missingFeatures: string[],
+    partialResult?: string
+  ): {
+    text: string;
+    warnings: string[];
+    metadata: Record<string, any>;
+  } {
+    const warnings = missingFeatures.map(feature =>
+      `Feature '${feature}' unavailable - operating in degraded mode`
+    );
+
+    const text = partialResult ||
+      `LiveKit agent response (degraded mode): ${originalInput}`;
+
+    const metadata = {
+      degradedMode: true,
+      missingFeatures,
+      operationalFeatures: ['text', 'basic_response'],
+      degradationReason: 'Some requested features are not available in current configuration',
+    };
+
+    return { text, warnings, metadata };
+  }
+
+  /**
+   * Checks what features are available and returns degradation info
+   */
+  static analyzeAvailableFeatures(config: LivekitProviderConfig): {
+    available: string[];
+    missing: string[];
+    degraded: boolean;
+  } {
+    const available: string[] = ['text']; // Always available
+    const missing: string[] = [];
+
+    // Check audio availability
+    if (config.enableAudio && config.audioConfig) {
+      available.push('audio');
+    } else if (config.enableAudio) {
+      missing.push('audio_config');
+    }
+
+    // Check video availability
+    if (config.enableVideo && config.videoConfig) {
+      available.push('video');
+    } else if (config.enableVideo) {
+      missing.push('video_config');
+    }
+
+    // Check chat availability
+    if (config.enableChat !== false) {
+      available.push('chat');
+    }
+
+    // Always mark as non-degraded since we can provide basic functionality
+    const degraded = false;
+
+    return { available, missing, degraded };
+  }
+}
+
 // Audio processing utilities
 class AudioProcessor {
   /**
@@ -1364,7 +2129,17 @@ class AudioProcessor {
         const filePath = input.startsWith('file://') ? input.slice(7) : input;
 
         try {
-          const audioBuffer = await fs.readFile(filePath);
+          const audioBuffer = await RetryHandler.withRetry(
+            () => TimeoutHandler.withTimeout(
+              fs.readFile(filePath),
+              5000,
+              'readAudioFile'
+            ),
+            {
+              ...RetryHandler.getRetryOptions('file'),
+              operationName: `readAudioFile:${path.basename(filePath)}`,
+            }
+          );
           const format = AudioProcessor.detectAudioFormat(audioBuffer);
 
           return {
@@ -1407,7 +2182,15 @@ class AudioProcessor {
 
       return null;
     } catch (error) {
-      logger.error(`Error parsing audio input: ${error instanceof Error ? error.message : String(error)}`);
+      const livekitError = ErrorHandler.wrapError(
+        error,
+        LivekitErrorType.MULTIMODAL_ERROR,
+        {
+          operation: 'parseAudioInput',
+          input: input?.substring(0, 100),
+        }
+      );
+      logger.error(ErrorHandler.formatErrorForLogging(livekitError));
       return null;
     }
   }
@@ -1512,7 +2295,17 @@ class VideoProcessor {
         const filePath = input.startsWith('file://') ? input.slice(7) : input;
 
         try {
-          const videoBuffer = await fs.readFile(filePath);
+          const videoBuffer = await RetryHandler.withRetry(
+            () => TimeoutHandler.withTimeout(
+              fs.readFile(filePath),
+              5000,
+              'readVideoFile'
+            ),
+            {
+              ...RetryHandler.getRetryOptions('file'),
+              operationName: `readVideoFile:${path.basename(filePath)}`,
+            }
+          );
           const format = VideoProcessor.detectVideoFormat(videoBuffer);
 
           return {
@@ -1558,7 +2351,15 @@ class VideoProcessor {
 
       return null;
     } catch (error) {
-      logger.error(`Error parsing video input: ${error instanceof Error ? error.message : String(error)}`);
+      const livekitError = ErrorHandler.wrapError(
+        error,
+        LivekitErrorType.MULTIMODAL_ERROR,
+        {
+          operation: 'parseVideoInput',
+          input: input?.substring(0, 100),
+        }
+      );
+      logger.error(ErrorHandler.formatErrorForLogging(livekitError));
       return null;
     }
   }
