@@ -7,7 +7,7 @@ import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
-import HomeIcon from '@mui/icons-material/Home';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function NotFoundPage() {
@@ -17,14 +17,14 @@ export default function NotFoundPage() {
 
   usePageMeta({
     title: 'Page Not Found',
-    description: 'The page you are looking for could not be found'
+    description: 'The page you are looking for could not be found',
   });
 
   useEffect(() => {
     recordEvent('webui_404_page_view', {
       path: location.pathname,
       search: location.search,
-      referrer: document.referrer
+      referrer: document.referrer,
     });
   }, [location.pathname, location.search, recordEvent]);
 
@@ -45,7 +45,7 @@ export default function NotFoundPage() {
               fontSize: '4rem',
               fontWeight: 700,
               color: 'primary.main',
-              mb: 2
+              mb: 2,
             }}
           >
             404
@@ -61,16 +61,16 @@ export default function NotFoundPage() {
 
           <Button
             variant="contained"
-            startIcon={<HomeIcon />}
+            startIcon={<AssignmentIcon />}
             onClick={() => {
-              recordEvent('webui_404_go_home_click', {
-                from_path: location.pathname
+              recordEvent('webui_404_see_evals_click', {
+                from_path: location.pathname,
               });
-              navigate('/');
+              navigate('/evals');
             }}
             size="large"
           >
-            Go Home
+            See Evals
           </Button>
         </Paper>
       </Box>
