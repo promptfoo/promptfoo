@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
 import UpdateBanner from '@app/components/UpdateBanner';
+import Box from '@mui/material/Box';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { Outlet } from 'react-router-dom';
@@ -235,7 +236,7 @@ const lightTheme = createAppTheme(false);
 const darkTheme = createAppTheme(true);
 
 function Layout({ children }: { children: React.ReactNode }) {
-  return <div>{children}</div>;
+  return <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>{children}</Box>;
 }
 
 export default function PageShell() {
@@ -279,7 +280,9 @@ export default function PageShell() {
         <Layout>
           <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
           <UpdateBanner />
-          <Outlet />
+          <Box sx={{ flex: 1, overflow: 'auto', position: 'relative' }}>
+            <Outlet />
+          </Box>
           <PostHogPageViewTracker />
         </Layout>
       </PostHogProvider>
