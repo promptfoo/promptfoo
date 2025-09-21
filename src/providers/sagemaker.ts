@@ -30,8 +30,7 @@ const SUPPORTED_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'c
 /**
  * Zod schema for validating SageMaker options
  */
-const SageMakerConfigSchema = z
-  .object({
+const SageMakerConfigSchema = z.strictObject({
     // AWS credentials options
     accessKeyId: z.string().optional(),
     profile: z.string().optional(),
@@ -60,16 +59,14 @@ const SageMakerConfigSchema = z
     modelType: z.enum(SUPPORTED_MODEL_TYPES).optional(),
 
     // Response format options
-    responseFormat: z
-      .object({
+    responseFormat: z.strictObject({
         type: z.string().optional(),
         path: z.string().optional(), // JavaScript expression to extract content (formerly JSONPath)
       })
       .optional(),
 
     basePath: z.string().optional(),
-  })
-  .strict();
+  });
 
 type SageMakerConfig = z.infer<typeof SageMakerConfigSchema>;
 

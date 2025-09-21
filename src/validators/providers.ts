@@ -13,8 +13,7 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 
-export const ProviderOptionsSchema = z
-  .object({
+export const ProviderOptionsSchema = z.strictObject({
     id: z.custom<ProviderId>().optional(),
     label: z.custom<ProviderLabel>().optional(),
     config: z.any().optional(),
@@ -22,8 +21,7 @@ export const ProviderOptionsSchema = z
     transform: z.string().optional(),
     delay: z.number().optional(),
     env: ProviderEnvOverridesSchema.optional(),
-  })
-  .strict();
+  });
 
 const CallApiContextParamsSchema = z.object({
   fetchWithCache: z.optional(z.any()),
@@ -32,36 +30,20 @@ const CallApiContextParamsSchema = z.object({
   logger: z.optional(z.any()),
   originalProvider: z.optional(z.any()),
   prompt: PromptSchema,
-  vars: z.record(z.union([z.string(), z.object({})])),
+  vars: z.record(z.string(), z.union([z.string(), z.record(z.string(), z.any())])),
 });
 
 const CallApiOptionsParamsSchema = z.object({
   includeLogProbs: z.optional(z.boolean()),
 });
 
-const CallApiFunctionSchema = z
-  .function()
-  .args(
-    z.string().describe('prompt'),
-    CallApiContextParamsSchema.optional(),
-    CallApiOptionsParamsSchema.optional(),
-  )
-  .returns(z.promise(z.custom<ProviderResponse>()))
-  .and(z.object({ label: z.string().optional() }));
+const CallApiFunctionSchema = z.custom<CallApiFunction & { label?: string }>();
 
 export const ApiProviderSchema = z.object({
-  id: z.function().returns(z.string()),
+  id: z.custom<() => string>(),
   callApi: z.custom<CallApiFunction>(),
-  callEmbeddingApi: z
-    .function()
-    .args(z.string())
-    .returns(z.promise(z.custom<ProviderEmbeddingResponse>()))
-    .optional(),
-  callClassificationApi: z
-    .function()
-    .args(z.string())
-    .returns(z.promise(z.custom<ProviderClassificationResponse>()))
-    .optional(),
+  callEmbeddingApi: z.custom<((input: string) => Promise<ProviderEmbeddingResponse>) | undefined>().optional(),
+  callClassificationApi: z.custom<((prompt: string) => Promise<ProviderClassificationResponse>) | undefined>().optional(),
   label: z.custom<ProviderLabel>().optional(),
   transform: z.string().optional(),
   delay: z.number().optional(),
@@ -97,7 +79,7 @@ export const ProviderSimilarityResponseSchema = z.object({
 
 export const ProviderClassificationResponseSchema = z.object({
   error: z.string().optional(),
-  classification: z.record(z.number()).optional(),
+  classification: z.record(z.string(), z.number()).optional(),
 });
 
 export const ProvidersSchema = z.union([

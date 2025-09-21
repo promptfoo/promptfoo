@@ -11,7 +11,7 @@ export type Intent = string | string[];
 
 // Policy Types
 export const PolicyObjectSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   text: z.string().optional(),
 });
 export type PolicyObject = z.infer<typeof PolicyObjectSchema>;

@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+// Using native Zod 4 z.toJSONSchema() instead of zod-to-json-schema
 import {
   addCustomer,
   addOrder,
@@ -28,7 +28,7 @@ const createProductSchema = z.object({
 const createCustomerSchema = z.object({
   companyName: z.string().describe('Company name'),
   contactName: z.string().describe('Primary contact name'),
-  email: z.string().email().describe('Contact email'),
+  email: z.email().describe('Contact email'),
   phone: z.string().describe('Contact phone'),
   address: z.object({
     street: z.string().describe('Street address'),
@@ -180,37 +180,37 @@ export const erpTools = [
   {
     name: 'create_product',
     description: 'Create a new product in the ERP system',
-    inputSchema: zodToJsonSchema(createProductSchema),
+    inputSchema: z.toJSONSchema(createProductSchema),
   },
   {
     name: 'create_customer',
     description: 'Create a new customer account',
-    inputSchema: zodToJsonSchema(createCustomerSchema),
+    inputSchema: z.toJSONSchema(createCustomerSchema),
   },
   {
     name: 'create_order',
     description: 'Create a new sales order',
-    inputSchema: zodToJsonSchema(createOrderSchema),
+    inputSchema: z.toJSONSchema(createOrderSchema),
   },
   {
     name: 'update_inventory',
     description: 'Update inventory levels for a product',
-    inputSchema: zodToJsonSchema(updateInventorySchema),
+    inputSchema: z.toJSONSchema(updateInventorySchema),
   },
   {
     name: 'query_inventory',
     description: 'Query current inventory status',
-    inputSchema: zodToJsonSchema(queryInventorySchema),
+    inputSchema: z.toJSONSchema(queryInventorySchema),
   },
   {
     name: 'query_orders',
     description: 'Query sales orders with filters',
-    inputSchema: zodToJsonSchema(queryOrdersSchema),
+    inputSchema: z.toJSONSchema(queryOrdersSchema),
   },
   {
     name: 'query_employees',
     description: 'Query employee information',
-    inputSchema: zodToJsonSchema(queryEmployeesSchema),
+    inputSchema: z.toJSONSchema(queryEmployeesSchema),
   },
 ];
 

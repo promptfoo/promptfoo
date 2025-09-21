@@ -20,6 +20,7 @@ import {
   type Prompt,
   type TestCase,
   type TestSuite,
+  type Vars,
 } from './types/index';
 import { renderVarsInObject } from './util/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
@@ -49,8 +50,8 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
 }
 
 export function resolveVariables(
-  variables: Record<string, string | object>,
-): Record<string, string | object> {
+  variables: Vars,
+): Vars {
   let resolved = true;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
@@ -97,7 +98,7 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
  * @param vars The variables object containing potential file references
  * @returns An object mapping variable names to their file metadata
  */
-export function collectFileMetadata(vars: Record<string, string | object>): FileMetadata {
+export function collectFileMetadata(vars: Vars): FileMetadata {
   const fileMetadata: FileMetadata = {};
 
   for (const [varName, value] of Object.entries(vars)) {
@@ -132,7 +133,7 @@ export function collectFileMetadata(vars: Record<string, string | object>): File
 
 export async function renderPrompt(
   prompt: Prompt,
-  vars: Record<string, string | object>,
+  vars: Vars,
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
 ): Promise<string> {

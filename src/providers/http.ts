@@ -714,15 +714,15 @@ function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?:
 }
 
 const TokenEstimationConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  multiplier: z.number().min(0.01).default(1.3),
+  enabled: z.boolean().prefault(false),
+  multiplier: z.number().min(0.01).prefault(1.3),
 });
 
 // Base signature auth fields
 const BaseSignatureAuthSchema = z.object({
-  signatureValidityMs: z.number().default(300000),
-  signatureDataTemplate: z.string().default('{{signatureTimestamp}}'),
-  signatureAlgorithm: z.string().default('SHA256'),
+  signatureValidityMs: z.number().prefault(300000),
+  signatureDataTemplate: z.string().prefault('{{signatureTimestamp}}'),
+  signatureAlgorithm: z.string().prefault('SHA256'),
   signatureRefreshBufferMs: z.number().optional(),
 });
 
@@ -783,7 +783,7 @@ const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
   pfxPassword: z.string().optional(),
   certPath: z.string().optional(),
   keyPath: z.string().optional(),
-}).passthrough();
+});
 
 // Generic certificate auth schema (for UI-based certificate uploads)
 const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
@@ -805,7 +805,7 @@ const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
   keyPath: z.string().optional(),
   certContent: z.string().optional(),
   keyContent: z.string().optional(),
-}).passthrough();
+});
 
 // TLS Certificate configuration schema for HTTPS connections
 const TlsCertificateSchema = z
@@ -834,7 +834,7 @@ const TlsCertificateSchema = z
     passphrase: z.string().optional().describe('Passphrase for PFX certificate'),
 
     // Security options
-    rejectUnauthorized: z.boolean().default(true),
+    rejectUnauthorized: z.boolean().prefault(true),
     servername: z.string().optional(),
 
     // Cipher configuration
@@ -863,17 +863,16 @@ const TlsCertificateSchema = z
       return true;
     },
     {
-      message:
-        'Both certificate and key must be provided for client certificate authentication (unless using PFX)',
+        error: 'Both certificate and key must be provided for client certificate authentication (unless using PFX)'
     },
   );
 
 export const HttpProviderConfigSchema = z.object({
-  body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
-  headers: z.record(z.string()).optional(),
+  body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
-  queryParams: z.record(z.string()).optional(),
+  queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
   useHttps: z
     .boolean()
@@ -884,7 +883,7 @@ export const HttpProviderConfigSchema = z.object({
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
   validateStatus: z
-    .union([z.string(), z.function().returns(z.boolean()).args(z.number())])
+    .union([z.string(), z.function({ input: [z.number()], output: z.boolean() })])
     .optional(),
   /**
    * @deprecated use transformResponse instead
