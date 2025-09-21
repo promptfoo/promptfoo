@@ -62,12 +62,7 @@ export default function NotFoundPage() {
           <Button
             variant="contained"
             startIcon={<AssignmentIcon />}
-            onClick={() => {
-              recordEvent('webui_404_see_evals_click', {
-                from_path: location.pathname,
-              });
-              navigate('/evals');
-            }}
+            onClick={() => navigate('/evals')}
             size="large"
           >
             See Evals
