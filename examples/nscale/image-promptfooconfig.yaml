@@ -1,15 +1,15 @@
 description: 'Nscale Image Generation Example - comparing different image models'
 
 providers:
-  - id: nscale:image:flux/flux.1-schnell
+  - id: nscale:image:BlackForestLabs/FLUX.1-schnell
     config:
       size: '1024x1024'
       n: 1
-  - id: nscale:image:bytedance/sdxl-lightning-4step
+  - id: nscale:image:ByteDance/SDXL-Lightning-4step
     config:
       size: '1024x1024'
       n: 1
-  - id: nscale:image:stable-diffusion/xl-1.0
+  - id: nscale:image:stabilityai/stable-diffusion-xl-base-1.0
     config:
       size: '1024x1024'
       n: 1

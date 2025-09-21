@@ -83,14 +83,14 @@ Nscale supports many popular models with competitive pricing:
 
 **Embedding Models:**
 
-- `qwen/qwen3-embedding-8b` - Qwen 3 8B Embedding model
+- `Qwen/Qwen3-Embedding-8B` - Qwen 3 8B Embedding model
 
 **Text-to-Image Models:**
 
-- `flux/flux.1-schnell` - Flux.1 Schnell image generation model
-- `stable-diffusion/xl-1.0` - Stable Diffusion XL 1.0
-- `bytedance/sdxl-lightning-4step` - SDXL Lightning 4-step
-- `bytedance/sdxl-lightning-8step` - SDXL Lightning 8-step
+- `BlackForestLabs/FLUX.1-schnell` - Flux.1 Schnell image generation model
+- `stabilityai/stable-diffusion-xl-base-1.0` - Stable Diffusion XL 1.0
+- `ByteDance/SDXL-Lightning-4step` - SDXL Lightning 4-step
+- `ByteDance/SDXL-Lightning-8step` - SDXL Lightning 8-step
 
 ## Pricing & Usage
 

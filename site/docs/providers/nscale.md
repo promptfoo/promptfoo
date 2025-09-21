@@ -108,18 +108,16 @@ Nscale offers a wide range of popular AI models:
 
 | Model               | Provider Format                            | Use Case                       |
 | ------------------- | ------------------------------------------ | ------------------------------ |
-| Qwen 3 Embedding 8B | `nscale:embedding:qwen/qwen3-embedding-8b` | Text embeddings and similarity |
+| Qwen 3 Embedding 8B | `nscale:embedding:Qwen/Qwen3-Embedding-8B` | Text embeddings and similarity |
 
 ### Text-to-Image Models
 
-| Model                  | Provider Format                                | Use Case                      |
-| ---------------------- | ---------------------------------------------- | ----------------------------- |
-| Flux.1 Schnell         | `nscale:image:flux/flux.1-schnell`             | Fast image generation         |
-| Stable Diffusion XL    | `nscale:image:stable-diffusion/xl-1.0`         | High-quality image generation |
-| SDXL Lightning 4-step  | `nscale:image:bytedance/sdxl-lightning-4step`  | Ultra-fast image generation   |
-| SDXL Lightning 8-step  | `nscale:image:bytedance/sdxl-lightning-8step`  | Balanced speed and quality    |
-
-**Note:** Image generation models are currently in development. Contact Nscale support for access and updated model availability.
+| Model                  | Provider Format                                     | Use Case                      |
+| ---------------------- | --------------------------------------------------- | ----------------------------- |
+| Flux.1 Schnell         | `nscale:image:BlackForestLabs/FLUX.1-schnell`      | Fast image generation         |
+| Stable Diffusion XL    | `nscale:image:stabilityai/stable-diffusion-xl-base-1.0` | High-quality image generation |
+| SDXL Lightning 4-step  | `nscale:image:ByteDance/SDXL-Lightning-4step`      | Ultra-fast image generation   |
+| SDXL Lightning 8-step  | `nscale:image:ByteDance/SDXL-Lightning-8step`      | Balanced speed and quality    |
 
 ## Configuration Options
 

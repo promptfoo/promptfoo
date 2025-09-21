@@ -96,7 +96,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     } as NscaleImageOptions;
 
     const model = this.modelName;
-    const responseFormat = config.response_format || 'url';
+    const responseFormat = config.response_format || 'b64_json'; // Default to b64_json for Nscale
     const endpoint = '/images/generations';
 
     const body: Record<string, any> = {
