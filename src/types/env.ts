@@ -102,21 +102,12 @@ export const ProviderEnvOverridesSchema = z.object({
   LIVEKIT_URL: z.string().optional(),
   LIVEKIT_API_KEY: z.string().optional(),
   LIVEKIT_API_SECRET: z.string().optional(),
-  LIVEKIT_REGION: z.string().optional(),
   LIVEKIT_ENABLE_AUDIO: z.string().optional(),
   LIVEKIT_ENABLE_VIDEO: z.string().optional(),
   LIVEKIT_ENABLE_CHAT: z.string().optional(),
   LIVEKIT_SESSION_TIMEOUT: z.string().optional(),
   LIVEKIT_ROOM_NAME: z.string().optional(),
   LIVEKIT_PARTICIPANT_NAME: z.string().optional(),
-  LIVEKIT_AUDIO_SAMPLE_RATE: z.string().optional(),
-  LIVEKIT_AUDIO_CHANNELS: z.string().optional(),
-  LIVEKIT_AUDIO_BITRATE: z.string().optional(),
-  LIVEKIT_VIDEO_WIDTH: z.string().optional(),
-  LIVEKIT_VIDEO_HEIGHT: z.string().optional(),
-  LIVEKIT_VIDEO_FRAMERATE: z.string().optional(),
-  LIVEKIT_VIDEO_BITRATE: z.string().optional(),
-  LIVEKIT_LOG_LEVEL: z.string().optional(),
 });
 
 export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;

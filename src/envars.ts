@@ -318,22 +318,12 @@ type EnvVars = {
   LIVEKIT_URL?: string;
   LIVEKIT_API_KEY?: string;
   LIVEKIT_API_SECRET?: string;
-  LIVEKIT_REGION?: string;
   LIVEKIT_ROOM_NAME?: string;
-  LIVEKIT_PARTICIPANT_IDENTITY?: string;
   LIVEKIT_PARTICIPANT_NAME?: string;
   LIVEKIT_SESSION_TIMEOUT?: number;
-  LIVEKIT_MAX_CONCURRENT_SESSIONS?: number;
-  LIVEKIT_RETRY_ATTEMPTS?: number;
-  LIVEKIT_RETRY_DELAY?: number;
   LIVEKIT_ENABLE_AUDIO?: boolean;
   LIVEKIT_ENABLE_VIDEO?: boolean;
   LIVEKIT_ENABLE_CHAT?: boolean;
-  LIVEKIT_ENABLE_SCREEN_SHARE?: boolean;
-  LIVEKIT_DEBUG?: boolean;
-  LIVEKIT_LOG_LEVEL?: string;
-  LIVEKIT_ENABLE_METRICS?: boolean;
-  LIVEKIT_ENABLE_TRACING?: boolean;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

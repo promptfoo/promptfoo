@@ -1,0 +1,355 @@
+import { jest } from '@jest/globals';
+
+// Mock the core functionality we need to test
+const mockAccessTokenInstance = {
+  addGrant: jest.fn(),
+  toJwt: jest.fn().mockReturnValue('mock-jwt-token'),
+};
+
+const mockAgent = {
+  prewarm: jest.fn().mockResolvedValue(undefined),
+  entry: jest.fn().mockResolvedValue(undefined),
+  config: {
+    name: 'Test Agent',
+    version: '1.0.0',
+  },
+};
+
+// Mock all external dependencies to avoid browser compatibility issues
+jest.mock('livekit-server-sdk');
+jest.mock('livekit-client');
+jest.mock('fs/promises');
+jest.mock('path');
+jest.mock('../../src/esm');
+jest.mock('../../src/providers/livekit/utils');
+
+// Import after mocking
+import { LiveKitProvider } from '../../src/providers/livekit';
+import { AccessToken } from 'livekit-server-sdk';
+import { Room } from 'livekit-client';
+import { importModule } from '../../src/esm';
+import fs from 'fs/promises';
+import path from 'path';
+
+// Setup mocks
+const MockAccessToken = AccessToken as jest.MockedClass<typeof AccessToken>;
+const MockRoom = Room as jest.MockedClass<typeof Room>;
+const mockImportModule = importModule as jest.MockedFunction<typeof importModule>;
+const mockAccess = fs.access as jest.MockedFunction<typeof fs.access>;
+const mockResolve = path.resolve as jest.MockedFunction<typeof path.resolve>;
+
+describe('LiveKitProvider', () => {
+  const mockAgent = {
+    prewarm: jest.fn().mockResolvedValue(undefined),
+    entry: jest.fn().mockResolvedValue(undefined),
+    config: {
+      name: 'Test Agent',
+      version: '1.0.0',
+      description: 'Test agent for unit tests',
+      capabilities: ['text'],
+      framework: 'livekit-agents',
+    },
+  };
+
+  const mockAgentWithSendMessage = {
+    ...mockAgent,
+    entry: jest.fn().mockImplementation((ctx) => {
+      ctx.sendMessage = jest.fn().mockResolvedValue({
+        response: 'Direct response from agent',
+        metadata: {
+          sessionId: ctx.sessionId,
+          timestamp: new Date().toISOString(),
+          isDirect: true,
+        },
+      });
+    }),
+  };
+
+  const testConfig = {
+    url: 'ws://localhost:7880',
+    apiKey: 'test-api-key',
+    apiSecret: 'test-api-secret',
+    roomName: 'test-room',
+    participantName: 'test-participant',
+    sessionTimeout: 10000,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.LIVEKIT_API_KEY = 'test-api-key';
+    process.env.LIVEKIT_API_SECRET = 'test-api-secret';
+
+    // Reset mock instances
+    mockRoomInstance.state = 'connected';
+    (mockRoomInstance.on as jest.MockedFunction<any>).mockClear();
+    (mockRoomInstance.once as jest.MockedFunction<any>).mockClear();
+    (mockRoomInstance.connect as jest.MockedFunction<any>).mockClear();
+    (mockRoomInstance.disconnect as jest.MockedFunction<any>).mockClear();
+    (mockAccessTokenInstance.addGrant as jest.MockedFunction<any>).mockClear();
+    (mockAccessTokenInstance.toJwt as jest.MockedFunction<any>).mockClear();
+    (mockImportModule as jest.MockedFunction<any>).mockClear();
+  });
+
+  afterEach(() => {
+    delete process.env.LIVEKIT_API_KEY;
+    delete process.env.LIVEKIT_API_SECRET;
+  });
+
+  describe('constructor', () => {
+    it('should create provider with agent path and config', () => {
+      const provider = new LiveKitProvider('/path/to/agent.js', {
+        config: testConfig,
+      });
+
+      expect(provider.id()).toBe('livekit:agent:/path/to/agent.js');
+      expect(provider.toString()).toBe('[LiveKit Provider /path/to/agent.js]');
+    });
+
+    it('should throw error when API credentials are missing', () => {
+      delete process.env.LIVEKIT_API_KEY;
+      delete process.env.LIVEKIT_API_SECRET;
+
+      expect(() => {
+        new LiveKitProvider('/path/to/agent.js', { config: {} });
+      }).toThrow('LiveKit API key and secret are required');
+    });
+
+    it('should use environment variables for configuration', () => {
+      process.env.LIVEKIT_URL = 'ws://test:7880';
+      process.env.LIVEKIT_ROOM_NAME = 'env-room';
+
+      const provider = new LiveKitProvider('/path/to/agent.js');
+
+      expect(provider.config.url).toBe('ws://test:7880');
+      expect(provider.config.roomName).toBe('env-room');
+    });
+  });
+
+  describe('loadAgent', () => {
+    it('should load and validate agent module', async () => {
+      (mockImportModule as jest.MockedFunction<any>).mockResolvedValue(mockAgent);
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+
+      const agent = await (provider as any).loadAgent();
+
+      expect(mockImportModule).toHaveBeenCalledWith(expect.stringContaining('agent.js'));
+      expect(agent).toBe(mockAgent);
+    });
+
+    it('should handle default export', async () => {
+      (mockImportModule as jest.MockedFunction<any>).mockResolvedValue({ default: mockAgent });
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+
+      const agent = await (provider as any).loadAgent();
+
+      expect(agent).toBe(mockAgent);
+    });
+
+    it('should throw error for invalid agent', async () => {
+      (mockImportModule as jest.MockedFunction<any>).mockResolvedValue({ entry: undefined });
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+
+      await expect((provider as any).loadAgent()).rejects.toThrow(
+        'Agent must export an object with an entry function'
+      );
+    });
+  });
+
+  describe('generateAccessToken', () => {
+    it('should generate valid JWT token', () => {
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+
+      const token = (provider as any).generateAccessToken('test-user', 'test-room');
+
+      expect(mockAccessToken).toHaveBeenCalledWith('test-api-key', 'test-api-secret', {
+        identity: 'test-user',
+        name: 'test-participant',
+        ttl: 10, // sessionTimeout in seconds
+      });
+      expect(mockAccessTokenInstance.addGrant).toHaveBeenCalledWith({
+        room: 'test-room',
+        roomJoin: true,
+        canPublish: true,
+        canSubscribe: true,
+        canPublishData: true,
+      });
+      expect(token).toBe('mock-jwt-token');
+    });
+  });
+
+  describe('createRoom', () => {
+    it('should create and connect to LiveKit room', async () => {
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+
+      const room = await (provider as any).createRoom('test-room', 'test-user');
+
+      expect(mockRoom).toHaveBeenCalledWith({
+        adaptiveStream: true,
+        dynacast: true,
+      });
+      expect(mockRoomInstance.connect).toHaveBeenCalledWith('ws://localhost:7880', 'mock-jwt-token');
+      expect(room).toBe(mockRoomInstance);
+    });
+  });
+
+  describe('setupAgentWorker', () => {
+    it('should setup agent with proper context', async () => {
+      (mockImportModule as jest.MockedFunction<any>).mockResolvedValue(mockAgent);
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+
+      const { agent, context } = await (provider as any).setupAgentWorker(mockRoomInstance);
+
+      expect(mockAgent.prewarm).toHaveBeenCalledWith({
+        userData: {},
+        pid: process.pid,
+        startTime: expect.any(Number),
+      });
+      expect(mockAgent.entry).toHaveBeenCalledWith({
+        room: mockRoomInstance,
+        sessionId: 'session-123',
+        userData: {},
+        config: testConfig,
+        proc: {
+          userData: {},
+          pid: process.pid,
+          startTime: expect.any(Number),
+        },
+        workerId: expect.stringMatching(/^promptfoo-worker-\d+$/),
+        job: {
+          id: 'session-123',
+          type: 'ROOM',
+          room: {
+            name: 'test-room',
+            sid: 'room-sid-123',
+          },
+        },
+      });
+      expect(agent).toBe(mockAgent);
+    });
+
+    it('should skip prewarm if not available', async () => {
+      const agentWithoutPrewarm = { ...mockAgent };
+      delete agentWithoutPrewarm.prewarm;
+      (mockImportModule as jest.MockedFunction<any>).mockResolvedValue(agentWithoutPrewarm);
+
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+
+      await (provider as any).setupAgentWorker(mockRoomInstance);
+
+      expect(agentWithoutPrewarm.entry).toHaveBeenCalled();
+    });
+  });
+
+  describe('callApi', () => {
+    it('should successfully call agent via sendMessage', async () => {
+      (mockImportModule as jest.MockedFunction<any>).mockResolvedValue(mockAgentWithSendMessage);
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.output).toBe('Direct response from agent');
+      expect(response.metadata).toMatchObject({
+        sessionId: expect.any(String),
+        roomName: expect.stringMatching(/^test-room-session-\d+$/),
+        participantIdentity: expect.stringMatching(/^test-participant-\d+$/),
+        timestamp: expect.any(String),
+        inputModalities: ['text'],
+        responseModalities: ['text'],
+        processingTime: expect.any(Number),
+        isDirect: true,
+      });
+      expect(mockRoomInstance.disconnect).toHaveBeenCalled();
+    });
+
+    it('should handle agent response via data channel', async () => {
+      (mockImportModule as jest.MockedFunction<any>).mockResolvedValue(mockAgent);
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+
+      // Mock room.on to simulate agent response
+      (mockRoomInstance.on as jest.MockedFunction<any>).mockImplementation((event, callback) => {
+        if (event === 'dataReceived') {
+          setTimeout(() => {
+            const responseData = {
+              type: 'agent_response',
+              response: {
+                response: 'Data channel response',
+                metadata: {
+                  sessionId: 'session-123',
+                  timestamp: new Date().toISOString(),
+                },
+              },
+            };
+            const payload = new TextEncoder().encode(JSON.stringify(responseData));
+            callback(payload, null, 'reliable');
+          }, 100);
+        }
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.output).toBe('Data channel response');
+      expect(mockRoomInstance.localParticipant.publishData).toHaveBeenCalled();
+    });
+
+    it('should handle connection timeout', async () => {
+      (mockImportModule as jest.MockedFunction<any>).mockResolvedValue(mockAgent);
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+      mockRoomInstance.state = 'connecting';
+
+      // Mock room.once to simulate timeout
+      (mockRoomInstance.once as jest.MockedFunction<any>).mockImplementation((event, callback) => {
+        if (event === 'connected') {
+          // Never call the callback to simulate timeout
+        }
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.error).toContain('Room connection timeout');
+    });
+
+    it('should handle errors gracefully', async () => {
+      (mockImportModule as jest.MockedFunction<any>).mockRejectedValue(new Error('Agent load failed'));
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.error).toContain('Agent load failed');
+      expect(response.metadata?.error).toBe(true);
+    });
+  });
+
+  describe('cleanup', () => {
+    it('should disconnect all active rooms', async () => {
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+      const mockRoom1 = {
+        disconnect: jest.fn().mockResolvedValue(undefined),
+      };
+      const mockRoom2 = {
+        disconnect: jest.fn().mockResolvedValue(undefined),
+      };
+
+      // Simulate active rooms
+      (provider as any).activeRooms.set('session-1', mockRoom1);
+      (provider as any).activeRooms.set('session-2', mockRoom2);
+
+      await provider.cleanup();
+
+      expect(mockRoom1.disconnect).toHaveBeenCalled();
+      expect(mockRoom2.disconnect).toHaveBeenCalled();
+      expect((provider as any).activeRooms.size).toBe(0);
+    });
+
+    it('should handle disconnect errors', async () => {
+      const provider = new LiveKitProvider('/path/to/agent.js', { config: testConfig });
+      const mockRoomWithError = {
+        disconnect: jest.fn().mockRejectedValue(new Error('Disconnect failed')),
+      };
+
+      (provider as any).activeRooms.set('session-1', mockRoomWithError);
+
+      await expect(provider.cleanup()).resolves.not.toThrow();
+      expect((provider as any).activeRooms.size).toBe(0);
+    });
+  });
+});

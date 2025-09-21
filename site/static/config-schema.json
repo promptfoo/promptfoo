@@ -363,9 +363,6 @@
                             "LIVEKIT_API_SECRET": {
                               "type": "string"
                             },
-                            "LIVEKIT_REGION": {
-                              "type": "string"
-                            },
                             "LIVEKIT_ENABLE_AUDIO": {
                               "type": "string"
                             },
@@ -384,30 +381,6 @@
                             "LIVEKIT_PARTICIPANT_NAME": {
                               "type": "string"
                             },
-                            "LIVEKIT_AUDIO_SAMPLE_RATE": {
-                              "type": "string"
-                            },
-                            "LIVEKIT_AUDIO_CHANNELS": {
-                              "type": "string"
-                            },
-                            "LIVEKIT_AUDIO_BITRATE": {
-                              "type": "string"
-                            },
-                            "LIVEKIT_VIDEO_WIDTH": {
-                              "type": "string"
-                            },
-                            "LIVEKIT_VIDEO_HEIGHT": {
-                              "type": "string"
-                            },
-                            "LIVEKIT_VIDEO_FRAMERATE": {
-                              "type": "string"
-                            },
-                            "LIVEKIT_VIDEO_BITRATE": {
-                              "type": "string"
-                            },
-                            "LIVEKIT_LOG_LEVEL": {
-                              "type": "string"
-                            }
                           },
                           "additionalProperties": false
                         }

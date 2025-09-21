@@ -1,0 +1,32 @@
+description: "LiveKit Provider End-to-End Test"
+
+providers:
+  - id: livekit:examples/real-livekit-agent.js
+    config:
+      # These would normally come from environment variables
+      # LIVEKIT_API_KEY and LIVEKIT_API_SECRET
+      apiKey: "test-api-key"
+      apiSecret: "test-api-secret"
+      url: "ws://localhost:7880"
+      roomName: "promptfoo-test"
+      participantName: "promptfoo-tester"
+      sessionTimeout: 5000
+
+tests:
+  - vars:
+      prompt: "Hello, can you help me with a simple test?"
+    assert:
+      - type: contains
+        value: "Real LiveKit agent"
+
+  - vars:
+      prompt: "audio:https://example.com/test.wav Please transcribe this audio"
+    assert:
+      - type: contains
+        value: "Real LiveKit agent"
+
+  - vars:
+      prompt: "video:https://example.com/test.mp4 Describe this video"
+    assert:
+      - type: contains
+        value: "Real LiveKit agent"

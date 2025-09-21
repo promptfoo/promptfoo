@@ -7,22 +7,22 @@ import type { MultiModalInput } from './types';
  * - "video:https://example.com/file.mp4 Describe what you see"
  */
 export function parseMultiModalInput(prompt: string): MultiModalInput {
-  const result: MultiModalInput = { text: prompt };
+  const result: MultiModalInput = {};
 
-  // Extract audio URLs
-  const audioMatch = prompt.match(/audio:(https?:\/\/[^\s]+)/);
-  if (audioMatch) {
-    result.audioUrl = audioMatch[1];
-    result.text = prompt.replace(audioMatch[0], '').trim();
-  }
+  // Extract all modalities in one pass using replaceAll with a callback
+  let cleanedText = prompt
+    .replace(/audio:(https?:\/\/[^\s]+)/g, (match, url) => {
+      result.audioUrl = url;
+      return '';
+    })
+    .replace(/video:(https?:\/\/[^\s]+)/g, (match, url) => {
+      result.videoUrl = url;
+      return '';
+    })
+    .replace(/\s+/g, ' ')  // Normalize whitespace
+    .trim();
 
-  // Extract video URLs
-  const videoMatch = prompt.match(/video:(https?:\/\/[^\s]+)/);
-  if (videoMatch) {
-    result.videoUrl = videoMatch[1];
-    result.text = prompt.replace(videoMatch[0], '').trim();
-  }
-
+  result.text = cleanedText || prompt; // Fallback to original if nothing left
   return result;
 }
 
