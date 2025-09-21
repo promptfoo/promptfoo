@@ -2,7 +2,6 @@ import { render, screen, fireEvent, within, RenderResult } from '@testing-librar
 import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { alpha } from '@mui/material';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 import Prompts from './Prompts';
 
