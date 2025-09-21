@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
+import Box from '@mui/material/Box';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
 import type { StandaloneEval } from '@promptfoo/util/database';
@@ -49,8 +50,12 @@ export default function HistoryPage({ showDatasetColumn = true }: HistoryPagePro
   usePageMeta({ title: 'History', description: 'Evaluation history' });
 
   return (
-    <ErrorBoundary name="History Page">
-      <HistoryPageContent showDatasetColumn={showDatasetColumn} />
-    </ErrorBoundary>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        <ErrorBoundary name="History Page">
+          <HistoryPageContent showDatasetColumn={showDatasetColumn} />
+        </ErrorBoundary>
+      </Box>
+    </Box>
   );
 }
