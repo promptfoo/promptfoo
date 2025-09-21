@@ -13,7 +13,7 @@ interface LogoutButtonProps {
 export default function LogoutButton({
   variant = 'outlined',
   size = 'medium',
-  className
+  className,
 }: LogoutButtonProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { logout } = useUserStore();
