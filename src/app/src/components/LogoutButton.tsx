@@ -37,6 +37,8 @@ export default function LogoutButton({
       size={size}
       onClick={handleLogout}
       disabled={isLoggingOut}
+      aria-busy={isLoggingOut}
+      type="button"
       className={className}
     >
       {isLoggingOut ? <CircularProgress size={20} /> : 'Logout'}

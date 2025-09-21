@@ -21,6 +21,7 @@ export const useUserStore = create<UserState>((set, getState) => ({
   setUserId: (userId: string) => set({ userId }),
   fetchEmail: async () => {
     if (getState().email) {
+      set({ isLoading: false });
       return;
     }
     try {

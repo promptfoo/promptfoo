@@ -155,7 +155,7 @@ export default function LoginPage() {
                 required
                 fullWidth
                 autoFocus
-                autoComplete="current-password"
+                autoComplete="new-password"
                 value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
                 disabled={isSubmitting}
