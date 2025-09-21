@@ -304,6 +304,12 @@ export default function EvalsDataGrid({
                   onEvalSelected(params.row.evalId);
                   return false;
                 }}
+                sx={{
+                  textDecoration: 'none',
+                  color: 'primary.main',
+                  fontFamily: 'monospace',
+                  '&:hover': { textDecoration: 'underline' },
+                }}
               >
                 {params.row.evalId}
               </Link>
