@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
-import Box from '@mui/material/Box';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Datasets from './Datasets';
 import type { TestCasesWithMetadata } from '@promptfoo/types';
@@ -41,12 +40,8 @@ function DatasetsPageContent() {
 export default function DatasetsPage() {
   usePageMeta({ title: 'Datasets', description: 'Prompt test case collections' });
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <Box sx={{ flex: 1, minHeight: 0 }}>
-        <ErrorBoundary name="Datasets Page">
-          <DatasetsPageContent />
-        </ErrorBoundary>
-      </Box>
-    </Box>
+    <ErrorBoundary name="Datasets Page">
+      <DatasetsPageContent />
+    </ErrorBoundary>
   );
 }
