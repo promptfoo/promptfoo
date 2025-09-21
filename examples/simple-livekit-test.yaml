@@ -1,0 +1,32 @@
+description: Simple LiveKit Provider Test
+
+providers:
+  - id: livekit:agent:examples/simple-agent.js
+    label: Simple LiveKit Agent
+
+prompts:
+  - "Hello, how are you?"
+  - "What is 2 + 2?"
+  - "Tell me a joke"
+
+tests:
+  - description: "Agent responds to greeting"
+    assert:
+      - type: contains
+        value: "Echo from simple agent"
+      - type: javascript
+        value: "output.length > 0"
+
+  - description: "Agent handles math question"
+    assert:
+      - type: contains
+        value: "Echo from simple agent"
+      - type: contains
+        value: "2 + 2"
+
+  - description: "Agent responds to request"
+    assert:
+      - type: contains
+        value: "Echo from simple agent"
+      - type: javascript
+        value: "output.length > 0"

@@ -990,6 +990,20 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('livekit:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createLivekitProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+        basePath: context.basePath,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => isJavascriptFile(providerPath),
     create: async (
       providerPath: string,
@@ -1235,20 +1249,6 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('livekit:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createLivekitProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-        basePath: context.basePath,
-      });
     },
   },
 ];
