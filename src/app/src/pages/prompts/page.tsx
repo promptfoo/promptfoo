@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
+import Box from '@mui/material/Box';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
@@ -49,8 +50,12 @@ function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
 export default function PromptsPage({ showDatasetColumn = true }: PromptsPageProps) {
   usePageMeta({ title: 'Prompts', description: 'Saved prompt templates' });
   return (
-    <ErrorBoundary name="Prompts Page">
-      <PromptsPageContent showDatasetColumn={showDatasetColumn} />
-    </ErrorBoundary>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        <ErrorBoundary name="Prompts Page">
+          <PromptsPageContent showDatasetColumn={showDatasetColumn} />
+        </ErrorBoundary>
+      </Box>
+    </Box>
   );
 }
