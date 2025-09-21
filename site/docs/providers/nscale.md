@@ -8,9 +8,7 @@ The Nscale provider enables you to use [Nscale's Serverless Inference API](https
 
 ## Setup
 
-### Service Token (Recommended)
-
-Nscale recommends using service tokens for improved security and control. Set your Nscale service token as an environment variable:
+Set your Nscale service token as an environment variable:
 
 ```bash
 export NSCALE_SERVICE_TOKEN=your_service_token_here
@@ -22,31 +20,13 @@ Alternatively, you can add it to your `.env` file:
 NSCALE_SERVICE_TOKEN=your_service_token_here
 ```
 
-### API Key (Deprecated)
-
-⚠️ **API keys will be deprecated on October 30, 2025**. Please migrate to service tokens when possible.
-
-If you still need to use an API key, set it as an environment variable:
-
-```bash
-export NSCALE_API_KEY=your_api_key_here
-```
-
-Or add it to your `.env` file:
-
-```
-NSCALE_API_KEY=your_api_key_here
-```
-
 ### Obtaining Credentials
 
-You can obtain service tokens or API keys by:
+You can obtain service tokens by:
 
 1. Signing up at [Nscale](https://nscale.com/)
 2. Navigating to your account settings
-3. Going to "Service Tokens" (recommended) or "API Keys" section
-
-**Note:** The provider will automatically prefer service tokens over API keys if both are provided.
+3. Going to "Service Tokens" section
 
 ## Configuration
 

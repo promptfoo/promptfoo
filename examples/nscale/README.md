@@ -14,10 +14,8 @@ npx promptfoo@latest init --example nscale
 
 1. Sign up for an account at [Nscale](https://nscale.com/)
 2. Navigate to your account settings
-
-#### Service Token (Recommended)
-
-Generate a service token and set it as an environment variable:
+3. Go to "Service Tokens" section
+4. Generate a service token and set it as an environment variable:
 
 ```bash
 export NSCALE_SERVICE_TOKEN="your-service-token-here"
@@ -28,24 +26,6 @@ Alternatively, you can add it to your `.env` file:
 ```
 NSCALE_SERVICE_TOKEN=your-service-token-here
 ```
-
-#### API Key (Deprecated)
-
-⚠️ **API keys will be deprecated on October 30, 2025**. Please migrate to service tokens.
-
-If you still need to use an API key:
-
-```bash
-export NSCALE_API_KEY="your-api-key-here"
-```
-
-Or add it to your `.env` file:
-
-```
-NSCALE_API_KEY=your-api-key-here
-```
-
-**Note:** The provider will automatically prefer service tokens over API keys if both are provided.
 
 ## Example Configuration
 
