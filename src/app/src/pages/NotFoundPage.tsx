@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
