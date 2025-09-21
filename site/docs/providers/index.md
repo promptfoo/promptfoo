@@ -275,3 +275,33 @@ providers:
 ```
 
 For detailed MCP documentation and advanced configurations, see the [MCP Integration Guide](../integrations/mcp.md).
+
+## Advanced Usage
+
+### Linking Custom Providers to Existing Targets (Promptfoo Cloud)
+
+:::info Promptfoo Cloud Feature
+This feature is available in [Promptfoo Cloud](/docs/enterprise) deployments.
+:::
+
+Use `linkedTargetId` to link custom providers to existing cloud targets. Results from the custom provider appear under the linked target instead of creating duplicate entries.
+
+```yaml
+providers:
+  - id: 'custom-wrapper'
+    config:
+      linkedTargetId: 'promptfoo://provider/12345-abcd-uuid'
+      # other custom provider config...
+```
+
+#### Supported target types
+
+- **Cloud provider IDs**: Format `promptfoo://provider/<uuid>` - points to existing cloud providers
+- **CLI target IDs**: Plain strings - points to CLI targets
+
+## Next Steps
+
+- [Configuration guide](/docs/configuration/guide) - Learn about test cases and assertions
+- [Expected outputs](/docs/configuration/expected-outputs) - Set up automatic evaluation
+- [Custom providers](/docs/providers/custom-api) - Build your own provider integrations
+- [Provider examples](https://github.com/promptfoo/promptfoo/tree/main/examples) - See real configuration examples
