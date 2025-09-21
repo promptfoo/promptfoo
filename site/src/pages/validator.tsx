@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Editor } from '@monaco-editor/react';
 import Link from '@docusaurus/Link';
 import Box from '@mui/material/Box';
@@ -42,6 +42,7 @@ const ConfigValidator = () => {
   const [schema, setSchema] = useState(null);
 
   useEffect(() => {
+    // biome-ignore lint/style/noRestrictedGlobals: Site documentation file, fetch is acceptable here
     fetch('/config-schema.json')
       .then((response) => response.json())
       .then((data) => setSchema(data))

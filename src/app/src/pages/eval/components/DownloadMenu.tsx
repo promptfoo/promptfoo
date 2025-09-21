@@ -21,6 +21,7 @@ import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
+import invariant from '@promptfoo/util/invariant';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
 import { useToast } from '../../../hooks/useToast';
@@ -33,6 +34,14 @@ function DownloadMenu() {
   const { showToast } = useToast();
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
+
+  // DRY helper to get filename with proper type narrowing
+  const getFilename = (suffix: string): string => {
+    if (evalId) {
+      return `${evalId}-${suffix}`;
+    }
+    invariant(false, 'evalId is required for file downloads');
+  };
 
   const openDownloadDialog = (blob: Blob, downloadName: string) => {
     const url = URL.createObjectURL(blob);
@@ -96,7 +105,7 @@ function DownloadMenu() {
   };
 
   const downloadConfig = () => {
-    const fileName = evalId ? `${evalId}-config.yaml` : 'promptfooconfig.yaml';
+    const fileName = getFilename('config.yaml');
     downloadYamlConfig(config, fileName, 'Configuration downloaded successfully');
   };
 
@@ -120,7 +129,7 @@ function DownloadMenu() {
     const configCopy = { ...config, tests: failedTests };
 
     // Create the file name
-    const fileName = evalId ? `${evalId}-failed-tests.yaml` : 'failed-tests.yaml';
+    const fileName = getFilename('failed-tests.yaml');
 
     downloadYamlConfig(
       configCopy,
@@ -143,7 +152,7 @@ function DownloadMenu() {
       prompts: table.head.prompts.map((prompt) => prompt.label || prompt.display || prompt.raw),
     }));
     const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, `${evalId ?? 'eval'}-dpo.json`);
+    openDownloadDialog(blob, getFilename('dpo.json'));
     handleClose();
   };
 
@@ -153,7 +162,7 @@ function DownloadMenu() {
       return;
     }
     const blob = new Blob([JSON.stringify(table, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, `${evalId ?? 'eval'}-table.json`);
+    openDownloadDialog(blob, getFilename('table.json'));
     handleClose();
   };
 
@@ -195,7 +204,7 @@ function DownloadMenu() {
 
     const output = csvStringify(csvRows);
     const blob = new Blob([output], { type: 'text/csv;charset=utf-8;' });
-    openDownloadDialog(blob, `${evalId ?? 'eval'}-table.csv`);
+    openDownloadDialog(blob, getFilename('table.csv'));
     handleClose();
   };
 
@@ -229,7 +238,7 @@ function DownloadMenu() {
 
     const yamlContent = yaml.dump(humanEvalCases);
     const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
-    openDownloadDialog(blob, `${evalId ?? 'eval'}-human-eval-cases.yaml`);
+    openDownloadDialog(blob, getFilename('human-eval-cases.yaml'));
     handleClose();
   };
 
@@ -260,7 +269,7 @@ function DownloadMenu() {
 
     const content = uniquePayloads.join('\n');
     const blob = new Blob([content], { type: 'text/plain' });
-    openDownloadDialog(blob, `${evalId ?? 'eval'}-burp-payloads.burp`);
+    openDownloadDialog(blob, getFilename('burp-payloads.burp'));
     handleClose();
   };
 
@@ -394,7 +403,7 @@ function DownloadMenu() {
                         Download YAML Config
                       </Button>
                       <CommandBlock
-                        fileName={evalId ? `${evalId}-config.yaml` : 'promptfooconfig.yaml'}
+                        fileName={getFilename('config.yaml')}
                         helpText="Run this command to execute the eval again:"
                       />
                     </Box>
@@ -420,7 +429,7 @@ function DownloadMenu() {
                         Download Failed Tests
                       </Button>
                       <CommandBlock
-                        fileName={evalId ? `${evalId}-failed-tests.yaml` : 'failed-tests.yaml'}
+                        fileName={getFilename('failed-tests.yaml')}
                         helpText="Run this command to re-run just the failed tests:"
                       />
                     </Box>

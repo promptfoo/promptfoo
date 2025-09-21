@@ -142,9 +142,10 @@ vi.mock('./EvalSelectorKeyboardShortcut', () => ({
 
 const mockRecentEvals: ResultLightweightWithLabel[] = [
   {
-    id: 'eval-1',
+    evalId: 'eval-1',
+    datasetId: null,
     label: 'Evaluation 1',
-    createdAt: '2023-01-01T00:00:00Z',
+    createdAt: Date.parse('2023-01-01T00:00:00Z'),
     description: 'Test evaluation 1',
     numTests: 5,
   },

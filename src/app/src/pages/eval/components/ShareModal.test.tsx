@@ -33,14 +33,12 @@ describe('ShareModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Mock successful domain check by default
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          domain: 'localhost:3000',
-          isCloudEnabled: false,
-        }),
-    });
+    mockCallApi.mockResolvedValue(
+      Response.json({
+        domain: 'localhost:3000',
+        isCloudEnabled: false,
+      })
+    );
   });
 
   it('does not render when closed', () => {
@@ -58,14 +56,12 @@ describe('ShareModal', () => {
   });
 
   it('displays signup prompt when cloud is not enabled', async () => {
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          domain: 'promptfoo.app',
-          isCloudEnabled: false,
-        }),
-    });
+    mockCallApi.mockResolvedValue(
+      Response.json({
+        domain: 'promptfoo.app',
+        isCloudEnabled: false,
+      })
+    );
 
     render(<ShareModal {...defaultProps} />);
 
@@ -108,13 +104,14 @@ describe('ShareModal', () => {
   });
 
   it('displays error when domain check fails', async () => {
-    mockCallApi.mockResolvedValue({
-      ok: false,
-      json: () =>
-        Promise.resolve({
+    mockCallApi.mockResolvedValue(
+      Response.json(
+        {
           error: 'Domain check failed',
-        }),
-    });
+        },
+        { status: 500 }
+      )
+    );
 
     render(<ShareModal {...defaultProps} />);
 
@@ -152,14 +149,12 @@ describe('ShareModal', () => {
   });
 
   it('opens external link when "Take me there" is clicked', async () => {
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          domain: 'promptfoo.app',
-          isCloudEnabled: false,
-        }),
-    });
+    mockCallApi.mockResolvedValue(
+      Response.json({
+        domain: 'promptfoo.app',
+        isCloudEnabled: false,
+      })
+    );
 
     // Mock window.open
     const mockOpen = vi.fn();

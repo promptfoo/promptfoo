@@ -761,13 +761,13 @@ const App = () => {
                       multiple
                       value={selectedCategories}
                       onChange={(event: SelectChangeEvent<string[]>) => {
-                        const value = event.target.value as string | string[];
+                        const value = event.target.value;
                         setSelectedCategories(typeof value === 'string' ? [value] : value);
                       }}
                       input={<OutlinedInput label="Risk Categories" />}
-                      renderValue={(selected) => (
+                      renderValue={(selected: string[]) => (
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                          {selected.map((value) => (
+                          {selected.map((value: string) => (
                             <Chip key={value} label={value} size="small" />
                           ))}
                         </Box>
@@ -787,13 +787,13 @@ const App = () => {
                       multiple
                       value={selectedStrategies}
                       onChange={(event: SelectChangeEvent<string[]>) => {
-                        const value = event.target.value as string | string[];
+                        const value = event.target.value;
                         setSelectedStrategies(typeof value === 'string' ? [value] : value);
                       }}
                       input={<OutlinedInput label="Strategies" />}
-                      renderValue={(selected) => (
+                      renderValue={(selected: string[]) => (
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                          {selected.map((value) => (
+                          {selected.map((value: string) => (
                             <Chip key={value} label={value} size="small" />
                           ))}
                         </Box>
