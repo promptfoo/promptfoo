@@ -34,13 +34,10 @@ describe('ShareModal', () => {
     vi.clearAllMocks();
     // Mock successful domain check by default
     mockCallApi.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          domain: 'localhost:3000',
-          isCloudEnabled: false,
-        }),
-        { status: 200, statusText: 'OK' },
-      ),
+      Response.json({
+        domain: 'localhost:3000',
+        isCloudEnabled: false,
+      }),
     );
   });
 
@@ -60,13 +57,10 @@ describe('ShareModal', () => {
 
   it('displays signup prompt when cloud is not enabled', async () => {
     mockCallApi.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          domain: 'promptfoo.app',
-          isCloudEnabled: false,
-        }),
-        { status: 200, statusText: 'OK' },
-      ),
+      Response.json({
+        domain: 'promptfoo.app',
+        isCloudEnabled: false,
+      }),
     );
 
     render(<ShareModal {...defaultProps} />);
@@ -111,11 +105,11 @@ describe('ShareModal', () => {
 
   it('displays error when domain check fails', async () => {
     mockCallApi.mockResolvedValue(
-      new Response(
-        JSON.stringify({
+      Response.json(
+        {
           error: 'Domain check failed',
-        }),
-        { status: 500, statusText: 'Internal Server Error' },
+        },
+        { status: 500 },
       ),
     );
 
@@ -156,13 +150,10 @@ describe('ShareModal', () => {
 
   it('opens external link when "Take me there" is clicked', async () => {
     mockCallApi.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          domain: 'promptfoo.app',
-          isCloudEnabled: false,
-        }),
-        { status: 200, statusText: 'OK' },
-      ),
+      Response.json({
+        domain: 'promptfoo.app',
+        isCloudEnabled: false,
+      }),
     );
 
     // Mock window.open
