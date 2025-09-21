@@ -5,6 +5,7 @@
 ### Frontend Login Implementation (`src/app/src/pages/login.tsx`)
 
 **Current Flow:**
+
 1. Simple email-only authentication form
 2. Two API calls on successful submission:
    - `POST /user/email` - Sets user email
@@ -13,6 +14,7 @@
 4. Redirects to dashboard or specified redirect URL
 
 **Current Issues:**
+
 - **No actual authentication** - just email verification/storage
 - **Basic UI/UX** - minimal styling with MUI components
 - **Limited error handling** - only console errors, no user feedback
@@ -22,12 +24,14 @@
 ### CLI Authentication (`src/commands/auth.ts`)
 
 **Current Flow:**
+
 1. Supports API key-based authentication via `--api-key` flag
 2. Validates API token against cloud service
 3. Syncs email between API token and local config
 4. Provides `login`, `logout`, `whoami`, and `can-create-targets` commands
 
 **Key Features:**
+
 - API key validation against external service
 - Organization and team-based access control
 - Proper token management and storage
@@ -36,12 +40,14 @@
 ### API Routes (`src/server/routes/user.ts`)
 
 **Current Endpoints:**
+
 - `GET /user/email` - Retrieves stored email
 - `POST /user/email` - Sets email and records telemetry/consent
 - `GET /user/id` - Gets user ID
 - `GET /user/email/status` - Checks email verification status
 
 **Missing:**
+
 - No `/user/consent` endpoint (referenced in frontend but doesn't exist)
 - No proper authentication middleware
 - No session management
@@ -54,6 +60,7 @@
 **Goal:** Create a unified authentication system that works for both CLI and web interface.
 
 **Components:**
+
 - **API Key Management**: Centralized token validation and management
 - **Session Handling**: Web session management with proper security
 - **Organization/Team Integration**: Role-based access control
@@ -62,6 +69,7 @@
 ### 2. Frontend Login Page Redesign
 
 **UX/UI Improvements:**
+
 - **Multi-step authentication flow**:
   1. Email input with validation
   2. API key/token input or magic link option
@@ -69,6 +77,7 @@
   4. Dashboard redirect with welcome message
 
 **Enhanced Features:**
+
 - **Better error handling** with user-friendly toast notifications
 - **Loading states** and progress indicators
 - **Form validation** with real-time feedback
@@ -77,6 +86,7 @@
 - **Branding consistency** with promptfoo design system
 
 **Security Enhancements:**
+
 - **Input sanitization** and validation
 - **Rate limiting** for login attempts
 - **CSRF protection** for form submissions
@@ -85,6 +95,7 @@
 ### 3. API Route Enhancements
 
 **New Endpoints:**
+
 ```
 POST /api/auth/login           # Handle email + API key login
 POST /api/auth/logout          # Clear session and invalidate tokens
@@ -96,6 +107,7 @@ GET  /api/auth/teams           # List user's teams
 ```
 
 **Enhanced Existing Endpoints:**
+
 - Add proper authentication middleware to all protected routes
 - Implement the missing `/user/consent` endpoint
 - Add request validation and error handling
@@ -104,6 +116,7 @@ GET  /api/auth/teams           # List user's teams
 ### 4. Unified Authentication Service
 
 **Core Service (`src/auth/AuthService.ts`):**
+
 - Handle API key validation against cloud service
 - Manage local session state
 - Provide authentication utilities for both CLI and web
@@ -111,6 +124,7 @@ GET  /api/auth/teams           # List user's teams
 - Implement logout and token refresh logic
 
 **Configuration Management:**
+
 - Extend existing `globalConfig` to include web session data
 - Secure storage for API tokens and session information
 - Environment-specific configuration (dev/prod/self-hosted)
@@ -118,12 +132,14 @@ GET  /api/auth/teams           # List user's teams
 ### 5. Testing Strategy
 
 **Frontend Tests:**
+
 - Unit tests for authentication components
 - Integration tests for login flow
 - E2E tests for complete authentication journey
 - Accessibility testing with jest-axe
 
 **Backend Tests:**
+
 - API endpoint testing with proper authentication scenarios
 - Security testing for rate limiting and CSRF protection
 - Integration tests with mock cloud service responses
@@ -132,11 +148,13 @@ GET  /api/auth/teams           # List user's teams
 ### 6. Migration Considerations
 
 **Backward Compatibility:**
+
 - Maintain existing CLI authentication flow
 - Support both old and new web authentication methods during transition
 - Graceful degradation for users with existing sessions
 
 **Data Migration:**
+
 - Migrate existing email-only users to new authentication system
 - Handle existing telemetry and consent data
 - Preserve user preferences and settings
@@ -144,30 +162,35 @@ GET  /api/auth/teams           # List user's teams
 ## Implementation Plan
 
 ### Phase 1: Backend Foundation
+
 1. Create authentication service architecture
 2. Implement new API endpoints with proper validation
 3. Add authentication middleware for protected routes
 4. Create comprehensive test suite for authentication flow
 
 ### Phase 2: Frontend Redesign
+
 1. Design new login page UI/UX mockups
 2. Implement multi-step authentication form
 3. Add proper error handling and user feedback
 4. Integrate with new backend authentication APIs
 
 ### Phase 3: Security & Performance
+
 1. Implement rate limiting and security middleware
 2. Add CSRF protection and secure headers
 3. Performance optimization and caching strategies
 4. Security audit and penetration testing
 
 ### Phase 4: Integration & Testing
+
 1. End-to-end testing of complete authentication flow
 2. CLI and web interface integration testing
 3. Organization/team switching functionality
 4. Migration scripts and backward compatibility testing
 
 ### Phase 5: Documentation & Deployment
+
 1. Update user documentation for new login flow
 2. Create developer documentation for authentication APIs
 3. Deployment guides for self-hosted installations
@@ -185,16 +208,19 @@ GET  /api/auth/teams           # List user's teams
 ## Risk Assessment
 
 **High Risk:**
+
 - Breaking existing CLI authentication during migration
 - Data loss during user migration process
 - Security vulnerabilities in new authentication system
 
 **Medium Risk:**
+
 - Performance impact of additional authentication checks
 - Complexity of organization/team switching implementation
 - Integration challenges with external cloud service
 
 **Low Risk:**
+
 - UI/UX changes requiring user education
 - Testing coverage gaps
 - Documentation updates
