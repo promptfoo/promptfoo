@@ -259,6 +259,10 @@ type EnvVars = {
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
 
+  // Nscale
+  NSCALE_SERVICE_TOKEN?: string;
+  NSCALE_API_KEY?: string;
+
   // Ollama
   OLLAMA_API_KEY?: string;
   OLLAMA_BASE_URL?: string;
