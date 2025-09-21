@@ -1,6 +1,5 @@
 const path = require('path');
 const fs = require('fs').promises;
-const { Resvg } = require('@resvg/resvg-js');
 const matter = require('gray-matter');
 const sharp = require('sharp');
 
@@ -398,6 +397,9 @@ async function generateSvgTemplate(metadata = {}) {
 async function generateOgImage(metadata, outputPath) {
   try {
     const svg = await generateSvgTemplate(metadata);
+
+    // Conditionally import Resvg only when needed
+    const { Resvg } = require('@resvg/resvg-js');
 
     // Convert SVG to PNG using resvg
     // Since we're embedding the font in the SVG, we don't need to load external fonts
