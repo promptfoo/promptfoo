@@ -1,7 +1,6 @@
 const path = require('path');
 const fs = require('fs').promises;
 const matter = require('gray-matter');
-const sharp = require('sharp');
 
 // Constants for image generation
 const WIDTH = 1200;
@@ -112,6 +111,9 @@ async function getImageAsBase64(imagePath, maxWidth = 520, maxHeight = 430) {
       const imageBuffer = await fs.readFile(fullPath);
       return `data:image/svg+xml;base64,${imageBuffer.toString('base64')}`;
     } else {
+      // Conditionally import sharp only when needed
+      const sharp = require('sharp');
+
       // Use sharp to resize and resample images with high quality
       const resizedBuffer = await sharp(fullPath)
         .resize(maxWidth, maxHeight, {
