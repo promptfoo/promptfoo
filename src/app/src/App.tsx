@@ -10,6 +10,7 @@ import {
   useLocation,
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
+import UnifiedLayoutWrapper from './components/UnifiedLayoutWrapper';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
@@ -54,16 +55,16 @@ const router = createBrowserRouter(
               />
             }
           />
-          <Route path="/datasets" element={<DatasetsPage />} />
+          <Route path="/datasets" element={<UnifiedLayoutWrapper><DatasetsPage /></UnifiedLayoutWrapper>} />
           <Route path="/eval" element={<EvalPage />} />
-          <Route path="/evals" element={<EvalsIndexPage />} />
+          <Route path="/evals" element={<UnifiedLayoutWrapper><EvalsIndexPage /></UnifiedLayoutWrapper>} />
           <Route path="/eval/:evalId" element={<EvalPage />} />
 
           {/* Redirect legacy /progress route to /history (since v0.104.5) */}
           <Route path="/progress" element={<Navigate to="/history" replace />} />
-          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/history" element={<UnifiedLayoutWrapper><HistoryPage /></UnifiedLayoutWrapper>} />
 
-          <Route path="/prompts" element={<PromptsPage />} />
+          <Route path="/prompts" element={<UnifiedLayoutWrapper><PromptsPage /></UnifiedLayoutWrapper>} />
           <Route path="/model-audit" element={<ModelAuditPage />} />
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />
