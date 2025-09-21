@@ -167,9 +167,8 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     // Validator requires `prompts`, but prompts is not actually required for redteam.
-    // For Zod 4, we need to handle pipes differently. Use relaxed validation for redteam configs.
-    const UnifiedConfigSchemaWithoutPrompts = z.any();
-    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
+    // For Zod 4, we need to handle pipes differently. Use full validation since it's important.
+    const validationResult = UnifiedConfigSchema.safeParse(dereferencedConfig);
     if (!validationResult.success) {
       logger.warn(
         `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,

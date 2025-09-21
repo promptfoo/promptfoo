@@ -256,7 +256,7 @@ describe('HttpProvider', () => {
       new HttpProvider(mockUrl, {
         config: invalidConfig as any,
       });
-    }).toThrow(/Expected object, received string/);
+    }).toThrow(/Invalid input: expected object, received string/);
   });
 
   it('should return provider id and string representation', () => {

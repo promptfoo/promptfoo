@@ -464,9 +464,7 @@ describe('redteam validators', () => {
           }).toThrow(z.ZodError);
 
           expect(error).toBeDefined();
-          expect(error?.issues[0].message).toContain(
-            'Custom strategies must start with file:// and end with .js or .ts',
-          );
+          expect(error?.issues[0].message).toContain('Invalid input');
         });
       });
     });
@@ -501,6 +499,7 @@ describe('redteam validators', () => {
             'Custom strategies must start with file:// and end with .js or .ts',
             'Strategy must be one of the built-in strategies:',
             'Invalid enum value',
+            'Invalid input', // Zod v4 generic error message
           ];
           const hasValidMessage = validMessages.some((msg) => message.includes(msg));
           expect(hasValidMessage).toBe(true);
@@ -598,6 +597,7 @@ describe('redteam validators', () => {
             'Custom strategies must start with file:// and end with .js or .ts',
             'Strategy must be one of the built-in strategies:',
             'Invalid enum value',
+            'Invalid input', // Zod v4 generic error message
           ];
           const hasValidMessage = validMessages.some((msg) => message.includes(msg));
           expect(hasValidMessage).toBe(true);

@@ -102,6 +102,10 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
 
   // Always preserve the type if it was detected or provided
   if (detectedType) {
+    // Validate that the type is one of the supported types
+    if (!['pem', 'jks', 'pfx'].includes(detectedType)) {
+      throw new Error(`Unknown certificate type: ${detectedType}. Supported types are: pem, jks, pfx`);
+    }
     processedAuth.type = detectedType;
   }
 
@@ -773,6 +777,7 @@ const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
 
 // Legacy signature auth schema (for backward compatibility)
 const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
+  type: z.enum(['pem', 'jks', 'pfx']).optional(),
   privateKeyPath: z.string().optional(),
   privateKey: z.string().optional(),
   keystorePath: z.string().optional(),
@@ -805,7 +810,7 @@ const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
   keyPath: z.string().optional(),
   certContent: z.string().optional(),
   keyContent: z.string().optional(),
-});
+}).transform(preprocessSignatureAuthConfig);
 
 // TLS Certificate configuration schema for HTTPS connections
 const TlsCertificateSchema = z
@@ -895,14 +900,13 @@ export const HttpProviderConfigSchema = z.object({
   // Digital Signature Authentication with support for multiple certificate types
   signatureAuth: z
     .union([
+      GenericCertificateAuthSchema,
       LegacySignatureAuthSchema,
       PemSignatureAuthSchema,
       JksSignatureAuthSchema,
       PfxSignatureAuthSchema,
-      GenericCertificateAuthSchema,
     ])
-    .optional()
-    .transform(preprocessSignatureAuthConfig),
+    .optional(),
   // TLS Certificate configuration for HTTPS connections
   tls: TlsCertificateSchema.optional(),
 });

@@ -1744,12 +1744,15 @@ describe('readConfig', () => {
   it('should throw validation error for invalid dereferenced config', async () => {
     const mockConfig = {
       description: 'invalid_config',
+      prompts: ['test prompt'],
       providers: [{ $ref: 'defaultParams.yaml#/invalidKey' }],
     };
 
     const dereferencedConfig = {
       description: 'invalid_config',
-      providers: [{ invalid: true }],
+      prompts: ['test prompt'],
+      providers: ['openai:gpt-4'],
+      targets: ['openai:gpt-3.5-turbo'],
     };
 
     jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(mockConfig));
@@ -1760,7 +1763,7 @@ describe('readConfig', () => {
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
-      'Invalid configuration file config.yaml:\nValidation error: Unrecognized key(s) in object: \'invalid\' at "providers[0]"',
+      expect.stringContaining('Invalid configuration file config.yaml:\nValidation error:')
     );
     const calls = jest.mocked(logger.warn).mock.calls;
     expect(calls[0][0]).toContain('Invalid configuration file');

@@ -1,11 +1,20 @@
+// @ts-ignore - Adaline packages use Zod v3, we use v4. Disable type checking for compatibility.
 import { Anthropic as GatewayAnthropic } from '@adaline/anthropic';
+// @ts-ignore
 import { Azure as GatewayAzure } from '@adaline/azure';
+// @ts-ignore
 import { Gateway } from '@adaline/gateway';
+// @ts-ignore
 import { Google as GatewayGoogle } from '@adaline/google';
+// @ts-ignore
 import { Groq as GatewayGroq } from '@adaline/groq';
+// @ts-ignore
 import { OpenRouter as GatewayOpenRouter } from '@adaline/open-router';
+// @ts-ignore
 import { OpenAI as GatewayOpenAI } from '@adaline/openai';
+// @ts-ignore
 import { TogetherAI as GatewayTogetherAi } from '@adaline/together-ai';
+// @ts-ignore
 import { Vertex as GatewayVertex } from '@adaline/vertex';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
@@ -25,15 +34,18 @@ import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { calculateOpenAICost } from './openai/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import { VoyageEmbeddingProvider } from './voyage';
+// @ts-ignore
 import type {
   CompleteChatHandlerResponseType,
   Cache as GatewayCache,
   GetEmbeddingsHandlerResponseType,
 } from '@adaline/gateway';
+// @ts-ignore
 import type {
   ChatModelV1 as GatewayChatModel,
   EmbeddingModelV1 as GatewayEmbeddingModel,
 } from '@adaline/provider';
+// @ts-ignore
 import type {
   EmbeddingRequestsType as GatewayEmbeddingRequestsType,
   MessageType as GatewayMessageType,
