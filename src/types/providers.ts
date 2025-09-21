@@ -3,6 +3,7 @@ import type winston from 'winston';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { Vars } from './index';
 
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
@@ -17,7 +18,7 @@ export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOpti
 // Local interface to avoid circular dependency with src/types/index.ts
 interface AtomicTestCase {
   description?: string;
-  vars?: Record<string, string | object>;
+  vars?: Vars;
   providerResponse?: ProviderResponse;
   tokenUsage?: TokenUsage;
   success?: boolean;

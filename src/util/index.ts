@@ -412,7 +412,7 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   return varsMatch(testCase.vars, result.vars) && providersMatch;
 }
 
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
+export function renderVarsInObject<T>(obj: T, vars?: Vars): T {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
@@ -514,7 +514,7 @@ export function isRunningUnderNpx(): boolean {
  */
 export function maybeLoadToolsFromExternalFile(
   tools: any,
-  vars?: Record<string, string | object>,
+  vars?: Vars,
 ): any {
   return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
 }

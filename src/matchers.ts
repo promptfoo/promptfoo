@@ -46,6 +46,7 @@ import type {
   ProviderType,
   ProviderTypeMap,
   TokenUsage,
+  Vars,
 } from './types/index';
 
 class LlmRubricProviderError extends Error {
@@ -411,9 +412,9 @@ function splitIntoSentences(text: string) {
 }
 
 function processContextForTemplating(
-  context: Record<string, string | object>,
+  context: Vars,
   enableObjectAccess: boolean,
-): Record<string, string | object> {
+): Vars {
   if (enableObjectAccess) {
     return context;
   }
@@ -436,7 +437,7 @@ function processContextForTemplating(
 
 export async function renderLlmRubricPrompt(
   rubricPrompt: string,
-  context: Record<string, string | object>,
+  context: Vars,
 ) {
   const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
   const processedContext = processContextForTemplating(context, enableObjectAccess);
@@ -461,7 +462,7 @@ export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Vars,
   assertion?: Assertion | null,
   options?: {
     throwOnError?: boolean;
@@ -625,7 +626,7 @@ export async function matchesFactuality(
   expected: string,
   output: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Vars,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -779,7 +780,7 @@ export async function matchesClosedQa(
   expected: string,
   output: string,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Vars,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -1041,7 +1042,7 @@ export async function matchesContextRecall(
   groundTruth: string,
   threshold: number,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Vars,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1208,7 +1209,7 @@ export async function matchesContextFaithfulness(
   context: string | string[],
   threshold: number,
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Vars,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1302,7 +1303,7 @@ export async function matchesSelectBest(
   criteria: string,
   outputs: string[],
   grading?: GradingConfig,
-  vars?: Record<string, string | object>,
+  vars?: Vars,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
     outputs.length >= 2,

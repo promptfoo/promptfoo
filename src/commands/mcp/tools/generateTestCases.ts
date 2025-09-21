@@ -69,7 +69,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
         // Extract variables from the prompt
         const variableMatches = prompt.match(/\{\{(\w+)\}\}/g);
         const variables = variableMatches
-          ? [...new Set(variableMatches.map((v) => v.slice(2, -2)))]
+          ? [...new Set(variableMatches.map((v: string) => v.slice(2, -2)))]
           : [];
 
         if (variables.length === 0) {
@@ -111,7 +111,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
 
           // Add basic assertions based on the prompt type
           if (assertionTypes && assertionTypes.length > 0) {
-            testCase.assert = assertionTypes.map((type) => ({ type }));
+            testCase.assert = assertionTypes.map((type: string) => ({ type }));
           } else {
             // Default assertions
             testCase.assert = [{ type: 'is-json' }, { type: 'not-empty' }];
@@ -129,7 +129,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
         }
 
         // Analyze the generated test cases
-        const analysis = analyzeTestCases(tests, variables);
+        const analysis = analyzeTestCases(tests as any[], variables as string[]);
 
         return createToolResponse('generate_test_cases', true, {
           testCases: tests,

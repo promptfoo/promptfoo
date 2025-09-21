@@ -12,6 +12,7 @@ import type { AnySchema } from 'ajv';
 import type { GoogleAuth } from 'google-auth-library';
 
 import type { Content, FunctionCall, Part, Tool } from './types';
+import type { Vars } from '../../types/index';
 
 const ajv = getAjv();
 // property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.
@@ -525,7 +526,7 @@ export function normalizeTools(tools: Tool[]): Tool[] {
 
 export function loadFile(
   config_var: Tool[] | string | undefined,
-  context_vars: Record<string, string | object> | undefined,
+  context_vars: Vars | undefined,
 ) {
   // Ensures that files are loaded correctly. Files may be defined in multiple ways:
   // 1. Directly in the provider:
@@ -589,7 +590,7 @@ function getMimeTypeFromBase64(base64Data: string): string {
 
 function processImagesInContents(
   contents: GeminiFormat,
-  contextVars?: Record<string, string | object>,
+  contextVars?: Vars,
 ): GeminiFormat {
   if (!contextVars) {
     return contents;
@@ -677,7 +678,7 @@ function processImagesInContents(
 
 export function geminiFormatAndSystemInstructions(
   prompt: string,
-  contextVars?: Record<string, string | object>,
+  contextVars?: Vars,
   configSystemInstruction?: Content | string,
   options?: { useAssistantRole?: boolean },
 ): {
@@ -805,7 +806,7 @@ export function parseStringObject(input: string | any) {
 export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
-  vars?: Record<string, string | object>,
+  vars?: Vars,
 ) {
   let functionCalls: FunctionCall[];
   try {

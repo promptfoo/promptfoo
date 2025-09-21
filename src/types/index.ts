@@ -553,7 +553,7 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
-  vars: Record<string, string | object>;
+  vars: Vars;
   test: AtomicTestCase;
   logProbs: number[] | undefined;
   config?: Record<string, any>;

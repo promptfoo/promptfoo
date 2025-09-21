@@ -50,7 +50,7 @@ export function registerCompareProvidersTool(server: McpServer) {
 
       try {
         // Load all providers
-        const apiProviders = await loadApiProviders(providers.map((p) => ({ id: p })));
+        const apiProviders = await loadApiProviders(providers.map((p: string) => ({ id: p })));
 
         if (apiProviders.length !== providers.length) {
           return createToolResponse(
