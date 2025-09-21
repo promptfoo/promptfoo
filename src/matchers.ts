@@ -411,10 +411,7 @@ function splitIntoSentences(text: string) {
   return text.split('\n').filter((sentence) => sentence.trim() !== '');
 }
 
-function processContextForTemplating(
-  context: Vars,
-  enableObjectAccess: boolean,
-): Vars {
+function processContextForTemplating(context: Vars, enableObjectAccess: boolean): Vars {
   if (enableObjectAccess) {
     return context;
   }
@@ -435,10 +432,7 @@ function processContextForTemplating(
   );
 }
 
-export async function renderLlmRubricPrompt(
-  rubricPrompt: string,
-  context: Vars,
-) {
+export async function renderLlmRubricPrompt(rubricPrompt: string, context: Vars) {
   const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
   const processedContext = processContextForTemplating(context, enableObjectAccess);
 

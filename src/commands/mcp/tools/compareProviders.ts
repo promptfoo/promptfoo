@@ -38,7 +38,8 @@ export function registerCompareProvidersTool(server: McpServer) {
           `,
         ),
 
-      timeoutMs: z.int()
+      timeoutMs: z
+        .int()
         .min(1000)
         .max(300000)
         .optional()

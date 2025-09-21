@@ -145,7 +145,7 @@ export class GoogleImageProvider implements ApiProvider {
         },
       };
 
-      const response = await this.withRetry(
+      const response = (await this.withRetry(
         () =>
           client.request({
             url: endpoint,
@@ -158,7 +158,7 @@ export class GoogleImageProvider implements ApiProvider {
             timeout: REQUEST_TIMEOUT_MS,
           }),
         'Vertex AI API call',
-      ) as any;
+      )) as any;
 
       return this.processResponse(response.data as any, false);
     } catch (err: any) {
@@ -208,7 +208,7 @@ export class GoogleImageProvider implements ApiProvider {
     logger.debug(`Making request to ${endpoint} with API key`);
 
     try {
-      const response = await this.withRetry(
+      const response = (await this.withRetry(
         () =>
           fetchWithCache(
             endpoint,
@@ -225,7 +225,7 @@ export class GoogleImageProvider implements ApiProvider {
             'json',
           ),
         'Google AI Studio API call',
-      ) as any;
+      )) as any;
 
       return this.processResponse(response.data as any, response.cached);
     } catch (err) {

@@ -9,11 +9,15 @@ export const PromptConfigSchema = z.object({
   suffix: z.string().optional(),
 });
 
-const PromptFunctionSchema = z
-  .function({ input: [z.object({
-          vars: z.record(z.string(), z.union([z.string(), z.any()])),
-          provider: z.custom<ApiProvider>().optional(),
-        })], output: z.promise(z.union([z.string(), z.any()])) });
+const PromptFunctionSchema = z.function({
+  input: [
+    z.object({
+      vars: z.record(z.string(), z.union([z.string(), z.any()])),
+      provider: z.custom<ApiProvider>().optional(),
+    }),
+  ],
+  output: z.promise(z.union([z.string(), z.any()])),
+});
 
 export const PromptSchema = z.object({
   id: z.string().optional(),

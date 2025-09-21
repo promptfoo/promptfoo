@@ -18,12 +18,14 @@ export function registerListEvaluationsTool(server: McpServer) {
         .describe(
           'Filter evaluations by dataset ID. Example: "dataset_123" or leave empty to see all evaluations',
         ),
-      page: z.int()
+      page: z
+        .int()
         .positive()
         .optional()
         .prefault(1)
         .describe('Page number for pagination (default: 1)'),
-      pageSize: z.int()
+      pageSize: z
+        .int()
         .min(1)
         .max(100)
         .optional()

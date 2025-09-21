@@ -607,7 +607,8 @@ const ProviderPromptMapSchema = z.record(
 const MetadataSchema = z.record(z.string(), z.any());
 
 export const VarsSchema = z.record(
-  z.string(), z.union([
+  z.string(),
+  z.union([
     z.string(),
     z.number(),
     z.boolean(),
@@ -791,8 +792,10 @@ export const DerivedMetricSchema = z.object({
   // The function to calculate the metric - either a mathematical expression or a function that takes the scores and returns a number
   value: z.union([
     z.string(),
-    z
-                  .function({ input: [z.record(z.string(), z.number()), z.custom<RunEvalOptions>()], output: z.number() }),
+    z.function({
+      input: [z.record(z.string(), z.number()), z.custom<RunEvalOptions>()],
+      output: z.number(),
+    }),
   ]),
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
@@ -824,8 +827,8 @@ export const TestSuiteSchema = z.object({
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
-          error: 'defaultTest string must start with file://'
-    }),
+        error: 'defaultTest string must start with file://',
+      }),
       TestCaseSchema.omit({ description: true }),
     ])
     .optional(),
@@ -845,7 +848,7 @@ export const TestSuiteSchema = z.object({
       z
         .string()
         .refine((value) => value.startsWith('file://'), {
-            error: 'Extension must start with file://'
+          error: 'Extension must start with file://',
         })
         .refine(
           (value) => {
@@ -853,8 +856,8 @@ export const TestSuiteSchema = z.object({
             return parts.length === 3 && parts.every((part) => part.trim() !== '');
           },
           {
-              error: 'Extension must be of the form file://path/to/file.py:function_name'
-        },
+            error: 'Extension must be of the form file://path/to/file.py:function_name',
+          },
         )
         .refine(
           (value) => {
@@ -865,8 +868,9 @@ export const TestSuiteSchema = z.object({
             );
           },
           {
-              error: 'Extension must be a python (.py) or javascript (.js, .ts, .mjs, .cjs, etc.) file followed by a colon and function name'
-        },
+            error:
+              'Extension must be a python (.py) or javascript (.js, .ts, .mjs, .cjs, etc.) file followed by a colon and function name',
+          },
         ),
     )
     .nullable()
@@ -960,8 +964,8 @@ export const TestSuiteConfigSchema = z.object({
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
-          error: 'defaultTest string must start with file://'
-    }),
+        error: 'defaultTest string must start with file://',
+      }),
       TestCaseSchema.omit({ description: true }),
     ])
     .optional(),

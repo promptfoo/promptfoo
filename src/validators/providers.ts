@@ -10,20 +10,19 @@ import type {
   ProviderEmbeddingResponse,
   ProviderId,
   ProviderLabel,
-  ProviderResponse,
 } from '../types/providers';
 
 export const ProviderOptionsSchema = z.strictObject({
-    id: z.custom<ProviderId>().optional(),
-    label: z.custom<ProviderLabel>().optional(),
-    config: z.any().optional(),
-    prompts: z.array(z.string()).optional(),
-    transform: z.string().optional(),
-    delay: z.number().optional(),
-    env: ProviderEnvOverridesSchema.optional(),
-  });
+  id: z.custom<ProviderId>().optional(),
+  label: z.custom<ProviderLabel>().optional(),
+  config: z.any().optional(),
+  prompts: z.array(z.string()).optional(),
+  transform: z.string().optional(),
+  delay: z.number().optional(),
+  env: ProviderEnvOverridesSchema.optional(),
+});
 
-const CallApiContextParamsSchema = z.object({
+const _CallApiContextParamsSchema = z.object({
   fetchWithCache: z.optional(z.any()),
   filters: NunjucksFilterMapSchema.optional(),
   getCache: z.optional(z.any()),
@@ -33,7 +32,7 @@ const CallApiContextParamsSchema = z.object({
   vars: z.record(z.string(), z.union([z.string(), z.record(z.string(), z.any())])),
 });
 
-const CallApiOptionsParamsSchema = z.object({
+const _CallApiOptionsParamsSchema = z.object({
   includeLogProbs: z.optional(z.boolean()),
 });
 
@@ -42,8 +41,12 @@ const CallApiFunctionSchema = z.custom<CallApiFunction & { label?: string }>();
 export const ApiProviderSchema = z.object({
   id: z.custom<() => string>(),
   callApi: z.custom<CallApiFunction>(),
-  callEmbeddingApi: z.custom<((input: string) => Promise<ProviderEmbeddingResponse>) | undefined>().optional(),
-  callClassificationApi: z.custom<((prompt: string) => Promise<ProviderClassificationResponse>) | undefined>().optional(),
+  callEmbeddingApi: z
+    .custom<((input: string) => Promise<ProviderEmbeddingResponse>) | undefined>()
+    .optional(),
+  callClassificationApi: z
+    .custom<((prompt: string) => Promise<ProviderClassificationResponse>) | undefined>()
+    .optional(),
   label: z.custom<ProviderLabel>().optional(),
   transform: z.string().optional(),
   delay: z.number().optional(),

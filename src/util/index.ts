@@ -512,9 +512,6 @@ export function isRunningUnderNpx(): boolean {
  * @param vars - Variables to use for rendering.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
  */
-export function maybeLoadToolsFromExternalFile(
-  tools: any,
-  vars?: Vars,
-): any {
+export function maybeLoadToolsFromExternalFile(tools: any, vars?: Vars): any {
   return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
 }

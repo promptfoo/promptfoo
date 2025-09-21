@@ -863,7 +863,8 @@ const TlsCertificateSchema = z
       return true;
     },
     {
-        error: 'Both certificate and key must be provided for client certificate authentication (unless using PFX)'
+      error:
+        'Both certificate and key must be provided for client certificate authentication (unless using PFX)',
     },
   );
 

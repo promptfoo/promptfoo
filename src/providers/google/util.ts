@@ -524,10 +524,7 @@ export function normalizeTools(tools: Tool[]): Tool[] {
   });
 }
 
-export function loadFile(
-  config_var: Tool[] | string | undefined,
-  context_vars: Vars | undefined,
-) {
+export function loadFile(config_var: Tool[] | string | undefined, context_vars: Vars | undefined) {
   // Ensures that files are loaded correctly. Files may be defined in multiple ways:
   // 1. Directly in the provider:
   //    config_var will be the file path, which will be loaded here in maybeLoadFromExternalFile.
@@ -588,10 +585,7 @@ function getMimeTypeFromBase64(base64Data: string): string {
   return 'image/jpeg';
 }
 
-function processImagesInContents(
-  contents: GeminiFormat,
-  contextVars?: Vars,
-): GeminiFormat {
+function processImagesInContents(contents: GeminiFormat, contextVars?: Vars): GeminiFormat {
   if (!contextVars) {
     return contents;
   }
