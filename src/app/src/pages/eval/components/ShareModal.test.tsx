@@ -58,7 +58,7 @@ describe('ShareModal', () => {
   it('displays signup prompt when cloud is not enabled', async () => {
     mockCallApi.mockResolvedValue(
       Response.json({
-        domain: 'promptfoo.app',
+        domain: "promptfoo.app",
         isCloudEnabled: false,
       })
     );
@@ -151,7 +151,7 @@ describe('ShareModal', () => {
   it('opens external link when "Take me there" is clicked', async () => {
     mockCallApi.mockResolvedValue(
       Response.json({
-        domain: 'promptfoo.app',
+        domain: "promptfoo.app",
         isCloudEnabled: false,
       })
     );

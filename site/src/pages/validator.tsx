@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Editor } from '@monaco-editor/react';
 import Link from '@docusaurus/Link';
 import Box from '@mui/material/Box';
