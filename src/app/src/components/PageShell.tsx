@@ -280,7 +280,7 @@ export default function PageShell() {
         <Layout>
           <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
           <UpdateBanner />
-          <Box sx={{ flex: 1, position: 'relative' }}>
+          <Box sx={{ flex: 1, minHeight: 0 }}>
             <Outlet />
           </Box>
           <PostHogPageViewTracker />
