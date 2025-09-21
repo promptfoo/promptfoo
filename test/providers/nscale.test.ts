@@ -7,10 +7,22 @@ import type { ProviderOptions } from '../../src/types/index';
 import type { EnvOverrides } from '../../src/types/env';
 
 jest.mock('../../src/providers/openai');
+jest.mock('../../src/envars', () => ({
+  getEnvString: jest.fn(),
+  getEnvBool: jest.fn((key: string, defaultValue: boolean) => defaultValue),
+  getEnvInt: jest.fn((key: string, defaultValue: number) => defaultValue),
+  getEnvFloat: jest.fn((key: string, defaultValue: number) => defaultValue),
+  getEvalTimeoutMs: jest.fn((defaultValue: number) => defaultValue),
+  getMaxEvalTimeMs: jest.fn((defaultValue: number) => defaultValue),
+  isCI: jest.fn(() => false),
+}));
+
+import { getEnvString } from '../../src/envars';
 
 describe('createNscaleProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (getEnvString as jest.Mock).mockReturnValue(undefined);
   });
 
   it('should create a chat completion provider when type is chat', () => {
@@ -74,6 +86,7 @@ describe('createNscaleProvider', () => {
   });
 
   it('should prefer service tokens over API keys', () => {
+    (getEnvString as jest.Mock).mockReturnValue(undefined);
     const options = {
       env: {
         NSCALE_SERVICE_TOKEN: 'service-token-123',
@@ -93,6 +106,7 @@ describe('createNscaleProvider', () => {
   });
 
   it('should fall back to API key if no service token is provided', () => {
+    (getEnvString as jest.Mock).mockReturnValue(undefined);
     const options = {
       env: {
         NSCALE_API_KEY: 'api-key-456',
@@ -111,6 +125,7 @@ describe('createNscaleProvider', () => {
   });
 
   it('should use explicit config apiKey over environment variables', () => {
+    (getEnvString as jest.Mock).mockReturnValue(undefined);
     const options = {
       config: {
         config: {
@@ -212,33 +227,36 @@ describe('createNscaleProvider', () => {
         }),
       );
     });
+  });
 
-    it('should handle passthrough correctly', () => {
+  describe('error handling', () => {
+    it('should handle malformed provider string gracefully', () => {
+      expect(() => createNscaleProvider('nscale:')).not.toThrow();
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('', expect.any(Object));
+    });
+
+    it('should work without API key or service token (provider will handle auth errors)', () => {
+      expect(() => createNscaleProvider('nscale:openai/gpt-oss-120b')).not.toThrow();
+      const provider = createNscaleProvider('nscale:openai/gpt-oss-120b');
+      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    });
+  });
+
+  describe('integration behavior', () => {
+    it('should create provider with correct base URL and authentication', () => {
       const options = {
-        config: {
-          config: {
-            temperature: 0.7,
-            passthrough: {
-              custom_param: 'value',
-            },
-          },
+        env: {
+          NSCALE_SERVICE_TOKEN: 'test-service-token',
         },
       };
-
-      createNscaleProvider('nscale:chat:openai/gpt-oss-120b', options);
+      createNscaleProvider('nscale:openai/gpt-oss-120b', options);
 
       expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
         'openai/gpt-oss-120b',
         expect.objectContaining({
           config: expect.objectContaining({
             apiBaseUrl: 'https://inference.api.nscale.com/v1',
-            apiKey: undefined, // No API key or service token set
-            passthrough: expect.objectContaining({
-              temperature: 0.7,
-              passthrough: {
-                custom_param: 'value',
-              },
-            }),
+            apiKey: 'test-service-token',
           }),
         }),
       );

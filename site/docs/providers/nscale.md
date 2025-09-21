@@ -12,7 +12,7 @@ The Nscale provider enables you to use [Nscale's Serverless Inference API](https
 
 Nscale recommends using service tokens for improved security and control. Set your Nscale service token as an environment variable:
 
-```sh
+```bash
 export NSCALE_SERVICE_TOKEN=your_service_token_here
 ```
 
@@ -28,7 +28,7 @@ NSCALE_SERVICE_TOKEN=your_service_token_here
 
 If you still need to use an API key, set it as an environment variable:
 
-```sh
+```bash
 export NSCALE_API_KEY=your_api_key_here
 ```
 
@@ -205,14 +205,6 @@ The Nscale provider includes built-in error handling for common issues:
 - Rate limiting (though Nscale has zero rate limits)
 - Invalid API key errors
 - Model availability issues
-
-## Getting an API Key
-
-1. Visit [Nscale](https://nscale.com/)
-2. Sign up for an account
-3. Navigate to your account settings
-4. Generate an API key
-5. Set the `NSCALE_API_KEY` environment variable
 
 ## Support
 
