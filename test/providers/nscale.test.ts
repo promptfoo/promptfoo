@@ -1,6 +1,7 @@
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import { NscaleImageProvider } from '../../src/providers/nscale/image';
 import { createNscaleProvider } from '../../src/providers/nscale';
 
 import type { ProviderOptions } from '../../src/types/index';
@@ -53,6 +54,11 @@ describe('createNscaleProvider', () => {
     const provider = createNscaleProvider('nscale:embeddings:qwen3-embedding-8b');
     expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
     expect(OpenAiEmbeddingProvider).toHaveBeenCalledWith('qwen3-embedding-8b', expect.any(Object));
+  });
+
+  it('should create an image provider when type is image', () => {
+    const provider = createNscaleProvider('nscale:image:flux/flux.1-schnell');
+    expect(provider).toBeInstanceOf(NscaleImageProvider);
   });
 
   it('should default to chat completion provider when no type is specified', () => {

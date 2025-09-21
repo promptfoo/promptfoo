@@ -2,6 +2,7 @@ import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { createNscaleImageProvider } from './nscale/image';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { EnvOverrides } from '../types/env';
@@ -57,6 +58,12 @@ export function createNscaleProvider(
   } else if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
     const modelName = splits.slice(2).join(':');
     return new OpenAiEmbeddingProvider(modelName, nscaleConfig);
+  } else if (splits[1] === 'image') {
+    return createNscaleImageProvider(providerPath, {
+      config: options.config,
+      id: options.id,
+      env: options.env,
+    });
   } else {
     // If no specific type is provided, default to chat
     const modelName = splits.slice(1).join(':');
