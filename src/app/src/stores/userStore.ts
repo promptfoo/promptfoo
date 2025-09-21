@@ -9,6 +9,8 @@ interface UserState {
   setUserId: (userId: string) => void;
   fetchEmail: () => Promise<void>;
   fetchUserId: () => Promise<void>;
+  logout: () => Promise<void>;
+  clearUser: () => void;
 }
 
 export const useUserStore = create<UserState>((set, getState) => ({
@@ -48,4 +50,27 @@ export const useUserStore = create<UserState>((set, getState) => ({
       set({ userId: null });
     }
   },
+  logout: async () => {
+    try {
+      const response = await callApi('/user/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        set({ email: null, userId: null, isLoading: false });
+      } else {
+        console.error('Logout failed');
+        // Clear local state even if logout API call fails
+        set({ email: null, userId: null, isLoading: false });
+      }
+    } catch (error) {
+      console.error('Error during logout:', error);
+      // Clear local state even if API call fails
+      set({ email: null, userId: null, isLoading: false });
+    }
+  },
+  clearUser: () => set({ email: null, userId: null, isLoading: false }),
 }));
