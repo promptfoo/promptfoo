@@ -16,7 +16,7 @@ export NSCALE_SERVICE_TOKEN=your_service_token_here
 
 Alternatively, you can add it to your `.env` file:
 
-```
+```env
 NSCALE_SERVICE_TOKEN=your_service_token_here
 ```
 
