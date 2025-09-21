@@ -37,7 +37,7 @@ describe('ShareModal', () => {
       Response.json({
         domain: 'localhost:3000',
         isCloudEnabled: false,
-      })
+      }),
     );
   });
 
@@ -58,9 +58,9 @@ describe('ShareModal', () => {
   it('displays signup prompt when cloud is not enabled', async () => {
     mockCallApi.mockResolvedValue(
       Response.json({
-        domain: "promptfoo.app",
+        domain: 'promptfoo.app',
         isCloudEnabled: false,
-      })
+      }),
     );
 
     render(<ShareModal {...defaultProps} />);
@@ -109,8 +109,8 @@ describe('ShareModal', () => {
         {
           error: 'Domain check failed',
         },
-        { status: 500 }
-      )
+        { status: 500 },
+      ),
     );
 
     render(<ShareModal {...defaultProps} />);
@@ -151,9 +151,9 @@ describe('ShareModal', () => {
   it('opens external link when "Take me there" is clicked', async () => {
     mockCallApi.mockResolvedValue(
       Response.json({
-        domain: "promptfoo.app",
+        domain: 'promptfoo.app',
         isCloudEnabled: false,
-      })
+      }),
     );
 
     // Mock window.open
