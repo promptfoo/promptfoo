@@ -38,7 +38,10 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     this.config = options.config || {};
   }
 
-  private static getApiKey(options: { config?: NscaleImageOptions; env?: EnvOverrides }): string | undefined {
+  private static getApiKey(options: {
+    config?: NscaleImageOptions;
+    env?: EnvOverrides;
+  }): string | undefined {
     const config = options.config || {};
     // Prefer service tokens over API keys (API keys deprecated Oct 30, 2025)
     return (

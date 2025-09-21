@@ -78,31 +78,31 @@ Nscale offers a wide range of popular AI models:
 
 ### Text Generation Models
 
-| Model                        | Provider Format                                      | Use Case                               |
-| ---------------------------- | ---------------------------------------------------- | -------------------------------------- |
-| GPT OSS 120B                 | `nscale:openai/gpt-oss-120b`                        | General-purpose reasoning and tasks    |
-| GPT OSS 20B                  | `nscale:openai/gpt-oss-20b`                         | Lightweight general-purpose model      |
-| Qwen 3 235B Instruct         | `nscale:qwen/qwen-3-235b-a22b-instruct`             | Large-scale language understanding     |
-| Qwen 3 235B Instruct 2507    | `nscale:qwen/qwen-3-235b-a22b-instruct-2507`        | Latest Qwen 3 235B variant             |
-| Qwen 3 4B Thinking 2507      | `nscale:qwen/qwen-3-4b-thinking-2507`               | Reasoning and thinking tasks           |
-| Qwen 3 8B                    | `nscale:qwen/qwen-3-8b`                             | Mid-size general-purpose model        |
-| Qwen 3 14B                   | `nscale:qwen/qwen-3-14b`                            | Enhanced reasoning capabilities        |
-| Qwen 3 32B                   | `nscale:qwen/qwen-3-32b`                            | Large-scale reasoning and analysis     |
-| Qwen 2.5 Coder 3B Instruct   | `nscale:qwen/qwen-2.5-coder-3b-instruct`            | Lightweight code generation            |
-| Qwen 2.5 Coder 7B Instruct   | `nscale:qwen/qwen-2.5-coder-7b-instruct`            | Code generation and programming        |
-| Qwen 2.5 Coder 32B Instruct  | `nscale:qwen/qwen-2.5-coder-32b-instruct`           | Advanced code generation               |
-| Qwen QwQ 32B                 | `nscale:qwen/qwq-32b`                               | Specialized reasoning model            |
-| Llama 3.3 70B Instruct       | `nscale:meta/llama-3.3-70b-instruct`                | High-quality instruction following     |
-| Llama 3.1 8B Instruct        | `nscale:meta/llama-3.1-8b-instruct`                 | Efficient instruction following        |
-| Llama 4 Scout 17B            | `nscale:meta/llama-4-scout-17b-16e-instruct`        | Image-Text-to-Text capabilities       |
-| DeepSeek R1 Distill Llama 70B| `nscale:deepseek/deepseek-r1-distill-llama-70b`     | Efficient reasoning model              |
-| DeepSeek R1 Distill Llama 8B | `nscale:deepseek/deepseek-r1-distill-llama-8b`      | Lightweight reasoning model            |
-| DeepSeek R1 Distill Qwen 1.5B| `nscale:deepseek/deepseek-r1-distill-qwen-1.5b`     | Ultra-lightweight reasoning            |
-| DeepSeek R1 Distill Qwen 7B  | `nscale:deepseek/deepseek-r1-distill-qwen-7b`       | Compact reasoning model                |
-| DeepSeek R1 Distill Qwen 14B | `nscale:deepseek/deepseek-r1-distill-qwen-14b`      | Mid-size reasoning model               |
-| DeepSeek R1 Distill Qwen 32B | `nscale:deepseek/deepseek-r1-distill-qwen-32b`      | Large reasoning model                  |
-| Devstral Small 2505          | `nscale:mistral/devstral-small-2505`                | Code generation and development        |
-| Mixtral 8x22B Instruct       | `nscale:mistral/mixtral-8x22b-instruct-v0.1`        | Large mixture-of-experts model        |
+| Model                         | Provider Format                                 | Use Case                            |
+| ----------------------------- | ----------------------------------------------- | ----------------------------------- |
+| GPT OSS 120B                  | `nscale:openai/gpt-oss-120b`                    | General-purpose reasoning and tasks |
+| GPT OSS 20B                   | `nscale:openai/gpt-oss-20b`                     | Lightweight general-purpose model   |
+| Qwen 3 235B Instruct          | `nscale:qwen/qwen-3-235b-a22b-instruct`         | Large-scale language understanding  |
+| Qwen 3 235B Instruct 2507     | `nscale:qwen/qwen-3-235b-a22b-instruct-2507`    | Latest Qwen 3 235B variant          |
+| Qwen 3 4B Thinking 2507       | `nscale:qwen/qwen-3-4b-thinking-2507`           | Reasoning and thinking tasks        |
+| Qwen 3 8B                     | `nscale:qwen/qwen-3-8b`                         | Mid-size general-purpose model      |
+| Qwen 3 14B                    | `nscale:qwen/qwen-3-14b`                        | Enhanced reasoning capabilities     |
+| Qwen 3 32B                    | `nscale:qwen/qwen-3-32b`                        | Large-scale reasoning and analysis  |
+| Qwen 2.5 Coder 3B Instruct    | `nscale:qwen/qwen-2.5-coder-3b-instruct`        | Lightweight code generation         |
+| Qwen 2.5 Coder 7B Instruct    | `nscale:qwen/qwen-2.5-coder-7b-instruct`        | Code generation and programming     |
+| Qwen 2.5 Coder 32B Instruct   | `nscale:qwen/qwen-2.5-coder-32b-instruct`       | Advanced code generation            |
+| Qwen QwQ 32B                  | `nscale:qwen/qwq-32b`                           | Specialized reasoning model         |
+| Llama 3.3 70B Instruct        | `nscale:meta/llama-3.3-70b-instruct`            | High-quality instruction following  |
+| Llama 3.1 8B Instruct         | `nscale:meta/llama-3.1-8b-instruct`             | Efficient instruction following     |
+| Llama 4 Scout 17B             | `nscale:meta/llama-4-scout-17b-16e-instruct`    | Image-Text-to-Text capabilities     |
+| DeepSeek R1 Distill Llama 70B | `nscale:deepseek/deepseek-r1-distill-llama-70b` | Efficient reasoning model           |
+| DeepSeek R1 Distill Llama 8B  | `nscale:deepseek/deepseek-r1-distill-llama-8b`  | Lightweight reasoning model         |
+| DeepSeek R1 Distill Qwen 1.5B | `nscale:deepseek/deepseek-r1-distill-qwen-1.5b` | Ultra-lightweight reasoning         |
+| DeepSeek R1 Distill Qwen 7B   | `nscale:deepseek/deepseek-r1-distill-qwen-7b`   | Compact reasoning model             |
+| DeepSeek R1 Distill Qwen 14B  | `nscale:deepseek/deepseek-r1-distill-qwen-14b`  | Mid-size reasoning model            |
+| DeepSeek R1 Distill Qwen 32B  | `nscale:deepseek/deepseek-r1-distill-qwen-32b`  | Large reasoning model               |
+| Devstral Small 2505           | `nscale:mistral/devstral-small-2505`            | Code generation and development     |
+| Mixtral 8x22B Instruct        | `nscale:mistral/mixtral-8x22b-instruct-v0.1`    | Large mixture-of-experts model      |
 
 ### Embedding Models
 
@@ -112,12 +112,12 @@ Nscale offers a wide range of popular AI models:
 
 ### Text-to-Image Models
 
-| Model                  | Provider Format                                     | Use Case                      |
-| ---------------------- | --------------------------------------------------- | ----------------------------- |
-| Flux.1 Schnell         | `nscale:image:BlackForestLabs/FLUX.1-schnell`      | Fast image generation         |
-| Stable Diffusion XL    | `nscale:image:stabilityai/stable-diffusion-xl-base-1.0` | High-quality image generation |
-| SDXL Lightning 4-step  | `nscale:image:ByteDance/SDXL-Lightning-4step`      | Ultra-fast image generation   |
-| SDXL Lightning 8-step  | `nscale:image:ByteDance/SDXL-Lightning-8step`      | Balanced speed and quality    |
+| Model                 | Provider Format                                         | Use Case                      |
+| --------------------- | ------------------------------------------------------- | ----------------------------- |
+| Flux.1 Schnell        | `nscale:image:BlackForestLabs/FLUX.1-schnell`           | Fast image generation         |
+| Stable Diffusion XL   | `nscale:image:stabilityai/stable-diffusion-xl-base-1.0` | High-quality image generation |
+| SDXL Lightning 4-step | `nscale:image:ByteDance/SDXL-Lightning-4step`           | Ultra-fast image generation   |
+| SDXL Lightning 8-step | `nscale:image:ByteDance/SDXL-Lightning-8step`           | Balanced speed and quality    |
 
 ## Configuration Options
 
