@@ -20,30 +20,28 @@ import {
   GridToolbarFilterButton,
 } from '@mui/x-data-grid';
 import {
+  categoryAliases,
   displayNameOverrides,
+  type Plugin,
   Severity,
-  severityDisplayNames,
   severityRiskScores,
+  subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
 import { getSeverityColor } from './FrameworkComplianceUtils';
 import { getStrategyIdFromTest } from './shared';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
-import { POLICY_METRIC_PREFIX } from '@promptfoo/redteam/plugins/policy/constants';
 import {
   calculatePluginRiskScore,
-  type PluginCategoryStatsByPluginId,
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
 
-const isKnownSeverity = (value: unknown): value is Severity =>
-  Object.values(Severity).includes(value as Severity);
-
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: PluginCategoryStatsByPluginId;
+  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
   plugins: RedteamPluginObject[];
   failuresByPlugin?: Record<string, any[]>;
   passesByPlugin?: Record<string, any[]>;
@@ -94,30 +92,10 @@ const TestSuites = ({
 
   const rows = React.useMemo(() => {
     return Object.entries(categoryStats)
-      .filter(([, pluginData]) => pluginData?.stats?.total > 0)
-      .map(([pluginName, pluginData]) => {
-        const stats = pluginData?.stats;
-        const metadata = pluginData?.metadata;
-        if (!stats) {
-          return {
-            id: pluginName,
-            pluginName,
-            type: metadata?.type ?? '',
-            description: metadata?.description ?? '',
-            severity: 'unknown',
-            passRate: 0,
-            passRateWithFilter: 0,
-            attackSuccessRate: 0,
-            total: 0,
-            successfulAttacks: 0,
-            riskScore: 0,
-            complexityScore: 0,
-            worstStrategy: 'none',
-          };
-        }
+      .filter(([_, stats]) => stats.total > 0)
+      .map(([pluginName, stats]) => {
+        const severity = getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown';
 
-        const severity = isKnownSeverity(metadata?.severity) ? metadata!.severity : 'unknown';
-        const severityForRisk = severity === 'unknown' ? Severity.Low : severity;
         // Calculate risk score with details
         const riskDetails = (() => {
           // Prepare test results using the helper function
@@ -138,11 +116,7 @@ const TestSuites = ({
           }
 
           // Calculate risk score once and extract values
-          const riskScoreResult = calculatePluginRiskScore(
-            pluginName,
-            severityForRisk,
-            testResults,
-          );
+          const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
           return {
             riskScore: riskScoreResult.score,
             complexityScore: riskScoreResult.complexityScore,
@@ -153,12 +127,13 @@ const TestSuites = ({
         return {
           id: pluginName,
           pluginName,
-          type: metadata?.type ?? '',
-          description: metadata?.description ?? '',
+          type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
+          description:
+            subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
           severity,
-          passRate: stats.total > 0 ? (stats.pass / stats.total) * 100 : 0,
-          passRateWithFilter: stats.total > 0 ? (stats.passWithFilter / stats.total) * 100 : 0,
-          attackSuccessRate: stats.total > 0 ? ((stats.total - stats.pass) / stats.total) * 100 : 0,
+          passRate: (stats.pass / stats.total) * 100,
+          passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
+          attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
           total: stats.total,
           successfulAttacks: stats.total - stats.pass,
           riskScore: riskDetails.riskScore,
@@ -197,8 +172,8 @@ const TestSuites = ({
         } as const;
 
         return sortModel[0].sort === 'asc'
-          ? severityOrder[a.severity as Severity] - severityOrder[b.severity as Severity]
-          : severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity];
+          ? severityOrder[a.severity] - severityOrder[b.severity]
+          : severityOrder[b.severity] - severityOrder[a.severity];
       }
 
       if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
@@ -234,7 +209,7 @@ const TestSuites = ({
       subCategory.successfulAttacks,
       subCategory.total,
       subCategory.attackSuccessRate.toFixed(2) + '%',
-      severityDisplayNames[subCategory.severity as Severity] ?? 'Unknown',
+      subCategory.severity,
     ]);
 
     // Combine headers and data with proper escaping for CSV
@@ -404,22 +379,16 @@ const TestSuites = ({
       headerName: 'Severity',
       type: 'singleSelect',
       flex: 0.5,
-      valueFormatter: (value: Severity) => severityDisplayNames[value],
-      valueOptions: [
-        ...Object.values(Severity).map((severity) => ({
-          value: severity,
-          label: severityDisplayNames[severity],
-        })),
-      ],
+      valueOptions: Object.values(Severity),
+      renderCell: (params: GridRenderCellParams) => <Box>{params.value}</Box>,
       sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
           [Severity.High]: 3,
           [Severity.Medium]: 2,
           [Severity.Low]: 1,
-          unknown: 0,
         };
-        return (severityOrder[v1 as string] ?? 0) - (severityOrder[v2 as string] ?? 0);
+        return severityOrder[v1] - severityOrder[v2];
       },
     },
     {
@@ -436,9 +405,7 @@ const TestSuites = ({
             size="small"
             onClick={() => {
               const pluginId = params.row.pluginName;
-              // Custom policies are uniquely identified using metrics, not plugin ids.
-              const key = pluginId.startsWith(`${POLICY_METRIC_PREFIX}:`) ? 'metric' : 'plugin';
-              navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}`);
+              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
             }}
           >
             View logs
