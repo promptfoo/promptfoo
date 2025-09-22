@@ -7,6 +7,8 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
 
+import { useCallback } from 'react';
+
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
@@ -14,13 +16,12 @@ import { styled } from '@mui/material/styles';
 import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import useCloudConfig from '../../../hooks/useCloudConfig';
+import { useTableStore } from './store';
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
-  onSearchTextChange?: (searchText: string) => void;
-  onMetricFilter?: (metric: string | null) => void;
   /**
    * How many metrics to display before truncating and rendering a "Show more" button.
    */
@@ -80,12 +81,11 @@ const CustomMetrics = ({
   lookup,
   counts,
   metricTotals,
-  onSearchTextChange,
-  onMetricFilter,
   truncationCount = 3,
   onShowMore,
 }: CustomMetricsProps) => {
   const { data: cloudConfig } = useCloudConfig();
+  const { filters, addFilter } = useTableStore();
 
   if (!lookup || !Object.keys(lookup).length) {
     return null;
@@ -94,13 +94,33 @@ const CustomMetrics = ({
   const metrics = Object.entries(lookup);
   const displayMetrics = metrics.slice(0, truncationCount);
 
-  const handleMetricClick = (metric: string) => {
-    if (onMetricFilter) {
-      onMetricFilter(metric);
-    } else if (onSearchTextChange) {
-      onSearchTextChange(`metric=${metric}:`);
-    }
-  };
+  const handleClick = useCallback(
+    (value: string) => {
+      const asPolicy = isPolicyMetric(value);
+      const filter = {
+        type: asPolicy ? ('policy' as const) : ('metric' as const),
+        operator: 'equals' as const,
+        value: asPolicy ? (deserializePolicyMetricsAsPolicyObject(value)?.id ?? '') : value,
+        logicOperator: 'or' as const,
+      };
+
+      // If this filter is already applied, do not re-apply it.
+      if (
+        Object.values(filters.values).find(
+          (f) =>
+            f.type === filter.type &&
+            f.value === filter.value &&
+            f.operator === filter.operator &&
+            f.logicOperator === filter.logicOperator,
+        )
+      ) {
+        return;
+      }
+
+      addFilter(filter);
+    },
+    [addFilter, filters.values],
+  );
 
   return (
     <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>
@@ -142,11 +162,11 @@ const CustomMetrics = ({
           return metric && typeof score !== 'undefined' ? (
             <div
               data-testid={`metric-${metric}`}
-              className={`metric-chip ${onMetricFilter ? 'filterable' : ''}`}
+              className="metric-chip filterable"
               key={`${metric}-${score}`}
             >
               <MetricTooltip title={tooltipContent}>
-                <div className="metric-content" onClick={() => handleMetricClick(metric)}>
+                <div className="metric-content" onClick={() => handleClick(metric)}>
                   <span data-testid={`metric-name-${metric}`} className="metric-name">
                     {displayLabel}
                   </span>

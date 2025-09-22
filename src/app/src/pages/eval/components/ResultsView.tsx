@@ -56,6 +56,7 @@ import './ResultsView.css';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -645,6 +646,11 @@ export default function ResultsView({
                         const severityDisplay =
                           filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
                         label = `Severity: ${severityDisplay}`;
+                      } else if (filter.type === 'policy') {
+                        // For policy filters, use the policy name from the mapping
+                        // This should match the display format used in the dropdown
+                        const policyName = filters.policyIdToNameMap?.[filter.value];
+                        label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
                       } else {
                         // metadata type
                         label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
@@ -805,7 +811,6 @@ export default function ResultsView({
           failureFilter={failureFilter}
           debouncedSearchText={debouncedSearchValue}
           onFailureFilterToggle={handleFailureFilterToggle}
-          onSearchTextChange={handleSearchTextChange}
           setFilterMode={setFilterMode}
           zoom={resultsTableZoom}
         />

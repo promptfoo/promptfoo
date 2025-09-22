@@ -569,6 +569,8 @@ export default class Eval {
           } else {
             condition = `(${explicit})`;
           }
+        } else if (type === 'policy' && operator === 'equals') {
+          condition = `(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE '%${value}%')`;
         }
 
         if (condition) {

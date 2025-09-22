@@ -1,5 +1,9 @@
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
+import {
+  deserializePolicyMetricsAsPolicyObject,
+  isPolicyMetric,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { v4 as uuidv4 } from 'uuid';
@@ -35,11 +39,71 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   const metrics = new Set<string>();
   table.head.prompts.forEach((prompt) => {
     if (prompt.metrics?.namedScores) {
-      Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
+      Object.keys(prompt.metrics.namedScores).forEach((metric) => {
+        // Exclude policy metrics as they are handled by the separate policy filter
+        if (!isPolicyMetric(metric)) {
+          metrics.add(metric);
+        }
+      });
     }
   });
 
   return Array.from(metrics).sort();
+}
+
+/**
+ * Extracts unique policy IDs from policy metrics in the table.
+ * Policy metrics are serialized PolicyObject instances that start with POLICY_METRIC_PREFIX.
+ */
+function extractPolicyOptionsFromMetrics(table: EvaluateTable | null | undefined): string[] {
+  if (!table || !table.head?.prompts) {
+    return [];
+  }
+
+  const policyIds = new Set<string>();
+  table.head.prompts.forEach((prompt) => {
+    if (prompt.metrics?.namedScores) {
+      Object.keys(prompt.metrics.namedScores).forEach((metric) => {
+        if (isPolicyMetric(metric)) {
+          const policy = deserializePolicyMetricsAsPolicyObject(metric);
+          if (policy) {
+            policyIds.add(policy.id);
+          }
+        }
+      });
+    }
+  });
+
+  return Array.from(policyIds).sort();
+}
+
+/**
+ * Creates a mapping of policy IDs to their names for display purposes.
+ * Used by the filter form to show policy names in the dropdown.
+ */
+function extractPolicyIdToNameMap(
+  table: EvaluateTable | null | undefined,
+): Record<string, string | undefined> {
+  if (!table || !table.head?.prompts) {
+    return {};
+  }
+
+  const policyMap: Record<string, string | undefined> = {};
+  table.head.prompts.forEach((prompt) => {
+    if (prompt.metrics?.namedScores) {
+      Object.keys(prompt.metrics.namedScores).forEach((metric) => {
+        if (isPolicyMetric(metric)) {
+          const policy = deserializePolicyMetricsAsPolicyObject(metric);
+          if (policy) {
+            // Store the policy name if available, otherwise undefined
+            policyMap[policy.id] = policy.name;
+          }
+        }
+      });
+    }
+  });
+
+  return policyMap;
 }
 
 function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
@@ -50,13 +114,17 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
 }
 
 /**
- * The `plugin`, `strategy`, and `severity` filter options are only available for redteam evaluations.
+ * The `plugin`, `strategy`, `severity`, and `policy` filter options are only available for redteam evaluations.
  * This function conditionally constructs these based on whether the evaluation was a red team. If it was not,
  * it returns an empty object.
+ *
+ * @param config - The eval config
+ * @param table - The eval table (needed to extract policy options from metrics)
  */
 function buildRedteamFilterOptions(
   config?: Partial<UnifiedConfig> | null,
-): { plugin: string[]; strategy: string[]; severity: string[] } | {} {
+  table?: EvaluateTable | null,
+): { plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {} {
   const isRedteam = Boolean(config?.redteam);
 
   // For non-redteam evaluations, don't provide redteam-specific filter options.
@@ -78,6 +146,7 @@ function buildRedteamFilterOptions(
     ),
     strategy: extractUniqueStrategyIds(config?.redteam?.strategies),
     severity: computeAvailableSeverities(config?.redteam?.plugins),
+    policy: extractPolicyOptionsFromMetrics(table),
   };
 }
 
@@ -126,7 +195,13 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy' | 'severity';
+export type ResultsFilterType =
+  | 'metric'
+  | 'metadata'
+  | 'plugin'
+  | 'strategy'
+  | 'severity'
+  | 'policy';
 
 export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
 
@@ -241,7 +316,12 @@ interface TableState {
       plugin?: string[];
       strategy?: string[];
       severity?: string[];
+      policy?: string[];
     };
+    /**
+     * Mapping of policy IDs to their names for display purposes.
+     */
+    policyIdToNameMap?: Record<string, string | undefined>;
   };
 }
 
@@ -359,8 +439,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(table),
             metadata: [],
-            ...buildRedteamFilterOptions(resultsFile.config),
+            ...buildRedteamFilterOptions(resultsFile.config, table),
           },
+          policyIdToNameMap: extractPolicyIdToNameMap(table),
         },
       }));
     } else {
@@ -374,8 +455,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(results.table),
             metadata: [],
-            ...buildRedteamFilterOptions(resultsFile.config),
+            ...buildRedteamFilterOptions(resultsFile.config, results.table),
           },
+          policyIdToNameMap: extractPolicyIdToNameMap(results.table),
         },
       }));
     }
@@ -475,8 +557,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
             options: {
               metric: computeAvailableMetrics(data.table),
               metadata: [],
-              ...buildRedteamFilterOptions(data.config),
+              ...buildRedteamFilterOptions(data.config, data.table),
             },
+            policyIdToNameMap: extractPolicyIdToNameMap(data.table),
           },
         }));
 

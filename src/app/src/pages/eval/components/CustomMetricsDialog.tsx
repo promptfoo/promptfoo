@@ -7,7 +7,6 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import IconButton from '@mui/material/IconButton';
 import { alpha, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
 import {
   DataGrid,
   type GridColDef,
@@ -16,6 +15,11 @@ import {
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
+import {
+  deserializePolicyMetricsAsPolicyObject,
+  formatPolicyIdentifierAsMetric,
+  isPolicyMetric,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import { useTableStore } from './store';
 
 type MetricScore = {
@@ -97,10 +101,12 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
         return;
       }
 
+      const asPolicy = isPolicyMetric(metric);
+
       const filter = {
-        type: 'metric' as const,
+        type: asPolicy ? ('policy' as const) : ('metric' as const),
         operator: 'equals' as const,
-        value: metric,
+        value: asPolicy ? (deserializePolicyMetricsAsPolicyObject(metric)?.id ?? '') : metric,
         logicOperator: 'or' as const,
       };
 
@@ -142,49 +148,16 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
         headerName: 'Metric',
         flex: 1,
         headerAlign: 'left',
-        renderCell: (params) => {
-          const metricName = params.row.metric;
-          return (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                justifyContent: 'space-between',
-                width: '100%',
-                position: 'relative',
-                '& .filter-icon': {
-                  opacity: 0,
-                },
-                '.MuiDataGrid-row:hover &': {
-                  '& .filter-icon': {
-                    opacity: 1,
-                  },
-                },
-              }}
-            >
-              <Typography variant="body2" component="span" sx={{ lineHeight: 1.5 }}>
-                {metricName}
-              </Typography>
-              <span style={{ display: 'flex', alignItems: 'center' }}>
-                <IconButton
-                  className="filter-icon"
-                  size="small"
-                  sx={{
-                    color: 'text.disabled',
-                    '&:hover': {
-                      color: 'primary.main',
-                      backgroundColor: 'action.hover',
-                    },
-                  }}
-                  aria-label={`Filter by ${metricName}`}
-                  onClick={() => handleMetricFilterClick(metricName)}
-                >
-                  <FilterAltIcon />
-                </IconButton>
-              </span>
-            </Box>
-          );
+        valueGetter: (value) => {
+          if (isPolicyMetric(value)) {
+            const policy = deserializePolicyMetricsAsPolicyObject(value);
+            if (!policy) {
+              return value;
+            }
+            return formatPolicyIdentifierAsMetric(policy?.name ?? policy.id);
+          } else {
+            return value;
+          }
         },
       },
     ];
@@ -196,7 +169,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       cols.push({
         field: `${columnId}_pass_rate`,
         headerName: 'Pass Rate',
-        flex: 0.5,
+        flex: 0.33,
         type: 'number',
         valueGetter: (_, row) => {
           const { hasScore, score, count } = row[columnId] as MetricScore;
@@ -238,7 +211,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       cols.push({
         field: `${columnId}_score`,
         headerName: 'Pass Count',
-        flex: 0.5,
+        flex: 0.33,
         type: 'number',
         valueGetter: (_, row) => {
           const { hasScore, score } = row[columnId] as MetricScore;
@@ -248,7 +221,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       cols.push({
         field: `${columnId}_count`,
         headerName: 'Test Count',
-        flex: 0.5,
+        flex: 0.33,
         type: 'number',
         valueGetter: (_, row) => {
           const { count } = row[columnId] as MetricScore;
@@ -260,7 +233,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     cols.push({
       field: 'avg_pass_rate',
       headerName: 'Avg. Pass Rate',
-      flex: 1,
+      flex: 0.33,
       type: 'number',
       valueGetter: (_, row) => {
         let promptCount = 0;
@@ -306,6 +279,31 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
               {params.value.toFixed(2)}%
             </Box>
           </Box>
+        );
+      },
+    });
+
+    // Actions Column:
+    cols.push({
+      field: 'actions',
+      headerName: '',
+      flex: 0.25,
+      align: 'right',
+      renderCell: (params) => {
+        return (
+          <IconButton
+            onClick={() => handleMetricFilterClick(params.row.metric)}
+            className="filter-icon"
+            size="small"
+            sx={{
+              '&:hover': {
+                color: 'primary.main',
+                backgroundColor: 'action.hover',
+              },
+            }}
+          >
+            <FilterAltIcon />
+          </IconButton>
         );
       },
     });
@@ -402,7 +400,7 @@ export default function CustomMetricsDialog({
   onClose: () => void;
 }) {
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xl">
       <DialogContent sx={{ height: '80vh' }}>
         <MetricsTable onClose={onClose} />
       </DialogContent>
