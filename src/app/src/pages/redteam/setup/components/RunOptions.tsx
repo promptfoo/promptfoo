@@ -94,7 +94,6 @@ export const RunOptionsContent = ({
           return Number.isNaN(n) || n < 1;
         })()}
       />
-
       {/**
        * Delay between API calls (ms)
        * - Enabled only when maxConcurrency is 1 (mutual exclusivity rule)
@@ -157,7 +156,6 @@ export const RunOptionsContent = ({
           return Number.isNaN(n) || n < 0;
         })()}
       />
-
       {/**
        * Max number of concurrent requests
        * - Enabled only when delay is 0 (mutual exclusivity rule)
@@ -218,7 +216,6 @@ export const RunOptionsContent = ({
           return Number.isNaN(n) || n < 1;
         })()}
       />
-
       <FormControlLabel
         control={
           <Switch

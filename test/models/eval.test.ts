@@ -77,6 +77,75 @@ describe('evaluator', () => {
       expect(evaluations[1].evalId).toBe(eval2.id);
       expect(evaluations[2].evalId).toBe(eval1.id);
     });
+
+    it('should correctly deserialize all provider types', async () => {
+      // Test different provider formats
+      const testCases = [
+        // String provider
+        { providers: 'openai:gpt-4', expected: [{ id: 'openai:gpt-4', label: null }] },
+        // Array with strings
+        {
+          providers: ['openai:gpt-4', 'anthropic:claude'],
+          expected: [
+            { id: 'openai:gpt-4', label: null },
+            { id: 'anthropic:claude', label: null },
+          ],
+        },
+        // Array with ProviderOptions (explicit id)
+        {
+          providers: [{ id: 'custom-provider', label: 'Custom Label' }],
+          expected: [{ id: 'custom-provider', label: 'Custom Label' }],
+        },
+        // Array with declarative providers (record format)
+        {
+          providers: [
+            { 'openai:gpt-4': { config: { temperature: 0.5 }, label: 'GPT-4' } },
+            { 'anthropic:claude': { config: { maxTokens: 1000 } } },
+          ],
+          expected: [
+            { id: 'openai:gpt-4', label: 'GPT-4' },
+            { id: 'anthropic:claude', label: null },
+          ],
+        },
+        // Mixed array
+        {
+          providers: [
+            'openai:gpt-3.5',
+            { id: 'custom', label: 'Custom' },
+            { 'anthropic:claude': { label: 'Claude' } },
+          ],
+          expected: [
+            { id: 'openai:gpt-3.5', label: null },
+            { id: 'custom', label: 'Custom' },
+            { id: 'anthropic:claude', label: 'Claude' },
+          ],
+        },
+      ];
+
+      for (const testCase of testCases) {
+        const evaluation = await Eval.create(
+          {
+            providers: testCase.providers as any,
+            prompts: ['Test prompt'],
+            tests: [{ vars: { test: 'value' } }],
+          },
+          [{ raw: 'Test prompt', label: 'Test prompt' }],
+        );
+
+        const summaries = await getEvalSummaries(undefined, undefined, true);
+        const summary = summaries.find((s) => s.evalId === evaluation.id);
+
+        expect(summary).toBeDefined();
+        expect(summary?.providers).toEqual(testCase.expected);
+
+        // Clean up
+        await evaluation.delete();
+      }
+    });
+
+    // Note: Function providers cannot be serialized to the database,
+    // so they won't appear in getEvalSummaries() results.
+    // The deserialization logic handles them, but they're lost during storage.
   });
 
   describe('delete', () => {

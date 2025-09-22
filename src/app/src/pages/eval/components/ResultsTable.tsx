@@ -1224,9 +1224,7 @@ function ResultsTable({
             <Typography variant="body1">No results found for the current filters.</Typography>
           </Box>
         )}
-
       <Box sx={{ height: '1rem' }} />
-
       <ResultsTableHeader
         reactTable={reactTable}
         tableWidth={tableWidth}
@@ -1237,7 +1235,6 @@ function ResultsTable({
         setStickyHeader={setStickyHeader}
         zoom={zoom}
       />
-
       <div
         id="results-table-container"
         style={{
@@ -1389,7 +1386,6 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-
       <Box
         className="pagination"
         px={2}

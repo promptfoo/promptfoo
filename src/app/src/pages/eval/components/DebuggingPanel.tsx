@@ -12,28 +12,29 @@ const subtitleTypographySx = {
 interface DebuggingPanelProps {
   evaluationId?: string;
   testCaseId?: string;
-  showTraceSection: boolean;
-  onTraceSectionVisibilityChange: (visible: boolean) => void;
+  testIndex?: number;
+  promptIndex?: number;
 }
 
 export function DebuggingPanel({
   evaluationId,
   testCaseId,
-  showTraceSection,
-  onTraceSectionVisibilityChange,
+  testIndex,
+  promptIndex,
 }: DebuggingPanelProps) {
   return (
     <Box>
       {evaluationId && (
-        <Box mb={2} sx={{ display: showTraceSection ? 'block' : 'none' }}>
-          <Typography variant="subtitle1" sx={subtitleTypographySx}>
+        <Box mb={2}>
+          <Typography variant="subtitle1" sx={subtitleTypographySx} aria-label="Trace Timeline">
             Trace Timeline
           </Typography>
           <ErrorBoundary fallback={<Alert severity="error">Error loading traces</Alert>}>
             <TraceView
               evaluationId={evaluationId}
               testCaseId={testCaseId}
-              onVisibilityChange={onTraceSectionVisibilityChange}
+              testIndex={testIndex}
+              promptIndex={promptIndex}
             />
           </ErrorBoundary>
         </Box>

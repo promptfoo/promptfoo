@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
@@ -894,10 +894,30 @@ export default class Eval {
  * Queries summaries of all evals, optionally for a given dataset.
  *
  * @param datasetId - An optional dataset ID to filter by.
+ * @param type - An optional eval type to filter by.
+ * @param includeProviders - An optional flag to include providers in the summary.
  * @returns A list of eval summaries.
  */
-export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
+export async function getEvalSummaries(
+  datasetId?: string,
+  type?: 'redteam' | 'eval',
+  includeProviders: boolean = false,
+): Promise<EvalSummary[]> {
   const db = getDb();
+
+  const whereClauses = [];
+
+  if (datasetId) {
+    whereClauses.push(eq(evalsToDatasetsTable.datasetId, datasetId));
+  }
+
+  if (type) {
+    if (type === 'redteam') {
+      whereClauses.push(sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`);
+    } else {
+      whereClauses.push(sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NULL`);
+    }
+  }
 
   const results = db
     .select({
@@ -907,10 +927,11 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
       prompts: evalsTable.prompts,
+      config: evalsTable.config,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
+    .where(and(...whereClauses))
     .orderBy(desc(evalsTable.createdAt))
     .all();
 
@@ -941,6 +962,49 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
     // Test count * prompt count
     const testRunCount = testCount * (result.prompts?.length ?? 0);
 
+    // Construct an array of providers
+    const deserializedProviders = [];
+    const providers = result.config.providers;
+
+    if (includeProviders) {
+      if (typeof providers === 'string') {
+        // `providers: string`
+        deserializedProviders.push({
+          id: providers,
+          label: null,
+        });
+      } else if (Array.isArray(providers)) {
+        providers.forEach((p) => {
+          if (typeof p === 'string') {
+            // `providers: string[]`
+            deserializedProviders.push({
+              id: p,
+              label: null,
+            });
+          } else if (typeof p === 'object' && p) {
+            // Check if it's a declarative provider (record format)
+            // e.g., { 'openai:gpt-4': { config: {...} } }
+            const keys = Object.keys(p);
+            if (keys.length === 1 && !('id' in p)) {
+              // This is a declarative provider
+              const providerId = keys[0];
+              const providerConfig = (p as any)[providerId];
+              deserializedProviders.push({
+                id: providerId,
+                label: providerConfig.label ?? null,
+              });
+            } else {
+              // `providers: ProviderOptions[]` with explicit id
+              deserializedProviders.push({
+                id: (p as any).id ?? 'unknown',
+                label: (p as any).label ?? null,
+              });
+            }
+          }
+        });
+      }
+    }
+
     return {
       evalId: result.evalId,
       createdAt: result.createdAt,
@@ -948,8 +1012,9 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       numTests: testCount,
       datasetId: result.datasetId,
       isRedteam: result.isRedteam,
-      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0, // ASR
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+      providers: deserializedProviders,
     };
   });
 }
