@@ -549,6 +549,9 @@ export default class Eval {
             condition = `json_extract(metadata, '$."${sanitizedField}"') LIKE '%${sanitizedValue}%'`;
           } else if (operator === 'not_contains') {
             condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
+          } else if (operator === 'exists') {
+            // For exists, we only check if the field is present, ignore the value
+            condition = `json_extract(metadata, '$."${sanitizedField}"') IS NOT NULL`;
           }
         } else if (type === 'plugin' && operator === 'equals') {
           const sanitizedValue = sanitizeValue(value);

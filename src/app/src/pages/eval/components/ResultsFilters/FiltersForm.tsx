@@ -34,6 +34,7 @@ const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
   equals: 'Equals',
   contains: 'Contains',
   not_contains: 'Not Contains',
+  exists: 'Exists',
 };
 
 function Dropdown({
@@ -227,7 +228,13 @@ function Filter({
    */
   const handleOperatorChange = useCallback(
     (filterOperator: ResultsFilter['operator']) => {
-      updateFilter({ ...value, operator: filterOperator });
+      const updatedFilter = {
+        ...value,
+        operator: filterOperator,
+        // Clear value when switching to exists
+        value: filterOperator === 'exists' ? '' : value.value,
+      };
+      updateFilter(updatedFilter);
     },
     [value, updateFilter],
   );
@@ -416,6 +423,7 @@ function Filter({
                   { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
                   { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
                   { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.exists, value: 'exists' },
                 ]
           }
           value={value.operator}
@@ -491,8 +499,11 @@ function Filter({
               label="Value"
               variant="outlined"
               size="small"
-              value={value.value}
+              value={value.operator === 'exists' ? '' : value.value}
               onChange={handleValueChange}
+              disabled={value.operator === 'exists'}
+              placeholder={value.operator === 'exists' ? 'No value needed for exists' : undefined}
+              helperText={value.operator === 'exists' ? 'Checks if the metadata key exists' : undefined}
               fullWidth
             />
           )}

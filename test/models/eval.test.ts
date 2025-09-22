@@ -818,6 +818,71 @@ describe('evaluator', () => {
       expect(containsRes.testIndices).toEqual([1]);
     });
 
+    it('filters by metadata exists operator', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 6,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const db = getDb();
+      // Add metadata to some results
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"unit","note":"hello world"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"integration"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"different":"field"}') WHERE eval_id = '${eval_.id}' AND test_idx = 3`,
+      );
+      // test_idx 0, 4, 5 have no metadata or empty metadata
+
+      // Test exists operator for 'source' field - should match test_idx 1 and 2
+      const existsRes = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'exists',
+            field: 'source',
+            value: '', // value should be ignored for exists
+          }),
+        ],
+      });
+      expect(existsRes.filteredCount).toBe(2);
+      expect(existsRes.testIndices.sort()).toEqual([1, 2]);
+
+      // Test exists operator for 'note' field - should match only test_idx 1
+      const noteExistsRes = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'exists',
+            field: 'note',
+            value: '', // value should be ignored for exists
+          }),
+        ],
+      });
+      expect(noteExistsRes.filteredCount).toBe(1);
+      expect(noteExistsRes.testIndices).toEqual([1]);
+
+      // Test exists operator for non-existent field - should match no results
+      const nonExistentRes = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'exists',
+            field: 'nonexistent',
+            value: '',
+          }),
+        ],
+      });
+      expect(nonExistentRes.filteredCount).toBe(0);
+      expect(nonExistentRes.testIndices).toEqual([]);
+    });
+
     it('filters by plugin and strategy', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 6,
