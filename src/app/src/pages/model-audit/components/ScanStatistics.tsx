@@ -4,7 +4,7 @@ import {
   Info as InfoIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import { alpha, useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -55,7 +55,14 @@ export default function ScanStatistics({
   return (
     <Grid container spacing={3} sx={{ mb: 4 }}>
       {severityStats.map(({ severity, icon: Icon, label, color, count }) => (
-        <Grid size={{ xs: 12, sm: 6, md: 3 }} key={severity}>
+        <Grid
+          key={severity}
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3,
+          }}
+        >
           <Tooltip
             title={
               selectedSeverity === severity

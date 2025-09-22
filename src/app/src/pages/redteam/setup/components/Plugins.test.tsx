@@ -164,11 +164,11 @@ describe('Plugins', () => {
     expect(screen.getByText('Minimal Test')).toBeInTheDocument();
   });
 
-  it('should render presets section using Grid2 and display all preset cards', async () => {
+  it('should render presets section using Grid and display all preset cards', async () => {
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     expect(
-      screen.getByText('Presets').closest('div')?.querySelector('.MuiGrid2-container'),
+      screen.getByText('Presets').closest('div')?.querySelector('.MuiGrid-root'),
     ).toBeInTheDocument();
 
     expect(screen.getByText('Recommended')).toBeInTheDocument();
