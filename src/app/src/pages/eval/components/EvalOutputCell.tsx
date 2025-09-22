@@ -604,6 +604,7 @@ function EvalOutputCell({
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
+              promptIndex={promptIndex}
               variables={output.testCase?.vars}
             />
           )}

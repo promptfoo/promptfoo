@@ -10,12 +10,16 @@ import TraceTimeline from './TraceTimeline';
 interface TraceViewProps {
   evaluationId?: string;
   testCaseId?: string;
+  testIndex?: number;
+  promptIndex?: number;
   onVisibilityChange?: (shouldShow: boolean) => void;
 }
 
 export default function TraceView({
   evaluationId,
   testCaseId,
+  testIndex,
+  promptIndex,
   onVisibilityChange,
 }: TraceViewProps) {
   const [traces, setTraces] = useState<any[]>([]);
@@ -107,12 +111,46 @@ export default function TraceView({
     );
   }
 
-  // Filter traces by test case ID if provided
-  const filteredTraces = testCaseId
-    ? traces.filter((trace) => trace.testCaseId === testCaseId)
-    : traces;
+  // Filter traces with try-direct-match then fallback approach
+  const isComposedId = (id: unknown): id is string =>
+    typeof id === 'string' && /^\d+-\d+$/.test(id);
 
-  if (filteredTraces.length === 0 && testCaseId) {
+  const matchesIndices = (id: unknown, ti?: number, pi?: number) => {
+    if (!isComposedId(id) || ti === undefined || pi === undefined) {
+      return false;
+    }
+    const [a, b] = id.split('-');
+    return Number.parseInt(a, 10) === ti && Number.parseInt(b, 10) === pi;
+  };
+
+  let filteredTraces: any[] = traces;
+
+  if (traces.length > 0) {
+    if (testCaseId) {
+      // Try direct testCaseId match first
+      const directMatches = traces.filter((trace) => trace.testCaseId === testCaseId);
+
+      if (directMatches.length > 0) {
+        filteredTraces = directMatches;
+      } else if (testIndex !== undefined && promptIndex !== undefined) {
+        // Fallback: try index-based matching on composed trace.testCaseId
+        filteredTraces = traces.filter((trace) =>
+          matchesIndices(trace.testCaseId, testIndex, promptIndex),
+        );
+      } else {
+        // No direct match and no indices for fallback
+        filteredTraces = [];
+      }
+    } else if (testIndex !== undefined && promptIndex !== undefined) {
+      // No testCaseId but indices provided - try index-based filtering
+      filteredTraces = traces.filter((trace) =>
+        matchesIndices(trace.testCaseId, testIndex, promptIndex),
+      );
+    }
+    // If no testCaseId and no indices, show all traces for the evaluation
+  }
+
+  if (filteredTraces.length === 0 && (testCaseId || testIndex !== undefined)) {
     return (
       <Box sx={{ p: 2 }}>
         <Typography variant="body2" color="text.secondary">

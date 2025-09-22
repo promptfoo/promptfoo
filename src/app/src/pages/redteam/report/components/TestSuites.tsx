@@ -91,56 +91,60 @@ const TestSuites = ({
   ]);
 
   const rows = React.useMemo(() => {
-    return Object.entries(categoryStats)
-      .filter(([_, stats]) => stats.total > 0)
-      .map(([pluginName, stats]) => {
-        const severity = getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown';
+    return (
+      Object.entries(categoryStats)
+        .filter(([_, stats]) => stats.total > 0)
+        .map(([pluginName, stats]) => {
+          const severity = getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown';
 
-        // Calculate risk score with details
-        const riskDetails = (() => {
-          // Prepare test results using the helper function
-          const testResults = prepareTestResultsFromStats(
-            failuresByPlugin,
-            passesByPlugin,
-            pluginName,
-            categoryStats,
-            getStrategyIdFromTest,
-          );
+          // Calculate risk score with details
+          const riskDetails = (() => {
+            // Prepare test results using the helper function
+            const testResults = prepareTestResultsFromStats(
+              failuresByPlugin,
+              passesByPlugin,
+              pluginName,
+              categoryStats,
+              getStrategyIdFromTest,
+            );
 
-          if (testResults.length === 0) {
+            if (testResults.length === 0) {
+              return {
+                riskScore: 0,
+                complexityScore: 0,
+                worstStrategy: 'none',
+              };
+            }
+
+            // Calculate risk score once and extract values
+            const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
             return {
-              riskScore: 0,
-              complexityScore: 0,
-              worstStrategy: 'none',
+              riskScore: riskScoreResult.score,
+              complexityScore: riskScoreResult.complexityScore,
+              worstStrategy: riskScoreResult.worstStrategy,
             };
-          }
+          })();
 
-          // Calculate risk score once and extract values
-          const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
           return {
-            riskScore: riskScoreResult.score,
-            complexityScore: riskScoreResult.complexityScore,
-            worstStrategy: riskScoreResult.worstStrategy,
+            id: pluginName,
+            pluginName,
+            type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
+            description:
+              subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
+            severity,
+            passRate: (stats.pass / stats.total) * 100,
+            passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
+            attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
+            total: stats.total,
+            successfulAttacks: stats.total - stats.pass,
+            riskScore: riskDetails.riskScore,
+            complexityScore: riskDetails.complexityScore,
+            worstStrategy: riskDetails.worstStrategy,
           };
-        })();
-
-        return {
-          id: pluginName,
-          pluginName,
-          type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
-          description:
-            subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
-          severity,
-          passRate: (stats.pass / stats.total) * 100,
-          passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-          attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
-          total: stats.total,
-          successfulAttacks: stats.total - stats.pass,
-          riskScore: riskDetails.riskScore,
-          complexityScore: riskDetails.complexityScore,
-          worstStrategy: riskDetails.worstStrategy,
-        };
-      });
+        })
+        // Filter out rows where ASR = 0
+        .filter((row) => row.successfulAttacks > 0)
+    );
   }, [categoryStats, plugins, failuresByPlugin, passesByPlugin]);
 
   const exportToCSV = React.useCallback(() => {
@@ -156,33 +160,48 @@ const TestSuites = ({
       'Severity',
     ];
 
-    // Get the sorted data based on current sort model
-    const sortedData = [...rows].sort((a, b) => {
+    const compareRows = (a: (typeof rows)[number], b: (typeof rows)[number]) => {
       if (sortModel.length > 0 && sortModel[0].field === 'attackSuccessRate') {
         return sortModel[0].sort === 'asc'
           ? a.attackSuccessRate - b.attackSuccessRate
           : b.attackSuccessRate - a.attackSuccessRate;
-      } else if (sortModel.length > 0 && sortModel[0].field === 'severity') {
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'severity') {
         const severityOrder = {
           [Severity.Critical]: 4,
           [Severity.High]: 3,
           [Severity.Medium]: 2,
           [Severity.Low]: 1,
-        };
+        } as const;
+
         return sortModel[0].sort === 'asc'
           ? severityOrder[a.severity] - severityOrder[b.severity]
           : severityOrder[b.severity] - severityOrder[a.severity];
-      } else if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
         return sortModel[0].sort === 'asc' ? a.riskScore - b.riskScore : b.riskScore - a.riskScore;
-      } else if (sortModel.length > 0 && sortModel[0].field === 'complexityScore') {
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'complexityScore') {
         return sortModel[0].sort === 'asc'
           ? a.complexityScore - b.complexityScore
           : b.complexityScore - a.complexityScore;
-      } else {
-        // Default sort
-        return b.riskScore - a.riskScore;
       }
-    });
+
+      return b.riskScore - a.riskScore;
+    };
+
+    const sortedData = rows.reduce<Array<(typeof rows)[number]>>((acc, current) => {
+      const insertIndex = acc.findIndex((item) => compareRows(current, item) < 0);
+      if (insertIndex === -1) {
+        acc.push(current);
+      } else {
+        acc.splice(insertIndex, 0, current);
+      }
+      return acc;
+    }, []);
 
     // Serialize the rows to CSV
     const csvData = sortedData.map((subCategory) => [
@@ -339,6 +358,12 @@ const TestSuites = ({
       },
     },
     {
+      field: 'successfulAttacks',
+      headerName: 'Successful Attacks',
+      type: 'number',
+      flex: 0.75,
+    },
+    {
       field: 'attackSuccessRate',
       headerName: 'Attack Success Rate',
       type: 'number',
@@ -348,7 +373,7 @@ const TestSuites = ({
         const passRateWithFilter = params.row.passRateWithFilter;
         const passRate = params.row.passRate;
         return (
-          <Box className={value >= 75 ? 'asr-high' : value >= 50 ? 'asr-medium' : 'asr-low'}>
+          <Box>
             <strong>{value.toFixed(2)}%</strong>
             {passRateWithFilter !== passRate && (
               <>
@@ -365,9 +390,7 @@ const TestSuites = ({
       type: 'singleSelect',
       flex: 0.5,
       valueOptions: Object.values(Severity),
-      renderCell: (params: GridRenderCellParams) => (
-        <Box className={`vuln-${params.value.toLowerCase()} vuln`}>{params.value}</Box>
-      ),
+      renderCell: (params: GridRenderCellParams) => <Box>{params.value}</Box>,
       sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
@@ -392,7 +415,7 @@ const TestSuites = ({
             size="small"
             onClick={() => {
               const pluginId = params.row.pluginName;
-              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
+              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}&mode=failures`);
             }}
           >
             View logs

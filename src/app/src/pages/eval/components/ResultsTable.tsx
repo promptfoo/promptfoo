@@ -49,8 +49,8 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
-import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
+import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -133,7 +133,6 @@ interface ResultsTableProps {
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
-  setFilterMode: (mode: EvalResultsFilterMode) => void;
   zoom: number;
 }
 
@@ -234,7 +233,6 @@ function ResultsTable({
   showStats,
   onFailureFilterToggle,
   onSearchTextChange,
-  setFilterMode,
   zoom,
 }: ResultsTableProps) {
   const {
@@ -248,6 +246,7 @@ function ResultsTable({
     isFetching,
     filters,
     addFilter,
+    setFilterMode,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -460,11 +459,11 @@ function ResultsTable({
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
 
-  // Reset pagination when evalId changes
+  // Reset pagination when evalId changes. Do not mark previousEvalIdRef here to
+  // allow the fetch effect to skip the first fetch after an eval switch.
   React.useEffect(() => {
     if (evalId !== previousEvalIdRef.current) {
       setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
-      previousEvalIdRef.current = evalId;
 
       // Don't fetch here - the parent component (Eval.tsx) is responsible
       // for the initial data load when changing evalId
@@ -796,8 +795,11 @@ function ResultsTable({
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
-                          maximumFractionDigits: prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
-                        }).format(prompt.metrics.cost / testCounts[idx])} per test`}
+                          maximumFractionDigits:
+                            testCounts[idx] && prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
+                        }).format(
+                          testCounts[idx] ? prompt.metrics.cost / testCounts[idx] : 0,
+                        )} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
@@ -823,7 +825,9 @@ function ResultsTable({
                       <strong>Avg Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / testCounts[idx])}
+                      }).format(
+                        testCounts[idx] ? prompt.metrics.tokenUsage.total / testCounts[idx] : 0,
+                      )}
                     </div>
                   ) : null}
                   {prompt.metrics?.totalLatencyMs ? (
@@ -831,7 +835,9 @@ function ResultsTable({
                       <strong>Avg Latency:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / testCounts[idx])}{' '}
+                      }).format(
+                        testCounts[idx] ? prompt.metrics.totalLatencyMs / testCounts[idx] : 0,
+                      )}{' '}
                       ms
                     </div>
                   ) : null}
@@ -1217,9 +1223,7 @@ function ResultsTable({
             <Typography variant="body1">No results found for the current filters.</Typography>
           </Box>
         )}
-
       <Box sx={{ height: '1rem' }} />
-
       <ResultsTableHeader
         reactTable={reactTable}
         tableWidth={tableWidth}
@@ -1230,7 +1234,6 @@ function ResultsTable({
         setStickyHeader={setStickyHeader}
         zoom={zoom}
       />
-
       <div
         id="results-table-container"
         style={{
@@ -1382,7 +1385,6 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-
       <Box
         className="pagination"
         px={2}
@@ -1508,7 +1510,7 @@ function ResultsTable({
               slotProps={{
                 htmlInput: {
                   min: 1,
-                  max: pageCount,
+                  max: pageCount || 1,
                 },
               }}
               disabled={pageCount === 1}

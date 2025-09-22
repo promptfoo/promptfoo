@@ -16,6 +16,8 @@ const StyledAlert = styled(Alert)(({ theme }) => ({
   borderRadius: 0,
   padding: theme.spacing(0.75, 2),
   alignItems: 'center',
+  position: 'relative',
+  zIndex: theme.zIndex.appBar + 1,
   '& .MuiAlert-message': {
     width: '100%',
     padding: theme.spacing(0.5, 0),
