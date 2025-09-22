@@ -65,11 +65,6 @@ const FrameworkCard = ({
     navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
   };
 
-  // Remove custom policies; they do not belong to any framework.
-  categoryStats = Object.fromEntries(
-    Object.entries(categoryStats).filter(([plugin]) => !isPolicyMetric(plugin)),
-  );
-
   const sortedPlugins = sortedNonCompliantPlugins(nonCompliantPlugins);
   const breakInside = idx === 0 ? 'undefined' : 'avoid';
   return (

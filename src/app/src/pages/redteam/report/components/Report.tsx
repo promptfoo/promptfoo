@@ -24,8 +24,8 @@ import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Modal from '@mui/material/Modal';
-import Paper from '@mui/material/Paper';
 import OutlinedInput from '@mui/material/OutlinedInput';
+import Paper from '@mui/material/Paper';
 import Select, { type SelectChangeEvent } from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -47,6 +47,7 @@ import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import './Report.css';
 
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -54,8 +55,6 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-
-import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 
 const App = () => {
   const navigate = useNavigate();
@@ -445,6 +444,47 @@ const App = () => {
     return stats;
   }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
 
+  const hasActiveFilters =
+    selectedCategories.length > 0 ||
+    selectedStrategies.length > 0 ||
+    statusFilter !== 'all' ||
+    Boolean(searchQuery);
+
+  /**
+   * Extracts custom policy IDs from the results.fix
+   */
+  const customPolicyIds = React.useMemo(() => {
+    const ids = new Set();
+    if (!evalData) {
+      return ids;
+    }
+
+    evalData.results.results.forEach((row) => {
+      if (row.metadata?.pluginId === 'policy') {
+        ids.add(getPluginIdFromResult(row));
+      }
+    });
+
+    return ids;
+  }, [evalData]);
+
+  /**
+   * Constructs category stats for the framework compliance section.
+   *
+   * - Determines whether to use filtered or unfiltered category stats based on the presence of active filters.
+   * - Removes custom policies; they do not belong to any framework.
+   */
+  const categoryStatsForFrameworkCompliance = React.useMemo(() => {
+    const stats = hasActiveFilters ? filteredCategoryStats : categoryStats;
+    // Remove custom policies; they do not belong to any framework.
+    Object.keys(stats).forEach((pluginId) => {
+      if (customPolicyIds.has(pluginId)) {
+        delete stats[pluginId];
+      }
+    });
+    return stats;
+  }, [hasActiveFilters, filteredCategoryStats, categoryStats, customPolicyIds]);
+
   usePageMeta({
     title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
     description: 'Red team evaluation report',
@@ -528,12 +568,6 @@ const App = () => {
     setStatusFilter('all');
     setSearchQuery('');
   };
-
-  const hasActiveFilters =
-    selectedCategories.length > 0 ||
-    selectedStrategies.length > 0 ||
-    statusFilter !== 'all' ||
-    Boolean(searchQuery);
 
   const ActionButtons = () => (
     <>
@@ -840,7 +874,7 @@ const App = () => {
           />
           <FrameworkCompliance
             evalId={evalId}
-            categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
+            categoryStats={categoryStatsForFrameworkCompliance}
             strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
           />
         </Stack>
