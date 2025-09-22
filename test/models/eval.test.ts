@@ -818,6 +818,140 @@ describe('evaluator', () => {
       expect(containsRes.testIndices).toEqual([1]);
     });
 
+    it('filters by metadata exists operator (non-empty values only)', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 10,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const db = getDb();
+      // Set up test data with various field states
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"unit","note":"hello"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"","note":"hello"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"  ","note":"hello"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"note":"hello"}') WHERE eval_id = '${eval_.id}' AND test_idx = 3`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":null,"note":"hello"}') WHERE eval_id = '${eval_.id}' AND test_idx = 4`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"integration","note":"hello"}') WHERE eval_id = '${eval_.id}' AND test_idx = 5`,
+      );
+
+      // exists should only return rows where source field has meaningful non-empty values
+      const existsRes = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'exists',
+            field: 'source',
+            value: '',
+          }),
+        ],
+      });
+
+      // Should only include test_idx 0 and 5 (has "unit" and "integration")
+      // Should exclude: empty string (1), whitespace (2), missing field (3), null (4)
+      expect(existsRes.filteredCount).toBe(2);
+      expect(existsRes.testIndices).toEqual([0, 5]);
+    });
+
+    it('filters by metadata exists operator with various data types', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 10,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const db = getDb();
+      // Set up test data with different data types
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"count":42}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"count":0}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"active":true}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"active":false}') WHERE eval_id = '${eval_.id}' AND test_idx = 3`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"tags":["a","b"]}') WHERE eval_id = '${eval_.id}' AND test_idx = 4`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"config":{"key":"value"}}') WHERE eval_id = '${eval_.id}' AND test_idx = 5`,
+      );
+
+      // Test exists for numeric field (should include both 42 and 0)
+      const countExists = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'exists',
+            field: 'count',
+            value: '',
+          }),
+        ],
+      });
+      expect(countExists.filteredCount).toBe(2);
+      expect(countExists.testIndices).toEqual([0, 1]);
+
+      // Test exists for boolean field (should include both true and false)
+      const activeExists = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'exists',
+            field: 'active',
+            value: '',
+          }),
+        ],
+      });
+      expect(activeExists.filteredCount).toBe(2);
+      expect(activeExists.testIndices).toEqual([2, 3]);
+
+      // Test exists for array field
+      const tagsExists = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'exists',
+            field: 'tags',
+            value: '',
+          }),
+        ],
+      });
+      expect(tagsExists.filteredCount).toBe(1);
+      expect(tagsExists.testIndices).toEqual([4]);
+
+      // Test exists for object field
+      const configExists = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'exists',
+            field: 'config',
+            value: '',
+          }),
+        ],
+      });
+      expect(configExists.filteredCount).toBe(1);
+      expect(configExists.testIndices).toEqual([5]);
+    });
+
     it('filters by plugin and strategy', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 6,

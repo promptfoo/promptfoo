@@ -124,7 +124,7 @@ export interface PaginationState {
 
 export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy' | 'severity';
 
-export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
+export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains' | 'exists';
 
 export type ResultsFilter = {
   /**

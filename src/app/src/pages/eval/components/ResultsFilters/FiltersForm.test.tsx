@@ -1177,4 +1177,264 @@ describe('FiltersForm', () => {
       );
     }
   });
+
+  describe('exists operator', () => {
+    it('should show exists option in operator dropdown for metadata filters', () => {
+      const initialFilter: ResultsFilter = {
+        id: 'filter-1',
+        type: 'metadata',
+        operator: 'equals',
+        value: '',
+        field: 'testField',
+        sortIndex: 0,
+        logicOperator: 'and',
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: { 'filter-1': initialFilter },
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: ['testField'],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      // Find the operator dropdown
+      const operatorDropdown = screen.getByRole('combobox', { name: /Operator/i });
+      expect(operatorDropdown).toBeInTheDocument();
+
+      // Click to open the dropdown
+      fireEvent.mouseDown(operatorDropdown);
+
+      // Check that "Exists" option is available
+      const existsOption = screen.getByRole('option', { name: 'Exists' });
+      expect(existsOption).toBeInTheDocument();
+    });
+
+    it('should not show exists option for non-metadata filters', () => {
+      const initialFilter: ResultsFilter = {
+        id: 'filter-1',
+        type: 'metric',
+        operator: 'equals',
+        value: '',
+        sortIndex: 0,
+        logicOperator: 'and',
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: { 'filter-1': initialFilter },
+          options: {
+            metric: ['latency'],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      // Find the operator dropdown
+      const operatorDropdown = screen.getByRole('combobox', { name: /Operator/i });
+      expect(operatorDropdown).toBeInTheDocument();
+
+      // Click to open the dropdown
+      fireEvent.mouseDown(operatorDropdown);
+
+      // Check that only "Equals" option is available for metric filters
+      const equalsOption = screen.getByRole('option', { name: 'Equals' });
+      expect(equalsOption).toBeInTheDocument();
+
+      // Check that "Exists" option is NOT available
+      const existsOption = screen.queryByRole('option', { name: 'Exists' });
+      expect(existsOption).not.toBeInTheDocument();
+    });
+
+    it('should hide value input when exists operator is selected', () => {
+      const initialFilter: ResultsFilter = {
+        id: 'filter-1',
+        type: 'metadata',
+        operator: 'exists',
+        value: '',
+        field: 'testField',
+        sortIndex: 0,
+        logicOperator: 'and',
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: { 'filter-1': initialFilter },
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: ['testField'],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      // Value input should not be present when exists is selected
+      const valueInput = screen.queryByRole('textbox', { name: /Value/i });
+      expect(valueInput).not.toBeInTheDocument();
+    });
+
+    it('should clear value when switching to exists operator', async () => {
+      const initialFilter: ResultsFilter = {
+        id: 'filter-1',
+        type: 'metadata',
+        operator: 'equals',
+        value: 'someValue',
+        field: 'testField',
+        sortIndex: 0,
+        logicOperator: 'and',
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: { 'filter-1': initialFilter },
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: ['testField'],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      // Find and click the operator dropdown
+      const operatorDropdown = screen.getByRole('combobox', { name: /Operator/i });
+      fireEvent.mouseDown(operatorDropdown);
+
+      // Select "Exists" option
+      const existsOption = screen.getByRole('option', { name: 'Exists' });
+      fireEvent.click(existsOption);
+
+      // Verify updateFilter was called with cleared value
+      expect(mockUpdateFilter).toHaveBeenCalledWith({
+        ...initialFilter,
+        operator: 'exists',
+        value: '', // Value should be cleared when switching to exists
+      });
+    });
+
+    it('should show value input when equals operator is selected', () => {
+      const initialFilter: ResultsFilter = {
+        id: 'filter-1',
+        type: 'metadata',
+        operator: 'equals',
+        value: '',
+        field: 'testField',
+        sortIndex: 0,
+        logicOperator: 'and',
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: { 'filter-1': initialFilter },
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: ['testField'],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      // Should show value input for equals operator
+      const valueInput = screen.getByRole('textbox', { name: /Value/i });
+      expect(valueInput).toBeInTheDocument();
+    });
+  });
 });
