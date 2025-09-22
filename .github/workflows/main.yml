@@ -236,7 +236,7 @@ jobs:
 
       - name: Build Documentation
         working-directory: site
-        run: SKIP_OG_GENERATION=true npm run build
+        run: npm run build
 
   webui:
     name: webui tests
