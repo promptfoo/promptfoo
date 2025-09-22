@@ -81,7 +81,7 @@ const CustomMetrics = ({
   lookup,
   counts,
   metricTotals,
-  truncationCount = 3,
+  truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
   const { data: cloudConfig } = useCloudConfig();
