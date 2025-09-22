@@ -211,9 +211,3 @@ For support with the Nscale provider:
 - [Nscale Documentation](https://docs.nscale.com/)
 - [Nscale Community Discord](https://discord.gg/nscale)
 - [promptfoo GitHub Issues](https://github.com/promptfoo/promptfoo/issues)
-
-## Related
-
-- [Getting Started with promptfoo](/docs/getting-started/)
-- [Provider Configuration](/docs/providers/)
-- [Model Comparison Guide](/docs/guides/model-comparison/)
