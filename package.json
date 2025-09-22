@@ -284,6 +284,9 @@
       }
     }
   },
+  "overrides": {
+    "zod": "^4.1.11"
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "@playwright/browser-chromium",
