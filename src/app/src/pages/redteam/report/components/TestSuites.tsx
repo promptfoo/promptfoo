@@ -116,7 +116,7 @@ const TestSuites = ({
         // of `pluginId` to handle inline policies which should inherit their severity from the map i.e.
         // the value at `pluginSeverityMap['policy']`.
         if (!plugin.severity) {
-          plugin.severity = pluginSeverityMap[plugin.id as Plugin];
+          plugin.severity = pluginSeverityMap[plugin.id as Plugin] ?? 'Unknown';
         }
 
         acc[pluginId] = plugin;
@@ -133,7 +133,8 @@ const TestSuites = ({
         .map(([pluginName, stats]) => {
           const plugin = pluginsById[pluginName];
 
-          const severity = plugin.severity;
+          // Severity is guaranteed to be defined at this point.
+          const severity = plugin.severity as Severity;
 
           // Calculate risk score with details
           const riskDetails = (() => {
@@ -234,8 +235,8 @@ const TestSuites = ({
         } as const;
 
         return sortModel[0].sort === 'asc'
-          ? severityOrder[a.severity] - severityOrder[b.severity]
-          : severityOrder[b.severity] - severityOrder[a.severity];
+          ? severityOrder[a.severity as Severity] - severityOrder[b.severity as Severity]
+          : severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity];
       }
 
       if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
