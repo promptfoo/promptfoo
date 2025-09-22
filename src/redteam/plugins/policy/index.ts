@@ -1,9 +1,9 @@
 import dedent from 'dedent';
 import { sha256 } from '../../../util/createHash';
 import invariant from '../../../util/invariant';
-import { type Policy, type PolicyObject, PolicyObjectSchema } from '../../types';
+import { type PolicyObject } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from '../base';
-import { serializePolicyObjectAsMetric } from './utils';
+import { isValidPolicyObject, serializePolicyObjectAsMetric } from './utils';
 
 import type {
   ApiProvider,
@@ -15,15 +15,6 @@ import type {
 } from '../../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
-
-/**
- * Checks whether a given Policy is a valid PolicyObject.
- * @param policy - The policy to check.
- * @returns True if the policy is a valid PolicyObject, false otherwise.
- */
-export function isValidPolicyObject(policy: Policy): policy is PolicyObject {
-  return PolicyObjectSchema.safeParse(policy).success;
-}
 
 export class PolicyPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;

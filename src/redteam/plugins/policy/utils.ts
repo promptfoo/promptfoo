@@ -1,5 +1,5 @@
 import { validate as isUUID } from 'uuid';
-import { PolicyObject } from '../../types';
+import { type Policy, PolicyObject, PolicyObjectSchema } from '../../types';
 import { POLICY_METRIC_PREFIX } from './constants';
 
 /**
@@ -66,4 +66,13 @@ export function makeCustomPolicyCloudUrl(cloudAppUrl: string, policyId: string):
  */
 export function determinePolicyTypeFromId(policyId: string): 'reusable' | 'inline' {
   return isUUID(policyId) ? 'reusable' : 'inline';
+}
+
+/**
+ * Checks whether a given Policy is a valid PolicyObject.
+ * @param policy - The policy to check.
+ * @returns True if the policy is a valid PolicyObject, false otherwise.
+ */
+export function isValidPolicyObject(policy: Policy): policy is PolicyObject {
+  return PolicyObjectSchema.safeParse(policy).success;
 }
