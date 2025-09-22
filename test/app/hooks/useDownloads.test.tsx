@@ -1,10 +1,6 @@
-import {
-  downloadBlob,
-  useDownload,
-  useDownloadCsv,
-  useDownloadJson,
-} from '../../../src/app/src/hooks/useDownloads';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { downloadBlob, useDownload } from '../../../src/app/src/hooks/useDownloads';
+import * as downloadsApi from '../../../src/app/src/utils/api/downloads';
 
 // Mock the useToast hook
 const showToastMock = jest.fn();
@@ -15,12 +11,15 @@ jest.mock('../../../src/app/src/hooks/useToast', () => ({
 }));
 
 // Mock the downloads API module
-const mockDownloadResultsCsv = jest.fn();
-const mockDownloadResultsJson = jest.fn();
-jest.mock('../../../src/app/src/utils/api/downloads', () => ({
-  downloadResultsCsv: mockDownloadResultsCsv,
-  downloadResultsJson: mockDownloadResultsJson,
-}));
+jest.mock('../../../src/app/src/utils/api/downloads');
+
+// Get mocked functions
+const mockDownloadResultsCsv = downloadsApi.downloadResultsCsv as jest.MockedFunction<
+  typeof downloadsApi.downloadResultsCsv
+>;
+const mockDownloadResultsJson = downloadsApi.downloadResultsJson as jest.MockedFunction<
+  typeof downloadsApi.downloadResultsJson
+>;
 
 // Mock URL and HTMLAnchorElement methods
 const createObjectURLMock = jest.fn().mockReturnValue('blob:mock-url');
@@ -72,24 +71,24 @@ describe('useDownloads', () => {
       downloadBlob(mockBlob, fileName);
 
       expect(createdLink).not.toBeNull();
-      expect(createdLink?.download).toBe(fileName);
-      expect(createdLink?.href).toBe('blob:mock-url');
+      expect(createdLink!.download).toBe(fileName);
+      expect(createdLink!.href).toBe('blob:mock-url');
     });
   });
 
-  describe('useDownloadCsv', () => {
+  describe('useDownload (CSV)', () => {
     it('should download CSV successfully', async () => {
       const mockBlob = new Blob(['csv,data'], { type: 'text/csv' });
       mockDownloadResultsCsv.mockResolvedValue(mockBlob);
 
       const onSuccessMock = jest.fn();
-      const { result } = renderHook(() => useDownloadCsv({ onSuccess: onSuccessMock }));
+      const { result } = renderHook(() => useDownload('csv', { onSuccess: onSuccessMock }));
 
       expect(result.current.isLoading).toBe(false);
 
       await act(async () => {
-        const fileName = await result.current.downloadCsv('test-eval-id');
-        expect(fileName).toBe('test-eval-id-results.csv');
+        const fileName = await result.current.download('test-eval-id');
+        expect(fileName).toBe('test-eval-id.csv');
       });
 
       await waitFor(() => {
@@ -97,7 +96,7 @@ describe('useDownloads', () => {
         expect(createObjectURLMock).toHaveBeenCalledWith(mockBlob);
         expect(clickMock).toHaveBeenCalled();
         expect(showToastMock).toHaveBeenCalledWith('CSV downloaded successfully', 'success');
-        expect(onSuccessMock).toHaveBeenCalledWith('test-eval-id-results.csv');
+        expect(onSuccessMock).toHaveBeenCalledWith('test-eval-id.csv');
         expect(result.current.isLoading).toBe(false);
       });
     });
@@ -107,10 +106,10 @@ describe('useDownloads', () => {
       mockDownloadResultsCsv.mockRejectedValue(error);
 
       const onErrorMock = jest.fn();
-      const { result } = renderHook(() => useDownloadCsv({ onError: onErrorMock }));
+      const { result } = renderHook(() => useDownload('csv', { onError: onErrorMock }));
 
       await act(async () => {
-        await expect(result.current.downloadCsv('test-eval-id')).rejects.toThrow('Network error');
+        await expect(result.current.download('test-eval-id')).rejects.toThrow('Network error');
       });
 
       await waitFor(() => {
@@ -131,12 +130,12 @@ describe('useDownloads', () => {
       });
       mockDownloadResultsCsv.mockReturnValue(downloadPromise);
 
-      const { result } = renderHook(() => useDownloadCsv());
+      const { result } = renderHook(() => useDownload('csv'));
 
       expect(result.current.isLoading).toBe(false);
 
       act(() => {
-        result.current.downloadCsv('test-eval-id').catch(() => {});
+        result.current.download('test-eval-id').catch(() => {});
       });
 
       expect(result.current.isLoading).toBe(true);
@@ -156,16 +155,16 @@ describe('useDownloads', () => {
       const mockBlob2 = new Blob(['csv2'], { type: 'text/csv' });
       mockDownloadResultsCsv.mockResolvedValueOnce(mockBlob1).mockResolvedValueOnce(mockBlob2);
 
-      const { result } = renderHook(() => useDownloadCsv());
+      const { result } = renderHook(() => useDownload('csv'));
 
       await act(async () => {
         const [fileName1, fileName2] = await Promise.all([
-          result.current.downloadCsv('eval-1'),
-          result.current.downloadCsv('eval-2'),
+          result.current.download('eval-1'),
+          result.current.download('eval-2'),
         ]);
 
-        expect(fileName1).toBe('eval-1-results.csv');
-        expect(fileName2).toBe('eval-2-results.csv');
+        expect(fileName1).toBe('eval-1.csv');
+        expect(fileName2).toBe('eval-2.csv');
       });
 
       expect(mockDownloadResultsCsv).toHaveBeenCalledTimes(2);
@@ -173,19 +172,19 @@ describe('useDownloads', () => {
     });
   });
 
-  describe('useDownloadJson', () => {
+  describe('useDownload (JSON)', () => {
     it('should download JSON successfully', async () => {
       const mockBlob = new Blob(['{"data": "test"}'], { type: 'application/json' });
       mockDownloadResultsJson.mockResolvedValue(mockBlob);
 
       const onSuccessMock = jest.fn();
-      const { result } = renderHook(() => useDownloadJson({ onSuccess: onSuccessMock }));
+      const { result } = renderHook(() => useDownload('json', { onSuccess: onSuccessMock }));
 
       expect(result.current.isLoading).toBe(false);
 
       await act(async () => {
-        const fileName = await result.current.downloadJson('test-eval-id');
-        expect(fileName).toBe('test-eval-id-results.json');
+        const fileName = await result.current.download('test-eval-id');
+        expect(fileName).toBe('test-eval-id.json');
       });
 
       await waitFor(() => {
@@ -193,7 +192,7 @@ describe('useDownloads', () => {
         expect(createObjectURLMock).toHaveBeenCalledWith(mockBlob);
         expect(clickMock).toHaveBeenCalled();
         expect(showToastMock).toHaveBeenCalledWith('JSON downloaded successfully', 'success');
-        expect(onSuccessMock).toHaveBeenCalledWith('test-eval-id-results.json');
+        expect(onSuccessMock).toHaveBeenCalledWith('test-eval-id.json');
         expect(result.current.isLoading).toBe(false);
       });
     });
@@ -203,10 +202,10 @@ describe('useDownloads', () => {
       mockDownloadResultsJson.mockRejectedValue(error);
 
       const onErrorMock = jest.fn();
-      const { result } = renderHook(() => useDownloadJson({ onError: onErrorMock }));
+      const { result } = renderHook(() => useDownload('json', { onError: onErrorMock }));
 
       await act(async () => {
-        await expect(result.current.downloadJson('test-eval-id')).rejects.toThrow('Server error');
+        await expect(result.current.download('test-eval-id')).rejects.toThrow('Server error');
       });
 
       await waitFor(() => {
@@ -227,12 +226,12 @@ describe('useDownloads', () => {
       });
       mockDownloadResultsJson.mockReturnValue(downloadPromise);
 
-      const { result } = renderHook(() => useDownloadJson());
+      const { result } = renderHook(() => useDownload('json'));
 
       expect(result.current.isLoading).toBe(false);
 
       act(() => {
-        result.current.downloadJson('test-eval-id').catch(() => {});
+        result.current.download('test-eval-id').catch(() => {});
       });
 
       expect(result.current.isLoading).toBe(true);
@@ -248,10 +247,10 @@ describe('useDownloads', () => {
     });
 
     it('should handle empty evaluation ID', async () => {
-      const { result } = renderHook(() => useDownloadJson());
+      const { result } = renderHook(() => useDownload('json'));
 
       await act(async () => {
-        await expect(result.current.downloadJson('')).rejects.toThrow();
+        await expect(result.current.download('')).rejects.toThrow();
       });
     });
 
@@ -259,12 +258,12 @@ describe('useDownloads', () => {
       const mockBlob = new Blob(['{"data": "test"}'], { type: 'application/json' });
       mockDownloadResultsJson.mockResolvedValue(mockBlob);
 
-      const { result } = renderHook(() => useDownloadJson());
+      const { result } = renderHook(() => useDownload('json'));
       const specialEvalId = 'eval/with:special@chars#123';
 
       await act(async () => {
-        const fileName = await result.current.downloadJson(specialEvalId);
-        expect(fileName).toBe(`${specialEvalId}-results.json`);
+        const fileName = await result.current.download(specialEvalId);
+        expect(fileName).toBe(`${specialEvalId}.json`);
       });
 
       expect(mockDownloadResultsJson).toHaveBeenCalledWith(specialEvalId);
@@ -307,10 +306,10 @@ describe('useDownloads', () => {
       const largeBlob = new Blob([largeContent], { type: 'text/csv' });
       mockDownloadResultsCsv.mockResolvedValue(largeBlob);
 
-      const { result } = renderHook(() => useDownloadCsv());
+      const { result } = renderHook(() => useDownload('csv'));
 
       await act(async () => {
-        await result.current.downloadCsv('large-eval');
+        await result.current.download('large-eval');
       });
 
       expect(createObjectURLMock).toHaveBeenCalledWith(largeBlob);
@@ -321,13 +320,13 @@ describe('useDownloads', () => {
       const mockBlob = new Blob(['test'], { type: 'text/csv' });
       mockDownloadResultsCsv.mockResolvedValue(mockBlob);
 
-      const { result } = renderHook(() => useDownloadCsv());
+      const { result } = renderHook(() => useDownload('csv'));
 
       await act(async () => {
         // Trigger multiple downloads rapidly
-        result.current.downloadCsv('eval-1');
-        result.current.downloadCsv('eval-2');
-        result.current.downloadCsv('eval-3');
+        result.current.download('eval-1');
+        result.current.download('eval-2');
+        result.current.download('eval-3');
       });
 
       // All downloads should complete

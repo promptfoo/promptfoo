@@ -12,7 +12,7 @@ import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
-import { DataExportService } from '../services/dataExportService';
+import { generateCsvData, generateJsonData } from '../services/dataExportService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import type { Request, Response } from 'express';
 
@@ -168,10 +168,12 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
   }
 });
 
+const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
+
 evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
   const format = req.query.format as string | undefined;
-  const limit = format ? Number.MAX_SAFE_INTEGER : Number(req.query.limit) || 50;
+  const limit = format ? UNLIMITED_RESULTS : Number(req.query.limit) || 50;
   const offset = format ? 0 : Number(req.query.offset) || 0;
   const filterMode = req.query.filterMode
     ? EvalResultsFilterMode.parse(req.query.filterMode)
@@ -250,7 +252,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
         ],
         vars: table.head.vars, // Assuming vars are the same
       },
-      body: table.body.map((row, _index) => {
+      body: table.body.map((row) => {
         // Find matching row in comparison table by test index
         const testIdx = row.testIdx;
         const matchingRows = comparisonTables
@@ -273,7 +275,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   // Handle export formats
   if (format === 'csv') {
-    const csvData = DataExportService.generateCsvData(returnTable, {
+    const csvData = generateCsvData(returnTable, {
       isRedteam: Boolean(eval_.config.redteam),
     });
 
@@ -281,9 +283,9 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     res.send(csvData);
     return;
   } else if (format === 'json') {
-    const jsonData = DataExportService.generateJsonData(returnTable);
+    const jsonData = generateJsonData(returnTable);
 
-    setDownloadHeaders(res, `${id}json`, 'application/json');
+    setDownloadHeaders(res, `${id}.json`, 'application/json');
     res.json(jsonData);
     return;
   }

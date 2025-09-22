@@ -5,6 +5,8 @@ import { callApi } from '../api';
  * @param evalId Evaluation ID
  * @param format Export format (csv or json)
  * @returns Blob containing the file data
+ * @throws {Error} When the server returns a non-OK response status
+ * @throws {Error} When the response cannot be converted to a blob
  */
 export async function downloadResultsFile(evalId: string, format: 'csv' | 'json'): Promise<Blob> {
   const response = await callApi(`/eval/${evalId}/table?format=${format}`, {
