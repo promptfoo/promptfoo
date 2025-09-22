@@ -117,6 +117,9 @@ describe('exportCommand', () => {
     await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
 
     const expectedJson = {
+      id: 'test-id',
+      createdAt: '2025-07-01T00:00:00.000Z',
+      author: 'test-author',
       evalId: 'test-id',
       results: { test: 'summary' },
       config: { test: 'config' },
@@ -157,7 +160,7 @@ describe('exportCommand', () => {
 
   describe('logs export', () => {
     const mockConfigDir = '/test/config';
-    const mockLogDir = '/test/config/logs';
+    const _mockLogDir = '/test/config/logs';
 
     beforeEach(() => {
       mockGetConfigDirectoryPath.mockReturnValue(mockConfigDir);

@@ -76,6 +76,9 @@ describe('JSON export with improved error handling', () => {
       const parsed = JSON.parse(content);
 
       // Verify structure matches expected OutputFile format
+      expect(parsed).toHaveProperty('id', 'test-eval-id');
+      expect(parsed).toHaveProperty('createdAt', '2025-01-01T00:00:00.000Z');
+      expect(parsed).toHaveProperty('author', 'test-author');
       expect(parsed).toHaveProperty('evalId', 'test-eval-id');
       expect(parsed).toHaveProperty('results');
       expect(parsed.results).toHaveProperty('version', 3);
@@ -100,7 +103,7 @@ describe('JSON export with improved error handling', () => {
       const content = fs.readFileSync(tempFilePath, 'utf8');
 
       // Verify proper 2-space indentation
-      expect(content).toContain('{\n  "evalId":');
+      expect(content).toContain('{\n  "id":');
       expect(content).toContain('  "results": {');
       expect(content).toContain('    "version":');
 
@@ -217,7 +220,7 @@ describe('JSON export with improved error handling', () => {
 
       // Verify exact structure
       expect(Object.keys(parsed).sort()).toEqual(
-        ['evalId', 'results', 'config', 'shareableUrl', 'metadata'].sort(),
+        ['id', 'createdAt', 'author', 'evalId', 'results', 'config', 'shareableUrl', 'metadata'].sort(),
       );
 
       expect(parsed.results).toEqual(expectedSummary);
