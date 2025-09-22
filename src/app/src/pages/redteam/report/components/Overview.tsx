@@ -78,7 +78,7 @@ const Overview = ({
         // Get the severity from the plugin definition or, if it's undefined (most cases; no override is set),
         // the risk category severity map.
         const pluginSeverity =
-          plugin.severity ?? getRiskCategorySeverityMap(plugins)[plugin.id as PluginType];
+          plugin?.severity ?? getRiskCategorySeverityMap(plugins)[plugin.id as PluginType];
 
         if (pluginSeverity !== severity) {
           return count;
