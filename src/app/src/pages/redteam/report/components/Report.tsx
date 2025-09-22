@@ -475,7 +475,7 @@ const App = () => {
    * - Removes custom policies; they do not belong to any framework.
    */
   const categoryStatsForFrameworkCompliance = React.useMemo(() => {
-    const stats = hasActiveFilters ? filteredCategoryStats : categoryStats;
+    const stats = { ...(hasActiveFilters ? filteredCategoryStats : categoryStats) };
     // Remove custom policies; they do not belong to any framework.
     Object.keys(stats).forEach((pluginId) => {
       if (customPolicyIds.has(pluginId)) {
