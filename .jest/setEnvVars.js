@@ -1,4 +1,4 @@
-export const TEST_CONFIG_DIR = './.local/jest/config';
+const TEST_CONFIG_DIR = './.local/jest/config';
 
 process.env.ANTHROPIC_API_KEY = 'foo';
 process.env.AZURE_OPENAI_API_HOST = 'azure.openai.host';

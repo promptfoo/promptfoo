@@ -5,7 +5,7 @@ import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import { useTheme } from '@mui/material/styles';
@@ -64,7 +64,7 @@ export default function Setup({ open, onClose }: SetupProps) {
           </li>
         </ul>
         <Grid container>
-          <Grid size={12}>
+          <Grid size={{ xs: 12 }}>
             <Box
               sx={{
                 display: 'flex',
