@@ -10,12 +10,24 @@ import { fetchWithTimeout } from './util/fetch';
 const execAsync = promisify(exec);
 
 export async function getLatestVersion() {
-  const response = await fetchWithTimeout(`https://api.promptfoo.dev/api/latestVersion`, {}, 1000);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch package information for promptfoo`);
+  try {
+    const response = await fetchWithTimeout(`https://api.promptfoo.dev/api/latestVersion`, {}, 1000);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch package information for promptfoo: ${response.status} ${response.statusText}`);
+    }
+    const data = (await response.json()) as { latestVersion: string };
+    return data.latestVersion;
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message.includes('timed out') || error.message.includes('aborted')) {
+        throw new Error('Unable to check for updates - network timeout. This is likely due to connectivity issues.');
+      }
+      if (error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+        throw new Error('Unable to check for updates - network connection failed. Please check your internet connection.');
+      }
+    }
+    throw error;
   }
-  const data = (await response.json()) as { latestVersion: string };
-  return data.latestVersion;
 }
 
 export async function checkForUpdates(): Promise<boolean> {
@@ -26,7 +38,9 @@ export async function checkForUpdates(): Promise<boolean> {
   let latestVersion: string;
   try {
     latestVersion = await getLatestVersion();
-  } catch {
+  } catch (error) {
+    // Log the error for debugging but don't interrupt the user's workflow
+    logger.debug(`Version check failed: ${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
   if (semverGt(latestVersion, VERSION)) {

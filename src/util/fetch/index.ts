@@ -191,7 +191,10 @@ export function fetchWithTimeout(
   return new Promise((resolve, reject) => {
     const controller = new AbortController();
     const { signal } = controller;
+    let isTimedOut = false;
+
     const timeoutId = setTimeout(() => {
+      isTimedOut = true;
       controller.abort();
       reject(new Error(`Request timed out after ${timeout} ms`));
     }, timeout);
@@ -201,12 +204,22 @@ export function fetchWithTimeout(
       signal,
     })
       .then((response) => {
-        clearTimeout(timeoutId);
-        resolve(response);
+        if (!isTimedOut) {
+          clearTimeout(timeoutId);
+          resolve(response);
+        }
       })
       .catch((error) => {
-        clearTimeout(timeoutId);
-        reject(error);
+        if (!isTimedOut) {
+          clearTimeout(timeoutId);
+          // Check if this is an AbortError due to timeout
+          if (error.name === 'AbortError') {
+            reject(new Error(`Request was aborted - this may be due to network connectivity issues`));
+          } else {
+            reject(error);
+          }
+        }
+        // If already timed out, the timeout handler has already rejected
       });
   });
 }

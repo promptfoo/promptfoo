@@ -52,10 +52,38 @@ describe('getLatestVersion', () => {
   it('should throw an error if the response is not ok', async () => {
     jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
     } as never);
 
     await expect(getLatestVersion()).rejects.toThrow(
-      'Failed to fetch package information for promptfoo',
+      'Failed to fetch package information for promptfoo: 500 Internal Server Error',
+    );
+  });
+
+  it('should throw a user-friendly error for timeout', async () => {
+    jest.mocked(fetchWithTimeout).mockRejectedValueOnce(new Error('Request timed out after 1000 ms'));
+
+    await expect(getLatestVersion()).rejects.toThrow(
+      'Unable to check for updates - network timeout. This is likely due to connectivity issues.',
+    );
+  });
+
+  it('should throw a user-friendly error for AbortError', async () => {
+    const abortError = new Error('This operation was aborted');
+    abortError.name = 'AbortError';
+    jest.mocked(fetchWithTimeout).mockRejectedValueOnce(abortError);
+
+    await expect(getLatestVersion()).rejects.toThrow(
+      'Unable to check for updates - network timeout. This is likely due to connectivity issues.',
+    );
+  });
+
+  it('should throw a user-friendly error for network connection failures', async () => {
+    jest.mocked(fetchWithTimeout).mockRejectedValueOnce(new Error('ENOTFOUND api.promptfoo.dev'));
+
+    await expect(getLatestVersion()).rejects.toThrow(
+      'Unable to check for updates - network connection failed. Please check your internet connection.',
     );
   });
 });

@@ -75,7 +75,12 @@ export function addCommonOptionsRecursively(command: Command) {
 async function main() {
   initializeRunLogging();
 
-  await checkForUpdates();
+  // Check for updates but don't let errors interrupt the CLI
+  try {
+    await checkForUpdates();
+  } catch (error) {
+    logger.debug(`Update check failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
   await runDbMigrations();
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();

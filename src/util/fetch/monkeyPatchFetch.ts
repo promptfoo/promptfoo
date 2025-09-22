@@ -65,9 +65,14 @@ export async function monkeyPatchFetch(
         );
         throw e;
       }
-      logger.error(
-        `Error in fetch: ${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`,
-      );
+      // Don't log AbortErrors with full stack trace as they're usually intentional (timeouts)
+      if (e instanceof Error && e.name === 'AbortError') {
+        logger.debug(`Request aborted to ${url}: ${e.message}`);
+      } else {
+        logger.error(
+          `Error in fetch: ${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`,
+        );
+      }
     }
     throw e;
   }
