@@ -492,7 +492,6 @@ const FrameworkCard = ({
                   }}
                 />
               </Box>
-
               <List dense sx={{ py: 0 }}>
                 {/* Failed plugins first */}
                 {nonCompliantPlugins.length > 0 && (

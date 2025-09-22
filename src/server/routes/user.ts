@@ -98,6 +98,87 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
   }
 });
 
+// New API key authentication endpoint that mirrors CLI behavior
+userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { apiKey, apiHost } = z
+      .object({
+        apiKey: z.string().min(1, 'API key is required').max(512, 'API key too long'),
+        apiHost: z.string().url().optional(),
+      })
+      .parse(req.body);
+
+    const host = apiHost || cloudConfig.getApiHost();
+
+    // Use the same validation logic as CLI
+    const { user, organization, app } = await cloudConfig.validateAndSetApiToken(apiKey, host);
+
+    // Sync email to local config (same as CLI)
+    const existingEmail = getUserEmail();
+    if (existingEmail && existingEmail !== user.email) {
+      logger.info(`Updating local email configuration from ${existingEmail} to ${user.email}`);
+    }
+    setUserEmail(user.email);
+
+    // Record telemetry and consent
+    await telemetry.record('webui_api', {
+      event: 'api_key_login',
+      email: user.email,
+      selfHosted: getEnvBool('PROMPTFOO_SELF_HOSTED'),
+    });
+    await telemetry.saveConsent(user.email, {
+      source: 'web_login',
+    });
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      },
+      organization: {
+        id: organization.id,
+        name: organization.name,
+      },
+      app: {
+        url: app.url,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      `Error during API key login: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromError(error).toString() });
+    } else {
+      // Don't expose internal error details to client
+      res.status(401).json({ error: 'Invalid API key or authentication failed' });
+    }
+  }
+});
+
+// Logout endpoint - clears local authentication data
+userRouter.post('/logout', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Clear stored email and cloud config (same as CLI logout)
+    setUserEmail('');
+    cloudConfig.delete();
+
+    logger.info('User logged out successfully');
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully',
+    });
+  } catch (error) {
+    logger.error(
+      `Error during logout: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
 /**
  * Returns information about the Promptfoo Cloud config for the current user.
  */

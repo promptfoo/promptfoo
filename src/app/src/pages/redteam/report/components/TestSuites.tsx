@@ -127,78 +127,82 @@ const TestSuites = ({
   }, [plugins, pluginSeverityMap]);
 
   const rows = React.useMemo(() => {
-    return Object.entries(categoryStats)
-      .filter(([_, stats]) => stats.total > 0)
-      .map(([pluginName, stats]) => {
-        const plugin = pluginsById[pluginName];
+    return (
+      Object.entries(categoryStats)
+        .filter(([_, stats]) => stats.total > 0)
+        .map(([pluginName, stats]) => {
+          const plugin = pluginsById[pluginName];
 
-        const severity = plugin.severity;
+          const severity = plugin.severity;
 
-        // Calculate risk score with details
-        const riskDetails = (() => {
-          // Prepare test results using the helper function
-          const testResults = prepareTestResultsFromStats(
-            failuresByPlugin,
-            passesByPlugin,
-            pluginName,
-            categoryStats,
-            getStrategyIdFromTest,
-          );
-
-          if (testResults.length === 0) {
-            return {
-              riskScore: 0,
-              complexityScore: 0,
-              worstStrategy: 'none',
-            };
-          }
-
-          // Calculate risk score once and extract values
-          const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
-          return {
-            riskScore: riskScoreResult.score,
-            complexityScore: riskScoreResult.complexityScore,
-            worstStrategy: riskScoreResult.worstStrategy,
-          };
-        })();
-
-        let type = categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName;
-        let description =
-          subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '';
-
-        // Read custom policy metadata from `pluginsById`.
-        if (plugin.id === 'policy' && plugin.config?.policy) {
-          if (isValidPolicyObject(plugin.config.policy)) {
-            type = formatPolicyIdentifierAsMetric(
-              plugin.config.policy.name ?? plugin.config.policy.id,
+          // Calculate risk score with details
+          const riskDetails = (() => {
+            // Prepare test results using the helper function
+            const testResults = prepareTestResultsFromStats(
+              failuresByPlugin,
+              passesByPlugin,
+              pluginName,
+              categoryStats,
+              getStrategyIdFromTest,
             );
-            if (plugin.config.policy.text) {
-              description = plugin.config.policy.text;
+
+            if (testResults.length === 0) {
+              return {
+                riskScore: 0,
+                complexityScore: 0,
+                worstStrategy: 'none',
+              };
             }
-          } else {
-            type = formatPolicyIdentifierAsMetric(
-              makeInlinePolicyId(plugin.config?.policy as string),
-            );
-            description = plugin.config?.policy as string;
-          }
-        }
 
-        return {
-          id: pluginName,
-          pluginName,
-          type,
-          description,
-          severity,
-          passRate: (stats.pass / stats.total) * 100,
-          passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-          attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
-          total: stats.total,
-          successfulAttacks: stats.total - stats.pass,
-          riskScore: riskDetails.riskScore,
-          complexityScore: riskDetails.complexityScore,
-          worstStrategy: riskDetails.worstStrategy,
-        };
-      });
+            // Calculate risk score once and extract values
+            const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
+            return {
+              riskScore: riskScoreResult.score,
+              complexityScore: riskScoreResult.complexityScore,
+              worstStrategy: riskScoreResult.worstStrategy,
+            };
+          })();
+
+          let type = categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName;
+          let description =
+            subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '';
+
+          // Read custom policy metadata from `pluginsById`.
+          if (plugin.id === 'policy' && plugin.config?.policy) {
+            if (isValidPolicyObject(plugin.config.policy)) {
+              type = formatPolicyIdentifierAsMetric(
+                plugin.config.policy.name ?? plugin.config.policy.id,
+              );
+              if (plugin.config.policy.text) {
+                description = plugin.config.policy.text;
+              }
+            } else {
+              type = formatPolicyIdentifierAsMetric(
+                makeInlinePolicyId(plugin.config?.policy as string),
+              );
+              description = plugin.config?.policy as string;
+            }
+          }
+
+          return {
+            id: pluginName,
+            pluginName,
+            type,
+            description,
+            severity,
+            passRate: (stats.pass / stats.total) * 100,
+            passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
+            attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
+            total: stats.total,
+            successfulAttacks: stats.total - stats.pass,
+            riskScore: riskDetails.riskScore,
+            complexityScore: riskDetails.complexityScore,
+            worstStrategy: riskDetails.worstStrategy,
+          };
+        })
+        // Filter out rows where ASR = 0
+        .filter((row) => row.successfulAttacks > 0)
+    );
   }, [categoryStats, plugins, failuresByPlugin, passesByPlugin, pluginsById, pluginSeverityMap]);
 
   const exportToCSV = React.useCallback(() => {
@@ -412,6 +416,12 @@ const TestSuites = ({
       },
     },
     {
+      field: 'successfulAttacks',
+      headerName: 'Successful Attacks',
+      type: 'number',
+      flex: 0.75,
+    },
+    {
       field: 'attackSuccessRate',
       headerName: 'Attack Success Rate',
       type: 'number',
@@ -470,7 +480,7 @@ const TestSuites = ({
               const pluginId = params.row.pluginName;
               const plugin = pluginsById[pluginId];
               const key = plugin.id === 'policy' ? 'policy' : 'plugin';
-              navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}`);
+              navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}&mode=failures`);
             }}
           >
             View logs

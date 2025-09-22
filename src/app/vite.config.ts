@@ -56,6 +56,13 @@ export default defineConfig({
       },
     },
     rollupOptions: {
+      onwarn(warning, warn) {
+        // Suppress eval warnings from vm-browserify polyfill
+        if (warning.code === 'EVAL' && warning.id?.includes('vm-browserify')) {
+          return;
+        }
+        warn(warning);
+      },
       output: {
         // Manual chunking to split vendor libraries
         manualChunks: {
@@ -70,8 +77,8 @@ export default defineConfig({
         },
       },
     },
-    // Increase chunk size warning limit slightly since we're splitting properly
-    chunkSizeWarningLimit: 600,
+    // Increase chunk size warning limit for this development tool
+    chunkSizeWarningLimit: 2500,
   },
   test: {
     environment: 'jsdom',
