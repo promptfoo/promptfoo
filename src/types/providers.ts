@@ -3,7 +3,7 @@ import type winston from 'winston';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
-import type { Vars } from './index';
+import type { Vars } from './vars';
 
 export type { TokenUsage } from './shared';
 export type ProviderId = string;

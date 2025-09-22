@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { BaseTokenUsageSchema } from '../types/shared';
+import { VarsSchema, type Vars } from '../types/vars';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
@@ -606,19 +607,7 @@ const ProviderPromptMapSchema = z.record(
 // Metadata is a key-value store for arbitrary data
 const MetadataSchema = z.record(z.string(), z.any());
 
-export const VarsSchema = z.record(
-  z.string(),
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.array(z.union([z.string(), z.number(), z.boolean()])),
-    z.record(z.string(), z.any()),
-    z.array(z.any()),
-  ]),
-);
-
-export type Vars = z.infer<typeof VarsSchema>;
+export { VarsSchema, type Vars } from './vars';
 
 export type ScoringFunction = (
   namedScores: Record<string, number>,
