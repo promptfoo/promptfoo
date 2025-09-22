@@ -1,4 +1,5 @@
 import { validate as isUUID } from 'uuid';
+import { sha256 } from '../../../util/createHash';
 import { type Policy, PolicyObject, PolicyObjectSchema } from '../../types';
 import { POLICY_METRIC_PREFIX } from './constants';
 
@@ -75,4 +76,18 @@ export function determinePolicyTypeFromId(policyId: string): 'reusable' | 'inlin
  */
 export function isValidPolicyObject(policy: Policy): policy is PolicyObject {
   return PolicyObjectSchema.safeParse(policy).success;
+}
+
+/**
+ * Constructs a unique ID for the inline policy by hashing the policy text and
+ * taking the first 8 characters of the hash.
+ * @param policyText - The text of the policy.
+ * @returns The ID for the inline policy.
+ */
+export function makeInlinePolicyId(policyText: string): string {
+  return sha256(policyText).slice(
+    0,
+    // 0.18% chance of collision w/ 1M policies i.e. extremely unlikely
+    12,
+  );
 }

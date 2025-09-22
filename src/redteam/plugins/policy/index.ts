@@ -1,9 +1,8 @@
 import dedent from 'dedent';
-import { sha256 } from '../../../util/createHash';
 import invariant from '../../../util/invariant';
 import { type PolicyObject } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from '../base';
-import { isValidPolicyObject, serializePolicyObjectAsMetric } from './utils';
+import { isValidPolicyObject, makeInlinePolicyId, serializePolicyObjectAsMetric } from './utils';
 
 import type {
   ApiProvider,
@@ -108,11 +107,7 @@ export class PolicyPlugin extends RedteamPluginBase {
    */
   protected getAssertions(prompt: string): Assertion[] {
     const data: PolicyObject = {
-      id: this.policyId
-        ? // Use the policyId as the metricId
-          this.policyId
-        : // Otherwise, hash the policy text to ensure duplicate policies counted as different metrics.
-          sha256(this.policy).slice(0, 8),
+      id: this.policyId ? this.policyId : makeInlinePolicyId(this.policy),
       text: this.policy,
     };
 
