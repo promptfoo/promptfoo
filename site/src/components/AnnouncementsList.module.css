@@ -1,0 +1,46 @@
+.announcementsListContainer {
+    margin-bottom: 2rem;
+    padding: 2rem 0;
+}
+
+.announcementsListTitle {
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin-bottom: 2rem;
+    color: var(--ifm-heading-color);
+    border-bottom: 2px solid var(--ifm-color-primary-lightest);
+    padding-bottom: 0.75rem;
+}
+
+.announcementsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+    padding: 1rem 0;
+}
+
+@media (min-width: 769px) {
+    .announcementsGrid {
+        grid-template-columns: 1fr;
+        gap: 2.5rem;
+        padding: 1.5rem 0;
+    }
+}
+
+@media (max-width: 768px) {
+    .announcementsGrid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        padding: 0.5rem 0;
+    }
+
+    .announcementsListTitle {
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .announcementsListContainer {
+        padding: 1rem 0;
+    }
+}
