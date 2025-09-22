@@ -1,6 +1,7 @@
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
@@ -77,37 +78,64 @@ export function MetadataPanel({
             }
 
             const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-            const truncatedValue = ellipsize(stringValue, 300);
-            let isUrl = typeof value === 'string' && isValidUrl(value);
-            let urlDisplayValue = expandedMetadata[key]?.expanded ? stringValue : truncatedValue;
+            let cell: React.ReactNode;
 
-            // Render a link to the policy in the cloud if cloud is enabled
-            if (key === 'policyId' && cloudConfig?.isEnabled && cloudConfig?.appUrl) {
-              urlDisplayValue = value;
-              value = makeCustomPolicyCloudUrl(cloudConfig?.appUrl, value);
-              isUrl = true;
+            // Is reusable custom policy name?
+            if (key === 'policyName' && cloudConfig?.isEnabled && cloudConfig?.appUrl) {
+              cell = (
+                <TableCell
+                  style={{
+                    whiteSpace: 'pre-wrap',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <span>{value}</span>
+                    <Link
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, value)}
+                      sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                    >
+                      <span>View policy in Promptfoo Cloud</span>
+                      <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
+                    </Link>
+                  </div>
+                </TableCell>
+              );
+            }
+            // Is URL?
+            else if (typeof value === 'string' && isValidUrl(value)) {
+              cell = (
+                <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}>
+                  <Link href={value} target="_blank" rel="noopener noreferrer">
+                    {value}
+                  </Link>
+                </TableCell>
+              );
+            } else {
+              const truncatedValue = ellipsize(stringValue, 300);
+              cell = (
+                <TableCell
+                  style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}
+                  onClick={() => onMetadataClick(key)}
+                >
+                  {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                </TableCell>
+              );
             }
 
             return (
               <TableRow key={key}>
                 <TableCell>{key}</TableCell>
-                <TableCell
-                  style={{
-                    whiteSpace: 'pre-wrap',
-                    cursor: isUrl ? 'auto' : 'pointer',
-                  }}
-                  onClick={() => !isUrl && onMetadataClick(key)}
-                >
-                  {isUrl ? (
-                    <Link href={value} target="_blank" rel="noopener noreferrer">
-                      {urlDisplayValue}
-                    </Link>
-                  ) : expandedMetadata[key]?.expanded ? (
-                    stringValue
-                  ) : (
-                    truncatedValue
-                  )}
-                </TableCell>
+                {cell}
+
                 <TableCell>
                   <Box sx={{ display: 'flex', gap: 0.5 }}>
                     <Tooltip title="Copy value">
