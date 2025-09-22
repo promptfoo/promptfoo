@@ -12,7 +12,6 @@ import ListItemText from '@mui/material/ListItemText';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useNavigate } from 'react-router-dom';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_NAMES,
@@ -21,6 +20,8 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
+import { isPolicyMetric } from '@promptfoo/redteam/plugins/policy/utils';
+import { useNavigate } from 'react-router-dom';
 import {
   type CategoryStats,
   categorizePlugins,
@@ -63,6 +64,11 @@ const FrameworkCard = ({
   const handlePluginClick = (pluginId: string) => {
     navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
   };
+
+  // Remove custom policies; they do not belong to any framework.
+  categoryStats = Object.fromEntries(
+    Object.entries(categoryStats).filter(([plugin]) => !isPolicyMetric(plugin)),
+  );
 
   const sortedPlugins = sortedNonCompliantPlugins(nonCompliantPlugins);
   const breakInside = idx === 0 ? 'undefined' : 'avoid';
