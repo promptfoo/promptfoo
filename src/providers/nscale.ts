@@ -60,7 +60,7 @@ export function createNscaleProvider(
     return new OpenAiEmbeddingProvider(modelName, nscaleConfig);
   } else if (splits[1] === 'image') {
     return createNscaleImageProvider(providerPath, {
-      config: options.config,
+      config: options.config as any, // Allow flexible config type for Nscale image options
       id: options.id,
       env: options.env,
     });

@@ -38,7 +38,7 @@ type NscaleImageOptions = OpenAiSharedOptions & {
  * Defaults to base64 JSON response format for compatibility with Nscale API.
  */
 export class NscaleImageProvider extends OpenAiImageProvider {
-  config: NscaleImageOptions;
+  config: NscaleImageOptions & any;
 
   /**
    * Create a new Nscale image provider instance.
@@ -50,15 +50,23 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     modelName: string,
     options: { config?: NscaleImageOptions; id?: string; env?: EnvOverrides } = {},
   ) {
+    const nscaleConfig = options.config || {};
+    const {
+      n: _n,
+      response_format: _response_format,
+      user: _user,
+      size: _size,
+      ...openAiCompatibleConfig
+    } = nscaleConfig;
     super(modelName, {
       ...options,
       config: {
-        ...options.config,
+        ...openAiCompatibleConfig,
         apiBaseUrl: 'https://inference.api.nscale.com/v1',
         apiKey: NscaleImageProvider.getApiKey(options),
       },
     });
-    this.config = options.config || {};
+    this.config = nscaleConfig;
   }
 
   /**
