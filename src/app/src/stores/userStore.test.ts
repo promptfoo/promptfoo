@@ -31,6 +31,10 @@ describe('useUserStore', () => {
     expect(mockedCallApi).toHaveBeenCalledWith('/user/email');
   };
 
+  const verifyEmailState = (expectedEmail: string | null) => {
+    expect(useUserStore.getState().email).toBe(expectedEmail);
+  };
+
   const verifyUserIdState = (expectedUserId: string | null) => {
     expect(useUserStore.getState().userId).toBe(expectedUserId);
   };
@@ -173,6 +177,81 @@ describe('useUserStore', () => {
       });
 
       verifyUserIdState(testUserId);
+    });
+  });
+
+  describe('logout', () => {
+    it('should clear user state on successful logout', async () => {
+      // Set initial state
+      useUserStore.getState().setEmail('test@example.com');
+      useUserStore.getState().setUserId('test-user-id');
+
+      verifyEmailState('test@example.com');
+      verifyUserIdState('test-user-id');
+
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
+
+      await act(async () => {
+        await useUserStore.getState().logout();
+      });
+
+      verifyEmailState(null);
+      verifyUserIdState(null);
+      expect(useUserStore.getState().isLoading).toBe(false);
+    });
+
+    it('should clear user state even on logout API failure', async () => {
+      // Set initial state
+      useUserStore.getState().setEmail('test@example.com');
+      useUserStore.getState().setUserId('test-user-id');
+
+      mockedCallApi.mockResolvedValue({
+        ok: false,
+        status: 500,
+      });
+
+      await act(async () => {
+        await useUserStore.getState().logout();
+      });
+
+      // Should still clear state even if API call fails
+      verifyEmailState(null);
+      verifyUserIdState(null);
+      expect(useUserStore.getState().isLoading).toBe(false);
+    });
+
+    it('should clear user state on logout network error', async () => {
+      // Set initial state
+      useUserStore.getState().setEmail('test@example.com');
+
+      mockedCallApi.mockRejectedValue(new Error('Network error'));
+
+      await act(async () => {
+        await useUserStore.getState().logout();
+      });
+
+      // Should clear state even on network error
+      verifyEmailState(null);
+      verifyUserIdState(null);
+    });
+  });
+
+  describe('clearUser', () => {
+    it('should immediately clear user state', () => {
+      // Set initial state
+      useUserStore.getState().setEmail('test@example.com');
+      useUserStore.getState().setUserId('test-user-id');
+
+      act(() => {
+        useUserStore.getState().clearUser();
+      });
+
+      verifyEmailState(null);
+      verifyUserIdState(null);
+      expect(useUserStore.getState().isLoading).toBe(false);
     });
   });
 });

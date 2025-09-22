@@ -180,6 +180,8 @@ export default function ResultsView({
     highlightedResultsCount,
     filters,
     removeFilter,
+    filterMode,
+    setFilterMode,
   } = useTableStore();
 
   const {
@@ -217,8 +219,6 @@ export default function ResultsView({
 
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
-
-  const [filterMode, setFilterMode] = React.useState<EvalResultsFilterMode>('all');
 
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
     const mode = event.target.value as EvalResultsFilterMode;
@@ -749,23 +749,18 @@ export default function ResultsView({
                       </MenuItem>
                     </Tooltip>
                     <DownloadMenu />
-                    {config?.sharing && (
-                      <Tooltip
-                        title="Generate a unique URL that others can access"
-                        placement="left"
-                      >
-                        <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-                          <ListItemIcon>
-                            {shareLoading ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <ShareIcon fontSize="small" />
-                            )}
-                          </ListItemIcon>
-                          Share
-                        </MenuItem>
-                      </Tooltip>
-                    )}
+                    <Tooltip title="Generate a unique URL that others can access" placement="left">
+                      <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+                        <ListItemIcon>
+                          {shareLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <ShareIcon fontSize="small" />
+                          )}
+                        </ListItemIcon>
+                        Share
+                      </MenuItem>
+                    </Tooltip>
                     <Tooltip title="Delete this eval" placement="left">
                       <MenuItem onClick={handleDeleteEvalClick}>
                         <ListItemIcon>
@@ -806,7 +801,6 @@ export default function ResultsView({
           debouncedSearchText={debouncedSearchValue}
           onFailureFilterToggle={handleFailureFilterToggle}
           onSearchTextChange={handleSearchTextChange}
-          setFilterMode={setFilterMode}
           zoom={resultsTableZoom}
         />
       </Box>
