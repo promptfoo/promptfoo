@@ -30,6 +30,8 @@ interface ProviderConfigEditorProps {
   validateAll?: boolean;
   onValidate?: (isValid: boolean) => void;
   providerType?: string;
+  onTargetTested?: (success: boolean) => void;
+  onSessionTested?: (success: boolean) => void;
 }
 
 const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigEditorProps>(
@@ -44,6 +46,8 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
       validateAll = false,
       onValidate,
       providerType,
+      onTargetTested,
+      onSessionTested,
     },
     ref,
   ) => {
@@ -252,6 +256,8 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
             urlError={urlError}
             setUrlError={setUrlError}
             updateFullTarget={setProvider}
+            onTargetTested={onTargetTested}
+            onSessionTested={onSessionTested}
           />
         )}
 

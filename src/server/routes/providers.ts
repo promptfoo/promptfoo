@@ -111,6 +111,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
           ...result,
           sessionId,
         },
+        transformedRequest: result?.metadata?.transformedRequest,
       } as ProviderTestResponse);
       return;
     }
@@ -124,6 +125,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
           ...result,
           sessionId,
         },
+        transformedRequest: result?.metadata?.transformedRequest,
       } as ProviderTestResponse)
       .status(200);
   } catch (e) {
@@ -244,6 +246,136 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     res.status(500).json({
       error: 'Failed to generate HTTP configuration',
       details: errorMessage,
+    });
+  }
+});
+
+// Test multi-turn session functionality
+providersRouter.post('/test-session', async (req: Request, res: Response): Promise<void> => {
+  const body = req.body;
+  const { provider: providerOptions, sessionConfig } = body;
+
+  try {
+    // Validate provider options
+    const validatedProvider = ProviderOptionsSchema.parse(providerOptions);
+    invariant(validatedProvider.id, 'Provider ID is required');
+
+    // First request - establish session with test data
+    const firstPrompt = 'Hello, please remember my name is TestUser';
+    const vars: Record<string, string> = {};
+
+    // Generate session ID for client-side sessions
+    if (sessionConfig?.sessionSource === 'client') {
+      vars['sessionId'] = uuidv4();
+    }
+
+    // Load provider and make first request
+    const loadedProvider = await loadApiProvider(validatedProvider.id, {
+      options: {
+        ...validatedProvider,
+        config: {
+          ...validatedProvider.config,
+          maxRetries: 1,
+          sessionSource: sessionConfig?.sessionSource,
+          sessionParser: sessionConfig?.sessionParser,
+        },
+      },
+    });
+
+    const firstResult = await loadedProvider.callApi(firstPrompt, {
+      debug: true,
+      prompt: { raw: firstPrompt, label: firstPrompt },
+      vars,
+    });
+
+    logger.debug(
+      dedent`[POST /providers/test-session] First request completed
+        prompt: ${firstPrompt}
+        sessionId: ${vars.sessionId || 'server-generated'}
+        response: ${JSON.stringify(firstResult?.output).substring(0, 200)}`,
+    );
+
+    // Get session ID (either from provider or from vars)
+    const sessionId = loadedProvider.getSessionId?.() ?? vars.sessionId ?? undefined;
+
+    // Update vars with session ID for second request
+    if (sessionId) {
+      vars['sessionId'] = sessionId;
+    }
+
+    // Second request - verify session persistence
+    const secondPrompt = 'What is my name?';
+    const secondResult = await loadedProvider.callApi(secondPrompt, {
+      debug: true,
+      prompt: { raw: secondPrompt, label: secondPrompt },
+      vars,
+    });
+
+    logger.debug(
+      dedent`[POST /providers/test-session] Second request completed
+        prompt: ${secondPrompt}
+        sessionId: ${sessionId}
+        response: ${JSON.stringify(secondResult?.output).substring(0, 200)}`,
+    );
+
+    // Check if the second response indicates session persistence
+    const responseText = (secondResult?.output || '').toString().toLowerCase();
+
+    // More strict checking - the response should explicitly mention the name from the first request
+    // and NOT say things like "I don't have access" or "I don't know"
+    const sessionWorking =
+      (responseText.includes('testuser') || responseText.includes('test user')) &&
+      !responseText.includes("don't have access") &&
+      !responseText.includes("don't know") &&
+      !responseText.includes('cannot remember') &&
+      !responseText.includes('no information') &&
+      !responseText.includes('not sure') &&
+      !responseText.includes('please tell me') &&
+      !responseText.includes('what is your name') &&
+      !responseText.includes('could you tell me');
+
+    // Also check if it's explicitly stating the name in a positive way
+    const explicitlyStatesName =
+      responseText.includes('your name is testuser') ||
+      responseText.includes('you are testuser') ||
+      responseText.includes('you told me your name is testuser') ||
+      responseText.includes('you said your name is testuser') ||
+      responseText.includes('you mentioned your name is testuser') ||
+      responseText.includes('name is testuser') ||
+      responseText.includes('testuser, ');
+
+    const finalSessionWorking = sessionWorking || explicitlyStatesName;
+
+    res.json({
+      success: finalSessionWorking,
+      message: finalSessionWorking
+        ? 'Session management is working correctly! The target remembered information across requests.'
+        : 'Session is NOT working. The target did not remember information from the first request. Check that your session configuration is correct and that your target properly maintains conversation state.',
+      details: {
+        sessionId: sessionId || 'Not extracted',
+        request1: {
+          prompt: firstPrompt,
+          sessionId: vars.sessionId,
+        },
+        response1: firstResult?.output,
+        request2: {
+          prompt: secondPrompt,
+          sessionId,
+        },
+        response2: secondResult?.output,
+      },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(
+      dedent`[POST /providers/test-session] Error testing session
+        error: ${errorMessage}
+        providerOptions: ${JSON.stringify(providerOptions)}`,
+    );
+    res.status(500).json({
+      success: false,
+      message: `Failed to test session: ${errorMessage}`,
+      error: errorMessage,
     });
   }
 });

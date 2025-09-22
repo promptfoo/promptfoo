@@ -12,9 +12,9 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { renderVarsInObject } from '../util/index';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { safeResolve } from '../util/pathUtils';
@@ -1863,6 +1863,8 @@ export class HttpProvider implements ApiProvider {
         statusText: response.statusText,
         headers: sanitizeAuthHeaders(response.headers),
       },
+      transformedRequest: transformedPrompt,
+      finalRequestBody: renderedConfig.body,
     };
 
     const rawText = response.data as string;
@@ -1970,12 +1972,12 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
     const ret: ProviderResponse = {};
-    if (context?.debug) {
-      ret.raw = response.data;
-      ret.metadata = {
-        headers: sanitizeAuthHeaders(response.headers),
-      };
-    }
+    ret.raw = response.data;
+    ret.metadata = {
+      headers: sanitizeAuthHeaders(response.headers),
+      transformedRequest: transformedPrompt,
+      finalRequestBody: parsedRequest.body?.text,
+    };
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
 
