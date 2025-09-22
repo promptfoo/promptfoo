@@ -7,7 +7,6 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';

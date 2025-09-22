@@ -243,7 +243,7 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
     if (isWrapped) {
       // Check what's in the body that JSDOM created
       const hasText = Array.from(document.body.childNodes).some(
-        (node: Node) => node.nodeType === 3 /* TEXT_NODE */ && node.textContent?.trim(),
+        (node) => node.nodeType === 3 /* TEXT_NODE */ && node.textContent?.trim(),
       );
 
       if (hasText) {
@@ -254,7 +254,7 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
 
     // Find all elements that are actually in the user's input
     const allElements = document.querySelectorAll('*');
-    const userProvidedElement = Array.from(allElements).find((element: Element) => {
+    const userProvidedElement = Array.from(allElements).find((element) => {
       const tagName = element.tagName.toLowerCase();
       // Skip JSDOM's auto-added elements unless user explicitly included them
       if (

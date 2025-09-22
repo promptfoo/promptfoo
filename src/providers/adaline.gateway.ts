@@ -309,10 +309,10 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
   checkRequestFormat(prompt: string): { formatType: 'gateway' | 'openai' } {
     const checkFormatRequestUsingConfig = (): { formatType: 'gateway' | 'openai' } => {
       if (this.config.tools && this.config.tools.length > 0) {
-        if ('definition' in this.config.tools[0]) {
+        if ('definition' in (this.config.tools[0] as any)) {
           // valid tool in config and sufficiently in gateway format
           return { formatType: 'gateway' };
-        } else if ('function' in this.config.tools[0]) {
+        } else if ('function' in (this.config.tools[0] as any)) {
           // valid tool in config and sufficiently in openai format
           return { formatType: 'openai' };
         }
