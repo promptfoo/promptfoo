@@ -1,5 +1,15 @@
+import { validate as isUUID } from 'uuid';
 import { PolicyObject } from '../../types';
 import { POLICY_METRIC_PREFIX } from './constants';
+
+/**
+ * Checks if a metric is a policy metric.
+ * @param metric - The metric to check.
+ * @returns True if the metric is a policy metric, false otherwise.
+ */
+export function isPolicyMetric(metric: string): boolean {
+  return metric.startsWith(POLICY_METRIC_PREFIX);
+}
 
 /**
  * Serializes a policy object as a metric. This allows the policy object to be persisted through
@@ -13,19 +23,47 @@ export function serializePolicyObjectAsMetric(policyObject: PolicyObject): strin
 
 /**
  * Deserializes a policy metric as a PolicyObject.
- * @param metric
- * @returns
+ * @param metric - The metric to deserialize.
+ * @returns The policy object if the metric is a policy metric, null otherwise.
  */
-export function deserializePolicyMetricsAsPolicyObject(metric: string): PolicyObject {
-  if (!metric.startsWith(POLICY_METRIC_PREFIX)) {
-    throw new Error(`Metric ${metric} is not a policy metric`);
+export function deserializePolicyMetricsAsPolicyObject(metric: string): PolicyObject | null {
+  if (!isPolicyMetric(metric)) {
+    return null;
   }
 
-  const [_, data] = metric.split(':');
-
-  if (!data) {
-    throw new Error(`Metric ${metric} is not a valid policy metric`);
+  try {
+    return JSON.parse(metric.replace(`${POLICY_METRIC_PREFIX}:`, '')) as PolicyObject;
+  } catch (error) {
+    console.error(`Error deserializing policy metric: ${error}`);
+    return null;
   }
+}
 
-  return JSON.parse(data) as PolicyObject;
+/**
+ * Formats a policy identifier as a metric.
+ * @param identifier Either the reusable policy's name or the inline policy's content hash.
+ * @returns The formatted policy identifier.
+ */
+export function formatPolicyIdentifierAsMetric(identifier: string): string {
+  return `Policy: ${identifier}`;
+}
+
+/**
+ * Makes a URL to a custom policy in the cloud.
+ * @param cloudAppUrl - The URL of the cloud app.
+ * @param policyId - The ID of the policy.
+ * @returns The URL to the custom policy in the cloud.
+ */
+export function makeCustomPolicyCloudUrl(cloudAppUrl: string, policyId: string): string {
+  return `${cloudAppUrl}/redteam/plugins/policies/${policyId}`;
+}
+
+/**
+ * Parses the policy id to determine if it's a reusable or inline policy. Reusable policies use
+ * v4 UUIDs whereas inline policies use a hash of the policy text.
+ * @param policyId – A PolicyObject.id value.
+ * @returns 'reusable' if the policy is a reusable policy, 'inline' if the policy is an inline policy.
+ */
+export function determinePolicyTypeFromId(policyId: string): 'reusable' | 'inline' {
+  return isUUID(policyId) ? 'reusable' : 'inline';
 }

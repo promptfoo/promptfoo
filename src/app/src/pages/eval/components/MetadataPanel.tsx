@@ -12,6 +12,7 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
+import { makeCustomPolicyCloudUrl } from '@promptfoo/redteam/plugins/policy/utils';
 import { ellipsize } from '../../../../../util/text';
 import useCloudConfig from '../../../hooks/useCloudConfig';
 
@@ -83,7 +84,7 @@ export function MetadataPanel({
             // Render a link to the policy in the cloud if cloud is enabled
             if (key === 'policyId' && cloudConfig?.isEnabled && cloudConfig?.appUrl) {
               urlDisplayValue = value;
-              value = `${cloudConfig?.appUrl}/redteam/plugins/policies/${value}`;
+              value = makeCustomPolicyCloudUrl(cloudConfig?.appUrl, value);
               isUrl = true;
             }
 

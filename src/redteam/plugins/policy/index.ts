@@ -106,6 +106,15 @@ export class PolicyPlugin extends RedteamPluginBase {
     return template;
   }
 
+  /**
+   * Constructs an assertion for the custom policy.
+   * It's worth noting that the metric is derived in manner which differs from how we typically construct plugins metrics i.e.
+   * we're storing the policy's metadata in the metric itself. This is a workaround from storing these values on the test case
+   * metadata and needing to access it in places which are inaccessible given the current data model (e.g. the headers returned
+   * by the API's eval table endpoint.)
+   * @param prompt
+   * @returns
+   */
   protected getAssertions(prompt: string): Assertion[] {
     const data: PolicyObject = {
       id: this.policyId

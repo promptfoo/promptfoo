@@ -1,6 +1,19 @@
+import {
+  deserializePolicyMetricsAsPolicyObject,
+  determinePolicyTypeFromId,
+  formatPolicyIdentifierAsMetric,
+  isPolicyMetric,
+  makeCustomPolicyCloudUrl,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
 
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
+import Link from '@mui/material/Link';
+import { styled } from '@mui/material/styles';
+import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
+import useCloudConfig from '../../../hooks/useCloudConfig';
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
@@ -51,15 +64,29 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
   return <span data-testid={`metric-value-${metric}`}>{score?.toFixed(2) ?? '0'}</span>;
 };
 
+const MetricTooltip = styled(({ className, ...props }: TooltipProps) => (
+  <Tooltip {...props} classes={{ popper: className }} />
+))(({ theme }) => ({
+  [`& .${tooltipClasses.tooltip}`]: {
+    backgroundColor: theme.palette.background.default,
+    color: theme.palette.text.primary,
+    boxShadow: theme.shadows[1],
+    padding: '16px',
+    maxWidth: '400px',
+  },
+}));
+
 const CustomMetrics = ({
   lookup,
   counts,
   metricTotals,
   onSearchTextChange,
   onMetricFilter,
-  truncationCount = 10,
+  truncationCount = 3,
   onShowMore,
 }: CustomMetricsProps) => {
+  const { data: cloudConfig } = useCloudConfig();
+
   if (!lookup || !Object.keys(lookup).length) {
     return null;
   }
@@ -79,30 +106,63 @@ const CustomMetrics = ({
     <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>
       {displayMetrics
         .sort(([metricA], [metricB]) => metricA.localeCompare(metricB))
-        .map(([metric, score]) =>
-          metric && typeof score !== 'undefined' ? (
+        .map(([metric, score]) => {
+          let displayLabel: string = metric;
+          let tooltipContent: React.ReactNode | null = null;
+          if (isPolicyMetric(metric)) {
+            const policy = deserializePolicyMetricsAsPolicyObject(metric);
+            if (policy) {
+              displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
+              tooltipContent = (
+                <>
+                  <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 600, mb: 1 }}>
+                    {policy.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 400 }}>
+                    {policy.text}
+                  </Typography>
+                  {determinePolicyTypeFromId(policy.id) === 'reusable' && cloudConfig?.appUrl && (
+                    <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 400, mt: 1 }}>
+                      <Link
+                        href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policy.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                      >
+                        <span>View policy in Promptfoo Cloud</span>
+                        <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
+                      </Link>
+                    </Typography>
+                  )}
+                </>
+              );
+            }
+          }
+
+          return metric && typeof score !== 'undefined' ? (
             <div
               data-testid={`metric-${metric}`}
-              onClick={() => handleMetricClick(metric)}
               className={`metric-chip ${onMetricFilter ? 'filterable' : ''}`}
               key={`${metric}-${score}`}
             >
-              <div className="metric-content">
-                <span data-testid={`metric-name-${metric}`} className="metric-name">
-                  {metric}
-                </span>
-                <span className="metric-value">
-                  <MetricValue
-                    metric={metric}
-                    score={score}
-                    counts={counts}
-                    metricTotals={metricTotals}
-                  />
-                </span>
-              </div>
+              <MetricTooltip title={tooltipContent}>
+                <div className="metric-content" onClick={() => handleMetricClick(metric)}>
+                  <span data-testid={`metric-name-${metric}`} className="metric-name">
+                    {displayLabel}
+                  </span>
+                  <span className="metric-value">
+                    <MetricValue
+                      metric={metric}
+                      score={score}
+                      counts={counts}
+                      metricTotals={metricTotals}
+                    />
+                  </span>
+                </div>
+              </MetricTooltip>
             </div>
-          ) : null,
-        )}
+          ) : null;
+        })}
       {metrics.length > truncationCount && (
         <div
           className="show-more-toggle clickable"
