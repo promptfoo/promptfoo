@@ -1,7 +1,7 @@
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
-  deserializePolicyMetricsAsPolicyObject,
+  deserializePolicyMetricAsPolicyObject,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
@@ -65,7 +65,7 @@ function extractPolicyOptionsFromMetrics(table: EvaluateTable | null | undefined
     if (prompt.metrics?.namedScores) {
       Object.keys(prompt.metrics.namedScores).forEach((metric) => {
         if (isPolicyMetric(metric)) {
-          const policy = deserializePolicyMetricsAsPolicyObject(metric);
+          const policy = deserializePolicyMetricAsPolicyObject(metric);
           if (policy) {
             policyIds.add(policy.id);
           }
@@ -93,7 +93,7 @@ function extractPolicyIdToNameMap(
     if (prompt.metrics?.namedScores) {
       Object.keys(prompt.metrics.namedScores).forEach((metric) => {
         if (isPolicyMetric(metric)) {
-          const policy = deserializePolicyMetricsAsPolicyObject(metric);
+          const policy = deserializePolicyMetricAsPolicyObject(metric);
           if (policy) {
             // Store the policy name if available, otherwise undefined
             policyMap[policy.id] = policy.name;

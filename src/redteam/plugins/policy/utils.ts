@@ -26,7 +26,7 @@ export function serializePolicyObjectAsMetric(policyObject: PolicyObject): strin
  * @param metric - The metric to deserialize.
  * @returns The policy object if the metric is a policy metric, null otherwise.
  */
-export function deserializePolicyMetricsAsPolicyObject(metric: string): PolicyObject | null {
+export function deserializePolicyMetricAsPolicyObject(metric: string): PolicyObject | null {
   if (!isPolicyMetric(metric)) {
     return null;
   }

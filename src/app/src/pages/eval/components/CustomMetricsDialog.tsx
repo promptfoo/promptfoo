@@ -16,7 +16,7 @@ import {
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
 import {
-  deserializePolicyMetricsAsPolicyObject,
+  deserializePolicyMetricAsPolicyObject,
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
@@ -106,7 +106,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       const filter = {
         type: asPolicy ? ('policy' as const) : ('metric' as const),
         operator: 'equals' as const,
-        value: asPolicy ? (deserializePolicyMetricsAsPolicyObject(metric)?.id ?? '') : metric,
+        value: asPolicy ? (deserializePolicyMetricAsPolicyObject(metric)?.id ?? '') : metric,
         logicOperator: 'or' as const,
       };
 
@@ -150,7 +150,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
         headerAlign: 'left',
         valueGetter: (value) => {
           if (isPolicyMetric(value)) {
-            const policy = deserializePolicyMetricsAsPolicyObject(value);
+            const policy = deserializePolicyMetricAsPolicyObject(value);
             if (!policy) {
               return value;
             }

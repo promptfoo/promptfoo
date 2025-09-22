@@ -1,5 +1,5 @@
 import {
-  deserializePolicyMetricsAsPolicyObject,
+  deserializePolicyMetricAsPolicyObject,
   determinePolicyTypeFromId,
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
@@ -100,7 +100,7 @@ const CustomMetrics = ({
       const filter = {
         type: asPolicy ? ('policy' as const) : ('metric' as const),
         operator: 'equals' as const,
-        value: asPolicy ? (deserializePolicyMetricsAsPolicyObject(value)?.id ?? '') : value,
+        value: asPolicy ? (deserializePolicyMetricAsPolicyObject(value)?.id ?? '') : value,
         logicOperator: 'or' as const,
       };
 
@@ -130,7 +130,7 @@ const CustomMetrics = ({
           let displayLabel: string = metric;
           let tooltipContent: React.ReactNode | null = null;
           if (isPolicyMetric(metric)) {
-            const policy = deserializePolicyMetricsAsPolicyObject(metric);
+            const policy = deserializePolicyMetricAsPolicyObject(metric);
             if (policy) {
               displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
               tooltipContent = (
