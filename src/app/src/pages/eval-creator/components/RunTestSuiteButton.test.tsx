@@ -50,4 +50,3 @@ describe('RunTestSuiteButton', () => {
     expect(button).not.toBeDisabled();
   });
 });
-
