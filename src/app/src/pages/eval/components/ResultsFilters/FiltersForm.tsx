@@ -431,11 +431,32 @@ function Filter({
           width={150}
         />
 
-        <Box sx={{ flex: 1, minWidth: 200, maxWidth: 300 }}>
-          {value.type === 'metric' ||
-          value.type === 'plugin' ||
-          value.type === 'strategy' ||
-          value.type === 'severity' ? (
+        {/* Show helpful text when exists operator is selected, otherwise show value input */}
+        {value.operator === 'exists' ? (
+          <Box
+            sx={{
+              flex: 1,
+              minWidth: 200,
+              maxWidth: 300,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 40,
+              backgroundColor: 'action.hover',
+              borderRadius: 1,
+              px: 2,
+            }}
+          >
+            <span style={{ fontSize: '0.875rem', fontStyle: 'italic' }}>
+              No value needed - checks if key exists
+            </span>
+          </Box>
+        ) : (
+          <Box sx={{ flex: 1, minWidth: 200, maxWidth: 300 }}>
+            {value.type === 'metric' ||
+            value.type === 'plugin' ||
+            value.type === 'strategy' ||
+            value.type === 'severity' ? (
             <Dropdown
               id={`${index}-value-select`}
               label={TYPE_LABELS_BY_TYPE[value.type]}
@@ -499,15 +520,13 @@ function Filter({
               label="Value"
               variant="outlined"
               size="small"
-              value={value.operator === 'exists' ? '' : value.value}
+              value={value.value}
               onChange={handleValueChange}
-              disabled={value.operator === 'exists'}
-              placeholder={value.operator === 'exists' ? 'No value needed for exists' : undefined}
-              helperText={value.operator === 'exists' ? 'Checks if the metadata key exists' : undefined}
               fullWidth
             />
           )}
-        </Box>
+          </Box>
+        )}
       </Box>
     </Box>
   );

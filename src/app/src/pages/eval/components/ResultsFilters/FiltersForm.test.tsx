@@ -1288,7 +1288,7 @@ describe('FiltersForm', () => {
       expect(existsOption).not.toBeInTheDocument();
     });
 
-    it('should disable value input when exists operator is selected', () => {
+    it('should hide value input when exists operator is selected', () => {
       const initialFilter: ResultsFilter = {
         id: 'filter-1',
         type: 'metadata',
@@ -1329,10 +1329,13 @@ describe('FiltersForm', () => {
         </WithTheme>,
       );
 
-      const valueInput = screen.getByRole('textbox', { name: /Value/i });
-      expect(valueInput).toBeInTheDocument();
-      expect(valueInput).toBeDisabled();
-      expect(valueInput).toHaveAttribute('placeholder', 'No value needed for exists');
+      // Value input should not be present when exists is selected
+      const valueInput = screen.queryByRole('textbox', { name: /Value/i });
+      expect(valueInput).not.toBeInTheDocument();
+
+      // Should show helpful text instead
+      const helperText = screen.getByText('No value needed - checks if key exists');
+      expect(helperText).toBeInTheDocument();
     });
 
     it('should clear value when switching to exists operator', async () => {
@@ -1392,11 +1395,11 @@ describe('FiltersForm', () => {
       });
     });
 
-    it('should show helpful placeholder text for exists operator', () => {
+    it('should show helpful text when exists operator is selected', () => {
       const initialFilter: ResultsFilter = {
         id: 'filter-1',
         type: 'metadata',
-        operator: 'exists',
+        operator: 'equals',
         value: '',
         field: 'testField',
         sortIndex: 0,
@@ -1433,11 +1436,13 @@ describe('FiltersForm', () => {
         </WithTheme>,
       );
 
+      // Initially should show value input for equals
       const valueInput = screen.getByRole('textbox', { name: /Value/i });
-      expect(valueInput).toHaveAttribute('placeholder', 'No value needed for exists');
+      expect(valueInput).toBeInTheDocument();
 
-      const helperText = screen.getByText('Checks if the metadata key exists');
-      expect(helperText).toBeInTheDocument();
+      // No helpful text should be present yet
+      const helperText = screen.queryByText('No value needed - checks if key exists');
+      expect(helperText).not.toBeInTheDocument();
     });
   });
 });
