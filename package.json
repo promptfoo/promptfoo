@@ -86,17 +86,6 @@
     }
   },
   "peerDependencies": {
-    "@adaline/anthropic": "1.6.0",
-    "@adaline/azure": "1.5.0",
-    "@adaline/gateway": "1.8.0",
-    "@adaline/google": "1.7.0",
-    "@adaline/groq": "1.7.0",
-    "@adaline/open-router": "1.4.0",
-    "@adaline/openai": "1.8.0",
-    "@adaline/provider": "1.4.0",
-    "@adaline/together-ai": "1.4.0",
-    "@adaline/types": "1.8.0",
-    "@adaline/vertex": "1.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.879.0",
     "@aws-sdk/client-bedrock-runtime": "^3.879.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.879.0",
@@ -121,17 +110,6 @@
     "sharp": "^0.34.4"
   },
   "devDependencies": {
-    "@adaline/anthropic": "1.7.1",
-    "@adaline/azure": "1.6.2",
-    "@adaline/gateway": "1.9.1",
-    "@adaline/google": "1.8.1",
-    "@adaline/groq": "1.8.2",
-    "@adaline/open-router": "1.5.1",
-    "@adaline/openai": "1.10.0",
-    "@adaline/provider": "1.5.1",
-    "@adaline/together-ai": "1.5.1",
-    "@adaline/types": "1.9.1",
-    "@adaline/vertex": "1.7.1",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.891.0",
     "@aws-sdk/client-bedrock-runtime": "^3.891.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.891.0",
@@ -198,6 +176,17 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
+    "@adaline/anthropic": "1.7.1",
+    "@adaline/azure": "1.6.2",
+    "@adaline/gateway": "1.9.1",
+    "@adaline/google": "1.8.1",
+    "@adaline/groq": "1.8.2",
+    "@adaline/open-router": "1.5.1",
+    "@adaline/openai": "1.10.0",
+    "@adaline/provider": "1.5.1",
+    "@adaline/together-ai": "1.5.1",
+    "@adaline/types": "1.9.1",
+    "@adaline/vertex": "1.7.1",
     "@biomejs/cli-darwin-arm64": "2.2.4",
     "@biomejs/cli-darwin-x64": "2.2.4",
     "@biomejs/cli-linux-x64": "2.2.4",
@@ -285,7 +274,40 @@
     }
   },
   "overrides": {
-    "zod": "^4.1.11"
+    "zod": "^4.1.11",
+    "@adaline/anthropic": {
+      "zod": "^4.1.11"
+    },
+    "@adaline/azure": {
+      "zod": "^4.1.11"
+    },
+    "@adaline/gateway": {
+      "zod": "^4.1.11"
+    },
+    "@adaline/google": {
+      "zod": "^4.1.11"
+    },
+    "@adaline/groq": {
+      "zod": "^4.1.11"
+    },
+    "@adaline/open-router": {
+      "zod": "^4.1.11"
+    },
+    "@adaline/openai": {
+      "zod": "^4.1.11"
+    },
+    "@adaline/provider": {
+      "zod": "^4.1.11"
+    },
+    "@adaline/together-ai": {
+      "zod": "^4.1.11"
+    },
+    "@adaline/types": {
+      "zod": "^4.1.11"
+    },
+    "@adaline/vertex": {
+      "zod": "^4.1.11"
+    }
   },
   "pnpm": {
     "onlyBuiltDependencies": [
