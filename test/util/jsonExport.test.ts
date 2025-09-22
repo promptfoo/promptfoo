@@ -220,7 +220,16 @@ describe('JSON export with improved error handling', () => {
 
       // Verify exact structure
       expect(Object.keys(parsed).sort()).toEqual(
-        ['id', 'createdAt', 'author', 'evalId', 'results', 'config', 'shareableUrl', 'metadata'].sort(),
+        [
+          'id',
+          'createdAt',
+          'author',
+          'evalId',
+          'results',
+          'config',
+          'shareableUrl',
+          'metadata',
+        ].sort(),
       );
 
       expect(parsed.results).toEqual(expectedSummary);
