@@ -370,7 +370,14 @@ function Filter({
           width={150}
         />
 
-        <Box sx={{ flex: 1, minWidth: 200, maxWidth: 300 }}>
+        <Box
+          sx={{
+            // NOTE: Do not set a max-width here: this container requires dynamic width which resizes according
+            // to the width of its contents i.e. the dropdown values.
+            flex: 1,
+            minWidth: 250,
+          }}
+        >
           {value.type === 'metric' ||
           value.type === 'plugin' ||
           value.type === 'strategy' ||
