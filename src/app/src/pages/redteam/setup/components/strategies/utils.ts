@@ -27,6 +27,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'jailbreak:composite': 5,
   'jailbreak:likert': 1,
   'jailbreak:tree': 150,
+  layer: 1,
   leetspeak: 1,
   'math-prompt': 1,
   'mischievous-user': 5,
@@ -34,7 +35,6 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   multilingual: 3, // This won't matter, we multiply all probes by number of languages
   'other-encodings': 1,
   emoji: 1,
-  pandamonium: 5,
   piglatin: 1,
   'prompt-injection': 1,
   retry: 1,

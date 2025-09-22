@@ -30,12 +30,12 @@ interface PromptDialogProps {
   showDatasetColumn?: boolean;
 }
 
-const PromptDialog: React.FC<PromptDialogProps> = ({
+const PromptDialog = ({
   openDialog,
   handleClose,
   selectedPrompt,
   showDatasetColumn = true,
-}) => {
+}: PromptDialogProps) => {
   const [copySnackbar, setCopySnackbar] = React.useState(false);
 
   const sortedEvals = useMemo(

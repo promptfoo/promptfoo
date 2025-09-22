@@ -114,24 +114,6 @@ describe('StrategyItem', () => {
       expect(screen.getByText('Multi-modal')).toBeInTheDocument();
     });
 
-    it('shows Experimental pill for pandamonium strategy', () => {
-      const experimentalStrategy: StrategyCardData = {
-        ...baseStrategy,
-        id: 'pandamonium',
-      };
-
-      render(
-        <StrategyItem
-          strategy={experimentalStrategy}
-          isSelected={false}
-          onToggle={mockOnToggle}
-          onConfigClick={mockOnConfigClick}
-        />,
-      );
-
-      expect(screen.getByText('Experimental')).toBeInTheDocument();
-    });
-
     it('renders multiple badges when a strategy belongs to multiple categories', () => {
       const multiCategoryStrategy: StrategyCardData = {
         ...baseStrategy,

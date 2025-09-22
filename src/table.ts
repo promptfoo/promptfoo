@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from './constants';
-import { type EvaluateTable, ResultFailureReason } from './types';
+import { type EvaluateTable, ResultFailureReason } from './types/index';
 import { ellipsize } from './util/text';
 
 export function generateTable(
@@ -70,5 +70,5 @@ export function wrapTable(
   for (const row of rows) {
     table.push(Object.values(row));
   }
-  return table;
+  return table.toString();
 }

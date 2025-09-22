@@ -4,7 +4,7 @@ import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { getTokenUsage } from './util';
 
-import type { ProviderEmbeddingResponse } from '../../types';
+import type { ProviderEmbeddingResponse } from '../../types/index';
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
@@ -32,12 +32,14 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        false,
+        this.config.maxRetries,
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${err}`);
       throw err;
     }
-    logger.debug(`\tOpenAI embeddings API response: ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;

@@ -1,8 +1,9 @@
 import Clone from 'rfdc';
 import { z } from 'zod';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
@@ -251,7 +252,7 @@ export function maybeCoerceToGeminiFormat(
     return { contents: contents as GeminiFormat, coerced: false, systemInstruction: undefined };
   }
 
-  const systemPromptParts: { text: string }[] = [];
+  let systemPromptParts: { text: string }[] = [];
   coercedContents = coercedContents.filter((message) => {
     if (message.role === ('system' as any) && message.parts.length > 0) {
       systemPromptParts.push(
@@ -263,6 +264,19 @@ export function maybeCoerceToGeminiFormat(
     }
     return true;
   });
+
+  // Convert system-only prompts to user messages
+  // Gemini does not support execution with systemInstruction only
+  if (coercedContents.length === 0 && systemPromptParts.length > 0) {
+    coercedContents = [
+      {
+        role: 'user',
+        parts: systemPromptParts,
+      },
+    ];
+    coerced = true;
+    systemPromptParts = [];
+  }
 
   return {
     contents: coercedContents,
@@ -326,7 +340,17 @@ export async function getGoogleClient({ credentials }: { credentials?: string } 
     client = await cachedAuth.getClient();
   }
 
-  const projectId = await cachedAuth.getProjectId();
+  // Try to get project ID from Google Auth Library, but don't fail if it can't detect it
+  // This allows the fallback logic in resolveProjectId to work properly
+  let projectId;
+  try {
+    projectId = await cachedAuth.getProjectId();
+  } catch {
+    // If Google Auth Library can't detect project ID from environment,
+    // let resolveProjectId handle the fallback logic
+    projectId = undefined;
+  }
+
   return { client, projectId };
 }
 
@@ -343,12 +367,12 @@ export async function resolveProjectId(
   });
 
   return (
-    googleProjectId ||
     config.projectId ||
     env?.VERTEX_PROJECT_ID ||
     env?.GOOGLE_PROJECT_ID ||
-    process.env.VERTEX_PROJECT_ID ||
-    process.env.GOOGLE_PROJECT_ID ||
+    getEnvString('VERTEX_PROJECT_ID') ||
+    getEnvString('GOOGLE_PROJECT_ID') ||
+    googleProjectId ||
     ''
   );
 }

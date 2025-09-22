@@ -5,7 +5,7 @@ import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
@@ -87,7 +87,7 @@ const AboutPageContent = () => {
                 name: 'Lily Liu',
                 title: 'Business Operations Lead',
                 image: '/img/team/lily.jpeg',
-                bio: 'Lily brings investment and operational expertise from CVC Capital Partners and Evercore, where she spent five years evaluating software companies and tech M&A deals. At Promptfoo, she builds the systems and processes that enable our rapid growth while maintaining operational excellence. She holds a BS in Computer Science from Stanford.',
+                bio: 'Lily brings investment and operational expertise from CVC Capital Partners and Evercore. At Promptfoo, she designs the systems and processes that power rapid growth and long-term scalability.',
               },
               {
                 name: 'Steve Klein',
@@ -142,6 +142,12 @@ const AboutPageContent = () => {
                 title: 'Founding Developer Advocate',
                 image: '/img/team/tabs.jpeg',
                 bio: 'Tabs fronts developer education, community management, and technical writing backed by a wealth of experience in design and software development. Learn more at your <a href="https://ladyofcode.com" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">own peril</a>.',
+              },
+              {
+                name: 'Alan DeLong',
+                title: 'Software Engineer',
+                image: '/img/team/alan.jpeg',
+                bio: 'Alan brings almost two decades of experience building and shipping software at scale. He has led and contributed on teams at companies like Ceros, Thoughtworks, and Parature.',
               },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>

@@ -1,25 +1,42 @@
 import fs from 'fs';
 import path from 'path';
 
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { ProxyAgent } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
+import logger from '../src/logger';
+import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
+  clearAgentCache,
   fetchWithProxy,
   fetchWithRetries,
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
-  sanitizeUrl,
-} from '../src/fetch';
-import logger from '../src/logger';
-import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
+} from '../src/util/fetch/index';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 
 jest.mock('../src/util/time', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+  logRequestResponse: jest.fn(),
+}));
+
+jest.mock('../src/globalConfig/cloud', () => ({
+  CLOUD_API_HOST: 'https://api.promptfoo.dev',
+  cloudConfig: {
+    getApiKey: jest.fn(),
+  },
 }));
 
 jest.mock('undici', () => {
@@ -48,7 +65,6 @@ jest.mock('undici', () => {
   return {
     ProxyAgent: mockProxyAgentConstructor,
     Agent: mockAgentConstructor,
-    setGlobalDispatcher: jest.fn(),
   };
 });
 
@@ -75,9 +91,6 @@ jest.mock('../src/envars', () => {
       }
       if (key === 'PROMPTFOO_CA_CERT_PATH' && process.env.PROMPTFOO_CA_CERT_PATH) {
         return process.env.PROMPTFOO_CA_CERT_PATH;
-      }
-      if (key === 'PROMPTFOO_INSECURE_SSL') {
-        return process.env.PROMPTFOO_INSECURE_SSL || defaultValue;
       }
       return defaultValue;
     }),
@@ -115,9 +128,9 @@ jest.mock('../src/cliState', () => ({
 describe('fetchWithProxy', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearAgentCache(); // Clear the agent cache before each test
     jest.spyOn(global, 'fetch').mockImplementation();
     jest.mocked(ProxyAgent).mockClear();
-    jest.mocked(setGlobalDispatcher).mockClear();
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -126,10 +139,12 @@ describe('fetchWithProxy', () => {
     delete process.env.npm_config_http_proxy;
     delete process.env.npm_config_proxy;
     delete process.env.all_proxy;
+    delete process.env.PROMPTFOO_CA_CERT_PATH; // Clean up CA cert path
   });
 
   afterEach(() => {
     jest.resetAllMocks();
+    delete process.env.PROMPTFOO_CA_CERT_PATH; // Clean up CA cert path after each test
   });
 
   it('should add version header to all requests', async () => {
@@ -142,6 +157,7 @@ describe('fetchWithProxy', () => {
         headers: expect.objectContaining({
           'x-promptfoo-version': VERSION,
         }),
+        dispatcher: expect.any(Object),
       }),
     );
   });
@@ -160,6 +176,7 @@ describe('fetchWithProxy', () => {
           Authorization: expect.any(String),
           'x-promptfoo-version': VERSION,
         },
+        dispatcher: expect.any(Object),
       }),
     );
   });
@@ -177,6 +194,7 @@ describe('fetchWithProxy', () => {
           'Content-Type': 'application/json',
           'x-promptfoo-version': VERSION,
         },
+        dispatcher: expect.any(Object),
       }),
     );
   });
@@ -212,6 +230,88 @@ describe('fetchWithProxy', () => {
         },
       }),
     );
+  });
+
+  it('should cache agents and reuse them for duplicate requests', async () => {
+    const undici = jest.requireMock('undici');
+    const { Agent, ProxyAgent } = undici;
+
+    // Test 1: Multiple requests without proxy should only create one agent
+    await fetchWithProxy('https://api.example.com/endpoint1');
+    await fetchWithProxy('https://api.example.com/endpoint2');
+    await fetchWithProxy('https://api.example.com/endpoint3');
+
+    // Agent should only be created once for non-proxy requests
+    expect(Agent).toHaveBeenCalledTimes(1);
+
+    // Test 2: Multiple requests with proxy should only create one proxy agent
+    process.env.HTTPS_PROXY = 'http://proxy.example.com:8080';
+
+    await fetchWithProxy('https://external-api.com/data1');
+    await fetchWithProxy('https://external-api.com/data2');
+    await fetchWithProxy('https://external-api.com/data3');
+
+    // ProxyAgent should only be created once for the same proxy configuration
+    expect(ProxyAgent).toHaveBeenCalledTimes(1);
+
+    // Test 3: Different proxy should create a new agent
+    process.env.HTTPS_PROXY = 'http://different-proxy.example.com:9090';
+
+    await fetchWithProxy('https://another-api.com/resource');
+
+    // Now ProxyAgent should have been called twice (different proxy)
+    expect(ProxyAgent).toHaveBeenCalledTimes(2);
+
+    // Test 4: Going back to no proxy should reuse the original non-proxy agent
+    delete process.env.HTTPS_PROXY;
+
+    await fetchWithProxy('https://api.example.com/endpoint4');
+
+    // Agent should still only have been called once (reusing cached)
+    expect(Agent).toHaveBeenCalledTimes(1);
+
+    // Test 5: Going back to the first proxy should reuse that cached agent
+    process.env.HTTPS_PROXY = 'http://proxy.example.com:8080';
+
+    await fetchWithProxy('https://external-api.com/data4');
+
+    // ProxyAgent should still be at 2 calls (reusing first proxy's agent)
+    expect(ProxyAgent).toHaveBeenCalledTimes(2);
+  });
+
+  it('should create different agents for different TLS configurations', async () => {
+    const undici = jest.requireMock('undici');
+    const { Agent, ProxyAgent } = undici;
+
+    // Reset mocks to ensure clean state
+    jest.mocked(Agent).mockClear();
+    jest.mocked(ProxyAgent).mockClear();
+    clearAgentCache();
+
+    // Test 1: Request with default TLS settings (rejectUnauthorized defaults to false in test env)
+    delete process.env.PROMPTFOO_INSECURE_SSL;
+    await fetchWithProxy('https://api.example.com/data1');
+    expect(Agent).toHaveBeenCalledTimes(1);
+
+    // Test 2: Same TLS settings reuse the agent
+    await fetchWithProxy('https://api.example.com/data2');
+    expect(Agent).toHaveBeenCalledTimes(1);
+
+    // Test 3: Request with proxy uses ProxyAgent instead
+    process.env.HTTPS_PROXY = 'http://proxy.example.com:8080';
+    await fetchWithProxy('https://api.example.com/data3');
+    expect(ProxyAgent).toHaveBeenCalledTimes(1);
+    expect(Agent).toHaveBeenCalledTimes(1); // Still just 1 regular Agent
+
+    // Test 4: Same proxy config reuses the ProxyAgent
+    await fetchWithProxy('https://api.example.com/data4');
+    expect(ProxyAgent).toHaveBeenCalledTimes(1);
+
+    // Test 5: Back to no proxy reuses original Agent
+    delete process.env.HTTPS_PROXY;
+    await fetchWithProxy('https://api.example.com/data5');
+    expect(Agent).toHaveBeenCalledTimes(1); // Reuses first agent
+    expect(ProxyAgent).toHaveBeenCalledTimes(1); // ProxyAgent count unchanged
   });
 
   it('should warn and prefer existing Authorization header over URL credentials', async () => {
@@ -340,7 +440,6 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('should handle missing CA certificate file gracefully', async () => {
@@ -382,7 +481,6 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
@@ -419,7 +517,6 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('should resolve CA certificate path relative to basePath when available', async () => {
@@ -480,7 +577,6 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
     cliState.basePath = undefined;
   });
@@ -546,7 +642,6 @@ describe('fetchWithProxy', () => {
         },
         headersTimeout: REQUEST_TIMEOUT_MS,
       });
-      expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
       const debugCalls = jest.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
@@ -583,7 +678,6 @@ describe('fetchWithProxy', () => {
         },
         headersTimeout: REQUEST_TIMEOUT_MS,
       });
-      expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
       const debugCalls = jest.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
@@ -611,7 +705,6 @@ describe('fetchWithProxy', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 });
 
@@ -912,195 +1005,12 @@ describe('fetchWithRetries', () => {
   });
 });
 
-describe('sanitizeUrl', () => {
-  it('should mask credentials in URLs', () => {
-    const url = 'https://username:password@example.com/api';
-    expect(sanitizeUrl(url)).toBe('https://***:***@example.com/api');
-  });
-
-  it('should handle URLs without credentials', () => {
-    const url = 'https://example.com/api';
-    expect(sanitizeUrl(url)).toBe(url);
-  });
-
-  it('should return original string for invalid URLs', () => {
-    const invalidUrl = 'not-a-url';
-    expect(sanitizeUrl(invalidUrl)).toBe(invalidUrl);
-  });
-
-  describe('query parameter sanitization', () => {
-    it('should sanitize api_key parameter', () => {
-      const url = 'https://example.com/api?api_key=sk_live_abc123&other=value';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?api_key=%5BREDACTED%5D&other=value');
-    });
-
-    it('should sanitize api-key parameter (hyphenated)', () => {
-      const url = 'https://example.com/api?api-key=secret123';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?api-key=%5BREDACTED%5D');
-    });
-
-    it('should sanitize token parameter', () => {
-      const url = 'https://example.com/api?token=bearer_token_123&normal=param';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?token=%5BREDACTED%5D&normal=param');
-    });
-
-    it('should sanitize password parameter', () => {
-      const url = 'https://example.com/api?username=user&password=secret123';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?username=user&password=%5BREDACTED%5D');
-    });
-
-    it('should sanitize secret parameter', () => {
-      const url = 'https://example.com/api?secret=mysecret&client_secret=clientsecret';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?secret=%5BREDACTED%5D&client_secret=%5BREDACTED%5D',
-      );
-    });
-
-    it('should sanitize signature and sig parameters', () => {
-      const url = 'https://example.com/api?signature=sig123&sig=sig456';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?signature=%5BREDACTED%5D&sig=%5BREDACTED%5D');
-    });
-
-    it('should sanitize access_token and refresh_token parameters', () => {
-      const url = 'https://example.com/api?access_token=access123&refresh_token=refresh456';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?access_token=%5BREDACTED%5D&refresh_token=%5BREDACTED%5D',
-      );
-    });
-
-    it('should sanitize id_token parameter', () => {
-      const url = 'https://example.com/api?id_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?id_token=%5BREDACTED%5D');
-    });
-
-    it('should sanitize authorization parameter', () => {
-      const url = 'https://example.com/api?authorization=Bearer%20token123';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?authorization=%5BREDACTED%5D');
-    });
-
-    it('should handle case-insensitive parameter matching', () => {
-      const url = 'https://example.com/api?API_KEY=secret&Token=bearer&PASSWORD=pass';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?API_KEY=%5BREDACTED%5D&Token=%5BREDACTED%5D&PASSWORD=%5BREDACTED%5D',
-      );
-    });
-
-    it('should handle multiple sensitive parameters', () => {
-      const url =
-        'https://example.com/api?api_key=key123&token=tok456&password=pass789&normal=value';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?api_key=%5BREDACTED%5D&token=%5BREDACTED%5D&password=%5BREDACTED%5D&normal=value',
-      );
-    });
-
-    it('should handle URLs with both credentials and sensitive parameters', () => {
-      const url = 'https://user:pass@example.com/api?api_key=secret123&normal=value';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://***:***@example.com/api?api_key=%5BREDACTED%5D&normal=value');
-    });
-
-    it('should preserve non-sensitive parameters', () => {
-      const url = 'https://example.com/api?limit=10&offset=20&format=json&api_key=secret';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?limit=10&offset=20&format=json&api_key=%5BREDACTED%5D',
-      );
-    });
-
-    it('should handle URLs with no query parameters', () => {
-      const url = 'https://example.com/api';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(url);
-    });
-
-    it('should handle empty query parameter values', () => {
-      const url = 'https://example.com/api?api_key=&normal=value';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?api_key=%5BREDACTED%5D&normal=value');
-    });
-
-    it('should continue sanitizing if search params handling fails', () => {
-      // Mock a scenario where searchParams throws an error
-      const originalURL = global.URL;
-      const mockURL = jest.fn().mockImplementation((url) => {
-        const urlObj = new originalURL(url);
-        Object.defineProperty(urlObj, 'searchParams', {
-          get: () => {
-            throw new Error('SearchParams error');
-          },
-        });
-        return urlObj;
-      });
-      global.URL = mockURL as any;
-
-      const url = 'https://user:pass@example.com/api?api_key=secret';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://***:***@example.com/api?api_key=secret'); // Credentials masked, params not
-
-      global.URL = originalURL;
-    });
-  });
-
-  describe('edge cases', () => {
-    it('should handle empty string input', () => {
-      expect(sanitizeUrl('')).toBe('');
-    });
-
-    it('should handle whitespace-only input', () => {
-      expect(sanitizeUrl('   ')).toBe('   ');
-    });
-
-    it('should handle non-string input gracefully', () => {
-      expect(sanitizeUrl(null as any)).toBe(null);
-      expect(sanitizeUrl(undefined as any)).toBe(undefined);
-      expect(sanitizeUrl(123 as any)).toBe(123);
-    });
-
-    it('should handle URLs with port numbers', () => {
-      const url = 'https://user:pass@example.com:8080/api?api_key=secret';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://***:***@example.com:8080/api?api_key=%5BREDACTED%5D');
-    });
-
-    it('should handle URLs with hash fragments', () => {
-      const url = 'https://example.com/api?api_key=secret#section';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?api_key=%5BREDACTED%5D#section');
-    });
-
-    it('should handle URLs with encoded characters', () => {
-      const url = 'https://example.com/api?api_key=secret%20key&normal=value%20with%20spaces';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?api_key=%5BREDACTED%5D&normal=value+with+spaces',
-      );
-    });
-
-    it('should handle malformed URLs gracefully', () => {
-      const malformedUrl = 'https://[invalid-host]/api?api_key=secret';
-      const result = sanitizeUrl(malformedUrl);
-      expect(result).toBe(malformedUrl); // Should return original if URL parsing fails
-    });
-  });
-});
-
 describe('fetchWithProxy with NO_PROXY', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearAgentCache(); // Clear the agent cache before each test
     jest.spyOn(global, 'fetch').mockImplementation();
     jest.mocked(ProxyAgent).mockClear();
-    jest.mocked(setGlobalDispatcher).mockClear();
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -1180,7 +1090,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('should use proxy for domains not in NO_PROXY', async () => {
@@ -1196,7 +1105,6 @@ describe('fetchWithProxy with NO_PROXY', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('should handle wildcard patterns in NO_PROXY', async () => {

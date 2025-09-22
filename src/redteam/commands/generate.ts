@@ -14,18 +14,21 @@ import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { getProviderIds } from '../../providers';
+import { getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
+import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index';
 import {
+  checkCloudPermissions,
   getCloudDatabaseId,
   getConfigFromCloud,
+  getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
-import { writePromptfooConfig } from '../../util/config/manage';
+import { writePromptfooConfig } from '../../util/config/writer';
+import { getCustomPolicies } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
@@ -39,13 +42,16 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { isValidPolicyObject } from '../plugins/policy';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
 import type {
+  PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
+  RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
@@ -108,6 +114,7 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
+  let resolvedConfigMetadata: Record<string, any> | undefined;
 
   // Write a remote config to a temporary file
   if (options.configFromCloud) {
@@ -161,6 +168,9 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+    resolvedConfigMetadata = resolved.config.metadata;
+
+    await checkCloudPermissions(resolved.config);
 
     // Warn if both tests section and redteam config are present
     if (redteamConfig && resolved.testSuite.tests && resolved.testSuite.tests.length > 0) {
@@ -228,7 +238,7 @@ export async function doGenerateRedteam(
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
 
-  let plugins;
+  let plugins: RedteamPluginObject[] = [];
 
   // If plugins are defined in the config file
   if (redteamConfig?.plugins && redteamConfig.plugins.length > 0) {
@@ -297,6 +307,36 @@ export async function doGenerateRedteam(
     });
 
     logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
+  }
+
+  // Resolve policy references.
+  // Each reference is an id of the policy record stored in Promptfoo Cloud; load their respective texts.
+  const policyPluginsWithRefs = plugins.filter(
+    (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
+  );
+  if (policyPluginsWithRefs.length > 0) {
+    // Load the calling user's team id; all policies must belong to the same team.
+    const teamId =
+      resolvedConfigMetadata?.teamId ??
+      (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
+      (await getDefaultTeam()).id;
+
+    const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
+
+    // Assign, in-place, the policy texts and severities to the plugins
+    for (const policyPlugin of policyPluginsWithRefs) {
+      const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
+      const policyData = policiesById.get(policyId);
+      if (policyData) {
+        // Set the policy details
+        policyPlugin.config!.policy = { id: policyId, text: policyData.text } as PolicyObject;
+        // Set the plugin severity if it hasn't been set already; this allows the user to override the severity
+        // on a per-config basis if necessary.
+        if (policyPlugin.severity == null) {
+          policyPlugin.severity = policyData.severity;
+        }
+      }
+    }
   }
 
   let strategies: (string | { id: string })[] =

@@ -10,7 +10,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 interface CohereChatOptions {
@@ -127,8 +127,6 @@ export class CohereChatCompletionProvider implements ApiProvider {
       };
     }
 
-    logger.debug(`Calling Cohere API: ${JSON.stringify(body)}`);
-
     let data,
       cached = false;
     try {
@@ -145,8 +143,6 @@ export class CohereChatCompletionProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
       )) as unknown as { data: any; cached: boolean });
-
-      logger.debug(`Cohere chat API response: ${JSON.stringify(data)}`);
 
       if (data.message) {
         return { error: data.message };
@@ -252,7 +248,6 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       logger.error(`API call error: ${err}`);
       throw err;
     }
-    logger.debug(`\tCohere embeddings API response: ${JSON.stringify(data)}`);
 
     const embedding = data?.embeddings?.[0];
     if (!embedding) {

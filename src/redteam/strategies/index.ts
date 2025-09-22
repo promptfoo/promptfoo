@@ -1,11 +1,10 @@
-import path from 'path';
-
 import chalk from 'chalk';
 import dedent from 'dedent';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -17,13 +16,13 @@ import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
 import { addIterativeJailbreaks } from './iterative';
+import { addLayerTestCases } from './layer';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
 import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
-import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
@@ -32,19 +31,27 @@ import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
-import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
+import type { RedteamStrategyObject, TestCase } from '../../types/index';
+import type { Strategy } from './types';
 
-export interface Strategy {
-  id: string;
-  action: (
-    testCases: TestCaseWithPlugin[],
-    injectVar: string,
-    config: Record<string, any>,
-    strategyId?: string,
-  ) => Promise<TestCase[]>;
-}
+export type { Strategy };
 
 export const Strategies: Strategy[] = [
+  {
+    id: 'layer',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Layer strategy to ${testCases.length} test cases`);
+      const newTestCases = await addLayerTestCases(
+        testCases,
+        injectVar,
+        config,
+        Strategies,
+        loadStrategy,
+      );
+      logger.debug(`Added ${newTestCases.length} Layer test cases`);
+      return newTestCases;
+    },
+  },
   {
     id: 'base64',
     action: async (testCases, injectVar) => {
@@ -234,15 +241,6 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'pandamonium',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding pandamonium runs to ${testCases.length} test cases`);
-      const newTestCases = await addPandamonium(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} Pandamonium test cases`);
-      return newTestCases;
-    },
-  },
-  {
     id: 'prompt-injection',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding prompt injections to ${testCases.length} test cases`);
@@ -352,8 +350,7 @@ export async function loadStrategy(strategyPath: string): Promise<Strategy> {
       throw new Error(`Custom strategy file must be a JavaScript file: ${filePath}`);
     }
 
-    const basePath = cliState.basePath || process.cwd();
-    const modulePath = path.isAbsolute(filePath) ? filePath : path.join(basePath, filePath);
+    const modulePath = safeJoin(cliState.basePath || process.cwd(), filePath);
     const CustomStrategy = (await importModule(modulePath)) as Strategy;
 
     // Validate that the custom strategy implements the Strategy interface

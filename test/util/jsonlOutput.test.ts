@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { writeOutput } from '../../src/util';
+import { writeOutput } from '../../src/util/index';
 
 // Mock dependencies
 jest.mock('../../src/database', () => ({

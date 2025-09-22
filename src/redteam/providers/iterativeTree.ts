@@ -14,36 +14,17 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
-import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  TokenUsage,
-} from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import {
-  accumulateTokenUsage,
-  createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
-} from '../../util/tokenUsageUtils';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import type { BaseRedteamMetadata } from '../types';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -56,6 +37,21 @@ import {
   getTargetResponse,
   redteamProviderManager,
 } from './shared';
+import type { Environment } from 'nunjucks';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  TokenUsage,
+} from '../../types';
+import type { BaseRedteamMetadata } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -176,6 +172,7 @@ export async function evaluateResponse(
     },
     vars: {},
   });
+  TokenUsageTracker.getInstance().trackUsage(provider.id(), judgeResp.tokenUsage);
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
@@ -241,6 +238,8 @@ export async function getNewPrompt(
   if (redteamResp.error) {
     throw new Error(`Error from redteam provider: ${redteamResp.error}`);
   }
+  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+
   const retObj =
     typeof redteamResp.output === 'string'
       ? extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output)
@@ -280,6 +279,7 @@ export async function checkIfOnTopic(
     },
     vars: {},
   });
+  TokenUsageTracker.getInstance().trackUsage(provider.id(), isOnTopicResp.tokenUsage);
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
@@ -577,18 +577,10 @@ async function runRedteamConversation({
           loggerTag: '[IterativeTree]',
         });
 
-        const {
-          improvement,
-          prompt: newInjectVar,
-          tokenUsage: redteamTokenUsage,
-        } = await getNewPrompt(redteamProvider, [
+        const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
           ...redteamHistory,
           { role: 'assistant', content: node.prompt },
         ]);
-
-        if (redteamTokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, redteamTokenUsage);
-        }
 
         attempts++;
         logger.debug(
@@ -605,14 +597,11 @@ async function runRedteamConversation({
           targetProvider,
         );
 
-        const { isOnTopic, tokenUsage: isOnTopicTokenUsage } = await checkIfOnTopic(
+        const { isOnTopic } = await checkIfOnTopic(
           gradingProvider,
           onTopicSystemPrompt,
           targetPrompt,
         );
-        if (isOnTopicTokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, isOnTopicTokenUsage);
-        }
 
         const targetResponse = await getTargetResponse(
           targetProvider,
@@ -623,7 +612,10 @@ async function runRedteamConversation({
         if (targetResponse.error) {
           throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
         }
-        invariant(targetResponse.output, '[IterativeTree] Target did not return an output');
+        invariant(
+          Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
+          '[IterativeTree] Target did not return an output property',
+        );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
@@ -695,10 +687,6 @@ async function runRedteamConversation({
             );
             storedGraderResult = grade;
             graderPassed = grade.pass;
-
-            if (grade.tokensUsed) {
-              accumulateGraderTokenUsage(totalTokenUsage, grade);
-            }
           }
         }
 

@@ -4,7 +4,7 @@ import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
 import { createTestCase } from './common';
 
-import type { PluginActionParams, TestCase } from '../../../types';
+import type { PluginActionParams, TestCase } from '../../../types/index';
 import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
 
 export async function getHarmfulTests(

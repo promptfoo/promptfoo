@@ -204,9 +204,6 @@
                             "JFROG_API_KEY": {
                               "type": "string"
                             },
-                            "LAMBDA_API_KEY": {
-                              "type": "string"
-                            },
                             "LANGFUSE_HOST": {
                               "type": "string"
                             },
@@ -1142,8 +1139,13 @@
                           "excessive-agency",
                           "financial:calculation-error",
                           "financial:compliance-violation",
+                          "financial:confidential-disclosure",
+                          "financial:counterfactual",
                           "financial:data-leakage",
+                          "financial:defamation",
                           "financial:hallucination",
+                          "financial:impartiality",
+                          "financial:misconduct",
                           "financial:sycophancy",
                           "foundation",
                           "guardrails-eval",
@@ -1265,6 +1267,7 @@
                           "reasoning-dos",
                           "religion",
                           "shell-injection",
+                          "special-token-injection",
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
@@ -1274,6 +1277,7 @@
                           "toxicity",
                           "unsafebench",
                           "unverifiable-claims",
+                          "vlguard",
                           "xstest"
                         ]
                       },
@@ -1329,8 +1333,13 @@
                               "excessive-agency",
                               "financial:calculation-error",
                               "financial:compliance-violation",
+                              "financial:confidential-disclosure",
+                              "financial:counterfactual",
                               "financial:data-leakage",
+                              "financial:defamation",
                               "financial:hallucination",
+                              "financial:impartiality",
+                              "financial:misconduct",
                               "financial:sycophancy",
                               "foundation",
                               "guardrails-eval",
@@ -1452,6 +1461,7 @@
                               "reasoning-dos",
                               "religion",
                               "shell-injection",
+                              "special-token-injection",
                               "sql-injection",
                               "ssrf",
                               "system-prompt-override",
@@ -1461,6 +1471,7 @@
                               "toxicity",
                               "unsafebench",
                               "unverifiable-claims",
+                              "vlguard",
                               "xstest"
                             ]
                           },
@@ -1523,13 +1534,13 @@
                           "jailbreak:composite",
                           "jailbreak:likert",
                           "jailbreak:tree",
+                          "layer",
                           "leetspeak",
                           "math-prompt",
                           "mischievous-user",
                           "morse",
                           "multilingual",
                           "other-encodings",
-                          "pandamonium",
                           "piglatin",
                           "prompt-injection",
                           "retry",
@@ -1562,7 +1573,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
               "default": ["default"]
             },
             "maxConcurrency": {
@@ -1792,6 +1803,9 @@
             "share": {
               "type": "boolean"
             },
+            "noShare": {
+              "type": "boolean"
+            },
             "progressBar": {
               "type": "boolean"
             },
@@ -1838,6 +1852,9 @@
             },
             "promptSuffix": {
               "type": "string"
+            },
+            "retryErrors": {
+              "type": "boolean"
             },
             "envPath": {
               "type": "string"

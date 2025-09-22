@@ -7,17 +7,35 @@ const sharp = require('sharp');
 // Constants for image generation
 const WIDTH = 1200;
 const HEIGHT = 630;
-// Template version constant removed; caching disabled
+
+// Asset cache to avoid repeated file reads (only for logo/font, not large image buffers)
+const assetCache = {
+  logo: null,
+  font: null,
+};
 
 function resolveImageFullPath(imagePath) {
   const cwd = process.cwd();
-  const inSiteDir = cwd.endsWith('/site');
+  const inSiteDir = path.basename(cwd) === 'site';
+  const siteRoot = inSiteDir ? cwd : path.join(cwd, 'site');
+
   if (imagePath.startsWith('/')) {
-    return inSiteDir
-      ? path.join(cwd, 'static', imagePath)
-      : path.join(cwd, 'site/static', imagePath);
+    // Treat as site-root-relative, not filesystem-root
+    const rel = imagePath.replace(/^\/+/, '');
+    const full = path.resolve(siteRoot, 'static', rel);
+    const staticRoot = path.resolve(siteRoot, 'static');
+    if (!full.startsWith(staticRoot + path.sep)) {
+      throw new Error(`Invalid image path (outside static): ${imagePath}`);
+    }
+    return full;
   }
-  return inSiteDir ? path.join(cwd, imagePath) : path.join(cwd, 'site', imagePath);
+
+  // Relative path: resolve under site root
+  const full = path.resolve(siteRoot, imagePath);
+  if (!full.startsWith(siteRoot + path.sep)) {
+    throw new Error(`Invalid relative image path: ${imagePath}`);
+  }
+  return full;
 }
 
 // Helper function to escape HTML/XML entities
@@ -33,38 +51,11 @@ function escapeXml(text) {
     .replace(/'/g, '&apos;');
 }
 
-// Smart text wrapping that preserves all content
-function wrapText(text, maxWidth, fontSize) {
-  if (!text) {
-    return [];
-  }
-  const words = text.split(' ');
-  const lines = [];
-  let currentLine = '';
-  const avgCharWidth = fontSize * 0.5;
-
-  for (const word of words) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    const estimatedWidth = testLine.length * avgCharWidth;
-
-    if (estimatedWidth > maxWidth && currentLine) {
-      lines.push(currentLine);
-      currentLine = word;
-    } else {
-      currentLine = testLine;
-    }
-  }
-
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-
-  return lines;
-}
-
 // Helper function to truncate text with ellipsis
 function truncateText(text, maxLength) {
-  if (text.length <= maxLength) return text;
+  if (text.length <= maxLength) {
+    return text;
+  }
   return text.substring(0, maxLength - 3) + '...';
 }
 
@@ -75,79 +66,45 @@ function calculateFontSize(text, baseSize = 64, minSize = 40) {
   return fontSize;
 }
 
-// Dynamic font sizing - much more aggressive scaling
-function calculateOptimalFontSize(text, hasImage = false, isTitle = true) {
-  if (!text) {
-    return 48;
-  }
-  const length = text.length;
-
-  if (isTitle) {
-    // Title sizing - MUCH larger when space allows
-    if (hasImage) {
-      // With image - slightly smaller
-      if (length <= 30) {
-        return 48;
-      }
-      if (length <= 50) {
-        return 42;
-      }
-      if (length <= 70) {
-        return 36;
-      }
-      if (length <= 100) {
-        return 32;
-      }
-      return 28;
-    } else {
-      // No image - we have lots of space
-      if (length <= 20) {
-        return 72;
-      }
-      if (length <= 30) {
-        return 64;
-      }
-      if (length <= 50) {
-        return 56;
-      }
-      if (length <= 70) {
-        return 48;
-      }
-      if (length <= 100) {
-        return 40;
-      }
-      return 32;
-    }
-  } else {
-    // Description sizing
-    return Math.min(22, Math.max(16, 24 - Math.floor(length / 60)));
-  }
-}
-
-// Helper function to convert SVG logo to base64
+// Helper function to convert SVG logo to base64 (cached)
 async function getLogoAsBase64() {
+  if (assetCache.logo !== null) {
+    return assetCache.logo;
+  }
+
   try {
     const logoPath = path.join(process.cwd(), 'site/static/img/logo-panda.svg');
     const logoContent = await fs.readFile(logoPath, 'utf8');
-    return `data:image/svg+xml;base64,${Buffer.from(logoContent).toString('base64')}`;
+    assetCache.logo = `data:image/svg+xml;base64,${Buffer.from(logoContent).toString('base64')}`;
+    return assetCache.logo;
   } catch (_error) {
     // Fallback to site/static path
     try {
       const logoPath = path.join(process.cwd(), 'static/img/logo-panda.svg');
       const logoContent = await fs.readFile(logoPath, 'utf8');
-      return `data:image/svg+xml;base64,${Buffer.from(logoContent).toString('base64')}`;
+      assetCache.logo = `data:image/svg+xml;base64,${Buffer.from(logoContent).toString('base64')}`;
+      return assetCache.logo;
     } catch (_e) {
+      assetCache.logo = '';
       return '';
     }
   }
 }
 
-// Helper function to convert image to base64
+// Helper function to convert image to base64 (no caching to avoid memory leaks)
 async function getImageAsBase64(imagePath, maxWidth = 520, maxHeight = 430) {
   try {
     // Handle relative paths from frontmatter
     // Check if we're already in the site directory
     const fullPath = resolveImageFullPath(imagePath);
+
+    // Check if file exists first
+    try {
+      await fs.access(fullPath);
+    } catch {
+      console.warn(`❌ Image file not found: ${imagePath} (resolved to: ${fullPath})`);
+      return null;
+    }
 
     const ext = path.extname(fullPath).toLowerCase().replace('.', '');
 
@@ -155,49 +112,77 @@ async function getImageAsBase64(imagePath, maxWidth = 520, maxHeight = 430) {
     if (ext === 'svg') {
       const imageBuffer = await fs.readFile(fullPath);
       return `data:image/svg+xml;base64,${imageBuffer.toString('base64')}`;
+    } else {
+      // Use sharp to resize and resample images with high quality
+      const resizedBuffer = await sharp(fullPath)
+        .resize(maxWidth, maxHeight, {
+          fit: 'inside',
+          withoutEnlargement: true,
+          kernel: sharp.kernel.lanczos3, // High-quality resampling
+        })
+        .png({
+          quality: 95,
+          compressionLevel: 6,
+        })
+        .toBuffer();
+
+      return `data:image/png;base64,${resizedBuffer.toString('base64')}`;
     }
-
-    // Use sharp to resize and resample images with high quality
-    const resizedBuffer = await sharp(fullPath)
-      .resize(maxWidth, maxHeight, {
-        fit: 'inside',
-        withoutEnlargement: true,
-        kernel: sharp.kernel.lanczos3, // High-quality resampling
-      })
-      .png({
-        quality: 95,
-        compressionLevel: 6,
-      })
-      .toBuffer();
-
-    return `data:image/png;base64,${resizedBuffer.toString('base64')}`;
   } catch (error) {
-    console.warn(`Could not load image ${imagePath}:`, error.message);
+    console.warn(`❌ Failed to process image ${imagePath}: ${error.message}`);
     return null;
   }
 }
 
 // Get page type label
 function getPageTypeLabel(routePath) {
-  if (routePath.includes('/blog/')) return 'Posts';
-  if (routePath.includes('/guides/')) return 'Guide';
-  if (routePath.includes('/red-team')) return 'Security';
-  if (routePath.includes('/providers/')) return 'Provider';
-  if (routePath.includes('/integrations/')) return 'Integration';
-  if (routePath.includes('/enterprise/')) return 'Enterprise';
-  if (routePath.includes('/api-reference/')) return 'API Reference';
+  if (routePath.includes('/blog/')) {
+    return 'Posts';
+  }
+  if (routePath.includes('/guides/')) {
+    return 'Guide';
+  }
+  if (routePath.includes('/red-team')) {
+    return 'Security';
+  }
+  if (routePath.includes('/providers/')) {
+    return 'Provider';
+  }
+  if (routePath.includes('/integrations/')) {
+    return 'Integration';
+  }
+  if (routePath.includes('/enterprise/')) {
+    return 'Enterprise';
+  }
+  if (routePath.includes('/api-reference/')) {
+    return 'API Reference';
+  }
   return 'Documentation';
 }
 
-// Helper function to convert font to base64
+// Helper function to convert font to base64 (cached)
 async function getFontAsBase64() {
+  if (assetCache.font !== null) {
+    return assetCache.font;
+  }
+
   try {
     const fontPath = path.join(process.cwd(), 'static/fonts/Inter-SemiBold.ttf');
     const fontBuffer = await fs.readFile(fontPath);
-    return fontBuffer.toString('base64');
-  } catch (error) {
-    console.warn('Could not load Inter font for embedding:', error);
-    return null;
+    assetCache.font = fontBuffer.toString('base64');
+    return assetCache.font;
+  } catch (_error) {
+    // Fallback when running from repo root
+    try {
+      const fontPath = path.join(process.cwd(), 'site/static/fonts/Inter-SemiBold.ttf');
+      const fontBuffer = await fs.readFile(fontPath);
+      assetCache.font = fontBuffer.toString('base64');
+      return assetCache.font;
+    } catch (e) {
+      console.warn('Could not load Inter font for embedding:', e);
+      assetCache.font = null;
+      return null;
+    }
   }
 }
 
@@ -205,13 +190,9 @@ async function getFontAsBase64() {
 async function generateSvgTemplate(metadata = {}) {
   const {
     title = 'Promptfoo',
-    description = '',
     breadcrumbs = [],
     routePath = '',
     ogTitle = null,
-    ogDescription = null,
-    date = null,
-    author = null,
     image = null,
   } = metadata;
 
@@ -220,24 +201,18 @@ async function generateSvgTemplate(metadata = {}) {
 
   // Use custom OG title if provided
   const displayTitle = ogTitle || title;
-  const displayDescription = ogDescription || description;
 
   // Truncate for cleaner display
   const escapedTitle = escapeXml(truncateText(displayTitle || 'Promptfoo Documentation', 70));
-  const escapedDescription = escapeXml(displayDescription);
 
   // Check if we have a valid image
   const hasImage = image && !image.startsWith('http');
   const imageBase64 = hasImage ? await getImageAsBase64(image) : null;
   const hasValidImage = Boolean(hasImage && imageBase64);
 
-  // Debug image processing
-  if (routePath && routePath.includes('/blog/') && image) {
-    console.log(`  Template for ${routePath}:`);
-    console.log('    Has image:', hasImage);
-    console.log('    Image provided:', Boolean(image));
-    console.log('    Image loaded:', Boolean(imageBase64));
-    console.log('    Has valid image:', Boolean(hasValidImage));
+  // Only log image processing issues, not successes
+  if (routePath && routePath.includes('/blog/') && image && !imageBase64) {
+    console.log(`  Template for ${routePath}: Image failed to load - ${image}`);
   }
 
   // Get page type
@@ -451,7 +426,10 @@ async function generateOgImage(metadata, outputPath) {
 
     return true;
   } catch (error) {
-    console.error(`Failed to generate OG image for "${metadata.title || 'untitled'}":`, error);
+    console.error(
+      `❌ Failed to generate OG image for "${metadata.title || 'untitled'}" (${metadata.routePath}):`,
+      error.message,
+    );
     return false;
   }
 }
@@ -587,6 +565,12 @@ module.exports = function (context, options) {
     },
 
     async postBuild({ siteConfig, routesPaths, outDir, plugins, content, routes }) {
+      // Skip OG image generation if disabled via environment variable
+      if (process.env.SKIP_OG_GENERATION === 'true') {
+        console.log('⏭️  Skipping OG image generation (SKIP_OG_GENERATION=true)');
+        return;
+      }
+
       console.log('Generating OG images for documentation pages...');
 
       const generatedImages = new Map();
@@ -665,116 +649,136 @@ module.exports = function (context, options) {
         }
       }
 
-      // Process all documentation routes
-      for (const routePath of routesPaths) {
-        if (routePath.startsWith('/docs/') || routePath.startsWith('/blog/')) {
-          try {
-            // Get metadata for this route
-            const metadata = routeMetadata.get(routePath) || {};
+      // Process all documentation routes with conservative parallel processing
+      const BATCH_SIZE = Number(process.env.OG_BATCH_SIZE) || 2; // Conservative default
+      const routesToProcess = routesPaths.filter(
+        (routePath) => routePath.startsWith('/docs/') || routePath.startsWith('/blog/'),
+      );
 
-            // Try to get metadata from multiple sources
-            let fileMetadata = { title: metadata.title };
+      const totalRoutes = routesToProcess.length;
+      console.log(`📊 Processing ${totalRoutes} routes in batches of ${BATCH_SIZE}...`);
 
-            // For blog posts, always try to read the markdown file to get the image
-            // Blog plugin doesn't expose custom frontmatter fields like image
-            if (routePath.startsWith('/blog/')) {
-              fileMetadata = await extractMetadataFromMarkdown(routePath, outDir);
-            } else if (!fileMetadata.title) {
-              // For docs, only read if we don't have a title
-              fileMetadata = await extractMetadataFromMarkdown(routePath, outDir);
-            }
+      for (let i = 0; i < routesToProcess.length; i += BATCH_SIZE) {
+        const batch = routesToProcess.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(totalRoutes / BATCH_SIZE);
 
-            // Merge route metadata with file metadata
-            const fullMetadata = {
-              ...fileMetadata,
-              ...metadata,
-              title: metadata.title || fileMetadata.title,
-              description: metadata.description || fileMetadata.description,
-              author: fileMetadata.author || metadata.author,
-              date: fileMetadata.date || metadata.date,
-              image: fileMetadata.image || metadata.image,
-            };
+        console.log(`⏳ Processing batch ${batchNum}/${totalBatches} (${batch.length} images)...`);
 
-            // Debug for specific blog posts
-            if (
-              routePath.includes('/blog/') &&
-              (routePath.includes('100k') || routePath.includes('excessive'))
-            ) {
-              console.log(`\nProcessing ${routePath}:`);
-              console.log('  Image from file present:', Boolean(fileMetadata.image));
-              console.log('  Image from metadata present:', Boolean(metadata.image));
-              console.log('  Final image present:', Boolean(fullMetadata.image));
-            }
+        await Promise.all(
+          batch.map(async (routePath) => {
+            try {
+              // Get metadata for this route
+              const metadata = routeMetadata.get(routePath) || {};
 
-            // Final fallback for title to path parsing
-            if (!fullMetadata.title) {
-              const pathParts = routePath.split('/').filter(Boolean);
-              const lastPart = pathParts[pathParts.length - 1];
-              fullMetadata.title = lastPart
-                .split('-')
-                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ');
-            }
+              // Try to get metadata from multiple sources
+              let fileMetadata = { title: metadata.title };
 
-            // Extract breadcrumbs from metadata or path
-            const breadcrumbs =
-              metadata.breadcrumbs && metadata.breadcrumbs.length > 0
-                ? metadata.breadcrumbs.map((b) => b.label || b)
-                : extractBreadcrumbs(routePath, []);
-
-            // Add route path to metadata
-            fullMetadata.routePath = routePath;
-            fullMetadata.breadcrumbs = breadcrumbs;
-
-            // Generate unique filename for this route
-            const imageFileName =
-              routePath
-                .replace(/^\//, '')
-                .replace(/\//g, '-')
-                .replace(/[^a-zA-Z0-9-]/g, '') + '-og.png';
-
-            const imagePath = path.join(outDir, 'img', 'og', imageFileName);
-            const imageUrl = `/img/og/${imageFileName}`;
-
-            // Generate the OG image with full metadata
-            const success = await generateOgImage(fullMetadata, imagePath);
-
-            if (success) {
-              generatedImages.set(routePath, imageUrl);
-              successCount++;
-
-              // Inject meta tags into the HTML for this route
-              const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
-              try {
-                if (
-                  await fs
-                    .stat(htmlPath)
-                    .then((stat) => stat.isFile())
-                    .catch(() => false)
-                ) {
-                  let html = await fs.readFile(htmlPath, 'utf8');
-
-                  const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
-                  const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
-
-                  // If HTML contains the default thumbnail URL, replace all instances
-                  if (html.includes(defaultThumbnailUrl)) {
-                    html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
-                    await fs.writeFile(htmlPath, html);
-                    console.log(`Replaced default thumbnail OG meta tags for ${routePath}`);
-                  }
-                }
-              } catch (error) {
-                console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
+              // For blog posts, always try to read the markdown file to get the image
+              // Blog plugin doesn't expose custom frontmatter fields like image
+              if (routePath.startsWith('/blog/')) {
+                fileMetadata = await extractMetadataFromMarkdown(routePath, outDir);
+              } else if (!fileMetadata.title) {
+                // For docs, only read if we don't have a title
+                fileMetadata = await extractMetadataFromMarkdown(routePath, outDir);
               }
-            } else {
+
+              // Merge route metadata with file metadata
+              const fullMetadata = {
+                ...fileMetadata,
+                ...metadata,
+                title: metadata.title || fileMetadata.title,
+                description: metadata.description || fileMetadata.description,
+                author: fileMetadata.author || metadata.author,
+                date: fileMetadata.date || metadata.date,
+                image: fileMetadata.image || metadata.image,
+              };
+
+              // Only log if there are image processing issues
+              if (
+                routePath.includes('/blog/') &&
+                fullMetadata.image &&
+                !fullMetadata.image.startsWith('http')
+              ) {
+                const imagePath = resolveImageFullPath(fullMetadata.image);
+                try {
+                  await fs.access(imagePath);
+                } catch {
+                  console.log(`⚠️  Missing image for ${routePath}: ${fullMetadata.image}`);
+                }
+              }
+
+              // Final fallback for title to path parsing
+              if (!fullMetadata.title) {
+                const pathParts = routePath.split('/').filter(Boolean);
+                const lastPart = pathParts[pathParts.length - 1];
+                fullMetadata.title = lastPart
+                  .split('-')
+                  .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                  .join(' ');
+              }
+
+              // Extract breadcrumbs from metadata or path
+              const breadcrumbs =
+                metadata.breadcrumbs && metadata.breadcrumbs.length > 0
+                  ? metadata.breadcrumbs.map((b) => b.label || b)
+                  : extractBreadcrumbs(routePath, []);
+
+              // Add route path to metadata
+              fullMetadata.routePath = routePath;
+              fullMetadata.breadcrumbs = breadcrumbs;
+
+              // Generate unique filename for this route
+              const imageFileName =
+                routePath
+                  .replace(/^\//, '')
+                  .replace(/\//g, '-')
+                  .replace(/[^a-zA-Z0-9-]/g, '') + '-og.png';
+
+              const imagePath = path.join(outDir, 'img', 'og', imageFileName);
+              const imageUrl = `/img/og/${imageFileName}`;
+
+              // Generate the OG image with full metadata
+              const success = await generateOgImage(fullMetadata, imagePath);
+
+              if (success) {
+                generatedImages.set(routePath, imageUrl);
+                successCount++;
+
+                // Inject meta tags into the HTML for this route
+                const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
+                try {
+                  if (
+                    await fs
+                      .stat(htmlPath)
+                      .then((stat) => stat.isFile())
+                      .catch(() => false)
+                  ) {
+                    let html = await fs.readFile(htmlPath, 'utf8');
+
+                    const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
+                    const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
+
+                    // If HTML contains the default thumbnail URL, replace all instances
+                    if (html.includes(defaultThumbnailUrl)) {
+                      html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
+                      await fs.writeFile(htmlPath, html);
+                      // Only log replacements for debugging if needed
+                      // console.log(`Replaced default thumbnail OG meta tags for ${routePath}`);
+                    }
+                  }
+                } catch (error) {
+                  console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
+                }
+              } else {
+                failureCount++;
+              }
+            } catch (error) {
+              console.error(`Error processing route ${routePath}:`, error);
               failureCount++;
             }
-          } catch (error) {
-            console.error(`Error processing route ${routePath}:`, error);
-            failureCount++;
-          }
-        }
+          }),
+        );
       }
 
       // Create a manifest file for the generated images
@@ -785,7 +789,7 @@ module.exports = function (context, options) {
       );
 
       console.log(
-        `OG image generation complete: ${successCount} succeeded, ${failureCount} failed`,
+        `✅ Generated ${successCount} OG images${failureCount > 0 ? ` (${failureCount} failed)` : ''}`,
       );
     },
   };

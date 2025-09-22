@@ -5,6 +5,8 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import { renderVarsInObject } from '../../util/index';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
@@ -28,7 +30,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
@@ -187,8 +189,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       messages,
     };
 
-    logger.debug(`Preparing to call Claude API with body: ${JSON.stringify(body)}`);
-
     const cache = await getCache();
     const cacheKey = `vertex:claude:${this.modelName}:${JSON.stringify(body)}`;
 
@@ -223,7 +223,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       });
 
       data = res.data as ClaudeResponse;
-      logger.debug(`Claude API response: ${JSON.stringify(data)}`);
     } catch (err) {
       const error = err as GaxiosError;
       if (error.response && error.response.data) {
@@ -320,7 +319,33 @@ export class VertexChatProvider extends VertexGenericProvider {
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };
-    logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
+
+    if (config.responseSchema) {
+      if (body.generationConfig.response_schema) {
+        throw new Error(
+          '`responseSchema` provided but `generationConfig.response_schema` already set.',
+        );
+      }
+
+      let schema = maybeLoadFromExternalFile(
+        renderVarsInObject(config.responseSchema, context?.vars),
+      );
+
+      // Parse JSON string if it's a string (not loaded from file)
+      if (typeof schema === 'string') {
+        try {
+          schema = JSON.parse(schema);
+        } catch (error) {
+          throw new Error(`Invalid JSON in responseSchema: ${error}`);
+        }
+      }
+
+      // Apply variable substitution to the loaded schema
+      schema = renderVarsInObject(schema, context?.vars);
+
+      body.generationConfig.response_schema = schema;
+      body.generationConfig.response_mime_type = 'application/json';
+    }
 
     const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
@@ -354,7 +379,6 @@ export class VertexChatProvider extends VertexGenericProvider {
           timeout: REQUEST_TIMEOUT_MS,
         });
         data = res.data as GeminiApiResponse;
-        logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
       } catch (err) {
         const geminiError = err as GaxiosError;
         if (
@@ -552,7 +576,6 @@ export class VertexChatProvider extends VertexGenericProvider {
         topK: this.config.topK,
       },
     };
-    logger.debug(`Calling Vertex Palm2 API: ${JSON.stringify(body)}`);
 
     const cache = await getCache();
     const cacheKey = `vertex:palm2:${JSON.stringify(body)}`;
@@ -594,7 +617,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       };
     }
 
-    logger.debug(`Vertex Palm2 API response: ${JSON.stringify(data)}`);
     try {
       if (data.error) {
         return {

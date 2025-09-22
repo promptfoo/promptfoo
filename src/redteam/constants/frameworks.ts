@@ -279,7 +279,6 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'crescendo',
       'goat',
       'multilingual',
-      'pandamonium',
       'gcg',
     ],
   },

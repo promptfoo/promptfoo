@@ -1,8 +1,8 @@
 import React, { forwardRef, useState } from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EngineeringIcon from '@mui/icons-material/Engineering';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
@@ -77,15 +77,55 @@ function NavLink({ href, label }: { href: string; label: string }) {
 
 type ActiveMenu = 'create' | 'evals' | null;
 
+// Shared constants
+const DROPDOWN_CLOSE_DELAY = 150;
+
+// Custom hook for delayed menu close functionality
+function useDelayedClose(
+  menuType: 'create' | 'evals',
+  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>,
+) {
+  const closeTimerRef = React.useRef<number | null>(null);
+
+  const scheduleClose = React.useCallback(() => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      setActiveMenu((current) => (current === menuType ? null : current));
+      closeTimerRef.current = null;
+    }, DROPDOWN_CLOSE_DELAY);
+  }, [menuType, setActiveMenu]);
+
+  const cancelClose = React.useCallback(() => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  React.useEffect(
+    () => () => {
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  return { scheduleClose, cancelClose };
+}
+
 function CreateDropdown({
   activeMenu,
   setActiveMenu,
 }: {
   activeMenu: ActiveMenu;
-  setActiveMenu: (menu: ActiveMenu) => void;
+  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>;
 }) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
+  const { scheduleClose, cancelClose } = useDelayedClose('create', setActiveMenu);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -102,7 +142,7 @@ function CreateDropdown({
   };
 
   const handleMouseLeave = () => {
-    setActiveMenu(null);
+    scheduleClose();
   };
 
   const isActive = ['/setup', '/redteam/setup'].some((route) =>
@@ -125,7 +165,11 @@ function CreateDropdown({
   const isOpen = activeMenu === 'create';
 
   return (
-    <>
+    <Box
+      onMouseLeave={handleMouseLeave}
+      onMouseEnter={cancelClose}
+      sx={{ position: 'relative', display: 'inline-block' }}
+    >
       <Button
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
@@ -164,7 +208,6 @@ function CreateDropdown({
         anchorEl={anchorEl}
         open={isOpen}
         placement="bottom-start"
-        onMouseLeave={handleMouseLeave}
         sx={{ zIndex: 1300 }}
         modifiers={[
           {
@@ -177,6 +220,8 @@ function CreateDropdown({
       >
         <Box sx={{ pt: 1 }}>
           <Paper
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
             elevation={3}
             sx={{
               width: 320,
@@ -243,7 +288,7 @@ function CreateDropdown({
           </Paper>
         </Box>
       </Popper>
-    </>
+    </Box>
   );
 }
 
@@ -252,10 +297,11 @@ function EvalsDropdown({
   setActiveMenu,
 }: {
   activeMenu: ActiveMenu;
-  setActiveMenu: (menu: ActiveMenu) => void;
+  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>;
 }) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
+  const { scheduleClose, cancelClose } = useDelayedClose('evals', setActiveMenu);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -272,7 +318,7 @@ function EvalsDropdown({
   };
 
   const handleMouseLeave = () => {
-    setActiveMenu(null);
+    scheduleClose();
   };
 
   const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));
@@ -288,12 +334,21 @@ function EvalsDropdown({
       label: 'All Evals',
       description: 'Browse and manage all evaluation runs',
     },
+    {
+      href: '/reports',
+      label: 'Red Team Vulnerability Reports',
+      description: 'View findings from red teams',
+    },
   ];
 
   const isOpen = activeMenu === 'evals';
 
   return (
-    <>
+    <Box
+      onMouseLeave={handleMouseLeave}
+      onMouseEnter={cancelClose}
+      sx={{ position: 'relative', display: 'inline-block' }}
+    >
       <Button
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
@@ -326,13 +381,12 @@ function EvalsDropdown({
           }),
         }}
       >
-        Evals
+        Results
       </Button>
       <Popper
         anchorEl={anchorEl}
         open={isOpen}
         placement="bottom-start"
-        onMouseLeave={handleMouseLeave}
         sx={{ zIndex: 1300 }}
         modifiers={[
           {
@@ -345,6 +399,8 @@ function EvalsDropdown({
       >
         <Box sx={{ pt: 1 }}>
           <Paper
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
             elevation={3}
             sx={{
               width: 320,
@@ -411,7 +467,7 @@ function EvalsDropdown({
           </Paper>
         </Box>
       </Popper>
-    </>
+    </Box>
   );
 }
 

@@ -2,7 +2,8 @@ import React from 'react';
 
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EvaluateTableRow } from './types';
@@ -100,7 +101,7 @@ vi.mock('react-router-dom', async () => {
 let mockTableStoreData = {
   table: mockTableWithoutHighlights,
   setTable: vi.fn(),
-  config: { description: 'Test Config', tags: {} },
+  config: { description: 'Test Config', tags: {}, sharing: true },
   setConfig: vi.fn(),
   evalId: '1',
   author: 'Test Author',
@@ -119,6 +120,7 @@ let mockTableStoreData = {
       metadata: [] as string[],
     },
   },
+  removeFilter: vi.fn(),
 };
 
 let mockResultsViewSettingsStoreData = {
@@ -185,6 +187,13 @@ vi.mock('./ResultsCharts', () => {
   };
 });
 
+// Mock ShareModal for share button tests
+vi.mock('./ShareModal', () => ({
+  default: vi.fn(({ open, onClose }) =>
+    open ? <div data-testid="share-modal">Share Modal</div> : null,
+  ),
+}));
+
 declare global {
   interface Window {
     resizeHandler: any;
@@ -211,7 +220,7 @@ describe('ResultsView', () => {
     mockTableStoreData = {
       table: mockTableWithoutHighlights,
       setTable: vi.fn(),
-      config: { description: 'Test Config', tags: {} },
+      config: { description: 'Test Config', tags: {}, sharing: true },
       setConfig: vi.fn(),
       evalId: '1',
       author: 'Test Author',
@@ -311,7 +320,7 @@ describe('ResultsView', () => {
           },
         ],
       },
-      config: { description: 'Test Config', tags: {} },
+      config: { description: 'Test Config', tags: {}, sharing: true },
     };
 
     renderWithProviders(
@@ -556,5 +565,72 @@ describe('ResultsView', () => {
 
     const showChartsButton = screen.getByText('Show Charts');
     expect(showChartsButton).toBeInTheDocument();
+  });
+
+  describe('Share Button Tests', () => {
+    const renderWithRouter = (component: React.ReactElement) => {
+      return render(<MemoryRouter>{component}</MemoryRouter>);
+    };
+
+    it('always shows share button regardless of config.sharing value', async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+
+      // Click on Eval actions to open the dropdown
+      const evalActionsButton = screen.getByText('Eval actions');
+      await userEvent.click(evalActionsButton);
+
+      // Share button should be visible
+      await waitFor(() => {
+        expect(screen.getByText('Share')).toBeInTheDocument();
+      });
+    });
+
+    it('opens share modal when share button is clicked', async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+
+      const evalActionsButton = screen.getByText('Eval actions');
+      await userEvent.click(evalActionsButton);
+
+      const shareButton = screen.getByText('Share');
+      await userEvent.click(shareButton);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('share-modal')).toBeInTheDocument();
+      });
+    });
+
+    it('shows share button alongside other menu items', async () => {
+      renderWithRouter(
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="test-eval-id"
+        />,
+      );
+
+      const evalActionsButton = screen.getByText('Eval actions');
+      await userEvent.click(evalActionsButton);
+
+      await waitFor(() => {
+        // Verify share button is present alongside other expected menu items
+        expect(screen.getByText('Share')).toBeInTheDocument();
+        expect(screen.getByText('Edit name')).toBeInTheDocument();
+        expect(screen.getByText('Edit and re-run')).toBeInTheDocument();
+        expect(screen.getByText('View YAML')).toBeInTheDocument();
+        expect(screen.getByText('Delete')).toBeInTheDocument();
+      });
+    });
   });
 });

@@ -4,15 +4,12 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import {
-  accumulateGraderTokenUsage,
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
@@ -166,8 +163,6 @@ export default class GoatProvider implements ApiProvider {
             purpose: context?.test?.metadata?.purpose,
           });
 
-          accumulateResponseTokenUsage(totalTokenUsage, unblockingResult);
-
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             logger.debug(
               `[GOAT] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
@@ -219,7 +214,7 @@ export default class GoatProvider implements ApiProvider {
             modifiers: context?.test?.metadata?.modifiers,
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-          response = await fetch(getRemoteGenerationUrl(), {
+          response = await fetchWithProxy(getRemoteGenerationUrl(), {
             body,
             headers: {
               'Content-Type': 'application/json',
@@ -254,7 +249,7 @@ export default class GoatProvider implements ApiProvider {
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-        response = await fetch(getRemoteGenerationUrl(), {
+        response = await fetchWithProxy(getRemoteGenerationUrl(), {
           body,
           headers: {
             'Content-Type': 'application/json',
@@ -287,7 +282,6 @@ export default class GoatProvider implements ApiProvider {
           content: renderedAttackerPrompt,
         });
 
-        accumulateResponseTokenUsage(totalTokenUsage, data);
         logger.debug(
           dedent`
           ${chalk.bold.green(`GOAT turn ${turn} history:`)}
@@ -305,6 +299,7 @@ export default class GoatProvider implements ApiProvider {
           logger.debug(`Sleeping for ${targetProvider.delay}ms`);
           await sleep(targetProvider.delay);
         }
+        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         logger.debug(`GOAT turn ${turn} target response: ${safeJsonStringify(targetResponse)}`);
 
@@ -342,8 +337,6 @@ export default class GoatProvider implements ApiProvider {
         // Store the attack response for potential unblocking in next turn
         previousTargetOutput = stringifiedOutput;
 
-        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
-
         lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
@@ -358,7 +351,6 @@ export default class GoatProvider implements ApiProvider {
           );
           graderPassed = grade.pass;
           storedGraderResult = grade;
-          accumulateGraderTokenUsage(totalTokenUsage, grade);
         }
 
         if (graderPassed === false) {

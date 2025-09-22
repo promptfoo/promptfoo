@@ -5,6 +5,13 @@ description: Debug and resolve common promptfoo issues with solutions for memory
 
 # Troubleshooting
 
+## Log Files and Debugging
+
+Before troubleshooting specific issues, you can access detailed logs to help diagnose problems:
+
+- **View logs directly**: Log files are stored in your config directory at `~/.promptfoo/logs` by default
+- **Export logs for sharing**: Use `promptfoo export logs` to create a compressed archive of your log files for debugging or support
+
 ## Out of memory error
 
 If you have a large number of tests or your tests have large outputs, you may encounter an out of memory error. There are several ways to handle this:
@@ -238,6 +245,69 @@ import pdb
 def call_api(prompt, options, context):
     pdb.set_trace()  # Debugger will pause here
     # Your code...
+```
+
+### Python Installation and Path Issues
+
+If you encounter errors like `spawn py -3 ENOENT` or `Python 3 not found`, promptfoo cannot locate your Python installation. Here's how to resolve this:
+
+#### Setting a Custom Python Path
+
+Use the `PROMPTFOO_PYTHON` environment variable to specify your Python executable:
+
+```bash
+# Windows (if Python is installed at a custom location)
+export PROMPTFOO_PYTHON=C:\Python\3_11\python.exe
+
+# macOS/Linux
+export PROMPTFOO_PYTHON=/usr/local/bin/python3
+
+# Then run your evaluation
+npx promptfoo eval
+```
+
+#### Per-Provider Python Configuration
+
+You can also set the Python path for specific providers in your config:
+
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      pythonExecutable: /path/to/specific/python
+```
+
+#### Windows-Specific Issues
+
+On Windows, promptfoo tries to detect Python in this order:
+
+1. `PROMPTFOO_PYTHON` environment variable (if set)
+2. Provider-specific `pythonExecutable` config (if set)
+3. **Windows smart detection**: Uses `where python` command and filters out Microsoft Store stubs
+4. `python -c "import sys; print(sys.executable)"` (to get the actual Python path)
+5. Common fallback commands: `python`, `python3`, `py -3`, `py`
+
+If you don't have the Python launcher (`py.exe`) installed but have Python directly, make sure the `python` command works from your command line. If not, either:
+
+- Add your Python installation directory to your PATH
+- Set `PROMPTFOO_PYTHON` to the full path of your `python.exe`
+
+**Common Windows Python locations:**
+
+- Microsoft Store: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps\python.exe`
+- Direct installer: `C:\Python3X\python.exe` (where X is the version)
+- Anaconda: `C:\Users\YourName\anaconda3\python.exe`
+
+#### Testing Your Python Configuration
+
+To verify your Python is correctly configured:
+
+```bash
+# Test that promptfoo can find your Python
+python -c "import sys; print(sys.executable)"
+
+# If this works but promptfoo still has issues, set PROMPTFOO_PYTHON:
+export PROMPTFOO_PYTHON=$(python -c "import sys; print(sys.executable)")
 ```
 
 ### Handling errors

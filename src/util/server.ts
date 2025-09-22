@@ -1,6 +1,6 @@
 import opener from 'opener';
-import { fetchWithCache } from '../cache';
 import { getDefaultPort, VERSION } from '../constants';
+import { fetchWithProxy } from './fetch';
 import logger from '../logger';
 import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
 import { promptYesNo } from './readline';
@@ -49,14 +49,12 @@ export async function checkServerFeatureSupport(
     const versionUrl = getRemoteVersionUrl();
 
     if (versionUrl) {
-      const { data } = await fetchWithCache(
-        versionUrl,
-        {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        },
-        5000,
-      );
+      const response = await fetchWithProxy(versionUrl, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
 
       if (data.buildDate) {
         // Parse build date and check if it's after the required date
@@ -89,12 +87,13 @@ export async function checkServerFeatureSupport(
 }
 
 export async function checkServerRunning(port = getDefaultPort()): Promise<boolean> {
+  logger.debug(`Checking for existing server on port ${port}...`);
   try {
-    const response = await fetch(`http://localhost:${port}/health`);
+    const response = await fetchWithProxy(`http://localhost:${port}/health`);
     const data = await response.json();
     return data.status === 'OK' && data.version === VERSION;
   } catch (err) {
-    logger.debug(`Failed to check server health: ${String(err)}`);
+    logger.debug(`No existing server found - this is expected on first startup. ${String(err)}`);
     return false;
   }
 }

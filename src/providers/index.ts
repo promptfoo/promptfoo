@@ -12,7 +12,7 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
 
-import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
+import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
 

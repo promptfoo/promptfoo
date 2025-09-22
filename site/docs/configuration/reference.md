@@ -13,7 +13,7 @@ keywords:
     assertion types,
   ]
 pagination_prev: configuration/guide
-pagination_next: configuration/parameters
+pagination_next: configuration/prompts
 ---
 
 # Reference
@@ -35,6 +35,9 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.repeat          | number                                                                                           | No       | Number of times to run each test case . Defaults to 1                                                                                                                                                       |
 | evaluateOptions.delay           | number                                                                                           | No       | Force the test runner to wait after each API call (milliseconds)                                                                                                                                            |
 | evaluateOptions.showProgressBar | boolean                                                                                          | No       | Whether to display the progress bar                                                                                                                                                                         |
+| evaluateOptions.cache           | boolean                                                                                          | No       | Whether to use disk cache for results (default: true)                                                                                                                                                       |
+| evaluateOptions.timeoutMs       | number                                                                                           | No       | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error. Default is 0 (no timeout).                                                 |
+| evaluateOptions.maxEvalTimeMs   | number                                                                                           | No       | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                           |
 | extensions                      | string[]                                                                                         | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
 | env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                   |
 | commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                        | No       | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                      |
@@ -138,6 +141,7 @@ tests: tests.csv
 
 # Set default command-line options
 commandLineOptions:
+  envPath: .env.local # Load environment variables from custom .env file
   maxConcurrency: 10
   repeat: 3
   delay: 1000
@@ -430,6 +434,7 @@ interface GuardrailResponse {
   flagged?: boolean;
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
+  reason?: string;
 }
 ```
 

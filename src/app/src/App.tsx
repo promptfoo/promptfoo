@@ -20,6 +20,7 @@ import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
 import LoginPage from './pages/login';
 import ModelAuditPage from './pages/model-audit/page';
+import NotFoundPage from './pages/NotFoundPage';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
@@ -67,9 +68,13 @@ const router = createBrowserRouter(
           <Route path="/model-audit" element={<ModelAuditPage />} />
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />
-          <Route path="/report" element={<ReportPage />} />
+
+          {/* Redirect legacy /report route to /reports (since v0.118.2) */}
+          <Route path="/report" element={<Navigate to="/reports" replace />} />
+          <Route path="/reports" element={<ReportPage />} />
           <Route path="/setup" element={<EvalCreatorPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
     </>,

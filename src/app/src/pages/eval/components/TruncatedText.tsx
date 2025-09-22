@@ -31,9 +31,31 @@ export interface TruncatedTextProps {
 }
 
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
-  const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
+  // Normalize without destroying arrays/element structure
+  const text: React.ReactNode =
+    typeof rawText === 'string' ||
+    typeof rawText === 'number' ||
+    Array.isArray(rawText) ||
+    React.isValidElement(rawText)
+      ? rawText
+      : JSON.stringify(rawText);
+
+  const contentLen = React.useMemo(() => textLength(text), [text]);
+  const isOverLength = React.useMemo(
+    () => maxLength > 0 && contentLen > maxLength,
+    [contentLen, maxLength],
+  );
+
+  // Initialize truncation state based on whether text actually exceeds maxLength
+  const [isTruncated, setIsTruncated] = React.useState(() => isOverLength);
+
+  // Reset truncation state when content or length threshold changes
+  React.useEffect(() => {
+    setIsTruncated(isOverLength);
+  }, [isOverLength]);
+
   const toggleTruncate = () => {
-    setIsTruncated(!isTruncated);
+    setIsTruncated((v) => !v);
   };
 
   const truncateText = (node: React.ReactNode, length: number = 0): React.ReactNode => {
@@ -68,15 +90,8 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     return node;
   };
 
-  let text;
-  if (React.isValidElement(rawText) || typeof rawText === 'string') {
-    text = rawText;
-  } else {
-    text = JSON.stringify(rawText);
-  }
   const truncatedText = isTruncated ? truncateText(text) : text;
 
-  const isOverLength = textLength(text) > maxLength;
   return (
     <div style={{ position: 'relative' }}>
       <div
@@ -88,6 +103,8 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
           marginBottom: '8px',
         }}
         onClick={isOverLength ? toggleTruncate : undefined}
+        // Force re-render when isOverLength changes by adding a data attribute
+        data-over-length={isOverLength}
       >
         {truncatedText}
         {isTruncated && isOverLength && (

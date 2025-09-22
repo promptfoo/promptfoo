@@ -8,10 +8,10 @@ import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { readPrompts } from '../../../src/prompts';
-import { loadApiProviders } from '../../../src/providers';
+import { readPrompts } from '../../../src/prompts/index';
+import { loadApiProviders } from '../../../src/providers/index';
 import { type UnifiedConfig } from '../../../src/types';
-import { isRunningUnderNpx } from '../../../src/util';
+import { isRunningUnderNpx } from '../../../src/util/index';
 import {
   combineConfigs,
   dereferenceConfig,
@@ -300,7 +300,7 @@ describe('combineConfigs', () => {
       outputPath: [],
       commandLineOptions: { verbose: false },
       metadata: {},
-      sharing: true,
+      sharing: false,
     });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
@@ -978,6 +978,26 @@ describe('combineConfigs', () => {
       apiBaseUrl: 'http://localhost',
       appBaseUrl: 'http://localhost',
     });
+  });
+
+  it('should default sharing to false when not defined', async () => {
+    const config = {
+      description: 'test config',
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      tests: ['test1'],
+      // No sharing property defined
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    const result = await combineConfigs(['config.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config.json'),
+      expect.anything(),
+    );
+
+    expect(result.sharing).toBe(false);
   });
 
   it('should load defaultTest from external file when string starts with file://', async () => {

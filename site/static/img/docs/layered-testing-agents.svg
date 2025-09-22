@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="blackBoxGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="componentGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6d28d9;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="traceGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#dc2626;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#b91c1c;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Drop shadow filter -->
+    <filter id="dropShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dx="0" dy="2" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.2"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Icons -->
+    <g id="userIcon">
+      <circle cx="12" cy="8" r="4" fill="white"/>
+      <path d="M12 14c-5 0-9 2-9 6v2h18v-2c0-4-4-6-9-6z" fill="white"/>
+    </g>
+
+    <g id="codeIcon">
+      <path d="M8 4l-4 4 4 4M16 4l4 4-4 4M14 2l-4 16" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <g id="traceIcon">
+      <path d="M2 12h4l2-4 4 8 2-4h4" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </defs>
+
+  <!-- Title -->
+  <text x="400" y="40" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="600" text-anchor="middle" fill="#1f2937">
+    Layered Testing for LLM Agents
+  </text>
+
+  <!-- Black-Box Testing Layer -->
+  <g transform="translate(50, 80)">
+    <rect x="0" y="0" width="700" height="100" rx="12" fill="url(#blackBoxGradient)" filter="url(#dropShadow)"/>
+    
+    <!-- Icon -->
+    <g transform="translate(20, 35) scale(1.5)">
+      <use href="#userIcon"/>
+    </g>
+    
+    <!-- Title -->
+    <text x="70" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="600" fill="white">
+      Black-Box Testing (End-to-End)
+    </text>
+    
+    <!-- Description -->
+    <text x="70" y="60" font-family="system-ui, -apple-system, sans-serif" font-size="14" fill="white" opacity="0.9">
+      Test the complete agent system as users would interact with it
+    </text>
+    
+    <!-- Car analogy -->
+    <text x="70" y="80" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="white" opacity="0.7" font-style="italic">
+      Like a test drive: Does it get you from A to B safely?
+    </text>
+    
+    <!-- Best for -->
+    <text x="500" y="50" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="white" opacity="0.9">
+      Best for:
+    </text>
+    <text x="500" y="68" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="white" opacity="0.8">
+      • Quick tests
+    </text>
+    <text x="500" y="84" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="white" opacity="0.8">
+      • Compliance testing
+    </text>
+  </g>
+
+  <!-- Component Testing Layer -->
+  <g transform="translate(50, 210)">
+    <rect x="0" y="0" width="700" height="100" rx="12" fill="url(#componentGradient)" filter="url(#dropShadow)"/>
+    
+    <!-- Icon -->
+    <g transform="translate(20, 35) scale(1.5)">
+      <use href="#codeIcon"/>
+    </g>
+    
+    <!-- Title -->
+    <text x="70" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="600" fill="white">
+      Component Testing (Direct Hooks)
+    </text>
+    
+    <!-- Description -->
+    <text x="70" y="60" font-family="system-ui, -apple-system, sans-serif" font-size="14" fill="white" opacity="0.9">
+      Test individual agent components in isolation
+    </text>
+    
+    <!-- Car analogy -->
+    <text x="70" y="80" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="white" opacity="0.7" font-style="italic">
+      Like checking engine, brakes, and steering individually
+    </text>
+    
+    <!-- Best for -->
+    <text x="500" y="50" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="white" opacity="0.9">
+      Best for:
+    </text>
+    <text x="500" y="68" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="white" opacity="0.8">
+      • Finding specific vulnerabilities
+    </text>
+    <text x="500" y="84" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="white" opacity="0.8">
+      • Faster iteration
+    </text>
+  </g>
+
+  <!-- Trace-Based Testing Layer -->
+  <g transform="translate(50, 340)">
+    <rect x="0" y="0" width="700" height="100" rx="12" fill="url(#traceGradient)" filter="url(#dropShadow)"/>
+    
+    <!-- Icon -->
+    <g transform="translate(20, 35) scale(1.5)">
+      <use href="#traceIcon"/>
+    </g>
+    
+    <!-- Title -->
+    <text x="70" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="600" fill="white">
+      Trace-Based Testing (Glass Box)
+    </text>
+    
+    <!-- Description -->
+    <text x="70" y="60" font-family="system-ui, -apple-system, sans-serif" font-size="14" fill="white" opacity="0.9">
+      Use OpenTelemetry tracing to observe internal agent behavior
+    </text>
+    
+    <!-- Car analogy -->
+    <text x="70" y="80" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="white" opacity="0.7" font-style="italic">
+      Like hooking up a diagnostic computer during the drive
+    </text>
+    
+    <!-- Best for -->
+    <text x="500" y="50" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="white" opacity="0.9">
+      Best for:
+    </text>
+    <text x="500" y="68" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="white" opacity="0.8">
+      • Debugging vulnerabilities
+    </text>
+    <text x="500" y="84" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="white" opacity="0.8">
+      • Complex failure debugging
+    </text>
+  </g>
+
+  <!-- Connecting arrows showing the layers work together -->
+  <g opacity="0.4">
+    <!-- Arrow from Black-Box to Component -->
+    <path d="M 400 180 L 400 210" stroke="#6b7280" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+    
+    <!-- Arrow from Component to Trace -->
+    <path d="M 400 310 L 400 340" stroke="#6b7280" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  </g>
+
+  <!-- Arrow marker definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+      <polygon points="0 0, 10 5, 0 10" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <!-- Bottom note -->
+  <text x="400" y="475" font-family="system-ui, -apple-system, sans-serif" font-size="12" text-anchor="middle" fill="#6b7280">
+    Multi-layered approach ensures comprehensive agent security testing
+  </text>
+</svg>

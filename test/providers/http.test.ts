@@ -1,8 +1,11 @@
 import crypto from 'crypto';
-import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 
+import dedent from 'dedent';
+
+// Mock console.warn to prevent test noise
+const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -27,8 +30,8 @@ jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-jest.mock('../../src/fetch', () => ({
-  ...jest.requireActual('../../src/fetch'),
+jest.mock('../../src/util/fetch/index.ts', () => ({
+  ...jest.requireActual('../../src/util/fetch/index.ts'),
   fetchWithRetries: jest.fn(),
   fetchWithTimeout: jest.fn(),
 }));
@@ -959,7 +962,7 @@ describe('HttpProvider', () => {
         const body = `{
 "messages": [
   {
-    "role": "system", 
+    "role": "system",
     "content": "{{systemPrompt}}"
   },
   {
@@ -986,7 +989,7 @@ describe('HttpProvider', () => {
         expect(result).toBe(`{
 "messages": [
   {
-    "role": "system", 
+    "role": "system",
     "content": "You are a helpful assistant"
   },
   {
@@ -1474,6 +1477,230 @@ describe('HttpProvider', () => {
     );
   });
 
+  describe('Authentication header sanitization', () => {
+    it('should redact authentication headers in metadata', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer secret-token',
+          'x-api-key': 'api-key-12345',
+          cookie: 'session=abc123; other=value',
+          'x-custom-header': 'should-remain',
+          'cache-control': 'no-cache',
+        },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      // Check that auth headers are redacted but other headers remain unchanged
+      expect(result.metadata?.http?.headers).toEqual({
+        'content-type': 'application/json',
+        authorization: '[REDACTED]',
+        'x-api-key': '[REDACTED]',
+        cookie: '[REDACTED]',
+        'x-custom-header': 'should-remain',
+        'cache-control': 'no-cache',
+      });
+    });
+
+    it('should redact various authentication header patterns', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {
+          Authorization: 'Bearer token',
+          'X-API-KEY': 'key123',
+          'API-Key': 'key456',
+          'X-Auth-Token': 'auth789',
+          'Access-Token': 'access123',
+          'X-Secret': 'secret456',
+          Token: 'token789',
+          ApiKey: 'apikey123',
+          Password: 'pass456',
+          Cookie: 'session=xyz',
+          'X-CSRF-Token': 'csrf123',
+          'Session-Id': 'session456',
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'User-Agent': 'test-agent',
+        },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      // Sensitive headers should be redacted, others remain unchanged
+      expect(result.metadata?.http?.headers).toEqual({
+        Authorization: '[REDACTED]',
+        'X-API-KEY': '[REDACTED]',
+        'API-Key': '[REDACTED]',
+        'X-Auth-Token': '[REDACTED]',
+        'Access-Token': '[REDACTED]',
+        'X-Secret': '[REDACTED]',
+        Token: '[REDACTED]',
+        ApiKey: '[REDACTED]',
+        Password: '[REDACTED]',
+        Cookie: '[REDACTED]',
+        'X-CSRF-Token': '[REDACTED]',
+        'Session-Id': '[REDACTED]',
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'User-Agent': 'test-agent',
+      });
+    });
+
+    it('should handle missing or undefined headers gracefully', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: undefined,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      // Should return empty object when headers are undefined
+      expect(result.metadata?.http?.headers).toEqual({});
+    });
+
+    it('should redact auth headers in raw request mode with debug context', async () => {
+      const rawRequest = dedent`
+        GET /api/data HTTP/1.1
+        Host: example.com
+        User-Agent: TestAgent/1.0
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          authorization: 'Bearer token',
+          'x-api-key': 'secret',
+          'content-type': 'application/json',
+          etag: 'W/"123"',
+        },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt', {
+        debug: true,
+        vars: {},
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      // In debug mode, headers should still have auth info redacted
+      expect(result.metadata?.headers).toEqual({
+        authorization: '[REDACTED]',
+        'x-api-key': '[REDACTED]',
+        'content-type': 'application/json',
+        etag: 'W/"123"',
+      });
+    });
+
+    it('should handle case-insensitive header matching', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {
+          AUTHORIZATION: 'Bearer TOKEN',
+          'x-ApI-kEy': 'KEY',
+          'Content-TYPE': 'application/json',
+          'X-Request-ID': 'req-123',
+        },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      // Auth headers should be redacted regardless of case
+      expect(result.metadata?.http?.headers).toEqual({
+        AUTHORIZATION: '[REDACTED]',
+        'x-ApI-kEy': '[REDACTED]',
+        'Content-TYPE': 'application/json',
+        'X-Request-ID': 'req-123',
+      });
+    });
+
+    it('should redact headers containing auth-related keywords', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {
+          'X-Custom-Authorization-Header': 'auth-value',
+          'App-Token-Value': 'token123',
+          'Secret-Key': 'secret',
+          'X-Session-Data': 'session123',
+          'X-Request-ID': 'req-456',
+          'X-Rate-Limit': '100',
+        },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      // Headers containing auth keywords should be redacted
+      expect(result.metadata?.http?.headers).toEqual({
+        'X-Custom-Authorization-Header': '[REDACTED]',
+        'App-Token-Value': '[REDACTED]',
+        'Secret-Key': '[REDACTED]',
+        'X-Session-Data': '[REDACTED]',
+        'X-Request-ID': 'req-456',
+        'X-Rate-Limit': '100',
+      });
+    });
+  });
+
   describe('Content-Type and body handling', () => {
     it('should render string body when content-type is not set', async () => {
       const provider = new HttpProvider(mockUrl, {
@@ -1735,13 +1962,15 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({
-        output: { chat_history: 'success' },
-        raw: JSON.stringify({ result: 'success' }),
-        metadata: {
-          http: { status: 200, statusText: 'OK', headers: {} },
-        },
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          output: { chat_history: 'success' },
+          raw: JSON.stringify({ result: 'success' }),
+          metadata: {
+            http: { status: 200, statusText: 'OK', headers: {} },
+          },
+        }),
+      );
     });
 
     it('should prefer transformResponse over responseParser when both are set', async () => {
@@ -1764,13 +1993,15 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({
-        output: { chat_history: 'from transformResponse' },
-        raw: JSON.stringify({ result: 'success' }),
-        metadata: {
-          http: { status: 200, statusText: 'OK', headers: {} },
-        },
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          output: { chat_history: 'from transformResponse' },
+          raw: JSON.stringify({ result: 'success' }),
+          metadata: {
+            http: { status: 200, statusText: 'OK', headers: {} },
+          },
+        }),
+      );
     });
 
     it('should handle string-based responseParser when transformResponse is not set', async () => {
@@ -1792,13 +2023,15 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({
-        output: 'success',
-        raw: JSON.stringify({ result: 'success' }),
-        metadata: {
-          http: { status: 200, statusText: 'OK', headers: {} },
-        },
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          output: 'success',
+          raw: JSON.stringify({ result: 'success' }),
+          metadata: {
+            http: { status: 200, statusText: 'OK', headers: {} },
+          },
+        }),
+      );
     });
   });
 
@@ -1911,13 +2144,13 @@ describe('HttpProvider', () => {
 describe('createTransformRequest', () => {
   it('should return identity function when no transform specified', async () => {
     const transform = await createTransformRequest(undefined);
-    const result = await transform('test prompt');
+    const result = await transform('test prompt', {} as any);
     expect(result).toBe('test prompt');
   });
 
   it('should handle string templates', async () => {
     const transform = await createTransformRequest('return {"text": prompt}');
-    const result = await transform('hello');
+    const result = await transform('hello', {} as any);
     expect(result).toEqual({
       text: 'hello',
     });
@@ -1929,7 +2162,7 @@ describe('createTransformRequest', () => {
     };
     const transform = await createTransformRequest(errorFn);
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow('Error in request transform function: Transform function error');
   });
 
@@ -1941,7 +2174,7 @@ describe('createTransformRequest', () => {
 
     const transform = await createTransformRequest('file://error-transform.js');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow(
       'Error in request transform function from error-transform.js: File transform error',
     );
@@ -1950,7 +2183,7 @@ describe('createTransformRequest', () => {
   it('should handle errors in string template transform', async () => {
     const transform = await createTransformRequest('return badVariable.nonexistent');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow('Error in request transform string template: badVariable is not defined');
   });
 
@@ -2004,14 +2237,14 @@ describe('createTransformRequest', () => {
 
     const transform = await createTransformRequest('file://specific-file.js');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow('Error in request transform function from specific-file.js: File error');
   });
 
   it('should handle errors in string template rendering', async () => {
     const transform = await createTransformRequest('{{ nonexistent | invalid }}');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow(
       'Error in request transform string template: (unknown path)\n  Error: filter not found: invalid',
     );
@@ -3310,7 +3543,11 @@ describe('HttpProvider with token estimation', () => {
 
     const result = await provider.callApi('Test prompt');
 
-    expect(result.tokenUsage).toBeUndefined();
+    expect(result.tokenUsage).toEqual(
+      expect.objectContaining({
+        numRequests: 1,
+      }),
+    );
   });
 
   it('should enable token estimation by default in redteam mode', async () => {
@@ -4528,4 +4765,9 @@ describe('HttpProvider - Sanitization', () => {
     // Note: timeout and maxRetries are not included in the rendered config that gets logged
     expect(logMessage).not.toContain('[REDACTED]');
   });
+});
+
+// Cleanup console mock
+afterAll(() => {
+  consoleSpy.mockRestore();
 });

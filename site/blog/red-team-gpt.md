@@ -41,7 +41,7 @@ GPT-4.1 and 4.5's new capabilities present unique security considerations:
 
 Before you begin, ensure you have:
 
-- **Node.js**: Version 18 or later. [Download Node.js](https://nodejs.org/en/download/)
+- **Node.js**: Version 20 or later. [Download Node.js](https://nodejs.org/en/download/)
 - **OpenAI API Key**: Sign up for an [OpenAI account](https://platform.openai.com/) and obtain an API key
 - **Promptfoo**: No prior installation needed; we'll use `npx` to run commands
 

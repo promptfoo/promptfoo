@@ -1,6 +1,6 @@
 import logger from '../logger';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleGuardrails = async ({
   assertion,

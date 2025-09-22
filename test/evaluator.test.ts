@@ -14,7 +14,12 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
-import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types';
+import {
+  type ApiProvider,
+  type Prompt,
+  ResultFailureReason,
+  type TestSuite,
+} from '../src/types/index';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
@@ -112,6 +117,34 @@ jest.mock('../src/util/transform', () => ({
       if (code.includes('test2UpperCase: vars.test2.toUpperCase()')) {
         return { ...input, test2UpperCase: input.test2.toUpperCase() };
       }
+      // Handle metadata transforms
+      if (code.includes('context?.metadata')) {
+        if (code.includes('Output:') && context?.metadata) {
+          return `Output: ${input}, Metadata: ${JSON.stringify(context.metadata)}`;
+        }
+        if (code.includes('Has metadata') && context?.metadata) {
+          return `Has metadata: ${input}`;
+        }
+        if (code.includes('No metadata') && !context?.metadata) {
+          return `No metadata: ${input}`;
+        }
+        if (
+          code.includes('Empty metadata') &&
+          context?.metadata &&
+          Object.keys(context.metadata).length === 0
+        ) {
+          return `Empty metadata: ${input}`;
+        }
+        if (code.includes('All context') && context?.vars && context?.prompt && context?.metadata) {
+          return `All context: ${input}`;
+        }
+        if (
+          code.includes('Missing context') &&
+          !(context?.vars && context?.prompt && context?.metadata)
+        ) {
+          return `Missing context: ${input}`;
+        }
+      }
     }
     return input;
   }),
@@ -163,6 +196,19 @@ jest.mock('../src/esm');
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
   runExtensionHook: jest.fn().mockImplementation((extensions, hookName, context) => context),
+}));
+
+jest.mock('../src/cliState', () => ({
+  __esModule: true,
+  default: {
+    resume: false,
+    basePath: '',
+    webUI: false,
+  },
+}));
+
+jest.mock('../src/models/prompt', () => ({
+  generateIdFromPrompt: jest.fn((prompt) => `prompt-${prompt.label || 'default'}`),
 }));
 
 jest.mock('../src/util/time', () => ({
@@ -252,10 +298,18 @@ describe('evaluator', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset cliState for each test to ensure clean state
+    const cliState = require('../src/cliState').default;
+    cliState.resume = false;
+    cliState.basePath = '';
+    cliState.webUI = false;
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+    // Reset cliState after each test
+    const cliState = require('../src/cliState').default;
+    cliState.resume = false;
     if (global.gc) {
       global.gc(); // Force garbage collection
     }
@@ -1074,6 +1128,159 @@ describe('evaluator', () => {
     );
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('evaluate with metadata passed to test transform', async () => {
+    const mockApiProviderWithMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { responseTime: 123, modelVersion: 'v1.0' },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Output: Test output, Metadata: {"responseTime":123,"modelVersion":"v1.0"}',
+            },
+          ],
+          options: {
+            transform:
+              'context?.metadata ? `Output: ${output}, Metadata: ${JSON.stringify(context.metadata)}` : output',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderWithMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe(
+      'Output: Test output, Metadata: {"responseTime":123,"modelVersion":"v1.0"}',
+    );
+  });
+
+  it('evaluate with metadata passed to test transform - no metadata case', async () => {
+    const mockApiProviderNoMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'No metadata: Test output',
+            },
+          ],
+          options: {
+            transform: 'context?.metadata ? `Has metadata: ${output}` : `No metadata: ${output}`',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderNoMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('No metadata: Test output');
+  });
+
+  it('evaluate with metadata passed to test transform - empty metadata', async () => {
+    const mockApiProviderEmptyMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-empty-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: {},
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderEmptyMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Empty metadata: Test output',
+            },
+          ],
+          options: {
+            transform:
+              '(context?.metadata && Object.keys(context.metadata).length === 0) ? `Empty metadata: ${output}` : output',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderEmptyMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Empty metadata: Test output');
+  });
+
+  it('evaluate with metadata preserved alongside other context properties', async () => {
+    const mockApiProviderWithMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-metadata-context'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { modelInfo: 'gpt-4' },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithMetadata],
+      prompts: [toPrompt('Test {{ var }}')],
+      tests: [
+        {
+          vars: { var: 'value' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'All context: Test output',
+            },
+          ],
+          options: {
+            transform:
+              '(Boolean(context?.vars) && Boolean(context?.prompt) && Boolean(context?.metadata)) ? `All context: ${output}` : `Missing context: ${output}`',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderWithMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('All context: Test output');
   });
 
   it('evaluate with context in vars transform in defaultTest', async () => {
@@ -3295,7 +3502,7 @@ describe('formatVarsForDisplay', () => {
 
   it('should handle extremely large vars without crashing', () => {
     // This would have caused RangeError before the fix
-    const megaString = 'x'.repeat(5 * 1024 * 1024); // 5MB string
+    const megaString = 'x'.repeat(500 * 1024); // 500KB string (reduced from 5MB to prevent SIGSEGV on macOS/Node24)
     const vars = {
       mega1: megaString,
       mega2: megaString,
@@ -3390,9 +3597,8 @@ describe('evaluator defaultTest merging', () => {
           vars: { text: 'Hello world' },
           assert: [
             {
-              type: 'similar',
-              value: 'expected output',
-              threshold: 0.8,
+              type: 'equals',
+              value: 'Test output',
             },
           ],
         },
@@ -3596,5 +3802,105 @@ describe('Evaluator with external defaultTest', () => {
     expect(result.testCase.options?.transformVars).toBe('vars.transformed = true; return vars;');
     // But other options should be merged
     expect(result.testCase.options?.provider).toBe('default-provider');
+  });
+
+  it('should preserve metrics from existing prompts when resuming evaluation', async () => {
+    const cliState = require('../src/cliState').default;
+
+    // Store original resume state and ensure it's false
+    const originalResume = cliState.resume;
+    cliState.resume = false;
+
+    try {
+      // Create a test suite with 2 prompts and 1 test
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [
+          { raw: 'Test prompt 1', label: 'test1' },
+          { raw: 'Test prompt 2', label: 'test2' },
+        ],
+        tests: [{ vars: { var: 'value1' } }],
+      };
+
+      // Create initial eval record
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      // Simulate that the eval was already partially completed with some metrics
+      const initialMetrics1 = {
+        score: 10,
+        testPassCount: 1,
+        testFailCount: 0,
+        testErrorCount: 0,
+        assertPassCount: 1,
+        assertFailCount: 0,
+        totalLatencyMs: 100,
+        tokenUsage: createEmptyTokenUsage(),
+        namedScores: {},
+        namedScoresCount: {},
+        cost: 0.001,
+      };
+
+      const initialMetrics2 = {
+        score: 5,
+        testPassCount: 0,
+        testFailCount: 1,
+        testErrorCount: 0,
+        assertPassCount: 0,
+        assertFailCount: 1,
+        totalLatencyMs: 150,
+        tokenUsage: createEmptyTokenUsage(),
+        namedScores: {},
+        namedScoresCount: {},
+        cost: 0.002,
+      };
+
+      evalRecord.prompts = [
+        {
+          raw: 'Test prompt 1',
+          label: 'test1',
+          id: 'prompt-test1',
+          provider: 'test-provider',
+          metrics: { ...initialMetrics1 },
+        },
+        {
+          raw: 'Test prompt 2',
+          label: 'test2',
+          id: 'prompt-test2',
+          provider: 'test-provider',
+          metrics: { ...initialMetrics2 },
+        },
+      ];
+      evalRecord.persisted = true;
+
+      // Enable resume mode
+      cliState.resume = true;
+
+      // Run evaluation with resume - this will run the test on both prompts
+      await evaluate(testSuite, evalRecord, {});
+
+      // Verify the prompts still exist and have the right IDs
+      expect(evalRecord.prompts).toHaveLength(2);
+      expect(evalRecord.prompts[0].id).toBe('prompt-test1');
+      expect(evalRecord.prompts[1].id).toBe('prompt-test2');
+
+      // Check that the prompts have preserved metrics
+      // When resuming, the metrics should be accumulated with the initial values
+      // The key test is that metrics are not reset to 0
+
+      // For prompt 1 which had testPassCount=1 initially
+      expect(evalRecord.prompts[0].metrics?.testPassCount).toBeGreaterThanOrEqual(1);
+
+      // For prompt 2, at least verify metrics exist and aren't completely reset
+      expect(evalRecord.prompts[1].metrics).toBeDefined();
+
+      // The combined pass/fail count should be greater than 0, showing metrics weren't reset
+      const prompt2TotalTests =
+        (evalRecord.prompts[1].metrics?.testPassCount || 0) +
+        (evalRecord.prompts[1].metrics?.testFailCount || 0);
+      expect(prompt2TotalTests).toBeGreaterThan(0);
+    } finally {
+      // Always restore original state
+      cliState.resume = originalResume;
+    }
   });
 });

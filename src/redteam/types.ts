@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { Plugin, Severity } from './constants';
 
@@ -6,6 +8,23 @@ import type { Plugin, Severity } from './constants';
 // and can be anything the user wants.
 export type Modifier = string | 'tone' | 'style' | 'context' | 'testGenerationInstructions';
 export type Intent = string | string[];
+
+// Policy Types
+export const PolicyObjectSchema = z.object({
+  id: z.string().uuid(),
+  text: z.string().optional(),
+});
+export type PolicyObject = z.infer<typeof PolicyObjectSchema>;
+export type Policy = string | PolicyObject; // Policy Text or Policy ID
+
+export type PoliciesById = Map<
+  PolicyObject['id'],
+  {
+    text: Required<PolicyObject>['text'];
+    severity: Severity;
+  }
+>;
+
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
 export type PluginConfig = {
@@ -36,7 +55,7 @@ export type PluginConfig = {
 
   indirectInjectionVar?: string;
   intent?: Intent | Intent[];
-  policy?: string;
+  policy?: Policy;
   systemPrompt?: string;
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies?: string[];
@@ -122,6 +141,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
   progressBar?: boolean;
+  liveRedteamConfig?: RedteamObjectConfig;
   configFromCloud?: any;
 }
 

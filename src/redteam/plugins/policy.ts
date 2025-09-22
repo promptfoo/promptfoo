@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import invariant from '../../util/invariant';
+import { type Policy, type PolicyObject, PolicyObjectSchema } from '../types';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
@@ -9,18 +10,57 @@ import type {
   GradingResult,
   PluginConfig,
   TestCase,
-} from '../../types';
+} from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 
+/**
+ * Checks whether a given Policy is a valid PolicyObject.
+ * @param policy - The policy to check.
+ * @returns True if the policy is a valid PolicyObject, false otherwise.
+ */
+export function isValidPolicyObject(policy: Policy): policy is PolicyObject {
+  return PolicyObjectSchema.safeParse(policy).success;
+}
+
 export class PolicyPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
-  private policy: string;
+  /**
+   * The text of the policy.
+   */
+  private policy: Required<PolicyObject>['text'];
+  /**
+   * The ID of the policy; available if the policy is loaded from Promptfoo Cloud.
+   */
+  private policyId?: PolicyObject['id'];
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
     super(provider, purpose, injectVar, config);
     invariant(config.policy, 'A "policy" property is required for the policy plugin.');
-    this.policy = config.policy;
+
+    if (isValidPolicyObject(config.policy)) {
+      // Edge case: PolicyObject should not be provided w/o text (i.e. it hasn't been "resolved" by something like
+      // utils/cloud.ts#getPoliciesFromCloud)
+      if (!config.policy.text) {
+        throw new Error(
+          `Policy with ID ${config.policy.id} has not been resolved. Please ensure policies are loaded from cloud.`,
+        );
+      }
+
+      this.policy = config.policy.text;
+      this.policyId = config.policy.id;
+    } else if (typeof config.policy === 'string') {
+      this.policy = config.policy; // The policy declaration is itself the policy text
+    }
+    // Edge case: this state should not be reached b/c `createPluginFactory` validates the config
+    // prior to instantiating the plugin. This state is reached within Promptfoo Cloud, so display an
+    // error message which is meaningful to a developer debugging the issue.
+    else {
+      invariant(
+        false,
+        'This state can only be reached if `createPluginFactory#validate` is not validating the config.',
+      );
+    }
   }
 
   protected async getTemplate(): Promise<string> {
@@ -75,6 +115,7 @@ export class PolicyPlugin extends RedteamPluginBase {
       metadata: {
         ...test.metadata,
         policy: this.policy,
+        ...(this.policyId && { policyId: this.policyId }),
       },
     }));
   }
@@ -110,6 +151,9 @@ export class PolicyViolationGrader extends RedteamGraderBase {
     provider: ApiProvider | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const { policy, ...restMetadata } = test.metadata || {};
+
+    // For custom policies, we skip the refusal check by passing skipRefusalCheck=true
+    // This allows the policy grader to evaluate refusals according to the policy rubric
     return super.getResult(
       prompt,
       llmOutput,
@@ -122,6 +166,8 @@ export class PolicyViolationGrader extends RedteamGraderBase {
       },
       provider,
       undefined,
+      undefined,
+      true, // skipRefusalCheck - custom policies should evaluate refusals
     );
   }
 }

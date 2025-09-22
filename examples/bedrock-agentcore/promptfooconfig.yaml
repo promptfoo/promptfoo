@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# AWS Bedrock AgentCore Provider Example Configuration
+# This example demonstrates how to use AWS Bedrock AgentCore with promptfoo
+
+description: 'AWS Bedrock AgentCore test suite'
+
+prompts:
+  - 'What can you help me with?'
+  - 'Perform a calculation: what is 15 multiplied by 27?'
+  - 'Search for information about AWS Lambda functions'
+
+providers:
+  # Basic configuration with agent ID in the path
+  - id: bedrock:agentcore:basic-agent
+    config:
+      agentId: ABCDEFGHIJ
+      agentAliasId: PROD_ALIAS_ID
+      region: us-east-1
+
+  # Configuration with additional options
+  - id: bedrock:agentcore:my-agent
+    config:
+      agentId: ABCDEFGHIJ
+      agentAliasId: PROD_ALIAS_ID # Optional: specific alias to use
+      region: us-east-1
+      sessionId: session-123 # Optional: maintain conversation state
+      enableTrace: true # Enable detailed trace information
+      memoryId: SHORT_TERM_MEMORY # or LONG_TERM_MEMORY
+
+      # AWS credentials (optional - will use default chain if not provided)
+      # accessKeyId: YOUR_ACCESS_KEY
+      # secretAccessKey: YOUR_SECRET_KEY
+      # sessionToken: YOUR_SESSION_TOKEN  # For temporary credentials
+      # profile: my-aws-profile  # Use AWS SSO profile
+tests:
+  - vars:
+      query: 'Tell me about your capabilities'
+    assert:
+      - type: contains
+        value: 'agent'
+
+  - vars:
+      query: 'Calculate the sum of 100 and 250'
+    assert:
+      - type: contains
+        value: '350'
+      - type: not-empty
+
+  - vars:
+      query: 'Remember that my favorite color is blue'
+    assert:
+      - type: not-empty
+      # With memory enabled, the agent should acknowledge storing this information
+
+  - vars:
+      query: 'What is my favorite color?'
+    assert:
+      - type: contains
+        value: 'blue'
+      # This test verifies memory retention if using the same session
+# Environment variables (set these in your environment or .env file):
+# AWS_BEDROCK_REGION=us-east-1
+# AWS_ACCESS_KEY_ID=your_access_key
+# AWS_SECRET_ACCESS_KEY=your_secret_key
+# AWS_SESSION_TOKEN=your_session_token (optional)
+

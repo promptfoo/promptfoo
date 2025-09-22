@@ -576,7 +576,7 @@ See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 
 ### Latency
 
-The `latency` assertion passes if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
+The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
 
 Example:
 

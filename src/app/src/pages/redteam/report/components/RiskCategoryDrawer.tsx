@@ -113,7 +113,7 @@ function getOutputDisplay(output: string | object) {
   return JSON.stringify(output);
 }
 
-const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
+const RiskCategoryDrawer = ({
   open,
   onClose,
   category,
@@ -123,7 +123,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   numPassed,
   numFailed,
   strategyStats,
-}) => {
+}: RiskCategoryDrawerProps) => {
   const navigate = useNavigate();
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {

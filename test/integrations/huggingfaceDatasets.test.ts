@@ -1,5 +1,5 @@
-import { getEnvString } from '../../src/envars';
 import { fetchWithCache } from '../../src/cache';
+import { getEnvString } from '../../src/envars';
 import {
   fetchHuggingFaceDataset,
   parseDatasetPath,
@@ -7,6 +7,10 @@ import {
 
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
+}));
+
+jest.mock('../../src/util/fetch/index.ts', () => ({
+  fetchWithProxy: jest.fn(),
 }));
 
 jest.mock('../../src/envars', () => ({

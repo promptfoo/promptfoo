@@ -54,6 +54,7 @@ export const CommandLineOptionsSchema = z.object({
   cache: z.boolean().optional(),
   table: z.boolean().optional(),
   share: z.boolean().optional(),
+  noShare: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
   filterErrorsOnly: z.string().optional(),
@@ -69,6 +70,7 @@ export const CommandLineOptionsSchema = z.object({
   generateSuggestions: z.boolean().optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
+  retryErrors: z.boolean().optional(),
 
   envPath: z.string().optional(),
 });
@@ -148,7 +150,6 @@ export interface RunEvalOptions {
   registers?: EvalRegisters;
   isRedteam: boolean;
 
-  // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
   allTests?: RunEvalOptions[];
   concurrency?: number;
 
@@ -1144,7 +1145,15 @@ export interface ResultLightweight {
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
-export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
+export type EvalSummary = ResultLightweightWithLabel & {
+  isRedteam: boolean;
+  passRate: number;
+  label: string;
+  providers: {
+    id: string;
+    label: string | null;
+  }[];
+};
 
 export interface OutputMetadata {
   promptfooVersion: string;
@@ -1193,3 +1202,14 @@ export interface LoadApiProviderContext {
   basePath?: string;
   env?: EnvOverrides;
 }
+
+export const EvalResultsFilterMode = z.enum([
+  'all',
+  'failures',
+  'different',
+  'highlights',
+  'errors',
+  'passes',
+]);
+
+export type EvalResultsFilterMode = z.infer<typeof EvalResultsFilterMode>;

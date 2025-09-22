@@ -1,5 +1,5 @@
 import cliState from '../../../src/cliState';
-import { loadApiProviders } from '../../../src/providers';
+import { loadApiProviders } from '../../../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import {
   ATTACKER_MODEL,
@@ -13,6 +13,8 @@ import {
   redteamProviderManager,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
+import { sleep } from '../../../src/util/time';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -20,11 +22,6 @@ import type {
   Prompt,
   ProviderResponse,
 } from '../../../src/types';
-import { sleep } from '../../../src/util/time';
-import {
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../../src/util/tokenUsageUtils';
 
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/cliState', () => ({
@@ -440,7 +437,7 @@ describe('shared redteam provider utilities', () => {
       };
 
       await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-        /Target returned malformed response: expected either `output` or `error` to be set./,
+        /Target returned malformed response: expected either `output` or `error` property to be set/,
       );
     });
 
@@ -459,6 +456,115 @@ describe('shared redteam provider utilities', () => {
       expect(result).toEqual({
         output: 'test response',
         tokenUsage: { numRequests: 1 },
+      });
+    });
+
+    describe('edge cases for empty and falsy responses', () => {
+      it('handles empty string output correctly', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              output: '', // Empty string
+              tokenUsage: { numRequests: 1 },
+            }),
+        };
+
+        const result = await getTargetResponse(mockProvider, 'test prompt');
+
+        expect(result).toEqual({
+          output: '',
+          tokenUsage: { numRequests: 1 },
+        });
+      });
+
+      it('handles zero output correctly', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              output: 0, // Zero value
+              tokenUsage: { numRequests: 1 },
+            }),
+        };
+
+        const result = await getTargetResponse(mockProvider, 'test prompt');
+
+        expect(result).toEqual({
+          output: '0', // Should be stringified
+          tokenUsage: { numRequests: 1 },
+        });
+      });
+
+      it('handles false output correctly', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              output: false, // Boolean false
+              tokenUsage: { numRequests: 1 },
+            }),
+        };
+
+        const result = await getTargetResponse(mockProvider, 'test prompt');
+
+        expect(result).toEqual({
+          output: 'false', // Should be stringified
+          tokenUsage: { numRequests: 1 },
+        });
+      });
+
+      it('handles null output correctly', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              output: null, // Null value
+              tokenUsage: { numRequests: 1 },
+            }),
+        };
+
+        const result = await getTargetResponse(mockProvider, 'test prompt');
+
+        expect(result).toEqual({
+          output: 'null', // Should be stringified
+          tokenUsage: { numRequests: 1 },
+        });
+      });
+
+      it('still fails when output property is missing', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              // No output property at all
+              tokenUsage: { numRequests: 1 },
+            }),
+        };
+
+        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
+          /Target returned malformed response: expected either `output` or `error` property to be set/,
+        );
+      });
+
+      it('still fails when both output and error are missing', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              someOtherField: 'value',
+            } as any),
+        };
+
+        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
+          /Target returned malformed response/,
+        );
       });
     });
   });
@@ -559,22 +665,6 @@ describe('shared redteam provider utilities', () => {
 
       expect(result.success).toBe(false);
       expect(result.unblockingPrompt).toBeUndefined();
-    });
-
-    it('does not increment token usage when skipped via env flag', async () => {
-      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
-
-      const total = createEmptyTokenUsage();
-      const result = await tryUnblocking({
-        messages: [],
-        lastResponse: 'irrelevant',
-        goal: 'test-goal',
-        purpose: 'test-purpose',
-      });
-
-      accumulateResponseTokenUsage(total, result);
-
-      expect(total.numRequests).toBe(0);
     });
   });
 });

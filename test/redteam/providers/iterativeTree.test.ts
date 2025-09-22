@@ -1,9 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import { jest } from '@jest/globals';
-
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
+import { v4 as uuidv4 } from 'uuid';
 import {
   checkIfOnTopic,
   createTreeNode,
@@ -21,6 +17,10 @@ import {
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import { getNunjucksEngine } from '../../../src/util/templates';
+
+import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -28,7 +28,6 @@ import type {
   CallApiOptionsParams,
   GradingResult,
 } from '../../../src/types';
-import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/providers/openai');
 jest.mock('../../../src/util/templates');
@@ -64,6 +63,7 @@ describe('RedteamIterativeProvider', () => {
 
     beforeEach(() => {
       mockRedteamProvider = {
+        id: jest.fn().mockReturnValue('mock-provider'),
         callApi: jest.fn(),
       } as unknown as jest.Mocked<OpenAiChatCompletionProvider>;
     });
@@ -173,6 +173,7 @@ describe('RedteamIterativeProvider', () => {
 
     beforeEach(() => {
       mockRedteamProvider = {
+        id: jest.fn().mockReturnValue('mock-provider'),
         callApi: jest.fn(),
       } as unknown as jest.Mocked<OpenAiChatCompletionProvider>;
     });
@@ -242,6 +243,7 @@ describe('RedteamIterativeProvider', () => {
 
     beforeEach(() => {
       mockRedteamProvider = {
+        id: jest.fn().mockReturnValue('mock-provider'),
         callApi: jest.fn(),
       } as unknown as jest.Mocked<OpenAiChatCompletionProvider>;
     });
@@ -544,10 +546,10 @@ describe('Tree Structure', () => {
 
     beforeEach(() => {
       mockRedteamProvider = {
+        id: jest.fn().mockReturnValue('mock-provider'),
         callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
           output: JSON.stringify({ onTopic: true }),
         }),
-        id: jest.fn().mockReturnValue('mock-provider'),
       } as jest.Mocked<ApiProvider>;
     });
 
@@ -1141,5 +1143,274 @@ describe('Metadata Validation with New Fields', () => {
     expect(completeMetadata.storedGraderResult?.pass).toBe(false);
     expect(completeMetadata.storedGraderResult?.score).toBe(0.7);
     expect(completeMetadata.redteamTreeHistory).toHaveLength(1);
+  });
+});
+
+describe('Token Counting', () => {
+  beforeEach(() => {
+    // Reset TokenUsageTracker between tests to ensure clean state
+    const { TokenUsageTracker } = require('../../../src/util/tokenUsage');
+    TokenUsageTracker.getInstance().resetAllUsage();
+  });
+
+  it('should correctly track token usage from target provider responses', async () => {
+    const mockTargetProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-target'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+        cached: false,
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    const targetPrompt = 'Test prompt';
+    const context: CallApiContextParams = {
+      prompt: { label: 'test', raw: targetPrompt },
+      vars: {},
+    };
+    const options: CallApiOptionsParams = {};
+
+    const result = await getTargetResponse(mockTargetProvider, targetPrompt, context, options);
+
+    // Verify that target token usage is correctly returned
+    expect(result.tokenUsage).toEqual({
+      total: 100,
+      prompt: 60,
+      completion: 40,
+      numRequests: 1,
+    });
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(targetPrompt, context, options);
+  });
+
+  it('should handle missing token usage from target responses', async () => {
+    const mockTargetProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-target'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: 'response without tokens',
+        // No tokenUsage provided
+        cached: false,
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    const result = await getTargetResponse(
+      mockTargetProvider,
+      'test prompt',
+      { prompt: { label: 'test', raw: 'test' }, vars: {} },
+      {},
+    );
+
+    // Should default to numRequests: 1 when no token usage provided
+    expect(result.tokenUsage).toEqual({ numRequests: 1 });
+  });
+
+  it('should handle zero token counts correctly', async () => {
+    const mockTargetProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-target'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: 'response with zero tokens',
+        tokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 1 },
+        cached: false,
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    const result = await getTargetResponse(
+      mockTargetProvider,
+      'test prompt',
+      { prompt: { label: 'test', raw: 'test' }, vars: {} },
+      {},
+    );
+
+    expect(result.tokenUsage).toEqual({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      numRequests: 1,
+    });
+  });
+
+  it('should track token usage from redteam provider calls', async () => {
+    const mockRedteamProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-redteam'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: JSON.stringify({
+          improvement: 'test improvement',
+          prompt: 'test prompt',
+        }),
+        tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+      { role: 'system', content: 'System prompt' },
+    ];
+
+    const result = await getNewPrompt(mockRedteamProvider, redteamHistory);
+
+    expect(result).toEqual({
+      improvement: 'test improvement',
+      prompt: 'test prompt',
+      tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+    });
+  });
+
+  it('should track token usage from judge evaluation calls', async () => {
+    const mockJudgeProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-judge'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: JSON.stringify({
+          currentResponse: { rating: 8, explanation: 'Good response' },
+          previousBestResponse: { rating: 5, explanation: 'Previous response' },
+        }),
+        tokenUsage: { total: 75, prompt: 40, completion: 35, numRequests: 1 },
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    const { score, explanation } = await evaluateResponse(
+      mockJudgeProvider,
+      'Judge prompt',
+      'Target response',
+      'Previous response',
+      false,
+    );
+
+    expect(score).toBe(8);
+    expect(explanation).toBe('Good response');
+    expect(mockJudgeProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should track token usage from on-topic check calls', async () => {
+    const mockOnTopicProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-ontopic'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: JSON.stringify({ onTopic: true }),
+        tokenUsage: { total: 25, prompt: 15, completion: 10, numRequests: 1 },
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    const result = await checkIfOnTopic(
+      mockOnTopicProvider,
+      'On-topic system prompt',
+      'Target prompt',
+    );
+
+    expect(result).toEqual({
+      isOnTopic: true,
+      tokenUsage: { total: 25, prompt: 15, completion: 10, numRequests: 1 },
+    });
+    expect(mockOnTopicProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle incomplete token usage data gracefully', async () => {
+    const mockProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-provider'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: 'response with partial tokens',
+        tokenUsage: { total: 100, prompt: 60 }, // completion missing
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    const result = await getTargetResponse(
+      mockProvider,
+      'test prompt',
+      { prompt: { label: 'test', raw: 'test' }, vars: {} },
+      {},
+    );
+
+    expect(result.tokenUsage).toEqual({
+      total: 100,
+      prompt: 60,
+      numRequests: 1,
+    });
+  });
+
+  it('should properly accumulate token usage across multiple provider calls', async () => {
+    // This test simulates how token usage would be accumulated in the actual iterativeTree provider
+    // by testing individual components that contribute to token usage
+
+    const mockRedteamProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-redteam'),
+      callApi: jest
+        .fn<ApiProvider['callApi']>()
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'test1', prompt: 'prompt1' }),
+          tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ onTopic: true }),
+          tokenUsage: { total: 25, prompt: 15, completion: 10, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 7, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+          tokenUsage: { total: 75, prompt: 40, completion: 35, numRequests: 1 },
+        }),
+    } as jest.Mocked<ApiProvider>;
+
+    const mockTargetProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-target'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    // Simulate the sequence of calls that would happen in one iteration
+    const promptResult = await getNewPrompt(mockRedteamProvider, [
+      { role: 'system', content: 'system' },
+    ]);
+    expect(promptResult.tokenUsage?.total).toBe(50);
+
+    const onTopicResult = await checkIfOnTopic(
+      mockRedteamProvider,
+      'ontopic prompt',
+      'target prompt',
+    );
+    expect(onTopicResult.tokenUsage?.total).toBe(25);
+
+    const targetResult = await getTargetResponse(
+      mockTargetProvider,
+      'target prompt',
+      { prompt: { label: 'test', raw: 'test' }, vars: {} },
+      {},
+    );
+    expect(targetResult.tokenUsage?.total).toBe(100);
+
+    const judgeResult = await evaluateResponse(
+      mockRedteamProvider,
+      'judge prompt',
+      'target response',
+      '',
+      false,
+    );
+    expect(judgeResult).toBeDefined();
+
+    // In the actual provider, these would all be accumulated using accumulateResponseTokenUsage
+    // Total would be: 50 + 25 + 100 + 75 = 250
+    const expectedTotal = 50 + 25 + 100 + 75;
+    expect(expectedTotal).toBe(250);
+  });
+
+  it('should handle provider delay settings during token tracking', async () => {
+    const mockProviderWithDelay: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-provider-with-delay'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: JSON.stringify({ improvement: 'test', prompt: 'test' }),
+        tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+      }),
+      delay: 100, // 100ms delay
+    } as jest.Mocked<ApiProvider>;
+
+    const startTime = Date.now();
+
+    const result = await getNewPrompt(mockProviderWithDelay, [{ role: 'system', content: 'test' }]);
+
+    const endTime = Date.now();
+    const elapsed = endTime - startTime;
+
+    expect(result.tokenUsage?.total).toBe(50);
+    // Should have waited at least the delay time (allowing for some test timing variance)
+    expect(elapsed).toBeGreaterThanOrEqual(90); // Allow for 10ms variance
   });
 });

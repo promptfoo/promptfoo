@@ -148,7 +148,7 @@ function getSystemInfo(infoType, detailed = false) {
     disk: detailed ? 'Disk: 500GB SSD, 200GB free' : 'Disk: 500GB',
     network: detailed ? 'Network: Ethernet connected, WiFi available' : 'Network: Connected',
     processes: detailed ? 'Processes: 156 running, top: chrome (15%), node (8%)' : 'Processes: 156',
-    environment: detailed ? 'Environment: Production, Node.js v18.17.0' : 'Environment: Production',
+    environment: detailed ? 'Environment: Production, Node.js v20.0.0' : 'Environment: Production',
   };
 
   return info[infoType] || 'Unknown system information type';

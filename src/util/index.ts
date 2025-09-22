@@ -25,17 +25,18 @@ import {
   OutputFileExtension,
   ResultFailureReason,
   type TestCase,
-} from '../types';
+} from '../types/index';
 import invariant from '../util/invariant';
-import { convertTestResultsToTableRow } from './exportToFile';
+import { convertTestResultsToTableRow } from './exportToFile/index';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
-import type { Vars } from '../types';
+import type { Vars } from '../types/index';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -323,9 +324,9 @@ export function printBorder() {
 export function setupEnv(envPath: string | undefined) {
   if (envPath) {
     logger.info(`Loading environment variables from ${envPath}`);
-    dotenv.config({ path: envPath, override: true });
+    dotenv.config({ path: envPath, override: true, quiet: true });
   } else {
-    dotenv.config();
+    dotenv.config({ quiet: true });
   }
 }
 
@@ -482,10 +483,7 @@ export function parsePathOrGlob(
   }
 
   const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
-  const safeFilename = path.relative(
-    basePath,
-    path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
-  );
+  const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
   return {
     extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
     filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),
