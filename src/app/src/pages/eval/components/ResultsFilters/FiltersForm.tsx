@@ -6,6 +6,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import {
   Box,
   Button,
+  CircularProgress,
   Divider,
   FormControl,
   IconButton,
@@ -137,7 +138,17 @@ function Filter({
   onClose: () => void;
 }) {
   const theme = useTheme();
-  const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
+  const {
+    filters,
+    updateFilter,
+    removeFilter,
+    updateAllFilterLogicOperators,
+    metadataKeys,
+    metadataKeysLoading,
+    metadataKeysError,
+    fetchMetadataKeys,
+    evalId,
+  } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
   const selectedMetricValues = Object.values(filters.values)
@@ -202,9 +213,20 @@ function Filter({
       ) {
         updatedFilter.operator = 'equals';
       }
+
+      // Fetch metadata keys when user switches to metadata filter type
+      if (
+        filterType === 'metadata' &&
+        evalId &&
+        !metadataKeysLoading &&
+        (!metadataKeys || metadataKeys.length === 0)
+      ) {
+        fetchMetadataKeys(evalId);
+      }
+
       updateFilter(updatedFilter);
     },
-    [value, updateFilter],
+    [value, updateFilter, evalId, metadataKeysLoading, metadataKeys?.length, fetchMetadataKeys],
   );
 
   /**
@@ -348,18 +370,49 @@ function Filter({
           width={150}
         />
 
-        {value.type === 'metadata' && (
-          <DebouncedTextField
-            id={`${index}-field-input`}
-            label="Key"
-            variant="outlined"
-            size="small"
-            value={value.field || ''}
-            onChange={handleFieldChange}
-            placeholder="Enter metadata key"
-            sx={{ width: 180 }}
-          />
-        )}
+        {value.type === 'metadata' &&
+          // Show loading state initially to prevent flicker
+          (metadataKeysLoading ? (
+            <TextField
+              id={`${index}-field-loading`}
+              label="Key"
+              variant="outlined"
+              size="small"
+              value=""
+              placeholder="Loading keys..."
+              disabled
+              sx={{ width: 180 }}
+              InputProps={{
+                endAdornment: <CircularProgress size={16} />,
+              }}
+            />
+          ) : metadataKeys && metadataKeys.length > 0 ? (
+            // Show dropdown if keys are available
+            <Dropdown
+              id={`${index}-field-select`}
+              label="Key"
+              values={(metadataKeys || []).map((key) => ({ label: key, value: key }))}
+              value={value.field || ''}
+              onChange={handleFieldChange}
+              width={180}
+            />
+          ) : (
+            // Fallback to text input with error indication if needed
+            <TextField
+              id={`${index}-field-input`}
+              label="Key"
+              variant="outlined"
+              size="small"
+              value={value.field || ''}
+              onChange={(e) => handleFieldChange(e.target.value)}
+              placeholder={
+                metadataKeysError ? 'Error loading keys - type manually' : 'Enter metadata key'
+              }
+              sx={{ width: 180 }}
+              error={metadataKeysError}
+              helperText={metadataKeysError ? 'Failed to load available keys' : undefined}
+            />
+          ))}
 
         <Dropdown
           id={`${index}-operator-select`}
@@ -494,7 +547,15 @@ export default function FiltersForm({
   onClose: () => void;
   anchorEl: HTMLElement | null;
 }) {
-  const { filters, addFilter, removeAllFilters } = useTableStore();
+  const {
+    filters,
+    addFilter,
+    removeAllFilters,
+    metadataKeys,
+    metadataKeysLoading,
+    fetchMetadataKeys,
+    evalId,
+  } = useTableStore();
 
   /**
    * Adds a new filter with default values.
@@ -540,6 +601,24 @@ export default function FiltersForm({
       handleAddFilter();
     }
   }, [filters.values, open, handleAddFilter]);
+
+  /**
+   * Fetch metadata keys when the filter form opens if there are existing metadata filters
+   * or if metadata keys haven't been loaded yet.
+   */
+  useEffect(() => {
+    if (open && evalId && !metadataKeysLoading) {
+      // Check if there are any existing metadata filters
+      const hasMetadataFilters = Object.values(filters.values).some(
+        (filter) => filter.type === 'metadata',
+      );
+
+      // Fetch if we have metadata filters but no keys, or if keys are empty
+      if (hasMetadataFilters && (!metadataKeys || metadataKeys.length === 0)) {
+        fetchMetadataKeys(evalId);
+      }
+    }
+  }, [open, evalId, metadataKeysLoading, filters.values, metadataKeys, fetchMetadataKeys]);
 
   const filterValuesList = useMemo(() => {
     // Sort by sortIndex to ensure consistent ordering
