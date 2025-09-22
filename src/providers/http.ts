@@ -104,7 +104,9 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
   if (detectedType) {
     // Validate that the type is one of the supported types
     if (!['pem', 'jks', 'pfx'].includes(detectedType)) {
-      throw new Error(`Unknown certificate type: ${detectedType}. Supported types are: pem, jks, pfx`);
+      throw new Error(
+        `Unknown certificate type: ${detectedType}. Supported types are: pem, jks, pfx`,
+      );
     }
     processedAuth.type = detectedType;
   }

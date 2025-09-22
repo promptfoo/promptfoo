@@ -84,11 +84,21 @@ const JsonSchemaConfigSchema = z.object({
         .array(
           z.union([
             z.enum(pluginOptions as [string, ...string[]]),
-            z.string().regex(/^file:\/\/.*\.(js|ts)$/, 'Custom plugins must start with file:// and end with .js or .ts'),
+            z
+              .string()
+              .regex(
+                /^file:\/\/.*\.(js|ts)$/,
+                'Custom plugins must start with file:// and end with .js or .ts',
+              ),
             z.object({
               id: z.union([
                 z.enum(pluginOptions as [string, ...string[]]),
-                z.string().regex(/^file:\/\/.*\.(js|ts)$/, 'Custom plugins must start with file:// and end with .js or .ts'),
+                z
+                  .string()
+                  .regex(
+                    /^file:\/\/.*\.(js|ts)$/,
+                    'Custom plugins must start with file:// and end with .js or .ts',
+                  ),
               ]),
               config: z.record(z.string(), z.any()).optional(),
             }),

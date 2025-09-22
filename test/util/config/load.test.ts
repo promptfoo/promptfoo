@@ -1763,7 +1763,7 @@ describe('readConfig', () => {
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Invalid configuration file config.yaml:\nValidation error:')
+      expect.stringContaining('Invalid configuration file config.yaml:\nValidation error:'),
     );
     const calls = jest.mocked(logger.warn).mock.calls;
     expect(calls[0][0]).toContain('Invalid configuration file');
