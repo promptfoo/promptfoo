@@ -24,7 +24,7 @@ const RunTestSuiteButton = () => {
   const [progressPercent, setProgressPercent] = useState(0);
 
   const isDisabled =
-    isRunning || !prompts || prompts.length === 0 || !tests || tests.length === 0;
+    isRunning || !prompts || prompts.length === 0 || !tests || (Array.isArray(tests) && tests.length === 0);
 
   const runTestSuite = async () => {
     setIsRunning(true);
