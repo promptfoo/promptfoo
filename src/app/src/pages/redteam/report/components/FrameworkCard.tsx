@@ -20,7 +20,6 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
-import { isPolicyMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import { useNavigate } from 'react-router-dom';
 import {
   type CategoryStats,
