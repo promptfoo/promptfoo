@@ -133,8 +133,10 @@ const TestSuites = ({
         .map(([pluginName, stats]) => {
           const plugin = pluginsById[pluginName];
 
-          // Severity is guaranteed to be defined at this point.
-          const severity = plugin.severity as Severity;
+          // Handle case where plugin is not found (e.g., when plugins array is empty)
+          // Use the severity map directly or default to 'Unknown'
+          const severity =
+            plugin?.severity || pluginSeverityMap[pluginName as Plugin] || ('Unknown' as Severity);
 
           // Calculate risk score with details
           const riskDetails = (() => {
@@ -169,7 +171,7 @@ const TestSuites = ({
             subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '';
 
           // Read custom policy metadata from `pluginsById`.
-          if (plugin.id === 'policy' && plugin.config?.policy) {
+          if (plugin?.id === 'policy' && plugin?.config?.policy) {
             if (isValidPolicyObject(plugin.config.policy)) {
               type = formatPolicyIdentifierAsMetric(
                 plugin.config.policy.name ?? plugin.config.policy.id,
@@ -480,7 +482,7 @@ const TestSuites = ({
             onClick={() => {
               const pluginId = params.row.pluginName;
               const plugin = pluginsById[pluginId];
-              const key = plugin.id === 'policy' ? 'policy' : 'plugin';
+              const key = plugin?.id === 'policy' ? 'policy' : 'plugin';
               navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}&mode=failures`);
             }}
           >

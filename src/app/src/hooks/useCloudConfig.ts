@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { callApi } from '../utils/api';
 
-interface CloudConfigData {
+type CloudConfigData = {
   appUrl: string;
   isEnabled: boolean;
-}
+};
 
+/**
+ * Loads the current user's cloud config from the API. Useful for getting the Cloud app's URL
+ * in order to redirect the user to something in Cloud.
+ */
 export default function useCloudConfig(): {
   data: CloudConfigData | null;
   isLoading: boolean;
@@ -14,10 +18,13 @@ export default function useCloudConfig(): {
   refetch: () => void;
 } {
   const [data, setData] = useState<CloudConfigData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCloudConfig = useCallback(async () => {
+  /**
+   * Fetches the cloud config from the API.
+   */
+  const fetchCloudConfig = async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -34,11 +41,14 @@ export default function useCloudConfig(): {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
 
+  /**
+   * Fetch on mount.
+   */
   useEffect(() => {
     fetchCloudConfig();
-  }, [fetchCloudConfig]);
+  }, []);
 
   return {
     data,

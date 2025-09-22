@@ -6,13 +6,13 @@ import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
+import InputAdornment from '@mui/material/InputAdornment';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import InputAdornment from '@mui/material/InputAdornment';
-import type { RedteamRunOptions } from '@promptfoo/types';
 import { Config } from '../types';
+import type { RedteamRunOptions } from '@promptfoo/types';
 
 const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
   return (
@@ -221,6 +221,7 @@ export const RunOptionsContent = ({
           <Switch
             checked={runOptions?.verbose}
             onChange={(e) => updateRunOption('verbose', e.target.checked)}
+            inputProps={{ 'aria-label': 'Debug mode' }}
           />
         }
         label={

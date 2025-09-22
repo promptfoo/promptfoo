@@ -1,8 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RunOptionsContent, RunOptions } from './RunOptions';
-import type { RedteamRunOptions } from '@promptfoo/types';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Config } from '../types';
+import { RunOptions, RunOptionsContent } from './RunOptions';
+import type { RedteamRunOptions } from '@promptfoo/types';
 
 describe('RunOptionsContent', () => {
   const mockUpdateConfig = vi.fn();
@@ -41,7 +41,7 @@ describe('RunOptionsContent', () => {
       expect(maxConcurrencyInput).toHaveValue(defaultProps.runOptions.maxConcurrency);
       expect(maxConcurrencyInput).not.toBeDisabled();
 
-      const debugSwitch = screen.getByRole('switch', { name: /Debug mode/i });
+      const debugSwitch = screen.getByRole('checkbox', { name: /Debug mode/i });
       expect(debugSwitch).toBeInTheDocument();
       expect(debugSwitch).not.toBeChecked();
     });
@@ -103,7 +103,7 @@ describe('RunOptionsContent', () => {
   describe('Interactions', () => {
     it('should call updateRunOption("verbose", checked) when the debug mode switch is toggled', () => {
       render(<RunOptionsContent {...defaultProps} />);
-      const debugSwitch = screen.getByRole('switch', { name: /Debug mode/i });
+      const debugSwitch = screen.getByRole('checkbox', { name: /Debug mode/i });
       fireEvent.click(debugSwitch);
       expect(mockUpdateRunOption).toHaveBeenCalledWith('verbose', true);
     });
@@ -183,7 +183,7 @@ describe('RunOptions', () => {
     const delayInput = screen.getByLabelText('Delay between API calls (ms)');
     expect(delayInput).toHaveValue(defaultProps.runOptions.delay);
 
-    const debugSwitch = screen.getByRole('switch', { name: /Debug mode/i });
+    const debugSwitch = screen.getByRole('checkbox', { name: /Debug mode/i });
     expect(debugSwitch).toBeChecked();
   });
 

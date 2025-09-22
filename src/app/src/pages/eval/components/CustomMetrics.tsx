@@ -129,6 +129,7 @@ const CustomMetrics = ({
         .map(([metric, score]) => {
           let displayLabel: string = metric;
           let tooltipContent: React.ReactNode | null = null;
+          // Display a tooltip for policy metrics.
           if (isPolicyMetric(metric)) {
             const policy = deserializePolicyMetricAsPolicyObject(metric);
             if (policy) {
