@@ -8,10 +8,10 @@ describe('downloadHelpers', () => {
     let setHeaderMock: jest.Mock;
 
     beforeEach(() => {
-      setHeaderMock = jest.fn();
+      setHeaderMock = jest.fn().mockReturnThis();
       mockRes = {
         setHeader: setHeaderMock,
-      };
+      } as Partial<Response>;
     });
 
     it('should set correct headers for CSV download', () => {
