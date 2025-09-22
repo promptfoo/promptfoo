@@ -180,6 +180,8 @@ export default function ResultsView({
     highlightedResultsCount,
     filters,
     removeFilter,
+    filterMode,
+    setFilterMode,
   } = useTableStore();
 
   const {
@@ -217,8 +219,6 @@ export default function ResultsView({
 
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
-
-  const [filterMode, setFilterMode] = React.useState<EvalResultsFilterMode>('all');
 
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
     const mode = event.target.value as EvalResultsFilterMode;
@@ -801,7 +801,6 @@ export default function ResultsView({
           debouncedSearchText={debouncedSearchValue}
           onFailureFilterToggle={handleFailureFilterToggle}
           onSearchTextChange={handleSearchTextChange}
-          setFilterMode={setFilterMode}
           zoom={resultsTableZoom}
         />
       </Box>

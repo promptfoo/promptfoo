@@ -248,6 +248,10 @@ interface TableState {
   metadataKeysError: boolean;
   fetchMetadataKeys: (id: string) => Promise<string[]>;
   currentMetadataKeysRequest: AbortController | null;
+
+  filterMode: EvalResultsFilterMode;
+  setFilterMode: (filterMode: EvalResultsFilterMode) => void;
+  resetFilterMode: () => void;
 }
 
 interface SettingsState {
@@ -405,7 +409,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
     const {
       pageIndex = 0,
       pageSize = 50,
-      filterMode = 'all',
+      // Default to current store value to keep initial load consistent with UI state
+      filterMode = get().filterMode,
       searchText = '',
       skipSettingEvalId = false,
       skipLoadingState = false,
@@ -737,4 +742,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
     }
     return [];
   },
+
+  filterMode: 'all',
+  setFilterMode: (filterMode: EvalResultsFilterMode) =>
+    set((prevState) => ({ ...prevState, filterMode })),
+  resetFilterMode: () => set((prevState) => ({ ...prevState, filterMode: 'all' })),
 }));
