@@ -16,7 +16,14 @@ export const PolicyObjectSchema = z.object({
 });
 export type PolicyObject = z.infer<typeof PolicyObjectSchema>;
 export type Policy = string | PolicyObject; // Policy Text or Policy ID
-export type PolicyTexts = Record<PolicyObject['id'], Required<PolicyObject>['text']>;
+
+export type PoliciesById = Map<
+  PolicyObject['id'],
+  {
+    text: Required<PolicyObject>['text'];
+    severity: Severity;
+  }
+>;
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;

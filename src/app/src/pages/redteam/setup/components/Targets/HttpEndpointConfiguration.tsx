@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
@@ -56,7 +56,7 @@ interface GeneratedConfig {
   };
 }
 
-const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
+const HttpEndpointConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   bodyError,
@@ -64,7 +64,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   setUrlError,
   updateFullTarget,
-}): JSX.Element => {
+}: HttpEndpointConfigurationProps): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 
@@ -527,7 +527,7 @@ ${exampleRequest}`;
             the configuration for you.
           </Typography>
           <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" gutterBottom>
                 Example Request (paste your HTTP request here)
               </Typography>
@@ -546,7 +546,7 @@ ${exampleRequest}`;
                 />
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" gutterBottom>
                 Example Response (optional, improves accuracy)
               </Typography>
@@ -566,12 +566,12 @@ ${exampleRequest}`;
               </Paper>
             </Grid>
             {error && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Typography color="error">Error: {error}</Typography>
               </Grid>
             )}
             {generatedConfig && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
                   <Typography variant="h6" sx={{ flexGrow: 1 }}>
                     Generated Configuration

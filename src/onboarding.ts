@@ -10,7 +10,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
-import { isRunningUnderNpx } from './util';
+import { isRunningUnderNpx } from './util/index';
 import { getNunjucksEngine } from './util/templates';
 
 import type { EnvOverrides } from './types/env';

@@ -16,6 +16,13 @@ export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
 }
 
+// Global configuration for structured logging
+let useStructuredLogging = false;
+
+export function setStructuredLogging(enabled: boolean) {
+  useStructuredLogging = enabled;
+}
+
 export const LOG_LEVELS = {
   error: 0,
   warn: 1,
@@ -270,8 +277,8 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
   };
 }
 
-// Wrapper enforces strict single-string argument logging
-const logger: StrictLogger = Object.assign({}, winstonLogger, {
+// Internal logger implementation
+let internalLogger: StrictLogger = Object.assign({}, winstonLogger, {
   error: createLogMethod('error'),
   warn: createLogMethod('warn'),
   info: createLogMethod('info'),
@@ -286,6 +293,58 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
 };
 
 /**
+ * Replace the logger instance with a custom logger
+ * Useful for integrating with external logging systems
+ * @param customLogger - Logger instance that implements the required interface
+ * @throws Error if customLogger is missing required methods
+ */
+export function setLogger(customLogger: Pick<StrictLogger, 'debug' | 'info' | 'warn' | 'error'>) {
+  // Validate that customLogger is not null or undefined
+  if (!customLogger || typeof customLogger !== 'object') {
+    throw new Error('Custom logger must be a valid object with required logging methods.');
+  }
+
+  // Runtime validation guards
+  const requiredMethods = ['debug', 'info', 'warn', 'error'] as const;
+
+  const missingMethods = requiredMethods.filter(
+    (method) => typeof customLogger[method] !== 'function',
+  );
+
+  if (missingMethods.length > 0) {
+    throw new Error(
+      `Custom logger is missing required methods: ${missingMethods.join(', ')}. ` +
+        'Logger must implement { debug: Function; info: Function; warn: Function; error: Function }',
+    );
+  }
+
+  internalLogger = customLogger as StrictLogger;
+}
+
+// Wrapper that delegates to the current logger instance
+const logger = {
+  error: (message: string) => internalLogger.error(message),
+  warn: (message: string) => internalLogger.warn(message),
+  info: (message: string) => internalLogger.info(message),
+  debug: (message: string) => internalLogger.debug(message),
+  add: (transport: winston.transport) =>
+    internalLogger.add ? internalLogger.add(transport) : undefined,
+  remove: (transport: winston.transport) =>
+    internalLogger.remove ? internalLogger.remove(transport) : undefined,
+  get transports() {
+    return internalLogger.transports || [];
+  },
+  get level() {
+    return internalLogger.transports?.[0]?.level || 'info';
+  },
+  set level(newLevel: string) {
+    if (internalLogger.transports?.[0]) {
+      internalLogger.transports[0].level = newLevel;
+    }
+  },
+};
+
+/**
  * Logs request/response details in a formatted way
  * @param url - Request URL
  * @param requestBody - Request body object
@@ -294,13 +353,14 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
  */
 export async function logRequestResponse(options: {
   url: string;
-  requestBody: any;
+  requestBody: BodyInit | null | undefined;
   requestMethod: string;
   response?: Response | null;
   error?: boolean;
 }): Promise<void> {
   const { url, requestBody, requestMethod, response, error } = options;
-  const logMethod = error || (response && !response.ok) ? logger.error : logger.debug;
+
+  const logMethod = error ? logger.error : logger.debug;
 
   let responseText = '';
   if (response) {
@@ -311,18 +371,35 @@ export async function logRequestResponse(options: {
     }
   }
 
-  const details = [
-    `URL: ${sanitizeUrl(url)}`,
-    `Method: ${requestMethod}`,
-    `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
-    response ? `Status: ${response.status} ${response.statusText}` : '',
-    responseText ? `Response: ${responseText}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  if (useStructuredLogging) {
+    const logObject = {
+      message: 'API request',
+      url: sanitizeUrl(url),
+      method: requestMethod,
+      requestBody: sanitizeBody(requestBody),
+      ...(response && {
+        status: response.status,
+        statusText: response.statusText,
+      }),
+      ...(responseText && { response: responseText }),
+    };
 
-  const message = `API request:\n${details}`;
-  logMethod(message);
+    // @ts-expect-error - the native logger expects a string but we're using a structured logger
+    logMethod(logObject);
+  } else {
+    const details = [
+      `URL: ${sanitizeUrl(url)}`,
+      `Method: ${requestMethod}`,
+      `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
+      response ? `Status: ${response.status} ${response.statusText}` : '',
+      responseText ? `Response: ${responseText}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const message = `API request:\n${details}`;
+    logMethod(message);
+  }
 }
 
 // Initialize source maps if debug is enabled at startup

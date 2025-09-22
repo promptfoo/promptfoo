@@ -10,7 +10,7 @@ import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
 import { TestGrader } from '../util/utils';
 
-import type { ApiProvider, Assertion, GradingConfig } from '../../src/types';
+import type { ApiProvider, Assertion, GradingConfig } from '../../src/types/index';
 
 jest.mock('../../src/esm', () => ({
   importModule: jest.fn(),

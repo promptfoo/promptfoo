@@ -50,6 +50,7 @@ import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -96,9 +97,9 @@ function TableHeader({
       {expandedText && (
         <>
           <Tooltip title="View prompt">
-            <span className="action" onClick={handlePromptOpen}>
+            <button className="action" onClick={handlePromptOpen}>
               🔎
-            </span>
+            </button>
           </Tooltip>
           {promptOpen && (
             <EvalOutputPromptDialog
@@ -197,6 +198,7 @@ function ResultsTableHeader({
               return (
                 <th
                   key={header.id}
+                  tabIndex={0}
                   colSpan={header.colSpan}
                   style={{
                     width: header.getSize(),
@@ -544,9 +546,7 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 let value: string | object = info.getValue();
-                const originalValue = value; // Store original value for tooltip
-                let isInjected = false;
-
+                const _originalValue = value; // Store original value for tooltip
                 const row = info.row.original;
 
                 // For red team evals, show the final injected prompt for the configured inject variable
@@ -558,7 +558,6 @@ function ResultsTable({
                     if (output?.metadata?.redteamFinalPrompt) {
                       // Replace the original prompt with the injected version
                       value = output.metadata.redteamFinalPrompt;
-                      isInjected = true;
                       break;
                     }
                   }
@@ -641,31 +640,39 @@ function ResultsTable({
                   <TruncatedText text={value} maxLength={maxTextLength} />
                 );
 
-                // If this is an injected value, wrap in tooltip showing original
-                if (isInjected && typeof originalValue === 'string') {
+                // Determine if we should show original text (decoded) even without redteamFinalPrompt
+                const testMetadata = (row as any)?.test?.metadata || {};
+                const metadataOriginal =
+                  typeof testMetadata.originalText === 'string'
+                    ? testMetadata.originalText
+                    : undefined;
+                const strategyId = testMetadata.strategyId;
+                const shouldShowOriginal =
+                  varName === injectVarName &&
+                  isEncodingStrategy(strategyId) &&
+                  Boolean(metadataOriginal);
+
+                // Show original text for encoding strategies
+                if (shouldShowOriginal) {
+                  const originalForDisplay = metadataOriginal || '';
                   return (
                     <div className="cell" data-capture="true">
-                      <Tooltip
-                        title={
-                          <div style={{ maxWidth: 500, whiteSpace: 'pre-wrap' }}>
-                            <strong>Original Attack:</strong>
-                            <br />
-                            {originalValue}
-                          </div>
-                        }
-                        placement="top"
-                        arrow
-                      >
-                        <div
-                          style={{
-                            cursor: 'help',
-                            borderBottom: '1px dashed #888',
-                            paddingBottom: '2px',
+                      {cellContent}
+                      {originalForDisplay && String(originalForDisplay) !== String(value) && (
+                        <Box
+                          sx={{
+                            marginTop: '6px',
+                            color: 'text.secondary',
+                            fontSize: '0.8em',
                           }}
                         >
-                          {cellContent}
-                        </div>
-                      </Tooltip>
+                          <strong>Original (decoded):</strong>{' '}
+                          <TruncatedText
+                            text={String(originalForDisplay)}
+                            maxLength={maxTextLength}
+                          />
+                        </Box>
+                      )}
                     </div>
                   );
                 }
@@ -789,8 +796,11 @@ function ResultsTable({
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
-                          maximumFractionDigits: prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
-                        }).format(prompt.metrics.cost / testCounts[idx])} per test`}
+                          maximumFractionDigits:
+                            testCounts[idx] && prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
+                        }).format(
+                          testCounts[idx] ? prompt.metrics.cost / testCounts[idx] : 0,
+                        )} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
@@ -816,7 +826,9 @@ function ResultsTable({
                       <strong>Avg Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / testCounts[idx])}
+                      }).format(
+                        testCounts[idx] ? prompt.metrics.tokenUsage.total / testCounts[idx] : 0,
+                      )}
                     </div>
                   ) : null}
                   {prompt.metrics?.totalLatencyMs ? (
@@ -824,7 +836,9 @@ function ResultsTable({
                       <strong>Avg Latency:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / testCounts[idx])}{' '}
+                      }).format(
+                        testCounts[idx] ? prompt.metrics.totalLatencyMs / testCounts[idx] : 0,
+                      )}{' '}
                       ms
                     </div>
                   ) : null}
@@ -1210,9 +1224,7 @@ function ResultsTable({
             <Typography variant="body1">No results found for the current filters.</Typography>
           </Box>
         )}
-
       <Box sx={{ height: '1rem' }} />
-
       <ResultsTableHeader
         reactTable={reactTable}
         tableWidth={tableWidth}
@@ -1223,7 +1235,6 @@ function ResultsTable({
         setStickyHeader={setStickyHeader}
         zoom={zoom}
       />
-
       <div
         id="results-table-container"
         style={{
@@ -1288,6 +1299,30 @@ function ResultsTable({
                       const imgSrc = value.startsWith('data:')
                         ? value
                         : `data:image/jpeg;base64,${value}`;
+
+                      // If this is a variable column for the inject var, try to show the original image text
+                      let originalImageText: string | undefined;
+                      const columnId = String(cell.column.id);
+                      const match = columnId.match(/^Variable (\d+)$/);
+                      if (match) {
+                        const varIdx = Number(match[1]) - 1;
+                        const injectVarName = config?.redteam?.injectVar || 'prompt';
+                        const varNameForCol = head.vars[varIdx];
+                        if (varNameForCol === injectVarName) {
+                          const testMeta: any = (row.original as any)?.test?.metadata || {};
+                          const fromMeta =
+                            typeof testMeta.originalText === 'string'
+                              ? testMeta.originalText
+                              : undefined;
+                          const testVars: any = (row.original as any)?.test?.vars || {};
+                          const fromVars =
+                            typeof testVars.image_text === 'string'
+                              ? (testVars.image_text as string)
+                              : undefined;
+                          originalImageText = fromVars || fromMeta;
+                        }
+                      }
+
                       cellContent = (
                         <>
                           <img
@@ -1313,12 +1348,28 @@ function ResultsTable({
                               />
                             </div>
                           )}
+                          {originalImageText ? (
+                            <Box
+                              sx={{
+                                marginTop: '6px',
+                                color: 'text.secondary',
+                                fontSize: '0.8em',
+                              }}
+                            >
+                              <strong>Original (image text):</strong>{' '}
+                              <TruncatedText
+                                text={String(originalImageText)}
+                                maxLength={maxTextLength}
+                              />
+                            </Box>
+                          ) : null}
                         </>
                       );
                     }
 
                     return (
                       <td
+                        tabIndex={0}
                         key={cell.id}
                         style={{
                           width: cell.column.getSize(),
@@ -1335,7 +1386,6 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-
       <Box
         className="pagination"
         px={2}
@@ -1461,7 +1511,7 @@ function ResultsTable({
               slotProps={{
                 htmlInput: {
                   min: 1,
-                  max: pageCount,
+                  max: pageCount || 1,
                 },
               }}
               disabled={pageCount === 1}

@@ -1,7 +1,7 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import NodeCache from 'node-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import {
   datasetsTable,
   evalResultsTable,
@@ -26,7 +26,7 @@ import {
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
 
@@ -451,6 +451,21 @@ export async function deleteEval(evalId: string) {
     if (deletedIds.changes === 0) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
+  });
+}
+
+/**
+ * Deletes evals by their IDs.
+ * @param ids - The IDs of the evals to delete.
+ */
+export function deleteEvals(ids: string[]) {
+  const db = getDb();
+  db.transaction(() => {
+    db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
+    db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
+    db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
+    db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
+    db.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
 }
 

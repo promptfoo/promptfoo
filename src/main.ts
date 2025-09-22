@@ -18,6 +18,7 @@ import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
+import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
@@ -33,7 +34,7 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
 import { checkForUpdates } from './updates';
-import { setupEnv } from './util';
+import { setupEnv } from './util/index';
 import { loadDefaultConfig } from './util/config/default';
 
 /**
@@ -111,6 +112,7 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
+  setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 

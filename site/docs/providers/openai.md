@@ -88,6 +88,7 @@ Supported parameters include:
 | `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                              |
 | `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                     |
 | `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3, o3-pro, o3-mini, o4-mini).                                                                                                                                                                           |
+| `maxRetries`            | Maximum number of retry attempts for failed API requests. Defaults to 4. Set to 0 to disable retries.                                                                                                                                                                                             |
 | `metadata`              | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                             |
 | `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                     |
 | `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings. |
@@ -145,6 +146,7 @@ interface OpenAiConfig {
   apiBaseUrl?: string;
   organization?: string;
   headers?: { [key: string]: string };
+  maxRetries?: number;
 }
 ```
 
@@ -1333,6 +1335,23 @@ providers:
               required: ['location']
       tool_choice: 'auto'
 ```
+
+### Using with Azure
+
+The Responses API can also be used with Azure OpenAI endpoints by configuring the `apiHost`:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      apiKey: '${AZURE_API_KEY}'
+      temperature: 0.7
+      instructions: 'You are a helpful assistant.'
+      response_format: file://./response-schema.json
+```
+
+For comprehensive Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
 
 ### Complete Example
 

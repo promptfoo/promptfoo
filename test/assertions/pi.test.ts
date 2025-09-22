@@ -3,7 +3,7 @@ import { matchesClosedQa, matchesPiScore } from '../../src/matchers';
 import { getNunjucksEngine } from '../../src/util/templates';
 import type nunjucks from 'nunjucks';
 
-import type { AssertionParams } from '../../src/types';
+import type { AssertionParams } from '../../src/types/index';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/util/templates');

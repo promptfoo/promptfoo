@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
 dotenv.config({ quiet: true });
 
 import http from 'node:http';
@@ -41,7 +42,7 @@ import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary } from '../types';
+import type { EvalSummary } from '../types/index';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -115,10 +116,19 @@ export function createApp() {
   app.get(
     '/api/results',
     async (
-      req: Request<{}, {}, {}, { datasetId?: string }>,
+      req: Request<
+        {},
+        {},
+        {},
+        { datasetId?: string; type?: 'redteam' | 'eval'; includeProviders?: boolean }
+      >,
       res: Response<{ data: EvalSummary[] }>,
     ): Promise<void> => {
-      const previousResults = await getEvalSummaries(req.query.datasetId);
+      const previousResults = await getEvalSummaries(
+        req.query.datasetId,
+        req.query.type,
+        req.query.includeProviders,
+      );
       res.json({ data: previousResults });
     },
   );

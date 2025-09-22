@@ -7,22 +7,18 @@ import {
   fetchWithCache,
   isCacheEnabled,
 } from '../src/cache';
+import { fetchWithRetries } from '../src/util/fetch/index';
 
 jest.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: jest.fn().mockReturnValue('/mock/config/path'),
 }));
 
-jest.mock('../src/util/fetch/index.ts', () => ({
+// Mock fetchWithRetries to return proper Response objects
+jest.mock('../src/util/fetch/index', () => ({
   fetchWithRetries: jest.fn(),
 }));
 
-// Mock fetch with retries
-jest.mock('../src/util/fetch/index.ts', () => ({
-  fetchWithRetries: jest.fn().mockImplementation(async (url, options) => {
-    const result = await global.fetch(url, options);
-    return result;
-  }),
-}));
+const mockFetchWithRetries = jest.mocked(fetchWithRetries);
 
 // Mock cache-manager
 jest.mock('cache-manager', () => ({
@@ -58,10 +54,7 @@ jest.mock('cache-manager', () => ({
   }),
 }));
 
-const mockedFetch = jest.mocked(jest.fn());
-global.fetch = mockedFetch;
-
-const mockedFetchResponse = (
+const mockFetchWithRetriesResponse = (
   ok: boolean,
   response: object | string,
   contentType = 'application/json',
@@ -147,7 +140,7 @@ describe('fetchWithCache', () => {
 
   beforeEach(() => {
     jest.resetModules();
-    mockedFetch.mockReset();
+    mockFetchWithRetries.mockReset();
     clearCache();
     enableCache();
   });
@@ -162,12 +155,12 @@ describe('fetchWithCache', () => {
 
   describe('with cache enabled', () => {
     it('should fetch and cache successful requests', async () => {
-      const mockResponse = mockedFetchResponse(true, response);
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       const result = await fetchWithCache(url, {}, 1000);
 
-      expect(mockedFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({
         cached: false,
         data: response,
@@ -179,7 +172,7 @@ describe('fetchWithCache', () => {
 
       // Second call should use cache
       const cachedResult = await fetchWithCache(url, {}, 1000);
-      expect(mockedFetch).toHaveBeenCalledTimes(1); // No additional fetch calls
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1); // No additional fetch calls
       expect(cachedResult).toMatchObject({
         data: response,
         status: 200,
@@ -202,7 +195,7 @@ describe('fetchWithCache', () => {
           'x-session-id': '45',
         }),
       } as Response;
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       const result = await fetchWithCache(url, {}, 1000);
       expect(result.status).toBe(400);
@@ -210,12 +203,12 @@ describe('fetchWithCache', () => {
       expect(result.data).toEqual({ error: 'Bad Request' });
 
       // Second call should try fetching again
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
       const result2 = await fetchWithCache(url, {}, 1000);
       expect(result2.status).toBe(400);
       expect(result2.statusText).toBe('Bad Request');
       expect(result2.data).toEqual({ error: 'Bad Request' });
-      expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
     it('should handle empty responses', async () => {
@@ -230,7 +223,7 @@ describe('fetchWithCache', () => {
           'x-session-id': '45',
         }),
       } as Response;
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       const result = await fetchWithCache(url, {}, 1000);
       expect(result.status).toBe(400);
@@ -239,8 +232,8 @@ describe('fetchWithCache', () => {
     });
 
     it('should handle non-JSON responses when JSON is expected', async () => {
-      const mockResponse = mockedFetchResponse(true, 'not json');
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      const mockResponse = mockFetchWithRetriesResponse(true, 'not json');
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       await expect(fetchWithCache(url, {}, 1000, 'json')).rejects.toThrow('Error parsing response');
     });
@@ -248,9 +241,9 @@ describe('fetchWithCache', () => {
     it('should handle request timeout', async () => {
       jest.useFakeTimers();
       const mockTimeoutPromise = new Promise((resolve) => {
-        setTimeout(() => resolve(mockedFetchResponse(true, response)), 2000);
+        setTimeout(() => resolve(mockFetchWithRetriesResponse(true, response)), 2000);
       });
-      mockedFetch.mockImplementationOnce(() => mockTimeoutPromise);
+      mockFetchWithRetries.mockImplementationOnce(() => mockTimeoutPromise as Promise<Response>);
 
       const fetchPromise = fetchWithCache(url, {}, 100);
 
@@ -266,34 +259,36 @@ describe('fetchWithCache', () => {
     });
 
     it('should handle network errors', async () => {
-      mockedFetch.mockRejectedValueOnce(new Error('Network error'));
+      mockFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
       await expect(fetchWithCache(url, {}, 100)).rejects.toThrow('Network error');
     });
 
     it('should handle request options in cache key', async () => {
       const options = { method: 'POST', body: JSON.stringify({ test: true }) };
-      const mockResponse = mockedFetchResponse(true, response);
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       await fetchWithCache(url, options, 1000);
-      expect(mockedFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
 
       // Different options should trigger new fetch
       const differentOptions = { method: 'POST', body: JSON.stringify({ test: false }) };
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
       await fetchWithCache(url, differentOptions, 1000);
-      expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
     it('should respect cache busting', async () => {
-      const mockResponse = mockedFetchResponse(true, response);
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
       await fetchWithCache(url, {}, 1000);
 
-      mockedFetch.mockResolvedValueOnce(mockedFetchResponse(true, { data: 'new data' }));
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'new data' }),
+      );
       const result = await fetchWithCache(url, {}, 1000, 'json', true);
 
-      expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
       expect(result.data).toEqual({ data: 'new data' });
       expect(result.cached).toBe(false);
     });
@@ -305,11 +300,11 @@ describe('fetchWithCache', () => {
     });
 
     it('should always fetch fresh data', async () => {
-      const mockResponse = mockedFetchResponse(true, response);
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       const firstResult = await fetchWithCache(url, {}, 1000);
-      expect(mockedFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
       expect(firstResult).toMatchObject({
         cached: false,
         data: response,
@@ -320,9 +315,9 @@ describe('fetchWithCache', () => {
       expect(firstResult.deleteFromCache).toBeInstanceOf(Function);
 
       // Second call should fetch again
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
       const secondResult = await fetchWithCache(url, {}, 1000);
-      expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
       expect(secondResult).toMatchObject({
         cached: false,
         data: response,
@@ -344,16 +339,16 @@ describe('fetchWithCache', () => {
     });
 
     it('should clear cache', async () => {
-      const mockResponse = mockedFetchResponse(true, response);
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
       await fetchWithCache(url, {}, 1000);
-      expect(mockedFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
 
       await clearCache();
 
-      mockedFetch.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
       await fetchWithCache(url, {}, 1000);
-      expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
   });
 });

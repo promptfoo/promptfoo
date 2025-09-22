@@ -2,8 +2,8 @@ import Clone from 'rfdc';
 import { z } from 'zod';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
@@ -340,7 +340,17 @@ export async function getGoogleClient({ credentials }: { credentials?: string } 
     client = await cachedAuth.getClient();
   }
 
-  const projectId = await cachedAuth.getProjectId();
+  // Try to get project ID from Google Auth Library, but don't fail if it can't detect it
+  // This allows the fallback logic in resolveProjectId to work properly
+  let projectId;
+  try {
+    projectId = await cachedAuth.getProjectId();
+  } catch {
+    // If Google Auth Library can't detect project ID from environment,
+    // let resolveProjectId handle the fallback logic
+    projectId = undefined;
+  }
+
   return { client, projectId };
 }
 

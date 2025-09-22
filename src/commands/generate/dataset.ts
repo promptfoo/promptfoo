@@ -7,8 +7,8 @@ import { serializeObjectArrayAsCSV } from '../../csv';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCase/synthesis';
-import { type TestSuite, type UnifiedConfig } from '../../types';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
+import { type TestSuite, type UnifiedConfig } from '../../types/index';
+import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index';
 import { resolveConfigs } from '../../util/config/load';
 import type { Command } from 'commander';
 

@@ -2,7 +2,7 @@ import fs from 'fs';
 
 import yaml from 'js-yaml';
 import logger from '../../logger';
-import { UnifiedConfig } from '../../types';
+import { UnifiedConfig } from '../../types/index';
 import { orderKeys } from '../json';
 
 export function writePromptfooConfig(

@@ -1,0 +1,37 @@
+# Example of using the layer strategy to compose multiple transformations
+# This example shows how to chain strategies.
+
+targets:
+  - openai:gpt-5-nano
+
+redteam:
+  purpose: An AI assistant that helps with general questions
+
+  plugins:
+    - harmful:hate
+
+  strategies:
+    # Layer strategy: translate then encode
+    - id: layer
+      config:
+        steps:
+          - id: multilingual
+            config:
+              languages: ['es', 'fr']
+          - leetspeak
+
+    # Another layer: progressive obfuscation
+    # - id: layer
+    #   config:
+    #     steps:
+    #       - leetspeak
+    #       - hex
+    #       - base64
+    #     plugins: ['harmful']  # Only apply to harmful plugin
+    #
+    # Custom layer with file-based strategy
+    # - id: layer
+    #   config:
+    #     steps:
+    #       - prompt-injection
+    #       - file://custom-obfuscator.js

@@ -49,7 +49,6 @@ import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import type { StackProps } from '@mui/material/Stack';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
 import './ResultsView.css';
@@ -64,7 +63,7 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
   [theme.breakpoints.down('sm')]: {
     flexDirection: 'column',
   },
-})) as React.FC<StackProps>;
+}));
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
@@ -750,23 +749,18 @@ export default function ResultsView({
                       </MenuItem>
                     </Tooltip>
                     <DownloadMenu />
-                    {config?.sharing && (
-                      <Tooltip
-                        title="Generate a unique URL that others can access"
-                        placement="left"
-                      >
-                        <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-                          <ListItemIcon>
-                            {shareLoading ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <ShareIcon fontSize="small" />
-                            )}
-                          </ListItemIcon>
-                          Share
-                        </MenuItem>
-                      </Tooltip>
-                    )}
+                    <Tooltip title="Generate a unique URL that others can access" placement="left">
+                      <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+                        <ListItemIcon>
+                          {shareLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <ShareIcon fontSize="small" />
+                          )}
+                        </ListItemIcon>
+                        Share
+                      </MenuItem>
+                    </Tooltip>
                     <Tooltip title="Delete this eval" placement="left">
                       <MenuItem onClick={handleDeleteEvalClick}>
                         <ListItemIcon>

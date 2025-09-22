@@ -1,4 +1,5 @@
 import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
+import type { Theme } from '@mui/material/styles';
 
 // Types for utility functions
 export type CategoryStats = Record<
@@ -87,18 +88,18 @@ export const FRAMEWORK_DESCRIPTIONS: Record<string, string> = {
   'eu:ai-act': 'EU AI Act for responsible AI development',
 };
 
-export const getSeverityColor = (severity: Severity): string => {
+export const getSeverityColor = (severity: Severity, theme: Theme): string => {
   switch (severity) {
     case Severity.Critical:
-      return '#d32f2f';
+      return theme.palette.error.main;
     case Severity.High:
-      return '#f57c00';
+      return theme.palette.warning.main;
     case Severity.Medium:
-      return '#fbc02d';
+      return theme.palette.warning.light;
     case Severity.Low:
-      return '#7cb342';
+      return theme.palette.success.main;
     default:
-      return '#757575';
+      return theme.palette.grey[500];
   }
 };
 

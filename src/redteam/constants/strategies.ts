@@ -46,6 +46,7 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'layer',
   'audio',
   'base64',
   'best-of-n',
@@ -91,6 +92,7 @@ export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
+  'layer',
   'multilingual',
   'best-of-n',
   'goat',
@@ -104,3 +106,32 @@ export const CONFIGURABLE_STRATEGIES = [
 ] as const;
 
 export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];
+
+/**
+ * Set of strategy IDs that represent encoding transformations where originalText should be shown
+ */
+export const ENCODING_STRATEGIES = new Set([
+  'base64',
+  'hex',
+  'rot13',
+  'leetspeak',
+  'homoglyph',
+  'morse',
+  'atbash',
+  'piglatin',
+  'camelcase',
+  'emoji',
+  'reverse',
+  'binary',
+  'octal',
+  'audio',
+  'image',
+  'video',
+]);
+
+/**
+ * Determines if a strategy represents an encoding where we should show the original text
+ */
+export function isEncodingStrategy(strategyId: string | undefined): boolean {
+  return strategyId ? ENCODING_STRATEGIES.has(strategyId) : false;
+}

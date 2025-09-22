@@ -16,7 +16,7 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/g
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
-import { isRunningUnderNpx, setupEnv } from '../../util';
+import { isRunningUnderNpx, setupEnv } from '../../util/index';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
@@ -32,7 +32,7 @@ import {
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 
-import type { ProviderOptions, RedteamPluginObject } from '../../types';
+import type { ProviderOptions, RedteamPluginObject } from '../../types/index';
 
 const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 

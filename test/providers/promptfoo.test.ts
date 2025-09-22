@@ -6,7 +6,7 @@ import {
   PromptfooHarmfulCompletionProvider,
   PromptfooSimulatedUserProvider,
 } from '../../src/providers/promptfoo';
-import { fetchWithRetries } from '../../src/util/fetch';
+import { fetchWithRetries } from '../../src/util/fetch/index';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/envars');

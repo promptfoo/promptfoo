@@ -7,7 +7,7 @@ import {
   isOtlpReceiverStarted,
 } from '../../src/tracing/evaluatorTracing';
 
-import type { TestCase } from '../../src/types';
+import type { TestCase } from '../../src/types/index';
 
 // Mock the logger
 jest.mock('../../src/logger', () => ({

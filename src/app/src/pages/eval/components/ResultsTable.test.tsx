@@ -1,6 +1,7 @@
-import { act } from 'react-dom/test-utils';
+import { act } from 'react';
 
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -55,7 +56,9 @@ vi.mock('./EvalOutputCell', () => {
     ({ onRating, searchText }: { onRating: any; searchText?: string }) => {
       return (
         <div data-testid="eval-output-cell" data-searchtext={searchText}>
-          <button onClick={() => onRating(true, 0.75, 'test comment')}>Rate</button>
+          <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
+            Rate
+          </button>
         </div>
       );
     },
@@ -86,6 +89,7 @@ describe('ResultsTable Metrics Display', () => {
             cost: 1.23456,
             namedScores: {},
             testPassCount: 10,
+            testFailCount: 0,
             tokenUsage: {
               completion: 500,
               total: 1000,
@@ -216,6 +220,25 @@ describe('ResultsTable Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Tokens/Sec:')).toBeInTheDocument();
     expect(screen.getByText('250')).toBeInTheDocument();
+  });
+
+  describe('Keyboard Navigation', () => {
+    it('should handle keyboard navigation with Tab between cells and actions within cell', async () => {
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      const tableContainer = document.getElementById('results-table-container');
+      const table = tableContainer?.querySelector('table') as HTMLTableElement;
+      expect(table).toBeInTheDocument();
+      const firstBodyCell = table.querySelector('tbody td') as HTMLElement;
+      expect(firstBodyCell).toBeInTheDocument();
+      firstBodyCell.focus();
+      expect(document.activeElement?.tagName).toBe('TD');
+      expect(document.activeElement).toHaveClass('first-prompt-col');
+      await userEvent.tab();
+      expect(document.activeElement?.tagName).toBe('BUTTON');
+      expect(document.activeElement).toHaveClass('action');
+      await userEvent.tab();
+      expect(document.activeElement?.tagName).toBe('TD');
+    });
   });
 
   describe('Variable rendering', () => {
