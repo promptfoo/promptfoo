@@ -15,10 +15,10 @@ import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
 
 import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
-import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 
 interface OverviewProps {
-  categoryStats: PluginCategoryStatsByPluginId;
+  categoryStats: Record<PluginType, { pass: number; total: number }>;
   plugins: RedteamPluginObject[];
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
@@ -59,9 +59,6 @@ const DARK_MODE_SECONDARY_TEXT_COLORS = {
   [Severity.Low]: '#00e676',
 };
 
-const isKnownSeverity = (value: unknown): value is Severity =>
-  Object.values(Severity).includes(value as Severity);
-
 const Overview = ({
   categoryStats,
   plugins,
@@ -70,29 +67,30 @@ const Overview = ({
 }: OverviewProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
-  const severityCounts = Object.values(Severity).reduce((acc, severity) => {
-    acc[severity] = plugins.reduce((count, plugin) => {
-      const pluginEntry = categoryStats[plugin.id as PluginType];
-      const stats = pluginEntry?.stats;
-      if (!stats || stats.total <= 0) {
-        return count;
-      }
+  const severityCounts = Object.values(Severity).reduce(
+    (acc, severity) => {
+      acc[severity] = plugins.reduce((count, plugin) => {
+        const stats = categoryStats[plugin.id as PluginType];
+        if (!stats || stats.total <= 0) {
+          return count;
+        }
 
-      const pluginSeverity = isKnownSeverity(plugin.severity)
-        ? plugin.severity
-        : isKnownSeverity(pluginEntry?.metadata?.severity)
-          ? pluginEntry?.metadata?.severity
-          : undefined;
+        // Get the severity from the plugin definition or, if it's undefined (most cases; no override is set),
+        // the risk category severity map.
+        const pluginSeverity =
+          plugin.severity ?? getRiskCategorySeverityMap(plugins)[plugin.id as PluginType];
 
-      if (pluginSeverity !== severity) {
-        return count;
-      }
+        if (pluginSeverity !== severity) {
+          return count;
+        }
 
-      const passRate = stats.total > 0 ? stats.pass / stats.total : 1;
-      return passRate < pluginPassRateThreshold ? count + 1 : count;
-    }, 0);
-    return acc;
-  }, {} as Record<Severity, number>);
+        const passRate = stats.total > 0 ? stats.pass / stats.total : 1;
+        return passRate < pluginPassRateThreshold ? count + 1 : count;
+      }, 0);
+      return acc;
+    },
+    {} as Record<Severity, number>,
+  );
 
   const handleNavigateToVulnerabilities = ({ severity }: { severity: Severity }) => {
     setVulnerabilitiesDataGridFilterModel({
