@@ -135,6 +135,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Check for >=1 metric params in the URL.
     const metricParams = searchParams.getAll('metric');
 
+    // Check for >=1 policyId params in the URL.
+    const policyIdParams = searchParams.getAll('policy');
+
     if (pluginParams.length > 0) {
       pluginParams.forEach((pluginParam) => {
         addFilter({
@@ -152,6 +155,17 @@ export default function Eval({ fetchId }: EvalOptions) {
           type: 'metric',
           operator: 'equals',
           value: metricParam,
+          logicOperator: 'or',
+        });
+      });
+    }
+
+    if (policyIdParams.length > 0) {
+      policyIdParams.forEach((policyId) => {
+        addFilter({
+          type: 'policy',
+          operator: 'equals',
+          value: policyId,
           logicOperator: 'or',
         });
       });

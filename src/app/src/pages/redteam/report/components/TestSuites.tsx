@@ -24,6 +24,7 @@ import {
   displayNameOverrides,
   type Plugin,
   Severity,
+  severityDisplayNames,
   severityRiskScores,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
@@ -34,6 +35,11 @@ import { getStrategyIdFromTest } from './shared';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
+import {
+  formatPolicyIdentifierAsMetric,
+  isValidPolicyObject,
+  makeInlinePolicyId,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import {
   calculatePluginRiskScore,
   prepareTestResultsFromStats,
@@ -90,11 +96,43 @@ const TestSuites = ({
     { field: 'riskScore', sort: 'desc' },
   ]);
 
+  const pluginSeverityMap = getRiskCategorySeverityMap(plugins);
+
+  const pluginsById = React.useMemo(() => {
+    return plugins.reduce(
+      (acc, plugin) => {
+        let pluginId: string;
+        if (plugin.id === 'policy' && plugin.config?.policy) {
+          // Use the policy id as the plugin id in order to differentiate custom policies from each other.
+          // Either get the policy id from the metadata or construct it by hashing the policy text.
+          pluginId = isValidPolicyObject(plugin.config.policy)
+            ? plugin.config.policy.id
+            : makeInlinePolicyId(plugin.config.policy as string);
+        } else {
+          pluginId = plugin.id;
+        }
+
+        // If the plugin does not have a severity defined, assign it here. `plugin.id` is used instead
+        // of `pluginId` to handle inline policies which should inherit their severity from the map i.e.
+        // the value at `pluginSeverityMap['policy']`.
+        if (!plugin.severity) {
+          plugin.severity = pluginSeverityMap[plugin.id as Plugin];
+        }
+
+        acc[pluginId] = plugin;
+        return acc;
+      },
+      {} as Record<string, RedteamPluginObject>,
+    );
+  }, [plugins, pluginSeverityMap]);
+
   const rows = React.useMemo(() => {
     return Object.entries(categoryStats)
       .filter(([_, stats]) => stats.total > 0)
       .map(([pluginName, stats]) => {
-        const severity = getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown';
+        const plugin = pluginsById[pluginName];
+
+        const severity = plugin.severity;
 
         // Calculate risk score with details
         const riskDetails = (() => {
@@ -124,12 +162,32 @@ const TestSuites = ({
           };
         })();
 
+        let type = categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName;
+        let description =
+          subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '';
+
+        // Read custom policy metadata from `pluginsById`.
+        if (plugin.id === 'policy' && plugin.config?.policy) {
+          if (isValidPolicyObject(plugin.config.policy)) {
+            type = formatPolicyIdentifierAsMetric(
+              plugin.config.policy.name ?? plugin.config.policy.id,
+            );
+            if (plugin.config.policy.text) {
+              description = plugin.config.policy.text;
+            }
+          } else {
+            type = formatPolicyIdentifierAsMetric(
+              makeInlinePolicyId(plugin.config?.policy as string),
+            );
+            description = plugin.config?.policy as string;
+          }
+        }
+
         return {
           id: pluginName,
           pluginName,
-          type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
-          description:
-            subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
+          type,
+          description,
           severity,
           passRate: (stats.pass / stats.total) * 100,
           passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
@@ -141,7 +199,7 @@ const TestSuites = ({
           worstStrategy: riskDetails.worstStrategy,
         };
       });
-  }, [categoryStats, plugins, failuresByPlugin, passesByPlugin]);
+  }, [categoryStats, plugins, failuresByPlugin, passesByPlugin, pluginsById, pluginSeverityMap]);
 
   const exportToCSV = React.useCallback(() => {
     // Format data for CSV
@@ -209,7 +267,7 @@ const TestSuites = ({
       subCategory.successfulAttacks,
       subCategory.total,
       subCategory.attackSuccessRate.toFixed(2) + '%',
-      subCategory.severity,
+      severityDisplayNames[subCategory.severity as Severity],
     ]);
 
     // Combine headers and data with proper escaping for CSV
@@ -379,8 +437,13 @@ const TestSuites = ({
       headerName: 'Severity',
       type: 'singleSelect',
       flex: 0.5,
-      valueOptions: Object.values(Severity),
-      renderCell: (params: GridRenderCellParams) => <Box>{params.value}</Box>,
+      valueFormatter: (value: Severity) => severityDisplayNames[value],
+      valueOptions: [
+        ...Object.values(Severity).map((severity) => ({
+          value: severity,
+          label: severityDisplayNames[severity],
+        })),
+      ],
       sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
@@ -405,7 +468,9 @@ const TestSuites = ({
             size="small"
             onClick={() => {
               const pluginId = params.row.pluginName;
-              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
+              const plugin = pluginsById[pluginId];
+              const key = plugin.id === 'policy' ? 'policy' : 'plugin';
+              navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}`);
             }}
           >
             View logs
