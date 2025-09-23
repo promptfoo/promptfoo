@@ -20,8 +20,6 @@ describe('TruncatedText', () => {
 
     expect(screen.queryByText(longText)).not.toBeInTheDocument();
 
-    expect(mainDiv).toHaveStyle('cursor: pointer');
-
     expect(screen.getByText('...')).toBeInTheDocument();
   });
 
@@ -39,8 +37,6 @@ describe('TruncatedText', () => {
     expect(screen.queryByText('...')).not.toBeInTheDocument();
 
     expect(screen.queryByText('Show less')).not.toBeInTheDocument();
-
-    expect(mainDiv).toHaveStyle('cursor: normal');
   });
 
   it("should expand to show the full text and display the 'Show less' UI when the user clicks the truncated text", () => {
@@ -53,7 +49,11 @@ describe('TruncatedText', () => {
     const mainDiv = container.querySelector('#eval-output-cell-text');
     expect(mainDiv).toBeInTheDocument();
 
-    fireEvent.click(mainDiv as Element);
+    const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
+    expect(truncationToggler).toBeInTheDocument();
+    expect(truncationToggler).toHaveStyle('cursor: pointer');
+
+    fireEvent.click(truncationToggler as Element);
 
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
@@ -69,13 +69,6 @@ describe('TruncatedText', () => {
 
     const mainDiv = container.querySelector('#eval-output-cell-text');
     expect(mainDiv).toBeInTheDocument();
-
-    fireEvent.click(mainDiv as Element);
-
-    const showLessButton = screen.getByText('Show less');
-    expect(showLessButton).toBeInTheDocument();
-
-    fireEvent.click(showLessButton);
 
     expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
     expect(screen.queryByText('Show less')).not.toBeInTheDocument();
@@ -126,8 +119,6 @@ describe('TruncatedText', () => {
 
     expect(screen.queryByText(expectedEnd)).not.toBeInTheDocument();
 
-    expect(mainDiv).toHaveStyle('cursor: pointer');
-
     expect(mainDiv?.textContent?.length).toBeLessThanOrEqual(maxLength + 3);
   });
 
@@ -142,7 +133,6 @@ describe('TruncatedText', () => {
     expect(mainDiv).toBeInTheDocument();
     expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
     expect(screen.queryByText(numericInput.toString())).not.toBeInTheDocument();
-    expect(mainDiv).toHaveStyle('cursor: pointer');
     expect(screen.getByText('...')).toBeInTheDocument();
   });
 
@@ -158,9 +148,6 @@ describe('TruncatedText', () => {
     // Should show the full text without truncation
     expect(mainDiv).toHaveTextContent(shortText);
     expect(mainDiv).not.toHaveTextContent('...');
-
-    // Should not be clickable since no truncation is needed
-    expect(mainDiv).toHaveStyle('cursor: normal');
 
     // Should not show ellipsis button
     expect(screen.queryByText('...')).not.toBeInTheDocument();
@@ -178,7 +165,6 @@ describe('TruncatedText', () => {
     // Text at exact length should not be truncated
     expect(mainDiv).toHaveTextContent(exactText);
     expect(mainDiv).not.toHaveTextContent('...');
-    expect(mainDiv).toHaveStyle('cursor: normal');
   });
 
   it('should properly handle text that is one character over maxLength', () => {
@@ -193,7 +179,6 @@ describe('TruncatedText', () => {
 
     // Should be truncated and show ellipsis
     expect(mainDiv).toHaveTextContent(`${expectedTruncated}...`);
-    expect(mainDiv).toHaveStyle('cursor: pointer');
     expect(screen.getByText('...')).toBeInTheDocument();
   });
 
@@ -206,8 +191,12 @@ describe('TruncatedText', () => {
     // Initially should be truncated
     expect(mainDiv).toHaveTextContent(`${longText.slice(0, 20)}...`);
 
+    const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
+    expect(truncationToggler).toBeInTheDocument();
+    expect(truncationToggler).toHaveStyle('cursor: pointer');
+
     // User clicks to expand
-    fireEvent.click(mainDiv as Element);
+    fireEvent.click(truncationToggler as Element);
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
 
@@ -235,7 +224,6 @@ describe('TruncatedText', () => {
     // Initially should not be truncated
     expect(mainDiv).toHaveTextContent(shortText);
     expect(mainDiv).not.toHaveTextContent('...');
-    expect(mainDiv).toHaveStyle('cursor: normal');
 
     // Re-render with longer text
     rerender(<TruncatedText text={longText} maxLength={maxLength} />);
@@ -243,7 +231,6 @@ describe('TruncatedText', () => {
     // Now should be truncated
     const mainDivAfter = container.querySelector('#eval-output-cell-text');
     expect(mainDivAfter).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
-    expect(mainDivAfter).toHaveStyle('cursor: pointer');
     expect(screen.getByText('...')).toBeInTheDocument();
   });
 
@@ -325,9 +312,6 @@ describe('TruncatedText', () => {
     expect(mainDiv).toHaveTextContent(longText);
     expect(mainDiv).not.toHaveTextContent('...');
 
-    // Should have normal cursor, not pointer
-    expect(mainDiv).toHaveStyle('cursor: normal');
-
     // Should not show ellipsis or show less button
     expect(screen.queryByText('...')).not.toBeInTheDocument();
     expect(screen.queryByText('Show less')).not.toBeInTheDocument();
@@ -345,9 +329,6 @@ describe('TruncatedText', () => {
     // Should display full text without truncation
     expect(mainDiv).toHaveTextContent(longText);
     expect(mainDiv).not.toHaveTextContent('...');
-
-    // Should have normal cursor, not pointer
-    expect(mainDiv).toHaveStyle('cursor: normal');
 
     // Should not show ellipsis or show less button
     expect(screen.queryByText('...')).not.toBeInTheDocument();
@@ -373,9 +354,12 @@ describe('TruncatedText', () => {
     const mainDiv = container.querySelector('#eval-output-cell-text');
     expect(mainDiv).toBeInTheDocument();
 
+    const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
+    expect(truncationToggler).toBeInTheDocument();
+    expect(truncationToggler).toHaveStyle('cursor: pointer');
+
     // Should be truncated since the nested text is longer than maxLength
     expect(mainDiv).toHaveTextContent('...');
-    expect(mainDiv).toHaveStyle('cursor: pointer');
     expect(screen.getByText('...')).toBeInTheDocument();
 
     // Text content should be truncated
@@ -396,7 +380,6 @@ describe('TruncatedText', () => {
 
     // Should not show ellipsis since element has no text content
     expect(mainDiv).not.toHaveTextContent('...');
-    expect(mainDiv).toHaveStyle('cursor: normal');
     expect(screen.queryByText('...')).not.toBeInTheDocument();
 
     // Should contain the img element
@@ -412,8 +395,12 @@ describe('TruncatedText', () => {
     // Initially should be truncated
     expect(mainDiv).toHaveTextContent('...');
 
+    const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
+    expect(truncationToggler).toBeInTheDocument();
+    expect(truncationToggler).toHaveStyle('cursor: pointer');
+
     // User clicks to expand
-    fireEvent.click(mainDiv as Element);
+    fireEvent.click(truncationToggler as Element);
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
 
@@ -438,7 +425,6 @@ describe('TruncatedText', () => {
 
     // Should not show ellipsis since array is empty (no text content)
     expect(mainDiv).not.toHaveTextContent('...');
-    expect(mainDiv).toHaveStyle('cursor: normal');
     expect(screen.queryByText('...')).not.toBeInTheDocument();
 
     // Content should be empty or minimal

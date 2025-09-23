@@ -121,6 +121,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
               cursor: 'pointer',
             }}
             onClick={toggleTruncate}
+            className="truncation-toggler"
           >
             {isTruncated ? (
               <span style={{ letterSpacing: '0.1rem' }}>...</span>
