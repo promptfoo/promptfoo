@@ -103,10 +103,19 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
 
       const asPolicy = isPolicyMetric(metric);
 
+      // Build filter, but bail if policy ID cannot be parsed
+      let filterValue = metric;
+      if (asPolicy) {
+        const policy = deserializePolicyMetricAsPolicyObject(metric);
+        if (!policy?.id) {
+          return; // avoid creating an empty-value filter
+        }
+        filterValue = policy.id;
+      }
       const filter = {
         type: asPolicy ? ('policy' as const) : ('metric' as const),
         operator: 'equals' as const,
-        value: asPolicy ? (deserializePolicyMetricAsPolicyObject(metric)?.id ?? '') : metric,
+        value: filterValue,
         logicOperator: 'or' as const,
       };
 
