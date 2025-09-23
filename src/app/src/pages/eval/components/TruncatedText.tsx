@@ -55,6 +55,8 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   }, [isOverLength]);
 
   const toggleTruncate = (e: React.MouseEvent<HTMLSpanElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     setIsTruncated((v) => !v);
   };
 
