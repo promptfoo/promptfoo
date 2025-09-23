@@ -293,10 +293,10 @@ export const providerMap: ProviderFactory[] = [
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
-      // Handle AgentCore
-      if (modelType === 'agentcore' || modelType === 'agent-core') {
-        const { AwsBedrockAgentCoreProvider } = await import('./bedrock/agentcore');
-        return new AwsBedrockAgentCoreProvider(modelName, providerOptions);
+      // Handle Bedrock Agents
+      if (modelType === 'agents') {
+        const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
+        return new AwsBedrockAgentsProvider(modelName, providerOptions);
       }
 
       if (modelType === 'completion') {
@@ -313,6 +313,18 @@ export const providerMap: ProviderFactory[] = [
       // Reconstruct the full model name preserving the original format
       const fullModelName = splits.slice(1).join(':');
       return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('bedrock-agent:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const agentId = providerPath.substring('bedrock-agent:'.length);
+      const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
+      return new AwsBedrockAgentsProvider(agentId, providerOptions);
     },
   },
   {
