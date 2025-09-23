@@ -5,7 +5,7 @@ import { parse as parsePath } from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
@@ -38,9 +38,16 @@ export async function readTestFiles(
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
-    const paths = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
+
+    let paths: string[];
+    if (hasMagic(resolvedPath)) {
+      paths = globSync(resolvedPath, {
+        windowsPathsNoEscape: true,
+      });
+    } else {
+      // For non-glob patterns, just check if the file exists
+      paths = fs.existsSync(resolvedPath) ? [resolvedPath] : [];
+    }
 
     for (const p of paths) {
       const rawData = yaml.load(fs.readFileSync(p, 'utf-8'));
@@ -310,9 +317,16 @@ export async function loadTestsFromGlob(
     loadTestsGlob = loadTestsGlob.slice('file://'.length);
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
-  const testFiles: Array<string> = globSync(resolvedPath, {
-    windowsPathsNoEscape: true,
-  });
+
+  let testFiles: Array<string>;
+  if (hasMagic(resolvedPath)) {
+    testFiles = globSync(resolvedPath, {
+      windowsPathsNoEscape: true,
+    });
+  } else {
+    // For non-glob patterns, just check if the file exists
+    testFiles = fs.existsSync(resolvedPath) ? [resolvedPath] : [];
+  }
 
   // Check for possible function names in the path
   const pathWithoutFunction: string = resolvedPath.split(':')[0];

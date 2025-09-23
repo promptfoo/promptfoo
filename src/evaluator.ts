@@ -1,10 +1,11 @@
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
 import * as path from 'path';
 
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
@@ -620,10 +621,19 @@ export function generateVarCombinations(
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const filePaths =
-        globSync(resolvedPath.replace(/\\/g, '/'), {
-          windowsPathsNoEscape: true,
-        }) || [];
+      const normalizedPath = resolvedPath.replace(/\\/g, '/');
+
+      let filePaths: string[];
+      if (hasMagic(normalizedPath)) {
+        filePaths =
+          globSync(normalizedPath, {
+            windowsPathsNoEscape: true,
+          }) || [];
+      } else {
+        // For non-glob patterns, just check if the file exists
+        filePaths = fs.existsSync(resolvedPath) ? [resolvedPath] : [];
+      }
+
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
         throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
