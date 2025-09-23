@@ -40,6 +40,7 @@
     "csv-parse": "^6.1.0",
     "csv-stringify": "^6.6.0",
     "diff": "^8.0.2",
+    "dotenv": "17.2.2",
     "fuzzysearch": "^1.0.3",
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.0",
