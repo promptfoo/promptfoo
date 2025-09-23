@@ -1,4 +1,6 @@
 ---
+title: AWS Bedrock Agents
+description: Configure and test Amazon Bedrock Agents in promptfoo, including setup, authentication, session management, knowledge bases, and tracing options.
 sidebar_label: AWS Bedrock Agents
 ---
 
@@ -293,23 +295,23 @@ The provider returns responses with the following structure:
 ### Basic Agent Testing
 
 ```yaml
-description: "Test customer support agent"
+description: 'Test customer support agent'
 
 providers:
   - id: support-agent
-    bedrock-agent:SUPPORT_AGENT_ID
+    provider: bedrock-agent:SUPPORT_AGENT_ID
     config:
       agentAliasId: PROD_ALIAS
       enableTrace: true
 
 prompts:
-  - "How do I reset my password?"
-  - "What are your business hours?"
-  - "I need to speak with a manager"
+  - 'How do I reset my password?'
+  - 'What are your business hours?'
+  - 'I need to speak with a manager'
 
 tests:
   - vars:
-      query: "{{prompt}}"
+      query: '{{prompt}}'
     assert:
       - type: not-empty
       - type: latency
@@ -325,24 +327,24 @@ tests:
       query: "I'm having trouble with product SKU-123"
     providers:
       - id: agent-session-1
-        bedrock-agent:AGENT_ID
+        provider: bedrock-agent:AGENT_ID
         config:
-          sessionId: "test-session-001"
+          sessionId: 'test-session-001'
           sessionState:
             sessionAttributes:
-              customerId: "CUST-456"
+              customerId: 'CUST-456'
 
   # Second turn - test context retention
   - vars:
-      query: "What warranty options are available?"
+      query: 'What warranty options are available?'
     providers:
       - id: agent-session-1
-        bedrock-agent:AGENT_ID
+        provider: bedrock-agent:AGENT_ID
         config:
-          sessionId: "test-session-001"  # Same session
+          sessionId: 'test-session-001' # Same session
     assert:
       - type: contains
-        value: "SKU-123"  # Should remember the product
+        value: 'SKU-123' # Should remember the product
 ```
 
 ### Knowledge Base Validation

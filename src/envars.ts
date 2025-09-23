@@ -190,7 +190,7 @@ type EnvVars = {
   // AWS Bedrock Agents
   AWS_BEDROCK_AGENT_ID?: string;
   AWS_BEDROCK_AGENT_ALIAS_ID?: string;
-  
+
   CEREBRAS_API_KEY?: string;
 
   // Azure OpenAI auth params
