@@ -3,9 +3,17 @@
 import path from 'path';
 
 import react from '@vitejs/plugin-react';
+import { config as dotenvConfig } from 'dotenv';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
+
+// Vite does not automatically load the root `.env` file, so we need to do it manually:
+dotenvConfig({
+  // Load the root `.env` file
+  path: '../../.env',
+  quiet: true,
+});
 
 const API_PORT = process.env.API_PORT || '15500';
 
@@ -89,6 +97,9 @@ export default defineConfig({
     'import.meta.env.VITE_PROMPTFOO_VERSION': JSON.stringify(packageJson.version),
     'import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY': JSON.stringify(
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
+    ),
+    'import.meta.env.VITE_PROMPTFOO_DEMO_MODE': JSON.stringify(
+      process.env.PROMPTFOO_DEMO_MODE || 'false',
     ),
     'import.meta.env.VITE_POSTHOG_KEY': JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(

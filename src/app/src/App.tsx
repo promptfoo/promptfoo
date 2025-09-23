@@ -11,6 +11,7 @@ import {
 } from 'react-router-dom';
 import PageShell from './components/PageShell';
 import { ToastProvider } from './contexts/ToastContext';
+import useDemoMode from './hooks/useDemoMode';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
 import EvalPage from './pages/eval/page';
@@ -83,6 +84,9 @@ const router = createBrowserRouter(
 );
 
 function App() {
+  const { isDemoMode } = useDemoMode();
+  console.debug('Demo Mode:', isDemoMode);
+
   return (
     <ToastProvider>
       <RouterProvider router={router} />
