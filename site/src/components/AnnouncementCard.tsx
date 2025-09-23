@@ -28,10 +28,10 @@ export default function AnnouncementCard({ announcement }: AnnouncementCardProps
         <h3 className={styles.title}>{title}</h3>
         <div className={styles.announcementMeta}>
           <span className={styles.date}>
-            {new Date(date).toLocaleDateString('en-US', { 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+            {new Date(date).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
             })}
           </span>
         </div>

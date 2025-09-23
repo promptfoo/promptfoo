@@ -8,7 +8,8 @@ We publish a list of new features every week. For more recent updates, check out
 
 ## September 2025
 
-### September 15, 2025 {#september-week-3}
+### September 15 {#september-2025-week-3}
+
 - New [Layer strategy](/docs/red-team/strategies/#layered-strategies): chain multiple strategies in red team scans!
 - Threshold: set a minimum score threshold for red team tests to pass.
 - Context can be provided to tests as an array of strings instead of a single string ([example](/docs/configuration/expected-outputs/model-graded/context-relevance/#array-context)).
@@ -18,7 +19,8 @@ We publish a list of new features every week. For more recent updates, check out
 - [AWS Bedrock inference profiles](/docs/providers/aws-bedrock/#application-inference-profiles): reference inference profiles instead of individual model IDs.
 - `azure:responses` provider alias for Azure Responses API added.
 
-### September 8, 2025 {#september-week-2}
+### September 8 {#september-2025-week-2}
+
 - New [VLGuard multi-modal plugin](/docs/red-team/plugins/vlguard/): test multi-modal modals for images from the [kirito011024](https://huggingface.co/kirito011024)/vlguard_unsafes dataset.
 - Pause and resume evals with `Ctrl+C` and `promptfoo eval --resume`!
 - Use `promptfoo export logs` to... Export logs. Creates a tar.gz to share for debugging.
@@ -27,7 +29,8 @@ We publish a list of new features every week. For more recent updates, check out
 - [Custom websocket URLs](/docs/providers/websocket/) for OpenAI Realtime added.
 - [Ollama 'thinking'](https://ollama.com/blog/thinking) supported through configuration options.
 
-### September 1, 2025 {#september-week-1}
+### September 1 {#september-2025-week-1}
+
 - New financial plugins: [Financial Confidential disclosure](/docs/red-team/plugins/financial/#financial-confidential-disclosure), [Financial Counterfactual](/docs/red-team/plugins/financial/#financial-defamation), [Financial Defamation](/docs/red-team/plugins/financial/#financial-defamation), [Financial Impartiality](/docs/red-team/plugins/financial/#financial-impartiality), and [Misconduct](/docs/red-team/plugins/financial/#financial-misconduct). They test for incorrect, non-existent, or potentially harm.
 - New [Special token injection plugin](/docs/red-team/plugins/special-token-injection/) added; tests for vulnerabilities that include ChatML format tags (`<|im_start|>`, `<|im_end|>`) and other similar delimiters.
 - Visible monthly limits added to red team scans.

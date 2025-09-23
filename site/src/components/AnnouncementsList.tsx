@@ -14,16 +14,19 @@ interface AnnouncementsListProps {
   announcements?: Announcement[];
 }
 
-export default function AnnouncementsList({ announcements = [] }: AnnouncementsListProps): JSX.Element {
+export default function AnnouncementsList({
+  announcements = [],
+}: AnnouncementsListProps): JSX.Element {
   // For now, we'll hardcode the announcement data
   // In the future, this could be dynamically loaded from the file system
   const defaultAnnouncements: Announcement[] = [
     {
-      title: "Tracing - See Inside Your LLM Applications with OpenTelemetry",
-      description: "OpenTelemetry tracing support to visualize execution flow, measure performance, and debug LLM applications",
-      date: "June 15, 2025",
-      permalink: "/docs/releases/announcements/2025/june/opentelemetry-tracing",
-      image: "/img/docs/trace.png"
+      title: 'Tracing - See Inside Your LLM Applications with OpenTelemetry',
+      description:
+        'OpenTelemetry tracing support to visualize execution flow, measure performance, and debug LLM applications',
+      date: 'June 15, 2025',
+      permalink: '/docs/releases/announcements/2025/june/opentelemetry-tracing',
+      image: '/img/docs/trace.png',
     },
     // {
     //   title: "Tracing - See Inside Your LLM Applications with OpenTelemetry",
@@ -35,7 +38,7 @@ export default function AnnouncementsList({ announcements = [] }: AnnouncementsL
   ];
 
   const displayAnnouncements = announcements.length > 0 ? announcements : defaultAnnouncements;
-  
+
   // Sort announcements by date in reverse chronological order (newest first)
   const sortedAnnouncements = [...displayAnnouncements].sort((a, b) => {
     return new Date(b.date).getTime() - new Date(a.date).getTime();
