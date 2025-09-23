@@ -554,20 +554,28 @@ describe('useTableStore', () => {
         value: filter.value,
       });
 
-      const mockCallApi = vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          table: { head: { prompts: [] }, body: [] },
-          totalCount: 0,
-          filteredCount: 0,
-        }),
-      } as any);
+      const mockCallApi = vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url.includes('metadata-keys')) {
+          return {
+            ok: true,
+            json: async () => ({ keys: [] }),
+          } as any;
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            table: { head: { prompts: [] }, body: [] },
+            totalCount: 0,
+            filteredCount: 0,
+          }),
+        } as any;
+      });
 
       await act(async () => {
         await useTableStore.getState().fetchEvalData(evalId, { filters: [filter] });
       });
 
-      expect(mockCallApi).toHaveBeenCalledTimes(1);
+      expect(mockCallApi).toHaveBeenCalledTimes(1); // table endpoint only (metadata-keys fetched lazily)
       const url = mockCallApi.mock.calls[0][0];
       const urlParams = new URL(url, 'http://example.com').searchParams;
       const rawFilterParam = urlParams.get('filter');
@@ -694,8 +702,19 @@ describe('useTableStore', () => {
       } as Response);
 
       let isFetchingDuringFetch: boolean = false;
-      mockCallApi.mockImplementation(async () => {
-        isFetchingDuringFetch = useTableStore.getState().isFetching;
+      mockCallApi.mockImplementation(async (url: string) => {
+        // Only check isFetching during the table call, not the metadata-keys call
+        if (!url.includes('metadata-keys')) {
+          isFetchingDuringFetch = useTableStore.getState().isFetching;
+        }
+
+        if (url.includes('metadata-keys')) {
+          return {
+            ok: true,
+            json: async () => ({ keys: [] }),
+          } as any;
+        }
+
         return {
           ok: true,
           json: async () => ({

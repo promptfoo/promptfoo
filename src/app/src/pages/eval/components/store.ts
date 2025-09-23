@@ -240,6 +240,15 @@ interface TableState {
     };
   };
 
+  /**
+   * Metadata keys for dropdown population
+   */
+  metadataKeys: string[];
+  metadataKeysLoading: boolean;
+  metadataKeysError: boolean;
+  fetchMetadataKeys: (id: string) => Promise<string[]>;
+  currentMetadataKeysRequest: AbortController | null;
+
   filterMode: EvalResultsFilterMode;
   setFilterMode: (filterMode: EvalResultsFilterMode) => void;
   resetFilterMode: () => void;
@@ -410,11 +419,21 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
     const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
-    if (skipLoadingState) {
-      set({ shouldHighlightSearchText: false });
-    } else {
-      set({ isFetching: true, shouldHighlightSearchText: false });
+    // Cancel any existing metadata keys request and reset state for new eval
+    const currentState = get();
+    if (currentState.currentMetadataKeysRequest) {
+      currentState.currentMetadataKeysRequest.abort();
     }
+
+    set({
+      isFetching: skipLoadingState ? get().isFetching : true,
+      shouldHighlightSearchText: false,
+      // Clear previous metadata keys to prevent memory accumulation
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: false,
+      currentMetadataKeysRequest: null,
+    });
 
     try {
       console.log(`Fetching data for eval ${id} with options:`, options);
@@ -481,6 +500,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
           },
         }));
 
+        // Metadata keys will be fetched lazily when user opens metadata filter dropdown
+
         return data;
       }
 
@@ -490,11 +511,12 @@ export const useTableStore = create<TableState>()((set, get) => ({
       return null;
     } catch (error) {
       console.error('Error fetching eval data:', error);
-      if (skipLoadingState) {
-        set({ isStreaming: false });
-      } else {
-        set({ isFetching: false, isStreaming: false });
-      }
+      set({
+        isFetching: skipLoadingState ? get().isFetching : false,
+        isStreaming: false,
+        metadataKeysLoading: false,
+        currentMetadataKeysRequest: null,
+      });
       return null;
     }
   },
@@ -631,6 +653,94 @@ export const useTableStore = create<TableState>()((set, get) => ({
         },
       };
     });
+  },
+
+  // Metadata keys implementation
+  metadataKeys: [],
+  metadataKeysLoading: false,
+  metadataKeysError: false,
+  currentMetadataKeysRequest: null,
+
+  fetchMetadataKeys: async (id: string) => {
+    // Cancel any existing request to prevent race conditions
+    const currentState = get();
+    if (currentState.currentMetadataKeysRequest) {
+      currentState.currentMetadataKeysRequest.abort();
+    }
+
+    const abortController = new AbortController();
+
+    // Add timeout to prevent hanging requests
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+    }, 30000); // 30 second timeout
+
+    set({
+      currentMetadataKeysRequest: abortController,
+      metadataKeysLoading: true,
+      metadataKeysError: false,
+    });
+
+    try {
+      // Get comparison eval IDs from settings store
+      const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
+
+      // Build URL with comparison eval IDs as query params
+      const url = new URL(`/eval/${id}/metadata-keys`, window.location.origin);
+      comparisonEvalIds.forEach((compId) => {
+        url.searchParams.append('comparisonEvalIds', compId);
+      });
+
+      const resp = await callApi(url.toString().replace(window.location.origin, ''), {
+        signal: abortController.signal,
+      });
+
+      // Clear timeout on successful response
+      clearTimeout(timeoutId);
+
+      if (resp.ok) {
+        const data = await resp.json();
+
+        // Check if this request is still current before updating state
+        const latestState = get();
+        if (latestState.currentMetadataKeysRequest === abortController) {
+          set({
+            metadataKeys: data.keys,
+            metadataKeysLoading: false,
+            currentMetadataKeysRequest: null,
+          });
+        }
+        return data.keys;
+      } else {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      }
+    } catch (error) {
+      // Always clear timeout
+      clearTimeout(timeoutId);
+
+      if ((error as Error).name === 'AbortError') {
+        // Request was aborted - clean up state but don't show error
+        const latestState = get();
+        if (latestState.currentMetadataKeysRequest === abortController) {
+          set({
+            metadataKeysLoading: false,
+            currentMetadataKeysRequest: null,
+          });
+        }
+      } else {
+        // Actual error occurred - only update if this is still the current request
+        console.error('Error fetching metadata keys:', error);
+        const latestState = get();
+        if (latestState.currentMetadataKeysRequest === abortController) {
+          set({
+            metadataKeysError: true,
+            metadataKeysLoading: false,
+            currentMetadataKeysRequest: null,
+          });
+        }
+      }
+    }
+    return [];
   },
 
   filterMode: 'all',
