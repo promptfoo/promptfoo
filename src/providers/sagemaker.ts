@@ -284,7 +284,7 @@ abstract class SageMakerGenericProvider {
             const fn = createSecureFunction(
               'prompt',
               'context',
-              `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`,
+              `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`,
             );
             const result = fn(prompt, transformContext);
 

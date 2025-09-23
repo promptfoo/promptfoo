@@ -1228,7 +1228,9 @@ export async function createTransformRequest(
         const secureFunc = createSecureFunction('prompt', 'vars', 'context', rendered);
         return await secureFunc(prompt, vars, context);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        let errorMessage = err instanceof Error ? err.message : String(err);
+        // Strip error type prefixes from isolated-vm errors for consistency
+        errorMessage = errorMessage.replace(/^(ReferenceError|TypeError|SyntaxError):\s*/, '');
         const wrappedError = new Error(
           `Error in request transform string template: ${errorMessage}`,
         );

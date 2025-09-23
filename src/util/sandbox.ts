@@ -71,6 +71,23 @@ export function createSecureFunction(...args: string[]): Function {
   const code = args.pop() as string;
   const params = args;
 
+  // Validate syntax during creation by attempting to compile
+  const isolate = getIsolate();
+  const context = isolate.createContextSync();
+  try {
+    const functionCode = `
+      (function(${params.join(', ')}) {
+        ${code}
+      })
+    `;
+    // Test compilation - this will throw if syntax is invalid
+    isolate.compileScriptSync(functionCode);
+    context.release();
+  } catch (error) {
+    context.release();
+    throw error; // Re-throw syntax errors during creation
+  }
+
   // Create a wrapper function that executes in sandbox
   return function (...callArgs: any[]): any {
     const isolate = getIsolate();
@@ -115,7 +132,7 @@ export function createSecureFunction(...args: string[]): Function {
           const result = (${functionCode})(${argsList});
           // Serialize complex objects to transfer them from the VM
           if (typeof result === 'object' && result !== null) {
-            return JSON.stringify(result);
+            return '__SANDBOX_JSON__' + JSON.stringify(result);
           }
           return result;
         })()
@@ -124,12 +141,12 @@ export function createSecureFunction(...args: string[]): Function {
       const result = script.runSync(context, { timeout: 5000 });
 
       // Handle JSON-serialized objects returned from the VM
-      if (typeof result === 'string') {
+      if (typeof result === 'string' && result.startsWith('__SANDBOX_JSON__')) {
         try {
-          return JSON.parse(result);
+          return JSON.parse(result.slice('__SANDBOX_JSON__'.length));
         } catch {
-          // Not JSON, return as string
-          return result;
+          // Failed to parse, return without prefix
+          return result.slice('__SANDBOX_JSON__'.length);
         }
       }
       return result;
