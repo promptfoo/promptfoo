@@ -623,16 +623,10 @@ export function generateVarCombinations(
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
       const normalizedPath = resolvedPath.replace(/\\/g, '/');
 
-      let filePaths: string[];
-      if (hasMagic(normalizedPath)) {
-        filePaths =
-          globSync(normalizedPath, {
-            windowsPathsNoEscape: true,
-          }) || [];
-      } else {
-        // For non-glob patterns, just check if the file exists
-        filePaths = fs.existsSync(resolvedPath) ? [resolvedPath] : [];
-      }
+      const filePaths =
+        globSync(normalizedPath, {
+          windowsPathsNoEscape: true,
+        }) || [];
 
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {

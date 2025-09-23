@@ -39,15 +39,9 @@ export async function readTestFiles(
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
 
-    let paths: string[];
-    if (hasMagic(resolvedPath)) {
-      paths = globSync(resolvedPath, {
-        windowsPathsNoEscape: true,
-      });
-    } else {
-      // For non-glob patterns, just check if the file exists
-      paths = fs.existsSync(resolvedPath) ? [resolvedPath] : [];
-    }
+    const paths = globSync(resolvedPath, {
+      windowsPathsNoEscape: true,
+    });
 
     for (const p of paths) {
       const rawData = yaml.load(fs.readFileSync(p, 'utf-8'));
@@ -318,15 +312,9 @@ export async function loadTestsFromGlob(
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
 
-  let testFiles: Array<string>;
-  if (hasMagic(resolvedPath)) {
-    testFiles = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
-  } else {
-    // For non-glob patterns, just check if the file exists
-    testFiles = fs.existsSync(resolvedPath) ? [resolvedPath] : [];
-  }
+  const testFiles: Array<string> = globSync(resolvedPath, {
+    windowsPathsNoEscape: true,
+  });
 
   // Check for possible function names in the path
   const pathWithoutFunction: string = resolvedPath.split(':')[0];

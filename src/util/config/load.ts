@@ -247,15 +247,9 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
-    let globPaths: string[];
-    if (hasMagic(resolvedPath)) {
-      globPaths = globSync(resolvedPath, {
-        windowsPathsNoEscape: true,
-      });
-    } else {
-      // For non-glob patterns, just check if the file exists
-      globPaths = fs.existsSync(resolvedPath) ? [resolvedPath] : [];
-    }
+    const globPaths = globSync(resolvedPath, {
+      windowsPathsNoEscape: true,
+    });
 
     if (globPaths.length === 0) {
       throw new Error(`No configuration file found at ${configPath}`);
