@@ -175,6 +175,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     setNotification({ show: true, message: 'Reset to current configuration', severity: 'info' });
   };
 
+  // Initial load effect
   React.useEffect(() => {
     if (initialYaml) {
       const formattedCode = ensureSchemaComment(initialYaml);
@@ -184,8 +185,18 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       const formattedCode = formatYamlWithSchema(initialConfig);
       setCode(formattedCode);
       setOriginalCode(formattedCode);
-    } else if (!isEditing) {
-      // Only auto-update when not editing and using store config
+    } else {
+      const currentConfig = getTestSuite();
+      const formattedCode = formatYamlWithSchema(currentConfig);
+      setCode(formattedCode);
+      setOriginalCode(formattedCode);
+    }
+    // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
+  }, [initialYaml, initialConfig]);
+
+  // Auto-update effect for store changes (only when not editing)
+  React.useEffect(() => {
+    if (!initialYaml && !initialConfig && !isEditing) {
       const currentConfig = getTestSuite();
       const formattedCode = formatYamlWithSchema(currentConfig);
       // Only update if the content has actually changed to avoid cursor jumping
@@ -196,7 +207,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     }
     // Deliberately omitting getTestSuite from dependencies to avoid infinite re-renders
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialYaml, initialConfig, config, isEditing, code]);
+  }, [config, isEditing, initialYaml, initialConfig, code]);
 
   // Track unsaved changes
   React.useEffect(() => {

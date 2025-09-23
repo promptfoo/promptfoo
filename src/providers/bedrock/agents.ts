@@ -61,7 +61,12 @@ interface BedrockAgentsOptions {
   enableTrace?: boolean;
   endSession?: boolean;
 
-  // Inference Configuration
+  // Inference Configuration (can be specified at root level for convenience or nested)
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maximumLength?: number;
+  stopSequences?: string[];
   inferenceConfig?: {
     temperature?: number;
     topP?: number;
@@ -173,8 +178,7 @@ interface BedrockAgentsOptions {
  *       guardrailConfiguration:
  *         guardrailId: GUARDRAIL_ID
  *         guardrailVersion: "1"
- *       inferenceConfig:
- *         temperature: 0.7
+ *       temperature: 0.7  # Can be specified at root level for convenience
  *         topP: 0.9
  *         maximumLength: 2048
  * ```
@@ -286,10 +290,21 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
   }
 
   /**
-   * Build inference configuration
+   * Build inference configuration from both root-level and nested parameters
+   * Root-level parameters take precedence over nested ones for convenience
    */
   private buildInferenceConfig(): InferenceConfig | undefined {
-    if (!this.config.inferenceConfig) {
+    // Check if we have any inference config at root level or nested
+    const hasRootConfig =
+      this.config.temperature !== undefined ||
+      this.config.topP !== undefined ||
+      this.config.topK !== undefined ||
+      this.config.maximumLength !== undefined ||
+      this.config.stopSequences !== undefined;
+
+    const hasNestedConfig = this.config.inferenceConfig !== undefined;
+
+    if (!hasRootConfig && !hasNestedConfig) {
       return undefined;
     }
 
@@ -297,21 +312,40 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     // Note: Using partial typing due to AWS SDK type constraints
     const inferenceConfig = {} as InferenceConfig;
 
-    if (this.config.inferenceConfig.maximumLength !== undefined) {
-      (inferenceConfig as any).maximumLength = this.config.inferenceConfig.maximumLength;
+    // Start with nested config as base
+    if (this.config.inferenceConfig) {
+      if (this.config.inferenceConfig.maximumLength !== undefined) {
+        (inferenceConfig as any).maximumLength = this.config.inferenceConfig.maximumLength;
+      }
+      if (this.config.inferenceConfig.stopSequences !== undefined) {
+        (inferenceConfig as any).stopSequences = this.config.inferenceConfig.stopSequences;
+      }
+      if (this.config.inferenceConfig.temperature !== undefined) {
+        (inferenceConfig as any).temperature = this.config.inferenceConfig.temperature;
+      }
+      if (this.config.inferenceConfig.topP !== undefined) {
+        (inferenceConfig as any).topP = this.config.inferenceConfig.topP;
+      }
+      if (this.config.inferenceConfig.topK !== undefined) {
+        (inferenceConfig as any).topK = this.config.inferenceConfig.topK;
+      }
     }
-    if (this.config.inferenceConfig.stopSequences !== undefined) {
-      (inferenceConfig as any).stopSequences = this.config.inferenceConfig.stopSequences;
+
+    // Override with root-level parameters (these take precedence for convenience)
+    if (this.config.temperature !== undefined) {
+      (inferenceConfig as any).temperature = this.config.temperature;
     }
-    // Temperature, topP, topK may be model-specific
-    if (this.config.inferenceConfig.temperature !== undefined) {
-      (inferenceConfig as any).temperature = this.config.inferenceConfig.temperature;
+    if (this.config.topP !== undefined) {
+      (inferenceConfig as any).topP = this.config.topP;
     }
-    if (this.config.inferenceConfig.topP !== undefined) {
-      (inferenceConfig as any).topP = this.config.inferenceConfig.topP;
+    if (this.config.topK !== undefined) {
+      (inferenceConfig as any).topK = this.config.topK;
     }
-    if (this.config.inferenceConfig.topK !== undefined) {
-      (inferenceConfig as any).topK = this.config.inferenceConfig.topK;
+    if (this.config.maximumLength !== undefined) {
+      (inferenceConfig as any).maximumLength = this.config.maximumLength;
+    }
+    if (this.config.stopSequences !== undefined) {
+      (inferenceConfig as any).stopSequences = this.config.stopSequences;
     }
 
     return inferenceConfig;
@@ -396,7 +430,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       // Advanced configurations - using type assertions for preview features
       // The AWS SDK types may not be fully up to date with all Bedrock Agents features
       // These configurations are validated by AWS at runtime
-      ...(this.config.inferenceConfig && {
+      ...(this.buildInferenceConfig() && {
         inferenceConfig: this.buildInferenceConfig(),
       }),
       ...(this.config.guardrailConfiguration && {
@@ -422,7 +456,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     const cache = await getCache();
     const cacheKey = `bedrock-agent:${this.config.agentId}:${JSON.stringify({
       prompt,
-      inferenceConfig: this.config.inferenceConfig,
+      inferenceConfig: this.buildInferenceConfig(),
       knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
     })}`;
 
