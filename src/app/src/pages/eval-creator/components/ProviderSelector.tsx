@@ -286,6 +286,17 @@ const defaultProviders: ProviderOptions[] = (
         region: 'us-east-1',
       },
     },
+    {
+      id: 'bedrock-agent:YOUR_AGENT_ID',
+      label: 'Bedrock: Agent',
+      config: {
+        agentId: 'YOUR_AGENT_ID',
+        agentAliasId: 'YOUR_ALIAS_ID',
+        region: 'us-east-1',
+        enableTrace: false,
+        temperature: 0.5,
+      },
+    },
   ])
   .concat([
     {
@@ -541,6 +552,7 @@ const PROVIDER_GROUPS: Record<string, string> = {
   'openai:': 'OpenAI',
   'anthropic:': 'Anthropic',
   'bedrock:': 'Amazon Web Services',
+  'bedrock-agent:': 'Amazon Web Services',
   'azure:': 'Azure',
   'openrouter:': 'OpenRouter',
   'replicate:': 'Replicate',

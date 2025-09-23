@@ -1,17 +1,17 @@
-# bedrock-agentcore (AWS Bedrock AgentCore Example)
+# bedrock-agents (AWS Bedrock Agents Example)
 
-This example demonstrates how to use AWS Bedrock AgentCore with promptfoo to test and evaluate deployed AI agents, including both single-agent and multi-agent scenarios.
+This example demonstrates how to use AWS Bedrock Agents with promptfoo to test and evaluate deployed AI agents, including both single-agent and multi-agent scenarios.
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example bedrock-agentcore
+npx promptfoo@latest init --example bedrock-agents
 ```
 
 ## Prerequisites
 
-1. An AWS account with Bedrock AgentCore access
-2. One or more deployed AgentCore agents (get agent IDs from the AWS Console)
+1. An AWS account with Bedrock Agents access
+2. One or more deployed Bedrock agents (get agent IDs from the AWS Console)
 3. AWS credentials configured (via environment variables, AWS CLI, or IAM role)
 4. Install the required AWS SDK:
 
@@ -76,14 +76,14 @@ npx promptfoo view
 
 ```yaml
 providers:
-  - bedrock:agentcore:YOUR_AGENT_ID
+  - bedrock-agent:YOUR_AGENT_ID
 ```
 
 ### Advanced Single Agent Configuration
 
 ```yaml
 providers:
-  - id: bedrock:agentcore:my-agent
+  - id: bedrock-agent:my-agent
     config:
       agentId: YOUR_AGENT_ID
       agentAliasId: PROD_ALIAS # Optional: specific version/alias
@@ -99,7 +99,7 @@ providers:
 providers:
   # Technical Support Agent
   - id: tech-agent
-    provider: bedrock:agentcore:TECH_AGENT_ID
+    provider: bedrock-agent:TECH_AGENT_ID
     config:
       agentId: TECH_AGENT_ID
       agentAliasId: TECH_ALIAS_ID
@@ -109,7 +109,7 @@ providers:
 
   # Billing Agent
   - id: billing-agent
-    provider: bedrock:agentcore:BILLING_AGENT_ID
+    provider: bedrock-agent:BILLING_AGENT_ID
     config:
       agentId: BILLING_AGENT_ID
       agentAliasId: BILLING_ALIAS_ID
@@ -209,6 +209,6 @@ Your AWS credentials need the following permissions:
 
 ## Learn More
 
-- [AWS Bedrock AgentCore Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html)
+- [AWS Bedrock Agents Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html)
 - [Promptfoo Documentation](https://promptfoo.dev/docs/providers/bedrock/)
-- [AgentCore Samples](https://github.com/awslabs/amazon-bedrock-agentcore-samples)
+- [Bedrock Agents Samples](https://github.com/awslabs/amazon-bedrock-agents-samples)

@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { AwsBedrockAgentCoreProvider } from '../../src/providers/bedrock/agentcore';
+import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 
 // Mock AWS SDK modules
 jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
@@ -17,43 +17,43 @@ jest.mock('../../src/cache', () => ({
   isCacheEnabled: jest.fn(() => false),
 }));
 
-describe('AwsBedrockAgentCoreProvider', () => {
+describe('AwsBedrockAgentsProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   describe('constructor', () => {
     it('should allow creation without agentAliasId but fail on callApi', async () => {
-      const provider = new AwsBedrockAgentCoreProvider('test-agent-123');
+      const provider = new AwsBedrockAgentsProvider('test-agent-123');
       const result = await provider.callApi('test');
       expect(result.error).toContain('Agent Alias ID is required');
     });
 
     it('should create provider with agent ID from path and alias in config', () => {
-      const provider = new AwsBedrockAgentCoreProvider('test-agent-123', {
+      const provider = new AwsBedrockAgentsProvider('test-agent-123', {
         config: { agentId: 'test-agent-123', agentAliasId: 'test-alias' },
       });
-      expect(provider.id()).toBe('bedrock:agentcore:test-agent-123');
+      expect(provider.id()).toBe('bedrock-agent:test-agent-123');
     });
 
     it('should create provider with agent ID from config', () => {
-      const provider = new AwsBedrockAgentCoreProvider('', {
+      const provider = new AwsBedrockAgentsProvider('', {
         config: {
           agentId: 'config-agent-456',
           agentAliasId: 'test-alias',
         },
       });
-      expect(provider.id()).toBe('bedrock:agentcore:config-agent-456');
+      expect(provider.id()).toBe('bedrock-agent:config-agent-456');
     });
 
     it('should throw error when no agent ID is provided', () => {
       expect(
         () =>
-          new AwsBedrockAgentCoreProvider('', {
+          new AwsBedrockAgentsProvider('', {
             config: { agentAliasId: 'test-alias' } as any,
           }),
       ).toThrow(
-        'Agent ID is required. Provide it in the provider path (bedrock:agentcore:AGENT_ID) or config.',
+        'Agent ID is required. Provide it in the provider path (bedrock-agent:AGENT_ID) or config.',
       );
     });
 
@@ -65,7 +65,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
         enableTrace: true,
         memoryId: 'LONG_TERM_MEMORY',
       };
-      const provider = new AwsBedrockAgentCoreProvider('', { config });
+      const provider = new AwsBedrockAgentsProvider('', { config });
       // Provider adds default timeout and maxRetries
       expect(provider.config).toMatchObject(config);
     });
@@ -73,7 +73,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
 
   describe('callApi', () => {
     let mockSend: jest.Mock;
-    let provider: AwsBedrockAgentCoreProvider;
+    let provider: AwsBedrockAgentsProvider;
 
     beforeEach(() => {
       jest.clearAllMocks();
@@ -92,7 +92,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
       InvokeAgentCommand.mockImplementation((input: any) => input);
 
       // Create provider after mocks are set up
-      provider = new AwsBedrockAgentCoreProvider('test-agent', {
+      provider = new AwsBedrockAgentsProvider('test-agent', {
         config: {
           agentId: 'test-agent',
           agentAliasId: 'test-alias',
@@ -108,7 +108,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
 
     it('should require agentAliasId', async () => {
       // Create provider without agentAliasId to test error
-      const providerNoAlias = new AwsBedrockAgentCoreProvider('test-agent', {
+      const providerNoAlias = new AwsBedrockAgentsProvider('test-agent', {
         config: {
           agentId: 'test-agent',
           // agentAliasId intentionally missing
@@ -280,7 +280,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      // Token usage is not currently extracted from AgentCore responses
+      // Token usage is not currently extracted from Bedrock Agents responses
       // as the AWS SDK types don't include usage metadata
       expect(result.output).toBe('Response with tokens');
     });
@@ -338,10 +338,10 @@ describe('AwsBedrockAgentCoreProvider', () => {
 
   describe('toString', () => {
     it('should return formatted string representation', () => {
-      const provider = new AwsBedrockAgentCoreProvider('my-agent', {
+      const provider = new AwsBedrockAgentsProvider('my-agent', {
         config: { agentId: 'my-agent', agentAliasId: 'test-alias' },
       });
-      expect(provider.toString()).toBe('[AWS Bedrock AgentCore Provider my-agent]');
+      expect(provider.toString()).toBe('[AWS Bedrock Agents Provider my-agent]');
     });
   });
 });

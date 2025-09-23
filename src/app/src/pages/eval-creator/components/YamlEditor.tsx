@@ -68,7 +68,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     severity?: 'success' | 'error' | 'warning' | 'info';
   }>({ show: false, message: '', severity: 'info' });
 
-  const { getTestSuite, updateConfig } = useStore();
+  const { config, getTestSuite, updateConfig } = useStore();
 
   const parseAndUpdateStore = (yamlContent: string) => {
     try {
@@ -184,14 +184,19 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       const formattedCode = formatYamlWithSchema(initialConfig);
       setCode(formattedCode);
       setOriginalCode(formattedCode);
-    } else {
+    } else if (!isEditing) {
+      // Only auto-update when not editing and using store config
       const currentConfig = getTestSuite();
       const formattedCode = formatYamlWithSchema(currentConfig);
-      setCode(formattedCode);
-      setOriginalCode(formattedCode);
+      // Only update if the content has actually changed to avoid cursor jumping
+      if (formattedCode !== code) {
+        setCode(formattedCode);
+        setOriginalCode(formattedCode);
+      }
     }
-    // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
-  }, [initialYaml, initialConfig]);
+    // Deliberately omitting getTestSuite from dependencies to avoid infinite re-renders
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialYaml, initialConfig, config, isEditing, code]);
 
   // Track unsaved changes
   React.useEffect(() => {

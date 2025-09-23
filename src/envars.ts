@@ -186,6 +186,11 @@ type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+
+  // AWS Bedrock Agents
+  AWS_BEDROCK_AGENT_ID?: string;
+  AWS_BEDROCK_AGENT_ALIAS_ID?: string;
+  
   CEREBRAS_API_KEY?: string;
 
   // Azure OpenAI auth params
