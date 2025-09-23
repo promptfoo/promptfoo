@@ -87,8 +87,21 @@ export function createSecureFunction(...args: string[]): Function {
       // Convert arguments to transferable format and set them in the context
       const serializedArgs = callArgs.map((arg, index) => {
         if (typeof arg === 'object' && arg !== null) {
-          context.global.setSync(`arg${index}`, new ivm.ExternalCopy(arg).copyInto());
-          return `arg${index}`;
+          try {
+            context.global.setSync(`arg${index}`, new ivm.ExternalCopy(arg).copyInto());
+            return `arg${index}`;
+          } catch (error) {
+            // If ExternalCopy fails (e.g., for functions), serialize as JSON
+            try {
+              const jsonArg = JSON.stringify(arg);
+              context.global.setSync(`arg${index}`, jsonArg);
+              return `JSON.parse(arg${index})`;
+            } catch (jsonError) {
+              // If JSON serialization also fails, convert to string
+              context.global.setSync(`arg${index}`, String(arg));
+              return `arg${index}`;
+            }
+          }
         } else {
           context.global.setSync(`arg${index}`, arg);
           return `arg${index}`;
@@ -98,16 +111,31 @@ export function createSecureFunction(...args: string[]): Function {
       // Execute the function with the arguments
       const argsList = serializedArgs.join(', ');
       const script = isolate.compileScriptSync(`
-        const fn = ${functionCode};
-        fn(${argsList});
+        (function() {
+          const result = (${functionCode})(${argsList});
+          // Serialize complex objects to transfer them from the VM
+          if (typeof result === 'object' && result !== null) {
+            return JSON.stringify(result);
+          }
+          return result;
+        })()
       `);
 
       const result = script.runSync(context, { timeout: 5000 });
 
+      // Handle JSON-serialized objects returned from the VM
+      if (typeof result === 'string') {
+        try {
+          return JSON.parse(result);
+        } catch {
+          // Not JSON, return as string
+          return result;
+        }
+      }
       return result;
     } catch (error) {
       logger.error(`Secure function execution error: ${error}`);
-      throw new Error(`Failed to execute secure function: ${String(error)}`);
+      throw error; // Re-throw original error to preserve caller's error handling
     } finally {
       context.release();
     }
@@ -117,22 +145,87 @@ export function createSecureFunction(...args: string[]): Function {
 /**
  * Execute code safely and return the result (for function callbacks)
  * @param code - The JavaScript code to execute
- * @returns The result of execution
+ * @returns A wrapper function that executes the code safely when called
  */
 export function executeFunctionSafely(code: string): any {
-  const isolate = getIsolate();
-  const context = isolate.createContextSync();
+  // Return a wrapper function that will execute the code in isolation when called
+  return (...callArgs: any[]) => {
+    const isolate = getIsolate();
+    const context = isolate.createContextSync();
 
-  try {
-    const script = isolate.compileScriptSync(`(${code})`);
-    const result = script.runSync(context, { timeout: 5000 });
-    return result;
-  } catch (error) {
-    logger.error(`Function execution error: ${error}`);
-    throw new Error(`Failed to execute function: ${String(error)}`);
-  } finally {
-    context.release();
-  }
+    try {
+      // Extract parameter names from the function code to determine what to pass
+      const trimmedCode = code.trim();
+
+      let executeCode = code;
+      if (trimmedCode.startsWith('async function') && !trimmedCode.includes('await')) {
+        // Convert simple async function to sync by removing the async keyword
+        executeCode = trimmedCode.replace(/^async\s+/, '');
+      }
+
+      // Try to extract parameter names from arrow functions and regular functions
+      let paramNames: string[] = [];
+
+      // Arrow function: (param1, param2) => ... or param => ...
+      const arrowMatch = executeCode.match(/^\s*\(([^)]*)\)\s*=>/);
+      if (arrowMatch) {
+        paramNames = arrowMatch[1].split(',').map(p => p.trim()).filter(p => p);
+      } else {
+        // Single parameter arrow function: param => ...
+        const singleArrowMatch = executeCode.match(/^\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=>/);
+        if (singleArrowMatch) {
+          paramNames = [singleArrowMatch[1]];
+        } else {
+          // Regular function: function(param1, param2) { ... }
+          const funcMatch = executeCode.match(/function\s*\([^)]*\)/);
+          if (funcMatch) {
+            const paramsMatch = funcMatch[0].match(/\(([^)]*)\)/);
+            if (paramsMatch) {
+              paramNames = paramsMatch[1].split(',').map(p => p.trim()).filter(p => p);
+            }
+          }
+        }
+      }
+
+      // Set up variables in the context based on the number of parameters expected
+      const argsList: string[] = [];
+      for (let i = 0; i < Math.min(paramNames.length, callArgs.length); i++) {
+        const argName = `arg${i}`;
+        if (typeof callArgs[i] === 'object' && callArgs[i] !== null) {
+          try {
+            context.global.setSync(argName, new ivm.ExternalCopy(callArgs[i]).copyInto());
+          } catch (error) {
+            // If ExternalCopy fails, try JSON serialization
+            try {
+              const jsonArg = JSON.stringify(callArgs[i]);
+              context.global.setSync(argName, JSON.parse(jsonArg));
+            } catch (jsonError) {
+              // If JSON also fails, convert to string
+              context.global.setSync(argName, String(callArgs[i]));
+            }
+          }
+        } else {
+          context.global.setSync(argName, callArgs[i]);
+        }
+        argsList.push(argName);
+      }
+
+      const script = isolate.compileScriptSync(`
+        (function() {
+          const fn = (${executeCode});
+          return fn(${argsList.join(', ')});
+        })();
+      `);
+
+      const result = script.runSync(context, { timeout: 5000 });
+      return result;
+    } catch (error) {
+      logger.error(`Function callback execution error: ${error}`);
+      throw new Error(`Function callback failed: ${String(error)}`);
+    } finally {
+      context.release();
+    }
+  };
 }
 
 /**
@@ -143,12 +236,7 @@ export function executeFunctionSafely(code: string): any {
  * @param context - Context parameter
  * @returns The transform result
  */
-export function executeTransformSafely(
-  code: string,
-  data: any,
-  text: string,
-  context?: any
-): any {
+export function executeTransformSafely(code: string, data: any, text: string, context?: any): any {
   const isolate = getIsolate();
   const vmContext = isolate.createContextSync();
 
@@ -170,6 +258,7 @@ export function executeTransformSafely(
     // Set up the execution environment
     const fullCode = `
       const json = ${JSON.stringify(data)};
+      const data = json; // Alias for compatibility
       const text = ${JSON.stringify(text)};
       const context = ${JSON.stringify(context || {})};
 

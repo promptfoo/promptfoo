@@ -1226,11 +1226,7 @@ export async function createTransformRequest(
         const rendered = getNunjucksEngine().renderString(transform, { prompt, vars, context });
         const { createSecureFunction } = require('../util/sandbox');
         const secureFunc = createSecureFunction('prompt', 'vars', 'context', rendered);
-        return await secureFunc(
-          prompt,
-          vars,
-          context,
-        );
+        return await secureFunc(prompt, vars, context);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wrappedError = new Error(
@@ -1317,7 +1313,9 @@ export async function createValidateStatus(
       }
       // For expressions, wrap in a function body
       const { createSecureFunction } = require('../util/sandbox');
-      return createSecureFunction('status', `return ${trimmedValidator}`) as (status: number) => boolean;
+      return createSecureFunction('status', `return ${trimmedValidator}`) as (
+        status: number,
+      ) => boolean;
     } catch (err: any) {
       throw new Error(`Invalid status validator expression: ${err?.message || String(err)}`);
     }
@@ -1836,10 +1834,19 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
-    if (!(await this.validateStatus)(response.status)) {
-      throw new Error(
-        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
-      );
+    try {
+      if (!(await this.validateStatus)(response.status)) {
+        throw new Error(
+          `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
+        );
+      }
+    } catch (error: any) {
+      if (error.message.includes('HTTP call failed with status')) {
+        // Re-throw status validation failures (not syntax errors)
+        throw error;
+      }
+      // Wrap syntax/execution errors in validator context
+      throw new Error(`Invalid status validator expression: ${error?.message || String(error)}`);
     }
     logger.debug(
       `[HTTP Provider]: Response (HTTP ${response.status}): ${safeJsonStringify(response.data)}`,
@@ -1946,10 +1953,19 @@ export class HttpProvider implements ApiProvider {
 
     logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
 
-    if (!(await this.validateStatus)(response.status)) {
-      throw new Error(
-        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
-      );
+    try {
+      if (!(await this.validateStatus)(response.status)) {
+        throw new Error(
+          `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
+        );
+      }
+    } catch (error: any) {
+      if (error.message.includes('HTTP call failed with status')) {
+        // Re-throw status validation failures (not syntax errors)
+        throw error;
+      }
+      // Wrap syntax/execution errors in validator context
+      throw new Error(`Invalid status validator expression: ${error?.message || String(error)}`);
     }
 
     const rawText = response.data as string;
