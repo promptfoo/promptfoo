@@ -90,7 +90,8 @@ export default function Hacktoberfest(): JSX.Element {
               </h1>
               <p className={styles.heroSubtitle}>
                 Join Promptfoo for Hacktoberfest 2025! Help secure AI applications worldwide while
-                earning swag and contributing to the most popular open-source AI security testing platform.
+                earning swag and contributing to the most popular open-source AI security testing
+                platform.
               </p>
               <div className={styles.heroButtons}>
                 <a
@@ -146,21 +147,21 @@ export default function Hacktoberfest(): JSX.Element {
               <div className={styles.whyPoint}>
                 <h3>🚀 It's exciting!</h3>
                 <p>
-                  We're not even two years old, and growing so quickly!
-                  Be part of the change as we build the future of AI security testing.
+                  We're not even two years old, and growing so quickly! Be part of the change as we
+                  build the future of AI security testing.
                 </p>
               </div>
               <div className={styles.whyPoint}>
                 <h3>🎯 We're on a mission</h3>
                 <p>
-                  We want developers everywhere to test AI like they run their unit tests. 
-                  Help us make AI testing as standard as traditional software testing.
+                  We want developers everywhere to test AI like they run their unit tests. Help us
+                  make AI testing as standard as traditional software testing.
                 </p>
               </div>
               <div className={styles.whyPoint}>
                 <h3>📈 Popular & growing</h3>
                 <p>
-                  Over 150k users and growing despite being a young project. Join a community that's 
+                  Over 150k users and growing despite being a young project. Join a community that's
                   already making a real impact in AI security worldwide.
                 </p>
               </div>
@@ -211,8 +212,8 @@ export default function Hacktoberfest(): JSX.Element {
                     <div className={styles.demoContent}>
                       <h3>Security & red teaming</h3>
                       <p>
-                        Add new attack vectors, enhance
-                        vulnerability detection, or improving red teaming capabilities. We love new plugins. Also you.
+                        Add new attack vectors, enhance vulnerability detection, or improving red
+                        teaming capabilities. We love new plugins. Also you.
                       </p>
                       <div className={styles.demoTag}>SECURITY FOCUSED</div>
                     </div>
@@ -245,9 +246,10 @@ export default function Hacktoberfest(): JSX.Element {
                     <div className={styles.demoContent}>
                       <h3>Community & outreach</h3>
                       <p>
-                        Help spread the word about Promptfoo through translations, talks, presentations, 
-                        hosting events, podcasts, social media, blog posts, or videos. Get in touch with 
-                        us to discuss what you'd like to do and how we can support your contribution.
+                        Help spread the word about Promptfoo through translations, talks,
+                        presentations, hosting events, podcasts, social media, blog posts, or
+                        videos. Get in touch with us to discuss what you'd like to do and how we can
+                        support your contribution.
                       </p>
                       <div className={styles.demoTag}>NO-CODE</div>
                     </div>
@@ -278,8 +280,8 @@ export default function Hacktoberfest(): JSX.Element {
                   <h3>Fork & clone the repository</h3>
                   <p>
                     Fork the{' '}
-                    <Link to="https://github.com/promptfoo/promptfoo">promptfoo repository</Link>{' '}
-                    on GitHub, then clone your fork locally:
+                    <Link to="https://github.com/promptfoo/promptfoo">promptfoo repository</Link> on
+                    GitHub, then clone your fork locally:
                   </p>
                   <code>git clone https://github.com/[your-username]/promptfoo.git</code>
                 </div>
@@ -288,9 +290,7 @@ export default function Hacktoberfest(): JSX.Element {
                 <div className={styles.stepNumber}>2</div>
                 <div className={styles.stepContent}>
                   <h3>Set up development environment</h3>
-                  <p>
-                    Install dependencies and run tests to make sure everything is working:
-                  </p>
+                  <p>Install dependencies and run tests to make sure everything is working:</p>
                   <code>npm install && npm test</code>
                 </div>
               </div>
@@ -301,7 +301,10 @@ export default function Hacktoberfest(): JSX.Element {
                   <p>
                     Look for issues labeled with <code>good first issue</code>,{' '}
                     <code>hacktoberfest</code>, or <code>help wanted</code> in our{' '}
-                    <Link to="https://github.com/promptfoo/promptfoo/issues">GitHub repository</Link>.
+                    <Link to="https://github.com/promptfoo/promptfoo/issues">
+                      GitHub repository
+                    </Link>
+                    .
                   </p>
                 </div>
               </div>
@@ -324,9 +327,10 @@ export default function Hacktoberfest(): JSX.Element {
           <div className={styles.container}>
             <h2 className={styles.sectionTitle}>Earn points & unlock rewards</h2>
             <p className={styles.rewardsSubtitle}>
-              The more you contribute, the more points you earn. Use your points to redeem exclusive swag from our foo store!
+              The more you contribute, the more points you earn. Use your points to redeem exclusive
+              swag from our foo store!
             </p>
-            
+
             <div className={styles.pointsSystem}>
               <div className={styles.pointsCard}>
                 <div className={styles.pointsHeader}>
@@ -335,7 +339,9 @@ export default function Hacktoberfest(): JSX.Element {
                 <div className={styles.pointsList}>
                   <div className={styles.pointsItem}>
                     <span className={styles.pointsValue}>5 pts</span>
-                    <span className={styles.pointsDesc}>Documentation improvements, small bug fixes</span>
+                    <span className={styles.pointsDesc}>
+                      Documentation improvements, small bug fixes
+                    </span>
                   </div>
                   <div className={styles.pointsItem}>
                     <span className={styles.pointsValue}>10 pts</span>
@@ -343,15 +349,21 @@ export default function Hacktoberfest(): JSX.Element {
                   </div>
                   <div className={styles.pointsItem}>
                     <span className={styles.pointsValue}>15 pts</span>
-                    <span className={styles.pointsDesc}>Security improvements, red teaming features</span>
+                    <span className={styles.pointsDesc}>
+                      Security improvements, red teaming features
+                    </span>
                   </div>
                   <div className={styles.pointsItem}>
                     <span className={styles.pointsValue}>20 pts</span>
-                    <span className={styles.pointsDesc}>Major architectural changes, complex PRs</span>
+                    <span className={styles.pointsDesc}>
+                      Major architectural changes, complex PRs
+                    </span>
                   </div>
                   <div className={styles.pointsItem}>
                     <span className={styles.pointsValue}>25 pts</span>
-                    <span className={styles.pointsDesc}>Community outreach, translations, talks</span>
+                    <span className={styles.pointsDesc}>
+                      Community outreach, translations, talks
+                    </span>
                   </div>
                 </div>
               </div>
@@ -388,7 +400,9 @@ export default function Hacktoberfest(): JSX.Element {
                 </div>
                 <div className={styles.rewardItems}>
                   <div className={styles.rewardItem}>Everything in bronze</div>
-                  <div className={styles.rewardItem}>Choice of Promptfoo Hacktoberfest t-shirt OR hoodie</div>
+                  <div className={styles.rewardItem}>
+                    Choice of Promptfoo Hacktoberfest t-shirt OR hoodie
+                  </div>
                   <div className={styles.rewardItem}>Shoutout on LinkedIn & social media</div>
                 </div>
               </div>
@@ -396,9 +410,12 @@ export default function Hacktoberfest(): JSX.Element {
 
             <div className={styles.rewardsNote}>
               <p>
-                <strong>How it works:</strong> Submit your PRs during October 2025, and we'll track your points automatically. 
-                Redeem rewards from our{' '}
-                <Link to="https://store.promptfoo.dev" style={{ color: '#b32e2e', fontWeight: 'bold' }}>
+                <strong>How it works:</strong> Submit your PRs during October 2025, and we'll track
+                your points automatically. Redeem rewards from our{' '}
+                <Link
+                  to="https://store.promptfoo.dev"
+                  style={{ color: '#b32e2e', fontWeight: 'bold' }}
+                >
                   foo store
                 </Link>{' '}
                 using your earned points. Limited quantities available!
