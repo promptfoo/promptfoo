@@ -63,15 +63,6 @@ providers:
               required: ['expression']
       tool_choice: auto
 
-  # Example using inference profile (single-region only - cross-region not supported)
-  # - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/qwen-profile
-  #   label: Qwen Inference Profile
-  #   config:
-  #     inferenceModelType: qwen
-  #     region: us-west-2
-  #     max_tokens: 1024
-  #     temperature: 0.7
-
 tests:
   - vars:
       question: Write a Python function to calculate the factorial of a number

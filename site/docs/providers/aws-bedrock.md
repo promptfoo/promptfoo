@@ -84,7 +84,7 @@ The `inferenceModelType` config option supports the following values:
 - `titan` - For Amazon Titan models
 - `deepseek` - For DeepSeek models
 - `openai` - For OpenAI models
-- `qwen` - For Alibaba Qwen models (application profiles only)
+- `qwen` - For Alibaba Qwen models
 
 ### Example: Multi-Region Inference Profile
 
@@ -303,7 +303,7 @@ providers:
       reasoning_effort: 'low'
   - id: bedrock:qwen.qwen3-coder-480b-a35b-v1:0
     config:
-      region: 'us-east-1'
+      region: 'us-west-2'
       temperature: 0.7
       max_tokens: 256
       showThinking: true
@@ -328,7 +328,7 @@ Different models may support different configuration options. Here are some mode
 
 ### General Configuration Options
 
-- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen` (application profiles only - cross-region not supported)
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
 
 ### Amazon Nova Models
 
@@ -582,13 +582,7 @@ OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bed
 
 Alibaba's Qwen models (e.g., `qwen.qwen3-coder-480b-a35b-v1:0`, `qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-235b-a22b-2507-v1:0`, `qwen.qwen3-32b-v1:0`) support advanced features including hybrid thinking modes, tool calling, and extended context understanding.
 
-**Regional Availability**:
-
-- **US West 2 (Oregon)**: All 4 models available
-- **US East 1 (N. Virginia)**: qwen3-coder-30b-a3b-v1:0, qwen3-32b-v1:0
-- **EU West 1 (Ireland)**: qwen3-coder-30b-a3b-v1:0, qwen3-32b-v1:0
-
-**Note**: Qwen models do not currently support cross-region inference profiles. Application inference profiles may be supported for single-region routing.
+**Regional Availability**: Check the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/home) or use `aws bedrock list-foundation-models` to verify which Qwen models are available in your target region, as availability varies by model and region.
 
 You can configure them with the following options:
 
@@ -649,7 +643,7 @@ config:
 providers:
   - id: bedrock:qwen.qwen3-coder-480b-a35b-v1:0
     config:
-      region: us-east-1
+      region: us-west-2
       max_tokens: 2048
       temperature: 0.7
       top_p: 0.9
