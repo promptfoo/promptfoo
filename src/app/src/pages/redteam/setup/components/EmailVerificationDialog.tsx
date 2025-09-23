@@ -15,7 +15,7 @@ import Typography from '@mui/material/Typography';
 interface EmailVerificationDialogProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (email: string) => Promise<void>;
   message?: string;
 }
 
@@ -67,7 +67,7 @@ export function EmailVerificationDialog({
         return;
       }
       showToast('Email saved successfully, starting redteam.');
-      onSuccess();
+      return onSuccess(email);
     } catch (error) {
       console.error('Error submitting email:', error);
       setEmailError(
@@ -78,9 +78,9 @@ export function EmailVerificationDialog({
     }
   };
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
+  const handleKeyPress = async (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !isSubmitting) {
-      handleSubmit();
+      return handleSubmit();
     }
   };
 

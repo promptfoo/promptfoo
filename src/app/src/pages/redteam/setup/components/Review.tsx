@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Code from '@app/components/Code';
+import useDemoMode from '@app/hooks/useDemoMode';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -16,7 +17,6 @@ import SearchIcon from '@mui/icons-material/Search';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import Grid from '@mui/material/Grid';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -29,6 +29,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -47,10 +48,9 @@ import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
-import type { RedteamRunOptions } from '@promptfoo/types';
 import { getEstimatedDuration } from './strategies/utils';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
-import type { Job } from '@promptfoo/types';
+import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -77,6 +77,7 @@ export default function Review({
   navigateToStrategies,
   navigateToPurpose,
 }: ReviewProps) {
+  const { isDemoMode, setEmailAddress: setDemoModeEmailAddress } = useDemoMode();
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
@@ -281,29 +282,6 @@ export default function Review({
   };
 
   const handleRunWithSettings = async () => {
-    // Check email verification first
-    const emailResult = await checkEmailStatus();
-
-    if (!emailResult.canProceed) {
-      if (emailResult.needsEmail) {
-        setEmailVerificationMessage(
-          emailResult.status?.message ||
-            'Redteam evals require email verification. Please enter your work email:',
-        );
-        setIsEmailDialogOpen(true);
-        return;
-      } else if (emailResult.error) {
-        setEmailVerificationError(emailResult.error);
-        showToast(emailResult.error, 'error');
-        return;
-      }
-    }
-
-    // Show usage warning if present
-    if (emailResult.status?.status === 'show_usage_warning' && emailResult.status.message) {
-      showToast(emailResult.status.message, 'warning');
-    }
-
     const { hasRunningJob } = await checkForRunningJob();
 
     if (hasRunningJob) {
@@ -408,6 +386,42 @@ export default function Review({
         'error',
       );
     }
+  };
+
+  const handleRun = async () => {
+    // Always prompt for email in demo mode
+    if (isDemoMode) {
+      setEmailVerificationMessage(
+        'Redteam evals require email verification. Please enter your work email:',
+      );
+      setIsEmailDialogOpen(true);
+      return;
+    }
+
+    // Check email verification first
+    const emailResult = await checkEmailStatus();
+
+    if (!emailResult.canProceed) {
+      if (emailResult.needsEmail) {
+        setEmailVerificationMessage(
+          emailResult.status?.message ||
+            'Redteam evals require email verification. Please enter your work email:',
+        );
+        setIsEmailDialogOpen(true);
+        return;
+      } else if (emailResult.error) {
+        setEmailVerificationError(emailResult.error);
+        showToast(emailResult.error, 'error');
+        return;
+      }
+    }
+
+    // Show usage warning if present
+    if (emailResult.status?.status === 'show_usage_warning' && emailResult.status.message) {
+      showToast(emailResult.status.message, 'warning');
+    }
+
+    return handleRunWithSettings();
   };
 
   const handleCancel = async () => {
@@ -1053,54 +1067,61 @@ export default function Review({
         </Box>
 
         <Paper elevation={2} sx={{ p: 3 }}>
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h6" gutterBottom>
-              Option 1: Save and Run via CLI
-            </Typography>
-            <Typography variant="body1">
-              Save your configuration and run it from the command line. Full control over the
-              evaluation process, good for larger scans:
-            </Typography>
-            <Code>promptfoo redteam run</Code>
-            <Stack spacing={2}>
-              <Box>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleSaveYaml}
-                  startIcon={<SaveIcon />}
-                >
-                  Save YAML
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="primary"
-                  startIcon={<VisibilityIcon />}
-                  onClick={handleOpenYamlDialog}
-                  sx={{ ml: 2 }}
-                >
-                  View YAML
-                </Button>
+          {!isDemoMode && (
+            <>
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                  Option 1: Save and Run via CLI
+                </Typography>
+                <Typography variant="body1">
+                  Save your configuration and run it from the command line. Full control over the
+                  evaluation process, good for larger scans:
+                </Typography>
+                <Code>promptfoo redteam run</Code>
+                <Stack spacing={2}>
+                  <Box>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={handleSaveYaml}
+                      startIcon={<SaveIcon />}
+                    >
+                      Save YAML
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      startIcon={<VisibilityIcon />}
+                      onClick={handleOpenYamlDialog}
+                      sx={{ ml: 2 }}
+                    >
+                      View YAML
+                    </Button>
+                  </Box>
+                </Stack>
               </Box>
-            </Stack>
-          </Box>
-
-          <Divider sx={{ my: 3 }} />
+              <Divider sx={{ my: 3 }} />
+            </>
+          )}
 
           <Box>
-            <Typography variant="h6" gutterBottom>
-              Option 2: Run Directly in Browser
-            </Typography>
-            <Typography variant="body1" paragraph>
-              Run the red team evaluation right here. Simpler but less powerful than the CLI, good
-              for tests and small scans:
-            </Typography>
+            {!isDemoMode && (
+              <>
+                <Typography variant="h6" gutterBottom>
+                  Option 2: Run Directly in Browser
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Run the red team evaluation right here. Simpler but less powerful than the CLI,
+                  good for tests and small scans:
+                </Typography>
+              </>
+            )}
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                 <Button
                   variant="contained"
                   color="primary"
-                  onClick={handleRunWithSettings}
+                  onClick={handleRun}
                   disabled={isRunning}
                   startIcon={
                     isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
@@ -1178,9 +1199,10 @@ export default function Review({
         <EmailVerificationDialog
           open={isEmailDialogOpen}
           onClose={() => setIsEmailDialogOpen(false)}
-          onSuccess={() => {
+          onSuccess={async (email: string) => {
             setIsEmailDialogOpen(false);
-            handleRunWithSettings();
+            setDemoModeEmailAddress(email);
+            return handleRunWithSettings();
           }}
           message={emailVerificationMessage}
         />
