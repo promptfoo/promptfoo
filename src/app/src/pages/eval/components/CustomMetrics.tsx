@@ -97,10 +97,19 @@ const CustomMetrics = ({
   const handleClick = useCallback(
     (value: string) => {
       const asPolicy = isPolicyMetric(value);
+      // Determine filter value, bailing if policy cannot be parsed
+      let filterValue = value;
+      if (asPolicy) {
+        const policy = deserializePolicyMetricAsPolicyObject(value);
+        if (!policy?.id) {
+          return;
+        }
+        filterValue = policy.id;
+      }
       const filter = {
         type: asPolicy ? ('policy' as const) : ('metric' as const),
         operator: 'equals' as const,
-        value: asPolicy ? (deserializePolicyMetricAsPolicyObject(value)?.id ?? '') : value,
+        value: filterValue,
         logicOperator: 'or' as const,
       };
 
