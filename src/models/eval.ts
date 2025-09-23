@@ -530,29 +530,32 @@ export default class Eval {
       // Helper function to sanitize SQL string values
       const sanitizeValue = (val: string) => val.replace(/'/g, "''");
 
+      // Helper function to escape JSON path keys to prevent path injection
+      const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
       opts.filters.forEach((filter) => {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
         if (type === 'metric' && operator === 'equals') {
-          const sanitizedValue = sanitizeValue(value);
-          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
-          // in double quotes.
-          condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
+          const escapedValue = escapeJsonPathKey(value);
+          // Because metric names can contain special characters (e.g. `gpt-4.1-judge`) we need to escape them
+          // and wrap in double quotes.
+          condition = `json_extract(named_scores, '$."${escapedValue}"') IS NOT NULL`;
         } else if (type === 'metadata' && field) {
           const sanitizedValue = sanitizeValue(value);
-          const sanitizedField = sanitizeValue(field);
+          const escapedField = escapeJsonPathKey(field);
 
           if (operator === 'equals') {
-            condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
+            condition = `json_extract(metadata, '$."${escapedField}"') = '${sanitizedValue}'`;
           } else if (operator === 'contains') {
-            condition = `json_extract(metadata, '$."${sanitizedField}"') LIKE '%${sanitizedValue}%'`;
+            condition = `json_extract(metadata, '$."${escapedField}"') LIKE '%${sanitizedValue}%'`;
           } else if (operator === 'not_contains') {
-            condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
+            condition = `(json_extract(metadata, '$."${escapedField}"') IS NULL OR json_extract(metadata, '$."${escapedField}"') NOT LIKE '%${sanitizedValue}%')`;
           } else if (operator === 'exists') {
             // For exists, check if the field is present AND not empty (not null, not empty string, not just whitespace)
             // Use a single json_extract call with LENGTH(TRIM()) for better performance
-            condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${sanitizedField}"'), ''))) > 0`;
+            condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${escapedField}"'), ''))) > 0`;
           }
         } else if (type === 'plugin' && operator === 'equals') {
           const sanitizedValue = sanitizeValue(value);

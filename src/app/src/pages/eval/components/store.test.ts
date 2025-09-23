@@ -367,6 +367,55 @@ describe('useTableStore', () => {
       expect(state.filters.values[mockFilterId].value).toBe('');
     });
 
+    it('should consider exists operator filters as applied when field is present (even with empty value)', () => {
+      const mockFilterId = 'exists-test-filter';
+      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+
+      // Add metadata filter with exists operator
+      const existsFilter = {
+        type: 'metadata' as const,
+        operator: 'exists' as const,
+        field: 'testField',
+        value: '', // Empty value is OK for exists operator
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(existsFilter);
+      });
+
+      const state = useTableStore.getState();
+
+      // Should be considered applied since field is present and operator is exists
+      expect(state.filters.appliedCount).toBe(1);
+      expect(state.filters.values[mockFilterId]).toEqual({
+        ...existsFilter,
+        id: mockFilterId,
+        logicOperator: 'and',
+        sortIndex: 0,
+      });
+    });
+
+    it('should not consider exists operator filters as applied when field is missing', () => {
+      const mockFilterId = 'exists-test-filter-2';
+      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+
+      // Add metadata filter with exists operator but no field
+      const existsFilter = {
+        type: 'metadata' as const,
+        operator: 'exists' as const,
+        value: '', // Empty value and no field
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(existsFilter);
+      });
+
+      const state = useTableStore.getState();
+
+      // Should NOT be considered applied since field is missing
+      expect(state.filters.appliedCount).toBe(0);
+    });
+
     it("should update `filters.options.strategy` with unique strategy IDs and include 'basic' when `fetchEvalData` receives redteam config with strategies", async () => {
       const mockEvalId = 'test-eval-id';
       const mockStrategies = ['strategy1', { id: 'strategy2' }, 'strategy1', { id: 'strategy3' }];

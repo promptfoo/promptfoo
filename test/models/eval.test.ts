@@ -952,6 +952,85 @@ describe('evaluator', () => {
       expect(configExists.testIndices).toEqual([5]);
     });
 
+    it('filters by metadata with special characters in field names (security test)', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 5,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const db = getDb();
+      // Test metadata keys with quotes and backslashes that could cause JSON path injection
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"field\\"with\\"quotes":"value1"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"field\\\\with\\\\backslashes":"value2"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"normal_field":"value3"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+
+      // Test equals filter with quotes in field name
+      const quotesResult = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'equals',
+            field: 'field"with"quotes',
+            value: 'value1',
+          }),
+        ],
+      });
+      expect(quotesResult.filteredCount).toBe(1);
+      expect(quotesResult.testIndices).toEqual([0]);
+
+      // Test equals filter with backslashes in field name
+      const backslashResult = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'equals',
+            field: 'field\\with\\backslashes',
+            value: 'value2',
+          }),
+        ],
+      });
+      expect(backslashResult.filteredCount).toBe(1);
+      expect(backslashResult.testIndices).toEqual([1]);
+
+      // Test exists filter with quotes in field name
+      const existsQuotesResult = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'exists',
+            field: 'field"with"quotes',
+            value: '',
+          }),
+        ],
+      });
+      expect(existsQuotesResult.filteredCount).toBe(1);
+      expect(existsQuotesResult.testIndices).toEqual([0]);
+
+      // Test exists filter with backslashes in field name
+      const existsBackslashResult = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'exists',
+            field: 'field\\with\\backslashes',
+            value: '',
+          }),
+        ],
+      });
+      expect(existsBackslashResult.filteredCount).toBe(1);
+      expect(existsBackslashResult.testIndices).toEqual([1]);
+    });
+
     it('filters by plugin and strategy', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 6,
