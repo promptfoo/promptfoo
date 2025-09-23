@@ -13,8 +13,6 @@ import {
   redteamProviderManager,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
-import { sleep } from '../../../src/util/time';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -22,6 +20,7 @@ import type {
   Prompt,
   ProviderResponse,
 } from '../../../src/types';
+import { sleep } from '../../../src/util/time';
 
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/cliState', () => ({
@@ -298,6 +297,63 @@ describe('shared redteam provider utilities', () => {
         output: '',
         error: 'Network error',
         tokenUsage: { numRequests: 1 },
+      });
+    });
+
+    describe('Multilingual provider', () => {
+      it('getMultilingualProvider returns undefined when not set', async () => {
+        // Ensure clean state
+        redteamProviderManager.clearProvider();
+        const result = await redteamProviderManager.getMultilingualProvider();
+        expect(result).toBeUndefined();
+      });
+
+      it('setMultilingualProvider caches provider and getMultilingualProvider returns it', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-multilingual-provider',
+          callApi: jest.fn<
+            Promise<ProviderResponse>,
+            [string, CallApiContextParams | undefined, any]
+          >(),
+        };
+
+        mockedLoadApiProviders.mockResolvedValueOnce([mockProvider]);
+
+        await redteamProviderManager.setMultilingualProvider('test-multilingual-provider');
+        const result = await redteamProviderManager.getMultilingualProvider();
+
+        expect(result).toBe(mockProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['test-multilingual-provider']);
+      });
+
+      it('setMultilingualProvider uses jsonOnly response_format when defaulting to OpenAI', async () => {
+        const mockOpenAiInstance = {
+          id: () => `openai:${ATTACKER_MODEL}`,
+          callApi: jest.fn(),
+          toString: () => `OpenAI(${ATTACKER_MODEL})`,
+          config: { temperature: TEMPERATURE, response_format: { type: 'json_object' } },
+          getApiKey: jest.fn(),
+          getApiUrl: jest.fn(),
+          getApiUrlDefault: jest.fn(),
+          getOrganization: jest.fn(),
+          requiresApiKey: jest.fn(),
+          initializationPromise: null,
+          loadedFunctionCallbacks: {},
+          mcpClient: null,
+        };
+
+        mockedOpenAiProvider.mockClear();
+        mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
+
+        // Pass undefined to trigger default provider creation
+        await redteamProviderManager.setMultilingualProvider(undefined as any);
+
+        expect(mockedOpenAiProvider).toHaveBeenCalledWith(ATTACKER_MODEL, {
+          config: {
+            temperature: TEMPERATURE,
+            response_format: { type: 'json_object' },
+          },
+        });
       });
     });
   });
