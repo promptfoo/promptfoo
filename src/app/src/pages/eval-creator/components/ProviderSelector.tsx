@@ -604,7 +604,7 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
   };
 
   const handleSave = (providerId: string, config: Record<string, any>) => {
-    onChange(providers.map((p) => (p.id === providerId && !p.label ? { ...p, config } : p)));
+    onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
     setSelectedProvider(null);
   };
 
