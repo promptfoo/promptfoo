@@ -1,11 +1,10 @@
 import { randomUUID } from 'crypto';
-import * as fs from 'fs';
 import * as path from 'path';
 
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { globSync, hasMagic } from 'glob';
+import { globSync } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,

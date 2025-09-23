@@ -1,4 +1,3 @@
-import { hasMagic } from 'glob';
 import { sha256 } from '../util/createHash';
 import { VALID_FILE_EXTENSIONS } from './constants';
 

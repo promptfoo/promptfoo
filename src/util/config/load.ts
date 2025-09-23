@@ -5,7 +5,7 @@ import process from 'process';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { globSync, hasMagic } from 'glob';
+import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions/index';
