@@ -56,6 +56,8 @@ export function MetadataPanel({
     return null;
   }
 
+  const metadataEntries = Object.entries(metadata);
+
   return (
     <TableContainer component={Paper} variant="outlined">
       <Table size="small">
@@ -71,7 +73,7 @@ export function MetadataPanel({
           </TableRow>
         </TableHead>
         <TableBody>
-          {Object.entries(metadata).map(([key, value]) => {
+          {metadataEntries.map(([key, value]) => {
             // Skip citations in metadata display as they're shown in their own component
             if (key === 'citations') {
               return null;
@@ -82,33 +84,33 @@ export function MetadataPanel({
 
             // Is reusable custom policy name?
             if (key === 'policyName' && cloudConfig?.isEnabled && cloudConfig?.appUrl) {
-              cell = (
-                <TableCell
-                  style={{
-                    whiteSpace: 'pre-wrap',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                  >
-                    <span>{value}</span>
-                    <Link
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, value)}
-                      sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-                    >
-                      <span>View policy in Promptfoo Cloud</span>
-                      <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
-                    </Link>
-                  </div>
-                </TableCell>
-              );
+              const policyId: string | null =
+                metadataEntries.find(([key]) => key === 'policyId')?.[1] ?? null;
+
+              if (policyId) {
+                cell = (
+                  <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>{value}</span>
+                      <Link
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policyId)}
+                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                      >
+                        <span>View policy in Promptfoo Cloud</span>
+                        <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
+                      </Link>
+                    </div>
+                  </TableCell>
+                );
+              } else {
+                cell = (
+                  <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
+                    {value}
+                  </TableCell>
+                );
+              }
             }
             // Is URL?
             else if (typeof value === 'string' && isValidUrl(value)) {
