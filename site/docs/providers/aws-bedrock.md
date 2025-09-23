@@ -6,7 +6,7 @@ description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, No
 
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, Alibaba's Qwen, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -84,6 +84,7 @@ The `inferenceModelType` config option supports the following values:
 - `titan` - For Amazon Titan models
 - `deepseek` - For DeepSeek models
 - `openai` - For OpenAI models
+- `qwen` - For Alibaba Qwen models
 
 ### Example: Multi-Region Inference Profile
 
@@ -300,6 +301,17 @@ providers:
       temperature: 0.7
       max_completion_tokens: 256
       reasoning_effort: 'low'
+  - id: bedrock:qwen.qwen3-coder-480b-a35b-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+      showThinking: true
+  - id: bedrock:qwen.qwen3-32b-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
 
 tests:
   - vars:
@@ -316,7 +328,7 @@ Different models may support different configuration options. Here are some mode
 
 ### General Configuration Options
 
-- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
 
 ### Amazon Nova Models
 
@@ -565,6 +577,87 @@ providers:
 OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bedrock models. This aligns with OpenAI's API specification and allows for more precise control over response length.
 
 :::
+
+### Qwen Models
+
+Alibaba's Qwen models (e.g., `qwen.qwen3-coder-480b-a35b-v1:0`, `qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-235b-a22b-2507-v1:0`, `qwen.qwen3-32b-v1:0`) support advanced features including hybrid thinking modes, tool calling, and extended context understanding. You can configure them with the following options:
+
+```yaml
+config:
+  max_tokens: 2048 # Maximum number of tokens to generate
+  temperature: 0.7 # Controls randomness (0.0 to 1.0)
+  top_p: 0.9 # Nucleus sampling parameter
+  top_k: 50 # Top-k sampling parameter (optional)
+  frequency_penalty: 0.1 # Reduces repetition of frequent tokens
+  presence_penalty: 0.1 # Reduces repetition of any tokens
+  stop: ['END', 'STOP'] # Stop sequences
+  showThinking: true # Control whether thinking content is included in output
+  tools: [...] # Tool calling configuration (optional)
+  tool_choice: 'auto' # Tool selection strategy (optional)
+```
+
+#### Hybrid Thinking Modes
+
+Qwen models support hybrid thinking modes where the model can apply step-by-step reasoning before delivering the final answer. The `showThinking` parameter controls whether thinking content is included in the response output:
+
+- When set to `true` (default), thinking content will be included in the output
+- When set to `false`, thinking content will be excluded from the output
+
+This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
+
+#### Tool Calling Support
+
+Qwen models support tool calling with OpenAI-compatible function definitions:
+
+```yaml
+config:
+  tools:
+    - type: function
+      function:
+        name: calculate
+        description: Perform arithmetic calculations
+        parameters:
+          type: object
+          properties:
+            expression:
+              type: string
+              description: The mathematical expression to evaluate
+          required: ['expression']
+  tool_choice: auto # 'auto', 'none', or specific function name
+```
+
+#### Model Variants
+
+- **Qwen3-Coder-480B-A35B**: Mixture-of-experts model optimized for coding and agentic tasks with 480B total parameters and 35B active parameters
+- **Qwen3-Coder-30B-A3B**: Smaller MoE model with 30B total parameters and 3B active parameters, optimized for coding tasks
+- **Qwen3-235B-A22B**: General-purpose MoE model with 235B total parameters and 22B active parameters for reasoning and coding
+- **Qwen3-32B**: Dense model with 32B parameters for consistent performance in resource-constrained environments
+
+#### Usage Example
+
+```yaml
+providers:
+  - id: bedrock:qwen.qwen3-coder-480b-a35b-v1:0
+    config:
+      region: us-east-1
+      max_tokens: 2048
+      temperature: 0.7
+      top_p: 0.9
+      showThinking: true
+      tools:
+        - type: function
+          function:
+            name: code_analyzer
+            description: Analyze code for potential issues
+            parameters:
+              type: object
+              properties:
+                code:
+                  type: string
+                  description: The code to analyze
+              required: ['code']
+      tool_choice: auto
+```
 
 ## Model-graded tests
 
