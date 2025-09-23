@@ -1863,7 +1863,9 @@ export class HttpProvider implements ApiProvider {
         statusText: response.statusText,
         headers: sanitizeAuthHeaders(response.headers),
       },
-      transformedRequest: transformedPrompt,
+      // If no transform was applied, show the final request body with nunjucks applied
+      // Otherwise show the transformed prompt
+      transformedRequest: this.config.transformRequest ? transformedPrompt : renderedConfig.body,
       finalRequestBody: renderedConfig.body,
     };
 
@@ -1975,7 +1977,11 @@ export class HttpProvider implements ApiProvider {
     ret.raw = response.data;
     ret.metadata = {
       headers: sanitizeAuthHeaders(response.headers),
-      transformedRequest: transformedPrompt,
+      // If no transform was applied, show the final raw request body with nunjucks applied
+      // Otherwise show the transformed prompt
+      transformedRequest: this.config.transformRequest
+        ? transformedPrompt
+        : parsedRequest.body?.text || renderedRequest.trim(),
       finalRequestBody: parsedRequest.body?.text,
     };
 

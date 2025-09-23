@@ -28,6 +28,7 @@ interface SessionsTabProps {
 interface TestResult {
   success: boolean;
   message: string;
+  reason?: string;
   details?: {
     sessionId?: string;
     request1?: any;
@@ -64,13 +65,9 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data: TestResult = await response.json();
 
-        setTestResult({
-          success: data.success,
-          message: data.message,
-          details: data.details,
-        });
+        setTestResult(data);
 
         // Call the callback when test completes
         if (onTestComplete) {
@@ -257,7 +254,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         </>
       ) : (
         <Box>
-          <Alert severity="success" sx={{ mb: 2 }}>
+          <Alert severity="info" sx={{ mb: 2 }}>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               Client-generated sessions enabled
             </Typography>
@@ -367,10 +364,14 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                       <strong>Response 2:</strong> {JSON.stringify(testResult.details.response2)}
                       <br />
                       <br />
-                      {!testResult.success && (
+                      {testResult.reason && (
                         <>
-                          <strong style={{ color: 'red' }}>Issue:</strong> The second response shows
-                          the target did not remember the name "TestUser" from the first request.
+                          {testResult.success ? (
+                            <strong>Reason: </strong>
+                          ) : (
+                            <strong style={{ color: 'red' }}>Issue:</strong>
+                          )}
+                          {testResult.reason}
                         </>
                       )}
                     </Typography>

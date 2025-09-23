@@ -51,7 +51,7 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
     },
     ref,
   ) => {
-    const [bodyError, setBodyError] = useState<string | null>(null);
+    const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
     const [urlError, setUrlError] = useState<string | null>(null);
     const [rawConfigJson, setRawConfigJson] = useState<string>(
       JSON.stringify(provider.config, null, 2),
@@ -92,7 +92,21 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         if (bodyStr.includes('{{prompt}}')) {
           setBodyError(null);
         } else if (!updatedTarget.config.request) {
-          setBodyError('Request body must contain {{prompt}}');
+          setBodyError(
+            <>
+              Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will
+              inject the attack payload. Add it as the value for the key your API expects. Promptfoo
+              uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the actual test
+              content.{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Learn more
+              </a>
+            </>,
+          );
         }
       } else if (field === 'request') {
         updatedTarget.config.request = value;
@@ -134,7 +148,7 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
     };
 
     const validate = (): boolean => {
-      const errors: string[] = [];
+      const errors: (string | React.ReactNode)[] = [];
 
       if (providerType === 'http') {
         // Check if we're in raw mode (using request field) or structured mode (using url field)

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { getDefaultProviders } from '../../providers/defaults';
 import { loadApiProvider } from '../../providers/index';
 import {
   doTargetPurposeDiscovery,
@@ -12,6 +13,7 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { fetchWithProxy } from '../../util/fetch';
 import invariant from '../../util/invariant';
+import { extractJsonObjects } from '../../util/json';
 import { ProviderOptionsSchema } from '../../validators/providers';
 import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
@@ -261,7 +263,7 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
     invariant(validatedProvider.id, 'Provider ID is required');
 
     // First request - establish session with test data
-    const firstPrompt = 'Hello, please remember my name is TestUser';
+    const firstPrompt = 'What can you help me with?';
     const vars: Record<string, string> = {};
 
     // Generate session ID for client-side sessions
@@ -292,7 +294,7 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
       dedent`[POST /providers/test-session] First request completed
         prompt: ${firstPrompt}
         sessionId: ${vars.sessionId || 'server-generated'}
-        response: ${JSON.stringify(firstResult?.output).substring(0, 200)}`,
+        response: ${JSON.stringify(firstResult?.output ?? {}).substring(0, 200)}`,
     );
 
     // Get session ID (either from provider or from vars)
@@ -304,7 +306,7 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
     }
 
     // Second request - verify session persistence
-    const secondPrompt = 'What is my name?';
+    const secondPrompt = 'What was the last thing I asked you?';
     const secondResult = await loadedProvider.callApi(secondPrompt, {
       debug: true,
       prompt: { raw: secondPrompt, label: secondPrompt },
@@ -315,42 +317,123 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
       dedent`[POST /providers/test-session] Second request completed
         prompt: ${secondPrompt}
         sessionId: ${sessionId}
-        response: ${JSON.stringify(secondResult?.output).substring(0, 200)}`,
+        response: ${JSON.stringify(secondResult?.output ?? {}).substring(0, 200)}`,
     );
 
-    // Check if the second response indicates session persistence
-    const responseText = (secondResult?.output || '').toString().toLowerCase();
+    // Use LLM as a judge to evaluate session persistence
+    let judgeProvider;
 
-    // More strict checking - the response should explicitly mention the name from the first request
-    // and NOT say things like "I don't have access" or "I don't know"
-    const sessionWorking =
-      (responseText.includes('testuser') || responseText.includes('test user')) &&
-      !responseText.includes("don't have access") &&
-      !responseText.includes("don't know") &&
-      !responseText.includes('cannot remember') &&
-      !responseText.includes('no information') &&
-      !responseText.includes('not sure') &&
-      !responseText.includes('please tell me') &&
-      !responseText.includes('what is your name') &&
-      !responseText.includes('could you tell me');
+    if (neverGenerateRemote()) {
+      // Remote grading is disabled, user should examine results manually
+      res.status(200).json({
+        success: false,
+        message:
+          'Session test completed. Remote grading is disabled - please examine the results yourself.',
+        reason: 'Manual review required - remote grading is disabled',
+        details: {
+          sessionId: sessionId || 'Not extracted',
+          request1: {
+            prompt: firstPrompt,
+            sessionId: vars.sessionId,
+          },
+          response1: firstResult?.output,
+          request2: {
+            prompt: secondPrompt,
+            sessionId,
+          },
+          response2: secondResult?.output,
+        },
+      });
+      return;
+    } else {
+      // Use default grading provider
+      const defaultProviders = await getDefaultProviders();
+      judgeProvider = defaultProviders.gradingJsonProvider || defaultProviders.gradingProvider;
 
-    // Also check if it's explicitly stating the name in a positive way
-    const explicitlyStatesName =
-      responseText.includes('your name is testuser') ||
-      responseText.includes('you are testuser') ||
-      responseText.includes('you told me your name is testuser') ||
-      responseText.includes('you said your name is testuser') ||
-      responseText.includes('you mentioned your name is testuser') ||
-      responseText.includes('name is testuser') ||
-      responseText.includes('testuser, ');
+      if (!judgeProvider) {
+        throw new Error(
+          'No default grading provider available. Please configure a provider for evaluation.',
+        );
+      }
+    }
 
-    const finalSessionWorking = sessionWorking || explicitlyStatesName;
+    // Create judge prompt
+    const judgePrompt = dedent`
+      You are evaluating whether a conversation system correctly maintains session state across multiple messages.
+
+      In the first message, the user asked what the system can help with.
+      In the second message, the user asked what was the last thing they asked.
+
+      First Message: "${firstPrompt}"
+      First Response: ${JSON.stringify(firstResult?.output)}
+
+      Second Message: "${secondPrompt}" 
+      Second Response: ${JSON.stringify(secondResult?.output)}
+
+      Evaluate whether the system correctly remembered the user's first question when responding to the second message.
+
+      Respond with a JSON object containing:
+      {
+        "pass": boolean,  // true if the system clearly remembered the first question, false otherwise
+        "reason": "string" // Brief explanation of your evaluation
+      }
+
+      Important criteria:
+      - Pass: The response clearly indicates remembering the first question (e.g., "You asked what I can help you with", "Your last question was about what I can do")
+      - Fail: The response indicates not remembering (e.g., "I don't know", "I don't have that information", generic responses)
+      - Fail: The response is evasive or doesn't directly answer what the previous question was
+    `;
+
+    // Call the judge
+    const judgeResponse = await judgeProvider.callApi(judgePrompt, {
+      prompt: {
+        raw: judgePrompt,
+        label: 'session-judge',
+      },
+      vars: {},
+    });
+
+    logger.debug(
+      dedent`[POST /providers/test-session] Judge response
+        response: ${JSON.stringify(judgeResponse?.output)}`,
+    );
+
+    // Parse judge response
+    let sessionWorking = false;
+    let judgeReason = 'Unable to determine session status';
+
+    if (judgeResponse.output && !judgeResponse.error) {
+      try {
+        let judgeResult;
+
+        if (typeof judgeResponse.output === 'string') {
+          const jsonObjects = extractJsonObjects(judgeResponse.output);
+          if (jsonObjects.length > 0) {
+            judgeResult = jsonObjects[0];
+          }
+        } else if (typeof judgeResponse.output === 'object') {
+          judgeResult = judgeResponse.output;
+        }
+
+        if (judgeResult && typeof judgeResult.pass === 'boolean') {
+          sessionWorking = judgeResult.pass;
+          judgeReason =
+            judgeResult.reason ||
+            (sessionWorking
+              ? "The system remembered the user's last request."
+              : "The system did not remember the user's last request.");
+        }
+      } catch (error) {
+        logger.error(`[POST /providers/test-session] Error parsing judge response: ${error}`);
+      }
+    }
 
     res.json({
-      success: finalSessionWorking,
-      message: finalSessionWorking
+      success: sessionWorking,
+      message: sessionWorking
         ? 'Session management is working correctly! The target remembered information across requests.'
         : 'Session is NOT working. The target did not remember information from the first request. Check that your session configuration is correct and that your target properly maintains conversation state.',
+      reason: judgeReason,
       details: {
         sessionId: sessionId || 'Not extracted',
         request1: {
