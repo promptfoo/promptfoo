@@ -48,7 +48,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  */
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
-  context?: 'assertion' | 'general',
+  context?: 'assertion' | 'general' | 'vars',
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
@@ -76,6 +76,13 @@ export function maybeLoadFromExternalFile(
   // handled by the assertion system, not the generic config loader
   if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
     logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
+    return renderedFilePath;
+  }
+
+  // In vars contexts, preserve file:// glob patterns for test case expansion
+  // This prevents premature glob expansion that should be handled by generateVarCombinations
+  if (context === 'vars' && cleanPath.includes('*')) {
+    logger.debug(`Preserving glob pattern in vars context: ${renderedFilePath}`);
     return renderedFilePath;
   }
 
@@ -212,7 +219,7 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'general',
+  context?: 'assertion' | 'general' | 'vars',
 ): any {
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
@@ -230,7 +237,11 @@ export function maybeLoadConfigFromExternalFile(
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
 
-      const childContext = isAssertionValue ? 'assertion' : context;
+      // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
+      // This preserves file:// glob patterns for test case expansion
+      const isVarsField = key === 'vars';
+
+      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
       result[key] = maybeLoadConfigFromExternalFile(config[key], childContext);
     }
     return result;

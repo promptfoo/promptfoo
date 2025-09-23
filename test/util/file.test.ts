@@ -875,5 +875,53 @@ describe('file utilities', () => {
         expect(fs.readFileSync).toHaveBeenCalledTimes(1); // Only expected.txt
       });
     });
+
+    describe('maybeLoadConfigFromExternalFile with vars context', () => {
+      it('should preserve glob patterns in vars field for test case expansion', () => {
+        const config = {
+          vars: {
+            text: 'file://./resources/tests/*.json',
+          },
+          assert: [
+            {
+              type: 'contains',
+              value: 'hello',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.text).toBe('file://./resources/tests/*.json');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve glob patterns in nested vars objects', () => {
+        const config = {
+          tests: [
+            {
+              vars: {
+                input: 'file://inputs/*.txt',
+                data: 'file://data/test-*.json',
+              },
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.tests[0].vars.input).toBe('file://inputs/*.txt');
+        expect(result.tests[0].vars.data).toBe('file://data/test-*.json');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should still resolve non-glob file references in vars when they do not contain wildcards', () => {
+        (fs.readFileSync as jest.Mock).mockReturnValue('test data');
+        const config = {
+          vars: {
+            content: 'file://content.txt', // No glob pattern
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.content).toBe('test data');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+    });
   });
 });
