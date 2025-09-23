@@ -321,7 +321,7 @@ function EvalsDropdown({
     scheduleClose();
   };
 
-  const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));
+  const isActive = ['/eval', '/results'].some((route) => location.pathname.startsWith(route));
 
   const menuItems = [
     {
@@ -330,12 +330,12 @@ function EvalsDropdown({
       description: 'View your most recent evaluation results',
     },
     {
-      href: '/evals',
-      label: 'All Evals',
-      description: 'Browse and manage all evaluation runs',
+      href: '/results',
+      label: 'Results Overview',
+      description: 'Browse eval history and red team reports',
     },
     {
-      href: '/reports',
+      href: '/results?tab=redteams',
       label: 'Red Team Vulnerability Reports',
       description: 'View findings from red teams',
     },
@@ -495,7 +495,6 @@ export default function Navigation({
             <EvalsDropdown activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
-            <NavLink href="/history" label="History" />
             <NavLink href="/model-audit" label="Model Audit" />
           </NavSection>
           <NavSection>

@@ -62,10 +62,10 @@ export default function NotFoundPage() {
           <Button
             variant="contained"
             startIcon={<AssignmentIcon />}
-            onClick={() => navigate('/evals')}
+            onClick={() => navigate('/results')}
             size="large"
           >
-            See Evals
+            View Results
           </Button>
         </Paper>
       </Box>

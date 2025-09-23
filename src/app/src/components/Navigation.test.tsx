@@ -39,7 +39,7 @@ describe('Navigation', () => {
 
     expect(screen.getByText('Prompts')).toBeInTheDocument();
     expect(screen.getByText('Datasets')).toBeInTheDocument();
-    expect(screen.getByText('History')).toBeInTheDocument();
+    expect(screen.getByText('Model Audit')).toBeInTheDocument();
 
     const infoButton = screen.getByTestId('InfoIcon').closest('button')!;
     fireEvent.click(infoButton);
@@ -72,7 +72,7 @@ describe('EvalsDropdown', () => {
     fireEvent.click(evalsButton);
 
     expect(screen.getByText('Latest Eval')).toBeInTheDocument();
-    expect(screen.getByText('All Evals')).toBeInTheDocument();
+    expect(screen.getByText('Results Overview')).toBeInTheDocument();
   });
 
   it('should keep the dropdown open for 150ms after mouse leaves, and then close it', async () => {
@@ -86,7 +86,7 @@ describe('EvalsDropdown', () => {
 
     fireEvent.mouseEnter(evalsButton);
     expect(screen.getByText('Latest Eval')).toBeInTheDocument();
-    expect(screen.getByText('All Evals')).toBeInTheDocument();
+    expect(screen.getByText('Results Overview')).toBeInTheDocument();
 
     const dropdownContainer = evalsButton.parentElement!;
     fireEvent.mouseLeave(dropdownContainer);
@@ -98,7 +98,7 @@ describe('EvalsDropdown', () => {
     });
 
     expect(screen.queryByText('Latest Eval')).not.toBeInTheDocument();
-    expect(screen.queryByText('All Evals')).not.toBeInTheDocument();
+    expect(screen.queryByText('Results Overview')).not.toBeInTheDocument();
   });
 
   it('should keep the dropdown open if the mouse re-enters the menu area before the close delay expires', async () => {
@@ -112,7 +112,7 @@ describe('EvalsDropdown', () => {
 
     fireEvent.mouseEnter(evalsButton);
     expect(screen.getByText('Latest Eval')).toBeInTheDocument();
-    expect(screen.getByText('All Evals')).toBeInTheDocument();
+    expect(screen.getByText('Results Overview')).toBeInTheDocument();
 
     const dropdownContainer = evalsButton.parentElement!;
     fireEvent.mouseLeave(dropdownContainer);
@@ -124,7 +124,7 @@ describe('EvalsDropdown', () => {
     });
 
     expect(screen.getByText('Latest Eval')).toBeInTheDocument();
-    expect(screen.getByText('All Evals')).toBeInTheDocument();
+    expect(screen.getByText('Results Overview')).toBeInTheDocument();
   });
 
   it('should close the dropdown when a menu item is clicked', () => {
@@ -138,13 +138,13 @@ describe('EvalsDropdown', () => {
     fireEvent.click(evalsButton);
 
     expect(screen.getByText('Latest Eval')).toBeInTheDocument();
-    expect(screen.getByText('All Evals')).toBeInTheDocument();
+    expect(screen.getByText('Results Overview')).toBeInTheDocument();
 
     const latestEvalLink = screen.getByText('Latest Eval');
     fireEvent.click(latestEvalLink);
 
     expect(screen.queryByText('Latest Eval')).not.toBeInTheDocument();
-    expect(screen.queryByText('All Evals')).not.toBeInTheDocument();
+    expect(screen.queryByText('Results Overview')).not.toBeInTheDocument();
   });
 
   it('should clear the close timer when unmounting', () => {

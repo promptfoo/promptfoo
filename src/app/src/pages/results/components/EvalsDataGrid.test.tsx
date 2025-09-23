@@ -224,7 +224,7 @@ describe('EvalsDataGrid', () => {
           navigate('/eval/eval-1');
           // Small delay to let the navigation happen
           setTimeout(() => {
-            navigate('/evals');
+            navigate('/results');
           }, 50);
         }, 100);
         return () => clearTimeout(timer);
@@ -235,13 +235,13 @@ describe('EvalsDataGrid', () => {
 
     const TestComponent = () => (
       <Routes>
-        <Route path="/evals" element={<NavigationWrapper />} />
+        <Route path="/results" element={<NavigationWrapper />} />
         <Route path="/eval/:id" element={<div>Edit page</div>} />
       </Routes>
     );
 
     render(
-      <MemoryRouter initialEntries={['/evals']}>
+      <MemoryRouter initialEntries={['/results']}>
         <TestComponent />
       </MemoryRouter>,
     );
@@ -300,7 +300,7 @@ describe('EvalsDataGrid', () => {
       React.useEffect(() => {
         // Small delay to ensure initial render completes
         const timer = setTimeout(() => {
-          navigate('/evals?param2=value2');
+          navigate('/results?param2=value2');
         }, 100);
         return () => clearTimeout(timer);
       }, [navigate]);
@@ -309,9 +309,9 @@ describe('EvalsDataGrid', () => {
     };
 
     render(
-      <MemoryRouter initialEntries={['/evals?param1=value1']}>
+      <MemoryRouter initialEntries={['/results?param1=value1']}>
         <Routes>
-          <Route path="/evals" element={<NavigationWrapper />} />
+          <Route path="/results" element={<NavigationWrapper />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -544,10 +544,10 @@ describe('EvalsDataGrid', () => {
       React.useEffect(() => {
         // Trigger rapid navigation changes
         const timer1 = setTimeout(() => {
-          navigate('/evals?filter=1');
+          navigate('/results?filter=1');
         }, 50);
         const timer2 = setTimeout(() => {
-          navigate('/evals?filter=2');
+          navigate('/results?filter=2');
         }, 100);
 
         return () => {
@@ -560,9 +560,9 @@ describe('EvalsDataGrid', () => {
     };
 
     render(
-      <MemoryRouter initialEntries={['/evals']}>
+      <MemoryRouter initialEntries={['/results']}>
         <Routes>
-          <Route path="/evals" element={<NavigationWrapper />} />
+          <Route path="/results" element={<NavigationWrapper />} />
         </Routes>
       </MemoryRouter>,
     );
