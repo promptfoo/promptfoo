@@ -60,32 +60,32 @@ providers:
                 expression:
                   type: string
                   description: The mathematical expression to evaluate
-              required: ["expression"]
+              required: ['expression']
       tool_choice: auto
 
-  # Example using inference profile
-  - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/qwen-profile
-    label: Qwen Inference Profile
-    config:
-      inferenceModelType: qwen
-      region: us-west-2
-      max_tokens: 1024
-      temperature: 0.7
+  # Example using inference profile (single-region only - cross-region not supported)
+  # - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/qwen-profile
+  #   label: Qwen Inference Profile
+  #   config:
+  #     inferenceModelType: qwen
+  #     region: us-west-2
+  #     max_tokens: 1024
+  #     temperature: 0.7
 
 tests:
   - vars:
       question: Write a Python function to calculate the factorial of a number
     assert:
       - type: contains
-        value: "def"
+        value: 'def'
       - type: contains
-        value: "factorial"
+        value: 'factorial'
 
   - vars:
       question: Explain the concept of recursion with a simple example
     assert:
       - type: contains
-        value: "recursion"
+        value: 'recursion'
       - type: llm-rubric
         value: Response clearly explains recursion with a concrete example
 
@@ -93,20 +93,20 @@ tests:
       question: What are the benefits of using mixture-of-experts models?
     assert:
       - type: contains
-        value: "efficiency"
+        value: 'efficiency'
 
   - vars:
       question: Debug this code and explain the issue - "for i in range(10) print(i)"
     assert:
       - type: contains
-        value: "syntax"
+        value: 'syntax'
       - type: contains
-        value: ":"
+        value: ':'
 
   - vars:
       question: Create a REST API endpoint using FastAPI for user authentication
     assert:
       - type: contains
-        value: "FastAPI"
+        value: 'FastAPI'
       - type: contains
-        value: "authentication"
+        value: 'authentication'
