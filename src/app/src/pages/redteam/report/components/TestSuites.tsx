@@ -96,7 +96,7 @@ const TestSuites = ({
     { field: 'riskScore', sort: 'desc' },
   ]);
 
-  const pluginSeverityMap = getRiskCategorySeverityMap(plugins);
+  const pluginSeverityMap = React.useMemo(() => getRiskCategorySeverityMap(plugins), [plugins]);
 
   const pluginsById = React.useMemo(() => {
     return plugins.reduce(
@@ -112,14 +112,12 @@ const TestSuites = ({
           pluginId = plugin.id;
         }
 
-        // If the plugin does not have a severity defined, assign it here. `plugin.id` is used instead
-        // of `pluginId` to handle inline policies which should inherit their severity from the map i.e.
-        // the value at `pluginSeverityMap['policy']`.
-        if (!plugin.severity) {
-          plugin.severity = pluginSeverityMap[plugin.id as Plugin] ?? 'Unknown';
-        }
-
-        acc[pluginId] = plugin;
+        acc[pluginId] = {
+          ...plugin,
+          // If the plugin does not have a severity defined, assign it here. Use original `plugin.id`
+          // for `pluginSeverityMap` lookups.
+          severity: plugin.severity ?? pluginSeverityMap[plugin.id as Plugin],
+        };
         return acc;
       },
       {} as Record<string, RedteamPluginObject>,
