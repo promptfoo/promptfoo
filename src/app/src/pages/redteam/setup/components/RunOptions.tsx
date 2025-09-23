@@ -1,18 +1,19 @@
 import { useState } from 'react';
 
+import useDemoMode from '@app/hooks/useDemoMode';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { FormControlLabel, Switch } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
+import InputAdornment from '@mui/material/InputAdornment';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import InputAdornment from '@mui/material/InputAdornment';
-import type { RedteamRunOptions } from '@promptfoo/types';
 import { Config } from '../types';
+import type { RedteamRunOptions } from '@promptfoo/types';
 
 const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
   return (
@@ -38,6 +39,7 @@ export const RunOptionsContent = ({
   updateRunOption,
   useGuardrailAssertion,
 }: RunOptionsProps) => {
+  const { isDemoMode } = useDemoMode();
   // These two settings are mutually exclusive
   const canSetDelay = Boolean(!runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1);
 
@@ -93,6 +95,7 @@ export const RunOptionsContent = ({
           const n = Number(numTestsInput);
           return Number.isNaN(n) || n < 1;
         })()}
+        disabled={isDemoMode}
       />
       {/**
        * Delay between API calls (ms)
@@ -115,7 +118,7 @@ export const RunOptionsContent = ({
           )
         }
         value={delayInput}
-        disabled={!canSetDelay}
+        disabled={!canSetDelay || isDemoMode}
         onChange={(e) => {
           const raw = e.target.value;
           const digitsOnly = raw.replace(/\D/g, '');
@@ -177,7 +180,7 @@ export const RunOptionsContent = ({
           )
         }
         value={maxConcurrencyInput}
-        disabled={!canSetMaxConcurrency}
+        disabled={!canSetMaxConcurrency || isDemoMode}
         onChange={(e) => {
           const raw = e.target.value;
           const digitsOnly = raw.replace(/\D/g, '');
@@ -221,6 +224,7 @@ export const RunOptionsContent = ({
           <Switch
             checked={runOptions?.verbose}
             onChange={(e) => updateRunOption('verbose', e.target.checked)}
+            disabled={isDemoMode}
           />
         }
         label={
