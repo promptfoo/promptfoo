@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import path from 'path';
 
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import cliState from '../../src/cliState';
 import {
@@ -91,6 +91,10 @@ describe('file utilities', () => {
       jest.resetAllMocks();
       jest.mocked(fs.existsSync).mockReturnValue(true);
       jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+      jest.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
+        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+      });
       cliState.basePath = '/mock/base/path';
     });
 
@@ -721,6 +725,10 @@ describe('file utilities', () => {
       jest.resetAllMocks();
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockReturnValue('file content');
+      jest.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
+        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+      });
       cliState.basePath = '/test';
     });
 
@@ -901,6 +909,8 @@ describe('file utilities', () => {
               vars: {
                 input: 'file://inputs/*.txt',
                 data: 'file://data/test-*.json',
+                patterns: 'file://data/test-{a,b}.yaml',
+                optional: 'file://data/file?.json',
               },
             },
           ],
@@ -908,6 +918,8 @@ describe('file utilities', () => {
         const result = maybeLoadConfigFromExternalFile(config);
         expect(result.tests[0].vars.input).toBe('file://inputs/*.txt');
         expect(result.tests[0].vars.data).toBe('file://data/test-*.json');
+        expect(result.tests[0].vars.patterns).toBe('file://data/test-{a,b}.yaml');
+        expect(result.tests[0].vars.optional).toBe('file://data/file?.json');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 

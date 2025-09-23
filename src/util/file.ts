@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { parse as csvParse, type Options as CsvOptions } from 'csv-parse/sync';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
@@ -81,7 +81,7 @@ export function maybeLoadFromExternalFile(
 
   // In vars contexts, preserve file:// glob patterns for test case expansion
   // This prevents premature glob expansion that should be handled by generateVarCombinations
-  if (context === 'vars' && cleanPath.includes('*')) {
+  if (context === 'vars' && hasMagic(renderedFilePath)) {
     logger.debug(`Preserving glob pattern in vars context: ${renderedFilePath}`);
     return renderedFilePath;
   }
@@ -102,7 +102,7 @@ export function maybeLoadFromExternalFile(
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
   // Check if the path contains glob patterns
-  if (pathToUse.includes('*') || pathToUse.includes('?') || pathToUse.includes('[')) {
+  if (hasMagic(pathToUse)) {
     // Use globSync to expand the pattern
     const matchedFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
