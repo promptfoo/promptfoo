@@ -391,9 +391,7 @@ export default function Review({
   const handleRun = async () => {
     // Always prompt for email in demo mode
     if (isDemoMode) {
-      setEmailVerificationMessage(
-        'Redteam evals require email verification. Please enter your work email:',
-      );
+      setEmailVerificationMessage('Please enter your work email:');
       setIsEmailDialogOpen(true);
       return;
     }
