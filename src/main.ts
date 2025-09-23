@@ -146,6 +146,8 @@ async function main() {
 if (require.main === module) {
   checkNodeVersion();
   main().finally(async () => {
+    logger.debug('Shutting down gracefully...');
     await telemetry.shutdown();
+    logger.debug('Shutdown complete');
   });
 }
