@@ -33,9 +33,10 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
+import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
-import { setupEnv } from './util/index';
 import { loadDefaultConfig } from './util/config/default';
+import { setupEnv } from './util/index';
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -144,5 +145,7 @@ async function main() {
 
 if (require.main === module) {
   checkNodeVersion();
-  main();
+  main().finally(async () => {
+    await telemetry.shutdown();
+  });
 }
