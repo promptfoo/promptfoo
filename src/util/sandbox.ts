@@ -107,13 +107,13 @@ export function createSecureFunction(...args: string[]): Function {
           try {
             context.global.setSync(`arg${index}`, new ivm.ExternalCopy(arg).copyInto());
             return `arg${index}`;
-          } catch (error) {
+          } catch (_error) {
             // If ExternalCopy fails (e.g., for functions), serialize as JSON
             try {
               const jsonArg = JSON.stringify(arg);
               context.global.setSync(`arg${index}`, jsonArg);
               return `JSON.parse(arg${index})`;
-            } catch (jsonError) {
+            } catch (_jsonError) {
               // If JSON serialization also fails, convert to string
               context.global.setSync(`arg${index}`, String(arg));
               return `arg${index}`;
@@ -186,7 +186,10 @@ export function executeFunctionSafely(code: string): any {
       // Arrow function: (param1, param2) => ... or param => ...
       const arrowMatch = executeCode.match(/^\s*\(([^)]*)\)\s*=>/);
       if (arrowMatch) {
-        paramNames = arrowMatch[1].split(',').map(p => p.trim()).filter(p => p);
+        paramNames = arrowMatch[1]
+          .split(',')
+          .map((p) => p.trim())
+          .filter((p) => p);
       } else {
         // Single parameter arrow function: param => ...
         const singleArrowMatch = executeCode.match(/^\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=>/);
@@ -198,7 +201,10 @@ export function executeFunctionSafely(code: string): any {
           if (funcMatch) {
             const paramsMatch = funcMatch[0].match(/\(([^)]*)\)/);
             if (paramsMatch) {
-              paramNames = paramsMatch[1].split(',').map(p => p.trim()).filter(p => p);
+              paramNames = paramsMatch[1]
+                .split(',')
+                .map((p) => p.trim())
+                .filter((p) => p);
             }
           }
         }
@@ -211,12 +217,12 @@ export function executeFunctionSafely(code: string): any {
         if (typeof callArgs[i] === 'object' && callArgs[i] !== null) {
           try {
             context.global.setSync(argName, new ivm.ExternalCopy(callArgs[i]).copyInto());
-          } catch (error) {
+          } catch (_error) {
             // If ExternalCopy fails, try JSON serialization
             try {
               const jsonArg = JSON.stringify(callArgs[i]);
               context.global.setSync(argName, JSON.parse(jsonArg));
-            } catch (jsonError) {
+            } catch (_jsonError) {
               // If JSON also fails, convert to string
               context.global.setSync(argName, String(callArgs[i]));
             }
