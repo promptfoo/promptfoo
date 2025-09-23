@@ -14,31 +14,12 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
+import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../remoteGeneration';
-import {
-  ATTACKER_SYSTEM_PROMPT,
-  CLOUD_ATTACKER_SYSTEM_PROMPT,
-  JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
-} from './prompts';
-import {
-  checkPenalizedPhrases,
-  createIterationContext,
-  getTargetResponse,
-  redteamProviderManager,
-} from './shared';
-import type { Environment } from 'nunjucks';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -51,7 +32,26 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+  ON_TOPIC_SYSTEM_PROMPT,
+} from './prompts';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -240,10 +240,37 @@ export async function getNewPrompt(
   }
   TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
 
-  const retObj =
-    typeof redteamResp.output === 'string'
-      ? extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output)
-      : redteamResp.output;
+  let retObj: { improvement: string; prompt: string };
+  if (typeof redteamResp.output === 'string') {
+    try {
+      // Primary path: extract first JSON object from possibly fenced/prose output
+      retObj = extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output);
+    } catch (primaryErr) {
+      // Fallback: sometimes models return a JSON-encoded string; try one decode then extract
+      try {
+        const decoded = JSON.parse(redteamResp.output);
+        if (typeof decoded === 'string') {
+          retObj = extractFirstJsonObject<{ improvement: string; prompt: string }>(decoded);
+        } else {
+          retObj = decoded as { improvement: string; prompt: string };
+        }
+      } catch (fallbackErr) {
+        logger.info(
+          `[IterativeTree] Failed to parse attacker response as JSON (primary and fallback). Skipping this turn. primary=${String(
+            primaryErr,
+          )} fallback=${String(fallbackErr)} outputPreview="${redteamResp.output.slice(0, 200)}"`,
+        );
+        // Gracefully skip this turn to keep the conversation going
+        return {
+          improvement: 'parse failure – skipping turn',
+          prompt: '',
+          tokenUsage: redteamResp.tokenUsage,
+        };
+      }
+    }
+  } else {
+    retObj = redteamResp.output as { improvement: string; prompt: string };
+  }
   return {
     ...retObj,
     tokenUsage: redteamResp.tokenUsage,
