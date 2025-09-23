@@ -83,7 +83,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             logger.debug(`Successfully preloaded function callback '${name}' from file`);
           } else {
             // It's an inline function string
-            this.loadedFunctionCallbacks[name] = new Function('return ' + callbackStr)();
+            const { executeFunctionSafely } = require('../../util/sandbox');
+            this.loadedFunctionCallbacks[name] = executeFunctionSafely(callbackStr);
             logger.debug(`Successfully preloaded inline function callback '${name}'`);
           }
         } else if (typeof callback === 'function') {
@@ -167,7 +168,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           if (callbackStr.startsWith('file://')) {
             callback = await this.loadExternalFunction(callbackStr);
           } else {
-            callback = new Function('return ' + callbackStr)();
+            const { executeFunctionSafely } = require('../../util/sandbox');
+            callback = executeFunctionSafely(callbackStr);
           }
 
           // Cache for future use

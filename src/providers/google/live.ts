@@ -672,7 +672,8 @@ export class GoogleLiveProvider implements ApiProvider {
           if (callbackStr.startsWith('file://')) {
             callback = await this.loadExternalFunction(callbackStr);
           } else {
-            callback = new Function('return ' + callbackStr)();
+            const { executeFunctionSafely } = require('../../util/sandbox');
+            callback = executeFunctionSafely(callbackStr);
           }
 
           // Cache for future use

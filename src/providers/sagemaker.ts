@@ -254,10 +254,11 @@ abstract class SageMakerGenericProvider {
           if (transformFn.includes('=>')) {
             // Arrow function format: prompt => ...
             // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
-            const fn = new Function(
+            const { createSecureFunction } = require('../util/sandbox');
+            const fn = createSecureFunction(
               'prompt',
               'context',
-              `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`,
+              `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`
             );
             const result = fn(prompt, transformContext);
 
@@ -279,10 +280,11 @@ abstract class SageMakerGenericProvider {
           } else {
             // Regular function format
             // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
-            const fn = new Function(
+            const { createSecureFunction } = require('../util/sandbox');
+            const fn = createSecureFunction(
               'prompt',
               'context',
-              `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`,
+              `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`
             );
             const result = fn(prompt, transformContext);
 
@@ -385,10 +387,12 @@ abstract class SageMakerGenericProvider {
       // For JavaScript expressions, create a simple function
       try {
         // Create a function that evaluates the expression with 'json' as the input
-        const result = new Function(
+        const { createSecureFunction } = require('../util/sandbox');
+        const fn = createSecureFunction(
           'json',
-          `try { return ${pathExpression}; } catch(e) { return undefined; }`,
-        )(responseJson);
+          `try { return ${pathExpression}; } catch(e) { return undefined; }`
+        );
+        const result = fn(responseJson);
 
         if (result === undefined) {
           logger.warn(`Path expression "${pathExpression}" did not match any data in the response`);

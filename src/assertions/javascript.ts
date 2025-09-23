@@ -56,8 +56,9 @@ export const handleJavascript = async ({
 
     let result: boolean | number | GradingResult;
     if (typeof valueFromScript === 'undefined') {
+      const { createSecureFunction } = require('../util/sandbox');
       const functionBody = renderedValue.includes('\n') ? renderedValue : `return ${renderedValue}`;
-      const customFunction = new Function('output', 'context', functionBody);
+      const customFunction = createSecureFunction('output', 'context', functionBody);
       result = await validateResult(customFunction(output, context));
     } else {
       invariant(

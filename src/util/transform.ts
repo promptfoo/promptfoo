@@ -91,7 +91,9 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
  * @returns A Function created from the provided code.
  */
 function getInlineTransformFunction(code: string, inputType: TransformInputType): Function {
-  return new Function(inputType, 'context', code.includes('\n') ? code : `return ${code}`);
+  const { createSecureFunction } = require('./sandbox');
+  const functionBody = code.includes('\n') ? code : `return ${code}`;
+  return createSecureFunction(inputType, 'context', functionBody);
 }
 
 /**

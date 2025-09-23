@@ -248,6 +248,7 @@
     "fastest-levenshtein": "^1.0.16",
     "glob": "^11.0.3",
     "http-z": "^7.1.3",
+    "isolated-vm": "^6.0.1",
     "jks-js": "^1.1.4",
     "js-rouge": "^3.0.0",
     "js-yaml": "^4.1.0",

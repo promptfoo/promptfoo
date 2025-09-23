@@ -58,7 +58,8 @@ export function createTransformResponse(
     return parser;
   }
   if (typeof parser === 'string') {
-    return new Function('extracted', 'finalHtml', `return ${parser}`) as (
+    const { createSecureFunction } = require('../util/sandbox');
+    return createSecureFunction('extracted', 'finalHtml', `return ${parser}`) as (
       extracted: Record<string, any>,
       finalHtml: string,
     ) => ProviderResponse;

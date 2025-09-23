@@ -30,7 +30,8 @@ export function createTransformResponse(parser: any): (data: any) => ProviderRes
     return parser;
   }
   if (typeof parser === 'string') {
-    return new Function('data', `return ${parser}`) as (data: any) => ProviderResponse;
+    const { createSecureFunction } = require('../util/sandbox');
+    return createSecureFunction('data', `return ${parser}`) as (data: any) => ProviderResponse;
   }
   return (data) => ({ output: data });
 }

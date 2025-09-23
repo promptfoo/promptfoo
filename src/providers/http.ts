@@ -958,7 +958,8 @@ export async function createSessionParser(
     return (data: SessionParserData) => {
       const trimmedParser = parser.trim();
 
-      return new Function('data', `return (${trimmedParser});`)(data);
+      const { executeTransformSafely } = require('../util/sandbox');
+      return executeTransformSafely(trimmedParser, data, '', {});
     };
   }
   throw new Error(
@@ -1016,23 +1017,8 @@ export async function createTransformResponse(
   } else if (typeof parser === 'string') {
     return (data, text, context) => {
       try {
-        const trimmedParser = parser.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
-        const transformFn = new Function(
-          'json',
-          'text',
-          'context',
-          isFunctionExpression
-            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
-            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
-        );
-        let resp: ProviderResponse | string;
-        if (context) {
-          resp = transformFn(data || null, text, context);
-        } else {
-          resp = transformFn(data || null, text);
-        }
+        const { executeTransformSafely } = require('../util/sandbox');
+        const resp = executeTransformSafely(parser, data || null, text, context);
 
         if (typeof resp === 'string') {
           return { output: resp };
@@ -1238,7 +1224,9 @@ export async function createTransformRequest(
     return async (prompt, vars, context) => {
       try {
         const rendered = getNunjucksEngine().renderString(transform, { prompt, vars, context });
-        return await new Function('prompt', 'vars', 'context', `${rendered}`)(
+        const { createSecureFunction } = require('../util/sandbox');
+        const secureFunc = createSecureFunction('prompt', 'vars', 'context', rendered);
+        return await secureFunc(
           prompt,
           vars,
           context,
@@ -1324,10 +1312,12 @@ export async function createValidateStatus(
       // Check if it's an arrow function or regular function
       if (trimmedValidator.includes('=>') || trimmedValidator.startsWith('function')) {
         // For arrow functions and regular functions, evaluate the whole function
-        return new Function(`return ${trimmedValidator}`)() as (status: number) => boolean;
+        const { executeFunctionSafely } = require('../util/sandbox');
+        return executeFunctionSafely(trimmedValidator) as (status: number) => boolean;
       }
       // For expressions, wrap in a function body
-      return new Function('status', `return ${trimmedValidator}`) as (status: number) => boolean;
+      const { createSecureFunction } = require('../util/sandbox');
+      return createSecureFunction('status', `return ${trimmedValidator}`) as (status: number) => boolean;
     } catch (err: any) {
       throw new Error(`Invalid status validator expression: ${err?.message || String(err)}`);
     }

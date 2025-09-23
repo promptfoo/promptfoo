@@ -179,7 +179,8 @@ export class FunctionCallbackHandler {
           callback = await this.loadExternalFunction(callbackConfig);
         } else {
           // Inline function string
-          callback = new Function('return ' + callbackConfig)() as FunctionCallback;
+          const { executeFunctionSafely } = require('../util/sandbox');
+          callback = executeFunctionSafely(callbackConfig) as FunctionCallback;
         }
       } else if (typeof callbackConfig === 'function') {
         callback = callbackConfig;
