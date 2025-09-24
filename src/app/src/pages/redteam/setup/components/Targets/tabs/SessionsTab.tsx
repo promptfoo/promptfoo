@@ -1,5 +1,6 @@
 import React from 'react';
 
+import ChatMessages from '@app/pages/eval/components/ChatMessages';
 import { callApi } from '@app/utils/api';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
@@ -17,6 +18,7 @@ import RadioGroup from '@mui/material/RadioGroup';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import type { Message } from '@app/pages/eval/components/ChatMessages';
 import type { ProviderOptions } from '@promptfoo/types';
 
 interface SessionsTabProps {
@@ -284,7 +286,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
       )}
 
       {/* Session Test Section */}
-      <Paper elevation={1} sx={{ p: 3, backgroundColor: 'background.default' }}>
+      <Paper elevation={1} sx={{ p: 3, backgroundColor: 'background.default', overflow: 'auto' }}>
         <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
           Test Session Configuration
         </Typography>
@@ -315,7 +317,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           <Alert
             severity={testResult.success ? 'success' : 'error'}
             icon={testResult.success ? <CheckCircleIcon /> : <ErrorIcon />}
-            sx={{ mt: 2 }}
+            sx={{ mt: 2, maxWidth: '60%' }}
           >
             <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
               {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
@@ -327,12 +329,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
             {testResult.details && (
               <Box sx={{ mt: 2 }}>
-                <Typography variant="caption" display="block" sx={{ mb: 1 }}>
-                  <strong>Session ID:</strong> {testResult.details.sessionId}
-                </Typography>
-
                 {!testResult.success && (
-                  <Alert severity="warning" sx={{ mb: 2, mt: 1 }}>
+                  <Alert severity="warning" sx={{ mb: 2 }}>
                     <Typography variant="caption">
                       <strong>What to check:</strong>
                       <br />• Verify your session configuration matches your target's requirements
@@ -351,30 +349,79 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                     </Typography>
                   </summary>
 
-                  <Box sx={{ mt: 1, p: 1, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 1 }}>
-                    <Typography variant="caption" component="div" sx={{ mb: 2 }}>
-                      <strong>Request 1:</strong> "{testResult.details.request1?.prompt}"
-                      <br />
-                      <strong>Response 1:</strong> {JSON.stringify(testResult.details.response1)}
-                    </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    {/* Chat Messages */}
+                    <ChatMessages
+                      messages={(() => {
+                        const messages: Message[] = [];
 
-                    <Typography variant="caption" component="div">
-                      <strong>Request 2:</strong> "{testResult.details.request2?.prompt}"
-                      <br />
-                      <strong>Response 2:</strong> {JSON.stringify(testResult.details.response2)}
-                      <br />
-                      <br />
-                      {testResult.reason && (
-                        <>
-                          {testResult.success ? (
-                            <strong>Reason: </strong>
-                          ) : (
-                            <strong style={{ color: 'red' }}>Issue:</strong>
-                          )}
+                        // Add first request
+                        if (testResult.details.request1?.prompt) {
+                          messages.push({
+                            role: 'user',
+                            content: testResult.details.request1.prompt,
+                          });
+                        }
+
+                        // Add first response
+                        if (testResult.details.response1) {
+                          const content =
+                            typeof testResult.details.response1 === 'string'
+                              ? testResult.details.response1
+                              : JSON.stringify(testResult.details.response1, null, 2);
+                          messages.push({
+                            role: 'assistant',
+                            content,
+                          });
+                        }
+
+                        // Add second request
+                        if (testResult.details.request2?.prompt) {
+                          messages.push({
+                            role: 'user',
+                            content: testResult.details.request2.prompt,
+                          });
+                        }
+
+                        // Add second response
+                        if (testResult.details.response2) {
+                          const content =
+                            typeof testResult.details.response2 === 'string'
+                              ? testResult.details.response2
+                              : JSON.stringify(testResult.details.response2, null, 2);
+                          messages.push({
+                            role: 'assistant',
+                            content,
+                          });
+                        }
+
+                        return messages;
+                      })()}
+                    />
+
+                    {/* Test Result Explanation */}
+                    {testResult.reason && (
+                      <Alert severity={testResult.success ? 'success' : 'warning'} sx={{ mt: 2 }}>
+                        <Typography variant="caption">
+                          <strong>{testResult.success ? 'Success:' : 'Issue:'}</strong>{' '}
                           {testResult.reason}
-                        </>
-                      )}
-                    </Typography>
+                        </Typography>
+                      </Alert>
+                    )}
+
+                    {/* Session ID Info */}
+                    <Box
+                      sx={{
+                        mt: 2,
+                        p: 1.5,
+                        backgroundColor: 'rgba(0,0,0,0.03)',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Typography variant="caption" color="textSecondary">
+                        <strong>Session ID used:</strong> {testResult.details.sessionId || 'None'}
+                      </Typography>
+                    </Box>
                   </Box>
                 </details>
               </Box>

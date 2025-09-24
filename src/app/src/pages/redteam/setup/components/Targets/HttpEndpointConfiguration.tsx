@@ -1,4 +1,5 @@
 import './syntax-highlighting.css';
+import 'prismjs/components/prism-clike';
 import 'prismjs/components/prism-javascript';
 
 import { useCallback, useState } from 'react';
