@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 // Plugin options for redteam configuration
 const pluginOptions = [
@@ -145,7 +146,7 @@ const JsonSchemaConfigSchema = z.object({
     .optional(),
 });
 
-const jsonSchema = z.toJSONSchema(JsonSchemaConfigSchema, {
+const jsonSchema = zodToJsonSchema(JsonSchemaConfigSchema, {
   name: 'PromptfooConfigSchema',
   definitions: true,
 });
