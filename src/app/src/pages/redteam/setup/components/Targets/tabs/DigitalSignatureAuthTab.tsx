@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -37,8 +38,8 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
   return (
     <>
       <Typography variant="body1" sx={{ mb: 3 }}>
-        Configure signature-based authentication for secure API calls. Your private key is
-        never sent to Promptfoo and will always be stored locally on your system. See{' '}
+        Configure signature-based authentication for secure API calls. Your private key is never
+        sent to Promptfoo and will always be stored locally on your system. See{' '}
         <a
           href="https://www.promptfoo.dev/docs/providers/http/#digital-signature-authentication"
           target="_blank"
@@ -47,7 +48,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
         </a>{' '}
         for more information.
       </Typography>
-      
+
       <FormGroup>
         <FormControlLabel
           control={
@@ -57,10 +58,8 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 if (event.target.checked) {
                   updateCustomTarget('signatureAuth', {
                     enabled: true,
-                    certificateType:
-                      selectedTarget.config.signatureAuth?.certificateType || 'pem',
-                    keyInputType:
-                      selectedTarget.config.signatureAuth?.keyInputType || 'upload',
+                    certificateType: selectedTarget.config.signatureAuth?.certificateType || 'pem',
+                    keyInputType: selectedTarget.config.signatureAuth?.keyInputType || 'upload',
                   });
                 } else {
                   updateCustomTarget('signatureAuth', undefined);
@@ -309,11 +308,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                         Upload your PEM format private key
                       </Typography>
                       <label htmlFor="private-key-upload">
-                        <Button
-                          variant="outlined"
-                          component="span"
-                          startIcon={<VpnKeyIcon />}
-                        >
+                        <Button variant="outlined" component="span" startIcon={<VpnKeyIcon />}>
                           Choose File
                         </Button>
                       </label>
@@ -380,8 +375,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                       startIcon={<CheckCircleIcon />}
                       onClick={async () => {
                         try {
-                          const inputKey =
-                            selectedTarget.config.signatureAuth?.privateKey || '';
+                          const inputKey = selectedTarget.config.signatureAuth?.privateKey || '';
                           const formattedKey = await convertStringKeyToPem(inputKey);
                           updateCustomTarget('signatureAuth', {
                             ...selectedTarget.config.signatureAuth,
@@ -623,8 +617,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             fullWidth
             label="Signature Data Template"
             value={
-              selectedTarget.config.signatureAuth?.signatureDataTemplate ||
-              '{{signatureTimestamp}}'
+              selectedTarget.config.signatureAuth?.signatureDataTemplate || '{{signatureTimestamp}}'
             }
             onChange={(e) =>
               updateCustomTarget('signatureAuth', {

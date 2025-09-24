@@ -1,7 +1,8 @@
 import React from 'react';
+
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
@@ -36,12 +37,8 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
   return (
     <>
       <Typography variant="body1" sx={{ mb: 2 }}>
-        Transform the prompt into a specific structure required by your API before sending.
-        See{' '}
-        <a
-          href="https://www.promptfoo.dev/docs/providers/http/#request-transform"
-          target="_blank"
-        >
+        Transform the prompt into a specific structure required by your API before sending. See{' '}
+        <a href="https://www.promptfoo.dev/docs/providers/http/#request-transform" target="_blank">
           docs
         </a>{' '}
         for more information.

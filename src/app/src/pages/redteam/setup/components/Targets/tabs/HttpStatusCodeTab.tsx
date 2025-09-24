@@ -1,7 +1,8 @@
 import React from 'react';
+
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
@@ -34,12 +35,9 @@ const HttpStatusCodeTab: React.FC<HttpStatusCodeTabProps> = ({
   return (
     <>
       <Typography variant="body1" sx={{ mb: 2 }}>
-        Customize which HTTP status codes are treated as successful responses. By default
-        accepts 200-299. See{' '}
-        <a
-          href="https://www.promptfoo.dev/docs/providers/http/#error-handling"
-          target="_blank"
-        >
+        Customize which HTTP status codes are treated as successful responses. By default accepts
+        200-299. See{' '}
+        <a href="https://www.promptfoo.dev/docs/providers/http/#error-handling" target="_blank">
           docs
         </a>{' '}
         for more details.

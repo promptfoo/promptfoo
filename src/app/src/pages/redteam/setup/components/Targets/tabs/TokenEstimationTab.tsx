@@ -1,4 +1,5 @@
 import React from 'react';
+
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
@@ -16,8 +17,7 @@ const TokenEstimationTab: React.FC<TokenEstimationTabProps> = ({
   return (
     <>
       <Typography variant="body1" sx={{ mb: 2 }}>
-        Enable word-based token estimation for APIs that don't return token usage information.
-        See{' '}
+        Enable word-based token estimation for APIs that don't return token usage information. See{' '}
         <a
           href="https://www.promptfoo.dev/docs/providers/http/#token-estimation"
           target="_blank"

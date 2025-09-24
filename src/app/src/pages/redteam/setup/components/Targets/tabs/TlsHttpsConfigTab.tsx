@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { useToast } from '@app/hooks/useToast';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HttpsIcon from '@mui/icons-material/Https';
@@ -41,8 +42,8 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
   return (
     <>
       <Typography variant="body1" sx={{ mb: 3 }}>
-        Configure TLS certificates for secure HTTPS connections, including custom CA
-        certificates, client certificates for mutual TLS, and PFX certificate bundles. See{' '}
+        Configure TLS certificates for secure HTTPS connections, including custom CA certificates,
+        client certificates for mutual TLS, and PFX certificate bundles. See{' '}
         <a
           href="https://www.promptfoo.dev/docs/providers/http/#tlshttps-configuration"
           target="_blank"
@@ -108,16 +109,13 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                         ? undefined
                         : selectedTarget.config.tls?.keyPath,
                     pfx: certType !== 'pfx' ? undefined : selectedTarget.config.tls?.pfx,
-                    pfxPath:
-                      certType !== 'pfx' ? undefined : selectedTarget.config.tls?.pfxPath,
+                    pfxPath: certType !== 'pfx' ? undefined : selectedTarget.config.tls?.pfxPath,
                     passphrase:
                       certType !== 'pfx' && certType !== 'jks'
                         ? undefined
                         : selectedTarget.config.tls?.passphrase,
-                    jksPath:
-                      certType !== 'jks' ? undefined : selectedTarget.config.tls?.jksPath,
-                    keyAlias:
-                      certType !== 'jks' ? undefined : selectedTarget.config.tls?.keyAlias,
+                    jksPath: certType !== 'jks' ? undefined : selectedTarget.config.tls?.jksPath,
+                    keyAlias: certType !== 'jks' ? undefined : selectedTarget.config.tls?.keyAlias,
                   });
                 }}
               >
@@ -128,8 +126,8 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               </Select>
             </FormControl>
             <Typography variant="caption" color="text.secondary">
-              Select "No Client Certificate" for server-only verification, or choose a
-              certificate type for mutual TLS
+              Select "No Client Certificate" for server-only verification, or choose a certificate
+              type for mutual TLS
             </Typography>
           </Box>
 
@@ -164,9 +162,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   </Button>
                   <Button
                     variant={
-                      selectedTarget.config.tls?.certInputType === 'path'
-                        ? 'contained'
-                        : 'outlined'
+                      selectedTarget.config.tls?.certInputType === 'path' ? 'contained' : 'outlined'
                     }
                     startIcon={<InsertDriveFileIcon />}
                     onClick={() =>
@@ -292,9 +288,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   </Button>
                   <Button
                     variant={
-                      selectedTarget.config.tls?.keyInputType === 'path'
-                        ? 'contained'
-                        : 'outlined'
+                      selectedTarget.config.tls?.keyInputType === 'path' ? 'contained' : 'outlined'
                     }
                     startIcon={<InsertDriveFileIcon />}
                     onClick={() =>
@@ -414,9 +408,9 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               <Paper variant="outlined" sx={{ p: 3 }}>
                 <Stack spacing={3}>
                   <Alert severity="info">
-                    Upload a JKS file to automatically extract the certificate and private key
-                    for TLS configuration. The jks-js library will be used to convert the JKS
-                    content to PEM format.
+                    Upload a JKS file to automatically extract the certificate and private key for
+                    TLS configuration. The jks-js library will be used to convert the JKS content to
+                    PEM format.
                   </Alert>
 
                   <Box>
@@ -610,8 +604,8 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                         {selectedTarget.config.tls?.jksExtractConfigured && (
                           <Alert severity="success" sx={{ mt: 2 }}>
                             JKS extraction configured. The certificate and private key will be
-                            extracted from the JKS file on the backend using the provided
-                            password and key alias.
+                            extracted from the JKS file on the backend using the provided password
+                            and key alias.
                           </Alert>
                         )}
                       </Box>
@@ -648,9 +642,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   </Button>
                   <Button
                     variant={
-                      selectedTarget.config.tls?.pfxInputType === 'path'
-                        ? 'contained'
-                        : 'outlined'
+                      selectedTarget.config.tls?.pfxInputType === 'path' ? 'contained' : 'outlined'
                     }
                     startIcon={<InsertDriveFileIcon />}
                     onClick={() =>
@@ -784,9 +776,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                 <Button
                   variant={
-                    selectedTarget.config.tls?.caInputType === 'upload'
-                      ? 'contained'
-                      : 'outlined'
+                    selectedTarget.config.tls?.caInputType === 'upload' ? 'contained' : 'outlined'
                   }
                   startIcon={<SecurityIcon />}
                   onClick={() =>
@@ -800,9 +790,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 </Button>
                 <Button
                   variant={
-                    selectedTarget.config.tls?.caInputType === 'path'
-                      ? 'contained'
-                      : 'outlined'
+                    selectedTarget.config.tls?.caInputType === 'path' ? 'contained' : 'outlined'
                   }
                   startIcon={<InsertDriveFileIcon />}
                   onClick={() =>
@@ -816,9 +804,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 </Button>
                 <Button
                   variant={
-                    selectedTarget.config.tls?.caInputType === 'inline'
-                      ? 'contained'
-                      : 'outlined'
+                    selectedTarget.config.tls?.caInputType === 'inline' ? 'contained' : 'outlined'
                   }
                   startIcon={<HttpsIcon />}
                   onClick={() =>
@@ -858,9 +844,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   />
                   <label htmlFor="tls-ca-upload">
                     <Button variant="outlined" component="span">
-                      {selectedTarget.config.tls?.ca
-                        ? 'Replace CA Certificate'
-                        : 'Choose CA File'}
+                      {selectedTarget.config.tls?.ca ? 'Replace CA Certificate' : 'Choose CA File'}
                     </Button>
                   </label>
                   {selectedTarget.config.tls?.ca && (
@@ -928,8 +912,8 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 />
                 {selectedTarget.config.tls?.rejectUnauthorized === false && (
                   <Alert severity="warning">
-                    Disabling certificate verification is dangerous and should never be used
-                    in production!
+                    Disabling certificate verification is dangerous and should never be used in
+                    production!
                   </Alert>
                 )}
 

@@ -1,7 +1,8 @@
 import React from 'react';
+
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
@@ -35,10 +36,7 @@ const ResponseTransformTab: React.FC<ResponseTransformTabProps> = ({
     <>
       <Typography variant="body1" sx={{ mb: 2 }}>
         Extract specific data from the HTTP response. See{' '}
-        <a
-          href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
-          target="_blank"
-        >
+        <a href="https://www.promptfoo.dev/docs/providers/http/#response-transform" target="_blank">
           docs
         </a>{' '}
         for more information.
