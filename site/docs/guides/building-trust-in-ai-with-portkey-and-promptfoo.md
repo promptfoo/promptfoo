@@ -1,7 +1,6 @@
 ---
-title: 'Building trust in AI with Portkey and Promptfoo'
+sidebar_label: Building trust in AI with Portkey and Promptfoo
 description: "Supercharge Promptfoo evaluations with Portkey's AI gateway. Run tests across 1600+ models, manage prompts collaboratively, and gain detailed analytics for production-ready AI trust."
-image: /img/blog/building-trust-in-ai-with-portkey-and-promptfoo/hero-image.jpg
 keywords:
   [
     portkey,
@@ -15,16 +14,17 @@ keywords:
     prompt versioning,
     AI monitoring,
   ]
-date: 2025-09-26
-authors: [drishti-portkey]
-tags: [partnership, ai-trust, evaluation]
 ---
 
 # Building trust in AI with Portkey and Promptfoo
 
+:::info Author
+This guide was written by **Drishti Shah** from [Portkey](https://portkey.ai/), a guest author contributing to the Promptfoo community.
+:::
+
 ## Supercharge Promptfoo runs with Portkey
 
-AI models are powerful, but teams still face the challenge of knowing whether they can trust outputs in production. That’s why evaluation has become central to every workflow.
+AI models are powerful, but teams still face the challenge of knowing whether they can trust outputs in production. That's why evaluation has become central to every workflow.
 
 Promptfoo gives you the framework to test prompts, compare models, and red-team systems. Portkey adds the infrastructure layer to make those evaluations scalable and production-ready.
 
@@ -36,13 +36,13 @@ With Portkey, you can store your prompts in a central library with history, tags
 
 ### Example config
 
-```
+```yaml
 prompts:
-  - id: support-prompt
-    value: portkey://prompts/customer-support-v3
+  - 'portkey://pp-customer-support-v3'
 ```
 
 Instead of evaluating a local snippet, Promptfoo is now testing the **production prompt stored in Portkey**. Teams can review changes, roll back if needed, and lock evaluations to specific versions for cleaner comparisons.
+
 When evaluation suites include adversarial test cases (like prompt injection attempts), Promptfoo effectively becomes a **red-team harness for your Portkey-managed prompt** — giving you confidence that the actual prompt in production holds up under pressure.
 
 ## Run Promptfoo on 1600+ models (including private/local)
@@ -51,26 +51,27 @@ Portkey's AI gateway for Promptfoo allows you to run the same evaluation suite a
 
 ![Portkey Model Catalog](/img/blog/building-trust-in-ai-with-portkey-and-promptfoo/portkey_model_catalog.png)
 
-```
+```yaml
 providers:
-  - id: gpt4o-via-portkey
-    label: GPT-4o (via Portkey)
+  - id: portkey:gpt-5
+    label: GPT-5 (via Portkey)
     config:
-      apiKey: ${PORTKEY_API_KEY}
-      apiBaseUrl: https://api.portkey.ai/v1
-      model: gpt-4o
+      portkeyApiKey: ${PORTKEY_API_KEY}
+      portkeyApiBaseUrl: https://api.portkey.ai/v1
+      portkeyProvider: openai
 
-  - id: llama3-via-portkey
-    label: Llama 3 (private, via Portkey)
+  - id: portkey:llama-4-scout-17b-16e-instruct
+    label: Llama 4 Scout 17B Instruct (via Portkey)
     config:
-      apiKey: ${PORTKEY_API_KEY}
-      apiBaseUrl: https://api.portkey.ai/v1
-      model: llama-3-70b
+      portkeyApiKey: ${PORTKEY_API_KEY}
+      portkeyApiBaseUrl: https://api.portkey.ai/v1
+      portkeyProvider: meta
 ```
 
 With this setup, you can run one test suite across multiple providers, no rewiring or custom adapters needed.
 
 This makes it simple to compare model quality, latency, and cost side-by-side, whether the model is commercial, open source, or running in your own environment.
+
 Promptfoo evaluations often fire thousands of requests at once. Without safeguards, that can quickly run into provider rate limits, retries, and inconsistent results.
 
 Portkey helps keep runs stable and predictable:
@@ -89,7 +90,7 @@ With Portkey in the loop, red-teaming becomes even more powerful:
 
 - **Unified orchestration**: run red-team suites against any model through the same Portkey endpoint.
 - **Complete observability**: Portkey logs every adversarial request and response, including latency, tokens, and cost.
-- **Better diagnostics**: segment results by commit, suite, or scenario and trace failures in Portkey’s logging UI.
+- **Better diagnostics**: segment results by commit, suite, or scenario and trace failures in Portkey's logging UI.
 
 Together, Promptfoo and Portkey turn red-teaming from a one-off exercise into a repeatable, production-grade security practice.
 
@@ -109,13 +110,13 @@ You can also send **custom metadata** with each request — for example, tagging
 
 Getting started is straightforward:
 
-1. Point your Promptfoo providers to Portkey (`apiBaseUrl` + API key).
+1. Point your Promptfoo providers to Portkey (`portkeyApiKey` + `portkeyApiBaseUrl`).
 2. Reference production prompts stored in Portkey using the `portkey://` syntax.
 3. (Optional) Add metadata, caching, or rate limits for more stable runs.
 
-That’s it! Your Promptfoo evaluations now run with Portkey’s infrastructure layer.
+That's it! Your Promptfoo evaluations now run with Portkey's infrastructure layer.
 
-👉 Refer to the detailed documentation on [Promptfoo](https://www.promptfoo.dev/docs/integrations/portkey/) and [Portkey](https://portkey.ai/docs/integrations/libraries/promptfoo) for setup instructions and advanced configuration.
+👉 Refer to the detailed documentation on [Promptfoo](/docs/integrations/portkey/) and [Portkey](https://portkey.ai/docs/integrations/libraries/promptfoo) for setup instructions and advanced configuration.
 
 ## Closing
 
