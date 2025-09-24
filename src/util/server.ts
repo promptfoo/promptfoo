@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import opener from 'opener';
 import { getDefaultPort, VERSION } from '../constants';
 import { fetchWithProxy } from './fetch';
@@ -127,6 +128,37 @@ export async function openBrowser(
     const shouldOpen = await promptYesNo('Open URL in browser?', false);
     if (shouldOpen) {
       await doOpen();
+    }
+  } else if (browserBehavior !== BrowserBehavior.SKIP) {
+    await doOpen();
+  }
+}
+
+export async function openAuthBrowser(
+  authUrl: string,
+  welcomeUrl: string,
+  browserBehavior: BrowserBehavior,
+): Promise<void> {
+  const doOpen = async () => {
+    try {
+      logger.info(`Opening ${authUrl} in your browser...`);
+      await opener(authUrl);
+      logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
+    } catch (err) {
+      logger.error(`Failed to open browser: ${String(err)}`);
+      // Fallback to showing URLs manually
+      logger.info(`Please visit: ${chalk.green(authUrl)}`);
+      logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
+    }
+  };
+
+  if (browserBehavior === BrowserBehavior.ASK) {
+    const shouldOpen = await promptYesNo('Open login page in browser?', true);
+    if (shouldOpen) {
+      await doOpen();
+    } else {
+      logger.info(`Please visit: ${chalk.green(authUrl)}`);
+      logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
     }
   } else if (browserBehavior !== BrowserBehavior.SKIP) {
     await doOpen();
