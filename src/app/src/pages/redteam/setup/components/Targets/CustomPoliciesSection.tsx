@@ -81,7 +81,9 @@ export const CustomPoliciesSection = () => {
       .filter((p) => typeof p === 'object' && p.id === 'policy')
       .map((p, index) => ({
         id: `policy-${Date.now()}-${index}`,
-        name: (p as { config: { policy: string; name?: string } }).config.name || `Custom Policy ${index + 1}`,
+        name:
+          (p as { config: { policy: string; name?: string } }).config.name ||
+          `Custom Policy ${index + 1}`,
         policy: (p as { config: { policy: string } }).config.policy,
         isExpanded: true,
       }));

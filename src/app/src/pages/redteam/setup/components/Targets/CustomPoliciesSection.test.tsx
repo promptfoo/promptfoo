@@ -303,7 +303,7 @@ describe('CustomPoliciesSection', () => {
             },
           ]);
         },
-        { timeout: 1000 }
+        { timeout: 1000 },
       );
     });
 
