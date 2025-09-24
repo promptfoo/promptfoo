@@ -530,7 +530,7 @@ export default class Eval {
       // Helper function to sanitize SQL string values
       const sanitizeValue = (val: string) => val.replace(/'/g, "''");
 
-      // Helper function to escape JSON path keys to prevent path injection
+      // Helper function to escape JSON path keys (quotes & backslashes) for safe SQLite json_extract() usage
       const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
       opts.filters.forEach((filter) => {
@@ -539,8 +539,8 @@ export default class Eval {
 
         if (type === 'metric' && operator === 'equals') {
           const escapedValue = escapeJsonPathKey(value);
-          // Because metric names can contain special characters (e.g. `gpt-4.1-judge`) we need to escape them
-          // and wrap in double quotes.
+          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
+          // in double quotes.
           condition = `json_extract(named_scores, '$."${escapedValue}"') IS NOT NULL`;
         } else if (type === 'metadata' && field) {
           const sanitizedValue = sanitizeValue(value);
