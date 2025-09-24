@@ -82,7 +82,7 @@ providers:
 | [Simulated User](./simulated-user.md)               | Custom - Conversation simulator                           | `promptfoo:simulated-user`                                                |
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                                             | `watsonx:ibm/granite-13b-chat-v2`                                         |
 | [X.AI](./xai.md)                                    | X.AI's models                                             | `xai:grok-3-beta`                                                         |
-| [CometAPI](./cometapi.md)                           | 500+ AI Model API,All In One API. Just In CometAPI                                        | `cometapi:gpt-5-mini`                                                    |
+| [CometAPI](./cometapi.md)                           | 500+ AI Model API,All In One API. Just In CometAPI        | `cometapi:gpt-5-mini`                                                     |
 
 ## Provider Syntax
 

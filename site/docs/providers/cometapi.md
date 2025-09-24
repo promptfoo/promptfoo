@@ -120,16 +120,19 @@ npx promptfoo@latest eval -c examples/cometapi/promptfooconfig.yaml
 ## Available Models
 
 Fetch the list of available models:
+
 ### Method 1: Using curl
+
 ```bash
 curl -H "Authorization: Bearer $COMETAPI_KEY" https://api.cometapi.com/v1/models
 ```
+
 ### Method 2: Accessing via the [CometAPI Pricing Page](https://api.cometapi.com/pricing)
 
 Note: The CometAPI models list includes non-chat models. Promptfoo filters obvious non-chat types using ignore patterns to make selection easier.
 
 ## Environment Variables
 
-| Variable | Description |
-| --- | --- |
+| Variable       | Description                                                          |
+| -------------- | -------------------------------------------------------------------- |
 | `COMETAPI_KEY` | Your CometAPI key. Get one at https://api.cometapi.com/console/token |

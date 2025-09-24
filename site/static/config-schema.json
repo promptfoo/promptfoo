@@ -69,6 +69,9 @@
                             "AIML_API_KEY": {
                               "type": "string"
                             },
+                            "COMETAPI_KEY": {
+                              "type": "string"
+                            },
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
@@ -352,9 +355,6 @@
                               "type": "string"
                             },
                             "PROMPTFOO_EVAL_TIMEOUT_MS": {
-                              "type": "string"
-                            },
-                            "COMETAPI_KEY": {
                               "type": "string"
                             }
                           },
