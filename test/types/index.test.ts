@@ -358,7 +358,7 @@ describe('CommandLineOptionsSchema', () => {
       filterErrorsOnly: true,
     };
     expect(() => CommandLineOptionsSchema.parse(options)).toThrow(
-      'Invalid input: expected string, received boolean',
+      /Expected string, received boolean/,
     );
   });
 
