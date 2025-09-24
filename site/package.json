@@ -60,6 +60,8 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@mui/material": "^7.3.2",
     "@mui/system": "^7.3.2",
     "react-router": "^7.9.1",
