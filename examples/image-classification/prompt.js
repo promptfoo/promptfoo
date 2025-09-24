@@ -1,5 +1,21 @@
 const dedent = require('dedent');
 
+function getMimeTypeFromBase64(base64Data) {
+  if (base64Data.startsWith('/9j/')) {
+    return 'image/jpeg';
+  } else if (base64Data.startsWith('iVBORw0KGgo')) {
+    return 'image/png';
+  } else if (base64Data.startsWith('R0lGODlh')) {
+    return 'image/gif';
+  } else if (base64Data.startsWith('UklGR')) {
+    return 'image/webp';
+  } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
+    return 'image/bmp';
+  }
+  // Fallback to JPEG if no magic number is matched
+  return 'image/jpeg';
+}
+
 module.exports = (context) => {
   return [
     {
@@ -32,7 +48,9 @@ module.exports = (context) => {
         {
           type: 'image_url',
           image_url: {
-            url: `data:image/jpeg;base64,${context.vars.image_base64}`,
+            url: `data:${getMimeTypeFromBase64(context.vars.image_base64)};base64,${
+              context.vars.image_base64
+            }`,
           },
         },
       ],

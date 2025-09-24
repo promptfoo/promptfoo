@@ -107,6 +107,45 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
     .join('\n\n');
 }
 
+/**
+ * Automatically extracts base64 data from data URLs for Anthropic image content.
+ * This ensures compatibility with our universal data URL generation without requiring
+ * users to modify their prompt templates with Nunjucks filters.
+ */
+function processAnthropicImageContent(content: any[]): any[] {
+  return content.map((item) => {
+    if (item.type === 'image' && item.source && item.source.type === 'base64') {
+      // Check if the data field contains a data URL prefix
+      if (typeof item.source.data === 'string' && item.source.data.startsWith('data:')) {
+        // Extract just the base64 part from data URLs like "data:image/jpeg;base64,/9j/4AAQ..."
+        const [header, base64Data] = item.source.data.split(',', 2);
+        if (base64Data) {
+          // Also extract the media type from the data URL header if not already set
+          if (!item.source.media_type && header.includes(':')) {
+            const mediaType = header.split(':')[1].split(';')[0];
+            return {
+              ...item,
+              source: {
+                ...item.source,
+                media_type: mediaType,
+                data: base64Data,
+              },
+            };
+          }
+          return {
+            ...item,
+            source: {
+              ...item.source,
+              data: base64Data,
+            },
+          };
+        }
+      }
+    }
+    return item;
+  });
+}
+
 export function parseMessages(messages: string): {
   system?: Anthropic.TextBlockParam[];
   extractedMessages: Anthropic.MessageParam[];
@@ -123,7 +162,7 @@ export function parseMessages(messages: string): {
           .map((msg) => ({
             role: msg.role,
             content: Array.isArray(msg.content)
-              ? msg.content
+              ? processAnthropicImageContent(msg.content)
               : [{ type: 'text', text: msg.content }],
           })),
         system: systemMessage
