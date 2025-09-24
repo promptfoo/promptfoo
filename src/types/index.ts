@@ -71,6 +71,7 @@ export const CommandLineOptionsSchema = z.object({
   generateSuggestions: z.boolean().optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
+  retryErrors: z.boolean().optional(),
 
   envPath: z.string().optional(),
 });

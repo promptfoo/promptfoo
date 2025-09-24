@@ -321,6 +321,65 @@
             },
             "verbose": {
               "type": "boolean"
+            },
+            "share": {
+              "type": "boolean"
+            },
+            "noShare": {
+              "type": "boolean"
+            },
+            "progressBar": {
+              "type": "boolean"
+            },
+            "watch": {
+              "type": "boolean"
+            },
+            "filterErrorsOnly": {
+              "type": "string"
+            },
+            "filterFailing": {
+              "type": "string"
+            },
+            "filterFirstN": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "filterMetadata": {
+              "type": "string"
+            },
+            "filterPattern": {
+              "type": "string"
+            },
+            "filterProviders": {
+              "type": "string"
+            },
+            "filterSample": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "filterTargets": {
+              "type": "string"
+            },
+            "var": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "generateSuggestions": {
+              "type": "boolean"
+            },
+            "promptPrefix": {
+              "type": "string"
+            },
+            "promptSuffix": {
+              "type": "string"
+            },
+            "retryErrors": {
+              "type": "boolean"
+            },
+            "envPath": {
+              "type": "string"
             }
           },
           "additionalProperties": false

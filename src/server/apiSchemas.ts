@@ -44,5 +44,16 @@ export const ApiSchemas = {
         message: z.string(),
       }),
     },
+    MetadataKeys: {
+      Params: z.object({
+        id: z.string().min(3).max(128),
+      }),
+      Query: z.object({
+        comparisonEvalIds: z.array(z.string()).optional(),
+      }),
+      Response: z.object({
+        keys: z.array(z.string()),
+      }),
+    },
   },
 };

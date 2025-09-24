@@ -91,56 +91,60 @@ const TestSuites = ({
   ]);
 
   const rows = React.useMemo(() => {
-    return Object.entries(categoryStats)
-      .filter(([_, stats]) => stats.total > 0)
-      .map(([pluginName, stats]) => {
-        const severity = getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown';
+    return (
+      Object.entries(categoryStats)
+        .filter(([_, stats]) => stats.total > 0)
+        .map(([pluginName, stats]) => {
+          const severity = getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown';
 
-        // Calculate risk score with details
-        const riskDetails = (() => {
-          // Prepare test results using the helper function
-          const testResults = prepareTestResultsFromStats(
-            failuresByPlugin,
-            passesByPlugin,
-            pluginName,
-            categoryStats,
-            getStrategyIdFromTest,
-          );
+          // Calculate risk score with details
+          const riskDetails = (() => {
+            // Prepare test results using the helper function
+            const testResults = prepareTestResultsFromStats(
+              failuresByPlugin,
+              passesByPlugin,
+              pluginName,
+              categoryStats,
+              getStrategyIdFromTest,
+            );
 
-          if (testResults.length === 0) {
+            if (testResults.length === 0) {
+              return {
+                riskScore: 0,
+                complexityScore: 0,
+                worstStrategy: 'none',
+              };
+            }
+
+            // Calculate risk score once and extract values
+            const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
             return {
-              riskScore: 0,
-              complexityScore: 0,
-              worstStrategy: 'none',
+              riskScore: riskScoreResult.score,
+              complexityScore: riskScoreResult.complexityScore,
+              worstStrategy: riskScoreResult.worstStrategy,
             };
-          }
+          })();
 
-          // Calculate risk score once and extract values
-          const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
           return {
-            riskScore: riskScoreResult.score,
-            complexityScore: riskScoreResult.complexityScore,
-            worstStrategy: riskScoreResult.worstStrategy,
+            id: pluginName,
+            pluginName,
+            type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
+            description:
+              subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
+            severity,
+            passRate: (stats.pass / stats.total) * 100,
+            passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
+            attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
+            total: stats.total,
+            successfulAttacks: stats.total - stats.pass,
+            riskScore: riskDetails.riskScore,
+            complexityScore: riskDetails.complexityScore,
+            worstStrategy: riskDetails.worstStrategy,
           };
-        })();
-
-        return {
-          id: pluginName,
-          pluginName,
-          type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
-          description:
-            subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
-          severity,
-          passRate: (stats.pass / stats.total) * 100,
-          passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-          attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
-          total: stats.total,
-          successfulAttacks: stats.total - stats.pass,
-          riskScore: riskDetails.riskScore,
-          complexityScore: riskDetails.complexityScore,
-          worstStrategy: riskDetails.worstStrategy,
-        };
-      });
+        })
+        // Filter out rows where ASR = 0
+        .filter((row) => row.successfulAttacks > 0)
+    );
   }, [categoryStats, plugins, failuresByPlugin, passesByPlugin]);
 
   const exportToCSV = React.useCallback(() => {
@@ -354,6 +358,12 @@ const TestSuites = ({
       },
     },
     {
+      field: 'successfulAttacks',
+      headerName: 'Successful Attacks',
+      type: 'number',
+      flex: 0.75,
+    },
+    {
       field: 'attackSuccessRate',
       headerName: 'Attack Success Rate',
       type: 'number',
@@ -405,7 +415,7 @@ const TestSuites = ({
             size="small"
             onClick={() => {
               const pluginId = params.row.pluginName;
-              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
+              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}&mode=failures`);
             }}
           >
             View logs

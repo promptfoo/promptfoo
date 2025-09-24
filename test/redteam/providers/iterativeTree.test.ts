@@ -1,5 +1,9 @@
-import { jest } from '@jest/globals';
 import { v4 as uuidv4 } from 'uuid';
+
+import { jest } from '@jest/globals';
+
+import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import {
   checkIfOnTopic,
   createTreeNode,
@@ -17,10 +21,6 @@ import {
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
-import { getNunjucksEngine } from '../../../src/util/templates';
-
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -28,6 +28,7 @@ import type {
   CallApiOptionsParams,
   GradingResult,
 } from '../../../src/types';
+import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/providers/openai');
 jest.mock('../../../src/util/templates');
@@ -205,15 +206,38 @@ describe('RedteamIterativeProvider', () => {
       );
     });
 
-    it('should throw an error for invalid API response', async () => {
+    it('should gracefully handle invalid API response by skipping the turn', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid json' });
 
       const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
         { role: 'system', content: 'System prompt' },
       ];
-      await expect(getNewPrompt(mockRedteamProvider, redteamHistory)).rejects.toThrow(
-        'Expected a JSON object',
-      );
+
+      const result = await getNewPrompt(mockRedteamProvider, redteamHistory);
+
+      expect(result).toEqual({
+        improvement: 'parse failure – skipping turn',
+        prompt: '',
+        tokenUsage: undefined,
+      });
+    });
+
+    it('should parse JSON object embedded in fenced prose', async () => {
+      const mockResponse = {
+        improvement: 'Fenced improvement',
+        prompt: 'Fenced prompt',
+      };
+      const proseWithFencedJson = `Here is the result you asked for.\n\n\`\`\`json\n${JSON.stringify(
+        mockResponse,
+      )}\n\`\`\`\n\nThanks!`;
+      mockRedteamProvider.callApi.mockResolvedValue({ output: proseWithFencedJson });
+
+      const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+        { role: 'system', content: 'System prompt' },
+      ];
+
+      const result = await getNewPrompt(mockRedteamProvider, redteamHistory);
+      expect(result).toEqual(mockResponse);
     });
 
     it('should handle empty history correctly', async () => {

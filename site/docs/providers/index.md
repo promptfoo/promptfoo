@@ -33,6 +33,7 @@ providers:
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                                 | `ai21:jamba-1.5-mini`                                                     |
 | [AI/ML API](./aimlapi.md)                           | Tap into 300+ cutting-edge AI models with a single API    | `aimlapi:chat:deepseek-r1`                                                |
 | [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers                  | `bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0`                      |
+| [AWS Bedrock Agents](./bedrock-agents.md)           | Amazon Bedrock Agents for orchestrating AI workflows      | `bedrock-agent:YOUR_AGENT_ID`                                             |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints                    | `sagemaker:my-endpoint-name`                                              |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                                | `azureopenai:gpt-4o-custom-deployment-name`                               |
 | [Cerebras](./cerebras.md)                           | High-performance inference API for Llama models           | `cerebras:llama-4-scout-17b-16e-instruct`                                 |
@@ -275,3 +276,23 @@ providers:
 ```
 
 For detailed MCP documentation and advanced configurations, see the [MCP Integration Guide](../integrations/mcp.md).
+
+## Advanced Usage
+
+### Linking Custom Providers to Existing Targets (Promptfoo Cloud)
+
+:::info Promptfoo Cloud Feature
+
+This feature is available in [Promptfoo Cloud](/docs/enterprise) deployments.
+
+:::
+
+Use `linkedTargetId` to link custom providers to existing cloud targets. Results from the custom provider appear under the linked target instead of creating duplicate entries.
+
+```yaml
+providers:
+  - id: 'custom-wrapper'
+    config:
+      linkedTargetId: 'promptfoo://provider/12345-abcd-uuid'
+      # other custom provider config...
+```

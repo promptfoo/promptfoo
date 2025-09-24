@@ -112,7 +112,7 @@ describe('getModelAuditLatestVersion', () => {
     expect(fetchWithTimeout).toHaveBeenCalledWith(
       'https://pypi.org/pypi/modelaudit/json',
       {},
-      1000,
+      10000,
     );
   });
 
