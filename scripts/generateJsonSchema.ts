@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { zodToJsonSchema } from '@alcyone-labs/zod-to-json-schema';
 
 // Plugin options for redteam configuration
 const pluginOptions = [
