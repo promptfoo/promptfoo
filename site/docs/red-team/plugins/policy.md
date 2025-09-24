@@ -28,6 +28,26 @@ redteam:
       numTests: 10
       config:
         policy: 'Your custom policy statement here'
+        name: 'Data Privacy Policy'  # Optional: human-readable name
+```
+
+The `name` field is optional and provides a human-readable identifier for the policy, which is especially useful when managing multiple custom policies.
+
+### Multiple Policies Example
+
+```yaml
+redteam:
+  plugins:
+    - id: 'policy'
+      numTests: 5
+      config:
+        policy: 'Never disclose personal information or contact details of users.'
+        name: 'Privacy Protection Policy'
+    - id: 'policy'
+      numTests: 5
+      config:
+        policy: 'Do not provide medical, legal, or financial advice that could be construed as professional consultation.'
+        name: 'Professional Advice Restrictions'
 ```
 
 ## How It Works

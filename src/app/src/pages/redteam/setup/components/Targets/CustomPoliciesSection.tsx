@@ -185,7 +185,7 @@ export const CustomPoliciesSection = () => {
           .filter((policy: string) => policy && policy.trim() !== '')
           .map((policy: string, index: number) => ({
             id: `policy-${Date.now()}-${index}`,
-            name: `Imported Policy ${policies.length + index + 1}`,
+            name: `Custom Policy ${policies.length + index + 1}`,
             policy: policy.trim(),
             isExpanded: false,
           }));

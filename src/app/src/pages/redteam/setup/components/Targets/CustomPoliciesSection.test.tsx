@@ -66,8 +66,8 @@ describe('CustomPoliciesSection', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByDisplayValue('Imported Policy 2')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('Imported Policy 3')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Custom Policy 2')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Custom Policy 3')).toBeInTheDocument();
 
         expect(screen.getByDisplayValue('Policy from CSV 1')).toBeInTheDocument();
         expect(screen.getByDisplayValue('Policy from CSV 2')).toBeInTheDocument();
@@ -307,7 +307,7 @@ describe('CustomPoliciesSection', () => {
       );
     });
 
-    it('should use "Imported Policy" prefix for CSV imports', async () => {
+    it('should use "Custom Policy" prefix for CSV imports', async () => {
       renderComponent();
 
       const csvContent = 'policy_text\n"CSV imported policy"';
@@ -324,7 +324,7 @@ describe('CustomPoliciesSection', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByDisplayValue('Imported Policy 2')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Custom Policy 2')).toBeInTheDocument();
         expect(screen.getByDisplayValue('CSV imported policy')).toBeInTheDocument();
       });
     });
