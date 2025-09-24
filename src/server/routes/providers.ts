@@ -22,46 +22,6 @@ import type { ProviderOptions, ProviderTestResponse } from '../../types/provider
 
 export const providersRouter = Router();
 
-function redactSensitiveProviderOptions(opts: ProviderOptions): ProviderOptions {
-  try {
-    const clone = JSON.parse(JSON.stringify(opts ?? {}));
-    const cfg = clone?.config ?? {};
-    // Headers
-    if (cfg.headers) {
-      for (const k of Object.keys(cfg.headers)) {
-        if (/(auth|key|token|secret|pass|signature)/i.test(k)) {
-          cfg.headers[k] = '***redacted***';
-        }
-      }
-    }
-    // Digital signature
-    if (cfg.signatureAuth) {
-      cfg.signatureAuth.privateKey = '***redacted***';
-      cfg.signatureAuth.privateKeyPath = cfg.signatureAuth.privateKeyPath
-        ? '***redacted***'
-        : undefined;
-    }
-    // TLS
-    if (cfg.tls) {
-      for (const k of ['key', 'cert', 'ca', 'pfx', 'passphrase', 'jksContent'] as const) {
-        if (cfg.tls[k] != null) {
-          cfg.tls[k] = '***redacted***';
-        }
-      }
-    }
-    // Env
-    if (clone.env) {
-      for (const k of Object.keys(clone.env)) {
-        clone.env[k] = '***redacted***';
-      }
-    }
-    clone.config = cfg;
-    return clone;
-  } catch {
-    return { ...opts, config: { ...opts?.config, headers: undefined } };
-  }
-}
-
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
   let providerOptions: ProviderOptions;
@@ -101,13 +61,13 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     logger.debug(
       dedent`[POST /providers/test] result from API provider
         result: ${JSON.stringify(result)}
-        providerOptions: ${JSON.stringify(redactSensitiveProviderOptions(providerOptions))}`,
+        providerOptions: ${JSON.stringify(providerOptions)}`,
     );
   } catch (error) {
     logger.error(
       dedent`[POST /providers/test] Error calling provider API
         error: ${error instanceof Error ? error.message : String(error)}
-        providerOptions: ${JSON.stringify(redactSensitiveProviderOptions(providerOptions))}`,
+        providerOptions: ${JSON.stringify(providerOptions)}`,
     );
     result = {
       error: error instanceof Error ? error.message : String(error),
@@ -122,7 +82,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     logger.debug(
       dedent`[POST /providers/test] Calling agent helper
         result: ${JSON.stringify(result)}
-        providerOptions: ${JSON.stringify(redactSensitiveProviderOptions(providerOptions))}`,
+        providerOptions: ${JSON.stringify(providerOptions)}`,
     );
     const testAnalyzerResponse = await fetchWithProxy(`${HOST}/api/v1/providers/test`, {
       method: 'POST',
@@ -130,7 +90,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        config: redactSensitiveProviderOptions(providerOptions),
+        config: providerOptions,
         providerResponse: result?.raw,
         parsedResponse: result?.output,
         error: result?.error,
@@ -142,7 +102,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
       logger.error(
         dedent`[POST /providers/test] Error calling agent helper
           error: ${testAnalyzerResponse.statusText}
-          providerOptions: ${JSON.stringify(redactSensitiveProviderOptions(providerOptions))}`,
+          providerOptions: ${JSON.stringify(providerOptions)}`,
       );
       res.status(200).json({
         testResult: {
@@ -173,7 +133,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     logger.error(
       dedent`[POST /providers/test] Error calling agent helper
         error: ${errorMessage}
-        providerOptions: ${JSON.stringify(redactSensitiveProviderOptions(providerOptions))}`,
+        providerOptions: ${JSON.stringify(providerOptions)}`,
     );
     res.status(200).json({
       testResult: {
@@ -492,7 +452,7 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
     logger.error(
       dedent`[POST /providers/test-session] Error testing session
         error: ${errorMessage}
-        providerOptions: ${JSON.stringify(redactSensitiveProviderOptions(providerOptions))}`,
+        providerOptions: ${JSON.stringify(providerOptions)}`,
     );
     res.status(500).json({
       success: false,

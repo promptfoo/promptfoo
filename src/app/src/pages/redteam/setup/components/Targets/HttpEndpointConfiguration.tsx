@@ -10,6 +10,7 @@ import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
+import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -323,7 +324,34 @@ Content-Type: application/json
 
   const handleRequestBodyChange = (content: string) => {
     setRequestBody(content);
+
+    // Validate JSON if content is not empty
+    if (content.trim()) {
+      try {
+        JSON.parse(content);
+        setBodyError(null); // Clear error if JSON is valid
+      } catch {
+        setBodyError('Invalid JSON format');
+      }
+    } else {
+      setBodyError(null); // Clear error for empty content
+    }
+
     updateCustomTarget('body', content);
+  };
+
+  const handleFormatJson = () => {
+    if (requestBody.trim()) {
+      try {
+        const parsed = JSON.parse(requestBody);
+        const formatted = JSON.stringify(parsed, null, 2);
+        setRequestBody(formatted);
+        updateCustomTarget('body', formatted);
+        setBodyError(null);
+      } catch {
+        setBodyError('Cannot format: Invalid JSON');
+      }
+    }
   };
 
   const handleRawRequestChange = (value: string) => {
@@ -586,6 +614,30 @@ ${exampleRequest}`;
                 backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
               }}
             >
+              <IconButton
+                size="small"
+                onClick={handleFormatJson}
+                disabled={!requestBody.trim() || !!bodyError}
+                title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
+                sx={{
+                  position: 'absolute',
+                  top: 4,
+                  right: 4,
+                  zIndex: 1,
+                  backgroundColor:
+                    theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.05)'
+                      : 'rgba(0, 0, 0, 0.03)',
+                  '&:hover': {
+                    backgroundColor:
+                      theme.palette.mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.1)'
+                        : 'rgba(0, 0, 0, 0.06)',
+                  },
+                }}
+              >
+                <FormatAlignLeftIcon fontSize="small" />
+              </IconButton>
               <Editor
                 value={
                   typeof requestBody === 'object'
@@ -599,6 +651,7 @@ ${exampleRequest}`;
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
                   minHeight: '100px',
+                  paddingRight: '40px', // Add space for the format button
                 }}
               />
             </Box>
