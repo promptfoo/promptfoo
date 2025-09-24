@@ -2669,9 +2669,7 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
       const result = qwenHandler.params(config, prompt, stop, 'qwen.qwen3-coder-480b-a35b-v1:0');
 
-      expect(result.messages).toEqual([
-        { role: 'user', content: 'Write a Python function' }
-      ]);
+      expect(result.messages).toEqual([{ role: 'user', content: 'Write a Python function' }]);
       expect(result.max_tokens).toBe(2048);
       expect(result.temperature).toBe(0.7);
       expect(result.top_p).toBe(0.9);
@@ -2690,14 +2688,14 @@ describe('BEDROCK_MODEL.QWEN', () => {
               parameters: {
                 type: 'object',
                 properties: {
-                  expression: { type: 'string' }
+                  expression: { type: 'string' },
                 },
-                required: ['expression']
-              }
-            }
-          }
+                required: ['expression'],
+              },
+            },
+          },
         ],
-        tool_choice: 'auto' as const
+        tool_choice: 'auto' as const,
       };
       const prompt = 'Calculate 5 + 3';
 
@@ -2731,15 +2729,18 @@ describe('BEDROCK_MODEL.QWEN', () => {
         choices: [
           {
             message: {
-              content: 'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)'
-            }
-          }
-        ]
+              content:
+                'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)',
+            },
+          },
+        ],
       };
 
       const result = qwenHandler.output(config, responseJson);
 
-      expect(result).toBe('Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)');
+      expect(result).toBe(
+        'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)',
+      );
     });
 
     it('should handle tool call response', () => {
@@ -2754,13 +2755,13 @@ describe('BEDROCK_MODEL.QWEN', () => {
                   type: 'function',
                   function: {
                     name: 'calculate',
-                    arguments: '{"expression": "15 * 8 + 42"}'
-                  }
-                }
-              ]
-            }
-          }
-        ]
+                    arguments: '{"expression": "15 * 8 + 42"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
       };
 
       const result = qwenHandler.output(config, responseJson);
@@ -2775,10 +2776,10 @@ describe('BEDROCK_MODEL.QWEN', () => {
         choices: [
           {
             message: {
-              content: '<think>Let me think about this step by step...</think>The answer is 42'
-            }
-          }
-        ]
+              content: '<think>Let me think about this step by step...</think>The answer is 42',
+            },
+          },
+        ],
       };
 
       const result = qwenHandler.output(config, responseJson);
@@ -2792,10 +2793,10 @@ describe('BEDROCK_MODEL.QWEN', () => {
         choices: [
           {
             message: {
-              content: '<think>Let me think about this step by step...</think>The answer is 42'
-            }
-          }
-        ]
+              content: '<think>Let me think about this step by step...</think>The answer is 42',
+            },
+          },
+        ],
       };
 
       const result = qwenHandler.output(config, responseJson);
@@ -2809,11 +2810,13 @@ describe('BEDROCK_MODEL.QWEN', () => {
       const responseJson = {
         error: {
           message: 'Model not found',
-          code: 'ModelNotFoundException'
-        }
+          code: 'ModelNotFoundException',
+        },
       };
 
-      expect(() => qwenHandler.output(config, responseJson)).toThrow('Qwen API error: [object Object]');
+      expect(() => qwenHandler.output(config, responseJson)).toThrow(
+        'Qwen API error: [object Object]',
+      );
     });
   });
 
@@ -2823,8 +2826,8 @@ describe('BEDROCK_MODEL.QWEN', () => {
         usage: {
           prompt_tokens: 50,
           completion_tokens: 100,
-          total_tokens: 150
-        }
+          total_tokens: 150,
+        },
       };
 
       const result = qwenHandler.tokenUsage(responseJson, '');
@@ -2858,10 +2861,10 @@ describe('Qwen model mapping', () => {
       'qwen.qwen3-coder-480b-a35b-v1:0',
       'qwen.qwen3-coder-30b-a3b-v1:0',
       'qwen.qwen3-235b-a22b-2507-v1:0',
-      'qwen.qwen3-32b-v1:0'
+      'qwen.qwen3-32b-v1:0',
     ];
 
-    qwenModels.forEach(modelId => {
+    qwenModels.forEach((modelId) => {
       expect(AWS_BEDROCK_MODELS[modelId]).toBeDefined();
       expect(AWS_BEDROCK_MODELS[modelId]).toBe(BEDROCK_MODEL.QWEN);
     });
