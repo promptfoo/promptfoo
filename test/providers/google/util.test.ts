@@ -17,11 +17,8 @@ import type { Tool } from '../../../src/providers/google/types';
 jest.mock('google-auth-library');
 
 jest.mock('glob', () => ({
+  ...jest.requireActual('glob'),
   globSync: jest.fn().mockReturnValue([]),
-  hasMagic: jest.fn().mockImplementation((path: string) => {
-    // Simple implementation that detects common glob patterns
-    return /[*?[\]{}]/.test(path);
-  }),
 }));
 
 jest.mock('fs', () => ({

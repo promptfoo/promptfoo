@@ -48,11 +48,8 @@ import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index
 jest.mock('fs');
 
 jest.mock('glob', () => ({
+  ...jest.requireActual('glob'),
   globSync: jest.fn(),
-  hasMagic: jest.fn().mockImplementation((path: string) => {
-    // Simple implementation that detects common glob patterns
-    return /[*?[\]{}]/.test(path);
-  }),
 }));
 
 jest.mock('proxy-agent', () => ({
@@ -71,11 +68,8 @@ jest.mock('fs', () => ({
 }));
 
 jest.mock('glob', () => ({
+  ...jest.requireActual('glob'),
   globSync: jest.fn(),
-  hasMagic: jest.fn().mockImplementation((path: string) => {
-    // Simple implementation that detects common glob patterns
-    return /[*?[\]{}]/.test(path);
-  }),
 }));
 
 jest.mock('../../src/database', () => ({
