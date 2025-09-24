@@ -597,18 +597,24 @@ export default function Review({
                       <IconButton
                         size="small"
                         onClick={() => {
-                          let policyIdx = -1;
-                          const newPlugins = config.plugins.filter((p) => {
+                          // Find the index of the Nth policy plugin (matching this rendered item)
+                          let count = 0;
+                          const removeIdx = config.plugins.findIndex((p) => {
                             if (typeof p === 'object' && p.id === 'policy') {
-                              policyIdx += 1;
-                              // Remove only the Nth policy matching this rendered item
-                              if (policyIdx === index) {
-                                return false;
+                              if (count === index) {
+                                return true;
                               }
+                              count += 1;
                             }
-                            return true;
+                            return false;
                           });
-                          updateConfig('plugins', newPlugins);
+                          if (removeIdx !== -1) {
+                            const newPlugins = [
+                              ...config.plugins.slice(0, removeIdx),
+                              ...config.plugins.slice(removeIdx + 1),
+                            ];
+                            updateConfig('plugins', newPlugins);
+                          }
                         }}
                         sx={{
                           position: 'absolute',
