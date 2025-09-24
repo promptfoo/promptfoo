@@ -2,11 +2,11 @@
 
 description: Quick demo of the CometAPI provider answering a geography question
 
-providers:
-  - cometapi:chat:gpt-5-mini
-
 prompts:
   - What is the capital of France?
+
+providers:
+  - cometapi:chat:gpt-5-mini
 
 tests:
   - vars:

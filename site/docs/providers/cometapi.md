@@ -1,4 +1,12 @@
 ---
+title: "CometAPI"
+description: "Provider docum```bash
+export COMETAPI_KEY=<your_api_key>
+```
+
+If you don't have an API key yet, get one at [CometAPI console token](https://api.cometapi.com/console/token).
+
+## Provider Usagen for CometAPI integration"
 sidebar_label: CometAPI
 ---
 
@@ -133,6 +141,6 @@ Note: The CometAPI models list includes non-chat models. Promptfoo filters obvio
 
 ## Environment Variables
 
-| Variable       | Description                                                          |
-| -------------- | -------------------------------------------------------------------- |
-| `COMETAPI_KEY` | Your CometAPI key. Get one at https://api.cometapi.com/console/token |
+| Variable       | Description                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| `COMETAPI_KEY` | Your CometAPI key. Get one at [CometAPI console token](https://api.cometapi.com/console/token) |

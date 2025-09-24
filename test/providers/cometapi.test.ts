@@ -8,7 +8,15 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
-jest.mock('../../src/providers/openai');
+jest.mock('../../src/providers/openai/chat', () => ({
+  OpenAiChatCompletionProvider: jest.fn(),
+}));
+jest.mock('../../src/providers/openai/completion', () => ({
+  OpenAiCompletionProvider: jest.fn(),
+}));
+jest.mock('../../src/providers/openai/embedding', () => ({
+  OpenAiEmbeddingProvider: jest.fn(),
+}));
 jest.mock('../../src/cache');
 
 describe('createCometApiProvider', () => {
