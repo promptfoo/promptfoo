@@ -2,306 +2,300 @@
   "$ref": "#/definitions/PromptfooConfigSchema",
   "definitions": {
     "PromptfooConfigSchema": {
-      "$ref": "#/definitions/PromptfooConfigSchema",
-      "definitions": {
-        "PromptfooConfigSchema": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "tags": {
           "type": "object",
-          "properties": {
-            "description": {
-              "type": "string"
-            },
-            "tags": {
-              "type": "object",
-              "additionalProperties": {
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
                 "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "config": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "prompts": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "raw": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "config": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "vars": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "assert": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "threshold": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["type"],
+                  "additionalProperties": false
+                }
               }
             },
-            "providers": {
+            "additionalProperties": false
+          }
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "config": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              },
+              "tests": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": ["config", "tests"],
+            "additionalProperties": false
+          }
+        },
+        "redteam": {
+          "type": "object",
+          "properties": {
+            "plugins": {
               "type": "array",
               "items": {
                 "anyOf": [
                   {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "bias",
+                      "bias:age",
+                      "bias:disability",
+                      "bias:gender",
+                      "bias:race",
+                      "default",
+                      "harmful",
+                      "pii",
+                      "contracts",
+                      "cybercrime",
+                      "excessive-agency",
+                      "hallucination",
+                      "hijacking",
+                      "imitation",
+                      "jailbreak",
+                      "overreliance",
+                      "politics",
+                      "shell-injection",
+                      "sql-injection"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^file:\\/\\/.*\\.(js|ts)$"
                   },
                   {
                     "type": "object",
                     "properties": {
                       "id": {
-                        "type": "string"
-                      },
-                      "label": {
-                        "type": "string"
-                      },
-                      "config": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
-                    },
-                    "additionalProperties": false
-                  }
-                ]
-              }
-            },
-            "prompts": {
-              "type": "array",
-              "items": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "raw": {
-                        "type": "string"
-                      },
-                      "label": {
-                        "type": "string"
-                      },
-                      "config": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
-                    },
-                    "additionalProperties": false
-                  }
-                ]
-              }
-            },
-            "tests": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "vars": {
-                    "type": "object",
-                    "additionalProperties": {}
-                  },
-                  "assert": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "type": {
-                          "type": "string"
-                        },
-                        "value": {},
-                        "threshold": {
-                          "type": "number"
-                        }
-                      },
-                      "required": ["type"],
-                      "additionalProperties": false
-                    }
-                  }
-                },
-                "additionalProperties": false
-              }
-            },
-            "scenarios": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "description": {
-                    "type": "string"
-                  },
-                  "config": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": {}
-                    }
-                  },
-                  "tests": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": {}
-                    }
-                  }
-                },
-                "required": ["config", "tests"],
-                "additionalProperties": false
-              }
-            },
-            "redteam": {
-              "type": "object",
-              "properties": {
-                "plugins": {
-                  "type": "array",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "enum": [
-                          "bias",
-                          "bias:age",
-                          "bias:disability",
-                          "bias:gender",
-                          "bias:race",
-                          "default",
-                          "harmful",
-                          "pii",
-                          "contracts",
-                          "cybercrime",
-                          "excessive-agency",
-                          "hallucination",
-                          "hijacking",
-                          "imitation",
-                          "jailbreak",
-                          "overreliance",
-                          "politics",
-                          "shell-injection",
-                          "sql-injection"
-                        ]
-                      },
-                      {
-                        "type": "string",
-                        "pattern": "^file:\\/\\/.*\\.(js|ts)$"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "enum": [
-                                  "bias",
-                                  "bias:age",
-                                  "bias:disability",
-                                  "bias:gender",
-                                  "bias:race",
-                                  "default",
-                                  "harmful",
-                                  "pii",
-                                  "contracts",
-                                  "cybercrime",
-                                  "excessive-agency",
-                                  "hallucination",
-                                  "hijacking",
-                                  "imitation",
-                                  "jailbreak",
-                                  "overreliance",
-                                  "politics",
-                                  "shell-injection",
-                                  "sql-injection"
-                                ]
-                              },
-                              {
-                                "type": "string",
-                                "pattern": "^file:\\/\\/.*\\.(js|ts)$"
-                              }
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "bias",
+                              "bias:age",
+                              "bias:disability",
+                              "bias:gender",
+                              "bias:race",
+                              "default",
+                              "harmful",
+                              "pii",
+                              "contracts",
+                              "cybercrime",
+                              "excessive-agency",
+                              "hallucination",
+                              "hijacking",
+                              "imitation",
+                              "jailbreak",
+                              "overreliance",
+                              "politics",
+                              "shell-injection",
+                              "sql-injection"
                             ]
                           },
-                          "config": {
-                            "type": "object",
-                            "additionalProperties": {}
+                          {
+                            "type": "string",
+                            "pattern": "^file:\\/\\/.*\\.(js|ts)$"
                           }
-                        },
-                        "required": ["id"],
-                        "additionalProperties": false
-                      }
-                    ]
-                  }
-                },
-                "strategies": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "numTests": {
-                  "type": "number"
-                },
-                "purpose": {
-                  "type": "string"
-                }
-              },
-              "additionalProperties": false
-            },
-            "outputPath": {
-              "type": "string"
-            },
-            "writeLatestResults": {
-              "type": "boolean"
-            },
-            "sharing": {
-              "type": "boolean"
-            },
-            "defaultTest": {
-              "type": "object",
-              "properties": {
-                "vars": {
-                  "type": "object",
-                  "additionalProperties": {}
-                },
-                "assert": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "type": {
-                        "type": "string"
+                        ]
                       },
-                      "value": {}
+                      "config": {
+                        "type": "object",
+                        "additionalProperties": {}
+                      }
                     },
-                    "required": ["type"],
+                    "required": ["id"],
                     "additionalProperties": false
                   }
-                }
-              },
-              "additionalProperties": false
+                ]
+              }
             },
-            "nunjucksFilters": {
-              "type": "object",
-              "additionalProperties": {}
-            },
-            "env": {
-              "type": "object",
-              "additionalProperties": {
+            "strategies": {
+              "type": "array",
+              "items": {
                 "type": "string"
               }
             },
-            "evaluateOptions": {
-              "type": "object",
-              "properties": {
-                "maxConcurrency": {
-                  "type": "number"
-                },
-                "showProgressBar": {
-                  "type": "boolean"
-                },
-                "generateSuggestions": {
-                  "type": "boolean"
-                },
-                "repeat": {
-                  "type": "number"
-                }
-              },
-              "additionalProperties": false
+            "numTests": {
+              "type": "number"
             },
-            "commandLineOptions": {
+            "purpose": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "outputPath": {
+          "type": "string"
+        },
+        "writeLatestResults": {
+          "type": "boolean"
+        },
+        "sharing": {
+          "type": "boolean"
+        },
+        "defaultTest": {
+          "type": "object",
+          "properties": {
+            "vars": {
               "type": "object",
-              "properties": {
-                "cache": {
-                  "type": "boolean"
+              "additionalProperties": {}
+            },
+            "assert": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "value": {}
                 },
-                "delay": {
-                  "type": "number"
-                },
-                "verbose": {
-                  "type": "boolean"
-                }
-              },
-              "additionalProperties": false
+                "required": ["type"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "nunjucksFilters": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "evaluateOptions": {
+          "type": "object",
+          "properties": {
+            "maxConcurrency": {
+              "type": "number"
+            },
+            "showProgressBar": {
+              "type": "boolean"
+            },
+            "generateSuggestions": {
+              "type": "boolean"
+            },
+            "repeat": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "commandLineOptions": {
+          "type": "object",
+          "properties": {
+            "cache": {
+              "type": "boolean"
+            },
+            "delay": {
+              "type": "number"
+            },
+            "verbose": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false
         }
       },
-      "$schema": "http://json-schema.org/draft-07/schema#"
+      "additionalProperties": false
     }
   }
 }

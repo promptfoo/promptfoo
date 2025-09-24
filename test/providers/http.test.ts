@@ -2335,7 +2335,7 @@ describe('constructor validation', () => {
           headers: { 'Content-Type': 123 }, // Invalid header type
         },
       });
-    }).toThrow('Invalid input: expected string, received number');
+    }).toThrow(/Invalid input: expected string, received number/);
   });
 
   it('should require body or GET method', () => {

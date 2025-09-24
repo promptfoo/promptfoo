@@ -739,12 +739,12 @@ describe('Error message quality', () => {
       },
       {
         config: { plugins: [{ id: 'default' }], numTests: 'many' as any },
-        expectedError: /expected number|Invalid input/,
+        expectedError: /Expected number|Invalid input/,
         description: 'string instead of number for numTests',
       },
       {
         config: { plugins: ['default'], delay: 'slow' as any },
-        expectedError: /expected number|Invalid input/,
+        expectedError: /Expected number|Invalid input/,
         description: 'string instead of number for delay',
       },
     ];

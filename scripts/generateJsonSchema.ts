@@ -154,7 +154,7 @@ const jsonSchema = zodToJsonSchema(JsonSchemaConfigSchema, {
 // Create the structure expected by tests: $ref and definitions
 const schemaWithRef = {
   $ref: '#/definitions/PromptfooConfigSchema',
-  definitions: {
+  definitions: jsonSchema.definitions || {
     PromptfooConfigSchema: jsonSchema,
   },
 };
