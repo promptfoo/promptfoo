@@ -570,7 +570,18 @@ export default function Review({
                       }}
                     >
                       <Typography
+                        variant="subtitle2"
+                        sx={{
+                          fontWeight: 600,
+                          marginBottom: 0.5,
+                          paddingRight: '24px',
+                        }}
+                      >
+                        {policy.config.name || 'Custom Policy'}
+                      </Typography>
+                      <Typography
                         variant="body2"
+                        color="text.secondary"
                         sx={{
                           display: '-webkit-box',
                           WebkitLineClamp: 2,
