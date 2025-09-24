@@ -263,6 +263,7 @@
     "winston": "^3.17.0",
     "ws": "^8.18.3",
     "zod": "^4.1.11",
+    "zod-to-json-schema": "^3.24.6",
     "zod-validation-error": "^4.0.2"
   },
   "madge": {
