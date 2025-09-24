@@ -85,7 +85,6 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--no-table`                        | Do not output table in CLI                                                    |
 | `--no-write`                        | Do not write results to promptfoo directory                                   |
 | `--resume [evalId]`                 | Resume a paused/incomplete evaluation. If `evalId` is omitted, resumes latest |
-| `--retry-errors`                    | Retry all ERROR results from the latest evaluation                            |
 | `-o, --output <paths...>`           | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml)          |
 | `-p, --prompts <paths...>`          | Paths to prompt files (.txt)                                                  |
 | `--prompt-prefix <path>`            | Prefix prepended to every prompt                                              |
@@ -113,16 +112,6 @@ promptfoo eval --resume <evalId>   # resumes a specific evaluation
 ```
 
 - On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
-
-### Retry Errors
-
-```sh
-promptfoo eval --retry-errors      # retries all ERROR results from the latest evaluation
-```
-
-- The retry errors feature automatically finds ERROR results from the latest evaluation, removes them from the database, and re-runs only those test cases. This is useful when evaluations fail due to temporary network issues, rate limits, or API errors.
-- Cannot be used together with `--resume` or `--no-write` flags.
-- Uses the original evaluation's configuration and runtime options to ensure consistency.
 
 ## `promptfoo init [directory]`
 
