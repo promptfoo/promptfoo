@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { authCommand } from '../../src/commands/auth';
-import { isCI } from '../../src/envars';
+import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
@@ -87,11 +87,9 @@ describe('auth command', () => {
     });
 
     it('should prompt for browser opening when no API key is provided in interactive environment', async () => {
-      // Mock interactive environment (not CI and TTY available)
-      jest.mocked(isCI).mockReturnValue(false);
+      // Mock interactive environment
+      jest.mocked(isNonInteractive).mockReturnValue(false);
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
-      Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
-      Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -108,36 +106,10 @@ describe('auth command', () => {
       expect(telemetry.record).toHaveBeenCalledTimes(1);
     });
 
-    it('should exit with error when no API key is provided in CI environment', async () => {
-      // Mock CI environment
-      jest.mocked(isCI).mockReturnValue(true);
+    it('should exit with error when no API key is provided in non-interactive environment', async () => {
+      // Mock non-interactive environment (CI, cron, SSH without TTY, etc.)
+      jest.mocked(isNonInteractive).mockReturnValue(true);
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
-
-      const loginCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test']);
-
-      expect(logger.error).toHaveBeenCalledWith(
-        'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
-      );
-      expect(logger.info).toHaveBeenCalledWith('Manual login URL: https://www.promptfoo.app/');
-      expect(logger.info).toHaveBeenCalledWith(
-        'After login, get your API token at: https://www.promptfoo.app/welcome',
-      );
-      expect(process.exitCode).toBe(1);
-      expect(openAuthBrowser).not.toHaveBeenCalled();
-
-      expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'auth login' });
-      expect(telemetry.record).toHaveBeenCalledTimes(1);
-    });
-
-    it('should exit with error when no API key is provided in non-TTY environment', async () => {
-      // Mock non-TTY environment (not CI but no TTY)
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
-      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
-      Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -159,10 +131,8 @@ describe('auth command', () => {
     });
 
     it('should use custom host for browser opening when provided in interactive environment', async () => {
-      // Mock interactive environment (not CI and TTY available)
-      jest.mocked(isCI).mockReturnValue(false);
-      Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
-      Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+      // Mock interactive environment
+      jest.mocked(isNonInteractive).mockReturnValue(false);
       const customHost = 'https://custom.promptfoo.com';
 
       const loginCmd = program.commands

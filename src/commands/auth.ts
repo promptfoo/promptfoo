@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { isCI } from '../envars';
+import { isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -51,7 +51,7 @@ export function authCommand(program: Command) {
           const authUrl = new URL(appUrl);
           const welcomeUrl = new URL('/welcome', appUrl);
 
-          if (isCI() || !process.stdin.isTTY || !process.stdout.isTTY) {
+          if (isNonInteractive()) {
             // CI Environment or non-interactive: Exit with error but show manual URLs
             logger.error(
               'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
