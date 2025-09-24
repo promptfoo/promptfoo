@@ -370,39 +370,28 @@ export default function Hacktoberfest(): JSX.Element {
             </div>
 
             <div className={styles.rewardsGrid}>
+
               <div className={styles.rewardTier}>
                 <div className={styles.tierHeader}>
-                  <h3>🥉 Bronze tier (25+ points)</h3>
-                  <p>Stickers & digital recognition</p>
+                  <h3>Award tier (1 pull request)</h3>
+                  <p>Apparel!</p>
                 </div>
                 <div className={styles.rewardItems}>
-                  <div className={styles.rewardItem}>Promptfoo stickers pack</div>
-                  <div className={styles.rewardItem}>Digital certificate</div>
+                  <div className={styles.rewardItem}>Promptfoo Hacktoberfest 2025 t-shirt</div>
                   <div className={styles.rewardItem}>GitHub profile recognition</div>
                 </div>
               </div>
 
               <div className={styles.rewardTier}>
                 <div className={styles.tierHeader}>
-                  <h3>🥈 Silver tier (50+ points)</h3>
-                  <p>Apparel & accessories</p>
-                </div>
-                <div className={styles.rewardItems}>
-                  <div className={styles.rewardItem}>Everything in bronze</div>
-                  <div className={styles.rewardItem}>Promptfoo Hacktoberfest 2025 t-shirt</div>
-                </div>
-              </div>
-
-              <div className={styles.rewardTier}>
-                <div className={styles.tierHeader}>
-                  <h3>🥇 Gold tier (75+ points)</h3>
+                  <h3>MVP tier (2+ pull requests)</h3>
                   <p>Merch & recognition</p>
                 </div>
                 <div className={styles.rewardItems}>
-                  <div className={styles.rewardItem}>Everything in bronze</div>
                   <div className={styles.rewardItem}>
                     Choice of Promptfoo Hacktoberfest t-shirt OR hoodie
                   </div>
+                  <div className={styles.rewardItem}>Digital certificate of completion</div>
                   <div className={styles.rewardItem}>Shoutout on LinkedIn & social media</div>
                 </div>
               </div>
@@ -410,8 +399,7 @@ export default function Hacktoberfest(): JSX.Element {
 
             <div className={styles.rewardsNote}>
               <p>
-                <strong>How it works:</strong> Submit your PRs during October 2025, and we'll track
-                your points automatically. Redeem rewards from our{' '}
+                <strong>How it works:</strong> Submit your PRs during October 2025, and we'll tally your PRs at the end of the month. Redeem rewards from our{' '}
                 <Link
                   to="https://store.promptfoo.dev"
                   style={{ color: '#b32e2e', fontWeight: 'bold' }}
