@@ -117,14 +117,14 @@ const TestTargetConfiguration = ({
     if (testingTarget) {
       return 'Test is currently in progress';
     }
-    if (!selectedTarget.config.url && !selectedTarget.config.request) {
+    if (!selectedTarget.config?.url && !selectedTarget.config?.request) {
       return 'Please configure either URL or request settings above';
     }
     return '';
   };
 
   const isButtonDisabled =
-    testingTarget || (!selectedTarget.config.url && !selectedTarget.config.request);
+    testingTarget || (!selectedTarget.config?.url && !selectedTarget.config?.request);
   const tooltipText = getTestButtonTooltip();
 
   return (
@@ -157,7 +157,7 @@ const TestTargetConfiguration = ({
         </Tooltip>
       </Box>
 
-      {!selectedTarget.config.url && !selectedTarget.config.request && (
+      {!selectedTarget.config?.url && !selectedTarget.config?.request && (
         <Alert severity="info">
           Please configure the HTTP endpoint above and click "Test Target" to proceed.
         </Alert>
@@ -211,7 +211,7 @@ const TestTargetConfiguration = ({
           )}
 
           {/* Request Details Accordion */}
-          {(selectedTarget.config.url || selectedTarget.config.request) && (
+          {(selectedTarget.config?.url || selectedTarget.config?.request) && (
             <Accordion
               sx={{
                 mt: 2,

@@ -231,7 +231,8 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
 
       const hasErrors = errors.length > 0;
       if (setError) {
-        setError(hasErrors ? errors.join(', ') : null);
+        const stringErrors = errors.filter((e): e is string => typeof e === 'string');
+        setError(hasErrors ? stringErrors.join(', ') || 'Validation failed' : null);
       }
       if (onValidate) {
         onValidate(!hasErrors);

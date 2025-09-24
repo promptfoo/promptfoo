@@ -636,7 +636,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             fullWidth
             label="Signature Validity (ms)"
             type="number"
-            value={selectedTarget.config.signatureAuth?.signatureValidityMs || '300000'}
+            value={selectedTarget.config.signatureAuth?.signatureValidityMs ?? '300000'}
             onChange={(e) =>
               updateCustomTarget('signatureAuth', {
                 ...selectedTarget.config.signatureAuth,

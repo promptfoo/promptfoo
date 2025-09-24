@@ -56,10 +56,15 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   }, [selectedTarget, updateConfig]);
 
   const handleProviderChange = (provider: ProviderOptions) => {
-    setSelectedTarget(provider);
-    // Reset test states when provider changes
-    setIsTargetTested(false);
-    setIsSessionTested(false);
+    setSelectedTarget((prev) => {
+      if (prev.id !== provider.id) {
+        // Reset test states when provider changes
+        setIsTargetTested(false);
+        setIsSessionTested(false);
+        return provider;
+      }
+      return prev;
+    });
     recordEvent('feature_used', { feature: 'redteam_config_target_changed', target: provider.id });
   };
 

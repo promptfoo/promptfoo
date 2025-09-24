@@ -641,7 +641,6 @@ ${exampleRequest}`;
             onValueChange={(code) => updateCustomTarget('transformResponse', code)}
             highlight={highlightJS}
             padding={10}
-            minLength={1000}
             placeholder={dedent`Optional: Transform the API response before using it. Format as either:
 
                         1. A JavaScript object path: \`json.choices[0].message.content\`
