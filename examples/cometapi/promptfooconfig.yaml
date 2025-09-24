@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Quick demo of the CometAPI provider answering a geography question
+
+providers:
+  - cometapi:chat:gpt-5-mini
+
+prompts:
+  - What is the capital of France?
+
+tests:
+  - vars:
+      calculation: 25 * 4 + 10
+  - vars:
+      calculation: (8 + 2) * 5

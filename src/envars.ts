@@ -313,6 +313,9 @@ type EnvVars = {
 
   // xAI
   XAI_API_KEY?: string;
+
+  // CometAPI
+  COMETAPI_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

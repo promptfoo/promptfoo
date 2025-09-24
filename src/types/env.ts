@@ -4,6 +4,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AI21_API_BASE_URL: z.string().optional(),
   AI21_API_KEY: z.string().optional(),
   AIML_API_KEY: z.string().optional(),
+  COMETAPI_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_BASE_URL: z.string().optional(),
   AWS_BEDROCK_REGION: z.string().optional(),

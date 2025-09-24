@@ -353,6 +353,9 @@
                             },
                             "PROMPTFOO_EVAL_TIMEOUT_MS": {
                               "type": "string"
+                            },
+                            "COMETAPI_KEY": {
+                              "type": "string"
                             }
                           },
                           "additionalProperties": false
