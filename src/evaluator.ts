@@ -630,7 +630,9 @@ export function generateVarCombinations(
 
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
-        throw new Error(`No files found for variable ${key} at path ${filePath} in directory ${basePath || process.cwd()}`);
+        throw new Error(
+          `No files found for variable ${key} at path ${filePath} in directory ${basePath || process.cwd()}`,
+        );
       }
     } else {
       values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
