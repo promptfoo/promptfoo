@@ -283,7 +283,13 @@ const TestSection: React.FC<TestSectionProps> = ({
                               Response Headers:
                             </Typography>
                             <Box sx={{ mb: 2, maxHeight: '200px', overflow: 'auto' }}>
-                              <pre style={{ margin: '4px 0', fontSize: '12px' }}>
+                              <pre
+                                style={{
+                                  margin: '4px 0',
+                                  fontSize: '12px',
+                                  overflowWrap: 'anywhere',
+                                }}
+                              >
                                 {JSON.stringify(
                                   testResult.providerResponse.metadata.headers,
                                   null,
@@ -303,7 +309,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                             margin: '4px 0',
                             fontSize: '12px',
                             whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
+                            overflowWrap: 'anywhere',
                           }}
                         >
                           {typeof testResult.providerResponse?.raw === 'string'
@@ -321,7 +327,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                             margin: '4px 0',
                             fontSize: '12px',
                             whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
+                            overflowWrap: 'anywhere',
                           }}
                         >
                           {typeof testResult.providerResponse?.output === 'string'
@@ -348,9 +354,17 @@ const TestSection: React.FC<TestSectionProps> = ({
                       )}
                     </>
                   ) : (
-                    <Typography variant="caption" color="error">
-                      {testResult.providerResponse?.error || 'No response from provider'}
-                    </Typography>
+                    <Box sx={{ maxHeight: '200px', overflow: 'auto' }}>
+                      <Typography
+                        variant="caption"
+                        color="error"
+                        sx={{
+                          overflowWrap: 'anywhere',
+                        }}
+                      >
+                        {testResult.providerResponse?.error || 'No response from provider'}
+                      </Typography>
+                    </Box>
                   )}
                 </Paper>
               </Box>
