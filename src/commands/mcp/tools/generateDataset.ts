@@ -30,7 +30,8 @@ export function registerGenerateDatasetTool(server: McpServer) {
         ),
 
       numSamples: z
-        .number().int()
+        .number()
+        .int()
         .min(1)
         .max(100)
         .default(10)

@@ -817,7 +817,7 @@ export const TestSuiteSchema = z.object({
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
-        error: 'defaultTest string must start with file://',
+        message: 'defaultTest string must start with file://',
       }),
       TestCaseSchema.omit({ description: true }),
     ])
@@ -838,7 +838,7 @@ export const TestSuiteSchema = z.object({
       z
         .string()
         .refine((value) => value.startsWith('file://'), {
-          error: 'Extension must start with file://',
+          message: 'Extension must start with file://',
         })
         .refine(
           (value) => {
@@ -846,7 +846,7 @@ export const TestSuiteSchema = z.object({
             return parts.length === 3 && parts.every((part) => part.trim() !== '');
           },
           {
-            error: 'Extension must be of the form file://path/to/file.py:function_name',
+            message: 'Extension must be of the form file://path/to/file.py:function_name',
           },
         )
         .refine(
@@ -858,7 +858,7 @@ export const TestSuiteSchema = z.object({
             );
           },
           {
-            error:
+            message:
               'Extension must be a python (.py) or javascript (.js, .ts, .mjs, .cjs, etc.) file followed by a colon and function name',
           },
         ),
@@ -954,7 +954,7 @@ export const TestSuiteConfigSchema = z.object({
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
-        error: 'defaultTest string must start with file://',
+        message: 'defaultTest string must start with file://',
       }),
       TestCaseSchema.omit({ description: true }),
     ])
