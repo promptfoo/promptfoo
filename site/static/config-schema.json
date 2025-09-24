@@ -69,9 +69,6 @@
                             "AIML_API_KEY": {
                               "type": "string"
                             },
-                            "COMETAPI_KEY": {
-                              "type": "string"
-                            },
                             "ANTHROPIC_API_KEY": {
                               "type": "string"
                             },
@@ -139,6 +136,9 @@
                               "type": "string"
                             },
                             "CLOUDFLARE_API_KEY": {
+                              "type": "string"
+                            },
+                            "COMETAPI_KEY": {
                               "type": "string"
                             },
                             "COHERE_API_KEY": {

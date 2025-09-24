@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../../src/cache';
 import {
   clearCometApiModelsCache,
+  CometApiImageProvider,
   createCometApiProvider,
   fetchCometApiModels,
 } from '../../src/providers/cometapi';
@@ -42,10 +43,31 @@ describe('createCometApiProvider', () => {
     expect(OpenAiEmbeddingProvider).toHaveBeenCalledWith('model-name', expect.any(Object));
   });
 
+  it('creates image provider when type is image', () => {
+    const provider = createCometApiProvider('cometapi:image:dall-e-3');
+    expect(provider).toBeInstanceOf(CometApiImageProvider);
+  });
+
+  it('works with any user-specified model name', () => {
+    const provider1 = createCometApiProvider('cometapi:chat:my-custom-model');
+    expect(provider1).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'my-custom-model',
+      expect.any(Object),
+    );
+
+    const provider2 = createCometApiProvider('cometapi:image:any-image-model');
+    expect(provider2).toBeInstanceOf(CometApiImageProvider);
+
+    const provider3 = createCometApiProvider('cometapi:embedding:custom-embeddings');
+    expect(provider3).toBeInstanceOf(OpenAiEmbeddingProvider);
+    expect(OpenAiEmbeddingProvider).toHaveBeenCalledWith('custom-embeddings', expect.any(Object));
+  });
+
   it('defaults to chat provider when no type specified', () => {
-    const provider = createCometApiProvider('cometapi:model-name');
+    const provider = createCometApiProvider('cometapi:any-model-name');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('model-name', expect.any(Object));
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('any-model-name', expect.any(Object));
   });
 });
 
@@ -55,9 +77,18 @@ describe('fetchCometApiModels', () => {
     clearCometApiModelsCache();
   });
 
-  it('fetches models from endpoint with auth header when provided', async () => {
+  it('fetches all models from endpoint without filtering', async () => {
     jest.mocked(fetchWithCache).mockResolvedValue({
-      data: { data: [{ id: 'chatgpt-4o-latest' }, { id: 'deepseek-v3' }, { id: 'sdxl' }] },
+      data: {
+        data: [
+          { id: 'gpt-4o' },
+          { id: 'claude-3-5-sonnet' },
+          { id: 'dall-e-3' },
+          { id: 'text-embedding-3-small' },
+          { id: 'whisper-1' }, // Audio model - now included
+          { id: 'custom-user-model' }, // User's custom model
+        ],
+      },
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -70,8 +101,15 @@ describe('fetchCometApiModels', () => {
       { headers: { Accept: 'application/json', Authorization: 'Bearer sk-test' } },
       expect.any(Number),
     );
-    // sdxl filtered out by ignore patterns
-    expect(models).toEqual([{ id: 'chatgpt-4o-latest' }, { id: 'deepseek-v3' }]);
+    // All models should be included - no filtering based on model names
+    expect(models).toEqual([
+      { id: 'gpt-4o' },
+      { id: 'claude-3-5-sonnet' },
+      { id: 'dall-e-3' },
+      { id: 'text-embedding-3-small' },
+      { id: 'whisper-1' },
+      { id: 'custom-user-model' },
+    ]);
   });
 
   it('uses cache on subsequent calls', async () => {

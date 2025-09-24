@@ -1,12 +1,6 @@
 ---
-title: "CometAPI"
-description: "Provider docum```bash
-export COMETAPI_KEY=<your_api_key>
-```
-
-If you don't have an API key yet, get one at [CometAPI console token](https://api.cometapi.com/console/token).
-
-## Provider Usagen for CometAPI integration"
+title: CometAPI
+description: Use 500+ AI models from multiple providers through CometAPI's unified OpenAI-compatible interface
 sidebar_label: CometAPI
 ---
 
@@ -14,55 +8,19 @@ sidebar_label: CometAPI
 
 The `cometapi` provider lets you use [CometAPI](https://www.cometapi.com/?utm_source=promptfoo&utm_campaign=integration&utm_medium=integration&utm_content=integration) via OpenAI-compatible endpoints. It supports hundreds of models across vendors.
 
-## Quick Start
-
-- Run with the included example config (from this repo root):
-
-```bash
-export COMETAPI_KEY=<your_api_key>
-npm run local -- eval -c examples/cometapi/promptfooconfig.yaml
-```
-
-- Or run a one-off prompt against a CometAPI model:
-
-```bash
-export COMETAPI_KEY=<your_api_key>
-npm run local -- eval --prompts "Say hello in one sentence" -r cometapi:chat:gpt-5-mini
-```
-
-Note: `init --example <name>` downloads from the upstream promptfoo/promptfoo repo. If the `cometapi` example isn’t published yet, you’ll see “Not Found.”
-
-### Alternative: Using the compiled build
-
-If you prefer to build first, you can use the compiled output directly:
-
-```bash
-export COMETAPI_KEY=<your_api_key>
-npm run build
-node dist/src/main.js eval --prompts "Say hello in one sentence" -r cometapi:chat:chatgpt-4o-latest
-```
-
-Or run with the bundled example config:
-
-```bash
-export COMETAPI_KEY=<your_api_key>
-npm run build
-node dist/src/main.js eval -c examples/cometapi/promptfooconfig.yaml
-```
-
 ## Setup
 
-Set your API key as an environment variable:
+First, set the `COMETAPI_KEY` environment variable with your CometAPI API key:
 
 ```bash
-export COMETAPI_KEY=<your_api_key>
+export COMETAPI_KEY=your_api_key_here
 ```
 
-If you don’t have an API key yet, get one at 👉 https://api.cometapi.com/console/token
+You can obtain an API key from the [CometAPI console](https://api.cometapi.com/console/token).
 
-## Provider Usage
+## Configuration
 
-The syntax follows:
+The provider uses the following syntax:
 
 ```yaml
 providers:
@@ -71,73 +29,151 @@ providers:
 
 Where `<type>` can be:
 
-- `chat`
-- `completion`
-- `embedding`
+- `chat` - For chat completions (text, vision, multimodal)
+- `completion` - For text completions
+- `embedding` - For text embeddings
+- `image` - For image generation (DALL-E, Flux models)
 
-You can also use `cometapi:<model>` to default to chat-completion mode.
+You can also use `cometapi:<model>` which defaults to chat mode.
 
-### Example
+### Examples
+
+**Chat Models (default):**
 
 ```yaml
 providers:
-  - cometapi:chat:chatgpt-4o-latest
-  - cometapi:completion:deepseek-chat
-  - cometapi:embedding:text-embedding-3-small
+  - cometapi:chat:gpt-5-mini
+  - cometapi:chat:claude-3-5-sonnet-20241022
+  - cometapi:chat:your-favorite-model
+  # Or use default chat mode
+  - cometapi:gpt-5-mini
 ```
 
-All standard OpenAI-style parameters are supported, such as:
+**Image Generation Models:**
 
 ```yaml
-temperature: 0.7
-max_tokens: 512
+providers:
+  - cometapi:image:dall-e-3
+  - cometapi:image:flux-schnell
+  - cometapi:image:any-image-model
 ```
 
-## Command-line Examples
+**Text Completion Models:**
 
-Run a quick one-off prompt with a CometAPI model:
-
-```bash
-export COMETAPI_KEY=your_api_key_here
-npx promptfoo@latest eval --prompts <(printf "Say hello in one sentence\n") -r cometapi:chat:chatgpt-4o-latest
+```yaml
+providers:
+  - cometapi:completion:deepseek-chat
+  - cometapi:completion:any-completion-model
 ```
 
-Compare several CometAPI models side-by-side:
+**Embedding Models:**
 
-```bash
-npx promptfoo@latest eval --prompts <(printf "Summarize the following text: {{text}}\n") \
-  --var text="Large language models are powerful tools for..." \
-  -r cometapi:chat:gpt-5-mini cometapi:chat:claude-sonnet-4-20250514 cometapi:chat:gemini-2.5-flash
+```yaml
+providers:
+  - cometapi:embedding:text-embedding-3-small
+  - cometapi:embedding:any-embedding-model
 ```
 
-Tune parameters inline for a provider:
+All standard OpenAI parameters are supported:
 
-```bash
-npx promptfoo@latest eval --prompts <(printf "Write a haiku about databases\n") \
-  -r cometapi:chat:gpt-5-mini \
-  --providers.0.config.temperature=0.3 \
-  --providers.0.config.max_tokens=200
+```yaml
+providers:
+  - id: cometapi:chat:gpt-5-mini
+    config:
+      temperature: 0.7
+      max_tokens: 512
+  - id: cometapi:image:dall-e-3
+    config:
+      n: 1
+      size: '1024x1024'
+      quality: 'standard'
 ```
 
-Use the included example config:
+## Examples
+
+You can run the included example configuration:
 
 ```bash
-npx promptfoo@latest eval -c examples/cometapi/promptfooconfig.yaml
+npx promptfoo@latest init --example cometapi
+```
+
+### Command Line Usage
+
+**Text Generation:**
+
+```bash
+npx promptfoo@latest eval --prompts "Write a haiku about AI" -r cometapi:chat:gpt-5-mini
+```
+
+**Image Generation:**
+
+```bash
+npx promptfoo@latest eval --prompts "A futuristic robot in a garden" -r cometapi:image:dall-e-3
+```
+
+**Vision/Multimodal:**
+
+```bash
+npx promptfoo@latest eval --prompts "Describe what's in this image: {{image_url}}" --vars image_url="https://example.com/image.jpg" -r cometapi:chat:gpt-4o
+```
+
+### Configuration Examples
+
+**Image Generation with Custom Parameters:**
+
+```yaml
+providers:
+  - id: cometapi:image:dall-e-3
+    config:
+      size: '1792x1024'
+      quality: 'hd'
+      style: 'vivid'
+      n: 1
+
+prompts:
+  - 'A {{style}} painting of {{subject}}'
+
+tests:
+  - vars:
+      style: surreal
+      subject: floating islands in space
+```
+
+**Vision Model Configuration:**
+
+```yaml
+providers:
+  - id: cometapi:chat:gpt-4o
+    config:
+      max_tokens: 1000
+      temperature: 0.3
+
+prompts:
+  - file://./vision-prompt.yaml
+
+tests:
+  - vars:
+      image_url: 'https://example.com/chart.png'
+      question: 'What insights can you draw from this data?'
 ```
 
 ## Available Models
 
-Fetch the list of available models:
-
-### Method 1: Using curl
+CometAPI supports 500+ models from multiple providers. You can view available models using:
 
 ```bash
 curl -H "Authorization: Bearer $COMETAPI_KEY" https://api.cometapi.com/v1/models
 ```
 
-### Method 2: Accessing via the [CometAPI Pricing Page](https://api.cometapi.com/pricing)
+Or browse models on the [CometAPI pricing page](https://api.cometapi.com/pricing).
 
-Note: The CometAPI models list includes non-chat models. Promptfoo filters obvious non-chat types using ignore patterns to make selection easier.
+**Using Any Model:** Simply specify the model name with the appropriate type prefix:
+
+- `cometapi:chat:any-model-name` for text/chat models
+- `cometapi:image:any-image-model` for image generation
+- `cometapi:embedding:any-embedding-model` for embeddings
+- `cometapi:completion:any-completion-model` for text completions
+- `cometapi:any-model-name` (defaults to chat mode)
 
 ## Environment Variables
 

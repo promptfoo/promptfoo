@@ -4,53 +4,18 @@ import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { OpenAiImageProvider } from './openai/image';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { EnvOverrides } from '../types/env';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
 
 export interface CometApiModel {
   id: string;
 }
 
-const COMETAPI_IGNORE_PATTERNS: string[] = [
-  // Image models
-  'dall-e',
-  'dalle',
-  'midjourney',
-  'mj_',
-  'stable-diffusion',
-  'sd-',
-  'flux-',
-  'playground-v',
-  'ideogram',
-  'recraft-',
-  'black-forest-labs',
-  '/recraft-v3',
-  'recraftv3',
-  'stability-ai/',
-  'sdxl',
-  // Audio models
-  'suno_',
-  'tts',
-  'whisper',
-  // Video models
-  'runway',
-  'luma_',
-  'luma-',
-  'veo',
-  'kling_',
-  'minimax_video',
-  'hunyuan-t1',
-  // Utility models
-  'embedding',
-  'search-gpts',
-  'files_retrieve',
-  'moderation',
-  // deepl-related models
-  'deepl-',
-];
+// Note: We no longer filter models - users specify intent via provider syntax like :chat:, :image:, :embedding:
 
 let modelCache: CometApiModel[] | null = null;
 
@@ -79,22 +44,49 @@ export async function fetchCometApiModels(env?: EnvOverrides): Promise<CometApiM
     const raw = data?.data || data?.models || data;
     let models: CometApiModel[] = [];
     if (Array.isArray(raw)) {
-      models = raw.map((m: any) => ({ id: m.id || m.model || m.name || m }));
+      models = raw.map((m: any) => ({
+        id: m.id || m.model || m.name || (typeof m === 'string' ? m : ''),
+      }));
     }
 
-    // Filter out non-chat models using ignore patterns
-    const filtered = models.filter((m) => {
-      const id = (m.id || '').toLowerCase();
-      return !COMETAPI_IGNORE_PATTERNS.some((pat) => id.includes(pat));
-    });
-
-    modelCache = filtered;
+    // Return all models - let users specify their intent with :chat:, :image:, :embedding: prefixes
+    modelCache = models;
   } catch (err) {
     logger.warn(`Failed to fetch cometapi models: ${String(err)}`);
     modelCache = [];
   }
 
   return modelCache;
+}
+
+/**
+ * CometAPI Image Provider - extends OpenAI Image Provider for CometAPI's image generation models
+ */
+export class CometApiImageProvider extends OpenAiImageProvider {
+  constructor(
+    modelName: string,
+    options: { config?: OpenAiSharedOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(modelName, {
+      ...options,
+      config: {
+        ...options.config,
+        apiKeyEnvar: 'COMETAPI_KEY',
+        apiBaseUrl: 'https://api.cometapi.com/v1',
+      },
+    });
+  }
+
+  getApiKey(): string | undefined {
+    if (this.config?.apiKey) {
+      return this.config.apiKey;
+    }
+    return getEnvString('COMETAPI_KEY');
+  }
+
+  getApiUrlDefault(): string {
+    return 'https://api.cometapi.com/v1';
+  }
 }
 
 /**
@@ -123,6 +115,8 @@ export function createCometApiProvider(
     return new OpenAiCompletionProvider(modelName, openaiOptions);
   } else if (type === 'embedding' || type === 'embeddings') {
     return new OpenAiEmbeddingProvider(modelName, openaiOptions);
+  } else if (type === 'image') {
+    return new CometApiImageProvider(modelName, openaiOptions);
   }
 
   // Default to chat provider when no type is specified

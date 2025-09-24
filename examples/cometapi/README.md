@@ -28,7 +28,7 @@ npx promptfoo@latest init --example cometapi
 This example demonstrates:
 
 - Basic usage of CometAPI provider with chat models
-- Simple geography question evaluation
+- Geography questions evaluation
 - How to configure CometAPI in your promptfoo setup
 
-The example uses the `gpt-5-mini` model to answer a basic geography question about France's capital.
+The example uses the `gpt-5-mini` model to answer geography questions about different countries' capitals.
