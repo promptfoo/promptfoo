@@ -53,7 +53,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
         }}
       >
         <Editor
-          value={selectedTarget.config.transformRequest || defaultRequestTransform || ''}
+          value={selectedTarget.config?.transformRequest || defaultRequestTransform || ''}
           onValueChange={(code) => updateCustomTarget('transformRequest', code)}
           highlight={highlightJS}
           padding={10}

@@ -111,7 +111,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           Does your system maintain conversation state?
         </Typography>
 
-        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           This determines whether your application remembers context from previous messages in a
           conversation.
         </Typography>
@@ -130,7 +130,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               label={
                 <Box>
                   <Typography variant="body1">Yes - my system is stateful</Typography>
-                  <Typography variant="caption" color="textSecondary">
+                  <Typography variant="caption" color="text.secondary">
                     The system maintains conversation history and context across messages
                   </Typography>
                 </Box>
@@ -142,7 +142,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               label={
                 <Box>
                   <Typography variant="body1">No - my system is not stateful</Typography>
-                  <Typography variant="caption" color="textSecondary">
+                  <Typography variant="caption" color="text.secondary">
                     The full conversation history must be sent with every request
                   </Typography>
                 </Box>
@@ -189,7 +189,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               label={
                 <Box>
                   <Typography variant="body1">Server-generated Session ID</Typography>
-                  <Typography variant="caption" color="textSecondary">
+                  <Typography variant="caption" color="text.secondary">
                     Your server creates and returns session IDs (e.g., in cookies, headers, or
                     response body)
                   </Typography>
@@ -202,7 +202,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               label={
                 <Box>
                   <Typography variant="body1">Client-generated Session ID</Typography>
-                  <Typography variant="caption" color="textSecondary">
+                  <Typography variant="caption" color="text.secondary">
                     The client generates session IDs and includes them in requests
                   </Typography>
                 </Box>
@@ -219,7 +219,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
             <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
               Session ID Extraction
             </Typography>
-            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Specify how to extract the session ID from the server response. Leave empty if the
               session ID is automatically handled (e.g., via cookies).
             </Typography>
@@ -291,7 +291,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           Test Session Configuration
         </Typography>
 
-        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Run a quick test to verify that your session configuration is working correctly. This will
           send two requests: first to establish a session with test data, then a second request to
           verify the session persists.
@@ -317,13 +317,16 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           <Alert
             severity={testResult.success ? 'success' : 'error'}
             icon={testResult.success ? <CheckCircleIcon /> : <ErrorIcon />}
-            sx={{ mt: 2, maxWidth: '60%' }}
+            sx={{ mt: 2 }}
           >
             <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
               {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
             </Typography>
 
-            <Typography variant="body2" sx={{ mb: testResult.details ? 2 : 0 }}>
+            <Typography
+              variant="body2"
+              sx={{ mb: testResult.details ? 2 : 0, overflowWrap: 'anywhere' }}
+            >
               {testResult.message}
             </Typography>
 
@@ -418,7 +421,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                         borderRadius: 1,
                       }}
                     >
-                      <Typography variant="caption" color="textSecondary">
+                      <Typography variant="caption" color="text.secondary">
                         <strong>Session ID used:</strong> {testResult.details.sessionId || 'None'}
                       </Typography>
                     </Box>
@@ -431,7 +434,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
       </Paper>
 
       <Box>
-        <Typography variant="caption" color="textSecondary">
+        <Typography variant="caption" color="text.secondary">
           For more information, see the{' '}
           <a
             href="https://www.promptfoo.dev/docs/providers/http/#session-management"
