@@ -1436,5 +1436,193 @@ describe('FiltersForm', () => {
       const valueInput = screen.getByRole('textbox', { name: /Value/i });
       expect(valueInput).toBeInTheDocument();
     });
+
+    it('should reset operator to "equals" and show value input when changing filter type from metadata with "exists" operator selected', async () => {
+      const initialFilter: ResultsFilter = {
+        id: 'filter-1',
+        type: 'metadata',
+        operator: 'exists',
+        value: '',
+        field: 'testField',
+        sortIndex: 0,
+        logicOperator: 'and',
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: { 'filter-1': initialFilter },
+          options: {
+            metric: ['metric1'],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: ['testField'],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      const filterTypeDropdown = screen.getByRole('combobox', { name: /Field/i });
+      await userEvent.click(filterTypeDropdown);
+
+      const metricOption = screen.getByText('Metric');
+      await userEvent.click(metricOption);
+
+      expect(mockUpdateFilter).toHaveBeenCalledTimes(1);
+      expect(mockUpdateFilter).toHaveBeenCalledWith({
+        ...initialFilter,
+        type: 'metric',
+        operator: 'equals',
+        value: '',
+        field: undefined,
+      });
+
+      const operatorDropdown = screen.getByRole('combobox', { name: /Operator/i });
+      expect(operatorDropdown).toBeVisible();
+    });
+
+    it('should maintain exists operator and hide value input when changing metadata field', async () => {
+      const initialFilter: ResultsFilter = {
+        id: 'filter-1',
+        type: 'metadata',
+        operator: 'exists',
+        value: '',
+        field: 'field1',
+        sortIndex: 0,
+        logicOperator: 'and',
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: { 'filter-1': initialFilter },
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: ['field1', 'field2'],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      const fieldDropdown = screen.getByRole('combobox', { name: /Key/i });
+      expect(fieldDropdown).toBeInTheDocument();
+
+      await userEvent.click(fieldDropdown);
+
+      const field2Option = await screen.findByRole('option', { name: 'field2' });
+      expect(field2Option).toBeInTheDocument();
+
+      await userEvent.click(field2Option);
+
+      expect(mockUpdateFilter).toHaveBeenCalledTimes(1);
+      expect(mockUpdateFilter).toHaveBeenCalledWith({
+        ...initialFilter,
+        field: 'field2',
+      });
+
+      const valueInput = screen.queryByRole('textbox', { name: /Value/i });
+      expect(valueInput).not.toBeInTheDocument();
+    });
+
+    it('should handle multiple filters with the same metadata field and "exists" operator', async () => {
+      const initialFilters: Record<string, ResultsFilter> = {
+        'filter-1': {
+          id: 'filter-1',
+          type: 'metadata',
+          operator: 'exists',
+          value: '',
+          field: 'testField',
+          sortIndex: 0,
+          logicOperator: 'and',
+        },
+        'filter-2': {
+          id: 'filter-2',
+          type: 'metadata',
+          operator: 'equals',
+          value: 'someValue',
+          field: 'testField',
+          sortIndex: 1,
+          logicOperator: 'and',
+        },
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: initialFilters,
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [],
+            strategy: [],
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        metadataKeys: ['testField'],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+        addFilter: mockAddFilter,
+        removeAllFilters: mockRemoveAllFilters,
+      } as any);
+
+      const handleClose = vi.fn();
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      const operatorDropdown = screen.getAllByRole('combobox', { name: /Operator/i })[1];
+      expect(operatorDropdown).toBeInTheDocument();
+
+      fireEvent.mouseDown(operatorDropdown);
+
+      const existsOption = screen.getByRole('option', { name: 'Exists' });
+      fireEvent.click(existsOption);
+
+      expect(mockUpdateFilter).toHaveBeenCalledWith({
+        ...initialFilters['filter-2'],
+        operator: 'exists',
+        value: '',
+      });
+    });
   });
 });
