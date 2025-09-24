@@ -28,7 +28,7 @@ redteam:
       numTests: 10
       config:
         policy: 'Your custom policy statement here'
-        name: 'Data Privacy Policy'  # Optional: human-readable name
+        name: 'Data Privacy Policy' # Optional: human-readable name
 ```
 
 The `name` field is optional and provides a human-readable identifier for the policy, which is especially useful when managing multiple custom policies.
