@@ -42,6 +42,25 @@ export interface EvalOutputCellProps {
   isRedteam?: boolean;
 }
 
+/**
+ * Renders a single evaluation output cell including content, pass/fail badges, metrics, actions, and dialogs.
+ *
+ * This component displays an evaluation output (text, image, or audio), optional diffs against a reference
+ * output, human grading UI (pass/fail/score/comment), token/latency/cost stats, and utility actions
+ * (copy, share, highlight). It also manages internal dialogs for viewing the prompt/test details and editing comments.
+ *
+ * @param output - The evaluation output record to render (text/audio/metadata, grading results, scores, etc.).
+ * @param maxTextLength - Maximum characters shown before truncation.
+ * @param firstOutput - Reference output used when `showDiffs` is true to compute and render diffs.
+ * @param showDiffs - When true, attempt to show a diff between `firstOutput` and `output`.
+ * @param searchText - Optional search string; when present and table highlighting is enabled, matches are highlighted in the output text.
+ * @param showStats - When true, renders token usage, latency, tokens/sec, cost, and other detail stats.
+ * @param onRating - Callback invoked to report human grading changes. Called as `onRating(pass?: boolean, score?: number, comment?: string)`.
+ * @param evaluationId - Evaluation identifier passed to the prompt/details dialog.
+ * @param testCaseId - Test case identifier passed to the prompt/details dialog (falls back to `output.id` when not provided).
+ * @param onMetricFilter - Optional callback to filter by a custom metric (passed through to the CustomMetrics child).
+ * @param isRedteam - When true, shows probe-specific stats (e.g., numRequests) in the stats panel.
+ */
 function EvalOutputCell({
   output,
   maxTextLength,
