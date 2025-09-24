@@ -597,14 +597,17 @@ export default function Review({
                       <IconButton
                         size="small"
                         onClick={() => {
-                          const newPlugins = config.plugins.filter(
-                            (p, i) =>
-                              !(
-                                typeof p === 'object' &&
-                                p.id === 'policy' &&
-                                p.config?.policy === policy.config.policy
-                              ),
-                          );
+                          let policyIdx = -1;
+                          const newPlugins = config.plugins.filter((p) => {
+                            if (typeof p === 'object' && p.id === 'policy') {
+                              policyIdx += 1;
+                              // Remove only the Nth policy matching this rendered item
+                              if (policyIdx === index) {
+                                return false;
+                              }
+                            }
+                            return true;
+                          });
                           updateConfig('plugins', newPlugins);
                         }}
                         sx={{

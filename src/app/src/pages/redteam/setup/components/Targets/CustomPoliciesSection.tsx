@@ -111,7 +111,7 @@ export const CustomPoliciesSection = () => {
           id: 'policy',
           config: {
             policy: policy.policy,
-            name: policy.name,
+            name: policy.name.trim(),
           },
         }));
 
