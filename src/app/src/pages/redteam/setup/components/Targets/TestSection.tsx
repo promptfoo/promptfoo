@@ -189,7 +189,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                     )}
 
                   {/* Request Body */}
-                  {selectedTarget.config.body && (
+                  {selectedTarget.config.body && !testResult?.transformedRequest && (
                     <>
                       <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
                         Request Body:
@@ -233,28 +233,27 @@ const TestSection: React.FC<TestSectionProps> = ({
                   )}
 
                   {/* Transformed Request */}
-                  {testResult?.transformedRequest &&
-                    typeof testResult.transformedRequest !== 'string' && (
-                      <>
-                        <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                          Transformed Request:
-                        </Typography>
-                        <Box sx={{ maxHeight: '200px', overflow: 'auto' }}>
-                          <pre
-                            style={{
-                              margin: '4px 0',
-                              fontSize: '12px',
-                              whiteSpace: 'pre-wrap',
-                              wordBreak: 'break-word',
-                            }}
-                          >
-                            {typeof testResult.transformedRequest === 'string'
-                              ? testResult.transformedRequest
-                              : JSON.stringify(testResult.transformedRequest, null, 2)}
-                          </pre>
-                        </Box>
-                      </>
-                    )}
+                  {testResult?.transformedRequest && (
+                    <>
+                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+                        Request Body:
+                      </Typography>
+                      <Box sx={{ maxHeight: '200px', overflow: 'auto' }}>
+                        <pre
+                          style={{
+                            margin: '4px 0',
+                            fontSize: '12px',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {typeof testResult.transformedRequest === 'string'
+                            ? testResult.transformedRequest
+                            : JSON.stringify(testResult.transformedRequest, null, 2)}
+                        </pre>
+                      </Box>
+                    </>
+                  )}
                 </Paper>
               </Box>
 

@@ -1863,11 +1863,11 @@ export class HttpProvider implements ApiProvider {
         statusText: response.statusText,
         headers: sanitizeAuthHeaders(response.headers),
       },
-      // If no transform was applied, show the final request body with nunjucks applied
-      // Otherwise show the transformed prompt
-      transformedRequest: this.config.transformRequest ? transformedPrompt : renderedConfig.body,
-      finalRequestBody: renderedConfig.body,
     };
+    if (context?.debug) {
+      ret.metadata.transformedRequest = transformedPrompt;
+      ret.metadata.finalRequestBody = renderedConfig.body;
+    }
 
     const rawText = response.data as string;
     let parsedData;
@@ -1974,16 +1974,18 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
     const ret: ProviderResponse = {};
-    ret.raw = response.data;
-    ret.metadata = {
-      headers: sanitizeAuthHeaders(response.headers),
-      // If no transform was applied, show the final raw request body with nunjucks applied
-      // Otherwise show the transformed prompt
-      transformedRequest: this.config.transformRequest
-        ? transformedPrompt
-        : parsedRequest.body?.text || renderedRequest.trim(),
-      finalRequestBody: parsedRequest.body?.text,
-    };
+    if (context?.debug) {
+      ret.raw = response.data;
+      ret.metadata = {
+        headers: sanitizeAuthHeaders(response.headers),
+        // If no transform was applied, show the final raw request body with nunjucks applied
+        // Otherwise show the transformed prompt
+        transformedRequest: this.config.transformRequest
+          ? transformedPrompt
+          : parsedRequest.body?.text || renderedRequest.trim(),
+        finalRequestBody: parsedRequest.body?.text,
+      };
+    }
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
 
