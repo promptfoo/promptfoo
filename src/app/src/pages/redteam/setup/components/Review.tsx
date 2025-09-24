@@ -63,6 +63,7 @@ interface PolicyPlugin {
   id: 'policy';
   config: {
     policy: string;
+    name?: string;
   };
 }
 
