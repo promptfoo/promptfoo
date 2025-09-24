@@ -348,7 +348,6 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
-  top_k?: number;
   stop?: string[];
   frequency_penalty?: number;
   presence_penalty?: number;
@@ -1448,7 +1447,6 @@ ${prompt}
         0.7,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
-      addConfigParam(params, 'top_k', config?.top_k, undefined, undefined);
       if ((stop && stop.length > 0) || config?.stop) {
         addConfigParam(params, 'stop', stop || config?.stop, getEnvString('AWS_BEDROCK_STOP'));
       }

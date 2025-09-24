@@ -1,4 +1,5 @@
 ---
+title: AWS Bedrock
 sidebar_label: AWS Bedrock
 sidebar_position: 3
 description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
@@ -6,7 +7,7 @@ description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, No
 
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, Alibaba's Qwen, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, Alibaba's Qwen, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -591,7 +592,6 @@ config:
   max_tokens: 2048 # Maximum number of tokens to generate
   temperature: 0.7 # Controls randomness (0.0 to 1.0)
   top_p: 0.9 # Nucleus sampling parameter
-  top_k: 50 # Top-k sampling parameter (optional)
   frequency_penalty: 0.1 # Reduces repetition of frequent tokens
   presence_penalty: 0.1 # Reduces repetition of any tokens
   stop: ['END', 'STOP'] # Stop sequences
@@ -854,7 +854,7 @@ These environment variables can be overridden by the configuration specified in 
 If you see this error when using an inference profile ARN:
 
 ```text
-Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai
+Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen
 ```
 
 This means you're using an application inference profile ARN but haven't specified which model family it's configured for. Add the `inferenceModelType` to your configuration:
