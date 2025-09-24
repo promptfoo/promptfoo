@@ -17,8 +17,13 @@ import type { Tool } from '../../../src/providers/google/types';
 jest.mock('google-auth-library');
 
 jest.mock('glob', () => ({
-  ...jest.requireActual('glob'),
   globSync: jest.fn().mockReturnValue([]),
+  hasMagic: (path: string) => {
+    // Use a more accurate implementation that mimics the real hasMagic
+    // Normalize Windows backslashes to forward slashes first
+    const normalizedPath = path.replace(/\\/g, '/');
+    return /[*?[\]{}]/.test(normalizedPath);
+  },
 }));
 
 jest.mock('fs', () => ({

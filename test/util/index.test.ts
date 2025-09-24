@@ -37,8 +37,13 @@ jest.mock('proxy-agent', () => ({
 }));
 
 jest.mock('glob', () => ({
-  ...jest.requireActual('glob'),
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Use a more accurate implementation that mimics the real hasMagic
+    // Normalize Windows backslashes to forward slashes first
+    const normalizedPath = path.replace(/\\/g, '/');
+    return /[*?[\]{}]/.test(normalizedPath);
+  },
 }));
 
 jest.mock('fs', () => ({
