@@ -12,7 +12,7 @@ export const mockDbInstance = {
 
 const mockRelations = jest.fn();
 
-const mockSqliteTable = jest.fn().mockImplementation((tableName, schema) => {
+const mockSqliteTable = jest.fn().mockImplementation((tableName: string, schema: any) => {
   // You can customize this mock based on your testing needs
   return { tableName, schema };
 });

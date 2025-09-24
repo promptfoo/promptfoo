@@ -39,7 +39,7 @@ export function registerTestProviderTool(server: McpServer) {
           z.string().min(1, 'Provider ID cannot be empty'),
           z.object({
             id: z.string().min(1, 'Provider ID cannot be empty'),
-            config: z.record(z.unknown()).optional(),
+            config: z.record(z.string(), z.unknown()).optional(),
           }),
         ])
         .describe(

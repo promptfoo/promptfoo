@@ -138,7 +138,7 @@ export function modelScanCommand(program: Command): void {
       } catch (error) {
         if (error instanceof z.ZodError) {
           console.error('Invalid model audit options provided:');
-          error.errors.forEach((err) => {
+          error.issues.forEach((err) => {
             console.error(`  - ${err.path.join('.')}: ${err.message}`);
           });
           process.exit(1);

@@ -38,9 +38,7 @@ export const RedteamPluginObjectSchema = z.object({
       z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
         if (!pluginOptions.includes(val)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.invalid_enum_value,
-            options: pluginOptions,
-            received: val,
+            code: 'custom',
             message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
           });
         }
@@ -48,7 +46,7 @@ export const RedteamPluginObjectSchema = z.object({
       z.string().superRefine((val, ctx) => {
         if (!val.startsWith('file://')) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: 'custom',
             message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
           });
         }
@@ -61,7 +59,7 @@ export const RedteamPluginObjectSchema = z.object({
     .positive()
     .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
-  config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
+  config: z.record(z.string(), z.unknown()).optional().describe('Plugin-specific configuration'),
   severity: z.nativeEnum(Severity).optional().describe('Severity level for this plugin'),
 });
 
@@ -74,9 +72,7 @@ export const RedteamPluginSchema = z.union([
       z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
         if (!pluginOptions.includes(val)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.invalid_enum_value,
-            options: pluginOptions,
-            received: val,
+            code: 'custom',
             message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
           });
         }
@@ -84,7 +80,7 @@ export const RedteamPluginSchema = z.union([
       z.string().superRefine((val, ctx) => {
         if (!val.startsWith('file://')) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: 'custom',
             message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
           });
         }
@@ -98,8 +94,7 @@ export const strategyIdSchema = z.union([
   z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
     if (!ALL_STRATEGIES.includes(val as Strategy)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.invalid_enum_value,
-        options: [...ALL_STRATEGIES] as [string, ...string[]],
+        code: 'custom',
         received: val,
         message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
       });
@@ -129,7 +124,10 @@ export const RedteamStrategySchema = z.union([
   strategyIdSchema,
   z.object({
     id: strategyIdSchema,
-    config: z.record(z.unknown()).optional().describe('Strategy-specific configuration'),
+    config: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Strategy-specific configuration'),
   }),
 ]);
 
@@ -149,7 +147,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   cache: z.boolean().describe('Whether to use caching'),
   config: z.string().optional().describe('Path to the configuration file'),
   target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
-  defaultConfig: z.record(z.unknown()).describe('Default configuration object'),
+  defaultConfig: z.record(z.string(), z.unknown()).describe('Default configuration object'),
   defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
   delay: z
     .number()

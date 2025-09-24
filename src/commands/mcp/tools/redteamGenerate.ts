@@ -194,7 +194,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
           config: configPath,
           output: output || (write ? undefined : 'redteam.yaml'),
           purpose,
-          plugins: plugins?.map((p) => ({ id: p })),
+          plugins: plugins?.map((p: string) => ({ id: p })),
           strategies,
           numTests,
           maxConcurrency,

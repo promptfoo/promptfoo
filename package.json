@@ -79,6 +79,7 @@
     "whatwg-url": "14.2.0",
     "esbuild": "0.25.9",
     "react-is": "^18.3.1",
+    "zod": "^4.1.11",
     "*": {
       "whatwg-url": "14.2.0",
       "chokidar": "4.0.3",
@@ -86,17 +87,6 @@
     }
   },
   "peerDependencies": {
-    "@adaline/anthropic": "1.6.0",
-    "@adaline/azure": "1.5.0",
-    "@adaline/gateway": "1.8.0",
-    "@adaline/google": "1.7.0",
-    "@adaline/groq": "1.7.0",
-    "@adaline/open-router": "1.4.0",
-    "@adaline/openai": "1.8.0",
-    "@adaline/provider": "1.4.0",
-    "@adaline/together-ai": "1.4.0",
-    "@adaline/types": "1.8.0",
-    "@adaline/vertex": "1.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.879.0",
     "@aws-sdk/client-bedrock-runtime": "^3.879.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.879.0",
@@ -173,6 +163,7 @@
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.4",
+    "google-auth-library": "^10.3.0",
     "ibm-cloud-sdk-core": "^5.4.3",
     "jest": "^30.1.3",
     "knip": "^5.63.1",
@@ -195,8 +186,7 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2",
     "undici-types": "^7.16.0",
-    "winston-transport": "^4.9.0",
-    "zod-to-json-schema": "^3.24.6"
+    "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
     "@biomejs/cli-darwin-arm64": "2.2.4",
@@ -212,7 +202,8 @@
     "@swc/core-win32-x64-msvc": "^1.13.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.62.0",
+    "@alcyone-labs/zod-to-json-schema": "^4.0.10",
+    "@anthropic-ai/sdk": "^0.63.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.2",
     "@googleapis/sheets": "^9.8.0",
     "@inquirer/checkbox": "^4.2.4",
@@ -272,8 +263,8 @@
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "ws": "^8.18.3",
-    "zod": "^3.25.76",
-    "zod-validation-error": "^3.5.3"
+    "zod": "^4.1.11",
+    "zod-validation-error": "^4.0.2"
   },
   "madge": {
     "detectiveOptions": {

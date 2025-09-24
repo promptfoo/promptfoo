@@ -268,7 +268,7 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');
-          error.errors.forEach((err) => {
+          error.issues.forEach((err) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
           process.exit(1);

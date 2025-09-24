@@ -102,6 +102,12 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
 
   // Always preserve the type if it was detected or provided
   if (detectedType) {
+    // Validate that the type is one of the supported types
+    if (!['pem', 'jks', 'pfx'].includes(detectedType)) {
+      throw new Error(
+        `Unknown certificate type: ${detectedType}. Supported types are: pem, jks, pfx`,
+      );
+    }
     processedAuth.type = detectedType;
   }
 
@@ -773,6 +779,7 @@ const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
 
 // Legacy signature auth schema (for backward compatibility)
 const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
+  type: z.enum(['pem', 'jks', 'pfx']).optional(),
   privateKeyPath: z.string().optional(),
   privateKey: z.string().optional(),
   keystorePath: z.string().optional(),
@@ -783,7 +790,7 @@ const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
   pfxPassword: z.string().optional(),
   certPath: z.string().optional(),
   keyPath: z.string().optional(),
-}).passthrough();
+});
 
 // Generic certificate auth schema (for UI-based certificate uploads)
 const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
@@ -805,7 +812,7 @@ const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
   keyPath: z.string().optional(),
   certContent: z.string().optional(),
   keyContent: z.string().optional(),
-}).passthrough();
+}).transform(preprocessSignatureAuthConfig);
 
 // TLS Certificate configuration schema for HTTPS connections
 const TlsCertificateSchema = z
@@ -863,17 +870,17 @@ const TlsCertificateSchema = z
       return true;
     },
     {
-      message:
+      error:
         'Both certificate and key must be provided for client certificate authentication (unless using PFX)',
     },
   );
 
 export const HttpProviderConfigSchema = z.object({
-  body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
-  headers: z.record(z.string()).optional(),
+  body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
-  queryParams: z.record(z.string()).optional(),
+  queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
   useHttps: z
     .boolean()
@@ -884,7 +891,7 @@ export const HttpProviderConfigSchema = z.object({
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
   validateStatus: z
-    .union([z.string(), z.function().returns(z.boolean()).args(z.number())])
+    .union([z.string(), z.function({ input: [z.number()], output: z.boolean() })])
     .optional(),
   /**
    * @deprecated use transformResponse instead
@@ -895,14 +902,13 @@ export const HttpProviderConfigSchema = z.object({
   // Digital Signature Authentication with support for multiple certificate types
   signatureAuth: z
     .union([
+      GenericCertificateAuthSchema,
       LegacySignatureAuthSchema,
       PemSignatureAuthSchema,
       JksSignatureAuthSchema,
       PfxSignatureAuthSchema,
-      GenericCertificateAuthSchema,
     ])
-    .optional()
-    .transform(preprocessSignatureAuthConfig),
+    .optional(),
   // TLS Certificate configuration for HTTPS connections
   tls: TlsCertificateSchema.optional(),
 });

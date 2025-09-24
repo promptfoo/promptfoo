@@ -110,7 +110,7 @@ export class MCPClient {
       // List available tools
       const toolsResult = await client.listTools();
       const serverTools =
-        toolsResult?.tools?.map((tool) => ({
+        toolsResult?.tools?.map((tool: any) => ({
           name: tool.name,
           description: tool.description || '',
           inputSchema: tool.inputSchema,
@@ -119,11 +119,11 @@ export class MCPClient {
       // Filter tools if specified
       let filteredTools = serverTools;
       if (this.config.tools) {
-        filteredTools = serverTools.filter((tool) => this.config.tools?.includes(tool.name));
+        filteredTools = serverTools.filter((tool: any) => this.config.tools?.includes(tool.name));
       }
       if (this.config.exclude_tools) {
         filteredTools = filteredTools.filter(
-          (tool) => !this.config.exclude_tools?.includes(tool.name),
+          (tool: any) => !this.config.exclude_tools?.includes(tool.name),
         );
       }
 
@@ -134,7 +134,7 @@ export class MCPClient {
       if (this.config.verbose) {
         console.log(
           `Connected to MCP server ${serverKey} with tools:`,
-          filteredTools.map((tool) => tool.name),
+          filteredTools.map((tool: any) => tool.name),
         );
       }
     } catch (error) {

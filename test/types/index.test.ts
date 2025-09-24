@@ -358,7 +358,7 @@ describe('CommandLineOptionsSchema', () => {
       filterErrorsOnly: true,
     };
     expect(() => CommandLineOptionsSchema.parse(options)).toThrow(
-      'Expected string, received boolean',
+      /Invalid input: expected string, received boolean/,
     );
   });
 
@@ -858,7 +858,7 @@ describe('TestSuiteSchema', () => {
 
       const result = TestSuiteSchema.safeParse(invalidConfig);
       expect(result.success).toBe(false);
-      expect(result.error!.errors[0].message).toContain(
+      expect(result.error!.issues[0].message).toContain(
         'defaultTest string must start with file://',
       );
     });
