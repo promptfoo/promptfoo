@@ -160,7 +160,10 @@ export async function openAuthBrowser(
       logger.info(`Please visit: ${chalk.green(authUrl)}`);
       logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
     }
-  } else if (browserBehavior !== BrowserBehavior.SKIP) {
+  } else if (browserBehavior === BrowserBehavior.SKIP) {
+    logger.info(`Please visit: ${chalk.green(authUrl)}`);
+    logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
+  } else {
     await doOpen();
   }
 }
