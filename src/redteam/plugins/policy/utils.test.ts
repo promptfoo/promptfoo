@@ -10,7 +10,7 @@ import {
   isValidPolicyObject,
   makeCustomPolicyCloudUrl,
   makeInlinePolicyId,
-  serializePolicyObjectAsMetric,
+  serializePolicyAsMetric,
 } from './utils';
 
 // Mock dependencies
@@ -38,38 +38,10 @@ describe('Policy Utils', () => {
     });
   });
 
-  describe('serializePolicyObjectAsMetric', () => {
+  describe('serializePolicyAsMetric', () => {
     it('should serialize a policy object correctly', () => {
-      const policyObject: PolicyObject = {
-        id: 'test-id',
-        name: 'Test Policy',
-        text: 'This is a test policy',
-      };
-
-      const result = serializePolicyObjectAsMetric(policyObject);
-      expect(result).toBe(`${POLICY_METRIC_PREFIX}:${JSON.stringify(policyObject)}`);
-    });
-
-    it('should handle policy objects with minimal properties', () => {
-      const policyObject: PolicyObject = {
-        id: 'minimal-id',
-      };
-
-      const result = serializePolicyObjectAsMetric(policyObject);
-      expect(result).toBe(`${POLICY_METRIC_PREFIX}:{"id":"minimal-id"}`);
-    });
-
-    it('should handle policy objects with special characters', () => {
-      const policyObject: PolicyObject = {
-        id: 'special-id',
-        name: 'Policy with "quotes"',
-        text: 'Line 1\nLine 2\tTabbed',
-      };
-
-      const result = serializePolicyObjectAsMetric(policyObject);
-      const parsed = JSON.parse(result.replace(`${POLICY_METRIC_PREFIX}:`, ''));
-      expect(parsed.name).toBe('Policy with "quotes"');
-      expect(parsed.text).toBe('Line 1\nLine 2\tTabbed');
+      const result = serializePolicyAsMetric('test-id');
+      expect(result).toBe(`${POLICY_METRIC_PREFIX}:test-id`);
     });
   });
 

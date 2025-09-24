@@ -13,13 +13,11 @@ export function isPolicyMetric(metric: string): boolean {
 }
 
 /**
- * Serializes a policy object as a metric. This allows the policy object to be persisted through
- * the system and then deserialized back into a policy object.
- * @param policyObject
+ * Serializes a policy as a unique metric.
  * @returns
  */
-export function serializePolicyObjectAsMetric(policyObject: PolicyObject): string {
-  return `${POLICY_METRIC_PREFIX}:${JSON.stringify(policyObject)}`;
+export function serializePolicyAsMetric(policyId: PolicyObject['id']): string {
+  return `${POLICY_METRIC_PREFIX}:${policyId}`;
 }
 
 /**

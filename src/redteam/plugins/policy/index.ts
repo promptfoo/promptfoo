@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import invariant from '../../../util/invariant';
 import { type PolicyObject } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from '../base';
-import { isValidPolicyObject, makeInlinePolicyId, serializePolicyObjectAsMetric } from './utils';
+import { isValidPolicyObject, makeInlinePolicyId, serializePolicyAsMetric } from './utils';
 
 import type {
   ApiProvider,
@@ -24,7 +24,7 @@ export class PolicyPlugin extends RedteamPluginBase {
   /**
    * The ID of the policy; available if the policy is loaded from Promptfoo Cloud.
    */
-  private policyId?: PolicyObject['id'];
+  private policyId: PolicyObject['id'];
   /**
    * The name of the policy; available if the policy is loaded from Promptfoo Cloud.
    */
@@ -48,6 +48,7 @@ export class PolicyPlugin extends RedteamPluginBase {
       this.name = config.policy.name;
     } else if (typeof config.policy === 'string') {
       this.policy = config.policy; // The policy declaration is itself the policy text
+      this.policyId = makeInlinePolicyId(this.policy); // Generate a unique ID for the inline policy
     }
     // Edge case: this state should not be reached b/c `createPluginFactory` validates the config
     // prior to instantiating the plugin. This state is reached within Promptfoo Cloud, so display an
@@ -100,24 +101,16 @@ export class PolicyPlugin extends RedteamPluginBase {
 
   /**
    * Constructs an assertion for the custom policy.
-   * It's worth noting that the metric is derived in manner which differs from how we typically construct plugins metrics i.e.
-   * we're storing the policy's metadata in the metric itself. This is a workaround from storing these values on the test case
-   * metadata and needing to access it in places which are inaccessible given the current data model (e.g. the headers returned
-   * by the API's eval table endpoint.)
    * @param prompt
    * @returns
    */
   protected getAssertions(prompt: string): Assertion[] {
-    const data: PolicyObject = {
-      id: this.policyId ? this.policyId : makeInlinePolicyId(this.policy),
-      text: this.policy,
-    };
-
-    if (this.name) {
-      data.name = this.name;
-    }
-
-    return [{ type: PLUGIN_ID, metric: serializePolicyObjectAsMetric(data) }];
+    return [
+      {
+        type: PLUGIN_ID,
+        metric: serializePolicyAsMetric(this.policyId),
+      },
+    ];
   }
 
   async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
