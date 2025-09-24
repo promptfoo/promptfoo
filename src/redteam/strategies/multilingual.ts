@@ -2,17 +2,17 @@ import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
+
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import type { TestCase } from '../../types/index';
 import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
-
-import type { TestCase } from '../../types/index';
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
@@ -310,10 +310,14 @@ async function translateBatchCore(
   text: string,
   languages: string[],
 ): Promise<Record<string, string>> {
-  const redteamProvider = await redteamProviderManager.getProvider({
-    jsonOnly: true,
-    preferSmallModel: true,
-  });
+  // Prefer a preconfigured multilingual provider if available (set by the server at boot).
+  const cachedMultilingual = await redteamProviderManager.getMultilingualProvider();
+  const redteamProvider =
+    cachedMultilingual ||
+    (await redteamProviderManager.getProvider({
+      jsonOnly: true,
+      preferSmallModel: true,
+    }));
 
   const languagesFormatted = languages.map((lang) => `- ${lang}`).join('\n');
 

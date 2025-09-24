@@ -17,10 +17,10 @@ import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, ProviderResponse } from '../../types/providers';
 
 /**
- * Configuration options for AWS Bedrock AgentCore provider
+ * Configuration options for AWS Bedrock Agents provider
  * @see https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html
  */
-interface BedrockAgentCoreOptions {
+interface BedrockAgentsOptions {
   // AWS Authentication
   accessKeyId?: string;
   secretAccessKey?: string;
@@ -61,7 +61,12 @@ interface BedrockAgentCoreOptions {
   enableTrace?: boolean;
   endSession?: boolean;
 
-  // Inference Configuration
+  // Inference Configuration (can be specified at root level for convenience or nested)
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maximumLength?: number;
+  stopSequences?: string[];
   inferenceConfig?: {
     temperature?: number;
     topP?: number;
@@ -140,14 +145,14 @@ interface BedrockAgentCoreOptions {
 }
 
 /**
- * AWS Bedrock AgentCore provider for invoking deployed AI agents.
- * Supports all AgentCore features including memory, knowledge bases, action groups,
+ * AWS Bedrock Agents provider for invoking deployed AI agents.
+ * Supports all Bedrock Agents features including memory, knowledge bases, action groups,
  * guardrails, and session management.
  *
  * @example Basic usage
  * ```yaml
  * providers:
- *   - bedrock:agentcore:AGENT_ID
+ *   - bedrock-agent:AGENT_ID
  *     config:
  *       agentAliasId: PROD_ALIAS
  *       region: us-east-1
@@ -156,7 +161,7 @@ interface BedrockAgentCoreOptions {
  * @example With memory and session
  * ```yaml
  * providers:
- *   - bedrock:agentcore:AGENT_ID
+ *   - bedrock-agent:AGENT_ID
  *     config:
  *       agentAliasId: PROD_ALIAS
  *       sessionId: user-session-123
@@ -167,32 +172,31 @@ interface BedrockAgentCoreOptions {
  * @example With guardrails and inference config
  * ```yaml
  * providers:
- *   - bedrock:agentcore:AGENT_ID
+ *   - bedrock-agent:AGENT_ID
  *     config:
  *       agentAliasId: PROD_ALIAS
  *       guardrailConfiguration:
  *         guardrailId: GUARDRAIL_ID
  *         guardrailVersion: "1"
- *       inferenceConfig:
- *         temperature: 0.7
+ *       temperature: 0.7  # Can be specified at root level for convenience
  *         topP: 0.9
  *         maximumLength: 2048
  * ```
  */
-export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider implements ApiProvider {
+export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private agentRuntimeClient?: BedrockAgentRuntimeClient;
-  config: BedrockAgentCoreOptions; // Make public to match base class
+  config: BedrockAgentsOptions; // Make public to match base class
 
   constructor(
     agentId: string,
-    options: { config?: BedrockAgentCoreOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: BedrockAgentsOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(agentId, options);
 
     // Validate required fields
     if (!agentId && !options.config?.agentId) {
       throw new Error(
-        'Agent ID is required. Provide it in the provider path (bedrock:agentcore:AGENT_ID) or config.',
+        'Agent ID is required. Provide it in the provider path (bedrock-agent:AGENT_ID) or config.',
       );
     }
 
@@ -200,21 +204,21 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
     this.config = {
       ...options.config,
       agentId: options.config?.agentId || agentId,
-    } as BedrockAgentCoreOptions;
+    } as BedrockAgentsOptions;
 
     // Record telemetry
     telemetry.record('feature_used', {
-      feature: 'bedrock-agentcore',
+      feature: 'bedrock-agents',
       provider: 'bedrock',
     });
   }
 
   id(): string {
-    return `bedrock:agentcore:${this.config.agentId}`;
+    return `bedrock-agent:${this.config.agentId}`;
   }
 
   toString(): string {
-    return `[AWS Bedrock AgentCore Provider ${this.config.agentId}]`;
+    return `[AWS Bedrock Agents Provider ${this.config.agentId}]`;
   }
 
   /**
@@ -286,10 +290,21 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
   }
 
   /**
-   * Build inference configuration
+   * Build inference configuration from both root-level and nested parameters
+   * Root-level parameters take precedence over nested ones for convenience
    */
   private buildInferenceConfig(): InferenceConfig | undefined {
-    if (!this.config.inferenceConfig) {
+    // Check if we have any inference config at root level or nested
+    const hasRootConfig =
+      this.config.temperature !== undefined ||
+      this.config.topP !== undefined ||
+      this.config.topK !== undefined ||
+      this.config.maximumLength !== undefined ||
+      this.config.stopSequences !== undefined;
+
+    const hasNestedConfig = this.config.inferenceConfig !== undefined;
+
+    if (!hasRootConfig && !hasNestedConfig) {
       return undefined;
     }
 
@@ -297,21 +312,40 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
     // Note: Using partial typing due to AWS SDK type constraints
     const inferenceConfig = {} as InferenceConfig;
 
-    if (this.config.inferenceConfig.maximumLength !== undefined) {
-      (inferenceConfig as any).maximumLength = this.config.inferenceConfig.maximumLength;
+    // Start with nested config as base
+    if (this.config.inferenceConfig) {
+      if (this.config.inferenceConfig.maximumLength !== undefined) {
+        (inferenceConfig as any).maximumLength = this.config.inferenceConfig.maximumLength;
+      }
+      if (this.config.inferenceConfig.stopSequences !== undefined) {
+        (inferenceConfig as any).stopSequences = this.config.inferenceConfig.stopSequences;
+      }
+      if (this.config.inferenceConfig.temperature !== undefined) {
+        (inferenceConfig as any).temperature = this.config.inferenceConfig.temperature;
+      }
+      if (this.config.inferenceConfig.topP !== undefined) {
+        (inferenceConfig as any).topP = this.config.inferenceConfig.topP;
+      }
+      if (this.config.inferenceConfig.topK !== undefined) {
+        (inferenceConfig as any).topK = this.config.inferenceConfig.topK;
+      }
     }
-    if (this.config.inferenceConfig.stopSequences !== undefined) {
-      (inferenceConfig as any).stopSequences = this.config.inferenceConfig.stopSequences;
+
+    // Override with root-level parameters (these take precedence for convenience)
+    if (this.config.temperature !== undefined) {
+      (inferenceConfig as any).temperature = this.config.temperature;
     }
-    // Temperature, topP, topK may be model-specific
-    if (this.config.inferenceConfig.temperature !== undefined) {
-      (inferenceConfig as any).temperature = this.config.inferenceConfig.temperature;
+    if (this.config.topP !== undefined) {
+      (inferenceConfig as any).topP = this.config.topP;
     }
-    if (this.config.inferenceConfig.topP !== undefined) {
-      (inferenceConfig as any).topP = this.config.inferenceConfig.topP;
+    if (this.config.topK !== undefined) {
+      (inferenceConfig as any).topK = this.config.topK;
     }
-    if (this.config.inferenceConfig.topK !== undefined) {
-      (inferenceConfig as any).topK = this.config.inferenceConfig.topK;
+    if (this.config.maximumLength !== undefined) {
+      (inferenceConfig as any).maximumLength = this.config.maximumLength;
+    }
+    if (this.config.stopSequences !== undefined) {
+      (inferenceConfig as any).stopSequences = this.config.stopSequences;
     }
 
     return inferenceConfig;
@@ -394,9 +428,9 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
       memoryId: this.config.memoryId,
 
       // Advanced configurations - using type assertions for preview features
-      // The AWS SDK types may not be fully up to date with all AgentCore features
+      // The AWS SDK types may not be fully up to date with all Bedrock Agents features
       // These configurations are validated by AWS at runtime
-      ...(this.config.inferenceConfig && {
+      ...(this.buildInferenceConfig() && {
         inferenceConfig: this.buildInferenceConfig(),
       }),
       ...(this.config.guardrailConfiguration && {
@@ -416,13 +450,13 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
       }),
     };
 
-    logger.debug(`Invoking AgentCore agent ${this.config.agentId} with session ${sessionId}`);
+    logger.debug(`Invoking Bedrock agent ${this.config.agentId} with session ${sessionId}`);
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
     const cache = await getCache();
-    const cacheKey = `bedrock:agentcore:${this.config.agentId}:${JSON.stringify({
+    const cacheKey = `bedrock-agent:${this.config.agentId}:${JSON.stringify({
       prompt,
-      inferenceConfig: this.config.inferenceConfig,
+      inferenceConfig: this.buildInferenceConfig(),
       knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
     })}`;
 
@@ -430,7 +464,7 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
     if (isCacheEnabled()) {
       const cached = await cache.get(cacheKey);
       if (cached) {
-        logger.debug('Returning cached AgentCore response');
+        logger.debug('Returning cached Bedrock Agents response');
         try {
           const parsed = JSON.parse(cached as string);
           // Validate the parsed cache data has expected structure
@@ -441,7 +475,7 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
             };
           }
         } catch {
-          logger.warn('Failed to parse cached AgentCore response, ignoring cache');
+          logger.warn('Failed to parse cached Bedrock Agents response, ignoring cache');
         }
       }
     }
@@ -482,7 +516,7 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
 
       return result;
     } catch (error: any) {
-      logger.error(`AgentCore invocation failed: ${error}`);
+      logger.error(`Bedrock Agents invocation failed: ${error}`);
 
       // Provide helpful error messages
       if (error.name === 'ResourceNotFoundException') {
