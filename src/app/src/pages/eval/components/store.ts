@@ -331,6 +331,20 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
   ),
 );
 
+// Helper function to determine if a filter is applied
+const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolean => {
+  if (filter.type === 'metadata') {
+    // For metadata filters with exists operator, only field is required
+    if (filter.operator === 'exists') {
+      return Boolean(filter.field);
+    }
+    // For other metadata operators, both field and value are required
+    return Boolean(filter.value && filter.field);
+  }
+  // For non-metadata filters, value is required
+  return Boolean(filter.value);
+};
+
 export const useTableStore = create<TableState>()((set, get) => ({
   evalId: null,
   setEvalId: (evalId: string) => set(() => ({ evalId })),
@@ -534,20 +548,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
     const filterId = uuidv4();
 
     set((prevState) => {
-      // Helper function to determine if a filter is applied
-      const isFilterApplied = (f: Partial<ResultsFilter>) => {
-        if (f.type === 'metadata') {
-          // For metadata filters with exists operator, only field is required
-          if (f.operator === 'exists') {
-            return Boolean(f.field);
-          }
-          // For other metadata operators, both field and value are required
-          return Boolean(f.value && f.field);
-        }
-        // For non-metadata filters, value is required
-        return Boolean(f.value);
-      };
-
       const isApplied = isFilterApplied(filter);
       const appliedCount = prevState.filters.appliedCount + (isApplied ? 1 : 0);
 
@@ -581,21 +581,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
   removeFilter: (id: ResultsFilter['id']) => {
     set((prevState) => {
       const target = prevState.filters.values[id];
-
-      // Helper function to determine if a filter is applied
-      const isFilterApplied = (f: ResultsFilter) => {
-        if (f.type === 'metadata') {
-          // For metadata filters with exists operator, only field is required
-          if (f.operator === 'exists') {
-            return Boolean(f.field);
-          }
-          // For other metadata operators, both field and value are required
-          return Boolean(f.value && f.field);
-        }
-        // For non-metadata filters, value is required
-        return Boolean(f.value);
-      };
-
       const wasApplied = isFilterApplied(target);
       const appliedCount = prevState.filters.appliedCount - (wasApplied ? 1 : 0);
       const values = { ...prevState.filters.values };
@@ -644,21 +629,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
   updateFilter: (filter: ResultsFilter) => {
     set((prevState) => {
       const target = prevState.filters.values[filter.id];
-
-      // Helper function to determine if a filter is applied
-      const isFilterApplied = (f: ResultsFilter) => {
-        if (f.type === 'metadata') {
-          // For metadata filters with exists operator, only field is required
-          if (f.operator === 'exists') {
-            return Boolean(f.field);
-          }
-          // For other metadata operators, both field and value are required
-          return Boolean(f.value && f.field);
-        }
-        // For non-metadata filters, value is required
-        return Boolean(f.value);
-      };
-
       const targetWasApplied = isFilterApplied(target);
       const filterIsApplied = isFilterApplied(filter);
       const appliedCount =
