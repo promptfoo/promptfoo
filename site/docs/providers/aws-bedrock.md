@@ -939,20 +939,19 @@ This approach allows you to:
 
 See the [Knowledge Base contextTransform example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for complete configuration examples.
 
-## AgentCore
+## Bedrock Agents
 
-AWS Bedrock AgentCore provides a managed service for deploying and operating AI agents at scale. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock AgentCore Provider](./bedrock-agentcore.md) documentation.
+Amazon Bedrock Agents uses the reasoning of foundation models (FMs), APIs, and data to break down user requests, gathers relevant information, and efficiently completes tasks—freeing teams to focus on high-value work. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock Agents Provider](./bedrock-agents.md) documentation.
 
 Quick example:
 
 ```yaml
 providers:
-  - bedrock:agentcore:YOUR_AGENT_ID
+  - bedrock-agent:YOUR_AGENT_ID
     config:
+      agentAliasId: PROD_ALIAS
+      region: us-east-1
       enableTrace: true
-      memoryConfig:
-        type: short-term
-        enabled: true
 ```
 
 ## See Also
