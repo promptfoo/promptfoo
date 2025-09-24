@@ -720,15 +720,15 @@ function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?:
 }
 
 const TokenEstimationConfigSchema = z.object({
-  enabled: z.boolean().prefault(false),
-  multiplier: z.number().min(0.01).prefault(1.3),
+  enabled: z.boolean().default(false),
+  multiplier: z.number().min(0.01).default(1.3),
 });
 
 // Base signature auth fields
 const BaseSignatureAuthSchema = z.object({
-  signatureValidityMs: z.number().prefault(300000),
-  signatureDataTemplate: z.string().prefault('{{signatureTimestamp}}'),
-  signatureAlgorithm: z.string().prefault('SHA256'),
+  signatureValidityMs: z.number().default(300000),
+  signatureDataTemplate: z.string().default('{{signatureTimestamp}}'),
+  signatureAlgorithm: z.string().default('SHA256'),
   signatureRefreshBufferMs: z.number().optional(),
 });
 
@@ -841,7 +841,7 @@ const TlsCertificateSchema = z
     passphrase: z.string().optional().describe('Passphrase for PFX certificate'),
 
     // Security options
-    rejectUnauthorized: z.boolean().prefault(true),
+    rejectUnauthorized: z.boolean().default(true),
     servername: z.string().optional(),
 
     // Cipher configuration

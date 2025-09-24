@@ -111,7 +111,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
         .min(1)
         .max(10)
         .optional()
-        .prefault(DEFAULT_MAX_CONCURRENCY)
+        .default(DEFAULT_MAX_CONCURRENCY)
         .describe('Maximum number of concurrent API calls (1-10)'),
       delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
       language: z
@@ -136,22 +136,22 @@ export function registerRedteamGenerateTool(server: McpServer) {
       force: z
         .boolean()
         .optional()
-        .prefault(false)
+        .default(false)
         .describe('Force generation even if no changes are detected'),
       write: z
         .boolean()
         .optional()
-        .prefault(false)
+        .default(false)
         .describe('Write results to the promptfoo configuration file instead of separate output'),
       remote: z
         .boolean()
         .optional()
-        .prefault(false)
+        .default(false)
         .describe('Force remote inference wherever possible'),
       progressBar: z
         .boolean()
         .optional()
-        .prefault(true)
+        .default(true)
         .describe('Show progress bar during generation'),
     },
     async (args) => {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const EmailSchema = z.email();
+const EmailSchema = z.string().email();
 
 export const ApiSchemas = {
   User: {
@@ -38,7 +38,7 @@ export const ApiSchemas = {
         id: z.string(),
       }),
       Request: z.object({
-        author: z.email(),
+        author: z.string().email(),
       }),
       Response: z.object({
         message: z.string(),

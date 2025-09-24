@@ -54,9 +54,9 @@ export const RedteamPluginObjectSchema = z.object({
     ])
     .describe('Name of the plugin'),
   numTests: z
-    .int()
+    .number().int()
     .positive()
-    .prefault(DEFAULT_NUM_TESTS_PER_PLUGIN)
+    .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
   config: z.record(z.string(), z.unknown()).optional().describe('Plugin-specific configuration'),
   severity: z.enum(Severity).optional().describe('Severity level for this plugin'),
@@ -149,16 +149,16 @@ export const RedteamGenerateOptionsSchema = z.object({
   defaultConfig: z.record(z.string(), z.unknown()).describe('Default configuration object'),
   defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
   delay: z
-    .int()
+    .number().int()
     .nonnegative()
     .optional()
     .describe('Delay in milliseconds between plugin API calls'),
   envFile: z.string().optional().describe('Path to the environment file'),
-  force: z.boolean().describe('Whether to force generation').prefault(false),
+  force: z.boolean().describe('Whether to force generation').default(false),
   injectVar: z.string().optional().describe('Variable to inject'),
   language: z.string().optional().describe('Language of tests to generate'),
-  maxConcurrency: z.int().positive().optional().describe('Maximum number of concurrent API calls'),
-  numTests: z.int().positive().optional().describe('Number of tests to generate'),
+  maxConcurrency: z.number().int().positive().optional().describe('Maximum number of concurrent API calls'),
+  numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
   provider: z.string().optional().describe('Provider to use'),
@@ -190,7 +190,7 @@ export const RedteamConfigSchema = z
       .optional()
       .describe('Additional instructions for test generation applied to each plugin'),
     provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
-    numTests: z.int().positive().optional().describe('Number of tests to generate'),
+    numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
     language: z.string().optional().describe('Language of tests ot generate for this plugin'),
     entities: z
       .array(z.string())
@@ -199,7 +199,7 @@ export const RedteamConfigSchema = z
     plugins: z
       .array(RedteamPluginSchema)
       .describe('Plugins to use for redteam generation')
-      .prefault(['default']),
+      .default(['default']),
     strategies: z
       .array(RedteamStrategySchema)
       .describe(
@@ -210,14 +210,14 @@ export const RedteamConfigSchema = z
         `,
       )
       .optional()
-      .prefault(['default']),
+      .default(['default']),
     maxConcurrency: z
-      .int()
+      .number().int()
       .positive()
       .optional()
       .describe('Maximum number of concurrent API calls'),
     delay: z
-      .int()
+      .number().int()
       .nonnegative()
       .optional()
       .describe('Delay in milliseconds between plugin API calls'),

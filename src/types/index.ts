@@ -40,7 +40,7 @@ export const CommandLineOptionsSchema = z.object({
   // Shared with EvaluateOptions
   maxConcurrency: z.coerce.number().int().positive().optional(),
   repeat: z.coerce.number().int().positive().optional(),
-  delay: z.coerce.number().int().nonnegative().prefault(0),
+  delay: z.coerce.number().int().nonnegative().default(0),
 
   // Command line only
   vars: z.string().optional(),
@@ -1010,23 +1010,23 @@ export const TestSuiteConfigSchema = z.object({
   // Tracing configuration
   tracing: z
     .object({
-      enabled: z.boolean().prefault(false),
+      enabled: z.boolean().default(false),
 
       // OTLP receiver configuration
       otlp: z
         .object({
           http: z
             .object({
-              enabled: z.boolean().prefault(true),
-              port: z.number().prefault(4318),
-              host: z.string().prefault('0.0.0.0'),
-              acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json']),
+              enabled: z.boolean().default(true),
+              port: z.number().default(4318),
+              host: z.string().default('0.0.0.0'),
+              acceptFormats: z.array(z.enum(['protobuf', 'json'])).default(['json']),
             })
             .optional(),
           grpc: z
             .object({
-              enabled: z.boolean().prefault(false),
-              port: z.number().prefault(4317),
+              enabled: z.boolean().default(false),
+              port: z.number().default(4317),
             })
             .optional(),
         })
@@ -1035,15 +1035,15 @@ export const TestSuiteConfigSchema = z.object({
       // Storage configuration
       storage: z
         .object({
-          type: z.enum(['sqlite']).prefault('sqlite'),
-          retentionDays: z.number().prefault(30),
+          type: z.enum(['sqlite']).default('sqlite'),
+          retentionDays: z.number().default(30),
         })
         .optional(),
 
       // Optional: Forward traces to another collector
       forwarding: z
         .object({
-          enabled: z.boolean().prefault(false),
+          enabled: z.boolean().default(false),
           endpoint: z.string(),
           headers: z.record(z.string(), z.string()).optional(),
         })

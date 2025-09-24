@@ -39,11 +39,11 @@ export function registerCompareProvidersTool(server: McpServer) {
         ),
 
       timeoutMs: z
-        .int()
+        .number().int()
         .min(1000)
         .max(300000)
         .optional()
-        .prefault(30000)
+        .default(30000)
         .describe('Timeout for each provider in milliseconds (default: 30000)'),
     },
     async (args) => {

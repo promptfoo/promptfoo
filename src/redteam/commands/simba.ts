@@ -16,7 +16,7 @@ const SimbaCommandSchema = z.object({
   purpose: z.string().optional(),
   maxRounds: z.number().optional(),
   maxVectors: z.number().optional(),
-  email: z.email().optional(),
+  email: z.string().email().optional(),
   additionalInstructions: z.string().optional(),
   sessionId: z.string().optional(),
   concurrency: z.number().min(1).max(100).optional(),
@@ -31,14 +31,14 @@ const TargetInfoSchema = z.object({
 });
 
 const ConfigOptionsSchema = z.object({
-  maxConversationRounds: z.number().min(1).prefault(10),
-  maxAttackVectors: z.number().min(1).prefault(5),
+  maxConversationRounds: z.number().min(1).default(10),
+  maxAttackVectors: z.number().min(1).default(5),
 });
 
 const StartRequestSchema = z.object({
   config: ConfigOptionsSchema,
   targetInfo: TargetInfoSchema,
-  email: z.email(),
+  email: z.string().email(),
 });
 
 interface SimbaStartResponse {

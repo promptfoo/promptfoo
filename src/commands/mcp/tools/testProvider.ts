@@ -61,11 +61,11 @@ export function registerTestProviderTool(server: McpServer) {
           `,
         ),
       timeoutMs: z
-        .int()
+        .number().int()
         .min(1000)
         .max(300000)
         .optional()
-        .prefault(30000)
+        .default(30000)
         .describe(
           dedent`
             Request timeout in milliseconds. 
