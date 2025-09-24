@@ -20,7 +20,9 @@ export async function monkeyPatchFetch(
   options?: RequestInit,
 ): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
-  const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl));
+  const headers = (options?.headers as Record<string, string>) || {};
+  const isSilent = headers['x-promptfoo-silent'] === 'true';
+  const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl)) && !isSilent;
 
   const opts = {
     ...options,

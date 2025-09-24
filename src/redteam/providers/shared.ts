@@ -20,7 +20,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { type TransformContext, TransformInputType, transform } from '../../util/transform';
+import { transform, type TransformContext, TransformInputType } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 async function loadRedteamProvider({
@@ -58,15 +58,22 @@ async function loadRedteamProvider({
 class RedteamProviderManager {
   private provider: ApiProvider | undefined;
   private jsonOnlyProvider: ApiProvider | undefined;
+  private multilingualProvider: ApiProvider | undefined;
 
   clearProvider() {
     this.provider = undefined;
     this.jsonOnlyProvider = undefined;
+    this.multilingualProvider = undefined;
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
     this.provider = await loadRedteamProvider({ provider });
     this.jsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+  }
+
+  async setMultilingualProvider(provider: RedteamFileConfig['provider']) {
+    // For multilingual, prefer a provider configured for structured JSON output
+    this.multilingualProvider = await loadRedteamProvider({ provider, jsonOnly: true });
   }
 
   async getProvider({
@@ -93,6 +100,17 @@ class RedteamProviderManager {
     const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
     logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
     return redteamProvider;
+  }
+
+  async getMultilingualProvider(): Promise<ApiProvider | undefined> {
+    if (this.multilingualProvider) {
+      logger.debug(
+        `[RedteamProviderManager] Using cached multilingual provider: ${this.multilingualProvider.id()}`,
+      );
+      return this.multilingualProvider;
+    }
+    logger.debug('[RedteamProviderManager] No multilingual provider configured');
+    return undefined;
   }
 }
 

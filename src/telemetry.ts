@@ -145,6 +145,17 @@ export class Telemetry {
     });
   }
 
+  async shutdown(): Promise<void> {
+    const client = getPostHogClient();
+    if (client) {
+      try {
+        await client.shutdown();
+      } catch (error) {
+        logger.debug(`PostHog shutdown error: ${error}`);
+      }
+    }
+  }
+
   /**
    * This is a separate endpoint to save consent used only for redteam data synthesis for "harmful" plugins.
    */
