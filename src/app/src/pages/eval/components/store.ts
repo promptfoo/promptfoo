@@ -1,19 +1,22 @@
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
-  deserializePolicyMetricAsPolicyObject,
   isPolicyMetric,
+  isValidPolicyObject,
+  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTable,
+  RedteamPluginObject,
   ResultsFile,
   UnifiedConfig,
 } from '@promptfoo/types';
@@ -55,51 +58,39 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
  * Extracts unique policy IDs from policy metrics in the table.
  * Policy metrics are serialized PolicyObject instances that start with POLICY_METRIC_PREFIX.
  */
-function extractPolicyOptionsFromMetrics(table: EvaluateTable | null | undefined): string[] {
-  if (!table || !table.head?.prompts) {
-    return [];
-  }
-
+function buildPolicyOptions(plugins?: RedteamPluginObject[]): string[] {
   const policyIds = new Set<string>();
-  table.head.prompts.forEach((prompt) => {
-    if (prompt.metrics?.namedScores) {
-      Object.keys(prompt.metrics.namedScores).forEach((metric) => {
-        if (isPolicyMetric(metric)) {
-          const policy = deserializePolicyMetricAsPolicyObject(metric);
-          if (policy) {
-            policyIds.add(policy.id);
-          }
+  plugins?.forEach((plugin) => {
+    if (typeof plugin !== 'string' && plugin.id === 'policy') {
+      const policy = plugin?.config?.policy;
+      if (policy) {
+        if (isValidPolicyObject(policy)) {
+          policyIds.add(policy.id);
+        } else {
+          policyIds.add(makeInlinePolicyId(policy));
         }
-      });
+      }
     }
   });
 
   return Array.from(policyIds).sort();
 }
 
+type PolicyIdToNameMap = Record<PolicyObject['id'], PolicyObject['name']>;
+
 /**
  * Creates a mapping of policy IDs to their names for display purposes.
  * Used by the filter form to show policy names in the dropdown.
  */
-function extractPolicyIdToNameMap(
-  table: EvaluateTable | null | undefined,
-): Record<string, string | undefined> {
-  if (!table || !table.head?.prompts) {
-    return {};
-  }
+function extractPolicyIdToNameMap(plugins: RedteamPluginObject[]): PolicyIdToNameMap {
+  const policyMap: PolicyIdToNameMap = {};
 
-  const policyMap: Record<string, string | undefined> = {};
-  table.head.prompts.forEach((prompt) => {
-    if (prompt.metrics?.namedScores) {
-      Object.keys(prompt.metrics.namedScores).forEach((metric) => {
-        if (isPolicyMetric(metric)) {
-          const policy = deserializePolicyMetricAsPolicyObject(metric);
-          if (policy) {
-            // Store the policy name if available, otherwise undefined
-            policyMap[policy.id] = policy.name;
-          }
-        }
-      });
+  plugins.forEach((plugin) => {
+    if (typeof plugin !== 'string' && plugin.id === 'policy') {
+      const policy = plugin?.config?.policy;
+      if (policy && isValidPolicyObject(policy)) {
+        policyMap[policy.id] = policy.name;
+      }
     }
   });
 
@@ -146,7 +137,7 @@ function buildRedteamFilterOptions(
     ),
     strategy: extractUniqueStrategyIds(config?.redteam?.strategies),
     severity: computeAvailableSeverities(config?.redteam?.plugins),
-    policy: extractPolicyOptionsFromMetrics(table),
+    policy: buildPolicyOptions(config?.redteam?.plugins),
   };
 }
 
@@ -454,7 +445,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metadata: [],
             ...buildRedteamFilterOptions(resultsFile.config, table),
           },
-          policyIdToNameMap: extractPolicyIdToNameMap(table),
+          policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
         },
       }));
     } else {
@@ -470,7 +461,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metadata: [],
             ...buildRedteamFilterOptions(resultsFile.config, results.table),
           },
-          policyIdToNameMap: extractPolicyIdToNameMap(results.table),
+          policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
         },
       }));
     }
@@ -583,7 +574,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
               metadata: [],
               ...buildRedteamFilterOptions(data.config, data.table),
             },
-            policyIdToNameMap: extractPolicyIdToNameMap(data.table),
+            policyIdToNameMap: extractPolicyIdToNameMap(data.config.redteam?.plugins ?? []),
           },
         }));
 

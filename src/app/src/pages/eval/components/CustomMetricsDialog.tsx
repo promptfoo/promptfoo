@@ -16,11 +16,14 @@ import {
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
 import {
-  deserializePolicyMetricAsPolicyObject,
+  deserializePolicyIdFromMetric,
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
+  isValidPolicyObject,
+  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { useTableStore } from './store';
+import type { PolicyObject } from '@promptfoo/redteam/types';
 
 type MetricScore = {
   score: number;
@@ -35,12 +38,30 @@ interface MetricRow {
 }
 
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
-  const { table, filters, addFilter } = useTableStore();
+  const { table, filters, addFilter, config } = useTableStore();
   const theme = useTheme();
 
   if (!table || !table.head || !table.head.prompts) {
     return null;
   }
+
+  const policiesById = React.useMemo(() => {
+    const map: Record<PolicyObject['id'], PolicyObject> = {};
+    config?.redteam?.plugins?.forEach((plugin) => {
+      if (typeof plugin !== 'string' && plugin.id === 'policy') {
+        const policy = plugin?.config?.policy;
+        if (policy) {
+          if (isValidPolicyObject(policy)) {
+            map[policy.id] = policy;
+          } else {
+            const id = makeInlinePolicyId(policy);
+            map[id] = { id, text: policy };
+          }
+        }
+      }
+    });
+    return map;
+  }, [config]);
 
   /**
    * Given the pass rate percentages, calculates the color and text color for the cell.
@@ -100,22 +121,11 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       if (!metric) {
         return;
       }
-
       const asPolicy = isPolicyMetric(metric);
-
-      // Build filter, but bail if policy ID cannot be parsed
-      let filterValue = metric;
-      if (asPolicy) {
-        const policy = deserializePolicyMetricAsPolicyObject(metric);
-        if (!policy?.id) {
-          return; // avoid creating an empty-value filter
-        }
-        filterValue = policy.id;
-      }
       const filter = {
         type: asPolicy ? ('policy' as const) : ('metric' as const),
         operator: 'equals' as const,
-        value: filterValue,
+        value: asPolicy ? deserializePolicyIdFromMetric(metric) : metric,
         logicOperator: 'or' as const,
       };
 
@@ -159,11 +169,12 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
         headerAlign: 'left',
         valueGetter: (value) => {
           if (isPolicyMetric(value)) {
-            const policy = deserializePolicyMetricAsPolicyObject(value);
+            const policyId = deserializePolicyIdFromMetric(value);
+            const policy = policiesById[policyId];
             if (!policy) {
               return value;
             }
-            return formatPolicyIdentifierAsMetric(policy?.name ?? policy.id);
+            return formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
           } else {
             return value;
           }

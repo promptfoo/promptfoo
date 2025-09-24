@@ -1,13 +1,14 @@
 import {
-  deserializePolicyMetricAsPolicyObject,
+  deserializePolicyIdFromMetric,
   determinePolicyTypeFromId,
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
+  isValidPolicyObject,
   makeCustomPolicyCloudUrl,
+  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
-
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
@@ -17,6 +18,7 @@ import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import useCloudConfig from '../../../hooks/useCloudConfig';
 import { useTableStore } from './store';
+import type { PolicyObject } from '@promptfoo/redteam/types';
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
@@ -85,7 +87,7 @@ const CustomMetrics = ({
   onShowMore,
 }: CustomMetricsProps) => {
   const { data: cloudConfig } = useCloudConfig();
-  const { filters, addFilter } = useTableStore();
+  const { filters, addFilter, config } = useTableStore();
 
   if (!lookup || !Object.keys(lookup).length) {
     return null;
@@ -97,19 +99,10 @@ const CustomMetrics = ({
   const handleClick = useCallback(
     (value: string) => {
       const asPolicy = isPolicyMetric(value);
-      // Determine filter value, bailing if policy cannot be parsed
-      let filterValue = value;
-      if (asPolicy) {
-        const policy = deserializePolicyMetricAsPolicyObject(value);
-        if (!policy?.id) {
-          return;
-        }
-        filterValue = policy.id;
-      }
       const filter = {
         type: asPolicy ? ('policy' as const) : ('metric' as const),
         operator: 'equals' as const,
-        value: filterValue,
+        value: asPolicy ? deserializePolicyIdFromMetric(value) : value,
         logicOperator: 'or' as const,
       };
 
@@ -131,6 +124,24 @@ const CustomMetrics = ({
     [addFilter, filters.values],
   );
 
+  const policiesById = useMemo(() => {
+    const map: Record<PolicyObject['id'], PolicyObject> = {};
+    config?.redteam?.plugins?.forEach((plugin) => {
+      if (typeof plugin !== 'string' && plugin.id === 'policy') {
+        const policy = plugin?.config?.policy;
+        if (policy) {
+          if (isValidPolicyObject(policy)) {
+            map[policy.id] = policy;
+          } else {
+            const id = makeInlinePolicyId(policy);
+            map[id] = { id, text: policy };
+          }
+        }
+      }
+    });
+    return map;
+  }, [config]);
+
   return (
     <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>
       {displayMetrics
@@ -140,7 +151,8 @@ const CustomMetrics = ({
           let tooltipContent: React.ReactNode | null = null;
           // Display a tooltip for policy metrics.
           if (isPolicyMetric(metric)) {
-            const policy = deserializePolicyMetricAsPolicyObject(metric);
+            const policyId = deserializePolicyIdFromMetric(metric);
+            const policy = policiesById[policyId];
             if (policy) {
               displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
               tooltipContent = (

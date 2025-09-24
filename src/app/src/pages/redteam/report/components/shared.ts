@@ -1,6 +1,6 @@
 import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
 import {
-  deserializePolicyMetricAsPolicyObject,
+  deserializePolicyIdFromMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
@@ -58,10 +58,7 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
 
     // Parse and return the policy ID from the policy metric
     if (isPolicyMetric(metric)) {
-      const policy = deserializePolicyMetricAsPolicyObject(metric);
-      if (policy) {
-        return policy.id;
-      }
+      return deserializePolicyIdFromMetric(metric);
     }
 
     const metricParts = metric.split('/');

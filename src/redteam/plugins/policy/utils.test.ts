@@ -1,9 +1,9 @@
 import { validate as isUUID } from 'uuid';
 import { sha256 } from '../../../util/createHash';
-import { PolicyObject, PolicyObjectSchema } from '../../types';
+import { PolicyObjectSchema } from '../../types';
 import { POLICY_METRIC_PREFIX } from './constants';
 import {
-  deserializePolicyMetricAsPolicyObject,
+  deserializePolicyIdFromMetric,
   determinePolicyTypeFromId,
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
@@ -45,53 +45,10 @@ describe('Policy Utils', () => {
     });
   });
 
-  describe('deserializePolicyMetricAsPolicyObject', () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    it('should deserialize a valid policy metric', () => {
-      const policyObject: PolicyObject = {
-        id: 'test-id',
-        name: 'Test Policy',
-        text: 'This is a test policy',
-      };
-      const metric = `${POLICY_METRIC_PREFIX}:${JSON.stringify(policyObject)}`;
-
-      const result = deserializePolicyMetricAsPolicyObject(metric);
-      expect(result).toEqual(policyObject);
-    });
-
-    it('should return null for non-policy metrics', () => {
-      expect(deserializePolicyMetricAsPolicyObject('other:{"id":"test"}')).toBeNull();
-      expect(deserializePolicyMetricAsPolicyObject('test')).toBeNull();
-      expect(deserializePolicyMetricAsPolicyObject('')).toBeNull();
-    });
-
-    it('should return null and log error for invalid JSON', () => {
-      const result = deserializePolicyMetricAsPolicyObject(`${POLICY_METRIC_PREFIX}:invalid-json`);
-      expect(result).toBeNull();
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Error deserializing policy metric:'),
-      );
-    });
-
-    it('should return null and log error for malformed JSON', () => {
-      const result = deserializePolicyMetricAsPolicyObject(`${POLICY_METRIC_PREFIX}:{"id":"test"`);
-      expect(result).toBeNull();
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Error deserializing policy metric:'),
-      );
-    });
-
-    it('should handle policy metrics with special characters', () => {
-      const policyObject: PolicyObject = {
-        id: 'special-id',
-        name: 'Policy with "quotes"',
-        text: 'Line 1\nLine 2\tTabbed',
-      };
-      const metric = `${POLICY_METRIC_PREFIX}:${JSON.stringify(policyObject)}`;
-
-      const result = deserializePolicyMetricAsPolicyObject(metric);
-      expect(result).toEqual(policyObject);
+  describe('deserializePolicyIdFromMetric', () => {
+    it('should deserialize a policy ID from a metric', () => {
+      const result = deserializePolicyIdFromMetric(`${POLICY_METRIC_PREFIX}:test-id`);
+      expect(result).toBe('test-id');
     });
   });
 

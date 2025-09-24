@@ -21,21 +21,12 @@ export function serializePolicyAsMetric(policyId: PolicyObject['id']): string {
 }
 
 /**
- * Deserializes a policy metric as a PolicyObject.
+ * Deserializes a policy ID from a metric.
  * @param metric - The metric to deserialize.
- * @returns The policy object if the metric is a policy metric, null otherwise.
+ * @returns The policy ID.
  */
-export function deserializePolicyMetricAsPolicyObject(metric: string): PolicyObject | null {
-  if (!isPolicyMetric(metric)) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(metric.replace(`${POLICY_METRIC_PREFIX}:`, '')) as PolicyObject;
-  } catch (error) {
-    console.error(`Error deserializing policy metric: ${error}`);
-    return null;
-  }
+export function deserializePolicyIdFromMetric(metric: string): PolicyObject['id'] {
+  return metric.replace(`${POLICY_METRIC_PREFIX}:`, '');
 }
 
 /**
