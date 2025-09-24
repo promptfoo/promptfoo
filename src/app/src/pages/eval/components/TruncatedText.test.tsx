@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import TruncatedText from './TruncatedText';
 
 describe('TruncatedText', () => {
@@ -429,5 +429,164 @@ describe('TruncatedText', () => {
 
     // Content should be empty or minimal
     expect(mainDiv?.textContent || '').toBe('');
+  });
+
+  it('should prevent event propagation when the truncation toggler is clicked', () => {
+    const longText =
+      'This is a very long piece of text that is intended to be truncated by the component.';
+    const maxLength = 20;
+
+    const parentClickHandler = vi.fn();
+
+    const { container } = render(
+      <div onClick={parentClickHandler}>
+        <TruncatedText text={longText} maxLength={maxLength} />
+      </div>,
+    );
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
+    expect(truncationToggler).toBeInTheDocument();
+
+    fireEvent.click(truncationToggler as Element);
+
+    expect(parentClickHandler).not.toHaveBeenCalled();
+  });
+
+  it('should prevent click event propagation to parent elements when toggling truncation', () => {
+    const longText = 'This is a very long piece of text that is intended to be truncated.';
+    const maxLength = 20;
+    const parentClickHandler = vi.fn();
+
+    render(
+      <div onClick={parentClickHandler}>
+        <TruncatedText text={longText} maxLength={maxLength} />
+      </div>,
+    );
+
+    const truncationToggler = screen.getByText('...');
+    fireEvent.click(truncationToggler);
+
+    expect(parentClickHandler).not.toHaveBeenCalled();
+  });
+
+  it('should display truncated JSON stringified text when a complex object exceeds maxLength', () => {
+    const complexObject = {
+      name: 'VeryLongNameThatExceedsMaxLength',
+      age: 30,
+      address: {
+        street: 'LongStreetNameThatAlsoExceedsMaxLength',
+        city: 'ShortCity',
+      },
+      hobbies: ['reading', 'coding', 'hiking'],
+    };
+    const maxLength = 25;
+    const expectedTruncatedText = JSON.stringify(complexObject).slice(0, maxLength);
+
+    const { container } = render(
+      <TruncatedText text={JSON.stringify(complexObject)} maxLength={maxLength} />,
+    );
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
+    expect(screen.getByText('...')).toBeInTheDocument();
+  });
+
+  it('should reset truncation state when text changes to different content that still exceeds maxLength', () => {
+    const longText1 = 'This is a very long piece of text that exceeds maxLength - 1';
+    const longText2 = 'This is another very long piece of text that exceeds maxLength - 2';
+    const maxLength = 20;
+
+    const { container, rerender } = render(
+      <TruncatedText text={longText1} maxLength={maxLength} />,
+    );
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
+    expect(truncationToggler).toBeInTheDocument();
+
+    fireEvent.click(truncationToggler as Element);
+    expect(screen.getByText('Show less')).toBeInTheDocument();
+    expect(screen.getByText(longText1)).toBeInTheDocument();
+
+    rerender(<TruncatedText text={longText2} maxLength={maxLength} />);
+
+    const mainDivAfter = container.querySelector('#eval-output-cell-text');
+    expect(mainDivAfter).toBeInTheDocument();
+
+    expect(screen.getByText('Show less')).toBeInTheDocument();
+    expect(screen.getByText(longText2)).toBeInTheDocument();
+  });
+
+  it('should call preventDefault and stopPropagation when the truncation toggler is clicked', () => {
+    const longText =
+      'This is a very long piece of text that is intended to be truncated by the component.';
+    const maxLength = 20;
+
+    const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
+    expect(truncationToggler).toBeInTheDocument();
+
+    const preventDefaultSpy = vi.spyOn(Event.prototype, 'preventDefault');
+    const stopPropagationSpy = vi.spyOn(Event.prototype, 'stopPropagation');
+
+    fireEvent.click(truncationToggler as Element);
+
+    expect(preventDefaultSpy).toHaveBeenCalled();
+    expect(stopPropagationSpy).toHaveBeenCalled();
+
+    preventDefaultSpy.mockRestore();
+    stopPropagationSpy.mockRestore();
+  });
+
+  it('should not toggle truncation when text is selected within the truncated text area', () => {
+    const longText =
+      'This is a very long piece of text that is intended to be truncated by the component.';
+    const maxLength = 20;
+    const expectedTruncatedText = longText.slice(0, maxLength);
+
+    const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+    expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
+
+    const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
+    expect(truncationToggler).toBeInTheDocument();
+
+    const textToSelect = mainDiv?.firstChild;
+
+    if (textToSelect) {
+      const range = document.createRange();
+      range.selectNodeContents(textToSelect);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+
+    expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
+    expect(screen.queryByText(longText)).not.toBeInTheDocument();
+  });
+
+  it('should handle arrays containing null or undefined values as part of the text prop', () => {
+    const textArray: React.ReactNode[] = ['Hello, ', null, 'World!'];
+    const maxLength = 20;
+
+    const { container } = render(<TruncatedText text={textArray} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    expect(mainDiv).toHaveTextContent('Hello, World!');
   });
 });
