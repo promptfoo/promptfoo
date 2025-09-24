@@ -18,6 +18,10 @@ jest.mock('google-auth-library');
 
 jest.mock('glob', () => ({
   globSync: jest.fn().mockReturnValue([]),
+  hasMagic: jest.fn().mockImplementation((path: string) => {
+    // Simple implementation that detects common glob patterns
+    return /[*?[\]{}]/.test(path);
+  }),
 }));
 
 jest.mock('fs', () => ({

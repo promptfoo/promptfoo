@@ -32,6 +32,10 @@ jest.mock('fs', () => ({
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: jest.fn().mockImplementation((path: string) => {
+    // Simple implementation that detects common glob patterns
+    return /[*?[\]{}]/.test(path);
+  }),
 }));
 
 jest.mock('better-sqlite3');

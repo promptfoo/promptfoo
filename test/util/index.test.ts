@@ -38,6 +38,10 @@ jest.mock('proxy-agent', () => ({
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: jest.fn().mockImplementation((path: string) => {
+    // Simple implementation that detects common glob patterns
+    return /[*?[\]{}]/.test(path);
+  }),
 }));
 
 jest.mock('fs', () => ({
@@ -66,6 +70,12 @@ describe('maybeLoadToolsFromExternalFile', () => {
     jest.resetAllMocks();
     jest.mocked(fs.existsSync).mockReturnValue(true);
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+    // Restore hasMagic mock after resetAllMocks
+    const { hasMagic } = require('glob');
+    jest.mocked(hasMagic).mockImplementation((path: string) => {
+      // Simple implementation that detects common glob patterns
+      return /[*?[\]{}]/.test(path);
+    });
   });
 
   it('should process tool objects directly', () => {
