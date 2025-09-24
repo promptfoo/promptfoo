@@ -8,8 +8,6 @@ The `cometapi` provider lets you use [CometAPI](https://www.cometapi.com/?utm_so
 
 ## Quick Start
 
-The CometAPI example will be available via `init --example` after it’s published upstream. In the meantime, use one of these quick commands for local development:
-
 - Run with the included example config (from this repo root):
 
 ```bash
