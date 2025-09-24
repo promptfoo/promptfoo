@@ -66,8 +66,8 @@ describe('CustomPoliciesSection', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByDisplayValue('Custom Policy 2')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('Custom Policy 3')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Imported Policy 2')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Imported Policy 3')).toBeInTheDocument();
 
         expect(screen.getByDisplayValue('Policy from CSV 1')).toBeInTheDocument();
         expect(screen.getByDisplayValue('Policy from CSV 2')).toBeInTheDocument();
@@ -218,6 +218,114 @@ describe('CustomPoliciesSection', () => {
           'Error parsing CSV: Error: File could not be read',
           'error',
         );
+      });
+    });
+  });
+
+  describe('Policy Name Persistence', () => {
+    it('should restore policy names from existing config', () => {
+      const mockConfigWithPolicies = {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: 'First policy text',
+              name: 'Data Privacy Policy',
+            },
+          },
+          {
+            id: 'policy',
+            config: {
+              policy: 'Second policy text',
+              name: 'Content Guidelines',
+            },
+          },
+        ],
+      };
+
+      (useRedTeamConfig as unknown as Mock).mockReturnValue({
+        config: mockConfigWithPolicies,
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderComponent();
+
+      expect(screen.getByDisplayValue('Data Privacy Policy')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Content Guidelines')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('First policy text')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Second policy text')).toBeInTheDocument();
+    });
+
+    it('should fall back to default names when config has no names', () => {
+      const mockConfigWithoutNames = {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: 'Policy without name',
+            },
+          },
+        ],
+      };
+
+      (useRedTeamConfig as unknown as Mock).mockReturnValue({
+        config: mockConfigWithoutNames,
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderComponent();
+
+      expect(screen.getByDisplayValue('Custom Policy 1')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Policy without name')).toBeInTheDocument();
+    });
+
+    it('should save policy names to config when policies are synced', async () => {
+      renderComponent();
+
+      // Change the default policy name
+      const policyNameInput = screen.getByDisplayValue('Custom Policy 1');
+      fireEvent.change(policyNameInput, { target: { value: 'My Custom Policy' } });
+
+      // Add policy text to trigger sync
+      const policyTextInput = screen.getByLabelText('Policy Text');
+      fireEvent.change(policyTextInput, { target: { value: 'Test policy content' } });
+
+      // Wait for debounced update
+      await waitFor(
+        () => {
+          expect(mockUpdateConfig).toHaveBeenCalledWith('plugins', [
+            {
+              id: 'policy',
+              config: {
+                policy: 'Test policy content',
+                name: 'My Custom Policy',
+              },
+            },
+          ]);
+        },
+        { timeout: 1000 }
+      );
+    });
+
+    it('should use "Imported Policy" prefix for CSV imports', async () => {
+      renderComponent();
+
+      const csvContent = 'policy_text\n"CSV imported policy"';
+      const file = new File([csvContent], 'policies.csv', { type: 'text/csv' });
+      Object.defineProperty(file, 'text', {
+        value: () => Promise.resolve(csvContent),
+      });
+
+      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
+      const fileInput = uploadButton.querySelector('input[type="file"]');
+
+      fireEvent.change(fileInput!, {
+        target: { files: [file] },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('Imported Policy 2')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('CSV imported policy')).toBeInTheDocument();
       });
     });
   });
