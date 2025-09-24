@@ -242,30 +242,40 @@ function EvalOutputCell({
         )}
       </div>
     );
-  } else if (renderMarkdown && !showDiffs) {
-    node = (
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          img: ({ src, alt }) => (
-            <img
-              loading="lazy"
-              src={src}
-              alt={alt}
-              onClick={() => toggleLightbox(src)}
-              style={{ cursor: 'pointer' }}
-            />
-          ),
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    );
-  } else if (prettifyJson) {
-    try {
-      node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
-    } catch {
-      // Ignore because it's probably not JSON.
+  } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
+    // When both prettifyJson and renderMarkdown are enabled,
+    // display as JSON if it's a valid object/array, otherwise render as Markdown
+    let isJsonHandled = false;
+    if (prettifyJson) {
+      try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed === 'object' && parsed !== null) {
+          node = <pre>{JSON.stringify(parsed, null, 2)}</pre>;
+          isJsonHandled = true;
+        }
+      } catch {
+        // Not valid JSON, continue to Markdown if enabled
+      }
+    }
+    if (!isJsonHandled && renderMarkdown) {
+      node = (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            img: ({ src, alt }) => (
+              <img
+                loading="lazy"
+                src={src}
+                alt={alt}
+                onClick={() => toggleLightbox(src)}
+                style={{ cursor: 'pointer' }}
+              />
+            ),
+          }}
+        >
+          {text}
+        </ReactMarkdown>
+      );
     }
   }
 
