@@ -528,70 +528,110 @@ export default function EvalOutputPromptDialog({
                       p: 2,
                     }}
                   >
-                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                    <Box sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                      gap: 2
+                    }}>
                       {tokenUsage?.numRequests !== undefined && (
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">
-                            Probes:
+                        <Box sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: '80px'
+                        }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                            Probes
                           </Typography>
-                          <Typography variant="body2" fontWeight="medium">
+                          <Typography variant="h6" fontWeight="medium" color="primary.main">
                             {tokenUsage.numRequests}
                           </Typography>
                         </Box>
                       )}
-                      {tokenUsage && (
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">
-                            Tokens:
+                      {tokenUsage && (tokenUsage.cached || tokenUsage.total) && (
+                        <Box sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: '120px'
+                        }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                            Tokens
                           </Typography>
-                          <Typography variant="body2" fontWeight="medium">
-                            {tokenUsage.cached ? (
-                              <span>
-                                {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.cached ?? 0)}{' '}
+                          {tokenUsage.cached ? (
+                            <Box sx={{ textAlign: 'center' }}>
+                              <Typography variant="h6" fontWeight="medium" color="primary.main">
+                                {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.cached)}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
                                 (cached)
-                              </span>
-                            ) : tokenUsage.total ? (
-                              <Tooltip
-                                title={`${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.prompt ?? 0)} prompt tokens + ${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completion ?? 0)} completion tokens = ${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.total ?? 0)} total`}
-                              >
-                                <span>
+                              </Typography>
+                            </Box>
+                          ) : tokenUsage.total ? (
+                            <Tooltip
+                              title={`${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.prompt ?? 0)} prompt + ${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completion ?? 0)} completion = ${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.total ?? 0)} total`}
+                            >
+                              <Box sx={{ textAlign: 'center', cursor: 'help' }}>
+                                <Typography variant="h6" fontWeight="medium" color="primary.main">
                                   {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.total)}
-                                  {((tokenUsage.prompt ?? 0) > 0 || (tokenUsage.completion ?? 0) > 0) &&
-                                    ` (${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.prompt ?? 0)}+${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completion ?? 0)})`}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  ({Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.prompt ?? 0)}+{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completion ?? 0)})
                                   {tokenUsage.completionDetails?.reasoning &&
                                     ` R${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completionDetails.reasoning)}`}
-                                </span>
-                              </Tooltip>
-                            ) : null}
-                          </Typography>
+                                </Typography>
+                              </Box>
+                            </Tooltip>
+                          ) : null}
                         </Box>
                       )}
                       {latencyMs && (
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">
-                            Latency:
+                        <Box sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: '100px'
+                        }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                            Latency
                           </Typography>
-                          <Typography variant="body2" fontWeight="medium">
-                            {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(latencyMs)} ms
+                          <Typography variant="h6" fontWeight="medium" color="primary.main">
+                            {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(latencyMs)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            ms
                           </Typography>
                         </Box>
                       )}
                       {tokenUsage?.completion && latencyMs && (
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">
-                            Tokens/Sec:
+                        <Box sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: '100px'
+                        }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                            Speed
                           </Typography>
-                          <Typography variant="body2" fontWeight="medium">
+                          <Typography variant="h6" fontWeight="medium" color="primary.main">
                             {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completion / (latencyMs / 1000))}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            tok/sec
                           </Typography>
                         </Box>
                       )}
                       {cost && (
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">
-                            Cost:
+                        <Box sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: '80px'
+                        }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                            Cost
                           </Typography>
-                          <Typography variant="body2" fontWeight="medium">
+                          <Typography variant="h6" fontWeight="medium" color="primary.main">
                             ${cost.toPrecision(2)}
                           </Typography>
                         </Box>
