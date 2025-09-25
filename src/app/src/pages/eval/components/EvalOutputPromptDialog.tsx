@@ -515,7 +515,7 @@ export default function EvalOutputPromptDialog({
                 )}
                 citations={citationsData}
               />
-              {showInferenceDetails && (tokenUsage || latencyMs || cost) && (
+              {showInferenceDetails && (tokenUsage || latencyMs || (cost !== undefined && cost > 0)) && (
                 <Box mb={2}>
                   <Typography variant="subtitle1" sx={subtitleTypographySx}>
                     Performance Metrics
@@ -669,7 +669,7 @@ export default function EvalOutputPromptDialog({
                       </Paper>
                     )}
 
-                    {cost && (
+                    {cost !== undefined && cost > 0 && (
                       <Paper
                         variant="outlined"
                         sx={{
