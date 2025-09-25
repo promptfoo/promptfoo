@@ -42,14 +42,14 @@ export default function LoginPage() {
   }, [fetchEmail]);
 
   const params = new URLSearchParams(location.search);
-  const handleRedirect = () => {
+  const handleRedirect = React.useCallback(() => {
     const redirect = params.get('redirect');
     if (redirect) {
       navigate(redirect);
     } else {
       navigate('/');
     }
-  };
+  }, [navigate, params]);
 
   useEffect(() => {
     if (!isLoading && email) {
