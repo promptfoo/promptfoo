@@ -300,6 +300,13 @@ export const OPENAI_CHAT_MODELS = [
       output: 6.0 / 1e6,
     },
   })),
+  ...['gpt-5-codex'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
 ];
 
 // Deep research models for Responses API
