@@ -515,7 +515,7 @@ export default function EvalOutputPromptDialog({
                 )}
                 citations={citationsData}
               />
-              {showInferenceDetails && (tokenUsage || latencyMs || (cost !== undefined && cost > 0)) && (
+              {showInferenceDetails && (tokenUsage || latencyMs || cost !== undefined) && (
                 <Box mb={2}>
                   <Typography variant="subtitle1" sx={subtitleTypographySx}>
                     Performance Metrics
@@ -669,7 +669,7 @@ export default function EvalOutputPromptDialog({
                       </Paper>
                     )}
 
-                    {cost !== undefined && cost > 0 && (
+                    {cost !== undefined && (
                       <Paper
                         variant="outlined"
                         sx={{
@@ -679,10 +679,10 @@ export default function EvalOutputPromptDialog({
                           bgcolor: 'background.paper',
                           minWidth: '80px',
                           textAlign: 'center',
-                          borderColor: cost > 0.01 ? 'warning.main' : 'divider',
+                          borderColor: cost > 0 ? (cost > 0.01 ? 'warning.main' : 'primary.main') : 'divider',
                           transition: 'all 0.2s ease',
                           '&:hover': {
-                            borderColor: cost > 0.01 ? 'warning.dark' : 'primary.main',
+                            borderColor: cost > 0 ? (cost > 0.01 ? 'warning.dark' : 'primary.main') : 'action.disabled',
                             bgcolor: 'action.hover',
                             transform: 'translateY(-1px)',
                             boxShadow: 1
@@ -692,10 +692,10 @@ export default function EvalOutputPromptDialog({
                         <Typography
                           variant="body2"
                           fontWeight="600"
-                          color={cost > 0.01 ? 'warning.main' : 'primary.main'}
+                          color={cost > 0 ? (cost > 0.01 ? 'warning.main' : 'primary.main') : 'text.secondary'}
                           sx={{ lineHeight: 1.2 }}
                         >
-                          ${cost >= 0.01 ? cost.toFixed(3) : cost.toPrecision(2)}
+                          {cost > 0 ? `$${cost >= 0.01 ? cost.toFixed(3) : cost.toPrecision(2)}` : 'N/A'}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
                           cost
