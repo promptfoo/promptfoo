@@ -55,7 +55,7 @@ export async function monkeyPatchFetch(
   ) {
     const token = cloudConfig.getApiKey();
     opts.headers = {
-      ...(options?.headers || {}),
+      ...(opts.headers || {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
   }
