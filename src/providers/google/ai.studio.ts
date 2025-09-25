@@ -7,7 +7,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import { CHAT_MODELS } from './shared';
+import { CHAT_MODELS, resolveChatModelName } from './shared';
 import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -119,10 +119,15 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     modelName: string,
     options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (!CHAT_MODELS.includes(modelName)) {
+    const resolvedModelName = resolveChatModelName(modelName);
+    if (!CHAT_MODELS.includes(resolvedModelName)) {
       logger.debug(`Using unknown Google chat model: ${modelName}`);
+    } else if (resolvedModelName !== modelName) {
+      logger.debug(
+        `Using Google chat model alias '${modelName}' -> '${resolvedModelName}'`,
+      );
     }
-    super(modelName, options);
+    super(resolvedModelName, options);
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }

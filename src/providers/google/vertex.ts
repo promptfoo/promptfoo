@@ -12,6 +12,7 @@ import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { resolveChatModelName } from './shared';
 import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -143,7 +144,13 @@ export class VertexChatProvider extends VertexGenericProvider {
     modelName: string,
     options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    super(modelName, options);
+    const resolvedModelName = resolveChatModelName(modelName);
+    if (resolvedModelName !== modelName) {
+      logger.debug(
+        `Using Google Vertex model alias '${modelName}' -> '${resolvedModelName}'`,
+      );
+    }
+    super(resolvedModelName, options);
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
