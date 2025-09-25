@@ -80,7 +80,7 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText?: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
+  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight, showInferenceDetails, wordBreak } =
     useResultsViewSettingsStore();
 
   const { shouldHighlightSearchText } = useTableStore();
@@ -628,13 +628,25 @@ function EvalOutputCell({
               prompt={output.prompt}
               provider={output.provider}
               gradingResults={output.gradingResult?.componentResults}
-              output={text}
+              output={output.text} // Pass raw output instead of processed text
               metadata={output.metadata}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
               promptIndex={promptIndex}
               variables={output.testCase?.vars}
+              // Pass global settings for consistent formatting
+              renderMarkdown={renderMarkdown}
+              prettifyJson={prettifyJson}
+              showInferenceDetails={showInferenceDetails}
+              maxTextLength={maxTextLength}
+              wordBreak={wordBreak}
+              maxImageWidth={maxImageWidth}
+              maxImageHeight={maxImageHeight}
+              // Pass additional data for inference details
+              tokenUsage={output.tokenUsage || output.response?.tokenUsage}
+              latencyMs={output.latencyMs}
+              cost={output.cost}
             />
           )}
         </>

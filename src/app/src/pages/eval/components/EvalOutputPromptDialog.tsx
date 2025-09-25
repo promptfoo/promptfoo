@@ -12,6 +12,9 @@ import Paper from '@mui/material/Paper';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
+import Tooltip from '@mui/material/Tooltip';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
@@ -47,7 +50,7 @@ const textContentTypographySx = {
   wordBreak: 'break-word',
 };
 
-// Code display component
+// Code display component with consistent formatting
 interface CodeDisplayProps {
   content: string;
   title: string;
@@ -57,6 +60,9 @@ interface CodeDisplayProps {
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   showCopyButton?: boolean;
+  renderMarkdown?: boolean;
+  prettifyJson?: boolean;
+  wordBreak?: 'break-word' | 'break-all';
 }
 
 function CodeDisplay({
@@ -68,19 +74,43 @@ function CodeDisplay({
   onMouseEnter,
   onMouseLeave,
   showCopyButton = false,
+  renderMarkdown = false,
+  prettifyJson = false,
+  wordBreak = 'break-word',
 }: CodeDisplayProps) {
-  // Improved code detection logic
-  const isCode =
-    /^[\s]*[{[]/.test(content) || // JSON-like (starts with { or [)
-    /^#\s/.test(content) || // Markdown headers (starts with # )
-    /```/.test(content) || // Code blocks (contains ```)
-    /^\s*[\w-]+\s*:/.test(content) || // YAML/config-like (key: value)
-    /^\s*<\w+/.test(content) || // XML/HTML-like (starts with <tag)
-    content.includes('function ') || // JavaScript functions
-    content.includes('class ') || // Class definitions
-    content.includes('import ') || // Import statements
-    /^\s*def\s+/.test(content) || // Python functions
-    /^\s*\w+\s*\(/.test(content); // Function calls
+  // Use same formatting logic as EvalOutputCell
+  let node: React.ReactNode | undefined;
+
+  if ((prettifyJson || renderMarkdown)) {
+    // When both prettifyJson and renderMarkdown are enabled,
+    // display as JSON if it's a valid object/array, otherwise render as Markdown
+    let isJsonHandled = false;
+    if (prettifyJson) {
+      try {
+        const parsed = JSON.parse(content);
+        if (typeof parsed === 'object' && parsed !== null) {
+          node = <pre style={{
+            margin: 0,
+            fontFamily: 'monospace',
+            fontSize: '0.875rem',
+            lineHeight: 1.6,
+            whiteSpace: 'pre-wrap',
+            wordBreak: wordBreak,
+          }}>{JSON.stringify(parsed, null, 2)}</pre>;
+          isJsonHandled = true;
+        }
+      } catch {
+        // Not valid JSON, continue to Markdown if enabled
+      }
+    }
+    if (!isJsonHandled && renderMarkdown) {
+      node = (
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {content}
+        </ReactMarkdown>
+      );
+    }
+  }
 
   return (
     <Box mb={2}>
@@ -110,21 +140,11 @@ function CodeDisplay({
             maxHeight,
           }}
         >
-          {isCode ? (
-            <pre
-              style={{
-                margin: 0,
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                lineHeight: 1.6,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              {content}
-            </pre>
-          ) : (
-            <Typography variant="body1" sx={textContentTypographySx}>
+          {node || (
+            <Typography variant="body1" sx={{
+              ...textContentTypographySx,
+              wordBreak: wordBreak,
+            }}>
               {content}
             </Typography>
           )}
@@ -157,6 +177,18 @@ interface EvalOutputPromptDialogProps {
   testIndex?: number;
   promptIndex?: number;
   variables?: Record<string, any>;
+  // Global settings for consistent formatting
+  renderMarkdown?: boolean;
+  prettifyJson?: boolean;
+  showInferenceDetails?: boolean;
+  maxTextLength?: number;
+  wordBreak?: 'break-word' | 'break-all';
+  maxImageWidth?: number;
+  maxImageHeight?: number;
+  // Additional data for inference details
+  tokenUsage?: any;
+  latencyMs?: number;
+  cost?: number;
 }
 
 export default function EvalOutputPromptDialog({
@@ -172,6 +204,16 @@ export default function EvalOutputPromptDialog({
   testIndex,
   promptIndex,
   variables,
+  renderMarkdown = false,
+  prettifyJson = false,
+  showInferenceDetails = false,
+  maxTextLength = 250,
+  wordBreak = 'break-word',
+  maxImageWidth = 256,
+  maxImageHeight = 256,
+  tokenUsage,
+  latencyMs,
+  cost,
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -444,7 +486,14 @@ export default function EvalOutputPromptDialog({
                 hoveredElement={hoveredElement}
                 onMouseEnter={setHoveredElement}
                 onMouseLeave={() => setHoveredElement(null)}
-                CodeDisplay={CodeDisplay}
+                CodeDisplay={(props: any) => (
+                  <CodeDisplay
+                    {...props}
+                    renderMarkdown={renderMarkdown}
+                    prettifyJson={prettifyJson}
+                    wordBreak={wordBreak}
+                  />
+                )}
                 subtitleTypographySx={subtitleTypographySx}
               />
               <OutputsPanel
@@ -456,9 +505,101 @@ export default function EvalOutputPromptDialog({
                 onCopy={copyFieldToClipboard}
                 onMouseEnter={setHoveredElement}
                 onMouseLeave={() => setHoveredElement(null)}
-                CodeDisplay={CodeDisplay}
+                CodeDisplay={(props: any) => (
+                  <CodeDisplay
+                    {...props}
+                    renderMarkdown={renderMarkdown}
+                    prettifyJson={prettifyJson}
+                    wordBreak={wordBreak}
+                  />
+                )}
                 citations={citationsData}
               />
+              {showInferenceDetails && (tokenUsage || latencyMs || cost) && (
+                <Box mb={2}>
+                  <Typography variant="subtitle1" sx={subtitleTypographySx}>
+                    Inference Details
+                  </Typography>
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      bgcolor: 'background.default',
+                      borderRadius: 1,
+                      p: 2,
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                      {tokenUsage?.numRequests !== undefined && (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">
+                            Probes:
+                          </Typography>
+                          <Typography variant="body2" fontWeight="medium">
+                            {tokenUsage.numRequests}
+                          </Typography>
+                        </Box>
+                      )}
+                      {tokenUsage && (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">
+                            Tokens:
+                          </Typography>
+                          <Typography variant="body2" fontWeight="medium">
+                            {tokenUsage.cached ? (
+                              <span>
+                                {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.cached ?? 0)}{' '}
+                                (cached)
+                              </span>
+                            ) : tokenUsage.total ? (
+                              <Tooltip
+                                title={`${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.prompt ?? 0)} prompt tokens + ${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completion ?? 0)} completion tokens = ${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.total ?? 0)} total`}
+                              >
+                                <span>
+                                  {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.total)}
+                                  {((tokenUsage.prompt ?? 0) > 0 || (tokenUsage.completion ?? 0) > 0) &&
+                                    ` (${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.prompt ?? 0)}+${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completion ?? 0)})`}
+                                  {tokenUsage.completionDetails?.reasoning &&
+                                    ` R${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completionDetails.reasoning)}`}
+                                </span>
+                              </Tooltip>
+                            ) : null}
+                          </Typography>
+                        </Box>
+                      )}
+                      {latencyMs && (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">
+                            Latency:
+                          </Typography>
+                          <Typography variant="body2" fontWeight="medium">
+                            {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(latencyMs)} ms
+                          </Typography>
+                        </Box>
+                      )}
+                      {tokenUsage?.completion && latencyMs && (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">
+                            Tokens/Sec:
+                          </Typography>
+                          <Typography variant="body2" fontWeight="medium">
+                            {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completion / (latencyMs / 1000))}
+                          </Typography>
+                        </Box>
+                      )}
+                      {cost && (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">
+                            Cost:
+                          </Typography>
+                          <Typography variant="body2" fontWeight="medium">
+                            ${cost.toPrecision(2)}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </Paper>
+                </Box>
+              )}
             </Box>
           )}
 
