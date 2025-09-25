@@ -22,17 +22,18 @@ export const handleLlmRubric = ({
   // Update the assertion value. This allows the web view to display the prompt.
   assertion.value = assertion.value || test.options?.rubricPrompt;
 
-  // Prefer the provider passed in by runAssertions when test options don't explicitly set one.
-  const optionsWithProvider = {
+  const gradingOptions = {
     ...test.options,
-    ...(provider && !test.options?.provider ? { provider } : {}),
   } as any;
+  const callOptions =
+    provider && !test.options?.provider ? { gradingProvider: provider } : undefined;
 
   return matchesLlmRubric(
     renderedValue || '',
     outputString,
-    optionsWithProvider,
+    gradingOptions,
     test.vars,
     assertion,
+    callOptions,
   );
 };

@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { serializeContext } from './assertions/contextUtils';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
@@ -19,20 +20,12 @@ import {
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
 } from './prompts';
-import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
+import { loadApiProvider } from './providers/index';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
-import { maybeLoadFromExternalFile } from './util/file';
-import { isJavascriptFile } from './util/fileExtensions';
-import invariant from './util/invariant';
-import { extractFirstJsonObject, extractJsonObjects } from './util/json';
-import { serializeContext } from './assertions/contextUtils';
-import { getNunjucksEngine } from './util/templates';
-import { accumulateTokenUsage } from './util/tokenUsageUtils';
-
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -47,6 +40,12 @@ import type {
   ProviderTypeMap,
   TokenUsage,
 } from './types/index';
+import { maybeLoadFromExternalFile } from './util/file';
+import { isJavascriptFile } from './util/fileExtensions';
+import invariant from './util/invariant';
+import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { getNunjucksEngine } from './util/templates';
+import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -465,6 +464,7 @@ export async function matchesLlmRubric(
   assertion?: Assertion | null,
   options?: {
     throwOnError?: boolean;
+    gradingProvider?: ApiProvider; // concrete provider instance override
   },
 ): Promise<GradingResult> {
   if (!grading) {
@@ -495,12 +495,9 @@ export async function matchesLlmRubric(
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
     defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
-  const finalProvider = await getAndCheckProvider(
-    'text',
-    grading.provider,
-    defaultProvider,
-    'llm-rubric check',
-  );
+  const finalProvider =
+    options?.gradingProvider ||
+    (await getAndCheckProvider('text', grading.provider, defaultProvider, 'llm-rubric check'));
   const resp = await finalProvider.callApi(prompt, {
     prompt: {
       raw: prompt,

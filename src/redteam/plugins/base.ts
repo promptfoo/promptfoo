@@ -470,10 +470,16 @@ export abstract class RedteamGraderBase {
         jsonOnly: true,
       }));
 
-    const grade = await matchesLlmRubric(finalRubric, llmOutput, {
-      ...test.options,
-      provider: providerToUse,
-    });
+    const grade = await matchesLlmRubric(
+      finalRubric,
+      llmOutput,
+      {
+        ...test.options,
+      },
+      test.vars,
+      undefined,
+      { gradingProvider: providerToUse },
+    );
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 
     let suggestions: ResultSuggestion[] | undefined;
