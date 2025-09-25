@@ -123,9 +123,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     if (!CHAT_MODELS.includes(resolvedModelName)) {
       logger.debug(`Using unknown Google chat model: ${modelName}`);
     } else if (resolvedModelName !== modelName) {
-      logger.debug(
-        `Using Google chat model alias '${modelName}' -> '${resolvedModelName}'`,
-      );
+      logger.debug(`Using Google chat model alias '${modelName}' -> '${resolvedModelName}'`);
     }
     super(resolvedModelName, options);
     if (this.config.mcp?.enabled) {

@@ -146,9 +146,7 @@ export class VertexChatProvider extends VertexGenericProvider {
   ) {
     const resolvedModelName = resolveChatModelName(modelName);
     if (resolvedModelName !== modelName) {
-      logger.debug(
-        `Using Google Vertex model alias '${modelName}' -> '${resolvedModelName}'`,
-      );
+      logger.debug(`Using Google Vertex model alias '${modelName}' -> '${resolvedModelName}'`);
     }
     super(resolvedModelName, options);
     if (this.config.mcp?.enabled) {
