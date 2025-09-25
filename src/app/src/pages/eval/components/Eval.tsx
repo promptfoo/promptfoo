@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
-import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import {
   EvalResultsFilterMode,
@@ -317,16 +315,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     return <EmptyState />;
   }
 
-  // Check if this is a redteam eval
-  const isRedteam = config?.redteam !== undefined;
-
   return (
     <ShiftKeyProvider>
-      {isRedteam && evalId && (
-        <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
-          <EnterpriseBanner evalId={evalId} />
-        </Box>
-      )}
       <ResultsView
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}

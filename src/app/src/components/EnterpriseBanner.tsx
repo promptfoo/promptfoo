@@ -7,7 +7,7 @@ import Link from '@mui/material/Link';
 
 interface EnterpriseBannerProps {
   evalId?: string;
-  sx?: React.CSSProperties;
+  sx?: any; // Use any for MUI sx prop
 }
 
 /**
@@ -16,39 +16,57 @@ interface EnterpriseBannerProps {
  */
 const EnterpriseBanner = ({ evalId, sx }: EnterpriseBannerProps) => {
   const [isCloudEnabled, setIsCloudEnabled] = useState<boolean | null>(null);
+  const [isRedteamEval, setIsRedteamEval] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Use the same API endpoint the server uses to check cloud status
-    const checkCloudStatus = async () => {
+    // Check both cloud status and if this is a redteam eval
+    const checkEvalDetails = async () => {
       try {
-        // If no evalId is provided, we can't check cloud status properly
+        // If no evalId is provided, we can't check properly
         if (!evalId) {
-          console.warn('EnterpriseBanner: No evalId provided, defaulting to showing banner');
-          setIsCloudEnabled(false);
+          setIsCloudEnabled(true); // Don't show banner if no evalId
+          setIsRedteamEval(false);
           return;
         }
 
-        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
-
-        if (response.ok) {
-          const data = await response.json();
-          setIsCloudEnabled(data.isCloudEnabled);
-        } else {
-          // If we can't check, default to showing the banner
-          setIsCloudEnabled(false);
+        // Check cloud status
+        const cloudResponse = await callApi(`/results/share/check-domain?id=${evalId}`);
+        let cloudEnabled = false;
+        if (cloudResponse.ok) {
+          const cloudData = await cloudResponse.json();
+          cloudEnabled = cloudData.isCloudEnabled;
         }
+
+        // Check if this is a redteam eval by fetching eval config
+        const evalResponse = await callApi(`/eval/${evalId}`);
+        let isRedteam = false;
+        if (evalResponse.ok) {
+          const evalData = await evalResponse.json();
+          isRedteam = Boolean(evalData.config?.redteam);
+        }
+
+        setIsCloudEnabled(cloudEnabled);
+        setIsRedteamEval(isRedteam);
       } catch (error) {
-        console.error('Error checking cloud status:', error);
+        console.error('Error checking eval details:', error);
         setIsCloudEnabled(false);
+        setIsRedteamEval(false);
       }
     };
 
-    checkCloudStatus();
+    checkEvalDetails();
   }, [evalId]);
 
-  // If still loading or cloud is enabled, don't show banner
-  if (isCloudEnabled === null || isCloudEnabled === true) {
-    return null;
+  // Only show if:
+  // 1. Not loading
+  // 2. Cloud is not enabled
+  // 3. This is a redteam evaluation
+  if (isCloudEnabled === null || isRedteamEval === null) {
+    return null; // Still loading
+  }
+
+  if (isCloudEnabled === true || isRedteamEval === false) {
+    return null; // Don't show banner
   }
 
   return (

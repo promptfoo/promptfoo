@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
+import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
 import UpdateBanner from '@app/components/UpdateBanner';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation, useParams } from 'react-router-dom';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
 const createAppTheme = (darkMode: boolean) =>
@@ -238,6 +239,24 @@ function Layout({ children }: { children: React.ReactNode }) {
   return <div>{children}</div>;
 }
 
+function GlobalEnterpriseBanner() {
+  const location = useLocation();
+  const params = useParams();
+
+  // Only show on eval and report pages
+  const shouldShowBanner =
+    location.pathname.includes('/eval') || location.pathname.includes('/reports');
+
+  if (!shouldShowBanner) {
+    return null;
+  }
+
+  // Extract evalId from URL params or query string
+  const evalId = params.evalId || new URLSearchParams(location.search).get('evalId');
+
+  return <EnterpriseBanner evalId={evalId || ''} sx={{ mb: 2, mt: 2, mx: 2 }} />;
+}
+
 export default function PageShell() {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
@@ -279,6 +298,7 @@ export default function PageShell() {
         <Layout>
           <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
           <UpdateBanner />
+          <GlobalEnterpriseBanner />
           <Outlet />
           <PostHogPageViewTracker />
         </Layout>
