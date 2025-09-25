@@ -1,3 +1,4 @@
+import { POLICY_METRIC_PREFIX } from 'src/redteam/plugins/policy/constants';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy';
 
@@ -88,7 +89,7 @@ describe('PolicyPlugin', () => {
     expect(assertions).toEqual([
       expect.objectContaining({
         type: 'promptfoo:redteam:policy',
-        metric: expect.stringMatching(/^PolicyViolation:/),
+        metric: `${POLICY_METRIC_PREFIX}:${plugin.policyId}`,
       }),
     ]);
   });

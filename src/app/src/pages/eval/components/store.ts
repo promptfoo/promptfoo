@@ -56,7 +56,6 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
 
 /**
  * Extracts unique policy IDs from policy metrics in the table.
- * Policy metrics are serialized PolicyObject instances that start with POLICY_METRIC_PREFIX.
  */
 function buildPolicyOptions(plugins?: RedteamPluginObject[]): string[] {
   const policyIds = new Set<string>();

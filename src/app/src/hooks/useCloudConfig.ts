@@ -32,8 +32,8 @@ export default function useCloudConfig(): {
       if (!response.ok) {
         throw new Error('Failed to fetch cloud config');
       }
-      const _data = await response.json();
-      setData(_data);
+      const responseData = await response.json();
+      setData(responseData);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);

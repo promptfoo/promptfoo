@@ -13,14 +13,6 @@ export function isPolicyMetric(metric: string): boolean {
 }
 
 /**
- * Serializes a policy as a unique metric.
- * @returns
- */
-export function serializePolicyAsMetric(policyId: PolicyObject['id']): string {
-  return `${POLICY_METRIC_PREFIX}:${policyId}`;
-}
-
-/**
  * Deserializes a policy ID from a metric.
  * @param metric - The metric to deserialize.
  * @returns The policy ID.

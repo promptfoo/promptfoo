@@ -10,7 +10,6 @@ import {
   isValidPolicyObject,
   makeCustomPolicyCloudUrl,
   makeInlinePolicyId,
-  serializePolicyAsMetric,
 } from './utils';
 
 // Mock dependencies
@@ -35,13 +34,6 @@ describe('Policy Utils', () => {
       expect(isPolicyMetric('other')).toBe(false);
       expect(isPolicyMetric('')).toBe(false);
       expect(isPolicyMetric('Policy')).toBe(false);
-    });
-  });
-
-  describe('serializePolicyAsMetric', () => {
-    it('should serialize a policy object correctly', () => {
-      const result = serializePolicyAsMetric('test-id');
-      expect(result).toBe(`${POLICY_METRIC_PREFIX}:test-id`);
     });
   });
 

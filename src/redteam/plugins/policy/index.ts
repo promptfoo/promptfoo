@@ -2,7 +2,8 @@ import dedent from 'dedent';
 import invariant from '../../../util/invariant';
 import { type PolicyObject } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from '../base';
-import { isValidPolicyObject, makeInlinePolicyId, serializePolicyAsMetric } from './utils';
+import { POLICY_METRIC_PREFIX } from './constants';
+import { isValidPolicyObject, makeInlinePolicyId } from './utils';
 
 import type {
   ApiProvider,
@@ -24,7 +25,7 @@ export class PolicyPlugin extends RedteamPluginBase {
   /**
    * The ID of the policy; available if the policy is loaded from Promptfoo Cloud.
    */
-  private policyId: PolicyObject['id'];
+  public policyId: PolicyObject['id'];
   /**
    * The name of the policy; available if the policy is loaded from Promptfoo Cloud.
    */
@@ -108,7 +109,7 @@ export class PolicyPlugin extends RedteamPluginBase {
     return [
       {
         type: PLUGIN_ID,
-        metric: serializePolicyAsMetric(this.policyId),
+        metric: `${POLICY_METRIC_PREFIX}:${this.policyId}`,
       },
     ];
   }
