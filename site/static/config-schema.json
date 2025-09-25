@@ -1869,9 +1869,6 @@
             "promptSuffix": {
               "type": "string"
             },
-            "retryErrors": {
-              "type": "boolean"
-            },
             "envPath": {
               "type": "string"
             }
