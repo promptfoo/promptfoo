@@ -24,7 +24,15 @@ With **Promptfoo**, you can integrate e2b into your evaluation pipeline:
 - Validate outputs against test cases.
 - Collect metrics (runtime, success/failure, logs).
 
-By the end of this guide, you’ll have a working setup where Promptfoo calls e2b for sandboxed execution, runs automated tests, and produces reproducible evaluation reports.
+By the end you’ll safely run LLM-generated code in a sandbox and view results in Promptfoo.
+
+## How the flow works (quick overview)
+
+- **Promptfoo** sends prompts to the selected **LLM**.  
+- The **LLM** generates Python function code.  
+- Promptfoo runs `validate_and_run_code_e2b.py` to extract and safety-check the code.  
+- The code executes inside the **E2B sandbox** with strict limits.  
+- **Promptfoo** collects results and metrics, showing them in the CLI or web viewer.
 
 ## Highlights
 
@@ -181,268 +189,9 @@ At the end, you get:
 
 ### Create `validate_and_run_code_e2b.py`
 
-Inside your project folder, create a file called `validate_and_run_code_e2b.py` and add:
+The main evaluation logic lives in [`examples/e2b-code-eval/validate_and_run_code_e2b.py`](https://github.com/promptfoo/promptfoo/blob/main/examples/e2b-code-eval/validate_and_run_code_e2b.py).
 
-````python
-# validate_and_run_code_e2b.py
-
-import os  # Provides operating system utilities
-import re  # Used for regex matching and parsing
-import json  # Handles JSON serialization/deserialization
-import time  # For timing and timestamps
-from e2b_code_interpreter import Sandbox  # Import the E2B sandbox for secure execution
-from metrics import write_metrics  # Custom function to log metrics from each run
-
-# Regex to detect fenced Python code blocks (triple backticks with python)
-FENCE_RE = re.compile(r"```(?:\s*python)?\s*\r?\n(.*?)```", re.DOTALL | re.IGNORECASE)
-
-# Predefined list of unsafe patterns to catch before execution
-UNSAFE_PATTERNS = [
-    r"\bimport\s+socket\b",   # Network access
-    r"\bimport\s+requests\b", # HTTP requests
-    r"\bimport\s+urllib\b",   # URL handling
-    r"\bos\.system\b",        # Shell execution
-    r"\bsubprocess\b",        # Subprocess execution
-    r"\beval\s*\(",           # Dangerous eval
-    r"\bexec\s*\(",           # Dangerous exec
-    r"open\(\s*['\"]\/etc",   # Accessing system files
-    r"open\(\s*['\"]\/proc",  # Accessing process files
-    r"__import__\(",          # Arbitrary import
-]
-
-def is_unsafe(code: str) -> bool:
-    # Check if any unsafe pattern exists in the generated code
-    for p in UNSAFE_PATTERNS:
-        if re.search(p, code):
-            return True
-    return False
-
-def _extract_function(output: str, fn_name: str) -> str | None:
-    # Try to extract the function definition from model output
-
-    # First, look for a fenced code block
-    m = FENCE_RE.search(output)
-    if m:
-        return m.group(1).strip()
-
-    # Next, try to match by function name explicitly
-    by_name = re.search(
-        rf"(def\s+{re.escape(fn_name)}\s*\(.*?\)\s*:[\s\S]*?)(?=\n\s*\n|^```|^class\s+|^def\s+)",
-        output,
-        re.IGNORECASE | re.MULTILINE,
-    )
-    if by_name:
-        return by_name.group(1).strip()
-
-    # Fallback: grab any function definition
-    any_def = re.search(r"(def\s+\w+\s*\(.*?\)\s*:[\s\S]*)", output)
-    if any_def:
-        return any_def.group(1).strip()
-
-    return None
-
-def _try_parse_logs_obj(logs_obj):
-    # Try to parse logs object (stdout/stderr) in many possible formats
-
-    if isinstance(logs_obj, (dict, list)):
-        # Dict case: standard stdout/stderr fields
-        if isinstance(logs_obj, dict) and "stdout" in logs_obj:
-            out = logs_obj.get("stdout")
-            err = logs_obj.get("stderr", "")
-            if isinstance(out, list):
-                out = "".join(map(str, out))
-            if isinstance(err, list):
-                err = "".join(map(str, err))
-            return str(out).strip(), str(err).strip()
-
-        # List case: iterate over multiple log entries
-        if isinstance(logs_obj, list):
-            outs, errs = [], []
-            for it in logs_obj:
-                if isinstance(it, dict):
-                    if it.get("stdout"): outs.append(it.get("stdout"))
-                    if it.get("stderr"): errs.append(it.get("stderr"))
-            if outs or errs:
-                outs = "".join(map(str, outs))
-                errs = "".join(map(str, errs))
-                return str(outs).strip(), str(errs).strip()
-
-    # If logs object has a to_json method, parse recursively
-    if hasattr(logs_obj, "to_json"):
-        try:
-            j = logs_obj.to_json()
-            return _try_parse_logs_obj(j)
-        except Exception:
-            pass
-
-    # If logs object has stdout/stderr attributes directly
-    if hasattr(logs_obj, "stdout") or hasattr(logs_obj, "stderr"):
-        try:
-            out = getattr(logs_obj, "stdout", "")
-            err = getattr(logs_obj, "stderr", "")
-            if isinstance(out, list):
-                out = "".join(map(str, out))
-            if isinstance(err, list):
-                err = "".join(map(str, err))
-            return str(out).strip(), str(err).strip()
-        except Exception:
-            pass
-
-    # If logs is a raw string, try parsing JSON or regex
-    if isinstance(logs_obj, str):
-        try:
-            parsed = json.loads(logs_obj)
-            return _try_parse_logs_obj(parsed)
-        except Exception:
-            m = re.search(r"stdout:\s*\[([^\]]*)\]", logs_obj)
-            if m:
-                inner = m.group(1).strip()
-                items = re.findall(r"'(.*?)'|\"(.*?)\"", inner)
-                strs = []
-                for a, b in items:
-                    if a: strs.append(a)
-                    elif b: strs.append(b)
-                out = "".join(strs)
-                return out.strip(), ""
-
-    return "", ""
-
-def _stdout_from_result(res) -> tuple[str, str]:
-    # Extract stdout and stderr from sandbox result
-
-    if hasattr(res, "results") and res.results:
-        try:
-            first = res.results[0]
-            if isinstance(first, dict):
-                out = first.get("stdout") or first.get("output") or first.get("text") or ""
-                err = first.get("stderr") or ""
-                if isinstance(out, list):
-                    out = "".join(map(str, out))
-                if isinstance(err, list):
-                    err = "".join(map(str, err))
-                if out or err:
-                    return str(out).strip(), str(err).strip()
-        except Exception:
-            pass
-
-    # Fallback: use logs field
-    logs_field = getattr(res, "logs", None)
-    if logs_field is not None:
-        out, err = _try_parse_logs_obj(logs_field)
-        if out or err:
-            return out, err
-
-    # Try direct text
-    if getattr(res, "text", None):
-        return str(res.text).strip(), ""
-
-    # Try JSON representation
-    if hasattr(res, "to_json"):
-        try:
-            j = res.to_json()
-            return _try_parse_logs_obj(j)
-        except Exception:
-            pass
-
-    return "", ""
-
-def _run_code_in_sandbox(sbx, code: str):
-    # Run code inside the E2B sandbox with multiple fallbacks
-
-    # Preferred: explicit args with resource limits and no network
-    try:
-        return sbx.run_code(code=code, language="python", limits={"cputime": 1, "wall_time": 5, "memory": 128}, allow_network=False)
-    except TypeError:
-        pass
-    except Exception:
-        pass
-
-    # Alternate signature
-    try:
-        return sbx.run_code(code, "python", {"cputime": 1, "wall_time": 5, "memory": 128})
-    except Exception:
-        pass
-
-    # Last resort: just run code with defaults
-    return sbx.run_code(code)
-
-def get_assert(output, context):
-    # Main entry for Promptfoo evaluation:
-    # - Extract function from LLM output
-    # - Check safety
-    # - Run inside E2B sandbox
-    # - Compare with expected result
-    # - Record metrics
-
-    # Unique identifiers and metadata
-    task_id = context.get("id", str(time.time()))
-    provider = context.get("provider", "unknown")
-    model = context.get("model", "unknown")
-
-    # Variables for function name, test input, expected output
-    fn_name = context["vars"]["function_name"]
-    test_input = context["vars"]["test_input"]
-    expected = str(context["vars"]["expected_output"])
-
-    # Extract function definition from model output
-    function_code = _extract_function(output, fn_name)
-    if not function_code:
-        snippet = output.strip()[:300].replace("\n", " ")
-        write_metrics(task_id, provider, model, False, 0.0, extra={"reason": "no_code_found"})
-        return {"pass": False, "score": 0, "reason": f"No Python code block found (first 300 chars: {snippet})"}
-
-    # Safety scan before execution
-    if is_unsafe(function_code):
-        write_metrics(task_id, provider, model, False, 0.0, extra={"reason": "unsafe_pattern"})
-        return {"pass": False, "score": 0, "reason": "Unsafe pattern detected in generated code"}
-
-    # Build test program: function definition + call
-    test_program = f"""{function_code}
-
-print({fn_name}({test_input}))
-"""
-
-    # Run code inside sandbox with timing
-    start = time.time()
-    with Sandbox.create() as sbx:
-        try:
-            res = _run_code_in_sandbox(sbx, test_program)
-        except Exception as e:
-            duration = time.time() - start
-            write_metrics(task_id, provider, model, False, duration, extra={"error": str(e)})
-            return {"pass": False, "score": 0, "reason": f"Sandbox execution error: {e}"}
-
-    duration = time.time() - start
-
-    # Parse outputs
-    stdout, stderr = _stdout_from_result(res)
-    err_obj = getattr(res, "error", None)
-
-    # Handle errors during execution
-    if err_obj or stderr:
-        dbg = ""
-        try:
-            dbg = getattr(res, "to_json")() if hasattr(res, "to_json") else str(getattr(res, "logs", ""))[:800]
-        except Exception:
-            dbg = str(getattr(res, "logs", ""))[:800]
-        write_metrics(task_id, provider, model, False, duration, extra={"error": err_obj or stderr, "debug": dbg})
-        return {"pass": False, "score": 0, "reason": f"Execution error: {err_obj or stderr} | debug: {dbg}"}
-
-    # Compare output with expected
-    success = (stdout == expected)
-    write_metrics(task_id, provider, model, success, duration, extra={"stdout": stdout[:500]})
-
-    if success:
-        return {"pass": True, "score": 1, "reason": f"Correct output: {stdout}"}
-
-    # Fallback: return failure with logs preview
-    logs_preview = getattr(res, "logs", None)
-    if isinstance(logs_preview, str) and len(logs_preview) > 400:
-        logs_preview = logs_preview[:400] + "...(truncated)"
-    return {"pass": False, "score": 0, "reason": f"Expected {expected}, got {stdout or '(empty)'} | logs: {logs_preview}"}
-````
-
-Summary of this file (validate_and_run_code_e2b.py):
+This script:
 
 - Extracts Python functions from LLM output (via regex or fenced code blocks).
 - Runs static safety checks to block dangerous code before execution.
@@ -452,325 +201,61 @@ Summary of this file (validate_and_run_code_e2b.py):
 
 ### Create `metrics.py`
 
-Inside your project folder, create a file called `metrics.py` and add:
+The metrics helper lives in [`examples/e2b-code-eval/metrics.py`](https://github.com/promptfoo/promptfoo/blob/main/examples/e2b-code-eval/metrics.py).
 
-```python
-# metrics.py
+This script:
 
-import json  # For saving metrics in JSON format
-import time  # To generate timestamps
-import os    # To handle file paths and environment variables
-
-def write_metrics(task_id, provider, model, success, runtime_s, memory_mb=None, extra=None):
-    # Build a dictionary of all metrics for one evaluation run
-    metrics = {
-        "task_id": str(task_id),       # Unique ID of the evaluation/test
-        "provider": provider,          # Which LLM provider was used (e.g., OpenAI)
-        "model": model,                # Which model (e.g., gpt-4, gpt-4o-mini)
-        "success": bool(success),      # Did the test pass (True/False)
-        "runtime_s": float(runtime_s), # How long execution took (in seconds)
-        "memory_mb": memory_mb,        # Optional: memory usage during run
-        "extra": extra or {},          # Optional: extra debug info (logs, errors)
-        "timestamp": int(time.time())  # Current time as UNIX timestamp
-    }
-
-    # Determine output directory from environment variable (fallback: .promptfoo_results)
-    out_dir = os.getenv("PROMPTFOO_RESULTS_DIR", ".promptfoo_results")
-    os.makedirs(out_dir, exist_ok=True)  # Create directory if it doesn’t exist
-
-    # Build filename: task ID + provider + model (slashes replaced with underscores)
-    fn = f"{metrics['task_id']}_{provider}_{model}.json".replace("/", "_")
-    path = os.path.join(out_dir, fn)  # Full path for the JSON file
-
-    # Write metrics dictionary into the JSON file (pretty-printed with indent=2)
-    with open(path, "w") as f:
-        json.dump(metrics, f, indent=2)
-
-    return path  # Return the file path where metrics were saved
-```
-
-Summary of this file (metrics.py):
-
-- Defines a helper function write_metrics to save evaluation run results.
-- Collects key metadata like task id, provider, model, runtime, memory, and success/failure.
-- Supports adding extra debug info (logs, error messages, etc.).
-- Saves results as structured JSON files in .promptfoo_results/ (or custom dir via env var).
-- Returns the path of the metrics file so other scripts can use it.
+- Defines `write_metrics`, a helper function to save evaluation results.  
+- Collects metadata like task ID, provider, model, runtime, success/failure.  
+- Supports adding debug info (logs, error messages, etc.).  
+- Saves results as structured JSON files in `.promptfoo_results/`.  
 
 ### Create `report.py`
 
-Inside your project folder, create a file called `report.py` and add:
+The reporting script lives in [`examples/e2b-code-eval/report.py`](https://github.com/promptfoo/promptfoo/blob/main/examples/e2b-code-eval/report.py).
 
-```python
-# report.py
+This script:
 
-import glob, json, os   # Import modules:
-# glob = for finding files with patterns
-# json = for reading/writing JSON files
-# os   = for file path handling
-
-def gen_report(out_dir=".promptfoo_results", out_md="promptfoo_report.md"):
-    # Generate a markdown report from all JSON metric files.
-    # out_dir = folder where metric JSON files are stored
-    # out_md  = output markdown file to generate
-
-    files = glob.glob(os.path.join(out_dir,"*.json"))
-    # Collect all JSON files in the metrics directory (default: .promptfoo_results)
-
-    rows = []  # will store parsed JSON objects
-    for f in files:
-        try:
-            j = json.load(open(f))   # Open and parse each JSON file
-            rows.append(j)           # Add parsed JSON dict to rows
-        except Exception:            # If file is corrupted/unreadable, skip it
-            continue
-
-    # Start building the markdown table
-    lines = [
-        "| task | provider | model | success | runtime_s |",  # Header row
-        "|---|---|---|---|---|"                               # Divider row
-    ]
-
-    # For each JSON metric file, add a row to the table
-    for r in rows:
-        lines.append(
-            f"|{r.get('task_id','-')}|"
-            f"{r.get('provider','-')}|"
-            f"{r.get('model','-')}|"
-            f"{r.get('success')}|"
-            f"{r.get('runtime_s')}|"
-        )
-
-    # Write the final markdown table into a file
-    open(out_md,"w").write("\n".join(lines))
-
-    # Print confirmation
-    print("Wrote", out_md)
-
-# If this script is run directly (not imported), generate the report
-if __name__ == "__main__":
-    gen_report()
-```
-
-Summary of this file (report.py):
-
-- Scans the .promptfoo_results directory for all JSON metric files generated by metrics.py.
-- Reads and parses each JSON file safely (skipping broken ones).
-- Builds a Markdown table with columns: task, provider, model, success, runtime.
-- Writes the report into a file (promptfoo_report.md) for easy human-readable results.
-- Allows running as a standalone script to generate reports anytime.
+- Reads all JSON metric files generated by `metrics.py`.  
+- Parses results and summarizes them in a Markdown table.  
+- Shows task, provider, model, success, and runtime.  
+- Writes the output to `promptfoo_report.md` for human-readable reporting.  
 
 ### Create `swe_runner.py`
 
-Inside your project folder, create a file called `swe_runner.py` and add:
+The SWE-bench–style runner lives in [`examples/e2b-code-eval/swe_runner.py`](https://github.com/promptfoo/promptfoo/blob/main/examples/e2b-code-eval/swe_runner.py).
 
-```python
-# swe_runner.py (e2b-only skeleton)
-import os                      # filesystem utilities
-import subprocess              # run shell commands / git / tests
-import tempfile                # create temporary directories
-import shutil                  # remove temp dirs
-import time                    # timestamps / timing (kept for possible use)
-from e2b_code_interpreter import Sandbox  # e2b SDK sandbox for safe execution
+This script:
 
-def model_call_patch(fail_log: str, relevant_files: dict) -> str:
-    # Placeholder function: should call your LLM provider / promptfoo to get a patch (unified diff string)
-    # Return: unified diff (git apply-ready)
-    raise NotImplementedError("Implement model_call_patch()")
-
-def run_task_local(repo_url: str, failing_test_cmd: str, relevant_paths: list, attempts=3):
-    tmp = tempfile.mkdtemp()  # create a temp directory to clone the repo into
-    try:
-        subprocess.check_call(["git", "clone", repo_url, tmp])  # clone the target repository
-        cwd = os.getcwd()                # save current working directory
-        os.chdir(tmp)                    # switch to the cloned repo directory
-
-        # capture failing test output
-        p = subprocess.run(failing_test_cmd, shell=True, capture_output=True, text=True)
-        fail_log = p.stdout + "\n" + p.stderr  # combine stdout and stderr
-
-        # read relevant files to give model context
-        relevant_files = {}
-        for path in relevant_paths:
-            try:
-                with open(os.path.join(tmp, path), "r") as f:
-                    relevant_files[path] = f.read()
-            except Exception:
-                relevant_files[path] = ""  # if file can't be read, fallback to empty string
-
-        success = False  # track whether patch fixed tests
-
-        for attempt in range(attempts):
-            try:
-                patch = model_call_patch(fail_log, relevant_files)  # call LLM to generate patch
-            except Exception as e:
-                print("Model call failed:", e)
-                break
-
-            # apply patch locally
-            proc = subprocess.run(["git", "apply", "-"], input=patch, text=True, capture_output=True)
-            if proc.returncode != 0:
-                print("Patch apply failed:", proc.stderr)
-                continue
-
-            # run tests inside e2b sandbox (safe execution)
-            with Sandbox.create() as sbx:
-                test_script = f"import subprocess; print(subprocess.run('{failing_test_cmd}', shell=True, capture_output=True).returncode)"
-                res = sbx.run_code(
-                    code=test_script,
-                    language="python",
-                    limits={"cputime": 10, "wall_time": 30, "memory": 512},
-                    allow_network=False,
-                )
-
-            rc = None
-            try:
-                if getattr(res, "results", None):
-                    r0 = res.results[0]
-                    val = r0.get("stdout") or r0.get("output") or r0.get("text") or ""
-                    if isinstance(val, list):
-                        val = "".join(map(str, val))
-                    rc = int(str(val).strip())  # parse return code
-                elif getattr(res, "text", None):
-                    rc = int(str(res.text).strip())
-            except Exception:
-                rc = None
-
-            if rc == 0:
-                success = True
-                print("Patch fixed tests on attempt", attempt+1)
-                break
-            else:
-                print("Patch did not fix tests; rc:", rc)
-
-        os.chdir(cwd)              # restore original working directory
-        return {"success": success}
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)  # clean up temp directory
-```
-
-Summary of this file (swe_runner.py ):
-
-- Clones a repository to a temporary directory and captures the failing test output so an LLM can be informed about the failure.
-- Reads relevant source files and passes fail_log + relevant_files to model_call_patch() (the function you must implement to ask an LLM for a patch/unified diff).
-- Applies the returned unified diff locally with git apply, then runs the failing test inside an e2b sandbox to safely verify if the patch fixed the failure.
-- Parses sandbox results robustly across several SDK return formats and reports success if the test return code is 0.
-- Cleans up the temporary clone directory on completion or failure.
+- Clones a target repo into a temp dir and captures failing test output.
+- Reads relevant files and calls model_call_patch (you implement) to obtain a unified diff.
+- Applies the patch locally with git apply.
+- Executes the test command inside an e2b sandbox to verify the fix.
+- Cleans up temp directories and reports success when return code is 0.
 
 ### Edit `promptfooconfig.yaml`
 
-Open the generated `promptfooconfig.yaml` and update it like this:
+The evaluation config lives in [`examples/e2b-code-eval/promptfooconfig.yaml`](https://github.com/promptfoo/promptfoo/blob/main/examples/e2b-code-eval/promptfooconfig.yaml).
 
-```bash
-# The prompt file that contains instructions for the LLM to generate code
-prompts: file://code_generation_prompt_fs.txt
+This file:
 
-# The LLM provider used for code generation (here: OpenAI GPT-4.1)
-providers:
-  - openai:gpt-4.1
+- Points prompts: to code_generation_prompt_fs.txt.
+- Selects an LLM provider (e.g., openai:gpt-4.1).
+- Defines test cases (problem, function_name, test_input, expected_output).
+- Sets the default assertion to `file://validate_and_run_code_e2b.py`, which runs the sandboxed check.
 
-# Test cases that will be run against the generated code
-tests:
-  - vars:
-      problem: "Write a Python function to calculate the factorial of a number" # Problem definition
-      function_name: "factorial"   # Name of the function the LLM should generate
-      test_input: "5"              # Input to test the function with
-      expected_output: "120"       # Expected correct result
+### Prompt Templates
 
-  - vars:
-      problem: "Write a Python function to check if a string is a palindrome"
-      function_name: "is_palindrome"
-      test_input: "'racecar'"
-      expected_output: "True"
+All prompt templates are in [`examples/e2b-code-eval/`](https://github.com/promptfoo/promptfoo/tree/main/examples/e2b-code-eval)
 
-  - vars:
-      problem: "Write a Python function to find the largest element in a list"
-      function_name: "find_largest"
-      test_input: "[1, 5, 3, 9, 2]"
-      expected_output: "9"
+`code_generation_prompt_fs.txt`
+Instructs the model to output only a Python function definition wrapped in triple backticks, using the exact {{function_name}}, avoiding network/filesystem access, and raising ValueError for clearly invalid inputs.
 
-# Default assertion logic for all tests
-defaultTest:
-  assert:
-    - type: python
-      value: file://validate_and_run_code_e2b.py  # Executes generated code in sandbox and validates it
-```
+`generate_unit_test_prompt.txt`
+Asks the model to produce 3 concise assert tests (no frameworks) that cover typical and edge cases for a provided function body.
 
-With this file, Promptfoo knows:
-
-- What to generate (from prompts)
-- Which provider to use (OpenAI GPT-4.1)
-- What to test (factorial, palindrome, largest element)
-- How to validate outputs (via validate_and_run_code_e2b.py)
-
-### Write `code_generation_prompt_fs.txt`
-
-Inside your project folder, create a file called `code_generation_prompt_fs.txt` and add the following prompts:
-
-````bash
-You are a careful Python engineer. Produce only the Python function definition (no explanation) wrapped in triple backticks.
-
-Requirements:
-- Use the exact function name: {{function_name}}
-- Avoid external network calls or reading system files.
-- Prefer idiomatic, clear Python.
-- Raise ValueError for clearly invalid inputs when applicable.
-- Keep runtime reasonable for typical inputs.
-
-Few-shot examples:
-Problem: "Sum a list of integers"
-```python
-def sum_integers(nums):
-    return sum(nums)
-````
-
-This:
-
-- Instructs the LLM to generate only clean Python function definitions.
-- Enforces wrapping code in triple backticks and avoiding unsafe operations (network, system calls, etc.).
-- Ensures functions raise ValueError for invalid inputs and use clear, idiomatic Python.
-
-### Write `generate_unit_test_prompt.txt`
-
-Inside your project folder, create a file called `generate_unit_test_prompt.txt` and add the following prompts:
-
-```bash
-You are a Python test author. Given the function below, write 3 short `assert` tests (not using pytest) that exercise edge cases and typical cases. Return only the tests (no explanations). Function:
-
-{{function_code}}
-```
-
-This:
-
-- Guides the LLM to produce unit tests for generated functions.
-- Tests should be minimal, self-contained, and cover both normal and edge cases.
-- Helps automatically validate correctness without relying on external libraries.
-
-### Write `patch_generation_prompt.txt`
-
-Inside your project folder, create a file called `patch_generation_prompt.txt` and add the following prompts:
-
-```bash
-You are a careful engineer. Given a failing test log and repository file contents, produce a minimal unified diff patch that fixes the failing test.
-
-Format:
-- Output strictly a unified diff (git apply-ready).
-- Do not include explanation text.
-
-Inputs:
-
-Failing test log:
-{{fail_log}}
-
-Relevant files (path => content):
-{{relevant_files}}
-```
-
-This:
-
-- Directs the LLM to output unified diffs (like git apply patches) instead of full files.
-- Used in SWE-bench–style repair workflows to fix failing code based on error logs.
-- Ensures patches are minimal and directly applicable to the target codebase.
+`patch_generation_prompt.txt`
+Directs the model to return a minimal unified diff (git-apply ready) that fixes a failing test using the supplied fail log and relevant file contents — no prose, just the diff.
 
 ## Step 7: Run Your First Evaluation
 
@@ -827,7 +312,7 @@ Type y, and your browser will open the Promptfoo dashboard.
 - Assertion results: Detailed breakdown of each check run via validate_and_run_code_e2b.py, including sandbox errors, safety violations, or mismatched outputs.
 - This makes it easy to see not just what passed or failed, but also why—with access to sandbox logs and execution details.
 
-### Step 9: Set Up Red Team Target (Custom E2B Provider)
+## Step 9: Set Up Red Team Target (Custom E2B Provider)
 
 Now that your E2B sandbox evaluation project is running and visible in the Promptfoo web dashboard, let’s prepare it for red teaming.
 
@@ -977,7 +462,7 @@ This means your setup is:
 
 Next Steps:
 
-- Extend unsafe pattern detection (cover more dangerous libraries).
-- Add patch generation workflows with swe_runner.py.
-- Use .env.example for easier key management.
-- Automate daily red team runs with GitHub Actions.
+- Extend unsafe pattern detection – Broaden your static analysis patterns in validate_and_run_code_e2b.py to catch more risky operations. For example, add regex checks for dangerous modules like shutil, ftplib, pickle, or suspicious uses of eval, exec, and file writes. This helps improve the safety layer before code even reaches the sandbox.
+- Add patch generation workflows with swe_runner.py – Use the SWE-style workflow to automatically suggest code fixes when tests fail. The swe_runner.py script can call an LLM with the failing test log and relevant files, generate a unified diff patch, apply it, and re-run tests inside the sandbox. This extends your evaluation pipeline into automated code repair.
+- Use .env.example for easier key management – Create a .env.example file listing required environment variables (like E2B_API_KEY and OPENAI_API_KEY). Developers can copy it to .env and fill in their keys, simplifying setup and improving onboarding.
+- Automate daily red team runs with GitHub Actions – Schedule daily security evaluations of your sandbox pipeline by running promptfoo redteam run in a GitHub Actions workflow. This ensures that unsafe code patterns, injection attempts, or sandbox bypasses are caught continuously as you evolve your prompts and models.
