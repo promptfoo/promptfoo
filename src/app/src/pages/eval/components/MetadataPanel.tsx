@@ -16,8 +16,9 @@ import { ellipsize } from '../../../../../util/text';
 
 const isValidUrl = (str: string): boolean => {
   try {
-    new URL(str);
-    return true;
+    const url = new URL(str);
+    // Only treat as URL if it has http/https scheme and a proper hostname
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.length > 0;
   } catch {
     return false;
   }
