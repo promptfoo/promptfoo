@@ -149,11 +149,26 @@ const App = () => {
       return {};
     }
 
+    const prompts =
+      (evalData.version >= 4
+        ? evalData.prompts
+        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+    const selectedPrompt = prompts[selectedPromptIndex];
+
     const failures: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
     evalData?.results.results.forEach((result) => {
+      // Filter by selected target/provider if multiple targets exist
+      if (
+        prompts.length > 1 &&
+        selectedPrompt &&
+        result.provider.id !== selectedPrompt.provider
+      ) {
+        return;
+      }
+
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
         console.warn(`Could not get failures for plugin ${pluginId}`);
@@ -182,18 +197,33 @@ const App = () => {
       }
     });
     return failures;
-  }, [evalData]);
+  }, [evalData, selectedPromptIndex]);
 
   const passesByPlugin = React.useMemo(() => {
     if (!evalData) {
       return {};
     }
 
+    const prompts =
+      (evalData.version >= 4
+        ? evalData.prompts
+        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+    const selectedPrompt = prompts[selectedPromptIndex];
+
     const passes: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
     evalData?.results.results.forEach((result) => {
+      // Filter by selected target/provider if multiple targets exist
+      if (
+        prompts.length > 1 &&
+        selectedPrompt &&
+        result.provider.id !== selectedPrompt.provider
+      ) {
+        return;
+      }
+
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
         console.warn(`Could not get passes for plugin ${pluginId}`);
@@ -219,15 +249,30 @@ const App = () => {
       }
     });
     return passes;
-  }, [evalData]);
+  }, [evalData, selectedPromptIndex]);
 
   const categoryStats = React.useMemo(() => {
     if (!evalData) {
       return {};
     }
 
+    const prompts =
+      (evalData.version >= 4
+        ? evalData.prompts
+        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+    const selectedPrompt = prompts[selectedPromptIndex];
+
     return evalData.results.results.reduce(
       (acc, row) => {
+        // Filter by selected target/provider if multiple targets exist
+        if (
+          prompts.length > 1 &&
+          selectedPrompt &&
+          row.provider.id !== selectedPrompt.provider
+        ) {
+          return acc;
+        }
+
         const pluginId = getPluginIdFromResult(row);
         if (!pluginId) {
           return acc;
@@ -257,7 +302,7 @@ const App = () => {
       },
       {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
     );
-  }, [evalData]);
+  }, [evalData, selectedPromptIndex]);
 
   const strategyStats = React.useMemo(() => {
     if (!failuresByPlugin || !passesByPlugin) {
