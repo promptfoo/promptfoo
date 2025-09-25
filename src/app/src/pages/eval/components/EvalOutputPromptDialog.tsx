@@ -522,8 +522,9 @@ export default function EvalOutputPromptDialog({
                   </Typography>
                   <Box sx={{
                     display: 'flex',
-                    gap: 1.5,
-                    flexWrap: 'wrap'
+                    gap: 1,
+                    flexWrap: 'wrap',
+                    alignItems: 'flex-start'
                   }}>
                     {tokenUsage?.numRequests !== undefined && (
                       <Paper
@@ -531,15 +532,16 @@ export default function EvalOutputPromptDialog({
                         sx={{
                           px: 2,
                           py: 1.5,
-                          borderRadius: 2,
+                          borderRadius: 1,
                           bgcolor: 'background.paper',
                           minWidth: '90px',
                           textAlign: 'center',
-                          border: '1px solid',
-                          borderColor: 'divider',
+                          transition: 'all 0.2s ease',
                           '&:hover': {
                             borderColor: 'primary.main',
-                            bgcolor: 'action.hover'
+                            bgcolor: 'action.hover',
+                            transform: 'translateY(-1px)',
+                            boxShadow: 1
                           }
                         }}
                       >
@@ -558,15 +560,16 @@ export default function EvalOutputPromptDialog({
                         sx={{
                           px: 2,
                           py: 1.5,
-                          borderRadius: 2,
+                          borderRadius: 1,
                           bgcolor: 'background.paper',
                           minWidth: '120px',
                           textAlign: 'center',
-                          border: '1px solid',
-                          borderColor: 'divider',
+                          transition: 'all 0.2s ease',
                           '&:hover': {
                             borderColor: 'primary.main',
-                            bgcolor: 'action.hover'
+                            bgcolor: 'action.hover',
+                            transform: 'translateY(-1px)',
+                            boxShadow: 1
                           }
                         }}
                       >
@@ -608,15 +611,16 @@ export default function EvalOutputPromptDialog({
                         sx={{
                           px: 2,
                           py: 1.5,
-                          borderRadius: 2,
+                          borderRadius: 1,
                           bgcolor: 'background.paper',
                           minWidth: '100px',
                           textAlign: 'center',
-                          border: '1px solid',
-                          borderColor: 'divider',
+                          transition: 'all 0.2s ease',
                           '&:hover': {
                             borderColor: 'primary.main',
-                            bgcolor: 'action.hover'
+                            bgcolor: 'action.hover',
+                            transform: 'translateY(-1px)',
+                            boxShadow: 1
                           }
                         }}
                       >
@@ -632,26 +636,32 @@ export default function EvalOutputPromptDialog({
                       </Paper>
                     )}
 
-                    {tokenUsage?.completion && latencyMs && (
+                    {tokenUsage?.completion && latencyMs && latencyMs > 0 && (
                       <Paper
                         variant="outlined"
                         sx={{
                           px: 2,
                           py: 1.5,
-                          borderRadius: 2,
+                          borderRadius: 1,
                           bgcolor: 'background.paper',
                           minWidth: '100px',
                           textAlign: 'center',
-                          border: '1px solid',
-                          borderColor: 'divider',
+                          transition: 'all 0.2s ease',
                           '&:hover': {
                             borderColor: 'primary.main',
-                            bgcolor: 'action.hover'
+                            bgcolor: 'action.hover',
+                            transform: 'translateY(-1px)',
+                            boxShadow: 1
                           }
                         }}
                       >
                         <Typography variant="body2" fontWeight="600" color="primary.main" sx={{ lineHeight: 1.2 }}>
-                          {Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(tokenUsage.completion / (latencyMs / 1000))}
+                          {(() => {
+                            const tokensPerSec = tokenUsage.completion / (latencyMs / 1000);
+                            return isFinite(tokensPerSec) && tokensPerSec > 0
+                              ? Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(tokensPerSec)
+                              : '0';
+                          })()}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
                           tok/sec
@@ -665,15 +675,17 @@ export default function EvalOutputPromptDialog({
                         sx={{
                           px: 2,
                           py: 1.5,
-                          borderRadius: 2,
+                          borderRadius: 1,
                           bgcolor: 'background.paper',
                           minWidth: '80px',
                           textAlign: 'center',
-                          border: '1px solid',
                           borderColor: cost > 0.01 ? 'warning.main' : 'divider',
+                          transition: 'all 0.2s ease',
                           '&:hover': {
                             borderColor: cost > 0.01 ? 'warning.dark' : 'primary.main',
-                            bgcolor: 'action.hover'
+                            bgcolor: 'action.hover',
+                            transform: 'translateY(-1px)',
+                            boxShadow: 1
                           }
                         }}
                       >
