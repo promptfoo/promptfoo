@@ -92,6 +92,7 @@ import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
 import { createLlamaApiProvider } from './llamaApi';
+import { createNscaleProvider } from './nscale';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -674,6 +675,19 @@ export const providerMap: ProviderFactory[] = [
         return new MistralEmbeddingProvider(providerOptions);
       }
       return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('nscale:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createNscaleProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
