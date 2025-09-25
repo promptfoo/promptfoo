@@ -669,6 +669,40 @@ export default function EvalOutputPromptDialog({
                       </Paper>
                     )}
 
+                    {(tokenUsage?.cached || (tokenUsage && 'cached' in tokenUsage)) && (
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          px: 2,
+                          py: 1.5,
+                          borderRadius: 1,
+                          bgcolor: 'background.paper',
+                          minWidth: '80px',
+                          textAlign: 'center',
+                          borderColor: tokenUsage?.cached ? 'success.main' : 'divider',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            borderColor: tokenUsage?.cached ? 'success.dark' : 'primary.main',
+                            bgcolor: 'action.hover',
+                            transform: 'translateY(-1px)',
+                            boxShadow: 1
+                          }
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          fontWeight="600"
+                          color={tokenUsage?.cached ? 'success.main' : 'text.secondary'}
+                          sx={{ lineHeight: 1.2 }}
+                        >
+                          {tokenUsage?.cached ? '✓' : '✗'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
+                          cached
+                        </Typography>
+                      </Paper>
+                    )}
+
                     {cost !== undefined && (
                       <Paper
                         variant="outlined"
