@@ -10,12 +10,12 @@ import {
   Severity,
   severityDisplayNames,
 } from '@promptfoo/redteam/constants';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
 
 import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 
 interface OverviewProps {
   categoryStats: Record<PluginType, { pass: number; total: number }>;

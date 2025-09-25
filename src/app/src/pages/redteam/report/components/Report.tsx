@@ -451,7 +451,8 @@ const App = () => {
     Boolean(searchQuery);
 
   /**
-   * Extracts custom policy IDs from the results.fix
+   * Extracts custom policy IDs from the results in order to then
+   * filter policies from the categories stats for the framework compliance section.
    */
   const customPolicyIds = React.useMemo(() => {
     const ids = new Set();
