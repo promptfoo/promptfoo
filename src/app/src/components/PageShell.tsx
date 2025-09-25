@@ -243,9 +243,11 @@ function GlobalEnterpriseBanner() {
   const location = useLocation();
   const params = useParams();
 
-  // Only show on eval and report pages
-  const shouldShowBanner =
-    location.pathname.includes('/eval') || location.pathname.includes('/reports');
+  // Only show on specific eval and report routes (exact matching)
+  const isEvalRoute = location.pathname === '/eval' || location.pathname.startsWith('/eval/');
+  const isReportsRoute =
+    location.pathname === '/reports' || location.pathname.startsWith('/reports/');
+  const shouldShowBanner = isEvalRoute || isReportsRoute;
 
   if (!shouldShowBanner) {
     return null;
