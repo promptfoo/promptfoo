@@ -1,6 +1,5 @@
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { matchesLlmRubric } from '../../src/matchers';
-
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
 jest.mock('../../src/matchers');
@@ -57,7 +56,7 @@ describe('handleLlmRubric', () => {
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       'test rendered value',
       'test output string',
-      undefined,
+      expect.any(Object),
       {},
       params.assertion,
     );
@@ -83,7 +82,7 @@ describe('handleLlmRubric', () => {
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       { test: 'value' },
       'test output string',
-      undefined,
+      expect.any(Object),
       {},
       params.assertion,
     );
@@ -109,7 +108,7 @@ describe('handleLlmRubric', () => {
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       '',
       'test output string',
-      undefined,
+      expect.any(Object),
       {},
       params.assertion,
     );
@@ -395,9 +394,45 @@ describe('handleLlmRubric', () => {
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       ['foo', 'bar'],
       'test output string',
-      undefined,
+      expect.any(Object),
       {},
       params.assertion,
+    );
+  });
+
+  it('should use provider passed via AssertionParams when test.options.provider is unset', async () => {
+    const fakeProvider: any = { id: () => 'fake-provider' };
+
+    await handleLlmRubric({
+      ...defaultParams,
+      test: { vars: {} } as any,
+      provider: fakeProvider,
+    } as any);
+
+    expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ provider: fakeProvider }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should not override test.options.provider when it is set', async () => {
+    const testProvider: any = { id: () => 'test-provider' };
+
+    await handleLlmRubric({
+      ...defaultParams,
+      test: { vars: {}, options: { provider: testProvider } } as any,
+      provider: { id: () => 'ignored' } as any,
+    } as any);
+
+    expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ provider: testProvider }),
+      expect.anything(),
+      expect.anything(),
     );
   });
 });

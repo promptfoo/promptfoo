@@ -636,6 +636,20 @@ describe('RedteamGraderBase', () => {
     });
   });
 
+  it('prefers provided provider over defaults when passed to getResult', async () => {
+    const mockResult: GradingResult = { pass: true, score: 1, reason: 'ok' };
+    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    const provided: any = { id: () => 'provided' };
+    await grader.getResult('p', 'o', mockTest, provided, undefined);
+
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expect.any(String),
+      'o',
+      expect.objectContaining({ provider: provided }),
+    );
+  });
+
   describe('grader examples', () => {
     it('should append grader examples to rubric when present', async () => {
       const mockResult: GradingResult = {
