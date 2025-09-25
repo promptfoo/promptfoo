@@ -76,6 +76,7 @@ export function MetadataPanel({
             const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
             const truncatedValue = ellipsize(stringValue, 300);
             const isUrl = typeof value === 'string' && isValidUrl(value);
+            const isExpandable = !isUrl && stringValue !== truncatedValue;
 
             return (
               <TableRow key={key}>
@@ -83,9 +84,9 @@ export function MetadataPanel({
                 <TableCell
                   style={{
                     whiteSpace: 'pre-wrap',
-                    cursor: isUrl ? 'auto' : 'pointer',
+                    cursor: isUrl ? 'default' : isExpandable ? 'pointer' : 'default',
                   }}
-                  onClick={() => !isUrl && onMetadataClick(key)}
+                  onClick={() => isExpandable && onMetadataClick(key)}
                 >
                   {isUrl ? (
                     <Link href={value} target="_blank" rel="noopener noreferrer">
