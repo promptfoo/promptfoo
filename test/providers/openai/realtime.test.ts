@@ -69,6 +69,33 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.config.maintainContext).toBe(true); // Default value
     });
 
+    it('should initialize with gpt-realtime model and new voices', () => {
+      const config = {
+        modalities: ['text', 'audio'],
+        instructions: 'Test instructions',
+        voice: 'cedar' as const, // New voice for gpt-realtime
+      };
+
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', { config });
+
+      expect(provider.modelName).toBe('gpt-realtime');
+      expect(provider.config).toEqual(expect.objectContaining(config));
+      expect(provider.config.maintainContext).toBe(true); // Default value
+    });
+
+    it('should support marin voice for gpt-realtime model', () => {
+      const config = {
+        modalities: ['text', 'audio'],
+        instructions: 'Test instructions',
+        voice: 'marin' as const, // New voice for gpt-realtime
+      };
+
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', { config });
+
+      expect(provider.modelName).toBe('gpt-realtime');
+      expect(provider.config.voice).toBe('marin');
+    });
+
     it('should log warning for unknown model', () => {
       new OpenAiRealtimeProvider('unknown-model');
       expect(logger.debug).toHaveBeenCalledWith(
@@ -548,12 +575,14 @@ describe('OpenAI Realtime Provider', () => {
 
       // Then verify audio properties
       expect(response.audio!.format).toBe('wav');
-      expect(response.audio!.data).toBe(audioData.toString('base64'));
+      // The audio data should be converted from PCM16 to WAV, so it will be different from the original
+      expect(response.audio!.data).toBeDefined();
+      expect(response.audio!.data!.length).toBeGreaterThan(audioData.toString('base64').length); // WAV has headers
       expect(response.audio!.transcript).toBe('Hello there');
 
       // Verify metadata
       expect(response.metadata!.audio!.format).toBe('wav');
-      expect(response.metadata!.audio!.data).toBe(audioData.toString('base64'));
+      expect(response.metadata!.audio!.data).toBe(response.audio!.data); // Should match the audio data
     });
 
     it('should reuse existing connection for subsequent requests', async () => {
