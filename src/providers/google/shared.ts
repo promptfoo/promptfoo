@@ -64,12 +64,3 @@ export const CHAT_MODELS = [
   'medlm-medium',
   'medlm-large',
 ];
-
-export const CHAT_MODEL_ALIASES: Record<string, string> = {
-  'gemini-flash-latest': 'gemini-2.5-flash-preview-09-2025',
-  'gemini-flash-lite-latest': 'gemini-2.5-flash-lite-preview-09-2025',
-};
-
-export function resolveChatModelName(modelName: string): string {
-  return CHAT_MODEL_ALIASES[modelName] ?? modelName;
-}
