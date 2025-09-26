@@ -21,63 +21,91 @@ const EnterpriseBanner = ({ evalId, sx }: EnterpriseBannerProps) => {
   const [evalData, setEvalData] = useState<{ isRedteam: boolean } | null>(null);
 
   // Get redteam status from store if available, otherwise from fetched data
-  const isRedteamEval = config?.redteam !== undefined ? Boolean(config.redteam) : evalData?.isRedteam ?? false;
+  const isRedteamEval =
+    config?.redteam !== undefined ? Boolean(config.redteam) : (evalData?.isRedteam ?? false);
 
   useEffect(() => {
+    // AbortController for cleanup
+    const abortController = new AbortController();
+    let isMounted = true;
+
     const checkEvalStatus = async () => {
       try {
         // If no evalId is provided, show banner for redteam evals (original behavior)
         if (!evalId) {
-          setIsCloudEnabled(false);
-          // If no store config available, assume it's a redteam eval to maintain original behavior
-          if (config?.redteam === undefined) {
-            setEvalData({ isRedteam: true });
+          if (isMounted) {
+            setIsCloudEnabled(false);
+            // If no store config available, assume it's a redteam eval to maintain original behavior
+            if (config?.redteam === undefined) {
+              setEvalData({ isRedteam: true });
+            }
           }
           return;
         }
 
         // If store has config, only check cloud status
         if (config?.redteam !== undefined) {
-          const cloudResponse = await callApi(`/results/share/check-domain?id=${evalId}`);
+          const cloudResponse = await callApi(`/results/share/check-domain?id=${evalId}`, {
+            signal: abortController.signal,
+          });
           let cloudEnabled = false;
-          if (cloudResponse.ok) {
+          if (cloudResponse.ok && !abortController.signal.aborted) {
             const cloudData = await cloudResponse.json();
             cloudEnabled = cloudData.isCloudEnabled;
           }
-          setIsCloudEnabled(cloudEnabled);
+          if (isMounted && !abortController.signal.aborted) {
+            setIsCloudEnabled(cloudEnabled);
+          }
         } else {
           // If store doesn't have config (e.g., reports page), fetch both in parallel
           const [cloudResponse, evalResponse] = await Promise.all([
-            callApi(`/results/share/check-domain?id=${evalId}`),
-            callApi(`/eval/${evalId}`),
+            callApi(`/results/share/check-domain?id=${evalId}`, {
+              signal: abortController.signal,
+            }),
+            callApi(`/eval/${evalId}`, {
+              signal: abortController.signal,
+            }),
           ]);
 
           let cloudEnabled = false;
-          if (cloudResponse.ok) {
+          if (cloudResponse.ok && !abortController.signal.aborted) {
             const cloudData = await cloudResponse.json();
             cloudEnabled = cloudData.isCloudEnabled;
           }
-          setIsCloudEnabled(cloudEnabled);
 
-          if (evalResponse.ok) {
+          let evalDataResult = { isRedteam: true }; // Safe fallback
+          if (evalResponse.ok && !abortController.signal.aborted) {
             const data = await evalResponse.json();
-            setEvalData({ isRedteam: Boolean(data.config?.redteam) });
-          } else {
-            // If we can't fetch eval data, assume redteam to show banner (safer fallback)
-            setEvalData({ isRedteam: true });
+            evalDataResult = { isRedteam: Boolean(data.config?.redteam) };
+          }
+
+          if (isMounted && !abortController.signal.aborted) {
+            setIsCloudEnabled(cloudEnabled);
+            setEvalData(evalDataResult);
           }
         }
       } catch (error) {
-        console.error('Error checking eval status:', error);
-        setIsCloudEnabled(false);
-        // On error, assume redteam to show banner (safer fallback)
-        if (config?.redteam === undefined) {
-          setEvalData({ isRedteam: true });
+        // Don't log or update state if the request was aborted (component unmounted)
+        if (!abortController.signal.aborted) {
+          console.error('Error checking eval status:', error);
+          if (isMounted) {
+            setIsCloudEnabled(false);
+            // On error, assume redteam to show banner (safer fallback)
+            if (config?.redteam === undefined) {
+              setEvalData({ isRedteam: true });
+            }
+          }
         }
       }
     };
 
     checkEvalStatus();
+
+    // Cleanup function to prevent memory leaks
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [evalId, config?.redteam]);
 
   // Show banner if:

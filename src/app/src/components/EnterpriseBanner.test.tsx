@@ -13,15 +13,24 @@ describe('EnterpriseBanner', () => {
   });
 
   it('should render the community edition banner when evalId is provided and cloud is not enabled', async () => {
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ isCloudEnabled: false }),
-    } as Response);
+    mockCallApi
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ isCloudEnabled: false }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ config: { redteam: true } }),
+      } as Response);
 
     render(<EnterpriseBanner evalId="test-eval-123" />);
 
-    expect(mockCallApi).toHaveBeenCalledTimes(1);
-    expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=test-eval-123');
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApi).toHaveBeenCalledWith(
+      '/results/share/check-domain?id=test-eval-123',
+      expect.any(Object),
+    );
+    expect(mockCallApi).toHaveBeenCalledWith('/eval/test-eval-123', expect.any(Object));
 
     const bannerText = await screen.findByText(
       /You're using the community edition of Promptfoo's red teaming suite/i,
@@ -34,15 +43,24 @@ describe('EnterpriseBanner', () => {
   });
 
   it('should not render anything when evalId is provided and cloud is enabled', async () => {
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ isCloudEnabled: true }),
-    } as Response);
+    mockCallApi
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ isCloudEnabled: true }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ config: { redteam: true } }),
+      } as Response);
 
     const { container } = render(<EnterpriseBanner evalId="test-eval-123" />);
 
-    expect(mockCallApi).toHaveBeenCalledTimes(1);
-    expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=test-eval-123');
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApi).toHaveBeenCalledWith(
+      '/results/share/check-domain?id=test-eval-123',
+      expect.any(Object),
+    );
+    expect(mockCallApi).toHaveBeenCalledWith('/eval/test-eval-123', expect.any(Object));
 
     // Wait for the component to finish updating
     await waitFor(() => {
@@ -71,15 +89,24 @@ describe('EnterpriseBanner', () => {
   });
 
   it('should render the community edition banner when the API call returns a non-OK response', async () => {
-    mockCallApi.mockResolvedValue({
-      ok: false,
-      json: () => Promise.resolve({}),
-    } as Response);
+    mockCallApi
+      .mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({}),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({}),
+      } as Response);
 
     render(<EnterpriseBanner evalId="test-eval-123" />);
 
-    expect(mockCallApi).toHaveBeenCalledTimes(1);
-    expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=test-eval-123');
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApi).toHaveBeenCalledWith(
+      '/results/share/check-domain?id=test-eval-123',
+      expect.any(Object),
+    );
+    expect(mockCallApi).toHaveBeenCalledWith('/eval/test-eval-123', expect.any(Object));
 
     const bannerText = await screen.findByText(
       /You're using the community edition of Promptfoo's red teaming suite/i,
@@ -96,8 +123,12 @@ describe('EnterpriseBanner', () => {
 
     render(<EnterpriseBanner evalId="test-eval-123" />);
 
-    expect(mockCallApi).toHaveBeenCalledTimes(1);
-    expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=test-eval-123');
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApi).toHaveBeenCalledWith(
+      '/results/share/check-domain?id=test-eval-123',
+      expect.any(Object),
+    );
+    expect(mockCallApi).toHaveBeenCalledWith('/eval/test-eval-123', expect.any(Object));
 
     const bannerText = await screen.findByText(
       /You're using the community edition of Promptfoo's red teaming suite/i,
