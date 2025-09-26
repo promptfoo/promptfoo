@@ -79,9 +79,24 @@ describe('getInstallationInfo', () => {
     process.argv = ['node', '/project/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/dist/src/main.js');
     mockFs.existsSync.mockImplementation(
-      (path) =>
-        path === '/project/.git' ||
-        (typeof path === 'string' && path.includes('project') && path.endsWith('.git')),
+      (path) => {
+        // Allow .git directory detection
+        if (path === '/project/.git' ||
+            (typeof path === 'string' && path.endsWith('/.git'))) {
+          return true;
+        }
+        // Explicitly deny lock files to avoid npm/yarn/pnpm/bun detection
+        if (typeof path === 'string' &&
+            (path.includes('yarn.lock') || path.includes('pnpm-lock.yaml') ||
+             path.includes('bun.lockb') || path.includes('package-lock.json'))) {
+          return false;
+        }
+        // Deny dockerenv to avoid docker detection
+        if (path === '/.dockerenv') {
+          return false;
+        }
+        return false;
+      },
     );
 
     const result = getInstallationInfo('/project', false);
