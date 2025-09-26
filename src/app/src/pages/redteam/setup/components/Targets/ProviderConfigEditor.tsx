@@ -30,6 +30,8 @@ interface ProviderConfigEditorProps {
   validateAll?: boolean;
   onValidate?: (isValid: boolean) => void;
   providerType?: string;
+  onTargetTested?: (success: boolean) => void;
+  onSessionTested?: (success: boolean) => void;
 }
 
 const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigEditorProps>(
@@ -44,10 +46,12 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
       validateAll = false,
       onValidate,
       providerType,
+      onTargetTested,
+      onSessionTested,
     },
     ref,
   ) => {
-    const [bodyError, setBodyError] = useState<string | null>(null);
+    const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
     const [urlError, setUrlError] = useState<string | null>(null);
     const [rawConfigJson, setRawConfigJson] = useState<string>(
       JSON.stringify(provider.config, null, 2),
@@ -88,7 +92,21 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         if (bodyStr.includes('{{prompt}}')) {
           setBodyError(null);
         } else if (!updatedTarget.config.request) {
-          setBodyError('Request body must contain {{prompt}}');
+          setBodyError(
+            <>
+              Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will
+              inject the attack payload. Replace the user input value with{' '}
+              <code>{'{{prompt}}'}</code>. Promptfoo uses Nunjucks templating to replace{' '}
+              <code>{'{{prompt}}'}</code> with the actual test content.{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Learn more
+              </a>
+            </>,
+          );
         }
       } else if (field === 'request') {
         updatedTarget.config.request = value;
@@ -130,7 +148,7 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
     };
 
     const validate = (): boolean => {
-      const errors: string[] = [];
+      const errors: (string | React.ReactNode)[] = [];
 
       if (providerType === 'http') {
         // Check if we're in raw mode (using request field) or structured mode (using url field)
@@ -213,7 +231,8 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
 
       const hasErrors = errors.length > 0;
       if (setError) {
-        setError(hasErrors ? errors.join(', ') : null);
+        const stringErrors = errors.filter((e): e is string => typeof e === 'string');
+        setError(hasErrors ? stringErrors.join(', ') || 'Validation failed' : null);
       }
       if (onValidate) {
         onValidate(!hasErrors);
@@ -252,6 +271,8 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
             urlError={urlError}
             setUrlError={setUrlError}
             updateFullTarget={setProvider}
+            onTargetTested={onTargetTested}
+            onSessionTested={onSessionTested}
           />
         )}
 
