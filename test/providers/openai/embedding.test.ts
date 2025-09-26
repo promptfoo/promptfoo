@@ -86,19 +86,23 @@ describe('OpenAI Provider', () => {
       const originalEnv = process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY;
 
-      const providerNoKey = new OpenAiEmbeddingProvider('text-embedding-3-large', {
-        config: {},
-      });
+      try {
+        const providerNoKey = new OpenAiEmbeddingProvider('text-embedding-3-large', {
+          config: {},
+        });
 
-      const result = await providerNoKey.callEmbeddingApi('test text');
-      expect(result.error).toBe(
-        'API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
-      expect(result.embedding).toBeUndefined();
-
-      // Restore original environment
-      if (originalEnv) {
-        process.env.OPENAI_API_KEY = originalEnv;
+        const result = await providerNoKey.callEmbeddingApi('test text');
+        expect(result.error).toBe(
+          'API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+        );
+        expect(result.embedding).toBeUndefined();
+      } finally {
+        // Always restore original environment state
+        if (originalEnv !== undefined) {
+          process.env.OPENAI_API_KEY = originalEnv;
+        } else {
+          delete process.env.OPENAI_API_KEY;
+        }
       }
     });
   });
