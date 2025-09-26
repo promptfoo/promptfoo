@@ -1,5 +1,6 @@
 // src/util/nextCommand.ts
 // Detect how the CLI was invoked so we can show the right "Next:" command.
+
 export function detectInstaller(): 'npx' | 'brew' | 'npm-global' | 'unknown' {
   const prefix = process.env.npm_config_prefix || '';
   const ua = process.env.npm_config_user_agent || '';

@@ -10,9 +10,8 @@ import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 import { fetchWithProxy } from '../util/fetch';
-import { isRunningUnderNpx } from '../util/index';
-import type { Command } from 'commander';
 import { nextCmd } from '../util/nextCommand';
+import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
@@ -148,7 +147,9 @@ async function handleExampleDownload(
     }
   }
 
-  if (!exampleName) return;
+  if (!exampleName) {
+    return;
+  }
 
   const basePath = directory && directory !== '.' ? `${directory}/` : '';
   const readmePath = path.join(basePath, exampleName, 'README.md');
