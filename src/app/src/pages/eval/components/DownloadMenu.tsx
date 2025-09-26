@@ -22,7 +22,7 @@ import Typography from '@mui/material/Typography';
 import invariant from '@promptfoo/util/invariant';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
 import yaml from 'js-yaml';
-import { downloadBlob, useDownloadCsv, useDownloadJson } from '../../../hooks/useDownloads';
+import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
 
@@ -41,12 +41,19 @@ function DownloadMenu() {
   const isDarkMode = theme.palette.mode === 'dark';
 
   // Use the new hooks for CSV and JSON downloads
-  const { downloadCsv: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadCsv({
-    onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
-  });
-  const { downloadJson: downloadJsonApi, isLoading: isLoadingJson } = useDownloadJson({
-    onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
-  });
+  const { downloadCsv: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(
+    DownloadFormat.CSV,
+    {
+      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
+    },
+  );
+  const { downloadJson: downloadJsonApi, isLoading: isLoadingJson } = useDownloadEval(
+    DownloadFormat.JSON,
+
+    {
+      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
+    },
+  );
 
   const getFilename = (suffix: string): string => {
     invariant(evalId, 'evalId is required for file downloads');
