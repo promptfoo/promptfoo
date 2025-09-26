@@ -178,6 +178,44 @@ describe('LoginPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/test-redirect');
   });
 
+  it('should redirect to the default route when the redirect query parameter is empty and the user is logged in', () => {
+    useUserStoreMock.mockReturnValue({
+      email: 'test@example.com',
+      isLoading: false,
+      fetchEmail: vi.fn(),
+      setEmail: vi.fn(),
+    });
+
+    mockLocationSearch = '?redirect=';
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/');
+  });
+
+  it('should navigate to the provided route when the redirect parameter points to a non-existent route', () => {
+    useUserStoreMock.mockReturnValue({
+      email: 'test@example.com',
+      isLoading: false,
+      fetchEmail: vi.fn(),
+      setEmail: vi.fn(),
+    });
+
+    mockLocationSearch = '?redirect=/non-existent-route';
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/non-existent-route');
+  });
+
   it('displays "View Report" when the URL contains "?type=report"', () => {
     useUserStoreMock.mockReturnValue({
       email: null,
@@ -284,5 +322,83 @@ describe('LoginPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Invalid API key or authentication failed')).toBeInTheDocument();
     });
+  });
+
+  it('should use the latest redirect parameter if it changes after component mount but before login', async () => {
+    const setEmail = vi.fn();
+    useUserStoreMock.mockReturnValue({
+      email: null,
+      isLoading: false,
+      fetchEmail: vi.fn(),
+      setEmail,
+    });
+
+    callApiMock.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        user: { email: 'test@example.com' },
+      }),
+    });
+
+    mockLocationSearch = '?redirect=/initial-redirect';
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    const apiKeyField = document.getElementById('apiKey')!;
+    fireEvent.change(apiKeyField, {
+      target: { value: 'test-api-key' },
+    });
+
+    mockLocationSearch = '?redirect=/updated-redirect';
+
+    fireEvent.click(screen.getByText('Sign In'));
+
+    await waitFor(() => expect(callApiMock).toHaveBeenCalledTimes(1));
+
+    expect(callApiMock).toHaveBeenCalledWith('/user/login', expect.any(Object));
+    expect(setEmail).toHaveBeenCalledWith('test@example.com');
+    expect(mockNavigate).toHaveBeenCalledWith('/updated-redirect');
+  });
+
+  it('should navigate to default route when redirect URL is malformed', () => {
+    useUserStoreMock.mockReturnValue({
+      email: 'test@example.com',
+      isLoading: false,
+      fetchEmail: vi.fn(),
+      setEmail: vi.fn(),
+    });
+
+    mockLocationSearch = '?redirect=javascript:alert("XSS")';
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/');
+  });
+
+  it('should handle redirect URLs with query parameters', () => {
+    useUserStoreMock.mockReturnValue({
+      email: 'test@example.com',
+      isLoading: false,
+      fetchEmail: vi.fn(),
+      setEmail: vi.fn(),
+    });
+
+    mockLocationSearch = '?redirect=/some-page?param1=value1&param2=value2';
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/some-page?param1=value1&param2=value2');
   });
 });
