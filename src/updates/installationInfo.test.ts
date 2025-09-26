@@ -80,7 +80,6 @@ describe('getInstallationInfo', () => {
     mockFs.realpathSync.mockReturnValue('/project/dist/src/main.js');
 
     // Mock process.cwd to return /project so isGitRepository works correctly
-    const originalCwd = process.cwd;
     jest.spyOn(process, 'cwd').mockReturnValue('/project');
     mockFs.existsSync.mockImplementation((path) => {
       // Allow .git directory detection (handle both Unix and Windows paths)
