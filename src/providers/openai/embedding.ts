@@ -53,9 +53,9 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       ({ data, cached, status, statusText, deleteFromCache } = response as any);
 
       // Check HTTP status like chat provider
-      if (status < 200 || status >= 300) {
+      if (status && (status < 200 || status >= 300)) {
         return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+          error: `API error: ${status} ${statusText || 'Unknown error'}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
       }
     } catch (err) {
