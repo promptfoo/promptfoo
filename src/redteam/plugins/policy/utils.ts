@@ -61,7 +61,7 @@ export function isValidPolicyObject(policy: Policy): policy is PolicyObject {
 
 /**
  * Constructs a unique ID for the inline policy by hashing the policy text and
- * taking the first 8 characters of the hash.
+ * taking the first 12 characters of the hash.
  * @param policyText - The text of the policy.
  * @returns The ID for the inline policy.
  */
