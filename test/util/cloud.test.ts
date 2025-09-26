@@ -625,7 +625,7 @@ describe('cloud utils', () => {
         statusText: 'Unauthorized',
       } as Response);
 
-      await expect(getDefaultTeam()).rejects.toThrow('Failed to get default team id: Unauthorized');
+      await expect(getDefaultTeam()).rejects.toThrow('Failed to get user teams: Unauthorized');
     });
 
     it('should throw error when fetch throws', async () => {
@@ -640,9 +640,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve([]),
       } as Response);
 
-      const result = await getDefaultTeam();
-
-      expect(result).toBeUndefined();
+      await expect(getDefaultTeam()).rejects.toThrow('No teams found for user');
     });
   });
 

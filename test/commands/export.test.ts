@@ -157,7 +157,7 @@ describe('exportCommand', () => {
 
   describe('logs export', () => {
     const mockConfigDir = '/test/config';
-    const mockLogDir = '/test/config/logs';
+    const _mockLogDir = '/test/config/logs';
 
     beforeEach(() => {
       mockGetConfigDirectoryPath.mockReturnValue(mockConfigDir);

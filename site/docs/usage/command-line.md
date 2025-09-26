@@ -331,13 +331,50 @@ Login to the promptfoo cloud.
 | `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
 | `-k, --api-key <key>` | Login using an API key                                                     |
 
+After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
+
 ### `promptfoo auth logout`
 
 Logout from the promptfoo cloud.
 
 ### `promptfoo auth whoami`
 
-Show current user information.
+Show current user information including the active team.
+
+### `promptfoo auth teams`
+
+Manage team switching for organizations with multiple teams.
+
+#### `promptfoo auth teams list`
+
+List all teams you have access to in the current organization.
+
+#### `promptfoo auth teams current`
+
+Show the currently active team.
+
+#### `promptfoo auth teams set <teamIdentifier>`
+
+Switch to a specific team. The team identifier can be:
+
+- Team name (e.g., "Engineering")
+- Team slug (e.g., "engineering")
+- Team ID (e.g., "team_12345")
+
+Examples:
+
+```sh
+# Switch to team by name
+promptfoo auth teams set "Engineering Team"
+
+# Switch to team by slug
+promptfoo auth teams set engineering
+
+# Switch to team by ID
+promptfoo auth teams set team_12345
+```
+
+Your team selection is remembered across CLI sessions and applies to all promptfoo operations including evaluations and red team testing.
 
 ## `promptfoo config`
 
