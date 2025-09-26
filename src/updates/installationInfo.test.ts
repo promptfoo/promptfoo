@@ -79,8 +79,9 @@ describe('getInstallationInfo', () => {
     process.argv = ['node', '/project/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/dist/src/main.js');
     mockFs.existsSync.mockImplementation((path) => {
-      // Allow .git directory detection
-      if (path === '/project/.git' || (typeof path === 'string' && path.endsWith('/.git'))) {
+      // Allow .git directory detection (handle both Unix and Windows paths)
+      if (path === '/project/.git' ||
+          (typeof path === 'string' && (path.endsWith('/.git') || path.endsWith('\\.git')))) {
         return true;
       }
       // Explicitly deny lock files to avoid npm/yarn/pnpm/bun detection
