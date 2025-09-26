@@ -24,5 +24,5 @@ export const isFilteredMetadataKey = (key: string): boolean => {
  */
 export const hasDisplayableMetadata = (metadata: Record<string, any> | undefined): boolean => {
   if (!metadata) return false;
-  return Object.keys(metadata).some(key => !isFilteredMetadataKey(key));
+  return Object.keys(metadata).some((key) => !isFilteredMetadataKey(key));
 };

@@ -31,9 +31,7 @@ export default function EmptyState({
         justifyContent="center"
         sx={{ color: 'text.secondary' }}
       >
-        <Box sx={{ fontSize: iconSize, mb: 1, opacity: 0.5 }}>
-          {icon}
-        </Box>
+        <Box sx={{ fontSize: iconSize, mb: 1, opacity: 0.5 }}>{icon}</Box>
         <Typography variant="body1" color="text.secondary" align="center">
           {title}
         </Typography>
