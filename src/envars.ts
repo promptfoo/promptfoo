@@ -451,3 +451,12 @@ export function isCI() {
     getEnvBool('TEAMCITY_VERSION')
   );
 }
+
+/**
+ * Check if the application is running in a non-interactive environment.
+ * This includes CI environments, cron jobs, SSH scripts without TTY, etc.
+ * @returns True if running in a non-interactive environment, false otherwise.
+ */
+export function isNonInteractive() {
+  return isCI() || !process.stdin.isTTY || !process.stdout.isTTY;
+}
