@@ -16,12 +16,13 @@ describe('MetadataPanel', () => {
     onApplyFilter: mockOnApplyFilter,
   };
 
-  it("should render a table with all metadata keys except 'citations' when metadata is provided", () => {
+  it("should render a table with all metadata keys except 'citations' and '_promptfooFileMetadata'", () => {
     const mockMetadata = {
       stringKey: 'stringValue',
       numberKey: 123,
       objectKey: { nested: 'value' },
       citations: [{ source: 'doc1', content: 'citation content' }],
+      _promptfooFileMetadata: { internal: 'data' },
     };
 
     render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
@@ -38,7 +39,9 @@ describe('MetadataPanel', () => {
     expect(screen.getByText('objectKey')).toBeInTheDocument();
     expect(screen.getByText(JSON.stringify(mockMetadata.objectKey))).toBeInTheDocument();
 
+    // Should filter out both citations and _promptfooFileMetadata
     expect(screen.queryByText('citations')).not.toBeInTheDocument();
+    expect(screen.queryByText('_promptfooFileMetadata')).not.toBeInTheDocument();
   });
 
   it('should render a metadata value as a Link when the value is a valid URL string', () => {
@@ -125,10 +128,11 @@ describe('MetadataPanel', () => {
     expect(mockOnApplyFilter).toHaveBeenCalledWith('testField', 'testValue');
   });
 
-  it('should return null when metadata is an empty object', () => {
+  it('should show empty state when metadata is an empty object', () => {
     const mockMetadata = {};
-    const { container } = render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
-    expect(container.firstChild).toBeNull();
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    expect(screen.getByText('No metadata available')).toBeInTheDocument();
+    expect(screen.getByText('Metadata will appear here when available')).toBeInTheDocument();
   });
 
   it('should correctly handle and render URLs with special characters that require URL encoding', () => {

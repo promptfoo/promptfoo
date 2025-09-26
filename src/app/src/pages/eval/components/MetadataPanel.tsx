@@ -1,6 +1,7 @@
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
@@ -14,13 +15,21 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import { makeCustomPolicyCloudUrl } from '@promptfoo/redteam/plugins/policy/utils';
+import EmptyState from '@app/components/EmptyState';
+import { hasDisplayableMetadata, isFilteredMetadataKey } from '@app/constants/metadata';
 import { ellipsize } from '../../../../../util/text';
 import useCloudConfig from '../../../hooks/useCloudConfig';
 
 const isValidUrl = (str: string): boolean => {
   try {
-    new URL(str);
-    return true;
+    // Check for basic malformed patterns first
+    if (str.includes(':/') && !str.includes('://')) {
+      return false; // Malformed like 'http:/example.com'
+    }
+
+    const url = new URL(str);
+    // Must have a valid protocol and hostname
+    return url.protocol.length > 0 && url.hostname.length > 0;
   } catch {
     return false;
   }
@@ -32,8 +41,6 @@ export interface ExpandedMetadataState {
     lastClickTime: number;
   };
 }
-
-const HIDDEN_KEYS = ['citations', '_promptfooFileMetadata'];
 
 interface MetadataPanelProps {
   metadata?: Record<string, any>;
@@ -54,16 +61,14 @@ export function MetadataPanel({
 }: MetadataPanelProps) {
   const { data: cloudConfig } = useCloudConfig();
 
-  if (!metadata) {
-    return null;
-  }
-
-  const metadataEntries = Object.entries(metadata)
-    .filter((d) => !HIDDEN_KEYS.includes(d[0]))
-    .sort((a, b) => a[0].localeCompare(b[0]));
-
-  if (metadataEntries.length === 0) {
-    return null;
+  if (!hasDisplayableMetadata(metadata)) {
+    return (
+      <EmptyState
+        icon={<InfoOutlinedIcon />}
+        title="No metadata available"
+        description="Metadata will appear here when available"
+      />
+    );
   }
 
   return (
@@ -81,109 +86,116 @@ export function MetadataPanel({
           </TableRow>
         </TableHead>
         <TableBody>
-          {metadataEntries.map(([key, value]) => {
-            const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-            let cell: React.ReactNode;
+          {Object.entries(metadata || {})
+            .filter(([key]) => !isFilteredMetadataKey(key))
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, value]) => {
+              const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
+              const truncatedValue = ellipsize(stringValue, 300);
+              const isUrl = typeof value === 'string' && isValidUrl(value);
 
-            // Is reusable custom policy name?
-            if (key === 'policyName' && cloudConfig?.isEnabled && cloudConfig?.appUrl) {
-              const policyId: string | null =
-                metadataEntries.find(([key]) => key === 'policyId')?.[1] ?? null;
+              let cell: React.ReactNode;
 
-              if (policyId) {
+              // Is reusable custom policy name?
+              if (key === 'policyName' && cloudConfig?.isEnabled && cloudConfig?.appUrl) {
+                const policyId: string | null =
+                  Object.entries(metadata || {}).find(([k]) => k === 'policyId')?.[1] ?? null;
+
+                if (policyId) {
+                  cell = (
+                    <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>{expandedMetadata[key]?.expanded ? stringValue : truncatedValue}</span>
+                        <Link
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policyId)}
+                          sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                        >
+                          <span>View policy in Promptfoo Cloud</span>
+                          <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
+                        </Link>
+                      </div>
+                    </TableCell>
+                  );
+                } else {
+                  cell = (
+                    <TableCell
+                      style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
+                      onClick={() => onMetadataClick(key)}
+                    >
+                      {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                    </TableCell>
+                  );
+                }
+              }
+              // Is URL?
+              else if (isUrl) {
                 cell = (
-                  <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>{value}</span>
-                      <Link
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policyId)}
-                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-                      >
-                        <span>View policy in Promptfoo Cloud</span>
-                        <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
-                      </Link>
-                    </div>
+                  <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'auto' }}>
+                    <Link href={value} target="_blank" rel="noopener noreferrer">
+                      {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                    </Link>
                   </TableCell>
                 );
               } else {
                 cell = (
-                  <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
-                    {value}
+                  <TableCell
+                    style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
+                    onClick={() => onMetadataClick(key)}
+                  >
+                    {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
                   </TableCell>
                 );
               }
-            }
-            // Is URL?
-            else if (typeof value === 'string' && isValidUrl(value)) {
-              cell = (
-                <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}>
-                  <Link href={value} target="_blank" rel="noopener noreferrer">
-                    {value}
-                  </Link>
-                </TableCell>
-              );
-            } else {
-              const truncatedValue = ellipsize(stringValue, 300);
-              cell = (
-                <TableCell
-                  style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}
-                  onClick={() => onMetadataClick(key)}
-                >
-                  {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
-                </TableCell>
-              );
-            }
 
-            return (
-              <TableRow key={key}>
-                <TableCell>{key}</TableCell>
-                {cell}
-
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 0.5 }}>
-                    <Tooltip title="Copy value">
-                      <IconButton
-                        size="small"
-                        onClick={() => onCopy(key, stringValue)}
-                        sx={{
-                          color: 'text.disabled',
-                          transition: 'color 0.2s ease',
-                          '&:hover': {
-                            color: 'text.secondary',
-                          },
-                        }}
-                        aria-label={`Copy metadata value for ${key}`}
-                      >
-                        {copiedFields[key] ? (
-                          <CheckIcon fontSize="small" />
-                        ) : (
-                          <ContentCopyIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Filter by value (replaces existing filters)">
-                      <IconButton
-                        size="small"
-                        onClick={() => onApplyFilter(key, stringValue)}
-                        sx={{
-                          color: 'text.disabled',
-                          transition: 'color 0.2s ease',
-                          '&:hover': {
-                            color: 'text.secondary',
-                          },
-                        }}
-                        aria-label={`Filter by ${key}`}
-                      >
-                        <FilterAltIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                </TableCell>
-              </TableRow>
-            );
-          })}
+              return (
+                <TableRow key={key}>
+                  <TableCell>{key}</TableCell>
+                  {cell}
+                  <TableCell>
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      <Tooltip title="Copy value">
+                        <IconButton
+                          size="small"
+                          onClick={() => onCopy(key, stringValue)}
+                          sx={{
+                            color: 'text.disabled',
+                            transition: 'color 0.2s ease',
+                            '&:hover': {
+                              color: 'text.secondary',
+                            },
+                          }}
+                          aria-label={`Copy metadata value for ${key}`}
+                        >
+                          {copiedFields[key] ? (
+                            <CheckIcon fontSize="small" />
+                          ) : (
+                            <ContentCopyIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Filter by value (replaces existing filters)">
+                        <IconButton
+                          size="small"
+                          onClick={() => onApplyFilter(key, stringValue)}
+                          sx={{
+                            color: 'text.disabled',
+                            transition: 'color 0.2s ease',
+                            '&:hover': {
+                              color: 'text.secondary',
+                            },
+                          }}
+                          aria-label={`Filter by ${key}`}
+                        >
+                          <FilterAltIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
         </TableBody>
       </Table>
     </TableContainer>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 
 import { callApi } from '@app/utils/api';
+import { hasDisplayableMetadata } from '@app/constants/metadata';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -334,8 +335,7 @@ export default function EvalOutputPromptDialog({
   // Determine which tabs have content
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
-  const hasMetadata =
-    metadata && Object.keys(metadata).filter((key) => key !== 'citations').length > 0;
+  const hasMetadata = hasDisplayableMetadata(metadata);
 
   // Build visible tabs list to handle dynamic tab indices
   const visibleTabs: string[] = ['prompt-output'];

@@ -151,7 +151,9 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
         LIMIT 1000
       `;
       const results: MetadataKeyResult[] = await db.all(query);
-      return results.map((r) => r.key);
+      return results
+        .map((r) => r.key)
+        .filter((key) => key !== 'citations' && key !== '_promptfooFileMetadata');
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
       logger.error(
