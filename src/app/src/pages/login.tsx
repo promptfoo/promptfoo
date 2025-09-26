@@ -41,10 +41,21 @@ export default function LoginPage() {
     fetchEmail();
   }, [fetchEmail]);
 
-  const params = new URLSearchParams(location.search);
   const handleRedirect = () => {
-    const redirect = params.get('redirect');
-    if (redirect) {
+    // Handle special case where redirect URL contains query parameters
+    // e.g., ?redirect=/some-page?param1=value1&param2=value2
+    const searchStr = location.search;
+    const redirectMatch = searchStr.match(/[?&]redirect=([^&]*(?:&[^=]*=[^&]*)*)/);
+    let redirect = null;
+
+    if (redirectMatch) {
+      redirect = decodeURIComponent(redirectMatch[1]);
+    } else {
+      const params = new URLSearchParams(searchStr);
+      redirect = params.get('redirect');
+    }
+
+    if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
       navigate(redirect);
     } else {
       navigate('/');
@@ -123,12 +134,14 @@ export default function LoginPage() {
             </Box>
 
             <Typography variant="h5" color="text.primary">
-              {params.get('type') === 'report' ? 'View Report' : 'Welcome to Promptfoo'}
+              {new URLSearchParams(location.search).get('type') === 'report'
+                ? 'View Report'
+                : 'Welcome to Promptfoo'}
             </Typography>
 
             <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400 }}>
               Enter your API token to authenticate.
-              {!params.get('type') && (
+              {!new URLSearchParams(location.search).get('type') && (
                 <>
                   {' '}
                   Don't have one?{' '}
