@@ -3,7 +3,6 @@ import logger from '../logger';
 import { checkForUpdates } from '../updates/updateCheck';
 import { getInstallationInfo } from '../updates/installationInfo';
 import { spawn } from 'node:child_process';
-import { getEnvBool } from '../envars';
 
 export function updateCommand(program: Command) {
   const updateCmd = program
@@ -35,7 +34,9 @@ export function updateCommand(program: Command) {
         const installationInfo = getInstallationInfo(process.cwd(), false);
 
         // Show what we detected
-        logger.info(`Detected installation: ${installationInfo.packageManager} (${installationInfo.isGlobal ? 'global' : 'local'})`);
+        logger.info(
+          `Detected installation: ${installationInfo.packageManager} (${installationInfo.isGlobal ? 'global' : 'local'})`,
+        );
 
         if (!installationInfo.updateCommand) {
           logger.warn('Cannot automatically update this installation.');
@@ -46,14 +47,17 @@ export function updateCommand(program: Command) {
         }
 
         const targetVersion = updateInfo ? updateInfo.update.latest : 'latest';
-        const updateCommand = installationInfo.updateCommand.replace('@latest', `@${targetVersion}`);
+        const updateCommand = installationInfo.updateCommand.replace(
+          '@latest',
+          `@${targetVersion}`,
+        );
 
         logger.info(`Running: ${updateCommand}`);
 
         // Execute the update command
         const updateProcess = spawn(updateCommand, {
           stdio: 'inherit',
-          shell: true
+          shell: true,
         });
 
         updateProcess.on('close', (code) => {
@@ -78,7 +82,6 @@ export function updateCommand(program: Command) {
           }
           process.exit(1);
         });
-
       } catch (error) {
         logger.error(`Failed to update: ${error}`);
         process.exit(1);

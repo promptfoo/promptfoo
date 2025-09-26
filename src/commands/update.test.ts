@@ -10,7 +10,9 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 
 const mockCheckForUpdates = checkForUpdates as jest.MockedFunction<typeof checkForUpdates>;
-const mockGetInstallationInfo = getInstallationInfo as jest.MockedFunction<typeof getInstallationInfo>;
+const mockGetInstallationInfo = getInstallationInfo as jest.MockedFunction<
+  typeof getInstallationInfo
+>;
 const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
 
 describe('update command', () => {
@@ -34,7 +36,7 @@ describe('update command', () => {
     program.parse(['node', 'test', 'update']);
 
     // Wait for async operations
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(mockCheckForUpdates).toHaveBeenCalled();
   });
@@ -45,15 +47,15 @@ describe('update command', () => {
       update: {
         current: '1.0.0',
         latest: '1.1.0',
-        name: 'promptfoo'
-      }
+        name: 'promptfoo',
+      },
     });
 
     updateCommand(program);
     program.parse(['node', 'test', 'update', '--check']);
 
     // Wait for async operations
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(mockCheckForUpdates).toHaveBeenCalled();
   });
@@ -85,15 +87,15 @@ describe('update command', () => {
       update: {
         current: '1.0.0',
         latest: '1.1.0',
-        name: 'promptfoo'
-      }
+        name: 'promptfoo',
+      },
     });
 
     mockGetInstallationInfo.mockReturnValue({
       packageManager: PackageManager.NPM,
       isGlobal: true,
       updateCommand: 'npm install -g promptfoo@latest',
-      updateMessage: 'Installed with npm. Attempting to automatically update now...'
+      updateMessage: 'Installed with npm. Attempting to automatically update now...',
     });
 
     mockSpawn.mockReturnValue(mockProcess);
@@ -102,12 +104,12 @@ describe('update command', () => {
     program.parse(['node', 'test', 'update']);
 
     // Wait for async operations
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(mockGetInstallationInfo).toHaveBeenCalledWith(process.cwd(), false);
     expect(mockSpawn).toHaveBeenCalledWith('npm install -g promptfoo@1.1.0', {
       stdio: 'inherit',
-      shell: true
+      shell: true,
     });
   });
 
@@ -117,21 +119,21 @@ describe('update command', () => {
       update: {
         current: '1.0.0',
         latest: '1.1.0',
-        name: 'promptfoo'
-      }
+        name: 'promptfoo',
+      },
     });
 
     mockGetInstallationInfo.mockReturnValue({
       packageManager: PackageManager.NPX,
       isGlobal: false,
-      updateMessage: 'Running via npx, update not applicable.'
+      updateMessage: 'Running via npx, update not applicable.',
     });
 
     updateCommand(program);
     program.parse(['node', 'test', 'update']);
 
     // Wait for async operations
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(mockGetInstallationInfo).toHaveBeenCalled();
     expect(mockSpawn).not.toHaveBeenCalled();
@@ -165,7 +167,7 @@ describe('update command', () => {
       packageManager: PackageManager.NPM,
       isGlobal: true,
       updateCommand: 'npm install -g promptfoo@latest',
-      updateMessage: 'Installed with npm.'
+      updateMessage: 'Installed with npm.',
     });
 
     mockSpawn.mockReturnValue(mockProcess);
@@ -174,11 +176,11 @@ describe('update command', () => {
     program.parse(['node', 'test', 'update', '--force']);
 
     // Wait for async operations
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(mockSpawn).toHaveBeenCalledWith('npm install -g promptfoo@latest', {
       stdio: 'inherit',
-      shell: true
+      shell: true,
     });
   });
 });
