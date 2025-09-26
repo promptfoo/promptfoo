@@ -18,44 +18,80 @@ interface EnterpriseBannerProps {
 const EnterpriseBanner = ({ evalId, sx }: EnterpriseBannerProps) => {
   const { config } = useTableStore();
   const [isCloudEnabled, setIsCloudEnabled] = useState<boolean | null>(null);
+  const [evalData, setEvalData] = useState<{ isRedteam: boolean } | null>(null);
 
-  // Get redteam status from the already-loaded config in the store
-  const isRedteamEval = Boolean(config?.redteam);
+  // Get redteam status from store if available, otherwise from fetched data
+  const isRedteamEval = config?.redteam !== undefined ? Boolean(config.redteam) : evalData?.isRedteam ?? false;
 
   useEffect(() => {
-    // Only check cloud status - we get redteam info from the store
-    const checkCloudStatus = async () => {
+    const checkEvalStatus = async () => {
       try {
-        // If no evalId is provided, show banner (original behavior)
+        // If no evalId is provided, show banner for redteam evals (original behavior)
         if (!evalId) {
           setIsCloudEnabled(false);
+          // If no store config available, assume it's a redteam eval to maintain original behavior
+          if (config?.redteam === undefined) {
+            setEvalData({ isRedteam: true });
+          }
           return;
         }
 
-        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
-
-        if (response.ok) {
-          const data = await response.json();
-          setIsCloudEnabled(data.isCloudEnabled);
+        // If store has config, only check cloud status
+        if (config?.redteam !== undefined) {
+          const cloudResponse = await callApi(`/results/share/check-domain?id=${evalId}`);
+          let cloudEnabled = false;
+          if (cloudResponse.ok) {
+            const cloudData = await cloudResponse.json();
+            cloudEnabled = cloudData.isCloudEnabled;
+          }
+          setIsCloudEnabled(cloudEnabled);
         } else {
-          // If we can't check, default to showing the banner (original behavior)
-          setIsCloudEnabled(false);
+          // If store doesn't have config (e.g., reports page), fetch both in parallel
+          const [cloudResponse, evalResponse] = await Promise.all([
+            callApi(`/results/share/check-domain?id=${evalId}`),
+            callApi(`/eval/${evalId}`),
+          ]);
+
+          let cloudEnabled = false;
+          if (cloudResponse.ok) {
+            const cloudData = await cloudResponse.json();
+            cloudEnabled = cloudData.isCloudEnabled;
+          }
+          setIsCloudEnabled(cloudEnabled);
+
+          if (evalResponse.ok) {
+            const data = await evalResponse.json();
+            setEvalData({ isRedteam: Boolean(data.config?.redteam) });
+          } else {
+            // If we can't fetch eval data, assume redteam to show banner (safer fallback)
+            setEvalData({ isRedteam: true });
+          }
         }
       } catch (error) {
-        console.error('Error checking cloud status:', error);
+        console.error('Error checking eval status:', error);
         setIsCloudEnabled(false);
+        // On error, assume redteam to show banner (safer fallback)
+        if (config?.redteam === undefined) {
+          setEvalData({ isRedteam: true });
+        }
       }
     };
 
-    checkCloudStatus();
-  }, [evalId]);
+    checkEvalStatus();
+  }, [evalId, config?.redteam]);
 
   // Show banner if:
   // 1. Cloud status has loaded
   // 2. Cloud is not enabled
-  // 3. This is a redteam evaluation (from store config)
+  // 3. This is a redteam evaluation (from store or fetched data)
+  // 4. We have redteam status determined
   if (isCloudEnabled === null) {
     return null; // Still loading cloud status
+  }
+
+  // If we're still waiting for redteam status and store doesn't have it
+  if (config?.redteam === undefined && evalData === null) {
+    return null; // Still loading redteam status
   }
 
   if (isCloudEnabled === true || !isRedteamEval) {
