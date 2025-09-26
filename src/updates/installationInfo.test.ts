@@ -78,6 +78,10 @@ describe('getInstallationInfo', () => {
   it('should detect local git clone', () => {
     process.argv = ['node', '/project/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/dist/src/main.js');
+
+    // Mock process.cwd to return /project so isGitRepository works correctly
+    const originalCwd = process.cwd;
+    jest.spyOn(process, 'cwd').mockReturnValue('/project');
     mockFs.existsSync.mockImplementation((path) => {
       // Allow .git directory detection (handle both Unix and Windows paths)
       if (
@@ -110,6 +114,9 @@ describe('getInstallationInfo', () => {
       isGlobal: false,
       updateMessage: 'Running from a local git clone. Please update with "git pull".',
     });
+
+    // Restore original process.cwd
+    (process.cwd as jest.Mock).mockRestore();
   });
 
   it('should detect NPX installation', () => {
