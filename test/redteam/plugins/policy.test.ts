@@ -1,6 +1,6 @@
-import { POLICY_METRIC_PREFIX } from 'src/redteam/plugins/policy/constants';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy';
+import { POLICY_METRIC_PREFIX } from '../../../src/redteam/plugins/policy/constants';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
