@@ -10,6 +10,7 @@ import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import { FormattingProvider } from '../contexts/FormattingContext';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 
@@ -80,7 +81,7 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText?: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight, showInferenceDetails, wordBreak } =
+  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewSettingsStore();
 
   const { shouldHighlightSearchText } = useTableStore();
@@ -622,32 +623,27 @@ function EvalOutputCell({
             </button>
           </Tooltip>
           {openPrompt && (
-            <EvalOutputPromptDialog
-              open={openPrompt}
-              onClose={handlePromptClose}
-              prompt={output.prompt}
-              provider={output.provider}
-              gradingResults={output.gradingResult?.componentResults}
-              output={output.text} // Pass raw output instead of processed text
-              metadata={output.metadata}
-              evaluationId={evaluationId}
-              testCaseId={testCaseId || output.id}
-              testIndex={rowIndex}
-              promptIndex={promptIndex}
-              variables={output.testCase?.vars}
-              // Pass global settings for consistent formatting
-              renderMarkdown={renderMarkdown}
-              prettifyJson={prettifyJson}
-              showInferenceDetails={showInferenceDetails}
-              maxTextLength={maxTextLength}
-              wordBreak={wordBreak}
-              maxImageWidth={maxImageWidth}
-              maxImageHeight={maxImageHeight}
-              // Pass additional data for inference details
-              tokenUsage={output.tokenUsage || output.response?.tokenUsage}
-              latencyMs={output.latencyMs}
-              cost={output.cost}
-            />
+            <FormattingProvider>
+              <EvalOutputPromptDialog
+                open={openPrompt}
+                onClose={handlePromptClose}
+                prompt={output.prompt}
+                provider={output.provider}
+                gradingResults={output.gradingResult?.componentResults}
+                output={output.text}
+                metadata={output.metadata}
+                evaluationId={evaluationId}
+                testCaseId={testCaseId || output.id}
+                testIndex={rowIndex}
+                promptIndex={promptIndex}
+                variables={output.testCase?.vars}
+                inferenceData={{
+                  tokenUsage: output.tokenUsage || output.response?.tokenUsage,
+                  latencyMs: output.latencyMs,
+                  cost: output.cost,
+                }}
+              />
+            </FormattingProvider>
           )}
         </>
       )}

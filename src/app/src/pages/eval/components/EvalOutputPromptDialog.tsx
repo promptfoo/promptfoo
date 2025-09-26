@@ -12,13 +12,13 @@ import Paper from '@mui/material/Paper';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
-import Tooltip from '@mui/material/Tooltip';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
+import { PerformanceMetrics } from './PerformanceMetrics';
+import { FormattedContent } from './FormattedContent';
+import type { InferenceData } from '../utils/formatting';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
 import { useTableStore } from './store';
@@ -60,9 +60,6 @@ interface CodeDisplayProps {
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   showCopyButton?: boolean;
-  renderMarkdown?: boolean;
-  prettifyJson?: boolean;
-  wordBreak?: 'break-word' | 'break-all';
 }
 
 function CodeDisplay({
@@ -74,44 +71,7 @@ function CodeDisplay({
   onMouseEnter,
   onMouseLeave,
   showCopyButton = false,
-  renderMarkdown = false,
-  prettifyJson = false,
-  wordBreak = 'break-word',
 }: CodeDisplayProps) {
-  // Use same formatting logic as EvalOutputCell
-  let node: React.ReactNode | undefined;
-
-  if ((prettifyJson || renderMarkdown)) {
-    // When both prettifyJson and renderMarkdown are enabled,
-    // display as JSON if it's a valid object/array, otherwise render as Markdown
-    let isJsonHandled = false;
-    if (prettifyJson) {
-      try {
-        const parsed = JSON.parse(content);
-        if (typeof parsed === 'object' && parsed !== null) {
-          node = <pre style={{
-            margin: 0,
-            fontFamily: 'monospace',
-            fontSize: '0.875rem',
-            lineHeight: 1.6,
-            whiteSpace: 'pre-wrap',
-            wordBreak: wordBreak,
-          }}>{JSON.stringify(parsed, null, 2)}</pre>;
-          isJsonHandled = true;
-        }
-      } catch {
-        // Not valid JSON, continue to Markdown if enabled
-      }
-    }
-    if (!isJsonHandled && renderMarkdown) {
-      node = (
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {content}
-        </ReactMarkdown>
-      );
-    }
-  }
-
   return (
     <Box mb={2}>
       <Typography variant="subtitle1" sx={subtitleTypographySx}>
@@ -140,14 +100,11 @@ function CodeDisplay({
             maxHeight,
           }}
         >
-          {node || (
-            <Typography variant="body1" sx={{
-              ...textContentTypographySx,
-              wordBreak: wordBreak,
-            }}>
-              {content}
-            </Typography>
-          )}
+          <FormattedContent
+            content={content}
+            variant="body1"
+            sx={textContentTypographySx}
+          />
         </Box>
         {showCopyButton && (
           <IconButton
@@ -177,18 +134,7 @@ interface EvalOutputPromptDialogProps {
   testIndex?: number;
   promptIndex?: number;
   variables?: Record<string, any>;
-  // Global settings for consistent formatting
-  renderMarkdown?: boolean;
-  prettifyJson?: boolean;
-  showInferenceDetails?: boolean;
-  maxTextLength?: number;
-  wordBreak?: 'break-word' | 'break-all';
-  maxImageWidth?: number;
-  maxImageHeight?: number;
-  // Additional data for inference details
-  tokenUsage?: any;
-  latencyMs?: number;
-  cost?: number;
+  inferenceData?: Partial<InferenceData>;
 }
 
 export default function EvalOutputPromptDialog({
@@ -204,16 +150,7 @@ export default function EvalOutputPromptDialog({
   testIndex,
   promptIndex,
   variables,
-  renderMarkdown = false,
-  prettifyJson = false,
-  showInferenceDetails = false,
-  maxTextLength = 250,
-  wordBreak = 'break-word',
-  maxImageWidth = 256,
-  maxImageHeight = 256,
-  tokenUsage,
-  latencyMs,
-  cost,
+  inferenceData = {},
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -486,14 +423,7 @@ export default function EvalOutputPromptDialog({
                 hoveredElement={hoveredElement}
                 onMouseEnter={setHoveredElement}
                 onMouseLeave={() => setHoveredElement(null)}
-                CodeDisplay={(props: any) => (
-                  <CodeDisplay
-                    {...props}
-                    renderMarkdown={renderMarkdown}
-                    prettifyJson={prettifyJson}
-                    wordBreak={wordBreak}
-                  />
-                )}
+                CodeDisplay={CodeDisplay}
                 subtitleTypographySx={subtitleTypographySx}
               />
               <OutputsPanel
@@ -505,240 +435,10 @@ export default function EvalOutputPromptDialog({
                 onCopy={copyFieldToClipboard}
                 onMouseEnter={setHoveredElement}
                 onMouseLeave={() => setHoveredElement(null)}
-                CodeDisplay={(props: any) => (
-                  <CodeDisplay
-                    {...props}
-                    renderMarkdown={renderMarkdown}
-                    prettifyJson={prettifyJson}
-                    wordBreak={wordBreak}
-                  />
-                )}
+                CodeDisplay={CodeDisplay}
                 citations={citationsData}
               />
-              {showInferenceDetails && (tokenUsage || latencyMs || cost !== undefined) && (
-                <Box mb={2}>
-                  <Typography variant="subtitle1" sx={subtitleTypographySx}>
-                    Performance Metrics
-                  </Typography>
-                  <Box sx={{
-                    display: 'flex',
-                    gap: 1,
-                    flexWrap: 'wrap',
-                    alignItems: 'flex-start'
-                  }}>
-                    {tokenUsage?.numRequests !== undefined && (
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          px: 2,
-                          py: 1.5,
-                          borderRadius: 1,
-                          bgcolor: 'background.paper',
-                          minWidth: '90px',
-                          textAlign: 'center',
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            borderColor: 'primary.main',
-                            bgcolor: 'action.hover',
-                            transform: 'translateY(-1px)',
-                            boxShadow: 1
-                          }
-                        }}
-                      >
-                        <Typography variant="body2" fontWeight="600" color="primary.main" sx={{ lineHeight: 1.2 }}>
-                          {tokenUsage.numRequests}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
-                          probes
-                        </Typography>
-                      </Paper>
-                    )}
-
-                    {tokenUsage && (tokenUsage.cached || tokenUsage.total) && (
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          px: 2,
-                          py: 1.5,
-                          borderRadius: 1,
-                          bgcolor: 'background.paper',
-                          minWidth: '120px',
-                          textAlign: 'center',
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            borderColor: 'primary.main',
-                            bgcolor: 'action.hover',
-                            transform: 'translateY(-1px)',
-                            boxShadow: 1
-                          }
-                        }}
-                      >
-                        {tokenUsage.cached ? (
-                          <>
-                            <Typography variant="body2" fontWeight="600" color="primary.main" sx={{ lineHeight: 1.2 }}>
-                              {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.cached)}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
-                              tokens (cached)
-                            </Typography>
-                          </>
-                        ) : tokenUsage.total ? (
-                          <Tooltip
-                            title={`${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.prompt ?? 0)} prompt + ${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completion ?? 0)} completion${tokenUsage.completionDetails?.reasoning ? ` + ${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completionDetails.reasoning)} reasoning` : ''} = ${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.total ?? 0)} total`}
-                            arrow
-                          >
-                            <Box sx={{ cursor: 'help' }}>
-                              <Typography variant="body2" fontWeight="600" color="primary.main" sx={{ lineHeight: 1.2 }}>
-                                {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.total)}
-                                {tokenUsage.completionDetails?.reasoning && (
-                                  <Typography component="span" variant="caption" color="warning.main" sx={{ ml: 0.5 }}>
-                                    +R{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completionDetails.reasoning)}
-                                  </Typography>
-                                )}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
-                                tokens ({Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.prompt ?? 0)}+{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.completion ?? 0)})
-                              </Typography>
-                            </Box>
-                          </Tooltip>
-                        ) : null}
-                      </Paper>
-                    )}
-
-                    {latencyMs && (
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          px: 2,
-                          py: 1.5,
-                          borderRadius: 1,
-                          bgcolor: 'background.paper',
-                          minWidth: '100px',
-                          textAlign: 'center',
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            borderColor: 'primary.main',
-                            bgcolor: 'action.hover',
-                            transform: 'translateY(-1px)',
-                            boxShadow: 1
-                          }
-                        }}
-                      >
-                        <Typography variant="body2" fontWeight="600" color="primary.main" sx={{ lineHeight: 1.2 }}>
-                          {latencyMs >= 1000 ?
-                            `${(latencyMs / 1000).toFixed(1)}s` :
-                            `${Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(latencyMs)}ms`
-                          }
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
-                          latency
-                        </Typography>
-                      </Paper>
-                    )}
-
-                    {tokenUsage?.completion && latencyMs && latencyMs > 0 && (
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          px: 2,
-                          py: 1.5,
-                          borderRadius: 1,
-                          bgcolor: 'background.paper',
-                          minWidth: '100px',
-                          textAlign: 'center',
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            borderColor: 'primary.main',
-                            bgcolor: 'action.hover',
-                            transform: 'translateY(-1px)',
-                            boxShadow: 1
-                          }
-                        }}
-                      >
-                        <Typography variant="body2" fontWeight="600" color="primary.main" sx={{ lineHeight: 1.2 }}>
-                          {(() => {
-                            const tokensPerSec = tokenUsage.completion / (latencyMs / 1000);
-                            return isFinite(tokensPerSec) && tokensPerSec > 0
-                              ? Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(tokensPerSec)
-                              : '0';
-                          })()}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
-                          tok/sec
-                        </Typography>
-                      </Paper>
-                    )}
-
-                    {(tokenUsage?.cached || (tokenUsage && 'cached' in tokenUsage)) && (
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          px: 2,
-                          py: 1.5,
-                          borderRadius: 1,
-                          bgcolor: 'background.paper',
-                          minWidth: '80px',
-                          textAlign: 'center',
-                          borderColor: tokenUsage?.cached ? 'success.main' : 'divider',
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            borderColor: tokenUsage?.cached ? 'success.dark' : 'primary.main',
-                            bgcolor: 'action.hover',
-                            transform: 'translateY(-1px)',
-                            boxShadow: 1
-                          }
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          fontWeight="600"
-                          color={tokenUsage?.cached ? 'success.main' : 'text.secondary'}
-                          sx={{ lineHeight: 1.2 }}
-                        >
-                          {tokenUsage?.cached ? '✓' : '✗'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
-                          cached
-                        </Typography>
-                      </Paper>
-                    )}
-
-                    {cost !== undefined && (
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          px: 2,
-                          py: 1.5,
-                          borderRadius: 1,
-                          bgcolor: 'background.paper',
-                          minWidth: '80px',
-                          textAlign: 'center',
-                          borderColor: cost > 0 ? (cost > 0.01 ? 'warning.main' : 'primary.main') : 'divider',
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            borderColor: cost > 0 ? (cost > 0.01 ? 'warning.dark' : 'primary.main') : 'action.disabled',
-                            bgcolor: 'action.hover',
-                            transform: 'translateY(-1px)',
-                            boxShadow: 1
-                          }
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          fontWeight="600"
-                          color={cost > 0 ? (cost > 0.01 ? 'warning.main' : 'primary.main') : 'text.secondary'}
-                          sx={{ lineHeight: 1.2 }}
-                        >
-                          {cost > 0 ? `$${cost >= 0.01 ? cost.toFixed(3) : cost.toPrecision(2)}` : 'N/A'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
-                          cost
-                        </Typography>
-                      </Paper>
-                    )}
-                  </Box>
-                </Box>
-              )}
+              <PerformanceMetrics data={inferenceData} />
             </Box>
           )}
 
