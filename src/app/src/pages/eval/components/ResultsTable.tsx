@@ -132,7 +132,6 @@ interface ResultsTableProps {
   debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
-  onSearchTextChange: (text: string) => void;
   zoom: number;
 }
 
@@ -232,7 +231,6 @@ function ResultsTable({
   debouncedSearchText,
   showStats,
   onFailureFilterToggle,
-  onSearchTextChange,
   zoom,
 }: ResultsTableProps) {
   const {
@@ -245,7 +243,6 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
-    addFilter,
     setFilterMode,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
@@ -732,37 +729,6 @@ function ResultsTable({
     return totals;
   }, [table?.head?.prompts, table?.body]);
 
-  const handleMetricFilterClick = React.useCallback(
-    (metric: string | null) => {
-      if (!metric) {
-        return;
-      }
-
-      const filter = {
-        type: 'metric' as const,
-        operator: 'equals' as const,
-        value: metric,
-        logicOperator: 'or' as const,
-      };
-
-      // If this filter is already applied, do not re-apply it.
-      if (
-        Object.values(filters.values).find(
-          (f) =>
-            f.type === filter.type &&
-            f.value === filter.value &&
-            f.operator === filter.operator &&
-            f.logicOperator === filter.logicOperator,
-        )
-      ) {
-        return;
-      }
-
-      addFilter(filter);
-    },
-    [addFilter, filters.values],
-  );
-
   const promptColumns = React.useMemo(() => {
     return [
       columnHelper.group({
@@ -918,8 +884,6 @@ function ResultsTable({
                           lookup={prompt.metrics.namedScores}
                           counts={prompt.metrics.namedScoresCount}
                           metricTotals={metricTotals}
-                          onSearchTextChange={onSearchTextChange}
-                          onMetricFilter={handleMetricFilterClick}
                           onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
                       </Box>
@@ -983,7 +947,6 @@ function ResultsTable({
                     showStats={showStats}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
-                    onMetricFilter={handleMetricFilterClick}
                     isRedteam={isRedteam}
                   />
                 </ErrorBoundary>
@@ -1014,7 +977,6 @@ function ResultsTable({
     debouncedSearchText,
     showStats,
     filters.appliedCount,
-    handleMetricFilterClick,
     passRates,
     passingTestCounts,
     testCounts,
