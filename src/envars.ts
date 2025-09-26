@@ -220,6 +220,9 @@ type EnvVars = {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_KEY?: string;
 
+  // CometAPI
+  COMETAPI_KEY?: string;
+
   // CDP
   CDP_DOMAIN?: string;
 
