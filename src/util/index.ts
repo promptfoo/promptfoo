@@ -6,7 +6,7 @@ import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import * as os from 'os';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
@@ -482,7 +482,7 @@ export function parsePathOrGlob(
     }
   }
 
-  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
+  const isPathPattern = stats?.isDirectory() || hasMagic(filePath); // glob pattern
   const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
   return {
     extension: isPathPattern ? undefined : path.parse(safeFilename).ext,

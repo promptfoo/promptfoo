@@ -18,6 +18,11 @@ jest.mock('google-auth-library');
 
 jest.mock('glob', () => ({
   globSync: jest.fn().mockReturnValue([]),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('fs', () => ({

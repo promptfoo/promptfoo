@@ -49,6 +49,11 @@ jest.mock('fs');
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('proxy-agent', () => ({
@@ -68,6 +73,11 @@ jest.mock('fs', () => ({
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('../../src/database', () => ({

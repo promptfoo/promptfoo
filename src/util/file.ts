@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { parse as csvParse, type Options as CsvOptions } from 'csv-parse/sync';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
@@ -48,7 +48,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  */
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
-  context?: 'assertion' | 'general',
+  context?: 'assertion' | 'general' | 'vars',
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
@@ -79,6 +79,13 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
+  // In vars contexts, preserve file:// glob patterns for test case expansion
+  // This prevents premature glob expansion that should be handled by generateVarCombinations
+  if (context === 'vars' && hasMagic(renderedFilePath)) {
+    logger.debug(`Preserving glob pattern in vars context: ${renderedFilePath}`);
+    return renderedFilePath;
+  }
+
   // For Python/JS files with function names, return the original string unchanged
   // to allow the assertion system to handle function loading at execution time.
   // This prevents premature file existence checks that would fail for function references.
@@ -95,7 +102,7 @@ export function maybeLoadFromExternalFile(
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
   // Check if the path contains glob patterns
-  if (pathToUse.includes('*') || pathToUse.includes('?') || pathToUse.includes('[')) {
+  if (hasMagic(pathToUse)) {
     // Use globSync to expand the pattern
     const matchedFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
@@ -212,7 +219,7 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'general',
+  context?: 'assertion' | 'general' | 'vars',
 ): any {
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
@@ -230,7 +237,11 @@ export function maybeLoadConfigFromExternalFile(
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
 
-      const childContext = isAssertionValue ? 'assertion' : context;
+      // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
+      // This preserves file:// glob patterns for test case expansion
+      const isVarsField = key === 'vars';
+
+      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
       result[key] = maybeLoadConfigFromExternalFile(config[key], childContext);
     }
     return result;

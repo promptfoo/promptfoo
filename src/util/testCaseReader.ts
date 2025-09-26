@@ -38,6 +38,7 @@ export async function readTestFiles(
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
+
     const paths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
@@ -310,6 +311,7 @@ export async function loadTestsFromGlob(
     loadTestsGlob = loadTestsGlob.slice('file://'.length);
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
+
   const testFiles: Array<string> = globSync(resolvedPath, {
     windowsPathsNoEscape: true,
   });
