@@ -34,12 +34,14 @@ To disable telemetry, set the following environment variable:
 PROMPTFOO_DISABLE_TELEMETRY=1
 ```
 
-## Updates
+## Update Notifications
 
-The CLI checks NPM's package registry for updates. If there is a newer version available, it will display a banner to the user.
+The CLI checks for updates when it starts up. If there is a newer version available, it will display a notification message suggesting you run `promptfoo update` to upgrade.
 
-To disable, set:
+To disable update notifications, set:
 
 ```sh
 PROMPTFOO_DISABLE_UPDATE=1
 ```
+
+Note: This only disables the notification. You can still manually update using `promptfoo update` at any time.
