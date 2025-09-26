@@ -147,13 +147,13 @@ async function handleExampleDownload(
       }
     }
   }
-  
+
   if (!exampleName) return;
 
-  const basePath   = directory && directory !== '.' ? `${directory}/` : '';
+  const basePath = directory && directory !== '.' ? `${directory}/` : '';
   const readmePath = path.join(basePath, exampleName, 'README.md');
-  const cdCommand  = `cd ${path.join(basePath, exampleName)}`;
-  const isRedteam  = /redteam/i.test(exampleName);
+  const cdCommand = `cd ${path.join(basePath, exampleName)}`;
+  const isRedteam = /redteam/i.test(exampleName);
 
   // Build the right command for this environment
   const cmd = nextCmd(isRedteam ? 'redteam init' : 'eval');
