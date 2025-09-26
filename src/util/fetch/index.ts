@@ -258,6 +258,7 @@ export async function handleRateLimit(response: Response): Promise<void> {
 
 /**
  * Fetch with automatic retries and rate limit handling
+ * Returns raw Response object for unified processing
  */
 export type { FetchOptions } from './types';
 
@@ -316,4 +317,107 @@ export async function fetchWithRetries(
     }
   }
   throw new Error(`Request failed after ${maxRetries} retries: ${lastErrorMessage}`);
+}
+
+/**
+ * Streaming metrics to track timing information during streaming responses
+ */
+export interface StreamingMetrics {
+  timeToFirstToken?: number;
+  tokensPerSecond?: number;
+  totalStreamTime?: number;
+}
+
+/**
+ * Callback for first token detection during streaming
+ */
+export type FirstTokenCallback = () => void;
+
+/**
+ * Options for streaming fetch requests
+ */
+export interface StreamingFetchOptions {
+  onFirstToken?: FirstTokenCallback;
+  enableMetrics?: boolean;
+}
+
+/**
+ * Process a streaming response and extract TTFT metrics
+ *
+ * @param response - The Response object to process as a stream
+ * @param onFirstToken - Optional callback triggered when first token is detected
+ * @returns Object containing the full response text and streaming metrics
+ */
+export async function processStreamingResponse(
+  response: Response,
+  onFirstToken?: FirstTokenCallback,
+): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
+  const streamStart = Date.now();
+  let firstTokenTime: number | undefined;
+  let hasCalledFirstToken = false;
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('Response body is not readable');
+  }
+
+  const decoder = new TextDecoder();
+  let text = '';
+  let tokenCount = 0;
+  let chunkCount = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      const chunk = decoder.decode(value, { stream: true });
+      text += chunk;
+      chunkCount++;
+
+      // Detect first meaningful token using a simple heuristic
+      // Limitation: This may not be accurate if the stream includes preambles,
+      // comments, or other non-content chunks. More sophisticated detection
+      // should be implemented in the provider's transformResponse function.
+      if (!hasCalledFirstToken && chunk.trim().length > 0) {
+        firstTokenTime = Date.now() - streamStart;
+        hasCalledFirstToken = true;
+        if (onFirstToken) {
+          onFirstToken();
+        }
+      }
+
+      // Approximate token counting using character-based estimation
+      // Note: This is a rough approximation (4 chars ≈ 1 token) and may be
+      // inaccurate for non-English text, code, or tokens with special formatting.
+      // For more accurate token counting, integrate with a proper tokenizer.
+      tokenCount += Math.ceil(chunk.length / 4);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const totalStreamTime = Date.now() - streamStart;
+  const tokensPerSecond = totalStreamTime > 0 ? (tokenCount / totalStreamTime) * 1000 : 0;
+
+  // For non-streaming responses (single chunk), TTFT is essentially the entire response time
+  if (chunkCount === 1 && !firstTokenTime) {
+    firstTokenTime = totalStreamTime;
+  }
+
+  // Ensure we always have a valid TTFT value for streaming metrics
+  // If no first token time was captured, use the total stream time
+  const finalTtft = firstTokenTime || totalStreamTime;
+
+  return {
+    text,
+    streamingMetrics: {
+      timeToFirstToken: finalTtft,
+      tokensPerSecond,
+      totalStreamTime,
+    },
+  };
 }

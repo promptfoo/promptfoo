@@ -469,6 +469,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'trace-error-spans',
   'trace-span-count',
   'trace-span-duration',
+  'ttft',
   'webhook',
 ]);
 
