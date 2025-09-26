@@ -34,10 +34,7 @@ export function handleAutoUpdate(
     return;
   }
 
-  const updateCommand = installationInfo.updateCommand.replace(
-    '@latest',
-    `@${info.update.latest}`,
-  );
+  const updateCommand = installationInfo.updateCommand.replace('@latest', `@${info.update.latest}`);
 
   const updateProcess = spawnFn(updateCommand, { stdio: 'pipe', shell: true });
   let errorOutput = '';
@@ -49,8 +46,7 @@ export function handleAutoUpdate(
   updateProcess.on('close', (code) => {
     if (code === 0) {
       updateEventEmitter.emit('update-success', {
-        message:
-          'Update successful! The new version will be used on your next run.',
+        message: 'Update successful! The new version will be used on your next run.',
       });
     } else {
       updateEventEmitter.emit('update-failed', {

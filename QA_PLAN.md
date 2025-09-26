@@ -3,33 +3,35 @@
 ## **Implementation Comparison: Promptfoo vs Gemini CLI**
 
 ### **✅ Features We Have (Parity)**
-| Feature | Gemini CLI | Promptfoo | Status |
-|---------|------------|-----------|---------|
-| Update Detection | `update-notifier` | `update-notifier` | ✅ Match |
-| Package Manager Detection | 9 types | 10 types | ✅ Match+ |
-| Environment Variable Controls | `disableUpdateNag`, `disableAutoUpdate` | `PROMPTFOO_DISABLE_UPDATE`, `PROMPTFOO_DISABLE_AUTO_UPDATE` | ✅ Match |
-| Development Mode Skip | `DEV=true` | `NODE_ENV=development` | ✅ Match |
-| Git Repository Detection | ✅ | ✅ | ✅ Match |
-| Event-Driven Architecture | EventEmitter | EventEmitter | ✅ Match |
-| Spawn Process Updates | ✅ | ✅ | ✅ Match |
-| Error Handling | Graceful degradation | Graceful degradation | ✅ Match |
-| Non-blocking Startup | ✅ | ✅ | ✅ Match |
+
+| Feature                       | Gemini CLI                              | Promptfoo                                                   | Status    |
+| ----------------------------- | --------------------------------------- | ----------------------------------------------------------- | --------- |
+| Update Detection              | `update-notifier`                       | `update-notifier`                                           | ✅ Match  |
+| Package Manager Detection     | 9 types                                 | 10 types                                                    | ✅ Match+ |
+| Environment Variable Controls | `disableUpdateNag`, `disableAutoUpdate` | `PROMPTFOO_DISABLE_UPDATE`, `PROMPTFOO_DISABLE_AUTO_UPDATE` | ✅ Match  |
+| Development Mode Skip         | `DEV=true`                              | `NODE_ENV=development`                                      | ✅ Match  |
+| Git Repository Detection      | ✅                                      | ✅                                                          | ✅ Match  |
+| Event-Driven Architecture     | EventEmitter                            | EventEmitter                                                | ✅ Match  |
+| Spawn Process Updates         | ✅                                      | ✅                                                          | ✅ Match  |
+| Error Handling                | Graceful degradation                    | Graceful degradation                                        | ✅ Match  |
+| Non-blocking Startup          | ✅                                      | ✅                                                          | ✅ Match  |
 
 ### **🔄 Key Differences**
 
-| Aspect | Gemini CLI | Promptfoo | Impact |
-|--------|------------|-----------|--------|
-| **Nightly Support** | Dual channel (@nightly + @latest) | Single channel (@latest only) | 🟡 Minor - Promptfoo doesn't have nightlies |
-| **UI Integration** | React components (UpdateNotification) | Console logging only | 🟡 Minor - CLI-focused |
-| **Timeout Behavior** | 60-second UI timeout | No timeout (console only) | 🟡 Minor |
-| **Package Name Detection** | Homebrew: `gemini-cli` | Homebrew: `promptfoo` | ✅ Correct |
-| **Docker Detection** | No explicit Docker support | Explicit Docker detection | 🟢 Enhancement |
+| Aspect                     | Gemini CLI                            | Promptfoo                     | Impact                                      |
+| -------------------------- | ------------------------------------- | ----------------------------- | ------------------------------------------- |
+| **Nightly Support**        | Dual channel (@nightly + @latest)     | Single channel (@latest only) | 🟡 Minor - Promptfoo doesn't have nightlies |
+| **UI Integration**         | React components (UpdateNotification) | Console logging only          | 🟡 Minor - CLI-focused                      |
+| **Timeout Behavior**       | 60-second UI timeout                  | No timeout (console only)     | 🟡 Minor                                    |
+| **Package Name Detection** | Homebrew: `gemini-cli`                | Homebrew: `promptfoo`         | ✅ Correct                                  |
+| **Docker Detection**       | No explicit Docker support            | Explicit Docker detection     | 🟢 Enhancement                              |
 
 ### **🧪 QA Test Plan**
 
 ## **Phase 1: Core Functionality Tests**
 
 ### **1.1 Update Detection Logic**
+
 ```bash
 # Test 1: Development mode skip
 NODE_ENV=development node dist/src/main.js --version
@@ -44,6 +46,7 @@ NODE_ENV=production node dist/src/main.js --version
 ```
 
 ### **1.2 Environment Variable Controls**
+
 ```bash
 # Test 4: Disable all updates
 PROMPTFOO_DISABLE_UPDATE=true node dist/src/main.js --version
@@ -59,6 +62,7 @@ node dist/src/main.js --version
 ```
 
 ### **1.3 Installation Method Detection**
+
 ```bash
 # Test 7: Current git repo detection
 pwd # Should be in promptfoo git repo
@@ -71,6 +75,7 @@ node -e "const {getInstallationInfo} = require('./dist/src/updates/installationI
 ## **Phase 2: Package Manager Simulation Tests**
 
 ### **2.1 Create Test Environments**
+
 ```bash
 # Test 8: NPM Global Simulation
 mkdir -p /tmp/test-npm/lib/node_modules/promptfoo
@@ -86,6 +91,7 @@ cd /tmp/test-project && echo '{"name":"test","dependencies":{"promptfoo":"*"}}' 
 ```
 
 ### **2.2 Path Detection Tests**
+
 ```bash
 # Test each package manager path detection:
 # - /.npm/_npx → NPX
@@ -100,6 +106,7 @@ cd /tmp/test-project && echo '{"name":"test","dependencies":{"promptfoo":"*"}}' 
 ## **Phase 3: Edge Cases & Error Handling**
 
 ### **3.1 Network & Error Conditions**
+
 ```bash
 # Test 16: Network failure simulation
 # Mock network timeout/failure in test
@@ -116,6 +123,7 @@ echo 'invalid json' > /tmp/test-package.json
 ```
 
 ### **3.2 Permission & System Tests**
+
 ```bash
 # Test 20: No write permissions
 # Test in directory without write access
@@ -131,6 +139,7 @@ DOCKER=true node dist/src/main.js --version
 ## **Phase 4: Integration & User Experience**
 
 ### **4.1 Command Integration**
+
 ```bash
 # Test 23-30: Run update check with various commands
 node dist/src/main.js eval --help
@@ -140,6 +149,7 @@ node dist/src/main.js view --help
 ```
 
 ### **4.2 Timing & Performance**
+
 ```bash
 # Test 31: Startup time impact
 time node dist/src/main.js --help
@@ -153,6 +163,7 @@ PROMPTFOO_DISABLE_UPDATE=false node dist/src/main.js --verbose --version
 ## **Phase 5: Comparison Testing**
 
 ### **5.1 Side-by-Side Behavior Comparison**
+
 ```bash
 # Install both CLIs globally:
 npm install -g promptfoo
@@ -171,17 +182,18 @@ gemini --version
 
 ### **5.2 Feature Parity Verification**
 
-| Test Case | Expected Behavior | Gemini CLI Result | Promptfoo Result |
-|-----------|-------------------|-------------------|-------------------|
-| Git repo detection | "git pull" message | ✅ | ❓ |
-| NPM global detection | "npm install -g" command | ✅ | ❓ |
-| Homebrew detection | "brew upgrade" message | ✅ | ❓ |
-| Development skip | No update check | ✅ | ❓ |
-| Network error handling | Graceful failure | ✅ | ❓ |
+| Test Case              | Expected Behavior        | Gemini CLI Result | Promptfoo Result |
+| ---------------------- | ------------------------ | ----------------- | ---------------- |
+| Git repo detection     | "git pull" message       | ✅                | ❓               |
+| NPM global detection   | "npm install -g" command | ✅                | ❓               |
+| Homebrew detection     | "brew upgrade" message   | ✅                | ❓               |
+| Development skip       | No update check          | ✅                | ❓               |
+| Network error handling | Graceful failure         | ✅                | ❓               |
 
 ## **Phase 6: Production Readiness**
 
 ### **6.1 Real-World Scenarios**
+
 ```bash
 # Test 33: Publish test version to npm
 # npm publish (test version)
@@ -196,6 +208,7 @@ gemini --version
 ```
 
 ### **6.2 Security & Safety**
+
 ```bash
 # Test 36: Command injection prevention
 # Verify spawn commands are properly escaped
@@ -232,7 +245,10 @@ console.log('   Update Message:', info.updateMessage || 'None');
 // Test 2: Environment Variables
 console.log('\n2. Environment Variables:');
 console.log('   PROMPTFOO_DISABLE_UPDATE:', process.env.PROMPTFOO_DISABLE_UPDATE || 'undefined');
-console.log('   PROMPTFOO_DISABLE_AUTO_UPDATE:', process.env.PROMPTFOO_DISABLE_AUTO_UPDATE || 'undefined');
+console.log(
+  '   PROMPTFOO_DISABLE_AUTO_UPDATE:',
+  process.env.PROMPTFOO_DISABLE_AUTO_UPDATE || 'undefined',
+);
 console.log('   NODE_ENV:', process.env.NODE_ENV || 'undefined');
 
 // Test 3: Update Check
@@ -253,6 +269,7 @@ checkForUpdates()
 ## **Success Criteria**
 
 ### **Must Have (P0)**
+
 - ✅ All unit tests pass
 - ✅ CLI builds and runs without errors
 - ✅ Update detection works in appropriate environments
@@ -261,12 +278,14 @@ checkForUpdates()
 - ✅ No startup performance regression
 
 ### **Should Have (P1)**
+
 - ✅ Accurate package manager detection for major PMs (npm, yarn, pnpm)
 - ✅ Proper error handling for network failures
 - ✅ Homebrew detection works on macOS
 - ✅ Non-blocking behavior during CLI operations
 
 ### **Nice to Have (P2)**
+
 - ✅ Docker environment detection
 - ✅ Bun/Bunx support
 - ✅ Comprehensive edge case handling
@@ -275,6 +294,7 @@ checkForUpdates()
 ---
 
 **Next Steps:**
+
 1. Run the quick validation script
 2. Execute Phase 1 tests systematically
 3. Set up test environments for Phase 2

@@ -65,8 +65,7 @@ export function getInstallationInfo(
       return {
         packageManager: PackageManager.UNKNOWN, // Not managed by a package manager in this sense
         isGlobal: false,
-        updateMessage:
-          'Running from a local git clone. Please update with "git pull".',
+        updateMessage: 'Running from a local git clone. Please update with "git pull".',
       };
     }
 
@@ -96,8 +95,7 @@ export function getInstallationInfo(
         return {
           packageManager: PackageManager.HOMEBREW,
           isGlobal: true,
-          updateMessage:
-            'Installed via Homebrew. Please update with "brew upgrade promptfoo".',
+          updateMessage: 'Installed via Homebrew. Please update with "brew upgrade promptfoo".',
         };
       } catch (_error) {
         // Brew is not installed or promptfoo is not installed via brew.
@@ -152,10 +150,7 @@ export function getInstallationInfo(
     }
 
     // Check for local install
-    if (
-      normalizedProjectRoot &&
-      realPath.startsWith(`${normalizedProjectRoot}/node_modules`)
-    ) {
+    if (normalizedProjectRoot && realPath.startsWith(`${normalizedProjectRoot}/node_modules`)) {
       let pm = PackageManager.NPM;
       if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
         pm = PackageManager.YARN;
@@ -167,8 +162,7 @@ export function getInstallationInfo(
       return {
         packageManager: pm,
         isGlobal: false,
-        updateMessage:
-          "Locally installed. Please update via your project's package.json.",
+        updateMessage: "Locally installed. Please update via your project's package.json.",
       };
     }
 

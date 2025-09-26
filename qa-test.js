@@ -25,7 +25,10 @@ try {
 // Test 2: Environment Variables
 console.log('\n2. Environment Variables:');
 console.log('   PROMPTFOO_DISABLE_UPDATE:', process.env.PROMPTFOO_DISABLE_UPDATE || 'undefined');
-console.log('   PROMPTFOO_DISABLE_AUTO_UPDATE:', process.env.PROMPTFOO_DISABLE_AUTO_UPDATE || 'undefined');
+console.log(
+  '   PROMPTFOO_DISABLE_AUTO_UPDATE:',
+  process.env.PROMPTFOO_DISABLE_AUTO_UPDATE || 'undefined',
+);
 console.log('   NODE_ENV:', process.env.NODE_ENV || 'undefined');
 
 // Test 3: Package.json Reading
@@ -74,41 +77,44 @@ checkForUpdates()
 
     console.log('   Testing NODE_ENV=development...');
     process.env.NODE_ENV = 'development';
-    checkForUpdates().then((result) => {
-      console.log('   Development mode result:', result ? 'Update found' : 'Skipped/None');
+    checkForUpdates()
+      .then((result) => {
+        console.log('   Development mode result:', result ? 'Update found' : 'Skipped/None');
 
-      console.log('   Testing NODE_ENV=production...');
-      process.env.NODE_ENV = 'production';
-      return checkForUpdates();
-    }).then((result) => {
-      console.log('   Production mode result:', result ? 'Update found' : 'Skipped/None');
+        console.log('   Testing NODE_ENV=production...');
+        process.env.NODE_ENV = 'production';
+        return checkForUpdates();
+      })
+      .then((result) => {
+        console.log('   Production mode result:', result ? 'Update found' : 'Skipped/None');
 
-      // Restore original NODE_ENV
-      if (originalNodeEnv) {
-        process.env.NODE_ENV = originalNodeEnv;
-      } else {
-        delete process.env.NODE_ENV;
-      }
+        // Restore original NODE_ENV
+        if (originalNodeEnv) {
+          process.env.NODE_ENV = originalNodeEnv;
+        } else {
+          delete process.env.NODE_ENV;
+        }
 
-      console.log('\n8. CLI Integration Test:');
-      try {
-        // Test that CLI still works with update system
-        const output = execSync('node dist/src/main.js --version', {
-          encoding: 'utf8',
-          timeout: 5000
-        });
-        console.log('   ✅ CLI Version Command:', output.trim());
-      } catch (err) {
-        console.log('   ❌ CLI execution failed:', err.message);
-      }
+        console.log('\n8. CLI Integration Test:');
+        try {
+          // Test that CLI still works with update system
+          const output = execSync('node dist/src/main.js --version', {
+            encoding: 'utf8',
+            timeout: 5000,
+          });
+          console.log('   ✅ CLI Version Command:', output.trim());
+        } catch (err) {
+          console.log('   ❌ CLI execution failed:', err.message);
+        }
 
-      console.log('\n🎉 QA Test Suite Complete!');
-      console.log('\nNext Steps:');
-      console.log('1. Run specific package manager tests');
-      console.log('2. Test with different installation contexts');
-      console.log('3. Verify error handling edge cases');
-      console.log('4. Compare with Gemini CLI behavior');
-    }).catch((err) => {
-      console.log('   ❌ Environment test failed:', err.message);
-    });
+        console.log('\n🎉 QA Test Suite Complete!');
+        console.log('\nNext Steps:');
+        console.log('1. Run specific package manager tests');
+        console.log('2. Test with different installation contexts');
+        console.log('3. Verify error handling edge cases');
+        console.log('4. Compare with Gemini CLI behavior');
+      })
+      .catch((err) => {
+        console.log('   ❌ Environment test failed:', err.message);
+      });
   });

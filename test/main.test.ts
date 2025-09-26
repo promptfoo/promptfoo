@@ -14,6 +14,26 @@ jest.mock('../src/logger', () => ({
   setLogLevel: jest.fn(),
 }));
 
+// Mock the auto-update system
+jest.mock('../src/updates/updateCheck', () => ({
+  checkForUpdates: jest.fn(() => Promise.resolve(null)),
+}));
+
+jest.mock('../src/updates/handleAutoUpdate', () => ({
+  handleAutoUpdate: jest.fn(),
+  setUpdateHandler: jest.fn(),
+}));
+
+jest.mock('../src/envars', () => ({
+  getEnvBool: jest.fn(() => false),
+  getEnvInt: jest.fn((key, defaultValue) => defaultValue),
+  getEnvString: jest.fn((key, defaultValue) => defaultValue),
+  getEnvFloat: jest.fn((key, defaultValue) => defaultValue),
+  getEvalTimeoutMs: jest.fn(() => 0),
+  getMaxEvalTimeMs: jest.fn(() => 0),
+  isCI: jest.fn(() => false),
+}));
+
 describe('addCommonOptionsRecursively', () => {
   const originalExit = process.exit;
   let program: Command;
