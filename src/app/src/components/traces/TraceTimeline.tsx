@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
 
+import TimelineIcon from '@mui/icons-material/Timeline';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { TraceData, TraceSpan } from '@promptfoo/types';
+import EmptyState from '@app/components/EmptyState';
 
 // Use TraceSpan from base types
 type SpanData = TraceSpan;
@@ -123,11 +125,12 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
 
   if (!trace.spans || trace.spans.length === 0) {
     return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary">
-          No trace data available
-        </Typography>
-      </Box>
+      <EmptyState
+        icon={<TimelineIcon />}
+        title="No trace data available"
+        description="Trace timeline will appear here when spans are available"
+        size="large"
+      />
     );
   }
 

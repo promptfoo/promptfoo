@@ -1,6 +1,7 @@
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
@@ -12,6 +13,8 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
+import EmptyState from '@app/components/EmptyState';
+import { hasDisplayableMetadata, isFilteredMetadataKey } from '@app/constants/metadata';
 import { ellipsize } from '../../../../../util/text';
 
 const isValidUrl = (str: string): boolean => {
@@ -47,8 +50,14 @@ export function MetadataPanel({
   onCopy,
   onApplyFilter,
 }: MetadataPanelProps) {
-  if (!metadata || Object.keys(metadata).filter((key) => key !== 'citations').length === 0) {
-    return null;
+  if (!hasDisplayableMetadata(metadata)) {
+    return (
+      <EmptyState
+        icon={<InfoOutlinedIcon />}
+        title="No metadata available"
+        description="Metadata will appear here when available"
+      />
+    );
   }
 
   return (
@@ -66,79 +75,77 @@ export function MetadataPanel({
           </TableRow>
         </TableHead>
         <TableBody>
-          {Object.entries(metadata).map(([key, value]) => {
-            // Skip citations in metadata display as they're shown in their own component
-            if (key === 'citations') {
-              return null;
-            }
+          {Object.entries(metadata || {})
+            .filter(([key]) => !isFilteredMetadataKey(key))
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, value]) => {
+              const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
+              const truncatedValue = ellipsize(stringValue, 300);
+              const isUrl = typeof value === 'string' && isValidUrl(value);
 
-            const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-            const truncatedValue = ellipsize(stringValue, 300);
-            const isUrl = typeof value === 'string' && isValidUrl(value);
-
-            return (
-              <TableRow key={key}>
-                <TableCell>{key}</TableCell>
-                <TableCell
-                  style={{
-                    whiteSpace: 'pre-wrap',
-                    cursor: isUrl ? 'auto' : 'pointer',
-                  }}
-                  onClick={() => !isUrl && onMetadataClick(key)}
-                >
-                  {isUrl ? (
-                    <Link href={value} target="_blank" rel="noopener noreferrer">
-                      {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
-                    </Link>
-                  ) : expandedMetadata[key]?.expanded ? (
-                    stringValue
-                  ) : (
-                    truncatedValue
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 0.5 }}>
-                    <Tooltip title="Copy value">
-                      <IconButton
-                        size="small"
-                        onClick={() => onCopy(key, stringValue)}
-                        sx={{
-                          color: 'text.disabled',
-                          transition: 'color 0.2s ease',
-                          '&:hover': {
-                            color: 'text.secondary',
-                          },
-                        }}
-                        aria-label={`Copy metadata value for ${key}`}
-                      >
-                        {copiedFields[key] ? (
-                          <CheckIcon fontSize="small" />
-                        ) : (
-                          <ContentCopyIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Filter by value (replaces existing filters)">
-                      <IconButton
-                        size="small"
-                        onClick={() => onApplyFilter(key, stringValue)}
-                        sx={{
-                          color: 'text.disabled',
-                          transition: 'color 0.2s ease',
-                          '&:hover': {
-                            color: 'text.secondary',
-                          },
-                        }}
-                        aria-label={`Filter by ${key}`}
-                      >
-                        <FilterAltIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                </TableCell>
-              </TableRow>
-            );
-          })}
+              return (
+                <TableRow key={key}>
+                  <TableCell>{key}</TableCell>
+                  <TableCell
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      cursor: isUrl ? 'auto' : 'pointer',
+                    }}
+                    onClick={() => !isUrl && onMetadataClick(key)}
+                  >
+                    {isUrl ? (
+                      <Link href={value} target="_blank" rel="noopener noreferrer">
+                        {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                      </Link>
+                    ) : expandedMetadata[key]?.expanded ? (
+                      stringValue
+                    ) : (
+                      truncatedValue
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      <Tooltip title="Copy value">
+                        <IconButton
+                          size="small"
+                          onClick={() => onCopy(key, stringValue)}
+                          sx={{
+                            color: 'text.disabled',
+                            transition: 'color 0.2s ease',
+                            '&:hover': {
+                              color: 'text.secondary',
+                            },
+                          }}
+                          aria-label={`Copy metadata value for ${key}`}
+                        >
+                          {copiedFields[key] ? (
+                            <CheckIcon fontSize="small" />
+                          ) : (
+                            <ContentCopyIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Filter by value (replaces existing filters)">
+                        <IconButton
+                          size="small"
+                          onClick={() => onApplyFilter(key, stringValue)}
+                          sx={{
+                            color: 'text.disabled',
+                            transition: 'color 0.2s ease',
+                            '&:hover': {
+                              color: 'text.secondary',
+                            },
+                          }}
+                          aria-label={`Filter by ${key}`}
+                        >
+                          <FilterAltIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
         </TableBody>
       </Table>
     </TableContainer>
