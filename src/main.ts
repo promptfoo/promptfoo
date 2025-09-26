@@ -35,7 +35,7 @@ import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
 import telemetry from './telemetry';
 import { checkForUpdates } from './updates/updateCheck';
-import { handleAutoUpdate, setUpdateHandler } from './updates/handleAutoUpdate';
+import { updateCommand } from './commands/update';
 import { getEnvBool } from './envars';
 import { loadDefaultConfig } from './util/config/default';
 import { setupEnv } from './util/index';
@@ -79,32 +79,19 @@ export function addCommonOptionsRecursively(command: Command) {
 async function main() {
   initializeRunLogging();
 
-  // Setup update event handlers
-  setUpdateHandler(
-    (info) => {
-      logger.info(info.message);
-    },
-    (info) => {
-      logger.info(info.message);
-    },
-    (info) => {
-      logger.warn(info.message);
-    },
-  );
-
-  // Check for updates asynchronously (non-blocking)
-  checkForUpdates()
-    .then((info) => {
-      handleAutoUpdate(
-        info,
-        getEnvBool('PROMPTFOO_DISABLE_UPDATE'),
-        getEnvBool('PROMPTFOO_DISABLE_AUTO_UPDATE'),
-        process.cwd(),
-      );
-    })
-    .catch((err) => {
-      logger.debug(`Failed to check for updates: ${err}`);
-    });
+  // Check for updates and show notification (non-blocking)
+  if (!getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
+    checkForUpdates()
+      .then((info) => {
+        if (info) {
+          logger.info(info.message);
+          logger.info('Run "promptfoo update" to upgrade to the latest version.');
+        }
+      })
+      .catch((err) => {
+        logger.debug(`Failed to check for updates: ${err}`);
+      });
+  }
 
   await runDbMigrations();
 
@@ -142,6 +129,7 @@ async function main() {
   listCommand(program);
   modelScanCommand(program);
   setupRetryCommand(program);
+  updateCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 

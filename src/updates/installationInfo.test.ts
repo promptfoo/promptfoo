@@ -24,7 +24,7 @@ describe('getInstallationInfo', () => {
     Object.defineProperty(process, 'platform', { value: 'linux' });
 
     // Reset mocks
-    mockFs.realpathSync.mockImplementation((path: string) => path.toString());
+    mockFs.realpathSync.mockImplementation((path) => path.toString());
     mockFs.existsSync.mockReturnValue(false);
     mockChildProcess.execSync.mockImplementation(() => {
       throw new Error('Command not found');
@@ -55,29 +55,33 @@ describe('getInstallationInfo', () => {
     expect(result).toEqual({
       packageManager: PackageManager.DOCKER,
       isGlobal: false,
-      updateMessage: 'Running in Docker. Please update with "docker pull promptfoo/promptfoo:latest".',
+      updateMessage:
+        'Running in Docker. Please update with "docker pull promptfoo/promptfoo:latest".',
     });
   });
 
   it('should detect Docker environment from .dockerenv file', () => {
     process.argv = ['node', '/usr/local/bin/promptfoo'];
     process.env.DOCKER = undefined;
-    mockFs.existsSync.mockImplementation((path: string) => path === '/.dockerenv');
+    mockFs.existsSync.mockImplementation((path) => path === '/.dockerenv');
 
     const result = getInstallationInfo('/project', false);
 
     expect(result).toEqual({
       packageManager: PackageManager.DOCKER,
       isGlobal: false,
-      updateMessage: 'Running in Docker. Please update with "docker pull promptfoo/promptfoo:latest".',
+      updateMessage:
+        'Running in Docker. Please update with "docker pull promptfoo/promptfoo:latest".',
     });
   });
 
   it('should detect local git clone', () => {
     process.argv = ['node', '/project/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/dist/src/main.js');
-    mockFs.existsSync.mockImplementation((path: string) =>
-      path === '/project/.git' || path.includes('project') && path.endsWith('.git')
+    mockFs.existsSync.mockImplementation(
+      (path) =>
+        path === '/project/.git' ||
+        (typeof path === 'string' && path.includes('project') && path.endsWith('.git')),
     );
 
     const result = getInstallationInfo('/project', false);
@@ -91,7 +95,9 @@ describe('getInstallationInfo', () => {
 
   it('should detect NPX installation', () => {
     process.argv = ['node', '/home/user/.npm/_npx/12345/node_modules/promptfoo/dist/src/main.js'];
-    mockFs.realpathSync.mockReturnValue('/home/user/.npm/_npx/12345/node_modules/promptfoo/dist/src/main.js');
+    mockFs.realpathSync.mockReturnValue(
+      '/home/user/.npm/_npx/12345/node_modules/promptfoo/dist/src/main.js',
+    );
 
     const result = getInstallationInfo('/project', false);
 
@@ -104,7 +110,9 @@ describe('getInstallationInfo', () => {
 
   it('should detect PNPX installation', () => {
     process.argv = ['node', '/home/user/.pnpm/_pnpx/12345/node_modules/promptfoo/dist/src/main.js'];
-    mockFs.realpathSync.mockReturnValue('/home/user/.pnpm/_pnpx/12345/node_modules/promptfoo/dist/src/main.js');
+    mockFs.realpathSync.mockReturnValue(
+      '/home/user/.pnpm/_pnpx/12345/node_modules/promptfoo/dist/src/main.js',
+    );
 
     const result = getInstallationInfo('/project', false);
 
@@ -129,10 +137,9 @@ describe('getInstallationInfo', () => {
       updateMessage: 'Installed via Homebrew. Please update with "brew upgrade promptfoo".',
     });
 
-    expect(mockChildProcess.execSync).toHaveBeenCalledWith(
-      'brew list -1 | grep -q "^promptfoo$"',
-      { stdio: 'ignore' }
-    );
+    expect(mockChildProcess.execSync).toHaveBeenCalledWith('brew list -1 | grep -q "^promptfoo$"', {
+      stdio: 'ignore',
+    });
   });
 
   it('should skip Homebrew detection on non-macOS platforms', () => {
@@ -148,7 +155,9 @@ describe('getInstallationInfo', () => {
 
   it('should detect PNPM global installation', () => {
     process.argv = ['node', '/home/user/.pnpm/global/5/node_modules/promptfoo/dist/src/main.js'];
-    mockFs.realpathSync.mockReturnValue('/home/user/.pnpm/global/5/node_modules/promptfoo/dist/src/main.js');
+    mockFs.realpathSync.mockReturnValue(
+      '/home/user/.pnpm/global/5/node_modules/promptfoo/dist/src/main.js',
+    );
 
     const result = getInstallationInfo('/project', false);
 
@@ -162,7 +171,9 @@ describe('getInstallationInfo', () => {
 
   it('should detect PNPM global installation with auto-update disabled', () => {
     process.argv = ['node', '/home/user/.pnpm/global/5/node_modules/promptfoo/dist/src/main.js'];
-    mockFs.realpathSync.mockReturnValue('/home/user/.pnpm/global/5/node_modules/promptfoo/dist/src/main.js');
+    mockFs.realpathSync.mockReturnValue(
+      '/home/user/.pnpm/global/5/node_modules/promptfoo/dist/src/main.js',
+    );
 
     const result = getInstallationInfo('/project', true);
 
@@ -176,7 +187,9 @@ describe('getInstallationInfo', () => {
 
   it('should detect Yarn global installation', () => {
     process.argv = ['node', '/home/user/.yarn/global/node_modules/promptfoo/dist/src/main.js'];
-    mockFs.realpathSync.mockReturnValue('/home/user/.yarn/global/node_modules/promptfoo/dist/src/main.js');
+    mockFs.realpathSync.mockReturnValue(
+      '/home/user/.yarn/global/node_modules/promptfoo/dist/src/main.js',
+    );
 
     const result = getInstallationInfo('/project', false);
 
@@ -189,8 +202,13 @@ describe('getInstallationInfo', () => {
   });
 
   it('should detect BUNX installation', () => {
-    process.argv = ['node', '/home/user/.bun/install/cache/promptfoo@1.0.0/node_modules/promptfoo/dist/src/main.js'];
-    mockFs.realpathSync.mockReturnValue('/home/user/.bun/install/cache/promptfoo@1.0.0/node_modules/promptfoo/dist/src/main.js');
+    process.argv = [
+      'node',
+      '/home/user/.bun/install/cache/promptfoo@1.0.0/node_modules/promptfoo/dist/src/main.js',
+    ];
+    mockFs.realpathSync.mockReturnValue(
+      '/home/user/.bun/install/cache/promptfoo@1.0.0/node_modules/promptfoo/dist/src/main.js',
+    );
 
     const result = getInstallationInfo('/project', false);
 
@@ -218,8 +236,8 @@ describe('getInstallationInfo', () => {
   it('should detect local npm installation', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
-    mockFs.existsSync.mockImplementation((path: string) =>
-      path !== '/.dockerenv' && path !== '/project/.git'
+    mockFs.existsSync.mockImplementation(
+      (path) => path !== '/.dockerenv' && path !== '/project/.git',
     );
 
     const result = getInstallationInfo('/project', false);
@@ -234,9 +252,9 @@ describe('getInstallationInfo', () => {
   it('should detect local yarn installation from yarn.lock', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
-    mockFs.existsSync.mockImplementation((path: string) =>
-      (path === '/project/yarn.lock') ||
-      (path !== '/.dockerenv' && path !== '/project/.git')
+    mockFs.existsSync.mockImplementation(
+      (path) =>
+        path === '/project/yarn.lock' || (path !== '/.dockerenv' && path !== '/project/.git'),
     );
 
     const result = getInstallationInfo('/project', false);
@@ -251,9 +269,9 @@ describe('getInstallationInfo', () => {
   it('should detect local pnpm installation from pnpm-lock.yaml', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
-    mockFs.existsSync.mockImplementation((path: string) =>
-      (path === '/project/pnpm-lock.yaml') ||
-      (path !== '/.dockerenv' && path !== '/project/.git')
+    mockFs.existsSync.mockImplementation(
+      (path) =>
+        path === '/project/pnpm-lock.yaml' || (path !== '/.dockerenv' && path !== '/project/.git'),
     );
 
     const result = getInstallationInfo('/project', false);
@@ -268,9 +286,9 @@ describe('getInstallationInfo', () => {
   it('should detect local bun installation from bun.lockb', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
-    mockFs.existsSync.mockImplementation((path: string) =>
-      (path === '/project/bun.lockb') ||
-      (path !== '/.dockerenv' && path !== '/project/.git')
+    mockFs.existsSync.mockImplementation(
+      (path) =>
+        path === '/project/bun.lockb' || (path !== '/.dockerenv' && path !== '/project/.git'),
     );
 
     const result = getInstallationInfo('/project', false);

@@ -14,14 +14,9 @@ jest.mock('../src/logger', () => ({
   setLogLevel: jest.fn(),
 }));
 
-// Mock the auto-update system
+// Mock the update check system
 jest.mock('../src/updates/updateCheck', () => ({
   checkForUpdates: jest.fn(() => Promise.resolve(null)),
-}));
-
-jest.mock('../src/updates/handleAutoUpdate', () => ({
-  handleAutoUpdate: jest.fn(),
-  setUpdateHandler: jest.fn(),
 }));
 
 jest.mock('../src/envars', () => ({
