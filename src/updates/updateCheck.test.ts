@@ -1,9 +1,6 @@
-jest.mock('update-notifier', () => {
-  const mockFetchInfo = jest.fn();
-  return jest.fn(() => ({
-    fetchInfo: mockFetchInfo,
-  }));
-});
+jest.mock('../util/fetch', () => ({
+  fetchWithTimeout: jest.fn(),
+}));
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -14,11 +11,11 @@ jest.mock('semver', () => ({
 }));
 
 import { checkForUpdates } from './updateCheck';
-import updateNotifier from 'update-notifier';
+import { fetchWithTimeout } from '../util/fetch';
 import { readFileSync } from 'fs';
 import semver from 'semver';
 
-const mockUpdateNotifier = updateNotifier as jest.MockedFunction<typeof updateNotifier>;
+const mockFetchWithTimeout = fetchWithTimeout as jest.MockedFunction<typeof fetchWithTimeout>;
 const mockReadFileSync = readFileSync as jest.MockedFunction<typeof readFileSync>;
 const mockSemverGt = semver.gt as jest.MockedFunction<typeof semver.gt>;
 
@@ -32,7 +29,7 @@ describe('checkForUpdates', () => {
     process.env.NODE_ENV = 'development';
     const result = await checkForUpdates();
     expect(result).toBeNull();
-    expect(mockUpdateNotifier).not.toHaveBeenCalled();
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
   it('should return null if package.json cannot be read', async () => {
@@ -45,11 +42,6 @@ describe('checkForUpdates', () => {
   });
 
   it('should return update info when update is available', async () => {
-    const mockFetchInfo = jest.fn();
-    mockUpdateNotifier.mockReturnValue({
-      fetchInfo: mockFetchInfo,
-    } as any);
-
     mockReadFileSync.mockReturnValue(
       JSON.stringify({
         name: 'promptfoo',
@@ -57,37 +49,32 @@ describe('checkForUpdates', () => {
       }),
     );
 
-    const mockUpdateInfo = {
-      current: '1.0.0',
-      latest: '1.1.0',
-    };
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as any);
 
-    mockFetchInfo.mockResolvedValue(mockUpdateInfo);
     mockSemverGt.mockReturnValue(true);
 
     const result = await checkForUpdates();
 
     expect(result).toEqual({
       message: 'Promptfoo update available! 1.0.0 → 1.1.0',
-      update: mockUpdateInfo,
+      update: {
+        current: '1.0.0',
+        latest: '1.1.0',
+        name: 'promptfoo',
+      },
     });
 
-    expect(mockUpdateNotifier).toHaveBeenCalledWith({
-      pkg: {
-        name: 'promptfoo',
-        version: '1.0.0',
-      },
-      updateCheckInterval: 0,
-      shouldNotifyInNpmScript: true,
-    });
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/latestVersion',
+      {},
+      10000,
+    );
   });
 
   it('should return null when no update is available', async () => {
-    const mockFetchInfo = jest.fn();
-    mockUpdateNotifier.mockReturnValue({
-      fetchInfo: mockFetchInfo,
-    } as any);
-
     mockReadFileSync.mockReturnValue(
       JSON.stringify({
         name: 'promptfoo',
@@ -95,12 +82,11 @@ describe('checkForUpdates', () => {
       }),
     );
 
-    const mockUpdateInfo = {
-      current: '1.0.0',
-      latest: '1.0.0',
-    };
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ latestVersion: '1.0.0' }),
+    } as any);
 
-    mockFetchInfo.mockResolvedValue(mockUpdateInfo);
     mockSemverGt.mockReturnValue(false);
 
     const result = await checkForUpdates();
@@ -108,11 +94,6 @@ describe('checkForUpdates', () => {
   });
 
   it('should return null on network error', async () => {
-    const mockFetchInfo = jest.fn();
-    mockUpdateNotifier.mockReturnValue({
-      fetchInfo: mockFetchInfo,
-    } as any);
-
     mockReadFileSync.mockReturnValue(
       JSON.stringify({
         name: 'promptfoo',
@@ -120,7 +101,7 @@ describe('checkForUpdates', () => {
       }),
     );
 
-    mockFetchInfo.mockRejectedValue(new Error('Network error'));
+    mockFetchWithTimeout.mockRejectedValue(new Error('Network error'));
 
     const result = await checkForUpdates();
     expect(result).toBeNull();
