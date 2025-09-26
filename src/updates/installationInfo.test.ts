@@ -237,9 +237,12 @@ describe('getInstallationInfo', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
     mockFs.existsSync.mockImplementation(
-      (path) => path !== '/.dockerenv' && path !== '/project/.git' &&
-                path !== '/project/yarn.lock' && path !== '/project/pnpm-lock.yaml' &&
-                path !== '/project/bun.lockb',
+      (path) =>
+        path !== '/.dockerenv' &&
+        path !== '/project/.git' &&
+        path !== '/project/yarn.lock' &&
+        path !== '/project/pnpm-lock.yaml' &&
+        path !== '/project/bun.lockb',
     );
 
     const result = getInstallationInfo('/project', false);
@@ -273,8 +276,11 @@ describe('getInstallationInfo', () => {
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
     mockFs.existsSync.mockImplementation(
       (path) =>
-        path === '/project/pnpm-lock.yaml' || (path !== '/.dockerenv' && path !== '/project/.git' &&
-        path !== '/project/yarn.lock' && path !== '/project/bun.lockb'),
+        path === '/project/pnpm-lock.yaml' ||
+        (path !== '/.dockerenv' &&
+          path !== '/project/.git' &&
+          path !== '/project/yarn.lock' &&
+          path !== '/project/bun.lockb'),
     );
 
     const result = getInstallationInfo('/project', false);
@@ -291,8 +297,11 @@ describe('getInstallationInfo', () => {
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
     mockFs.existsSync.mockImplementation(
       (path) =>
-        path === '/project/bun.lockb' || (path !== '/.dockerenv' && path !== '/project/.git' &&
-        path !== '/project/yarn.lock' && path !== '/project/pnpm-lock.yaml'),
+        path === '/project/bun.lockb' ||
+        (path !== '/.dockerenv' &&
+          path !== '/project/.git' &&
+          path !== '/project/yarn.lock' &&
+          path !== '/project/pnpm-lock.yaml'),
     );
 
     const result = getInstallationInfo('/project', false);
