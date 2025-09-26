@@ -1,5 +1,6 @@
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { Request, Response } from 'express';
-import { describe, expect, it, jest, beforeEach, afterEach } from '@jest/globals';
+
 import type { CompletedPrompt } from '../../../src/types';
 
 // Mock dependencies first
@@ -8,26 +9,26 @@ jest.mock('../../../src/database', () => ({
 }));
 
 jest.mock('../../../src/models/eval');
-jest.mock('../../../src/server/services/dataExportService');
+jest.mock('../../../src/server/utils/evalTableUtils');
 jest.mock('../../../src/server/utils/downloadHelpers', () => ({
   setDownloadHeaders: jest.fn(),
 }));
 
 // Import after mocking
 import Eval from '../../../src/models/eval';
-import { generateCsvData, generateJsonData } from '../../../src/server/services/dataExportService';
+import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalTableUtils';
 import { setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
 
 // Setup mocked functions
 const mockedEvalFindById = jest.fn() as jest.MockedFunction<typeof Eval.findById>;
-const mockedGenerateCsvData = jest.fn() as jest.MockedFunction<typeof generateCsvData>;
-const mockedGenerateJsonData = jest.fn() as jest.MockedFunction<typeof generateJsonData>;
+const mockedGenerateCsvData = jest.fn() as jest.MockedFunction<typeof evalTableToCsv>;
+const mockedGenerateJsonData = jest.fn() as jest.MockedFunction<typeof evalTableToJson>;
 
 // Override the mocked modules
 (Eval as any).findById = mockedEvalFindById;
-const dataExportService = require('../../../src/server/services/dataExportService');
-dataExportService.generateCsvData = mockedGenerateCsvData;
-dataExportService.generateJsonData = mockedGenerateJsonData;
+const evalTableUtils = require('../../../src/server/utils/evalTableUtils');
+evalTableUtils.generateCsvData = mockedGenerateCsvData;
+evalTableUtils.generateJsonData = mockedGenerateJsonData;
 
 describe('evalRouter - GET /:id/table with export formats', () => {
   let mockReq: Partial<Request>;

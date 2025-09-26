@@ -41,13 +41,13 @@ function DownloadMenu() {
   const isDarkMode = theme.palette.mode === 'dark';
 
   // Use the new hooks for CSV and JSON downloads
-  const { downloadCsv: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(
+  const { download: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(
     DownloadFormat.CSV,
     {
       onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
     },
   );
-  const { downloadJson: downloadJsonApi, isLoading: isLoadingJson } = useDownloadEval(
+  const { download: downloadJsonApi, isLoading: isLoadingJson } = useDownloadEval(
     DownloadFormat.JSON,
 
     {
@@ -63,7 +63,6 @@ function DownloadMenu() {
 
   const openDownloadDialog = (blob: Blob, downloadName: string) => {
     downloadBlob(blob, downloadName);
-    // Mark this file as downloaded
     setDownloadedFiles((prev) => new Set([...prev, downloadName]));
   };
 
@@ -71,6 +70,13 @@ function DownloadMenu() {
     setOpen(false);
     // Reset download states when dialog is closed
     setDownloadedFiles(new Set());
+  };
+
+  const getFilename = (suffix: string): string => {
+    if (evalId) {
+      return `${evalId}-${suffix}`;
+    }
+    invariant(false, 'evalId is required for file downloads');
   };
 
   const copyToClipboard = (text: string) => {

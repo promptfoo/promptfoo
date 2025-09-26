@@ -18,7 +18,14 @@
   "ts-node": {
     "swc": true
   },
-  "include": ["src/", "test/", "./package.json", "src/**/*.json", "test/**/*.json", "src/types/globals.d.ts"],
+  "include": [
+    "src/",
+    "test/",
+    "./package.json",
+    "src/**/*.json",
+    "test/**/*.json",
+    "src/types/globals.d.ts"
+  ],
   "exclude": [
     "node_modules",
     "dist",

@@ -11,7 +11,7 @@ import type { EvaluateTableRow, Prompt } from '../../types';
  * @param options - Export options
  * @returns CSV formatted string
  */
-export function generateCsvData(
+export function evalTableToCsv(
   table: { head: { prompts: Prompt[]; vars: string[] }; body: EvaluateTableRow[] },
   options: { isRedteam?: boolean } = { isRedteam: false },
 ): string {
@@ -96,7 +96,7 @@ export function generateCsvData(
  * @param table Evaluation table data
  * @returns JSON object
  */
-export function generateJsonData(table: {
+export function evalTableToJson(table: {
   head: { prompts: Prompt[]; vars: string[] };
   body: EvaluateTableRow[];
 }): any {

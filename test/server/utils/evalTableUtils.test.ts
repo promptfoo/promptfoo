@@ -1,14 +1,15 @@
-import { describe, expect, it, beforeEach } from '@jest/globals';
-import { generateCsvData, generateJsonData } from '../../../src/server/services/dataExportService';
+import { beforeEach, describe, expect, it } from '@jest/globals';
+import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalTableUtils';
 import { ResultFailureReason } from '../../../src/types';
+
 import type {
-  EvaluateTableRow,
   CompletedPrompt,
-  UnifiedConfig,
   EvaluateTableOutput,
+  EvaluateTableRow,
+  UnifiedConfig,
 } from '../../../src/types';
 
-describe('dataExportService', () => {
+describe('evalTableUtils', () => {
   let mockTable: {
     head: { prompts: CompletedPrompt[]; vars: string[] };
     body: EvaluateTableRow[];
@@ -86,10 +87,10 @@ describe('dataExportService', () => {
     };
   });
 
-  describe('generateCsvData', () => {
+  describe('evalTableToCsv', () => {
     describe('Basic CSV generation', () => {
       it('should generate CSV with headers and data', () => {
-        const csv = generateCsvData(mockTable);
+        const csv = evalTableToCsv(mockTable);
         const lines = csv.split('\n');
 
         expect(lines[0]).toContain('Description');
@@ -102,7 +103,7 @@ describe('dataExportService', () => {
       });
 
       it('should include test descriptions when present', () => {
-        const csv = generateCsvData(mockTable);
+        const csv = evalTableToCsv(mockTable);
         const lines = csv.split('\n');
 
         expect(lines[1]).toContain('Test case 1');
@@ -120,7 +121,7 @@ describe('dataExportService', () => {
           })),
         };
 
-        const csv = generateCsvData(tableWithoutDescriptions);
+        const csv = evalTableToCsv(tableWithoutDescriptions);
         const lines = csv.split('\n');
 
         expect(lines[0]).not.toContain('Description');
@@ -128,7 +129,7 @@ describe('dataExportService', () => {
       });
 
       it('should format output with pass/fail/error prefixes', () => {
-        const csv = generateCsvData(mockTable);
+        const csv = evalTableToCsv(mockTable);
         const lines = csv.split('\n');
 
         expect(lines[1]).toContain('[PASS] Success output');
@@ -138,7 +139,7 @@ describe('dataExportService', () => {
       });
 
       it('should include grader reason and comments', () => {
-        const csv = generateCsvData(mockTable);
+        const csv = evalTableToCsv(mockTable);
         const lines = csv.split('\n');
 
         expect(lines[1]).toContain('Output meets criteria');
@@ -162,7 +163,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithNullOutputs);
+        const csv = evalTableToCsv(tableWithNullOutputs);
         const lines = csv.split('\n');
 
         // Should have empty values for null/undefined outputs
@@ -186,7 +187,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithoutGrading);
+        const csv = evalTableToCsv(tableWithoutGrading);
         const lines = csv.split('\n');
 
         // Should have empty values for grader columns
@@ -223,7 +224,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithMessages, { isRedteam: true });
+        const csv = evalTableToCsv(tableWithMessages, { isRedteam: true });
         const lines = csv.split('\n');
 
         expect(lines[0]).toContain('Messages');
@@ -256,7 +257,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithHistory, { isRedteam: true });
+        const csv = evalTableToCsv(tableWithHistory, { isRedteam: true });
         const lines = csv.split('\n');
 
         expect(lines[0]).toContain('RedteamHistory');
@@ -285,7 +286,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithTreeHistory, { isRedteam: true });
+        const csv = evalTableToCsv(tableWithTreeHistory, { isRedteam: true });
         const lines = csv.split('\n');
 
         expect(lines[0]).toContain('RedteamTreeHistory');
@@ -322,7 +323,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithAllMetadata, { isRedteam: true });
+        const csv = evalTableToCsv(tableWithAllMetadata, { isRedteam: true });
         const lines = csv.split('\n');
 
         expect(lines[0]).toContain('Messages');
@@ -349,7 +350,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithMetadata); // No config
+        const csv = evalTableToCsv(tableWithMetadata); // No config
         const lines = csv.split('\n');
 
         expect(lines[0]).not.toContain('Messages');
@@ -377,7 +378,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithEmptyMetadata, { isRedteam: true });
+        const csv = evalTableToCsv(tableWithEmptyMetadata, { isRedteam: true });
         const lines = csv.split('\n');
 
         expect(lines[1]).toContain('[]'); // Empty arrays as JSON
@@ -403,7 +404,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithNullMetadata, { isRedteam: true });
+        const csv = evalTableToCsv(tableWithNullMetadata, { isRedteam: true });
         const lines = csv.split('\n');
 
         // When metadata fields are null/undefined, they should be empty strings in CSV
@@ -439,7 +440,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithSpecialChars);
+        const csv = evalTableToCsv(tableWithSpecialChars);
 
         // CSV should properly escape special characters
         expect(csv).toContain('"Description with ""quotes"", commas, and\nnewlines"');
@@ -468,7 +469,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithUnicode);
+        const csv = evalTableToCsv(tableWithUnicode);
 
         expect(csv).toContain('Test with émojis 🎉 and Unicode: 你好世界');
         expect(csv).toContain('日本語');
@@ -502,7 +503,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithLongText);
+        const csv = evalTableToCsv(tableWithLongText);
 
         // Should contain the long text (CSV format handles it)
         expect(csv).toContain(longText);
@@ -514,7 +515,7 @@ describe('dataExportService', () => {
           body: [],
         };
 
-        const csv = generateCsvData(emptyTable);
+        const csv = evalTableToCsv(emptyTable);
         const lines = csv.split('\n').filter((line: string) => line.trim());
 
         // Should only have header row
@@ -538,7 +539,7 @@ describe('dataExportService', () => {
           ],
         };
 
-        const csv = generateCsvData(tableWithNoPrompts);
+        const csv = evalTableToCsv(tableWithNoPrompts);
         const lines = csv.split('\n');
 
         // Should only have variable columns
@@ -595,7 +596,7 @@ describe('dataExportService', () => {
           redteam: { strategies: ['test'] },
         } as UnifiedConfig;
 
-        const csv = generateCsvData(tableWithComplexMetadata, {
+        const csv = evalTableToCsv(tableWithComplexMetadata, {
           isRedteam: true,
         });
 
@@ -609,9 +610,9 @@ describe('dataExportService', () => {
     });
   });
 
-  describe('generateJsonData', () => {
+  describe('evalTableToJson', () => {
     it('should return the table as-is', () => {
-      const result = generateJsonData(mockTable);
+      const result = evalTableToJson(mockTable);
       expect(result).toBe(mockTable);
     });
 
@@ -620,7 +621,7 @@ describe('dataExportService', () => {
         head: { vars: [], prompts: [] },
         body: [],
       };
-      const result = generateJsonData(emptyTable);
+      const result = evalTableToJson(emptyTable);
       expect(result).toBe(emptyTable);
     });
 
@@ -644,7 +645,7 @@ describe('dataExportService', () => {
         ],
       };
 
-      const result = generateJsonData(tableWithMetadata);
+      const result = evalTableToJson(tableWithMetadata);
       expect(result).toBe(tableWithMetadata);
       expect(result.body[0].outputs[0].metadata).toEqual({
         custom: 'data',
