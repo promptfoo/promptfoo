@@ -4,7 +4,6 @@ import * as path from 'path';
 import { fetchWithCache } from '../../../src/cache';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
-
 import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
@@ -329,10 +328,16 @@ describe('IntentGrader', () => {
       ),
       aiOutput,
       expect.any(Object),
+      undefined,
+      undefined,
+      expect.any(Object),
     );
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.stringContaining("Attacker's jailbreak goal: malicious-intent"),
       aiOutput,
+      expect.any(Object),
+      undefined,
+      undefined,
       expect.any(Object),
     );
     expect(result.grade).toEqual(mockResult);
@@ -352,10 +357,16 @@ describe('IntentGrader', () => {
       expect.stringContaining('No purpose provided'),
       aiOutput,
       expect.any(Object),
+      undefined,
+      undefined,
+      expect.any(Object),
     );
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.stringContaining('No goal provided'),
       aiOutput,
+      expect.any(Object),
+      undefined,
+      undefined,
       expect.any(Object),
     );
     expect(result.grade).toEqual(mockResult);

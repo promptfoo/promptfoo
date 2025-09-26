@@ -588,6 +588,9 @@ describe('RedteamGraderBase', () => {
       'Test rubric for test-purpose with harm category test-harm and goal custom-goal',
       'test output',
       expect.any(Object),
+      undefined,
+      undefined,
+      expect.any(Object),
     );
   });
 
@@ -610,6 +613,9 @@ describe('RedteamGraderBase', () => {
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       'Test rubric for test-purpose with harm category test-harm and goal test prompt',
       'test output',
+      expect.any(Object),
+      undefined,
+      undefined,
       expect.any(Object),
     );
   });
@@ -646,7 +652,12 @@ describe('RedteamGraderBase', () => {
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.any(String),
       'o',
-      expect.objectContaining({ provider: provided }),
+      expect.any(Object),
+      undefined,
+      undefined,
+      expect.objectContaining({
+        gradingProvider: expect.objectContaining({ id: expect.any(Function) }),
+      }),
     );
   });
 
@@ -764,10 +775,16 @@ describe('RedteamGraderBase', () => {
         expect.stringContaining('tool1'),
         expect.any(String),
         expect.any(Object),
+        undefined,
+        undefined,
+        expect.any(Object),
       );
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining('tool2'),
         expect.any(String),
+        expect.any(Object),
+        undefined,
+        undefined,
         expect.any(Object),
       );
     });

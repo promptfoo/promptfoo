@@ -1,7 +1,6 @@
 import { matchesLlmRubric } from '../../../src/matchers';
 import { PlinyGrader, PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util';
-
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
@@ -154,6 +153,9 @@ describe('PlinyGrader', () => {
       expect.any(String), // The rendered rubric
       aiOutput,
       expect.any(Object),
+      undefined,
+      undefined,
+      expect.any(Object),
     );
   });
 
@@ -173,6 +175,9 @@ describe('PlinyGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.any(String), // The rendered rubric
       aiOutput,
+      expect.any(Object),
+      undefined,
+      undefined,
       expect.any(Object),
     );
   });
