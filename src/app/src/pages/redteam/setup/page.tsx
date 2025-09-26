@@ -33,7 +33,6 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import type { RedteamStrategy } from '@promptfoo/types';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -48,8 +47,10 @@ import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import { generateOrderedYaml } from './utils/yamlHelpers';
+import type { RedteamStrategy } from '@promptfoo/types';
 
 import './page.css';
+
 import type { Config, RedteamUITarget } from './types';
 
 export const SIDEBAR_WIDTH = 240;
@@ -472,6 +473,8 @@ export default function RedTeamSetupPage() {
 
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
+      // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
+      window.location.reload();
     } catch (error) {
       console.error('Failed to load configuration', error);
       toast.showToast(
