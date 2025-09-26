@@ -10,7 +10,7 @@ import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 import { fetchWithProxy } from '../util/fetch';
-import { isRunningUnderNpx } from '../util/index';
+import { nextCmd } from '../util/nextCommand';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
@@ -147,7 +147,6 @@ async function handleExampleDownload(
     }
   }
 
-  const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
   if (!exampleName) {
     return;
   }
@@ -155,26 +154,17 @@ async function handleExampleDownload(
   const basePath = directory && directory !== '.' ? `${directory}/` : '';
   const readmePath = path.join(basePath, exampleName, 'README.md');
   const cdCommand = `cd ${path.join(basePath, exampleName)}`;
+  const isRedteam = /redteam/i.test(exampleName);
 
-  if (exampleName.includes('redteam')) {
-    logger.info(
-      dedent`
+  // Build the right command for this environment
+  const cmd = nextCmd(isRedteam ? 'redteam init' : 'eval');
 
-      View the README file at ${chalk.bold(readmePath)} to get started!
-      `,
-    );
-  } else {
-    logger.info(
-      dedent`
-
-      View the README at ${chalk.bold(readmePath)} or run:
-
-      \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
-
-      to get started!
-      `,
-    );
-  }
+  logger.info(
+    dedent`
+      View the README: ${chalk.bold(readmePath)}
+      ${chalk.bold('Next:')} ${chalk.bold(`${cdCommand} && ${cmd}`)}
+    `,
+  );
 
   return exampleName;
 }
