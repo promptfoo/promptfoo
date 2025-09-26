@@ -309,6 +309,11 @@ export default function EvalOutputPromptDialog({
   // Get citations from metadata if they exist
   const citationsData = metadata?.citations;
 
+  // Determine if there's output content to show
+  const hasOutputContent = Boolean(
+    output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
+  );
+
   // Check if red team history has actual content
   const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
     .filter((entry: any) => entry?.prompt && entry?.output)
@@ -417,7 +422,7 @@ export default function EvalOutputPromptDialog({
             flexShrink: 0,
           }}
         >
-          <Tab label="Prompt & Output" />
+          <Tab label={hasOutputContent ? 'Prompt & Output' : 'Prompt'} />
           {hasEvaluationData && <Tab label="Evaluation" />}
           {hasMessagesData && <Tab label="Messages" />}
           {hasMetadata && <Tab label="Metadata" />}
@@ -446,19 +451,22 @@ export default function EvalOutputPromptDialog({
                 onMouseLeave={() => setHoveredElement(null)}
                 CodeDisplay={CodeDisplay}
                 subtitleTypographySx={subtitleTypographySx}
+                readOnly={!evaluationId}
               />
-              <OutputsPanel
-                output={output}
-                replayOutput={replayOutput}
-                redteamFinalPrompt={metadata?.redteamFinalPrompt}
-                copiedFields={copiedFields}
-                hoveredElement={hoveredElement}
-                onCopy={copyFieldToClipboard}
-                onMouseEnter={setHoveredElement}
-                onMouseLeave={() => setHoveredElement(null)}
-                CodeDisplay={CodeDisplay}
-                citations={citationsData}
-              />
+              {hasOutputContent && (
+                <OutputsPanel
+                  output={output}
+                  replayOutput={replayOutput}
+                  redteamFinalPrompt={metadata?.redteamFinalPrompt}
+                  copiedFields={copiedFields}
+                  hoveredElement={hoveredElement}
+                  onCopy={copyFieldToClipboard}
+                  onMouseEnter={setHoveredElement}
+                  onMouseLeave={() => setHoveredElement(null)}
+                  CodeDisplay={CodeDisplay}
+                  citations={citationsData}
+                />
+              )}
             </Box>
           )}
 

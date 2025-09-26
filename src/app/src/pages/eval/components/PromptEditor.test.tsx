@@ -207,4 +207,33 @@ describe('PromptEditor', () => {
 
     expect(onPromptChange).toHaveBeenCalledWith(newPromptValue);
   });
+
+  it('should not show edit button when readOnly is true', () => {
+    render(<PromptEditor {...defaultProps} readOnly={true} />);
+
+    expect(screen.getByTestId('mock-code-display')).toBeInTheDocument();
+    expect(screen.getByText('This is the original prompt.')).toBeInTheDocument();
+
+    expect(screen.queryByRole('button', { name: /edit & replay/i })).not.toBeInTheDocument();
+  });
+
+  it('should not show replay and cancel buttons when readOnly is true and editMode is true', () => {
+    render(<PromptEditor {...defaultProps} readOnly={true} editMode={true} />);
+
+    expect(screen.queryByRole('button', { name: 'Replay' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /edit & replay/i })).not.toBeInTheDocument();
+  });
+
+  it('should show edit button when readOnly is false (default behavior)', () => {
+    render(<PromptEditor {...defaultProps} readOnly={false} />);
+
+    expect(screen.getByRole('button', { name: /edit & replay/i })).toBeInTheDocument();
+  });
+
+  it('should show edit button when readOnly is not provided (default behavior)', () => {
+    render(<PromptEditor {...defaultProps} />);
+
+    expect(screen.getByRole('button', { name: /edit & replay/i })).toBeInTheDocument();
+  });
 });
