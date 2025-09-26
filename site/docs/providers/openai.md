@@ -961,6 +961,7 @@ The Responses API supports a wide range of models, including:
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Latest fast, cost-effective reasoning model
 - `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
+- `gpt-5-codex` - GPT-5 based coding model optimized for code generation
 
 ### Using the Responses API
 
