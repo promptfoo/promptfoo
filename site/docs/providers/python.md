@@ -5,7 +5,7 @@ description: 'Create custom Python scripts for advanced model integrations, eval
 
 # Python Provider
 
-The Python provider enables you to create custom evaluation logic using Python scripts. This allows you to integrate Promptfoo with any Python-based model, API, or custom logic.
+The Python provider lets you write custom evaluation logic in Python. You create a Python file with a `call_api` function, and Promptfoo will import and call that function for each test case.
 
 **Common use cases:**
 
@@ -63,10 +63,10 @@ That's it! You've created your first custom Python provider.
 
 ## How It Works
 
-When Promptfoo evaluates a test case with a Python provider:
+When Promptfoo runs an evaluation with a Python provider:
 
-1. **Promptfoo** prepares the prompt based on your configuration
-2. **Python Script** is called with three parameters:
+1. **Promptfoo** loads your Python script
+2. **Your Function** (`call_api`) is called with three parameters:
    - `prompt`: The final prompt string
    - `options`: Provider configuration from your YAML
    - `context`: Variables and metadata for the current test
@@ -76,7 +76,7 @@ When Promptfoo evaluates a test case with a Python provider:
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │ Promptfoo   │────▶│ Your Python  │────▶│ Your Logic  │
-│ Evaluation  │     │ Provider     │     │ (API/Model) │
+│ Evaluation  │     │ Function     │     │ (API/Model) │
 └─────────────┘     └──────────────┘     └─────────────┘
        ▲                    │
        │                    ▼
@@ -564,6 +564,8 @@ def call_api(prompt, options, context):
 | No output visible           | Use `LOG_LEVEL=debug` to see print statements                       |
 | JSON parsing errors         | Ensure prompt format matches your parsing logic                     |
 | Timeout errors              | Optimize initialization code, load models once                      |
+| Script not loading properly | Check `LOG_LEVEL=debug` for initialization errors                   |
+| Process crashes repeatedly  | Ensure script doesn't call `sys.exit()` or use blocking operations  |
 
 ### Debugging Tips
 
@@ -617,15 +619,34 @@ def call_api(prompt, options, context):
 
 ### Performance Optimization
 
-:::tip
-Initialize expensive resources (models, connections) outside the function to avoid reloading on each call:
+Python providers load your script once and keep it in memory between function calls. This means expensive operations like model loading only happen once.
 
 ```python
-# Initialize once
+# This initialization happens when the script loads
+model = load_large_model()
+client = OpenAI()
+
+def call_api(prompt, options, context):
+    # These objects are already loaded
+    return {"output": model.generate(prompt)}
+```
+
+**Benefits:**
+
+- Model/library initialization happens once, not per call
+- No Python interpreter startup overhead
+- Variables persist between function calls
+
+**Fresh state per call**: If you need completely isolated execution for each call, set `config: { persistent: false }`.
+
+:::tip
+Initialize expensive resources (models, connections) outside your functions for better performance:
+
+```python
+# This happens once when the script loads
 model = load_model()
 
 def call_api(prompt, options, context):
-    # Use pre-loaded model
     return {"output": model.generate(prompt)}
 ```
 
