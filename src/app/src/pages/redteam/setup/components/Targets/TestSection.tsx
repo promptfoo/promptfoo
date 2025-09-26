@@ -111,7 +111,7 @@ const TestSection: React.FC<TestSectionProps> = ({
           </Alert>
 
           {/* Request and Response Details */}
-          <details style={{ marginTop: '16px' }}>
+          <details style={{ marginTop: '16px' }} open={testResult.changes_needed}>
             <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
               <Typography variant="caption" component="span">
                 View request and response details

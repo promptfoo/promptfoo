@@ -314,6 +314,8 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
       },
       resetConfig: () => {
         set({ config: defaultConfig, providerType: undefined });
+        // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
+        window.location.reload();
       },
       updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) =>
         set((state) => {

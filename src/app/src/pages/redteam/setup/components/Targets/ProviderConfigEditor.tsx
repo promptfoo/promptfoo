@@ -95,9 +95,9 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
           setBodyError(
             <>
               Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will
-              inject the attack payload. Add it as the value for the key your API expects. Promptfoo
-              uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the actual test
-              content.{' '}
+              inject the attack payload. Replace the user input value with{' '}
+              <code>{'{{prompt}}'}</code>. Promptfoo uses Nunjucks templating to replace{' '}
+              <code>{'{{prompt}}'}</code> with the actual test content.{' '}
               <a
                 href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
                 target="_blank"

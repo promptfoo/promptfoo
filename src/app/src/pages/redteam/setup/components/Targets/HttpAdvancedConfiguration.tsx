@@ -8,6 +8,7 @@ import 'prismjs/themes/prism.css';
 import React from 'react';
 
 import Box from '@mui/material/Box';
+import Divider from '@mui/material/Divider';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import DigitalSignatureAuthTab from './tabs/DigitalSignatureAuthTab';
@@ -151,6 +152,7 @@ const HttpAdvancedConfiguration = ({
           />
         </TabPanel>
       </Box>
+      <Divider />
     </>
   );
 };

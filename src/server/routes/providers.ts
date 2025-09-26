@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { getDefaultProviders } from '../../providers/defaults';
+import { matchesLlmRubric } from '../../matchers';
 import { loadApiProvider } from '../../providers/index';
 import {
   doTargetPurposeDiscovery,
@@ -13,7 +13,6 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { fetchWithProxy } from '../../util/fetch';
 import invariant from '../../util/invariant';
-import { extractJsonObjects } from '../../util/json';
 import { ProviderOptionsSchema } from '../../validators/providers';
 import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
@@ -261,12 +260,67 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
     const validatedProvider = ProviderOptionsSchema.parse(providerOptions);
     invariant(validatedProvider.id, 'Provider ID is required');
 
+    // Validate session configuration based on source
+    const effectiveSessionSource =
+      sessionConfig?.sessionSource || validatedProvider.config?.sessionSource || 'server';
+
+    // Check client-side session configuration
+    if (effectiveSessionSource === 'client') {
+      const configStr = JSON.stringify(validatedProvider);
+      const hasSessionIdTemplate = configStr.includes('{{sessionId}}');
+
+      if (!hasSessionIdTemplate) {
+        logger.warn(
+          dedent`[POST /providers/test-session] Warning: Session source is set to 'client' but {{sessionId}} is not found in the provider configuration.
+            Make sure to include {{sessionId}} in your headers or body to properly maintain session state.`,
+        );
+
+        res.status(400).json({
+          success: false,
+          message:
+            'Session configuration error: {{sessionId}} variable is not used in the provider configuration',
+          error:
+            'When using client-side sessions, you must include {{sessionId}} in your request headers or body. For example, add a header like "X-Session-Id: {{sessionId}}" or include it in your request body.',
+          details: {
+            sessionSource: effectiveSessionSource,
+            hasSessionIdTemplate: false,
+          },
+        });
+        return;
+      }
+    }
+
+    // Check server-side session configuration
+    if (effectiveSessionSource === 'server') {
+      const sessionParser = sessionConfig?.sessionParser || validatedProvider.config?.sessionParser;
+
+      if (!sessionParser || sessionParser.trim() === '') {
+        logger.warn(
+          dedent`[POST /providers/test-session] Warning: Session source is set to 'server' but no session parser is configured.
+            A session parser is required to extract the session ID from server responses.`,
+        );
+
+        res.status(400).json({
+          success: false,
+          message:
+            'Session configuration error: No session parser configured for server-generated sessions',
+          error:
+            'When using server-side sessions, you must configure a session parser to extract the session ID from the server response.',
+          details: {
+            sessionSource: effectiveSessionSource,
+            hasSessionParser: false,
+          },
+        });
+        return;
+      }
+    }
+
     // First request - establish session with test data
     const firstPrompt = 'What can you help me with?';
     const vars: Record<string, string> = {};
 
     // Generate session ID for client-side sessions
-    if (sessionConfig?.sessionSource === 'client') {
+    if (effectiveSessionSource === 'client') {
       vars['sessionId'] = uuidv4();
     }
 
@@ -277,8 +331,8 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
         config: {
           ...validatedProvider.config,
           maxRetries: 1,
-          sessionSource: sessionConfig?.sessionSource,
-          sessionParser: sessionConfig?.sessionParser,
+          sessionSource: effectiveSessionSource,
+          sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
         },
       },
     });
@@ -298,6 +352,34 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
 
     // Get session ID (either from provider or from vars)
     const sessionId = loadedProvider.getSessionId?.() ?? vars.sessionId ?? undefined;
+
+    // Validate that server-generated session was extracted
+    if (effectiveSessionSource === 'server' && (!sessionId || sessionId.trim() === '')) {
+      const sessionParser = sessionConfig?.sessionParser || validatedProvider.config?.sessionParser;
+      logger.error(
+        dedent`[POST /providers/test-session] Failed to extract session ID from server response
+          sessionParser: ${sessionParser}
+          firstResult: ${JSON.stringify(firstResult?.metadata?.http || {}).substring(0, 500)}`,
+      );
+
+      res.status(200).json({
+        success: false,
+        message:
+          'Session extraction failed: The session parser did not extract a session ID from the server response',
+        reason:
+          "The session parser expression did not return a valid session ID. Check that the parser matches your server's response format.",
+        details: {
+          sessionSource: effectiveSessionSource,
+          sessionParser: sessionParser,
+          sessionId: 'Not extracted',
+          request1: {
+            prompt: firstPrompt,
+          },
+          response1: firstResult?.output,
+        },
+      });
+      return;
+    }
 
     // Update vars with session ID for second request
     if (sessionId) {
@@ -319,10 +401,53 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
         response: ${JSON.stringify(secondResult?.output ?? {}).substring(0, 200)}`,
     );
 
-    // Use LLM as a judge to evaluate session persistence
-    let judgeProvider;
+    // Create judge rubric for evaluating session persistence
+    const judgeRubric = dedent`
+      You are evaluating whether a conversation system correctly maintains session state across multiple messages.
 
-    if (neverGenerateRemote()) {
+      In the first message, the user asked what the system can help with.
+      In the second message, the user asked what was the last thing they asked.
+
+      First Message: "${firstPrompt}"
+      First Response: {{firstResponse}}
+
+      Second Message: "${secondPrompt}" 
+      Second Response: {{output}}
+
+      Evaluate whether the system correctly remembered the user's first question when responding to the second message.
+
+      Important criteria:
+      - Pass: The response clearly indicates remembering the first question (e.g., "You asked what I can help you with", "Your last question was about what I can do")
+      - Fail: The response indicates not remembering (e.g., "I don't know", "I don't have that information", generic responses)
+      - Fail: The response is evasive or doesn't directly answer what the previous question was
+
+      Respond with a JSON object containing:
+      {
+        "pass": boolean,  // true if the system clearly remembered the first question, false otherwise
+        "reason": "string" // Brief explanation of your evaluation
+      }
+    `;
+
+    const judgeResult = await matchesLlmRubric(
+      judgeRubric,
+      JSON.stringify(secondResult?.output),
+      {},
+      {
+        firstResponse: JSON.stringify(firstResult?.output),
+      },
+    );
+
+    logger.debug(
+      dedent`[POST /providers/test-session] Judge result
+        pass: ${judgeResult.pass}
+        reason: ${judgeResult.reason}`,
+    );
+
+    const sessionWorking = judgeResult.pass;
+    const judgeReason = judgeResult.reason;
+
+    // Use LLM as a judge to evaluate session persistence
+    if (neverGenerateRemote() || !judgeResult.reason) {
       // Remote grading is disabled, user should examine results manually
       res.status(200).json({
         success: false,
@@ -345,108 +470,27 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
       });
       return;
     } else {
-      // Use default grading provider
-      const defaultProviders = await getDefaultProviders();
-      judgeProvider = defaultProviders.gradingJsonProvider || defaultProviders.gradingProvider;
-
-      if (!judgeProvider) {
-        throw new Error(
-          'No default grading provider available. Please configure a provider for evaluation.',
-        );
-      }
-    }
-
-    // Create judge prompt
-    const judgePrompt = dedent`
-      You are evaluating whether a conversation system correctly maintains session state across multiple messages.
-
-      In the first message, the user asked what the system can help with.
-      In the second message, the user asked what was the last thing they asked.
-
-      First Message: "${firstPrompt}"
-      First Response: ${JSON.stringify(firstResult?.output)}
-
-      Second Message: "${secondPrompt}" 
-      Second Response: ${JSON.stringify(secondResult?.output)}
-
-      Evaluate whether the system correctly remembered the user's first question when responding to the second message.
-
-      Respond with a JSON object containing:
-      {
-        "pass": boolean,  // true if the system clearly remembered the first question, false otherwise
-        "reason": "string" // Brief explanation of your evaluation
-      }
-
-      Important criteria:
-      - Pass: The response clearly indicates remembering the first question (e.g., "You asked what I can help you with", "Your last question was about what I can do")
-      - Fail: The response indicates not remembering (e.g., "I don't know", "I don't have that information", generic responses)
-      - Fail: The response is evasive or doesn't directly answer what the previous question was
-    `;
-
-    // Call the judge
-    const judgeResponse = await judgeProvider.callApi(judgePrompt, {
-      prompt: {
-        raw: judgePrompt,
-        label: 'session-judge',
-      },
-      vars: {},
-    });
-
-    logger.debug(
-      dedent`[POST /providers/test-session] Judge response
-        response: ${JSON.stringify(judgeResponse?.output)}`,
-    );
-
-    // Parse judge response
-    let sessionWorking = false;
-    let judgeReason = 'Unable to determine session status';
-
-    if (judgeResponse.output && !judgeResponse.error) {
-      try {
-        let judgeResult;
-
-        if (typeof judgeResponse.output === 'string') {
-          const jsonObjects = extractJsonObjects(judgeResponse.output);
-          if (jsonObjects.length > 0) {
-            judgeResult = jsonObjects[0];
-          }
-        } else if (typeof judgeResponse.output === 'object') {
-          judgeResult = judgeResponse.output;
-        }
-
-        if (judgeResult && typeof judgeResult.pass === 'boolean') {
-          sessionWorking = judgeResult.pass;
-          judgeReason =
-            judgeResult.reason ||
-            (sessionWorking
-              ? "The system remembered the user's last request."
-              : "The system did not remember the user's last request.");
-        }
-      } catch (error) {
-        logger.error(`[POST /providers/test-session] Error parsing judge response: ${error}`);
-      }
-    }
-
-    res.json({
-      success: sessionWorking,
-      message: sessionWorking
-        ? 'Session management is working correctly! The target remembered information across requests.'
-        : 'Session is NOT working. The target did not remember information from the first request. Check that your session configuration is correct and that your target properly maintains conversation state.',
-      reason: judgeReason,
-      details: {
-        sessionId: sessionId || 'Not extracted',
-        request1: {
-          prompt: firstPrompt,
-          sessionId: vars.sessionId,
+      res.json({
+        success: sessionWorking,
+        message: sessionWorking
+          ? 'Session management is working correctly! The target remembered information across requests.'
+          : 'Session is NOT working. The target did not remember information from the first request. Check that your session configuration is correct and that your target properly maintains conversation state.',
+        reason: judgeReason,
+        details: {
+          sessionId: sessionId || 'Not extracted',
+          request1: {
+            prompt: firstPrompt,
+            sessionId: vars.sessionId,
+          },
+          response1: firstResult?.output,
+          request2: {
+            prompt: secondPrompt,
+            sessionId,
+          },
+          response2: secondResult?.output,
         },
-        response1: firstResult?.output,
-        request2: {
-          prompt: secondPrompt,
-          sessionId,
-        },
-        response2: secondResult?.output,
-      },
-    });
+      });
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(
