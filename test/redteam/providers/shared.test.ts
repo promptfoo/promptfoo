@@ -283,6 +283,50 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Once for regular, once for jsonOnly
     });
 
+    describe('getGradingProvider', () => {
+      it('returns cached grading provider set via setGradingProvider', async () => {
+        redteamProviderManager.clearProvider();
+        const gradingInstance: ApiProvider = {
+          id: () => 'grading-cached',
+          callApi: jest.fn(),
+        } as any;
+
+        // Set concrete instance and retrieve it (jsonOnly false)
+        await redteamProviderManager.setGradingProvider(gradingInstance as any);
+        const got = await redteamProviderManager.getGradingProvider();
+        expect(got.id()).toBe('grading-cached');
+      });
+
+      it('uses defaultTest chain when no cached grading provider', async () => {
+        redteamProviderManager.clearProvider();
+        const mockProvider: ApiProvider = {
+          id: () => 'from-defaultTest-provider',
+          callApi: jest.fn(),
+        } as any;
+        mockedLoadApiProviders.mockResolvedValue([mockProvider]);
+
+        // Inject defaultTest provider config
+        (cliState as any).config = {
+          defaultTest: {
+            provider: 'from-defaultTest-provider',
+          },
+        };
+
+        const got = await redteamProviderManager.getGradingProvider();
+        expect(got).toBe(mockProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['from-defaultTest-provider']);
+      });
+
+      it('falls back to redteam provider when grading not set', async () => {
+        redteamProviderManager.clearProvider();
+        (cliState as any).config = {}; // no defaultTest
+
+        // Expect fallback to default OpenAI redteam provider
+        const got = await redteamProviderManager.getGradingProvider({ jsonOnly: true });
+        expect(got.id()).toContain('openai:');
+      });
+    });
+
     it('handles thrown errors in getTargetResponse', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
