@@ -23,7 +23,7 @@ import invariant from '@promptfoo/util/invariant';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
-import { downloadBlob, useDownloadCsv, useDownloadJson } from '../../../hooks/useDownloads';
+import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
 
@@ -36,12 +36,19 @@ function DownloadMenu() {
   const isDarkMode = theme.palette.mode === 'dark';
 
   // Use the new hooks for CSV and JSON downloads
-  const { downloadCsv: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadCsv({
-    onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
-  });
-  const { downloadJson: downloadJsonApi, isLoading: isLoadingJson } = useDownloadJson({
-    onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
-  });
+  const { downloadCsv: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(
+    DownloadFormat.CSV,
+    {
+      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
+    },
+  );
+  const { downloadJson: downloadJsonApi, isLoading: isLoadingJson } = useDownloadEval(
+    DownloadFormat.JSON,
+
+    {
+      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
+    },
+  );
 
   const openDownloadDialog = (blob: Blob, downloadName: string) => {
     downloadBlob(blob, downloadName);
