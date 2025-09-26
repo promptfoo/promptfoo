@@ -27,7 +27,10 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       model: this.modelName,
     };
 
-    let data, status, statusText;
+    let data: any;
+    let status: number | undefined;
+    let statusText: string | undefined;
+    let deleteFromCache: (() => Promise<void>) | undefined;
     let cached = false;
     try {
       const response = await fetchWithCache(
@@ -47,7 +50,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         false,
         this.config.maxRetries,
       );
-      ({ data, cached, status, statusText } = response as any);
+      ({ data, cached, status, statusText, deleteFromCache } = response as any);
 
       // Check HTTP status like chat provider
       if (status < 200 || status >= 300) {
@@ -57,7 +60,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -76,7 +79,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       };
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
