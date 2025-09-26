@@ -175,7 +175,7 @@ interface FetchEvalOptions {
   filters?: ResultsFilter[];
 }
 
-interface ColumnState {
+export interface ColumnState {
   selectedColumns: string[];
   columnVisibility: VisibilityState;
 }
@@ -351,8 +351,9 @@ interface SettingsState {
   stickyHeader: boolean;
   setStickyHeader: (stickyHeader: boolean) => void;
 
-  columnStates: Record<string, ColumnState>;
-  setColumnState: (evalId: string, state: ColumnState) => void;
+  globalColumnSettings: ColumnState | null;
+  setColumnState: (state: ColumnState) => void;
+  getColumnState: (validColumns?: string[]) => ColumnState | null;
 
   maxImageWidth: number;
   setMaxImageWidth: (maxImageWidth: number) => void;
@@ -386,14 +387,36 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       stickyHeader: true,
       setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
 
-      columnStates: {},
-      setColumnState: (evalId: string, state: ColumnState) =>
-        set((prevState) => ({
-          columnStates: {
-            ...prevState.columnStates,
-            [evalId]: state,
-          },
+      globalColumnSettings: null,
+      setColumnState: (state: ColumnState) =>
+        set(() => ({
+          globalColumnSettings: state,
         })),
+      getColumnState: (validColumns?: string[]) => {
+        const state = get();
+        const columnState = state.globalColumnSettings;
+
+        if (!columnState || !validColumns) {
+          return columnState;
+        }
+
+        // Filter out columns that don't exist in the current evaluation
+        const filteredSelectedColumns = columnState.selectedColumns.filter((col) =>
+          validColumns.includes(col),
+        );
+
+        const filteredColumnVisibility: VisibilityState = {};
+        for (const [col, visible] of Object.entries(columnState.columnVisibility)) {
+          if (validColumns.includes(col)) {
+            filteredColumnVisibility[col] = visible;
+          }
+        }
+
+        return {
+          selectedColumns: filteredSelectedColumns,
+          columnVisibility: filteredColumnVisibility,
+        };
+      },
 
       maxImageWidth: 256,
       setMaxImageWidth: (maxImageWidth: number) => set(() => ({ maxImageWidth })),
