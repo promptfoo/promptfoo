@@ -30,6 +30,8 @@ export interface ExpandedMetadataState {
   };
 }
 
+const HIDDEN_KEYS = ['citatons', '_promptfooFileMetadata'];
+
 interface MetadataPanelProps {
   metadata?: Record<string, any>;
   expandedMetadata: ExpandedMetadataState;
@@ -47,9 +49,9 @@ export function MetadataPanel({
   onCopy,
   onApplyFilter,
 }: MetadataPanelProps) {
-  if (!metadata || Object.keys(metadata).filter((key) => key !== 'citations').length === 0) {
-    return null;
-  }
+  if (!metadata) {return null;}
+
+  const metadataEntries = Object.entries(metadata).filter((d) => !HIDDEN_KEYS.includes(d[0])).sort((a,b) => a[0].localeCompare(b[0]) );
 
   return (
     <TableContainer component={Paper} variant="outlined">
@@ -66,12 +68,7 @@ export function MetadataPanel({
           </TableRow>
         </TableHead>
         <TableBody>
-          {Object.entries(metadata).map(([key, value]) => {
-            // Skip citations in metadata display as they're shown in their own component
-            if (key === 'citations') {
-              return null;
-            }
-
+          {metadataEntries.map(([key, value]) => {
             const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
             const truncatedValue = ellipsize(stringValue, 300);
             const isUrl = typeof value === 'string' && isValidUrl(value);
