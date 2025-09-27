@@ -33,6 +33,8 @@ export interface ExpandedMetadataState {
   };
 }
 
+const HIDDEN_KEYS = ['citations', '_promptfooFileMetadata'];
+
 interface MetadataPanelProps {
   metadata?: Record<string, any>;
   expandedMetadata: ExpandedMetadataState;
@@ -52,11 +54,11 @@ export function MetadataPanel({
 }: MetadataPanelProps) {
   const { data: cloudConfig } = useCloudConfig();
 
-  if (!metadata || Object.keys(metadata).filter((key) => key !== 'citations').length === 0) {
+  if (!metadata) {
     return null;
   }
 
-  const metadataEntries = Object.entries(metadata);
+  const metadataEntries = Object.entries(metadata).filter((d) => !HIDDEN_KEYS.includes(d[0])).sort((a,b) => a[0].localeCompare(b[0]));
 
   return (
     <TableContainer component={Paper} variant="outlined">
@@ -74,11 +76,6 @@ export function MetadataPanel({
         </TableHead>
         <TableBody>
           {metadataEntries.map(([key, value]) => {
-            // Skip citations in metadata display as they're shown in their own component
-            if (key === 'citations') {
-              return null;
-            }
-
             const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
             let cell: React.ReactNode;
 
