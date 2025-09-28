@@ -31,7 +31,9 @@ def model_call_patch(fail_log: str, relevant_files: dict) -> str:
             "You are a code repair assistant. Output ONLY a unified diff patch that "
             "can be applied with `git apply -p0`. Do NOT include any explanations."
         )
-        files_blob = "\n\n".join(f"{path}:\n{content}" for path, content in relevant_files.items())
+        files_blob = "\n\n".join(
+            f"{path}:\n{content}" for path, content in relevant_files.items()
+        )
         user_msg = (
             "Given the failing test log and the repository files, produce a minimal fix:\n\n"
             f"Failing test log:\n{fail_log}\n\n"
@@ -57,14 +59,18 @@ def model_call_patch(fail_log: str, relevant_files: dict) -> str:
     else:
         demo_path = next(iter(relevant_files.keys()))
         old = relevant_files[demo_path]
-        new = (old or "") + ("\n" if old and not old.endswith("\n") else "") + "# patched-by-demo\n"
+        new = (
+            (old or "")
+            + ("\n" if old and not old.endswith("\n") else "")
+            + "# patched-by-demo\n"
+        )
 
     # Minimal unified diff; uses -p0 friendly paths (a/ and b/)
     fallback_patch = dedent(f"""\
     --- a/{demo_path}
     +++ b/{demo_path}
     @@
-    {old or ''}
+    {old or ""}
     +# patched-by-demo
     """)
     return fallback_patch

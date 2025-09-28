@@ -1,7 +1,12 @@
 # metrics.py
-import json, time, os
+import json
+import os
+import time
 
-def write_metrics(task_id, provider, model, success, runtime_s, memory_mb=None, extra=None):
+
+def write_metrics(
+    task_id, provider, model, success, runtime_s, memory_mb=None, extra=None
+):
     metrics = {
         "task_id": str(task_id),
         "provider": provider,
@@ -10,7 +15,7 @@ def write_metrics(task_id, provider, model, success, runtime_s, memory_mb=None, 
         "runtime_s": float(runtime_s),
         "memory_mb": memory_mb,
         "extra": extra or {},
-        "timestamp": int(time.time())
+        "timestamp": int(time.time()),
     }
     out_dir = os.getenv("PROMPTFOO_RESULTS_DIR", ".promptfoo_results")
     os.makedirs(out_dir, exist_ok=True)
