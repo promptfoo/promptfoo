@@ -29,6 +29,7 @@ import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bed
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
+import { createEnvoyProvider } from './envoy';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { EchoProvider } from './echo';
@@ -480,6 +481,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new EchoProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('envoy:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createEnvoyProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {

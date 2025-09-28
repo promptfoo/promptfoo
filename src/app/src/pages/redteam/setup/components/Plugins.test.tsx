@@ -82,6 +82,7 @@ vi.mock('@promptfoo/redteam/constants', () => ({
   OWASP_API_TOP_10_MAPPING: {},
   MITRE_ATLAS_MAPPING: {},
   EU_AI_ACT_MAPPING: {},
+  ISO_42001_MAPPING: {},
   PLUGIN_PRESET_DESCRIPTIONS: {
     Recommended: 'A broad set of plugins recommended by Promptfoo',
     'Minimal Test': 'Minimal set of plugins to validate your setup',
@@ -95,6 +96,7 @@ vi.mock('@promptfoo/redteam/constants', () => ({
     'OWASP API Top 10': 'OWASP API Top 10 plugins',
     MITRE: 'MITRE ATLAS plugins',
     'EU AI Act': 'EU AI Act plugins',
+    'ISO 42001': 'ISO/IEC 42001 AI management system requirements',
   },
   AGENTIC_EXEMPT_PLUGINS: [],
   DATASET_EXEMPT_PLUGINS: [],
@@ -183,6 +185,7 @@ describe('Plugins', () => {
     expect(screen.getByText('OWASP API Top 10')).toBeInTheDocument();
     expect(screen.getByText('MITRE')).toBeInTheDocument();
     expect(screen.getByText('EU AI Act')).toBeInTheDocument();
+    expect(screen.getByText('ISO 42001')).toBeInTheDocument();
   });
 
   it('should render custom configuration sections', async () => {

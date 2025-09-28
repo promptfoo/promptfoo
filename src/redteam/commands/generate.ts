@@ -17,7 +17,6 @@ import logger from '../../logger';
 import { getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index';
 import {
   checkCloudPermissions,
   getCloudDatabaseId,
@@ -29,6 +28,7 @@ import {
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { getCustomPolicies } from '../../util/generation';
+import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
@@ -42,7 +42,7 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
-import { isValidPolicyObject } from '../plugins/policy';
+import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';
 
@@ -329,7 +329,11 @@ export async function doGenerateRedteam(
       const policyData = policiesById.get(policyId);
       if (policyData) {
         // Set the policy details
-        policyPlugin.config!.policy = { id: policyId, text: policyData.text } as PolicyObject;
+        policyPlugin.config!.policy = {
+          id: policyId,
+          name: policyData.name,
+          text: policyData.text,
+        } as PolicyObject;
         // Set the plugin severity if it hasn't been set already; this allows the user to override the severity
         // on a per-config basis if necessary.
         if (policyPlugin.severity == null) {

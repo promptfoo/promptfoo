@@ -13,6 +13,7 @@ import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
+import type { FetchOptions } from './types';
 
 /**
  * Options for configuring TLS in proxy connections
@@ -122,7 +123,7 @@ function getOrCreateAgent(url: string): Agent | ProxyAgent {
 
 export async function fetchWithProxy(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: FetchOptions = {},
 ): Promise<Response> {
   let finalUrl = url;
   let finalUrlString: string | undefined = undefined;
@@ -140,7 +141,7 @@ export async function fetchWithProxy(
   }
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
-  const finalOptions: RequestInit & { dispatcher?: any } = {
+  const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...options,
     headers: {
       ...(options.headers as Record<string, string>),
@@ -185,7 +186,7 @@ export async function fetchWithProxy(
 
 export function fetchWithTimeout(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: FetchOptions = {},
   timeout: number,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
@@ -258,9 +259,11 @@ export async function handleRateLimit(response: Response): Promise<void> {
 /**
  * Fetch with automatic retries and rate limit handling
  */
+export type { FetchOptions } from './types';
+
 export async function fetchWithRetries(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: FetchOptions = {},
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
