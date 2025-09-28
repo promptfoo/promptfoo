@@ -285,6 +285,10 @@ At the end, Promptfoo shows you a clear table: PASS/FAIL for each test and the o
 
 You just ran a full Promptfoo evaluation using the e2b sandbox for safe code execution.
 
+<p align="center">
+  <img src="/img/docs/e2b/e2b-code.gif" width="800" alt="e2b secure code generation demo" />
+</p>
+
 ## Step 8: Explore Results in the Web Viewer
 
 Now that you’ve run your first evaluation with the e2b sandbox, let’s explore the results visually.
@@ -302,6 +306,10 @@ Open URL in browser? (y/N):
 ```
 
 Type y, and your browser will open the Promptfoo dashboard.
+
+<p align="center">
+  <img src="/img/docs/e2b/e2b-tests.png" width="800" alt="Promptfoo E2B test results view" />
+</p>
 
 ## What you see in the Promptfoo Web Viewer:
 
