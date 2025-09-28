@@ -148,4 +148,68 @@ describe('MetadataPanel', () => {
     expect(linkElement).toBeInTheDocument();
     expect(linkElement).toHaveAttribute('href', urlWithSpecialChars);
   });
+
+  it('should render malformed URLs as plain text and call onMetadataClick when clicked', () => {
+    const mockMetadata = {
+      malformedUrlKey: 'http:/example.com',
+    };
+
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+
+    const malformedUrlText = screen.getByText('http:/example.com');
+    expect(malformedUrlText.closest('a')).toBeNull();
+
+    fireEvent.click(malformedUrlText);
+    expect(mockOnMetadataClick).toHaveBeenCalledWith('malformedUrlKey');
+  });
+
+  it('should show empty state when metadata is undefined', () => {
+    render(<MetadataPanel {...defaultProps} metadata={undefined} />);
+    expect(screen.getByText('No metadata available')).toBeInTheDocument();
+    expect(screen.getByText('Metadata will appear here when available')).toBeInTheDocument();
+  });
+
+  it('should render the empty state UI when metadata only contains filtered keys', () => {
+    const mockMetadata = {
+      citations: [{ source: 'doc1', content: 'citation content' }],
+      _promptfooFileMetadata: { internal: 'data' },
+    };
+
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+
+    expect(screen.getByText('No metadata available')).toBeInTheDocument();
+    expect(screen.getByText('Metadata will appear here when available')).toBeInTheDocument();
+  });
+
+  it('should render metadata keys in alphabetical order', () => {
+    const mockMetadata = {
+      zebra: 'value1',
+      apple: 'value2',
+      banana: 'value3',
+    };
+
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+
+    const rows = screen.getAllByRole('row');
+
+    const renderedKeys = rows.slice(1).map((row) => row.children[0].textContent);
+
+    expect(renderedKeys).toEqual(['apple', 'banana', 'zebra']);
+  });
+
+  it('should call onApplyFilter with the correct field and stringified value when the filter icon is clicked for a complex object value', () => {
+    const mockMetadata = {
+      complexObjectField: { a: 1, b: 'test' },
+    };
+
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+
+    const filterButton = screen.getByRole('button', { name: 'Filter by complexObjectField' });
+    fireEvent.click(filterButton);
+
+    expect(mockOnApplyFilter).toHaveBeenCalledWith(
+      'complexObjectField',
+      JSON.stringify(mockMetadata.complexObjectField),
+    );
+  });
 });

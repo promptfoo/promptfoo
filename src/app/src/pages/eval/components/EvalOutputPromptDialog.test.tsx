@@ -126,6 +126,31 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.getByText('testValue')).toBeInTheDocument();
   });
 
+  it('does not display the Metadata tab when metadata is an empty object', () => {
+    const propsWithEmptyMetadata = {
+      ...defaultProps,
+      metadata: {},
+    };
+    render(<EvalOutputPromptDialog {...propsWithEmptyMetadata} />);
+    expect(screen.queryByText('Metadata')).toBeNull();
+  });
+
+  it('does not display the Metadata tab when metadata only contains internal keys', () => {
+    const propsWithInternalMetadata = {
+      ...defaultProps,
+      metadata: {
+        _promptfooFileMetadata: 'internal value',
+      },
+    };
+    render(<EvalOutputPromptDialog {...propsWithInternalMetadata} />);
+    expect(screen.queryByText('Metadata')).toBeNull();
+  });
+
+  it('does not display the Metadata tab when metadata is null', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} metadata={undefined} />);
+    expect(screen.queryByText('Metadata')).toBeNull();
+  });
+
   it('calls onClose when close button is clicked', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
     await userEvent.click(screen.getByLabelText('close'));
@@ -471,6 +496,27 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
     });
 
     expect(screen.getByText(longValue)).toBeInTheDocument();
+  });
+
+  it('displays only valid keys when metadata contains internal and valid keys', async () => {
+    const metadata = {
+      testKey: 'testValue',
+      _promptfooFileMetadata: 'internalValue',
+      citations: [{ source: 'test', content: 'test content' }],
+      anotherKey: 'anotherValue',
+    };
+
+    render(<EvalOutputPromptDialog {...defaultProps} metadata={metadata} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+
+    expect(screen.getByText('testKey')).toBeInTheDocument();
+    expect(screen.getByText('anotherKey')).toBeInTheDocument();
+    expect(screen.getByText('testValue')).toBeInTheDocument();
+    expect(screen.getByText('anotherValue')).toBeInTheDocument();
+    expect(screen.queryByText('_promptfooFileMetadata')).toBeNull();
+
+    const metadataTable = screen.getByText('Metadata').closest('div');
+    expect(metadataTable?.textContent).not.toContain('citations');
   });
 
   it('should reset filters, apply the selected metadata filter, and close the dialog when the filter button is clicked in the Metadata tab', async () => {
