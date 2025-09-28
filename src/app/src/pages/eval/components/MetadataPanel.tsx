@@ -70,7 +70,6 @@ export function MetadataPanel({
       />
     );
   }
-
   return (
     <TableContainer component={Paper} variant="outlined">
       <Table size="small">
