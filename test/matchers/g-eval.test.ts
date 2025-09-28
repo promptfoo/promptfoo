@@ -15,7 +15,7 @@ describe('matchesGEval', () => {
         };
       } else {
         return {
-          output: '{"score": 8, "reason": "The response is well-structured and clear"}',
+          output: '{"score": 0.8, "reason": "The response is well-structured and clear"}',
           tokenUsage: { total: 15, prompt: 8, completion: 7 },
         };
       }
@@ -54,7 +54,7 @@ describe('matchesGEval', () => {
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       }))
       .mockImplementationOnce(() => ({
-        output: '{"score": 8, "reason": "Custom evaluation complete", "pass": true}',
+        output: '{"score": 0.8, "reason": "Custom evaluation complete", "pass": true}',
         tokenUsage: { total: 15, prompt: 8, completion: 7 },
       }));
 
@@ -100,7 +100,7 @@ describe('matchesGEval', () => {
       })
       .mockImplementationOnce(async () => {
         return {
-          output: '{"score": 3, "reason": "The response lacks coherence"}',
+          output: '{"score": 0.3, "reason": "The response lacks coherence"}',
           tokenUsage: { total: 15, prompt: 8, completion: 7 },
         };
       });

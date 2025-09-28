@@ -256,7 +256,7 @@ Evaluation Criteria:
 
 Evaluation Steps:
 - {{steps}}
-- Given the evaluation steps, return a JSON with two keys: 1) a "score" key ranging from 0 - {{maxScore}}, with {{maxScore}} being that it follows the Evaluation Criteria outlined in the Evaluation Steps and 0 being that it does not; 2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Source Text and Reply in your reason, but be very concise with it!
+- Given the evaluation steps, return a JSON with two keys: 1) a "score" key ranging from 0.0 to 1.0, where 1.0 being that it follows the Evaluation Criteria outlined in the Evaluation Steps and 0.0 being that it does not; 2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Source Text and Reply in your reason, but be very concise with it!
 
 Source Text:
 {{input}}

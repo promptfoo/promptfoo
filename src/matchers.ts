@@ -850,7 +850,6 @@ export async function matchesGEval(
     throw Error('No source text to estimate reply');
   }
 
-  const maxScore = 10;
   const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
@@ -906,7 +905,6 @@ export async function matchesGEval(
   const promptText = await renderLlmRubricPrompt(evalPrompt, {
     criteria,
     steps: steps.join('\n- '),
-    maxScore: maxScore.toString(),
     input: tryParse(input),
     output: tryParse(output),
   });
@@ -922,8 +920,8 @@ export async function matchesGEval(
   }
 
   return {
-    pass: result.score / maxScore >= threshold,
-    score: result.score / maxScore,
+    pass: result.score >= threshold,
+    score: result.score,
     reason: result.reason,
     tokensUsed,
   };
