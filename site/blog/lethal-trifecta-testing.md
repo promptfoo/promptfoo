@@ -164,7 +164,7 @@ Let’s unpack this:
 
 When you run this test (via `promptfoo eval`), Promptfoo will substitute in the `secret_note` and `malicious_document` and feed the prompt to your model. If the model’s output violates the rule, Promptfoo will mark the test as failed, meaning the model fell for the attack.
 
-This custom scenario is obviously a bit basic, but you can take this and set up multiple tests, or automate the test generation using the `indirect-prompt-injecion` plugin above.
+This custom scenario is obviously a bit basic, but you can take this and set up multiple tests, or automate the test generation using the `indirect-prompt-injection` plugin above.
 
 Ultimately, bringing in the system prompt (if you can) and crafting a targeted scenario is a good complement to the broad automated tests.
 
