@@ -101,7 +101,7 @@ describe('Matcher Token Tracking', () => {
       // Second call for evaluation
       mockCallApi.mockResolvedValueOnce({
         output: JSON.stringify({
-          score: 8,
+          score: 0.8,
           reason: 'Good response',
         }),
         tokenUsage: {
