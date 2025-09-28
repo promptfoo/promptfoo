@@ -4,6 +4,7 @@ import {
   hasDisplayableMetadata,
   CITATIONS_METADATA_KEY,
   PROMPTFOO_FILE_METADATA_KEY,
+  FILTERED_METADATA_KEYS,
 } from './metadata';
 
 describe('isFilteredMetadataKey', () => {
@@ -23,6 +24,12 @@ describe('isFilteredMetadataKey', () => {
     const result = isFilteredMetadataKey('author');
 
     expect(result).toBe(false);
+  });
+
+  it('should return true for all keys in FILTERED_METADATA_KEYS array', () => {
+    FILTERED_METADATA_KEYS.forEach((key) => {
+      expect(isFilteredMetadataKey(key)).toBe(true);
+    });
   });
 });
 

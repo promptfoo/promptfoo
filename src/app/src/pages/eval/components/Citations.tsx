@@ -13,16 +13,8 @@ import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import { alpha } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
+import { isValidUrl } from '@app/utils/urlValidation';
 import { ellipsize } from '../../../../../util/text';
-
-const isValidUrl = (str: string): boolean => {
-  try {
-    new URL(str);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 const getSourceIcon = (source: string) => {
   if (isValidUrl(source)) {

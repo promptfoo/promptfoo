@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 
 import { callApi } from '@app/utils/api';
-import { hasDisplayableMetadata } from '@app/constants/metadata';
+import { hasDisplayableMetadata, CITATIONS_METADATA_KEY } from '@app/constants/metadata';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -308,7 +308,7 @@ export default function EvalOutputPromptDialog({
   } catch {}
 
   // Get citations from metadata if they exist
-  const citationsData = metadata?.citations;
+  const citationsData = metadata?.[CITATIONS_METADATA_KEY];
 
   // Check if red team history has actual content
   const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])

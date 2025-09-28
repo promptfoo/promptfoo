@@ -17,23 +17,9 @@ import Tooltip from '@mui/material/Tooltip';
 import { makeCustomPolicyCloudUrl } from '@promptfoo/redteam/plugins/policy/utils';
 import EmptyState from '@app/components/EmptyState';
 import { hasDisplayableMetadata, isFilteredMetadataKey } from '@app/constants/metadata';
+import { isValidUrl } from '@app/utils/urlValidation';
 import { ellipsize } from '../../../../../util/text';
 import useCloudConfig from '../../../hooks/useCloudConfig';
-
-const isValidUrl = (str: string): boolean => {
-  try {
-    // Check for basic malformed patterns first
-    if (str.includes(':/') && !str.includes('://')) {
-      return false; // Malformed like 'http:/example.com'
-    }
-
-    const url = new URL(str);
-    // Must have a valid protocol and hostname
-    return url.protocol.length > 0 && url.hostname.length > 0;
-  } catch {
-    return false;
-  }
-};
 
 export interface ExpandedMetadataState {
   [key: string]: {
@@ -104,7 +90,9 @@ export function MetadataPanel({
                   cell = (
                     <TableCell style={{ whiteSpace: 'pre-wrap', cursor: 'default' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span>{expandedMetadata[key]?.expanded ? stringValue : truncatedValue}</span>
+                        <span>
+                          {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                        </span>
                         <Link
                           target="_blank"
                           rel="noopener noreferrer"

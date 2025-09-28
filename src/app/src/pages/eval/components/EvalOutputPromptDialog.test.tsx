@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CITATIONS_METADATA_KEY, PROMPTFOO_FILE_METADATA_KEY } from '@app/constants/metadata';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
 import { useTableStore } from './store';
@@ -139,7 +140,7 @@ describe('EvalOutputPromptDialog', () => {
     const propsWithInternalMetadata = {
       ...defaultProps,
       metadata: {
-        _promptfooFileMetadata: 'internal value',
+        [PROMPTFOO_FILE_METADATA_KEY]: 'internal value',
       },
     };
     render(<EvalOutputPromptDialog {...propsWithInternalMetadata} />);
@@ -501,8 +502,8 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
   it('displays only valid keys when metadata contains internal and valid keys', async () => {
     const metadata = {
       testKey: 'testValue',
-      _promptfooFileMetadata: 'internalValue',
-      citations: [{ source: 'test', content: 'test content' }],
+      [PROMPTFOO_FILE_METADATA_KEY]: 'internalValue',
+      [CITATIONS_METADATA_KEY]: [{ source: 'test', content: 'test content' }],
       anotherKey: 'anotherValue',
     };
 

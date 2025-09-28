@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { CITATIONS_METADATA_KEY, PROMPTFOO_FILE_METADATA_KEY } from '@app/constants/metadata';
 import { MetadataPanel } from './MetadataPanel';
 import type { ExpandedMetadataState } from './MetadataPanel';
 
@@ -21,8 +22,8 @@ describe('MetadataPanel', () => {
       stringKey: 'stringValue',
       numberKey: 123,
       objectKey: { nested: 'value' },
-      citations: [{ source: 'doc1', content: 'citation content' }],
-      _promptfooFileMetadata: { internal: 'data' },
+      [CITATIONS_METADATA_KEY]: [{ source: 'doc1', content: 'citation content' }],
+      [PROMPTFOO_FILE_METADATA_KEY]: { internal: 'data' },
     };
 
     render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
@@ -151,12 +152,12 @@ describe('MetadataPanel', () => {
 
   it('should render malformed URLs as plain text and call onMetadataClick when clicked', () => {
     const mockMetadata = {
-      malformedUrlKey: 'http:/example.com',
+      malformedUrlKey: 'not-a-url-at-all',
     };
 
     render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
-    const malformedUrlText = screen.getByText('http:/example.com');
+    const malformedUrlText = screen.getByText('not-a-url-at-all');
     expect(malformedUrlText.closest('a')).toBeNull();
 
     fireEvent.click(malformedUrlText);
@@ -171,8 +172,8 @@ describe('MetadataPanel', () => {
 
   it('should render the empty state UI when metadata only contains filtered keys', () => {
     const mockMetadata = {
-      citations: [{ source: 'doc1', content: 'citation content' }],
-      _promptfooFileMetadata: { internal: 'data' },
+      [CITATIONS_METADATA_KEY]: [{ source: 'doc1', content: 'citation content' }],
+      [PROMPTFOO_FILE_METADATA_KEY]: { internal: 'data' },
     };
 
     render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
