@@ -75,7 +75,7 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
 
     // First pass: create all spans
     sortedSpans.forEach((span) => {
-      const duration = span.endTime ? span.endTime - span.startTime : 0;
+      const duration = span.endTime ? Math.max(0, span.endTime - span.startTime) : 0;
       const processedSpan: ProcessedSpan = {
         ...span,
         duration,

@@ -154,8 +154,10 @@ describe('TraceTimeline', () => {
     const traceIdElement = screen.getByText(`Trace ID: ${mockTrace.traceId}`);
     expect(traceIdElement).toBeInTheDocument();
 
+    // Should show 0ms total duration (negative durations are clamped to 0)
     expect(screen.getByText('Total Duration: 0ms')).toBeInTheDocument();
 
+    // Individual span should show 0ms duration (negative durations are clamped to 0)
     expect(screen.getByText('0ms')).toBeInTheDocument();
   });
 });
