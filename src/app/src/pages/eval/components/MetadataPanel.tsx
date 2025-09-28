@@ -58,7 +58,13 @@ export function MetadataPanel({
     return null;
   }
 
-  const metadataEntries = Object.entries(metadata).filter((d) => !HIDDEN_KEYS.includes(d[0])).sort((a,b) => a[0].localeCompare(b[0]));
+  const metadataEntries = Object.entries(metadata)
+    .filter((d) => !HIDDEN_KEYS.includes(d[0]))
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  if (metadataEntries.length === 0) {
+    return null;
+  }
 
   return (
     <TableContainer component={Paper} variant="outlined">
