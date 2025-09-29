@@ -6,6 +6,7 @@ import {
   processAnthropicTools,
 } from '../../../src/providers/anthropic/util';
 import type Anthropic from '@anthropic-ai/sdk';
+
 import type {
   WebFetchToolConfig,
   WebSearchToolConfig,
@@ -56,6 +57,11 @@ describe('Anthropic utilities', () => {
     it('should calculate default cost for Claude Sonnet 4 model', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-20250514', {}, 100, 200);
       expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - using default model costs
+    });
+
+    it('should calculate default cost for Claude Sonnet 4.5 model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 100, 200);
+      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - using Sonnet 4 pricing
     });
 
     it('should return undefined for missing model', () => {
