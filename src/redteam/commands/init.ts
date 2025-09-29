@@ -16,7 +16,8 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/g
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
-import { isRunningUnderNpx, setupEnv } from '../../util';
+import { setupEnv } from '../../util/index';
+import { promptfooCommand } from '../../util/promptfooCommand';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
@@ -310,8 +311,8 @@ export async function redteamInit(directory: string | undefined) {
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
-      { name: 'openai:gpt-4.1-mini', value: 'openai:gpt-4.1-mini' },
-      { name: 'openai:gpt-4.1', value: 'openai:gpt-4.1' },
+      { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
+      { name: 'openai:gpt-5', value: 'openai:gpt-5' },
       {
         name: 'anthropic:claude-sonnet-4-20250514',
         value: 'anthropic:messages:claude-sonnet-4-20250514',
@@ -343,7 +344,7 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = [{ id: 'openai:gpt-4.1-mini', label }];
+      providers = [{ id: 'openai:gpt-5-mini', label }];
     } else {
       providers = [{ id: selectedProvider, label }];
     }
@@ -633,7 +634,7 @@ export async function redteamInit(directory: string | undefined) {
         chalk.green(dedent`
           To generate test cases and run your red team, use the command:
 
-              ${chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`)}
+              ${chalk.bold(promptfooCommand('redteam run'))}
         `),
     );
     return;
@@ -661,7 +662,7 @@ export async function redteamInit(directory: string | undefined) {
         '\n' +
           chalk.blue(
             'To generate test cases and run your red team later, use the command: ' +
-              chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`),
+              chalk.bold(promptfooCommand('redteam run')),
           ),
       );
     }
@@ -706,7 +707,7 @@ export function initCommand(program: Command) {
                 chalk.blue(
                   'Red team initialization paused. To continue setup later, use the command: ',
                 ) +
-                chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam init`),
+                chalk.bold(promptfooCommand('redteam init')),
             );
             logger.info(
               chalk.blue('For help or feedback, visit ') +

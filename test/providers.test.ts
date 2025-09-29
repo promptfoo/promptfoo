@@ -4,7 +4,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import cliState from '../src/cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
-import { loadApiProvider, loadApiProviders } from '../src/providers';
+import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { HttpProvider } from '../src/providers/http';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';

@@ -259,6 +259,52 @@ assert:
 
 The threshold is applied to the score returned by the LLM (which ranges from 0.0 to 1.0). If the LLM returns an explicit pass/fail status, the threshold will still be enforced - both conditions must be met for the assertion to pass.
 
+## Pass vs. Score Semantics
+
+- PASS is determined by the LLM's boolean `pass` field unless you set a `threshold`.
+- If the model omits `pass`, promptfoo assumes `pass: true` by default.
+- `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
+- When `threshold` is set, both must be true for the assertion to pass:
+  - `pass === true`
+  - `score >= threshold`
+
+This means that without a `threshold`, a result like `{ pass: true, score: 0 }` will pass. If you want the numeric score (e.g., 0/1 rubric) to drive PASS/FAIL, set a `threshold` accordingly or have the model return explicit `pass`.
+
+:::caution
+If the model omits `pass` and you don't set `threshold`, the assertion passes even with `score: 0`.
+:::
+
+### Common misconfiguration
+
+```yaml
+# ❌ Problem: Returns 0/1 scores but no threshold set
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    # Missing threshold - always passes due to pass defaulting to true
+```
+
+**Fixes:**
+
+```yaml
+# ✅ Option A: Add threshold
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    threshold: 1
+
+# ✅ Option B: Control pass explicitly
+assert:
+  - type: llm-rubric
+    value: |
+      Return {"pass": true, "score": 1} if the response is correct
+      Return {"pass": false, "score": 0} if the response is incorrect
+```
+
 ## Further reading
 
 See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.

@@ -1,4 +1,4 @@
-import { loadApiProvider } from '../src/providers';
+import { loadApiProvider } from '../src/providers/index';
 import {
   SageMakerCompletionProvider,
   SageMakerEmbeddingProvider,

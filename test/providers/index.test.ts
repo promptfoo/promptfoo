@@ -8,7 +8,7 @@ import dedent from 'dedent';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
-import { loadApiProvider, loadApiProviders } from '../../src/providers';
+import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';

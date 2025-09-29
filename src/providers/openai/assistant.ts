@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { sleep } from '../../util/time';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';

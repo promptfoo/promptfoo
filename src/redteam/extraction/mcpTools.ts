@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { MCPProvider } from '../../providers/mcp';
+import { MCPProvider } from '../../providers/mcp/index';
 
 import type { ApiProvider } from '../../types/index';
 

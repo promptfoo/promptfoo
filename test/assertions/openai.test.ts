@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { runAssertion } from '../../src/assertions';
+import { runAssertion } from '../../src/assertions/index';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';

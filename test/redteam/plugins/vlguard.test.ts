@@ -7,7 +7,7 @@ import {
   VALID_SUBCATEGORIES,
 } from '../../../src/redteam/plugins/vlguard';
 import * as huggingfaceDatasets from '../../../src/integrations/huggingfaceDatasets';
-import * as fetchModule from '../../../src/util/fetch';
+import * as fetchModule from '../../../src/util/fetch/index';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 

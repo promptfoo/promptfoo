@@ -1,4 +1,4 @@
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import { createCerebrasProvider } from '../../src/providers/cerebras';
 import type { z } from 'zod';
 

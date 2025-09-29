@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
-import { fetchWithTimeout } from '../util/fetch';
+import { fetchWithTimeout } from '../util/fetch/index';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';

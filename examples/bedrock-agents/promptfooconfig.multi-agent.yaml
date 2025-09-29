@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# Multi-Agent System Example with AWS Bedrock AgentCore
+# Multi-Agent System Example with AWS Bedrock Agents
 # This example demonstrates testing multiple specialized agents working together
 
 description: 'Multi-Agent Customer Support System Evaluation'
@@ -8,7 +8,7 @@ description: 'Multi-Agent Customer Support System Evaluation'
 providers:
   # Technical Support Agent - handles technical queries
   - id: tech-agent
-    provider: bedrock:agentcore:TECH_AGENT_ID
+    provider: bedrock-agent:TECH_AGENT_ID
     config:
       agentId: TECH_AGENT_ID
       agentAliasId: TECH_ALIAS_ID
@@ -18,7 +18,7 @@ providers:
 
   # Billing Agent - handles payment and subscription queries
   - id: billing-agent
-    provider: bedrock:agentcore:BILLING_AGENT_ID
+    provider: bedrock-agent:BILLING_AGENT_ID
     config:
       agentId: BILLING_AGENT_ID
       agentAliasId: BILLING_ALIAS_ID
@@ -28,7 +28,7 @@ providers:
 
   # Product Specialist Agent - handles product recommendations
   - id: product-agent
-    provider: bedrock:agentcore:PRODUCT_AGENT_ID
+    provider: bedrock-agent:PRODUCT_AGENT_ID
     config:
       agentId: PRODUCT_AGENT_ID
       agentAliasId: PRODUCT_ALIAS_ID
@@ -38,7 +38,7 @@ providers:
 
   # Supervisor Agent - routes queries and escalates issues
   - id: supervisor-agent
-    provider: bedrock:agentcore:SUPERVISOR_AGENT_ID
+    provider: bedrock-agent:SUPERVISOR_AGENT_ID
     config:
       agentId: SUPERVISOR_AGENT_ID
       agentAliasId: SUPERVISOR_ALIAS_ID

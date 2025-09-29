@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';
 
 import type { TestCase } from '../../src/types/index';

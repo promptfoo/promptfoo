@@ -1,5 +1,5 @@
 import type { Assertion } from '../../src/types/index';
-import { runAssertions } from '../../src/assertions';
+import { runAssertions } from '../../src/assertions/index';
 
 describe('max-score assertion integration', () => {
   it('should exclude max-score from regular assertion processing', async () => {

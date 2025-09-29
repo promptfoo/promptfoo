@@ -6,9 +6,9 @@ import { API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { TestSuite, UnifiedConfig } from '../../types/index';
 import { CallApiContextParams, CallApiOptionsParams } from '../../types/providers';
-import { setupEnv } from '../../util';
+import { setupEnv } from '../../util/index';
 import { resolveConfigs } from '../../util/config/load';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 
 const SimbaCommandSchema = z.object({
   config: z.union([z.string(), z.array(z.string())]).optional(),

@@ -7,7 +7,7 @@ description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, an
 
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, Alibaba's Qwen, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -47,6 +47,86 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
          max_tokens: 256
          temperature: 0.7
    ```
+
+## Application Inference Profiles
+
+AWS Bedrock supports Application Inference Profiles, which allow you to use a single ARN to access multiple foundation models across different regions. This helps optimize costs and availability while maintaining consistent performance.
+
+### Using Inference Profiles
+
+When using an inference profile ARN, you must specify the `inferenceModelType` in your configuration to indicate which model family the profile is configured for:
+
+```yaml
+providers:
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+    config:
+      inferenceModelType: 'claude' # Required for inference profiles
+      region: 'us-east-1'
+      max_tokens: 256
+      temperature: 0.7
+```
+
+### Supported Model Types
+
+The `inferenceModelType` config option supports the following values:
+
+- `claude` - For Anthropic Claude models
+- `nova` - For Amazon Nova models
+- `llama` - Defaults to Llama 4 (latest version)
+- `llama2` - For Meta Llama 2 models
+- `llama3` - For Meta Llama 3 models
+- `llama3.1` or `llama3_1` - For Meta Llama 3.1 models
+- `llama3.2` or `llama3_2` - For Meta Llama 3.2 models
+- `llama3.3` or `llama3_3` - For Meta Llama 3.3 models
+- `llama4` - For Meta Llama 4 models
+- `mistral` - For Mistral models
+- `cohere` - For Cohere models
+- `ai21` - For AI21 models
+- `titan` - For Amazon Titan models
+- `deepseek` - For DeepSeek models
+- `openai` - For OpenAI models
+- `qwen` - For Alibaba Qwen models
+
+### Example: Multi-Region Inference Profile
+
+```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  # Using an inference profile that routes to Claude models
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
+    config:
+      inferenceModelType: 'claude'
+      max_tokens: 1024
+      temperature: 0.7
+      anthropic_version: 'bedrock-2023-05-31'
+
+  # Using an inference profile for Llama models
+  - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/llama-profile
+    config:
+      inferenceModelType: 'llama3.3'
+      max_gen_len: 1024
+      temperature: 0.7
+
+  # Using an inference profile for Nova models
+  - id: bedrock:arn:aws:bedrock:eu-west-1:123456789012:application-inference-profile/nova-profile
+    config:
+      inferenceModelType: 'nova'
+      interfaceConfig:
+        max_new_tokens: 1024
+        temperature: 0.7
+```
+
+:::tip
+
+Application Inference Profiles provide several benefits:
+
+- **Automatic failover**: If one region is unavailable, requests automatically route to another region
+- **Cost optimization**: Routes to the most cost-effective available model
+- **Simplified management**: Use a single ARN instead of managing multiple model IDs
+
+When using inference profiles, ensure the `inferenceModelType` matches the model family your profile is configured for, as the configuration parameters differ between model types.
+
+:::
 
 ## Authentication
 
@@ -244,6 +324,15 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
+  # Using inference profiles (requires inferenceModelType)
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-claude-profile
+    config:
+      inferenceModelType: 'claude'
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+
+  # Using regular model IDs
   - id: bedrock:meta.llama3-1-405b-instruct-v1:0
     config:
       region: 'us-east-1'
@@ -296,6 +385,17 @@ providers:
       temperature: 0.7
       max_completion_tokens: 256
       reasoning_effort: 'low'
+  - id: bedrock:qwen.qwen3-coder-480b-a35b-v1:0
+    config:
+      region: 'us-west-2'
+      temperature: 0.7
+      max_tokens: 256
+      showThinking: true
+  - id: bedrock:qwen.qwen3-32b-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
 
 tests:
   - vars:
@@ -309,6 +409,10 @@ tests:
 ## Model-specific Configuration
 
 Different models may support different configuration options. Here are some model-specific parameters:
+
+### General Configuration Options
+
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
 
 ### Amazon Nova Models
 
@@ -558,9 +662,95 @@ OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bed
 
 :::
 
+### Qwen Models
+
+Alibaba's Qwen models (e.g., `qwen.qwen3-coder-480b-a35b-v1:0`, `qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-235b-a22b-2507-v1:0`, `qwen.qwen3-32b-v1:0`) support advanced features including hybrid thinking modes, tool calling, and extended context understanding.
+
+**Regional Availability**: Check the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/home) or use `aws bedrock list-foundation-models` to verify which Qwen models are available in your target region, as availability varies by model and region.
+
+You can configure them with the following options:
+
+```yaml
+config:
+  max_tokens: 2048 # Maximum number of tokens to generate
+  temperature: 0.7 # Controls randomness (0.0 to 1.0)
+  top_p: 0.9 # Nucleus sampling parameter
+  frequency_penalty: 0.1 # Reduces repetition of frequent tokens
+  presence_penalty: 0.1 # Reduces repetition of any tokens
+  stop: ['END', 'STOP'] # Stop sequences
+  showThinking: true # Control whether thinking content is included in output
+  tools: [...] # Tool calling configuration (optional)
+  tool_choice: 'auto' # Tool selection strategy (optional)
+```
+
+#### Hybrid Thinking Modes
+
+Qwen models support hybrid thinking modes where the model can apply step-by-step reasoning before delivering the final answer. The `showThinking` parameter controls whether thinking content is included in the response output:
+
+- When set to `true` (default), thinking content will be included in the output
+- When set to `false`, thinking content will be excluded from the output
+
+This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
+
+#### Tool Calling Support
+
+Qwen models support tool calling with OpenAI-compatible function definitions:
+
+```yaml
+config:
+  tools:
+    - type: function
+      function:
+        name: calculate
+        description: Perform arithmetic calculations
+        parameters:
+          type: object
+          properties:
+            expression:
+              type: string
+              description: The mathematical expression to evaluate
+          required: ['expression']
+  tool_choice: auto # 'auto', 'none', or specific function name
+```
+
+#### Model Variants
+
+- **Qwen3-Coder-480B-A35B**: Mixture-of-experts model optimized for coding and agentic tasks with 480B total parameters and 35B active parameters
+- **Qwen3-Coder-30B-A3B**: Smaller MoE model with 30B total parameters and 3B active parameters, optimized for coding tasks
+- **Qwen3-235B-A22B**: General-purpose MoE model with 235B total parameters and 22B active parameters for reasoning and coding
+- **Qwen3-32B**: Dense model with 32B parameters for consistent performance in resource-constrained environments
+
+#### Usage Example
+
+```yaml
+providers:
+  - id: bedrock:qwen.qwen3-coder-480b-a35b-v1:0
+    config:
+      region: us-west-2
+      max_tokens: 2048
+      temperature: 0.7
+      top_p: 0.9
+      showThinking: true
+      tools:
+        - type: function
+          function:
+            name: code_analyzer
+            description: Analyze code for potential issues
+            parameters:
+              type: object
+              properties:
+                code:
+                  type: string
+                  description: The code to analyze
+              required: ['code']
+      tool_choice: auto
+```
+
 ## Model-graded tests
 
 You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-4.1-2025-04-14` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
+
+You can use either regular model IDs or application inference profiles for grading:
 
 :::warning
 
@@ -574,10 +764,17 @@ To set this for all your test cases, add the [`defaultTest`](/docs/configuration
 defaultTest:
   options:
     provider:
-      id: provider:chat:modelname
+      # Using a regular model ID
+      id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
       config:
         temperature: 0
         # Other provider config options
+
+      # Or using an inference profile
+      # id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/grading-profile
+      # config:
+      #   inferenceModelType: 'claude'
+      #   temperature: 0
 ```
 
 You can also do this for individual assertions:
@@ -784,6 +981,27 @@ This will show detailed AWS SDK logs including credential resolution.
 
 ### Model Configuration Issues
 
+#### Inference profile requires inferenceModelType
+
+If you see this error when using an inference profile ARN:
+
+```text
+Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen
+```
+
+This means you're using an application inference profile ARN but haven't specified which model family it's configured for. Add the `inferenceModelType` to your configuration:
+
+```yaml
+providers:
+  # Incorrect - missing inferenceModelType
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+
+  # Correct - includes inferenceModelType
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+    config:
+      inferenceModelType: 'claude' # Specify the model family
+```
+
 #### ValidationException: On-demand throughput isn't supported
 
 If you see this error:
@@ -950,20 +1168,19 @@ This approach allows you to:
 
 See the [Knowledge Base contextTransform example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for complete configuration examples.
 
-## AgentCore
+## Bedrock Agents
 
-AWS Bedrock AgentCore provides a managed service for deploying and operating AI agents at scale. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock AgentCore Provider](./bedrock-agentcore.md) documentation.
+Amazon Bedrock Agents uses the reasoning of foundation models (FMs), APIs, and data to break down user requests, gathers relevant information, and efficiently completes tasks—freeing teams to focus on high-value work. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock Agents Provider](./bedrock-agents.md) documentation.
 
 Quick example:
 
 ```yaml
 providers:
-  - bedrock:agentcore:YOUR_AGENT_ID
+  - bedrock-agent:YOUR_AGENT_ID
     config:
+      agentAliasId: PROD_ALIAS
+      region: us-east-1
       enableTrace: true
-      memoryConfig:
-        type: short-term
-        enabled: true
 ```
 
 ## See Also

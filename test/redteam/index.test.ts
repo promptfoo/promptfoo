@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
 import logger from '../../src/logger';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
@@ -1330,6 +1330,26 @@ describe('getTestCount', () => {
 
   it('should return totalPluginTests for other strategies', () => {
     const strategy = { id: 'morse' };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(10);
+  });
+  it('should multiply by language count for layer strategy with multilingual step', () => {
+    const strategy = {
+      id: 'layer',
+      config: {
+        steps: ['base64', { id: 'multilingual', config: { languages: ['es', 'fr'] } }, 'rot13'],
+      },
+    };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(20); // 10 * 2 languages
+  });
+  it('should return totalPluginTests for layer strategy without multilingual', () => {
+    const strategy = {
+      id: 'layer',
+      config: {
+        steps: ['base64', 'rot13'],
+      },
+    };
     const result = getTestCount(strategy, 10, []);
     expect(result).toBe(10);
   });

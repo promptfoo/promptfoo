@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# AWS Bedrock AgentCore Provider Example Configuration
-# This example demonstrates how to use AWS Bedrock AgentCore with promptfoo
+# AWS Bedrock Agents Provider Example Configuration
+# This example demonstrates how to use AWS Bedrock Agents with promptfoo
 
-description: 'AWS Bedrock AgentCore test suite'
+description: 'AWS Bedrock Agents test suite'
 
 prompts:
   - 'What can you help me with?'
@@ -11,14 +11,14 @@ prompts:
 
 providers:
   # Basic configuration with agent ID in the path
-  - id: bedrock:agentcore:basic-agent
+  - id: bedrock-agent:basic-agent
     config:
       agentId: ABCDEFGHIJ
       agentAliasId: PROD_ALIAS_ID
       region: us-east-1
 
   # Configuration with additional options
-  - id: bedrock:agentcore:my-agent
+  - id: bedrock-agent:my-agent
     config:
       agentId: ABCDEFGHIJ
       agentAliasId: PROD_ALIAS_ID # Optional: specific alias to use

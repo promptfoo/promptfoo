@@ -1,15 +1,7 @@
 import dedent from 'dedent';
-import cliState from '../../cliState';
+
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import { maybeLoadToolsFromExternalFile } from '../../util';
-import { retryWithDeduplication, sampleArray } from '../../util/generation';
-import invariant from '../../util/invariant';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
-
 import type {
   ApiProvider,
   Assertion,
@@ -20,6 +12,13 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import invariant from '../../util/invariant';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { redteamProviderManager } from '../providers/shared';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
@@ -249,6 +248,28 @@ export abstract class RedteamPluginBase {
         );
         return [];
       }
+
+      // Handle inference refusals. Result is thrown rather than returning an empty array in order to
+      // catch and show a explanatory error message.
+      if (isBasicRefusal(generatedPrompts)) {
+        let message = `${this.provider.id()} returned a refusal during inference for ${this.constructor.name} test case generation.`;
+        // We don't know exactly why the prompt was refused, but we can provide hints to the user based on the values which were
+        // included in the context window during inference.
+        const context: Record<string, string> = {};
+        if (this.purpose) {
+          context.purpose = this.purpose;
+        }
+        if (this.config.examples) {
+          context.examples = this.config.examples.join(', ');
+        }
+
+        if (context) {
+          message += ` User-configured values were included in inference and may have been deemed harmful: ${JSON.stringify(context)}. Check these and retry.`;
+        }
+
+        throw new Error(message);
+      }
+
       return parseGeneratedPrompts(generatedPrompts);
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
@@ -394,6 +415,7 @@ export abstract class RedteamGraderBase {
     provider: ApiProvider | undefined,
     renderedValue: AssertionValue | undefined,
     additionalRubric?: string,
+    skipRefusalCheck?: boolean,
   ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
@@ -423,7 +445,7 @@ export abstract class RedteamGraderBase {
       (additionalRubric ? '\n\n' + additionalRubric : '') +
       graderExamplesString;
 
-    if (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput)) {
+    if (!skipRefusalCheck && (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))) {
       return {
         grade: { pass: true, score: 1, reason: 'Model refused the request' },
         rubric: finalRubric,
@@ -432,18 +454,7 @@ export abstract class RedteamGraderBase {
 
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
-      provider: await redteamProviderManager.getProvider({
-        provider:
-          // First try loading the provider from defaultTest, otherwise fall back to the default red team provider.
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.provider) ||
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.options?.provider?.text) ||
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.options?.provider) ||
-          undefined,
-        jsonOnly: true,
-      }),
+      provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
     });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 

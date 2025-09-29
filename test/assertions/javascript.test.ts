@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { runAssertion } from '../../src/assertions';
+import { runAssertion } from '../../src/assertions/index';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
@@ -732,6 +732,156 @@ describe('JavaScript file references', () => {
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
+    });
+  });
+
+  describe('JavaScript threshold edge cases', () => {
+    const baseParams = {
+      prompt: 'test',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '0' },
+    };
+
+    it('should FAIL when score=0 and no threshold (default behavior)', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: '0',
+      };
+
+      const result: GradingResult = await runAssertion({
+        ...baseParams,
+        assertion,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+    });
+
+    it('should PASS when score=0 and threshold=0 (explicit zero threshold)', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: '0',
+        threshold: 0,
+      };
+
+      const result: GradingResult = await runAssertion({
+        ...baseParams,
+        assertion,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0);
+    });
+
+    it('should FAIL when score=0 and threshold=0.1', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: '0',
+        threshold: 0.1,
+      };
+
+      const result: GradingResult = await runAssertion({
+        ...baseParams,
+        assertion,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+    });
+
+    it('should PASS when score=1 and threshold=0', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: '1',
+        threshold: 0,
+      };
+
+      const result: GradingResult = await runAssertion({
+        ...baseParams,
+        assertion,
+        providerResponse: { output: '1' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should PASS when score=1 and no threshold', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: '1',
+      };
+
+      const result: GradingResult = await runAssertion({
+        ...baseParams,
+        assertion,
+        providerResponse: { output: '1' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle threshold=0 differently from threshold=undefined', async () => {
+      const assertionWithoutThreshold: Assertion = {
+        type: 'javascript',
+        value: '0',
+      };
+
+      const assertionWithZeroThreshold: Assertion = {
+        type: 'javascript',
+        value: '0',
+        threshold: 0,
+      };
+
+      const resultWithoutThreshold: GradingResult = await runAssertion({
+        ...baseParams,
+        assertion: assertionWithoutThreshold,
+      });
+
+      const resultWithZeroThreshold: GradingResult = await runAssertion({
+        ...baseParams,
+        assertion: assertionWithZeroThreshold,
+      });
+
+      // These should have different outcomes
+      expect(resultWithoutThreshold.pass).toBe(false); // score > 0 check
+      expect(resultWithZeroThreshold.pass).toBe(true); // score >= 0 check
+
+      // But same score
+      expect(resultWithoutThreshold.score).toBe(0);
+      expect(resultWithZeroThreshold.score).toBe(0);
+    });
+
+    it('should handle various falsy threshold values correctly', async () => {
+      const testCases = [
+        { threshold: 0, expected: true, description: 'threshold=0' },
+        { threshold: undefined, expected: false, description: 'threshold=undefined' },
+        // Note: null, empty string, false are treated as valid thresholds and compared numerically
+        // null becomes 0 when compared: 0 >= null (which is 0) = true
+        { threshold: null, expected: true, description: 'threshold=null (becomes 0)' },
+        // Empty string becomes 0 when compared: 0 >= '' (which is 0) = true
+        { threshold: '', expected: true, description: 'threshold="" (becomes 0)' },
+        // false becomes 0 when compared: 0 >= false (which is 0) = true
+        { threshold: false, expected: true, description: 'threshold=false (becomes 0)' },
+      ];
+
+      for (const testCase of testCases) {
+        const assertion: Assertion = {
+          type: 'javascript',
+          value: '0',
+          threshold: testCase.threshold as any,
+        };
+
+        const result: GradingResult = await runAssertion({
+          ...baseParams,
+          assertion,
+        });
+
+        expect(result.pass).toBe(testCase.expected);
+        expect(result.score).toBe(0);
+      }
     });
   });
 });

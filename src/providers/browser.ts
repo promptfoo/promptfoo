@@ -1,6 +1,6 @@
 import { type BrowserContext, type ElementHandle, type Page } from 'playwright';
 import logger from '../logger';
-import { fetchWithTimeout } from '../util/fetch';
+import { fetchWithTimeout } from '../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';

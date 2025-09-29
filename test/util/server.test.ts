@@ -40,7 +40,7 @@ jest.mock('../../src/redteam/remoteGeneration', () => ({
 }));
 
 // Import the mocked fetchWithProxy for use in tests
-import * as fetchModule from '../../src/util/fetch';
+import * as fetchModule from '../../src/util/fetch/index';
 
 const mockFetchWithProxy = fetchModule.fetchWithProxy as jest.MockedFunction<
   typeof fetchModule.fetchWithProxy
@@ -61,6 +61,11 @@ describe('Server Utilities', () => {
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         `http://localhost:${getDefaultPort()}/health`,
+        {
+          headers: {
+            'x-promptfoo-silent': 'true',
+          },
+        },
       );
       expect(result).toBe(true);
     });
@@ -104,7 +109,11 @@ describe('Server Utilities', () => {
 
       await checkServerRunning(customPort);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(`http://localhost:${customPort}/health`);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(`http://localhost:${customPort}/health`, {
+        headers: {
+          'x-promptfoo-silent': 'true',
+        },
+      });
     });
   });
 
