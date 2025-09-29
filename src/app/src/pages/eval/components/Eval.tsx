@@ -142,6 +142,12 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Check for >=1 metric params in the URL.
     const metricParams = searchParams.getAll('metric');
 
+    // Check for >=1 policyId params in the URL.
+    const policyIdParams = searchParams.getAll('policy');
+
+    // Check for a `mode` param in the URL.
+    const modeParam = searchParams.get('mode');
+
     if (pluginParams.length > 0) {
       pluginParams.forEach((pluginParam) => {
         addFilter({
@@ -164,8 +170,16 @@ export default function Eval({ fetchId }: EvalOptions) {
       });
     }
 
-    // Check for a `mode` param in the URL.
-    const modeParam = searchParams.get('mode');
+    if (policyIdParams.length > 0) {
+      policyIdParams.forEach((policyId) => {
+        addFilter({
+          type: 'policy',
+          operator: 'equals',
+          value: policyId,
+          logicOperator: 'or',
+        });
+      });
+    }
 
     // If a mode param is provided, set the filter mode to the provided value.
     // Otherwise, reset the filter mode to ensure that the filter mode from the previously viewed eval

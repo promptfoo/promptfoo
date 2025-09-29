@@ -763,6 +763,10 @@ describe('useTableStore', () => {
           table: { head: { prompts: [] }, body: [] },
           totalCount: 0,
           filteredCount: 0,
+          config: {},
+          author: null,
+          version: 1,
+          id: mockEvalId,
         }),
       });
 
@@ -967,6 +971,10 @@ describe('useTableStore', () => {
             table: { head: { prompts: [] }, body: [] },
             totalCount: 0,
             filteredCount: 0,
+            config: {},
+            author: null,
+            version: 1,
+            id: mockEvalId,
           }),
         });
 
@@ -995,12 +1003,16 @@ describe('useTableStore', () => {
           resolvePromise = resolve;
         });
 
-        (callApi as Mock).mockReturnValue({
+        (callApi as Mock).mockResolvedValue({
           ok: true,
           json: async () => ({
             table: { head: { prompts: [] }, body: [] },
             totalCount: 0,
             filteredCount: 0,
+            config: {},
+            author: null,
+            version: 1,
+            id: mockEvalId,
           }),
         });
 
@@ -1026,6 +1038,10 @@ describe('useTableStore', () => {
             table: { head: { prompts: [] }, body: [] },
             totalCount: 0,
             filteredCount: 0,
+            config: {},
+            author: null,
+            version: 1,
+            id: mockEvalId,
           });
         });
 

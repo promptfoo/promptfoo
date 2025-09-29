@@ -12,9 +12,9 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { renderVarsInObject } from '../util/index';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { safeResolve } from '../util/pathUtils';
@@ -1864,6 +1864,10 @@ export class HttpProvider implements ApiProvider {
         headers: sanitizeAuthHeaders(response.headers),
       },
     };
+    if (context?.debug) {
+      ret.metadata.transformedRequest = transformedPrompt;
+      ret.metadata.finalRequestBody = renderedConfig.body;
+    }
 
     const rawText = response.data as string;
     let parsedData;
@@ -1974,6 +1978,12 @@ export class HttpProvider implements ApiProvider {
       ret.raw = response.data;
       ret.metadata = {
         headers: sanitizeAuthHeaders(response.headers),
+        // If no transform was applied, show the final raw request body with nunjucks applied
+        // Otherwise show the transformed prompt
+        transformedRequest: this.config.transformRequest
+          ? transformedPrompt
+          : parsedRequest.body?.text || renderedRequest.trim(),
+        finalRequestBody: parsedRequest.body?.text,
       };
     }
 

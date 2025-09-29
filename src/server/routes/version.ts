@@ -3,7 +3,7 @@ import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
-import { isRunningUnderNpx } from '../../util/index';
+import { isRunningUnderNpx } from '../../util/promptfooCommand';
 import logger from '../../logger';
 import type { Request, Response } from 'express';
 
