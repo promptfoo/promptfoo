@@ -1,5 +1,6 @@
 ---
 sidebar_label: How to red team LLM applications
+description: Protect your LLM applications from prompt injection, jailbreaks, and data leaks with automated red teaming tests that identify 20+ vulnerability types and security risks
 ---
 
 # How to red team LLM applications
@@ -53,7 +54,7 @@ You can also dig into specific red team failure cases:
 
 ## Prerequisites
 
-First, install [Node 18 or later](https://nodejs.org/en/download/package-manager/).
+First, install [Node 20 or later](https://nodejs.org/en/download/package-manager/).
 
 Then create a new project for your red teaming needs:
 

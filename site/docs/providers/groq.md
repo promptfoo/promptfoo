@@ -1,5 +1,6 @@
 ---
 sidebar_label: Groq
+description: Configure Groq's ultra-fast LLM inference API with Llama-70b and vision models for high-performance testing and evaluation with OpenAI-compatible endpoints
 ---
 
 # Groq

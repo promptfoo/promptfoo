@@ -1,8 +1,11 @@
+import fs from 'fs';
+
 import { Command } from 'commander';
 import { exportCommand } from '../../src/commands/export';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { writeOutput } from '../../src/util';
+import { writeOutput } from '../../src/util/index';
+import { getConfigDirectoryPath } from '../../src/util/config/manage';
 
 jest.mock('../../src/telemetry', () => ({
   record: jest.fn(),
@@ -12,7 +15,7 @@ jest.mock('../../src/util', () => ({
   writeOutput: jest.fn(),
   createOutputMetadata: jest.fn().mockReturnValue({
     promptfooVersion: '1.0.0',
-    nodeVersion: 'v18.0.0',
+    nodeVersion: 'v20.0.0',
     platform: 'linux',
     arch: 'x64',
     exportedAt: '2025-07-01T00:00:00.000Z',
@@ -26,10 +29,35 @@ jest.mock('../../src/logger', () => ({
   error: jest.fn(),
 }));
 
+jest.mock('../../src/util/config/manage', () => ({
+  getConfigDirectoryPath: jest.fn(),
+}));
+
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  readdirSync: jest.fn(),
+  statSync: jest.fn(),
+  readFileSync: jest.fn(),
+  createWriteStream: jest.fn(),
+}));
+
+jest.mock('zlib', () => ({
+  createGzip: jest.fn(),
+  gzip: jest.fn(),
+}));
+
+jest.mock('../../src/database', () => ({
+  getDbInstance: jest.fn(),
+}));
+
 describe('exportCommand', () => {
   let program: Command;
   let mockExit: jest.SpyInstance;
   let mockEval: any;
+  const mockFs = fs as jest.Mocked<typeof fs>;
+  const mockGetConfigDirectoryPath = getConfigDirectoryPath as jest.MockedFunction<
+    typeof getConfigDirectoryPath
+  >;
 
   beforeEach(() => {
     program = new Command();
@@ -55,7 +83,7 @@ describe('exportCommand', () => {
 
     exportCommand(program);
 
-    await program.parseAsync(['node', 'test', 'export', 'latest', '--output', 'test.json']);
+    await program.parseAsync(['node', 'test', 'export', 'eval', 'latest', '--output', 'test.json']);
 
     expect(Eval.latest).toHaveBeenCalledWith();
     expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null);
@@ -67,7 +95,15 @@ describe('exportCommand', () => {
 
     exportCommand(program);
 
-    await program.parseAsync(['node', 'test', 'export', 'test-id', '--output', 'test.json']);
+    await program.parseAsync([
+      'node',
+      'test',
+      'export',
+      'eval',
+      'test-id',
+      '--output',
+      'test.json',
+    ]);
 
     expect(Eval.findById).toHaveBeenCalledWith('test-id');
     expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null);
@@ -79,7 +115,7 @@ describe('exportCommand', () => {
 
     exportCommand(program);
 
-    await program.parseAsync(['node', 'test', 'export', 'test-id']);
+    await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
 
     const expectedJson = {
       evalId: 'test-id',
@@ -88,7 +124,7 @@ describe('exportCommand', () => {
       shareableUrl: null,
       metadata: {
         promptfooVersion: '1.0.0',
-        nodeVersion: 'v18.0.0',
+        nodeVersion: 'v20.0.0',
         platform: 'linux',
         arch: 'x64',
         exportedAt: '2025-07-01T00:00:00.000Z',
@@ -105,7 +141,7 @@ describe('exportCommand', () => {
 
     exportCommand(program);
 
-    await program.parseAsync(['node', 'test', 'export', 'non-existent-id']);
+    await program.parseAsync(['node', 'test', 'export', 'eval', 'non-existent-id']);
 
     expect(mockExit).toHaveBeenCalledWith(1);
   });
@@ -115,8 +151,68 @@ describe('exportCommand', () => {
 
     exportCommand(program);
 
-    await program.parseAsync(['node', 'test', 'export', 'test-id']);
+    await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
 
     expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  describe('logs export', () => {
+    const mockConfigDir = '/test/config';
+    const mockLogDir = '/test/config/logs';
+
+    beforeEach(() => {
+      mockGetConfigDirectoryPath.mockReturnValue(mockConfigDir);
+      // Reset all mocks for clean state
+      jest.clearAllMocks();
+    });
+
+    it('should handle missing log directory', async () => {
+      mockFs.existsSync.mockReturnValue(false);
+
+      exportCommand(program);
+
+      await program.parseAsync(['node', 'test', 'export', 'logs']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'No log directory found. Logs have not been created yet.',
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('should handle no log files found', async () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readdirSync.mockReturnValue([]);
+
+      exportCommand(program);
+
+      await program.parseAsync(['node', 'test', 'export', 'logs']);
+
+      expect(logger.error).toHaveBeenCalledWith('No log files found in the logs directory.');
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('should handle invalid count parameter', async () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readdirSync.mockReturnValue(['promptfoo-2025-01-01.log'] as any);
+
+      exportCommand(program);
+
+      await program.parseAsync(['node', 'test', 'export', 'logs', '--count', 'invalid']);
+
+      expect(logger.error).toHaveBeenCalledWith('Count must be a positive number');
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('should handle zero count parameter', async () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readdirSync.mockReturnValue(['promptfoo-2025-01-01.log'] as any);
+
+      exportCommand(program);
+
+      await program.parseAsync(['node', 'test', 'export', 'logs', '--count', '0']);
+
+      expect(logger.error).toHaveBeenCalledWith('Count must be a positive number');
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
   });
 });

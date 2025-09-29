@@ -1,14 +1,26 @@
+import fs from 'fs';
 import path from 'path';
 
 import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
+import { getConfigDirectoryPath } from './util/config/manage';
+import { sanitizeBody, sanitizeUrl } from './util/sanitizer';
+
+const MAX_LOG_FILES = 50;
 
 type LogCallback = (message: string) => void;
 export let globalLogCallback: LogCallback | null = null;
 
 export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
+}
+
+// Global configuration for structured logging
+let useStructuredLogging = false;
+
+export function setStructuredLogging(enabled: boolean) {
+  useStructuredLogging = enabled;
 }
 
 export const LOG_LEVELS = {
@@ -173,6 +185,83 @@ export function isDebugEnabled(): boolean {
 }
 
 /**
+ * Creates log directory and cleans up old log files
+ */
+function setupLogDirectory(): string {
+  const configDir = getConfigDirectoryPath(true);
+  const logDir = path.join(configDir, 'logs');
+
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+
+  // Clean up old log files
+  try {
+    const logFiles = fs
+      .readdirSync(logDir)
+      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
+      .map((file) => ({
+        name: file,
+        path: path.join(logDir, file),
+        mtime: fs.statSync(path.join(logDir, file)).mtime,
+      }))
+      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
+
+    // Remove old files
+    if (logFiles.length >= MAX_LOG_FILES) {
+      logFiles.slice(MAX_LOG_FILES).forEach((file) => {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (error) {
+          logger.warn(`Error removing old log file: ${file.name} ${error}`);
+        }
+      });
+    }
+  } catch (error) {
+    logger.warn(`Error cleaning up old log files: ${error}`);
+  }
+
+  return logDir;
+}
+
+/**
+ * Creates a new log file for the current CLI run
+ */
+function createRunLogFile(): string {
+  const logDir = setupLogDirectory();
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
+  const logFile = path.join(logDir, `promptfoo-${timestamp}.log`);
+  return logFile;
+}
+
+// Create a file transport for the current run
+let runLogTransport: winston.transports.FileTransportInstance | null = null;
+
+/**
+ * Initialize per-run logging
+ */
+export function initializeRunLogging(): void {
+  if (runLogTransport) {
+    return;
+  }
+
+  try {
+    const logFile = createRunLogFile();
+    runLogTransport = new winston.transports.File({
+      filename: logFile,
+      level: 'debug', // Capture all levels in the file
+      format: winston.format.combine(winston.format.simple(), fileFormatter),
+    });
+
+    winstonLogger.add(runLogTransport);
+  } catch (error) {
+    logger.warn(`Error creating run log file: ${error}`);
+
+    runLogTransport = null;
+  }
+}
+
+/**
  * Creates a logger method for the specified log level
  */
 function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
@@ -188,8 +277,8 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
   };
 }
 
-// Wrapper enforces strict single-string argument logging
-const logger: StrictLogger = Object.assign({}, winstonLogger, {
+// Internal logger implementation
+let internalLogger: StrictLogger = Object.assign({}, winstonLogger, {
   error: createLogMethod('error'),
   warn: createLogMethod('warn'),
   info: createLogMethod('info'),
@@ -202,6 +291,116 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
   remove: typeof winstonLogger.remove;
   transports: typeof winstonLogger.transports;
 };
+
+/**
+ * Replace the logger instance with a custom logger
+ * Useful for integrating with external logging systems
+ * @param customLogger - Logger instance that implements the required interface
+ * @throws Error if customLogger is missing required methods
+ */
+export function setLogger(customLogger: Pick<StrictLogger, 'debug' | 'info' | 'warn' | 'error'>) {
+  // Validate that customLogger is not null or undefined
+  if (!customLogger || typeof customLogger !== 'object') {
+    throw new Error('Custom logger must be a valid object with required logging methods.');
+  }
+
+  // Runtime validation guards
+  const requiredMethods = ['debug', 'info', 'warn', 'error'] as const;
+
+  const missingMethods = requiredMethods.filter(
+    (method) => typeof customLogger[method] !== 'function',
+  );
+
+  if (missingMethods.length > 0) {
+    throw new Error(
+      `Custom logger is missing required methods: ${missingMethods.join(', ')}. ` +
+        'Logger must implement { debug: Function; info: Function; warn: Function; error: Function }',
+    );
+  }
+
+  internalLogger = customLogger as StrictLogger;
+}
+
+// Wrapper that delegates to the current logger instance
+const logger = {
+  error: (message: string) => internalLogger.error(message),
+  warn: (message: string) => internalLogger.warn(message),
+  info: (message: string) => internalLogger.info(message),
+  debug: (message: string) => internalLogger.debug(message),
+  add: (transport: winston.transport) =>
+    internalLogger.add ? internalLogger.add(transport) : undefined,
+  remove: (transport: winston.transport) =>
+    internalLogger.remove ? internalLogger.remove(transport) : undefined,
+  get transports() {
+    return internalLogger.transports || [];
+  },
+  get level() {
+    return internalLogger.transports?.[0]?.level || 'info';
+  },
+  set level(newLevel: string) {
+    if (internalLogger.transports?.[0]) {
+      internalLogger.transports[0].level = newLevel;
+    }
+  },
+};
+
+/**
+ * Logs request/response details in a formatted way
+ * @param url - Request URL
+ * @param requestBody - Request body object
+ * @param response - Response object (optional)
+ * @param error - Whether to log as error (true) or debug (false)
+ */
+export async function logRequestResponse(options: {
+  url: string;
+  requestBody: BodyInit | null | undefined;
+  requestMethod: string;
+  response?: Response | null;
+  error?: boolean;
+}): Promise<void> {
+  const { url, requestBody, requestMethod, response, error } = options;
+
+  const logMethod = error ? logger.error : logger.debug;
+
+  let responseText = '';
+  if (response) {
+    try {
+      responseText = await response.clone().text();
+    } catch {
+      responseText = 'Unable to read response';
+    }
+  }
+
+  if (useStructuredLogging) {
+    const logObject = {
+      message: 'API request',
+      url: sanitizeUrl(url),
+      method: requestMethod,
+      requestBody: sanitizeBody(requestBody),
+      ...(response && {
+        status: response.status,
+        statusText: response.statusText,
+      }),
+      ...(responseText && { response: responseText }),
+    };
+
+    // @ts-expect-error - the native logger expects a string but we're using a structured logger
+    logMethod(logObject);
+  } else {
+    const details = [
+      `URL: ${sanitizeUrl(url)}`,
+      `Method: ${requestMethod}`,
+      `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
+      response ? `Status: ${response.status} ${response.statusText}` : '',
+      responseText ? `Response: ${responseText}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const message = `API request:\n${details}`;
+    logMethod(message);
+  }
+}
 
 // Initialize source maps if debug is enabled at startup
 if (getEnvString('LOG_LEVEL', 'info') === 'debug') {

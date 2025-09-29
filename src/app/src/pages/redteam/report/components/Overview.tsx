@@ -15,9 +15,13 @@ import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
 
+import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+
 interface OverviewProps {
   categoryStats: Record<PluginType, { pass: number; total: number }>;
   plugins: RedteamPluginObject[];
+  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
+  setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
 
 const PRIMARY_TEXT_COLORS = {
@@ -55,26 +59,52 @@ const DARK_MODE_SECONDARY_TEXT_COLORS = {
   [Severity.Low]: '#00e676',
 };
 
-const Overview: React.FC<OverviewProps> = ({ categoryStats, plugins }) => {
+const Overview = ({
+  categoryStats,
+  plugins,
+  vulnerabilitiesDataGridRef,
+  setVulnerabilitiesDataGridFilterModel,
+}: OverviewProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const severityCounts = Object.values(Severity).reduce(
     (acc, severity) => {
-      acc[severity] = Object.keys(categoryStats).reduce((count, category) => {
-        const stats = categoryStats[category as PluginType];
-        const passRate = stats.pass / stats.total;
-        if (
-          getRiskCategorySeverityMap(plugins)[category as PluginType] === severity &&
-          passRate < pluginPassRateThreshold
-        ) {
-          return count + 1;
+      acc[severity] = plugins.reduce((count, plugin) => {
+        const stats = categoryStats[plugin.id as PluginType];
+        if (!stats || stats.total <= 0) {
+          return count;
         }
-        return count;
+
+        // Get the severity from the plugin definition or, if it's undefined (most cases; no override is set),
+        // the risk category severity map.
+        const pluginSeverity =
+          plugin?.severity ?? getRiskCategorySeverityMap(plugins)[plugin.id as PluginType];
+
+        if (pluginSeverity !== severity) {
+          return count;
+        }
+
+        const passRate = stats.total > 0 ? stats.pass / stats.total : 1;
+        return passRate < pluginPassRateThreshold ? count + 1 : count;
       }, 0);
       return acc;
     },
     {} as Record<Severity, number>,
   );
+
+  const handleNavigateToVulnerabilities = ({ severity }: { severity: Severity }) => {
+    setVulnerabilitiesDataGridFilterModel({
+      items: [
+        {
+          field: 'severity',
+          operator: 'is',
+          value: severity,
+        },
+      ],
+      logicOperator: GridLogicOperator.Or,
+    });
+    vulnerabilitiesDataGridRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
     <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
@@ -82,7 +112,7 @@ const Overview: React.FC<OverviewProps> = ({ categoryStats, plugins }) => {
         <Box key={severity} flex={1}>
           <Card className={`severity-card card-${severity.toLowerCase()}`}>
             <CardContent
-              onClick={() => (window.location.hash = '#table')}
+              onClick={() => handleNavigateToVulnerabilities({ severity })}
               sx={[
                 {
                   backgroundColor: BACKGROUND_COLORS[severity],

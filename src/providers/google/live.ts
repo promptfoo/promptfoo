@@ -16,7 +16,7 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
-} from '../../types';
+} from '../../types/index';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 
@@ -108,6 +108,7 @@ export class GoogleLiveProvider implements ApiProvider {
       prompt,
       context?.vars,
       this.config.systemInstruction,
+      { useAssistantRole: this.config.useAssistantRole },
     );
     let contentIndex = 0;
 

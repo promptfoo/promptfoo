@@ -62,6 +62,16 @@ describe('matchesAnswerRelevance', () => {
         completionDetails: expect.any(Object),
         numRequests: 0,
       },
+      metadata: {
+        generatedQuestions: expect.arrayContaining([
+          expect.objectContaining({
+            question: expect.any(String),
+            similarity: expect.any(Number),
+          }),
+        ]),
+        averageSimilarity: 1,
+        threshold: 0.5,
+      },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
@@ -110,6 +120,16 @@ describe('matchesAnswerRelevance', () => {
         completionDetails: expect.any(Object),
         numRequests: 0,
       },
+      metadata: {
+        generatedQuestions: expect.arrayContaining([
+          expect.objectContaining({
+            question: expect.any(String),
+            similarity: expect.any(Number),
+          }),
+        ]),
+        averageSimilarity: 0,
+        threshold: 0.5,
+      },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
@@ -136,5 +156,57 @@ describe('matchesAnswerRelevance', () => {
     expect(result.tokensUsed?.total).toBe(50);
     expect(result.tokensUsed?.cached).toBe(0);
     expect(result.tokensUsed?.completionDetails).toBeDefined();
+  });
+
+  it('should return metadata with generated questions and similarities', async () => {
+    const input = 'What is the capital of France?';
+    const output = 'The capital of France is Paris.';
+    const threshold = 0.7;
+
+    // Mock 3 different generated questions
+    let callCount = 0;
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
+      const questions = [
+        'What is the capital city of France?',
+        'Which city is the capital of France?',
+        "What is France's capital?",
+      ];
+      return Promise.resolve({
+        output: questions[callCount++ % 3],
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    // Mock embeddings with varying similarities
+    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+      if (text === input) {
+        return Promise.resolve({
+          embedding: [1, 0, 0],
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        });
+      } else if (text.includes('capital') && text.includes('France')) {
+        // Similar questions get high similarity
+        return Promise.resolve({
+          embedding: [0.9, 0.1, 0],
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        });
+      }
+      return Promise.resolve({
+        embedding: [0.8, 0.2, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      });
+    });
+
+    const result = await matchesAnswerRelevance(input, output, threshold);
+
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.generatedQuestions).toHaveLength(3);
+    expect(result.metadata?.generatedQuestions[0]).toMatchObject({
+      question: expect.stringContaining('capital'),
+      similarity: expect.any(Number),
+    });
+    expect(result.metadata?.averageSimilarity).toBeCloseTo(0.99, 2);
+    expect(result.metadata?.threshold).toBe(0.7);
+    expect(result.pass).toBe(true);
   });
 });

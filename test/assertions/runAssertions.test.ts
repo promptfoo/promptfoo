@@ -1,10 +1,15 @@
-import { runAssertions } from '../../src/assertions';
+import { runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import { TestGrader } from '../util/utils';
 
-import type { ApiProvider, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+} from '../../src/types/index';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
@@ -23,8 +28,8 @@ jest.mock('node:module', () => {
   };
 });
 
-jest.mock('../../src/fetch', () => {
-  const actual = jest.requireActual('../../src/fetch');
+jest.mock('../../src/util/fetch', () => {
+  const actual = jest.requireActual('../../src/util/fetch');
   return {
     ...actual,
     fetchWithRetries: jest.fn(actual.fetchWithRetries),

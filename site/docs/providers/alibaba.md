@@ -1,5 +1,6 @@
 ---
 sidebar_label: Alibaba Cloud (Qwen)
+description: "Deploy Alibaba Cloud's Qwen models and AI services for enterprise applications with regional compliance and scalability"
 ---
 
 # Alibaba Cloud (Qwen)

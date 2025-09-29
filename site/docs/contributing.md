@@ -1,14 +1,14 @@
 ---
 title: Contributing to promptfoo
 sidebar_label: Contributing
-description: Learn how to contribute code, documentation, and providers to the promptfoo
+description: Contribute to promptfoo by submitting code, documentation, providers, and features following our development guidelines
 ---
 
 We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/promptfoo) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
 
 ## Project Overview
 
-promptfoo is an MIT licensed tool for testing and evaluating LLM apps.
+Promptfoo is an MIT-licensed tool for testing and evaluating LLM apps.
 
 ### How to Contribute
 
@@ -42,7 +42,7 @@ We particularly welcome contributions in the following areas:
    3.1. Setup locally
 
    ```bash
-   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 18)
+   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 20)
    nvm use
    npm install
    ```
@@ -412,11 +412,11 @@ Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. 
 
 #### Main Tables
 
-- `evals`: Stores evaluation details including results and configuration.
+- `evals`: Stores eval details including results and configuration.
 - `prompts`: Stores information about different prompts.
 - `datasets`: Stores dataset information and test configurations.
-- `evalsToPrompts`: Manages the relationship between evaluations and prompts.
-- `evalsToDatasets`: Manages the relationship between evaluations and datasets.
+- `evalsToPrompts`: Manages the relationship between evals and prompts.
+- `evalsToDatasets`: Manages the relationship between evals and datasets.
 
 You can view the contents of each of these tables by running `npx drizzle-kit studio`, which will start a web server.
 

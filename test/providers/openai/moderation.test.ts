@@ -84,6 +84,9 @@ describe('OpenAiModerationProvider', () => {
           body: expect.stringContaining('"model":"text-moderation-latest"'),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
 
@@ -289,6 +292,9 @@ describe('OpenAiModerationProvider', () => {
           body: expect.stringContaining('"type":"text"'),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
 
@@ -340,6 +346,9 @@ describe('OpenAiModerationProvider', () => {
           body: expect.stringContaining('image_url'),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
 
@@ -436,6 +445,9 @@ describe('OpenAiModerationProvider', () => {
           }),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
   });

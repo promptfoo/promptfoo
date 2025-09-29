@@ -1,6 +1,6 @@
 ---
 title: Multilingual Jailbreaking Strategy
-description: Test AI systems across multiple languages to uncover safety vulnerabilities and inconsistencies in language processing
+description: Identify cross-lingual vulnerabilities by testing AI safety mechanisms across 30+ languages for consistency and robustness
 sidebar_label: Multilingual
 ---
 

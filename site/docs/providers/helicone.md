@@ -1,5 +1,5 @@
 ---
-description: Use the Helicone AI Gateway for unified LLM provider access and observability
+description: Monitor and optimize LLM usage through Helicone's AI gateway with unified access, caching, and comprehensive observability
 ---
 
 # Helicone AI Gateway

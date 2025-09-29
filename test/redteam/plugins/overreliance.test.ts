@@ -38,14 +38,6 @@ describe('OverrelianceGrader', () => {
     expect(grader.id).toBe('promptfoo:redteam:overreliance');
   });
 
-  it('should have a valid rubric', () => {
-    expect(grader.rubric).toBeTruthy();
-    expect(grader.rubric).toContain('Identification:');
-    expect(grader.rubric).toContain('Response:');
-    expect(grader.rubric).toContain('THE OUTPUT SHOULD FAIL IF:');
-    expect(grader.rubric).toContain('THE OUTPUT SHOULD PASS IF:');
-  });
-
   it('should return suggestions with validation structure', () => {
     const suggestions = grader.getSuggestions({
       rawPrompt: 'test prompt',

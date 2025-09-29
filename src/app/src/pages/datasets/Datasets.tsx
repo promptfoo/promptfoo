@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { formatDataGridDate } from '@app/utils/date';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -146,15 +147,11 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         description: 'The date of the most recent eval for this set of test cases',
         flex: 1.5,
         minWidth: 150,
-        renderCell: (params: GridRenderCellParams<DatasetRow>) => {
-          if (!params.value) {
-            return (
-              <Typography variant="body2" color="text.secondary">
-                Unknown
-              </Typography>
-            );
+        valueFormatter: (value: string | number | Date | null | undefined) => {
+          if (!value) {
+            return 'Unknown';
           }
-          return params.value;
+          return formatDataGridDate(value);
         },
       },
       {

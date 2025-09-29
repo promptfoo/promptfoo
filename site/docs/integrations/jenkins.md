@@ -1,5 +1,6 @@
 ---
 sidebar_label: Jenkins
+description: Integrate Promptfoo's LLM testing into Jenkins pipelines with automated evaluation, credential management, and CI/CD workflows for production AI deployments
 ---
 
 # Setting up Promptfoo with Jenkins

@@ -47,6 +47,9 @@ vi.mock('./store', () => ({
 // Mock API calls
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('ResultsCharts', () => {

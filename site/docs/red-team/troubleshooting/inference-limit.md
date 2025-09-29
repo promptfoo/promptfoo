@@ -1,5 +1,6 @@
 ---
 sidebar_label: Inference Limits
+description: Red team LLM inference security by monitoring usage limits and configuring provider access to prevent unauthorized API exploitation and service abuse
 ---
 
 # Inference Limits

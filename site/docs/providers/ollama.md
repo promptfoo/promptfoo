@@ -1,5 +1,6 @@
 ---
 sidebar_label: Ollama
+description: "Run open-source LLMs locally using Ollama's streamlined interface for rapid prototyping and offline model evaluation"
 ---
 
 # Ollama
@@ -56,6 +57,21 @@ providers:
   - id: ollama:chat:llama3.3
     config:
       num_predict: 1024
+      temperature: 0.7
+      top_p: 0.9
+      think: true # Enable thinking/reasoning mode (top-level API parameter)
+```
+
+You can also pass arbitrary fields directly to the Ollama API using the `passthrough` option:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: ollama:chat:llama3.3
+    config:
+      passthrough:
+        keep_alive: '5m'
+        format: 'json'
+        # Any other Ollama API fields
 ```
 
 ## Using Ollama as a Local Grading Provider

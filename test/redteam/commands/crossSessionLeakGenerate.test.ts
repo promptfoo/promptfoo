@@ -10,7 +10,7 @@ jest.mock('../../../src/redteam', () => ({
 jest.mock('../../../src/util/config/load', () => ({
   resolveConfigs: jest.fn(),
 }));
-jest.mock('../../../src/util/config/manage', () => ({
+jest.mock('../../../src/util/config/writer', () => ({
   writePromptfooConfig: jest.fn(),
 }));
 jest.mock('../../../src/providers', () => ({

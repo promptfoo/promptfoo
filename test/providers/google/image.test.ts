@@ -1,5 +1,5 @@
-import { GoogleImageProvider } from '../../../src/providers/google/image';
 import { fetchWithCache } from '../../../src/cache';
+import { GoogleImageProvider } from '../../../src/providers/google/image';
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
@@ -7,21 +7,33 @@ jest.mock('../../../src/cache', () => ({
 
 jest.mock('../../../src/providers/google/util', () => ({
   getGoogleClient: jest.fn(),
+  loadCredentials: jest.fn(),
+  resolveProjectId: jest.fn(),
 }));
 
 describe('GoogleImageProvider', () => {
   const mockFetchWithCache = fetchWithCache as jest.Mock;
-  const mockGetGoogleClient = require('../../../src/providers/google/util')
-    .getGoogleClient as jest.Mock;
+  const utilMocks = require('../../../src/providers/google/util');
+  const mockGetGoogleClient = utilMocks.getGoogleClient as jest.Mock;
+  const mockLoadCredentials = utilMocks.loadCredentials as jest.Mock;
+  const mockResolveProjectId = utilMocks.resolveProjectId as jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.GOOGLE_API_KEY = 'test-api-key';
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+
+    // Set up default mock behaviors
+    mockLoadCredentials.mockImplementation((creds) => creds);
+    mockResolveProjectId.mockResolvedValue('test-project');
   });
 
   afterEach(() => {
     delete process.env.GOOGLE_API_KEY;
     delete process.env.GOOGLE_PROJECT_ID;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
   });
 
   it('should construct with model name', () => {
@@ -65,6 +77,8 @@ describe('GoogleImageProvider', () => {
   it('should return error when both project ID and API key are missing', async () => {
     delete process.env.GOOGLE_PROJECT_ID;
     delete process.env.GOOGLE_API_KEY;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
     const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
     const result = await provider.callApi('Test prompt');
@@ -304,6 +318,8 @@ describe('GoogleImageProvider', () => {
 
     it('should handle missing API key for Google AI Studio', async () => {
       delete process.env.GOOGLE_API_KEY;
+      delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      delete process.env.GEMINI_API_KEY;
       const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
       const result = await provider.callApi('Test prompt');

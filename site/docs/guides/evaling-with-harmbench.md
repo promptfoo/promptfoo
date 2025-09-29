@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating LLM safety with HarmBench
+description: Assess LLM vulnerabilities against 400+ adversarial attacks using HarmBench benchmarks to identify and prevent harmful outputs across 6 risk categories
 ---
 
 # Evaluating LLM safety with HarmBench
@@ -105,7 +106,7 @@ For more information, see:
 
 - [HarmBench paper](https://arxiv.org/abs/2402.04249)
 - [HarmBench GitHub repository](https://github.com/centerforaisafety/HarmBench)
-- [HarmBench Propmtfoo plugin](/docs/red-team/plugins/harmbench)
+- [HarmBench Promptfoo plugin](/docs/red-team/plugins/harmbench)
 - [Promptfoo red teaming guide](/docs/red-team/quickstart)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [CybersecEval](/blog/cyberseceval)

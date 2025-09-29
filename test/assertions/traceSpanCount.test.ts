@@ -1,6 +1,6 @@
 import { handleTraceSpanCount } from '../../src/assertions/traceSpanCount';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types';
+import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
 const mockProvider: ApiProvider = {
@@ -240,13 +240,9 @@ describe('handleTraceSpanCount', () => {
       renderedValue: { pattern: '*', min: 1 },
     };
 
-    const result = handleTraceSpanCount(params);
-    expect(result).toEqual({
-      pass: false,
-      score: 0,
-      reason: 'No trace data available for trace-span-count assertion',
-      assertion: params.assertion,
-    });
+    expect(() => handleTraceSpanCount(params)).toThrow(
+      'No trace data available for trace-span-count assertion',
+    );
   });
 
   it('should handle empty trace spans', () => {

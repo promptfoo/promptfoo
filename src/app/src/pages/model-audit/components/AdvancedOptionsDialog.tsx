@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -23,6 +23,13 @@ interface AdvancedOptionsDialogProps {
   onOptionsChange: (options: ScanOptions) => void;
 }
 
+const defaultScanOptions: ScanOptions = {
+  blacklist: [],
+  timeout: 3600,
+  maxSize: undefined,
+  strict: false,
+};
+
 export default function AdvancedOptionsDialog({
   open,
   onClose,
@@ -30,7 +37,18 @@ export default function AdvancedOptionsDialog({
   onOptionsChange,
 }: AdvancedOptionsDialogProps) {
   const [blacklistInput, setBlacklistInput] = useState('');
-  const [localOptions, setLocalOptions] = useState(scanOptions);
+  const [localOptions, setLocalOptions] = useState({
+    ...defaultScanOptions,
+    ...scanOptions,
+  });
+
+  // Update local options when scanOptions prop changes or when dialog opens
+  useEffect(() => {
+    setLocalOptions({
+      ...defaultScanOptions,
+      ...scanOptions,
+    });
+  }, [scanOptions, open]);
 
   const handleAddBlacklist = () => {
     if (blacklistInput.trim()) {
@@ -108,7 +126,7 @@ export default function AdvancedOptionsDialog({
               onChange={(e) =>
                 setLocalOptions({
                   ...localOptions,
-                  timeout: Number.parseInt(e.target.value) || 300,
+                  timeout: Number.parseInt(e.target.value) || 3600,
                 })
               }
               InputProps={{
@@ -117,47 +135,50 @@ export default function AdvancedOptionsDialog({
             />
           </Box>
 
-          {/* Max File Size */}
+          {/* Max Size */}
           <Box>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              Maximum File Size
+              Maximum Size Limit
             </Typography>
             <TextField
               fullWidth
-              type="number"
-              placeholder="Unlimited"
-              value={localOptions.maxFileSize || ''}
+              placeholder="e.g., 1GB, 500MB"
+              value={localOptions.maxSize || ''}
               onChange={(e) =>
                 setLocalOptions({
                   ...localOptions,
-                  maxFileSize: e.target.value ? Number.parseInt(e.target.value) : undefined,
+                  maxSize: e.target.value || undefined,
                 })
               }
-              InputProps={{
-                endAdornment: <InputAdornment position="end">bytes</InputAdornment>,
-              }}
             />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              Format examples: <strong>500MB</strong>, <strong>2GB</strong>, <strong>1.5TB</strong>,{' '}
+              <strong>100KB</strong>
+            </Typography>
           </Box>
 
-          {/* Verbose */}
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localOptions.verbose}
-                onChange={(e) => setLocalOptions({ ...localOptions, verbose: e.target.checked })}
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="subtitle1" fontWeight={600}>
-                  Verbose Output
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Show detailed scanning information
-                </Typography>
-              </Box>
-            }
-          />
+          {/* Boolean Options */}
+          <Stack spacing={2}>
+            {/* Strict Mode */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={localOptions.strict || false}
+                  onChange={(e) => setLocalOptions({ ...localOptions, strict: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Strict Mode
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Fail on warnings, scan all file types, strict license validation
+                  </Typography>
+                </Box>
+              }
+            />
+          </Stack>
         </Stack>
       </DialogContent>
       <DialogActions sx={{ p: 3 }}>

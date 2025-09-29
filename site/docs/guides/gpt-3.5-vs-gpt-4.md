@@ -1,5 +1,6 @@
 ---
 sidebar_label: GPT 3.5 vs GPT 4
+description: Compare GPT-3.5 vs GPT-4 performance on your custom datasets using automated benchmarks to evaluate costs, latency and reasoning capabilities for your use case
 ---
 
 # GPT 3.5 vs GPT 4: benchmark on your own data

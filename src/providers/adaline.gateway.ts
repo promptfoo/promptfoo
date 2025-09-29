@@ -10,7 +10,7 @@ import { Vertex as GatewayVertex } from '@adaline/vertex';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
-import { maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { calculateAnthropicCost } from './anthropic/util';
@@ -18,7 +18,6 @@ import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { calculateAzureCost } from './azure/util';
 import { AIStudioChatProvider } from './google/ai.studio';
-import { getGoogleClient } from './google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -50,7 +49,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { OpenAiCompletionOptions } from './openai/types';
 
@@ -211,8 +210,12 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         });
       } else if (this.providerName === 'vertex') {
         const provider = new GatewayVertex();
-        const parentClass = new VertexEmbeddingProvider(this.modelName, this.providerOptions);
-        const { client, projectId } = await getGoogleClient();
+        const parentClass = new VertexEmbeddingProvider(this.modelName, {
+          config: this.config,
+          env: this.env,
+        });
+        const client = await parentClass.getClientWithCredentials();
+        const projectId = await parentClass.getProjectId();
         const token = await client.getAccessToken();
         gatewayEmbeddingModel = provider.embeddingModel({
           modelName: this.modelName,
@@ -448,13 +451,18 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           gatewayConfig.presencePenalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0);
       } else if (this.providerName === 'vertex') {
         const provider = new GatewayVertex();
-        const parentClass = new VertexChatProvider(this.modelName, this.providerOptions);
-        const { client, projectId } = await getGoogleClient();
+        const parentClass = new VertexChatProvider(this.modelName, {
+          config: this.config as any,
+          env: this.env,
+        });
+        const client = await parentClass.getClientWithCredentials();
+        const projectId = await parentClass.getProjectId();
         const token = await client.getAccessToken();
         if (token === null) {
           throw new Error('Vertex API token is not set. Please configure the Google Cloud SDK');
         }
         gatewayChatModel = provider.chatModel({
+          authType: 'accessToken',
           modelName: this.modelName,
           accessToken: token.token as string,
           location: parentClass.getRegion(),

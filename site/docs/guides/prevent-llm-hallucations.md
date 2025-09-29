@@ -1,5 +1,6 @@
 ---
 sidebar_label: Preventing hallucinations
+description: Measure and reduce LLM hallucinations using perplexity metrics, RAG, and controlled decoding techniques to achieve 85%+ factual accuracy in AI outputs
 ---
 
 # How to Measure and Prevent LLM Hallucinations

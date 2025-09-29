@@ -1,5 +1,6 @@
 ---
 sidebar_label: Uncensored Llama2 benchmark
+description: Compare Llama2 Uncensored vs GPT-3.5 responses on sensitive topics using automated benchmarks to evaluate model safety and content filtering capabilities
 ---
 
 # How to benchmark Llama2 Uncensored vs. GPT-3.5 on your own inputs

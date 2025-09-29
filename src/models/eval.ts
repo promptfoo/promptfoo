@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
 
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
@@ -19,6 +19,7 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -32,14 +33,17 @@ import {
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
-import { convertTestResultsToTableRow } from '../util/exportToFile';
+import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
+
+import type { EvalResultsFilterMode } from '../types/index';
 
 interface FilteredCountRow {
   count: number | null;
@@ -47,6 +51,34 @@ interface FilteredCountRow {
 
 interface TestIndexRow {
   test_idx: number;
+}
+
+/**
+ * Sanitizes runtime options to ensure only JSON-serializable data is persisted.
+ * Removes non-serializable fields like AbortSignal, functions, and symbols.
+ */
+function sanitizeRuntimeOptions(
+  options?: Partial<import('../types').EvaluateOptions>,
+): Partial<import('../types').EvaluateOptions> | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  // Create a deep copy to avoid mutating the original
+  const sanitized = { ...options };
+
+  // Remove known non-serializable fields
+  delete (sanitized as any).abortSignal;
+
+  // Remove any function or symbol values
+  for (const key in sanitized) {
+    const value = (sanitized as any)[key];
+    if (typeof value === 'function' || typeof value === 'symbol') {
+      delete (sanitized as any)[key];
+    }
+  }
+
+  return sanitized;
 }
 
 export function createEvalId(createdAt: Date = new Date()) {
@@ -91,6 +123,43 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
   }
+
+  static async getMetadataKeysFromEval(
+    evalId: string,
+    comparisonEvalIds: string[] = [],
+  ): Promise<string[]> {
+    interface MetadataKeyResult {
+      key: string;
+    }
+
+    const db = getDb();
+    try {
+      // Combine primary eval ID with comparison eval IDs
+      const allEvalIds = [evalId, ...comparisonEvalIds];
+
+      // Use json_valid() to filter out malformed JSON and add LIMIT for DoS protection
+      const query = sql`
+        SELECT DISTINCT j.key FROM (
+          SELECT metadata FROM eval_results
+          WHERE eval_id IN (${sql.join(allEvalIds, sql`, `)})
+            AND metadata IS NOT NULL
+            AND metadata != '{}'
+            AND json_valid(metadata)
+          LIMIT 10000
+        ) t, json_each(t.metadata) j
+        ORDER BY j.key
+        LIMIT 1000
+      `;
+      const results: MetadataKeyResult[] = await db.all(query);
+      return results.map((r) => r.key);
+    } catch (error) {
+      // Log error but return empty array to prevent breaking the UI
+      logger.error(
+        `Error fetching metadata keys for eval ${evalId} and comparisons [${comparisonEvalIds.join(', ')}]: ${error}`,
+      );
+      return [];
+    }
+  }
 }
 
 export default class Eval {
@@ -107,6 +176,7 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
+  runtimeOptions?: Partial<import('../types').EvaluateOptions>;
 
   static async latest() {
     const db = getDb();
@@ -155,6 +225,7 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
+      runtimeOptions: (eval_ as any).runtimeOptions,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -201,6 +272,7 @@ export default class Eval {
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
+      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -220,6 +292,7 @@ export default class Eval {
           config,
           results: {},
           vars: opts?.vars || [],
+          runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
         })
         .run();
 
@@ -298,7 +371,13 @@ export default class Eval {
       }
     });
 
-    return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
+    return new Eval(config, {
+      id: evalId,
+      author: opts?.author,
+      createdAt,
+      persisted: true,
+      runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+    });
   }
 
   constructor(
@@ -312,6 +391,7 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
+      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -325,6 +405,7 @@ export default class Eval {
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
+    this.runtimeOptions = opts?.runtimeOptions;
   }
 
   version() {
@@ -354,6 +435,7 @@ export default class Eval {
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
+      runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
     };
 
     if (this.useOldResults()) {
@@ -409,14 +491,8 @@ export default class Eval {
   }
 
   async getResultsCount(): Promise<number> {
-    const db = getDb();
-    const result = db
-      .select({ count: sql<number>`count(*)` })
-      .from(evalResultsTable)
-      .where(eq(evalResultsTable.evalId, this.id))
-      .all();
-    const count = result[0]?.count ?? 0;
-    return Number(count);
+    // Use cached count for better performance
+    return getCachedResultsCount(this.id);
   }
 
   async fetchResultsByTestIdx(testIdx: number) {
@@ -429,14 +505,14 @@ export default class Eval {
   private async queryTestIndices(opts: {
     offset?: number;
     limit?: number;
-    filterMode?: string;
+    filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
     const db = getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
-    const mode = opts.filterMode ?? 'all';
+    const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
     // Build filter conditions
     const conditions = [`eval_id = '${this.id}'`];
@@ -446,23 +522,28 @@ export default class Eval {
       conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
     } else if (mode === 'passes') {
       conditions.push(`success = 1`);
+    } else if (mode === 'highlights') {
+      conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
     }
 
     // Add filters
     if (opts.filters && opts.filters.length > 0) {
       const filterConditions: string[] = [];
+      // Helper function to sanitize SQL string values
+      const sanitizeValue = (val: string) => val.replace(/'/g, "''");
+
       opts.filters.forEach((filter) => {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
         if (type === 'metric' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
           // in double quotes.
           condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
         } else if (type === 'metadata' && field) {
-          const sanitizedValue = value.replace(/'/g, "''");
-          const sanitizedField = field.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
+          const sanitizedField = sanitizeValue(field);
 
           if (operator === 'equals') {
             condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
@@ -472,18 +553,19 @@ export default class Eval {
             condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
           }
         } else if (type === 'plugin' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           // Is the value a category? e.g. `harmful` or `bias`
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
+          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
 
           // Plugin ID is stored in metadata.pluginId
           if (isCategory) {
-            condition = `json_extract(metadata, '$.pluginId') LIKE '${sanitizedValue}:%'`;
+            condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
           } else {
-            condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+            condition = `${pluginIdPath} = '${sanitizedValue}'`;
           }
         } else if (type === 'strategy' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           if (sanitizedValue === 'basic') {
             // Basic is represented by NULL in the metadata.strategyId field
             condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
@@ -491,12 +573,49 @@ export default class Eval {
             // Strategy ID is stored in metadata.strategyId
             condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
           }
+        } else if (type === 'severity' && operator === 'equals') {
+          const sanitizedValue = sanitizeValue(value);
+
+          // Severity can be explicit (metadata.severity) or implied by pluginId.
+          // When implied by pluginId, ignore cases where an explicit override disagrees.
+          const explicit = `json_extract(metadata, '$.severity') = '${sanitizedValue}'`;
+
+          // Get the severity map for all plugins
+          const severityMap = getRiskCategorySeverityMap(this.config?.redteam?.plugins);
+
+          // Find all plugin IDs that match the requested severity
+          const matchingPluginIds = Object.entries(severityMap)
+            .filter(([, severity]) => severity === sanitizedValue)
+            .map(([pluginId]) => pluginId);
+
+          // Build pluginId match conditions for this severity
+          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+          const pluginConditions: string[] = matchingPluginIds.map((pluginId) => {
+            const sanitizedPluginId = sanitizeValue(pluginId);
+            return pluginId.includes(':')
+              ? // It's a specific subcategory
+                `${pluginIdPath} = '${sanitizedPluginId}'`
+              : // It's a category, match any plugin starting with this prefix
+                `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
+          });
+
+          // Final condition: explicit OR (plugin match AND no conflicting override)
+          if (pluginConditions.length > 0) {
+            // Plugin-derived severity is only applied when there's no conflicting explicitly-defined override
+            // in the row's metadata.
+            const overrideOk = `(json_extract(metadata, '$.severity') IS NULL OR json_extract(metadata, '$.severity') = '${sanitizedValue}')`;
+            condition = `(${explicit} OR ((${pluginConditions.join(' OR ')}) AND ${overrideOk}))`;
+          } else {
+            condition = `(${explicit})`;
+          }
+        } else if (type === 'policy' && operator === 'equals') {
+          const sanitizedValue = sanitizeValue(value);
+          condition = `(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE '%${sanitizedValue}%')`;
         }
 
         if (condition) {
-          // Logic operator can only be applied if there are already conditions
+          // Apply logic operator if there are already existing filter conditions
           filterConditions.push(
-            // Logic operator can only be applied if there are already conditions
             filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
           );
         }
@@ -558,7 +677,7 @@ export default class Eval {
   async getTablePage(opts: {
     offset?: number;
     limit?: number;
-    filterMode?: string;
+    filterMode?: EvalResultsFilterMode;
     testIndices?: number[];
     searchQuery?: string;
     filters?: string[];
@@ -581,14 +700,31 @@ export default class Eval {
       testIndices = opts.testIndices;
       filteredCount = testIndices.length;
     } else {
-      // Query for test indices based on filters
-      const queryResult = await this.queryTestIndices({
-        offset: opts.offset,
-        limit: opts.limit,
-        filterMode: opts.filterMode,
-        searchQuery: opts.searchQuery,
-        filters: opts.filters,
-      });
+      // Use optimized query for simple cases, fall back to original for complex filters
+      const hasComplexFilters = opts.filters && opts.filters.length > 0;
+
+      let queryResult;
+      if (hasComplexFilters) {
+        // Fall back to original query for complex filters
+        logger.debug('Using original query for complex filters');
+        queryResult = await this.queryTestIndices({
+          offset: opts.offset,
+          limit: opts.limit,
+          filterMode: opts.filterMode,
+          searchQuery: opts.searchQuery,
+          filters: opts.filters,
+        });
+      } else {
+        // Use optimized query for better performance
+        logger.debug('Using optimized query for table page');
+        queryResult = await queryTestIndicesOptimized(this.id, {
+          offset: opts.offset,
+          limit: opts.limit,
+          filterMode: opts.filterMode,
+          searchQuery: opts.searchQuery,
+          filters: opts.filters,
+        });
+      }
 
       testIndices = queryResult.testIndices;
       filteredCount = queryResult.filteredCount;
@@ -763,10 +899,30 @@ export default class Eval {
  * Queries summaries of all evals, optionally for a given dataset.
  *
  * @param datasetId - An optional dataset ID to filter by.
+ * @param type - An optional eval type to filter by.
+ * @param includeProviders - An optional flag to include providers in the summary.
  * @returns A list of eval summaries.
  */
-export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
+export async function getEvalSummaries(
+  datasetId?: string,
+  type?: 'redteam' | 'eval',
+  includeProviders: boolean = false,
+): Promise<EvalSummary[]> {
   const db = getDb();
+
+  const whereClauses = [];
+
+  if (datasetId) {
+    whereClauses.push(eq(evalsToDatasetsTable.datasetId, datasetId));
+  }
+
+  if (type) {
+    if (type === 'redteam') {
+      whereClauses.push(sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`);
+    } else {
+      whereClauses.push(sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NULL`);
+    }
+  }
 
   const results = db
     .select({
@@ -776,10 +932,11 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
       prompts: evalsTable.prompts,
+      config: evalsTable.config,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
+    .where(and(...whereClauses))
     .orderBy(desc(evalsTable.createdAt))
     .all();
 
@@ -810,6 +967,49 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
     // Test count * prompt count
     const testRunCount = testCount * (result.prompts?.length ?? 0);
 
+    // Construct an array of providers
+    const deserializedProviders = [];
+    const providers = result.config.providers;
+
+    if (includeProviders) {
+      if (typeof providers === 'string') {
+        // `providers: string`
+        deserializedProviders.push({
+          id: providers,
+          label: null,
+        });
+      } else if (Array.isArray(providers)) {
+        providers.forEach((p) => {
+          if (typeof p === 'string') {
+            // `providers: string[]`
+            deserializedProviders.push({
+              id: p,
+              label: null,
+            });
+          } else if (typeof p === 'object' && p) {
+            // Check if it's a declarative provider (record format)
+            // e.g., { 'openai:gpt-4': { config: {...} } }
+            const keys = Object.keys(p);
+            if (keys.length === 1 && !('id' in p)) {
+              // This is a declarative provider
+              const providerId = keys[0];
+              const providerConfig = (p as any)[providerId];
+              deserializedProviders.push({
+                id: providerId,
+                label: providerConfig.label ?? null,
+              });
+            } else {
+              // `providers: ProviderOptions[]` with explicit id
+              deserializedProviders.push({
+                id: (p as any).id ?? 'unknown',
+                label: (p as any).label ?? null,
+              });
+            }
+          }
+        });
+      }
+    }
+
     return {
       evalId: result.evalId,
       createdAt: result.createdAt,
@@ -817,8 +1017,9 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       numTests: testCount,
       datasetId: result.datasetId,
       isRedteam: result.isRedteam,
-      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0, // ASR
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+      providers: deserializedProviders,
     };
   });
 }

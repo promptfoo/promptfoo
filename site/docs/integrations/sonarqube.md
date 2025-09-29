@@ -1,6 +1,6 @@
 ---
 title: Integrate Promptfoo with SonarQube
-description: Import Promptfoo eval security findings into SonarQube and gate your CI pipelines.
+description: Integrate Promptfoo security findings into SonarQube for centralized vulnerability tracking and CI/CD quality gates
 sidebar_label: SonarQube
 ---
 

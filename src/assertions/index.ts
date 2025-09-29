@@ -5,6 +5,8 @@ import async from 'async';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
+import { handleConversationRelevance } from '../external/assertions/deepeval';
+import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import {
   matchesAnswerRelevance,
@@ -27,7 +29,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type GradingResult,
-} from '../types';
+} from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -55,6 +57,7 @@ import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
+import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
@@ -86,7 +89,7 @@ import type {
   BaseAssertionTypes,
   ProviderResponse,
   ScoringFunction,
-} from '../types';
+} from '../types/index';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -136,6 +139,7 @@ export async function runAssertion({
     output = await transform(assertion.transform, output, {
       vars: test.vars,
       prompt: { label: prompt },
+      ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
     });
   }
 
@@ -261,22 +265,25 @@ export async function runAssertion({
     contains: handleContains,
     'contains-all': handleContainsAll,
     'contains-any': handleContainsAny,
+    'contains-html': handleContainsHtml,
     'contains-json': handleContainsJson,
     'contains-sql': handleContainsSql,
     'contains-xml': handleIsXml,
     'context-faithfulness': handleContextFaithfulness,
     'context-recall': handleContextRecall,
     'context-relevance': handleContextRelevance,
+    'conversation-relevance': handleConversationRelevance,
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
     'finish-reason': handleFinishReason,
+    'g-eval': handleGEval,
     gleu: handleGleuScore,
     guardrails: handleGuardrails,
-    'g-eval': handleGEval,
     icontains: handleIContains,
     'icontains-all': handleIContainsAll,
     'icontains-any': handleIContainsAny,
+    'is-html': handleIsHtml,
     'is-json': handleIsJson,
     'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
@@ -310,6 +317,7 @@ export async function runAssertion({
     moderation: handleModeration,
     perplexity: handlePerplexity,
     'perplexity-score': handlePerplexityScore,
+    pi: handlePiScorer,
     python: handlePython,
     regex: handleRegex,
     'rouge-n': handleRougeScore,
@@ -319,7 +327,6 @@ export async function runAssertion({
     'trace-span-count': handleTraceSpanCount,
     'trace-span-duration': handleTraceSpanDuration,
     webhook: handleWebhook,
-    pi: handlePiScorer,
   };
 
   // Check for redteam assertions first
@@ -493,4 +500,5 @@ export default {
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
   matchesModeration,
+  matchesConversationRelevance,
 };

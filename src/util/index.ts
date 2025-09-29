@@ -6,7 +6,7 @@ import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import * as os from 'os';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
@@ -25,17 +25,18 @@ import {
   OutputFileExtension,
   ResultFailureReason,
   type TestCase,
-} from '../types';
+} from '../types/index';
 import invariant from '../util/invariant';
-import { convertTestResultsToTableRow } from './exportToFile';
+import { convertTestResultsToTableRow } from './exportToFile/index';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
-import type { Vars } from '../types';
+import type { Vars } from '../types/index';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -82,6 +83,50 @@ export function createOutputMetadata(evalRecord: Eval) {
     evaluationCreatedAt,
     author: evalRecord.author,
   };
+}
+
+/**
+ * JSON writer with improved error handling for large datasets.
+ * Provides helpful error messages when memory limits are exceeded.
+ */
+async function writeJsonOutputSafely(
+  outputPath: string,
+  evalRecord: Eval,
+  shareableUrl: string | null,
+): Promise<void> {
+  const metadata = createOutputMetadata(evalRecord);
+
+  try {
+    const summary = await evalRecord.toEvaluateSummary();
+    const outputData: OutputFile = {
+      evalId: evalRecord.id,
+      results: summary,
+      config: evalRecord.config,
+      shareableUrl,
+      metadata,
+    };
+
+    // Use standard JSON.stringify with proper formatting
+    const jsonString = JSON.stringify(outputData, null, 2);
+    fs.writeFileSync(outputPath, jsonString);
+  } catch (error) {
+    const msg = (error as Error)?.message ?? '';
+    const isStringLen = error instanceof RangeError && msg.includes('Invalid string length');
+    const isHeapOOM = /heap out of memory|Array buffer allocation failed|ERR_STRING_TOO_LONG/i.test(
+      msg,
+    );
+    if (isStringLen || isHeapOOM) {
+      // The dataset is too large to load into memory at once
+      const resultCount = await evalRecord.getResultsCount();
+      logger.error(`Dataset too large for JSON export (${resultCount} results).`);
+      throw new Error(
+        `Dataset too large for JSON export. The evaluation has ${resultCount} results which exceeds memory limits. ` +
+          'Consider using JSONL format instead: --output output.jsonl',
+      );
+    } else {
+      throw error;
+    }
+  }
 }
 
 export async function writeOutput(
@@ -151,21 +196,7 @@ export async function writeOutput(
       fs.appendFileSync(outputPath, batchCsv);
     }
   } else if (outputExtension === 'json') {
-    const summary = await evalRecord.toEvaluateSummary();
-    fs.writeFileSync(
-      outputPath,
-      JSON.stringify(
-        {
-          evalId: evalRecord.id,
-          results: summary,
-          config: evalRecord.config,
-          shareableUrl,
-          metadata,
-        } satisfies OutputFile,
-        null,
-        2,
-      ),
-    );
+    await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
     fs.writeFileSync(
@@ -198,11 +229,37 @@ export async function writeOutput(
     fs.writeFileSync(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
+      const text = batchResults.map((result) => JSON.stringify(result)).join(os.EOL) + os.EOL;
       fs.appendFileSync(outputPath, text);
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
+
+    // Sanitize data for XML builder to prevent textValue.replace errors
+    const sanitizeForXml = (obj: any): any => {
+      if (obj === null || obj === undefined) {
+        return '';
+      }
+      if (typeof obj === 'boolean' || typeof obj === 'number') {
+        return String(obj);
+      }
+      if (typeof obj === 'string') {
+        return obj;
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(sanitizeForXml);
+      }
+      if (typeof obj === 'object') {
+        const sanitized: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+          sanitized[key] = sanitizeForXml(value);
+        }
+        return sanitized;
+      }
+      // For any other type, convert to string
+      return String(obj);
+    };
+
     const xmlBuilder = new XMLBuilder({
       ignoreAttributes: false,
       format: true,
@@ -211,9 +268,9 @@ export async function writeOutput(
     const xmlData = xmlBuilder.build({
       promptfoo: {
         evalId: evalRecord.id,
-        results: summary,
-        config: evalRecord.config,
-        shareableUrl: shareableUrl || undefined,
+        results: sanitizeForXml(summary),
+        config: sanitizeForXml(evalRecord.config),
+        shareableUrl: shareableUrl || '',
       },
     });
     fs.writeFileSync(outputPath, xmlData);
@@ -267,9 +324,9 @@ export function printBorder() {
 export function setupEnv(envPath: string | undefined) {
   if (envPath) {
     logger.info(`Loading environment variables from ${envPath}`);
-    dotenv.config({ path: envPath, override: true });
+    dotenv.config({ path: envPath, override: true, quiet: true });
   } else {
-    dotenv.config();
+    dotenv.config({ quiet: true });
   }
 }
 
@@ -425,11 +482,12 @@ export function parsePathOrGlob(
     }
   }
 
-  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
-  const safeFilename = path.relative(
-    basePath,
-    path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
-  );
+  // Check for glob patterns in the original path or the resolved path
+  // On Windows, normalize separators for cross-platform glob pattern detection
+  const normalizedFilePath = filePath.replace(/\\/g, '/');
+  const isPathPattern =
+    stats?.isDirectory() || hasMagic(promptPath) || hasMagic(normalizedFilePath);
+  const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
   return {
     extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
     filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),
