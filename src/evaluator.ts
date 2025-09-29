@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import * as path from 'path';
 
 import async from 'async';
 import chalk from 'chalk';
