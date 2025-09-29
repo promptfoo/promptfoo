@@ -6,6 +6,7 @@ import dedent from 'dedent';
 
 // Mock console.warn to prevent test noise
 const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -1966,9 +1967,9 @@ describe('HttpProvider', () => {
         expect.objectContaining({
           output: { chat_history: 'success' },
           raw: JSON.stringify({ result: 'success' }),
-          metadata: {
+          metadata: expect.objectContaining({
             http: { status: 200, statusText: 'OK', headers: {} },
-          },
+          }),
         }),
       );
     });
@@ -1997,9 +1998,9 @@ describe('HttpProvider', () => {
         expect.objectContaining({
           output: { chat_history: 'from transformResponse' },
           raw: JSON.stringify({ result: 'success' }),
-          metadata: {
+          metadata: expect.objectContaining({
             http: { status: 200, statusText: 'OK', headers: {} },
-          },
+          }),
         }),
       );
     });
@@ -2027,9 +2028,9 @@ describe('HttpProvider', () => {
         expect.objectContaining({
           output: 'success',
           raw: JSON.stringify({ result: 'success' }),
-          metadata: {
+          metadata: expect.objectContaining({
             http: { status: 200, statusText: 'OK', headers: {} },
-          },
+          }),
         }),
       );
     });
@@ -2579,6 +2580,8 @@ describe('response handling', () => {
         status: 200,
         statusText: 'OK',
       },
+      finalRequestBody: undefined,
+      transformedRequest: 'test',
     });
     expect(result.raw).toEqual(mockData);
   });

@@ -1,4 +1,9 @@
 import dedent from 'dedent';
+import invariant from '../../../util/invariant';
+import { type PolicyObject } from '../../types';
+import { RedteamGraderBase, RedteamPluginBase } from '../base';
+import { POLICY_METRIC_PREFIX } from './constants';
+import { isValidPolicyObject, makeInlinePolicyId } from './utils';
 
 import type {
   ApiProvider,
@@ -7,21 +12,9 @@ import type {
   GradingResult,
   PluginConfig,
   TestCase,
-} from '../../types/index';
-import invariant from '../../util/invariant';
-import { type Policy, type PolicyObject, PolicyObjectSchema } from '../types';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+} from '../../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
-
-/**
- * Checks whether a given Policy is a valid PolicyObject.
- * @param policy - The policy to check.
- * @returns True if the policy is a valid PolicyObject, false otherwise.
- */
-export function isValidPolicyObject(policy: Policy): policy is PolicyObject {
-  return PolicyObjectSchema.safeParse(policy).success;
-}
 
 export class PolicyPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
@@ -32,7 +25,11 @@ export class PolicyPlugin extends RedteamPluginBase {
   /**
    * The ID of the policy; available if the policy is loaded from Promptfoo Cloud.
    */
-  private policyId?: PolicyObject['id'];
+  public policyId: PolicyObject['id'];
+  /**
+   * The name of the policy; available if the policy is loaded from Promptfoo Cloud.
+   */
+  private name?: PolicyObject['name'];
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
     super(provider, purpose, injectVar, config);
@@ -49,8 +46,10 @@ export class PolicyPlugin extends RedteamPluginBase {
 
       this.policy = config.policy.text;
       this.policyId = config.policy.id;
+      this.name = config.policy.name;
     } else if (typeof config.policy === 'string') {
       this.policy = config.policy; // The policy declaration is itself the policy text
+      this.policyId = makeInlinePolicyId(this.policy); // Generate a unique ID for the inline policy
     }
     // Edge case: this state should not be reached b/c `createPluginFactory` validates the config
     // prior to instantiating the plugin. This state is reached within Promptfoo Cloud, so display an
@@ -101,11 +100,16 @@ export class PolicyPlugin extends RedteamPluginBase {
     return template;
   }
 
+  /**
+   * Constructs an assertion for the custom policy.
+   * @param prompt
+   * @returns
+   */
   protected getAssertions(prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,
-        metric: 'PolicyViolation',
+        metric: `${POLICY_METRIC_PREFIX}:${this.policyId}`,
       },
     ];
   }
@@ -118,6 +122,7 @@ export class PolicyPlugin extends RedteamPluginBase {
         ...test.metadata,
         policy: this.policy,
         ...(this.policyId && { policyId: this.policyId }),
+        ...(this.name && { policyName: this.name }),
       },
     }));
   }
