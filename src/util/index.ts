@@ -485,7 +485,8 @@ export function parsePathOrGlob(
   // Check for glob patterns in the original path or the resolved path
   // On Windows, normalize separators for cross-platform glob pattern detection
   const normalizedFilePath = filePath.replace(/\\/g, '/');
-  const isPathPattern = stats?.isDirectory() || hasMagic(promptPath) || hasMagic(normalizedFilePath);
+  const isPathPattern =
+    stats?.isDirectory() || hasMagic(promptPath) || hasMagic(normalizedFilePath);
   const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
   return {
     extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
