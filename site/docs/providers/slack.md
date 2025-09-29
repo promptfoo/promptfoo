@@ -590,6 +590,6 @@ tests:
 
 ## See Also
 
-- [Manual Input Provider](/docs/providers/manual) - For terminal-based human input
+- [Manual Input Provider](/docs/providers/manual-input) - For terminal-based human input
 - [Webhook Provider](/docs/providers/webhook) - For programmatic integrations
-- [Provider Configuration](/docs/configuration/providers) - General provider setup
+- [Configuration Guide](/docs/configuration/guide) - General provider setup
