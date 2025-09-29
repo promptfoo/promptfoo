@@ -109,10 +109,16 @@ Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel 
 1. Install the `xlsx` package as a peer dependency:
 
    ```bash
+   # Install latest version from npm
    npm install xlsx
-   # or
+
+   # OR install specific version from SheetJS CDN (for version control)
    npm install https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
    ```
+
+   **Why two options?**
+   - **npm install xlsx**: Gets the latest stable version from npm registry (recommended for most users)
+   - **CDN URL**: Installs a specific version for consistent behavior across environments
 
 2. Use Excel files just like CSV files:
    ```yaml title="promptfooconfig.yaml"
@@ -134,11 +140,20 @@ tests: file://test_cases.xlsx#2
 
 ### XLSX Example
 
-```text title="test_cases.xlsx"
-question | expectedAnswer
-What is 2+2? | 4
-What is the capital of France? | Paris
-```
+Your Excel file should have column headers in the first row, with each subsequent row representing a test case:
+
+| question                       | expectedAnswer |
+| ------------------------------ | -------------- |
+| What is 2+2?                   | 4              |
+| What is the capital of France? | Paris          |
+| Name a primary color           | blue           |
+
+**Tips for Excel files:**
+
+- First row must contain column headers
+- Column names become variable names in your prompts
+- Empty cells are treated as empty strings
+- Use `__expected` columns for assertions (same as CSV)
 
 ### CSV with Assertions
 

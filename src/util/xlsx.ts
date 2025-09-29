@@ -26,23 +26,23 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     if (sheetSpecifier) {
       // Check if it's a numeric index (1-based)
       const sheetIndex = parseInt(sheetSpecifier, 10);
-      if (!isNaN(sheetIndex)) {
+      if (isNaN(sheetIndex)) {
+        // It's a sheet name
+        if (!workbook.SheetNames.includes(sheetSpecifier)) {
+          throw new Error(
+            `Sheet "${sheetSpecifier}" not found. Available sheets: ${workbook.SheetNames.join(', ')}`,
+          );
+        }
+        sheetName = sheetSpecifier;
+      } else {
         // Convert to 0-based index
         const zeroBasedIndex = sheetIndex - 1;
         if (zeroBasedIndex < 0 || zeroBasedIndex >= workbook.SheetNames.length) {
           throw new Error(
-            `Sheet index ${sheetIndex} is out of range. Available sheets: ${workbook.SheetNames.length} (1-${workbook.SheetNames.length})`
+            `Sheet index ${sheetIndex} is out of range. Available sheets: ${workbook.SheetNames.length} (1-${workbook.SheetNames.length})`,
           );
         }
         sheetName = workbook.SheetNames[zeroBasedIndex];
-      } else {
-        // It's a sheet name
-        if (!workbook.SheetNames.includes(sheetSpecifier)) {
-          throw new Error(
-            `Sheet "${sheetSpecifier}" not found. Available sheets: ${workbook.SheetNames.join(', ')}`
-          );
-        }
-        sheetName = sheetSpecifier;
       }
     } else {
       // Use the first sheet by default
@@ -50,7 +50,34 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     }
 
     const sheet = workbook.Sheets[sheetName];
-    return xlsx.utils.sheet_to_json<CsvRow>(sheet, { defval: '' });
+
+    // Convert sheet to JSON and validate the result
+    const data = xlsx.utils.sheet_to_json<CsvRow>(sheet, { defval: '' });
+
+    // Check if the sheet is empty
+    if (data.length === 0) {
+      throw new Error(`Sheet "${sheetName}" is empty or contains no valid data rows`);
+    }
+
+    // Check if the first row has any headers
+    const firstRow = data[0];
+    const headers = Object.keys(firstRow);
+    if (headers.length === 0) {
+      throw new Error(`Sheet "${sheetName}" has no valid column headers`);
+    }
+
+    // Check for completely empty columns (all values are empty strings)
+    const hasValidData = data.some((row) =>
+      headers.some((header) => row[header] && row[header].toString().trim() !== ''),
+    );
+
+    if (!hasValidData) {
+      throw new Error(
+        `Sheet "${sheetName}" contains only empty data. Please ensure the sheet has both headers and data rows.`,
+      );
+    }
+
+    return data;
   } catch (error) {
     if (error instanceof Error && error.message.includes("Cannot find module 'xlsx'")) {
       throw new Error(

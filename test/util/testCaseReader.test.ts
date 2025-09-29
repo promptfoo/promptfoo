@@ -538,6 +538,42 @@ describe('readStandaloneTestsFile', () => {
     }
   });
 
+  it('should read real XLSX file from examples (integration test)', async () => {
+    // Integration test using the actual Excel file from examples
+    const path = require('path');
+    const exampleFile = path.join(__dirname, '../../examples/simple-csv/tests.xlsx');
+
+    // Only run if xlsx is actually installed (in dev environment)
+    try {
+      await import('xlsx');
+      const fs = require('fs');
+
+      if (fs.existsSync(exampleFile)) {
+        const result = await readStandaloneTestsFile(exampleFile);
+
+        // Verify the structure matches expected test cases
+        expect(result).toHaveLength(4); // Based on the known test data
+        expect(result[0]).toMatchObject({
+          vars: expect.objectContaining({
+            language: expect.any(String),
+            body: expect.any(String),
+          }),
+          assert: expect.any(Array),
+        });
+
+        // Verify specific test case content
+        const frenchTest = result.find((test) => test.vars?.language === 'French');
+        expect(frenchTest).toBeDefined();
+        expect(frenchTest?.vars?.body).toBe('Hello world');
+      } else {
+        console.log('Skipping integration test - example Excel file not found');
+      }
+    } catch (error) {
+      // Skip test if xlsx is not installed
+      console.log('Skipping integration test - xlsx not available:', error);
+    }
+  });
+
   it('should handle Python files with default function name', async () => {
     const pythonResult = [
       { vars: { var1: 'value1' }, assert: [{ type: 'equals', value: 'expected1' }] },

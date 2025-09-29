@@ -118,9 +118,9 @@
     "playwright": "^1.55.0",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "sharp": "^0.34.4",
-    "xlsx": "^0.18.5"
+    "sharp": "^0.34.4"
   },
+  "_comment_xlsx": "xlsx is an optional peer dependency for Excel file support. Users must install it manually: npm install xlsx. It's also in devDependencies for build/test purposes only.",
   "peerDependenciesMeta": {
     "xlsx": {
       "optional": true

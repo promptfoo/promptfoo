@@ -80,12 +80,14 @@ describe('parseXlsxFile', () => {
 
     xlsx.utils.sheet_to_json.mockReturnValue([]);
 
-    const result = await parseXlsxFile('test.xlsx');
-
-    expect(result).toEqual([]);
+    await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
+      'Failed to parse Excel file test.xlsx: Sheet "Sheet1" is empty or contains no valid data rows',
+    );
   });
 
   it('should use first sheet by default', async () => {
+    const mockData = [{ col1: 'value1', col2: 'value2' }];
+
     xlsx.readFile.mockReturnValue({
       SheetNames: ['Sheet1', 'Sheet2'],
       Sheets: {
@@ -94,10 +96,11 @@ describe('parseXlsxFile', () => {
       },
     });
 
-    xlsx.utils.sheet_to_json.mockReturnValue([]);
+    xlsx.utils.sheet_to_json.mockReturnValue(mockData);
 
-    await parseXlsxFile('test.xlsx');
+    const result = await parseXlsxFile('test.xlsx');
 
+    expect(result).toEqual(mockData);
     expect(xlsx.utils.sheet_to_json).toHaveBeenCalledWith({}, { defval: '' });
   });
 
@@ -201,6 +204,76 @@ describe('parseXlsxFile', () => {
       await expect(parseXlsxFile('test.xlsx#0')).rejects.toThrow(
         'Failed to parse Excel file test.xlsx#0: Sheet index 0 is out of range. Available sheets: 2 (1-2)',
       );
+    });
+  });
+
+  describe('data validation', () => {
+    it('should throw error for empty sheet', async () => {
+      xlsx.readFile.mockReturnValue({
+        SheetNames: ['EmptySheet'],
+        Sheets: {
+          EmptySheet: {},
+        },
+      });
+
+      xlsx.utils.sheet_to_json.mockReturnValue([]);
+
+      await expect(parseXlsxFile('test.xlsx#EmptySheet')).rejects.toThrow(
+        'Failed to parse Excel file test.xlsx#EmptySheet: Sheet "EmptySheet" is empty or contains no valid data rows',
+      );
+    });
+
+    it('should throw error for sheet with no headers', async () => {
+      xlsx.readFile.mockReturnValue({
+        SheetNames: ['NoHeaders'],
+        Sheets: {
+          NoHeaders: {},
+        },
+      });
+
+      xlsx.utils.sheet_to_json.mockReturnValue([{}]);
+
+      await expect(parseXlsxFile('test.xlsx#NoHeaders')).rejects.toThrow(
+        'Failed to parse Excel file test.xlsx#NoHeaders: Sheet "NoHeaders" has no valid column headers',
+      );
+    });
+
+    it('should throw error for sheet with only empty data', async () => {
+      xlsx.readFile.mockReturnValue({
+        SheetNames: ['EmptyData'],
+        Sheets: {
+          EmptyData: {},
+        },
+      });
+
+      xlsx.utils.sheet_to_json.mockReturnValue([
+        { col1: '', col2: '' },
+        { col1: '   ', col2: '' },
+        { col1: '', col2: '  ' },
+      ]);
+
+      await expect(parseXlsxFile('test.xlsx#EmptyData')).rejects.toThrow(
+        'Failed to parse Excel file test.xlsx#EmptyData: Sheet "EmptyData" contains only empty data. Please ensure the sheet has both headers and data rows.',
+      );
+    });
+
+    it('should accept sheet with some valid data', async () => {
+      const mockData = [
+        { col1: '', col2: 'valid data' },
+        { col1: '   ', col2: '' },
+      ];
+
+      xlsx.readFile.mockReturnValue({
+        SheetNames: ['ValidData'],
+        Sheets: {
+          ValidData: {},
+        },
+      });
+
+      xlsx.utils.sheet_to_json.mockReturnValue(mockData);
+
+      const result = await parseXlsxFile('test.xlsx#ValidData');
+      expect(result).toEqual(mockData);
     });
   });
 });
