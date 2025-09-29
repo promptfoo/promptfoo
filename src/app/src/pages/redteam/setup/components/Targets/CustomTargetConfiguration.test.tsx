@@ -180,5 +180,56 @@ describe('CustomTargetConfiguration', () => {
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', 'http://example.com/api');
     });
+
+    it('should add file:// prefix to Python paths with custom function names', () => {
+      const mockUpdateCustomTarget = vi.fn();
+      const mockSetRawConfigJson = vi.fn();
+      const selectedTarget: ProviderOptions = {
+        id: '',
+        config: {},
+      };
+
+      renderWithTheme(
+        <CustomTargetConfiguration
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+          rawConfigJson="{}"
+          setRawConfigJson={mockSetRawConfigJson}
+          bodyError={null}
+        />,
+      );
+
+      const input = screen.getByLabelText(/Target ID/i);
+      fireEvent.change(input, { target: { value: '/path/to/script.py:custom_func' } });
+
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+        'id',
+        'file:///path/to/script.py:custom_func',
+      );
+    });
+
+    it('should add file:// prefix to JavaScript paths with custom function names', () => {
+      const mockUpdateCustomTarget = vi.fn();
+      const mockSetRawConfigJson = vi.fn();
+      const selectedTarget: ProviderOptions = {
+        id: '',
+        config: {},
+      };
+
+      renderWithTheme(
+        <CustomTargetConfiguration
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+          rawConfigJson="{}"
+          setRawConfigJson={mockSetRawConfigJson}
+          bodyError={null}
+        />,
+      );
+
+      const input = screen.getByLabelText(/Target ID/i);
+      fireEvent.change(input, { target: { value: './provider.js:myFunc' } });
+
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', 'file://./provider.js:myFunc');
+    });
   });
 });

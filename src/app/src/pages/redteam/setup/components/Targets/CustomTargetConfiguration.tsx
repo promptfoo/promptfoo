@@ -34,10 +34,14 @@ const CustomTargetConfiguration = ({
     setTargetId(value);
 
     let idToSave = value;
-    if (value && (value.endsWith('.py') || value.endsWith('.js'))) {
-      if (!value.startsWith('file://')) {
-        idToSave = `file://${value}`;
-      }
+    if (
+      value &&
+      !value.startsWith('file://') &&
+      !value.startsWith('http://') &&
+      !value.startsWith('https://') &&
+      (value.includes('.py') || value.includes('.js'))
+    ) {
+      idToSave = `file://${value}`;
     }
     updateCustomTarget('id', idToSave);
   };
