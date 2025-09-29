@@ -27,6 +27,12 @@ import yaml from 'js-yaml';
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
 
+/**
+ * Renders a "Download" menu item and a modal dialog that lets users export evaluation data
+ * (configuration files, table exports, and advanced formats), copy related CLI commands, and track downloaded files.
+ *
+ * @returns A React element containing the menu item and the download options dialog with controls for exporting files and copying commands.
+ */
 function DownloadMenu() {
   const { table, config, evalId } = useResultsViewStore();
   const [open, setOpen] = React.useState(false);
