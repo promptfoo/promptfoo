@@ -22,10 +22,6 @@ export async function filterTestsByResults(
   pathOrId: string,
   filterFn: ResultFilterFn,
 ): Promise<Tests> {
-  if (!testSuite.tests) {
-    return [];
-  }
-
   let results: { results: EvaluateResult[] };
   try {
     if (pathOrId.endsWith('.json')) {
@@ -53,7 +49,60 @@ export async function filterTestsByResults(
     return [];
   }
 
-  return [...testSuite.tests].filter((test) =>
-    filteredResults.some((result) => resultIsForTestCase(result, test)),
-  );
+  // Check if we have tests from the original test suite
+  const hasOriginalTests = testSuite.tests && testSuite.tests.length > 0;
+
+  // Check if we're dealing with scenarios
+  const hasScenarios = testSuite.scenarios && testSuite.scenarios.length > 0;
+
+  const allTests: Tests = [];
+  const seenTestKeys = new Set<string>();
+
+  // First, try to match with the original test suite structure
+  if (hasOriginalTests) {
+    const matchedTests = [...testSuite.tests!].filter((test) =>
+      filteredResults.some((result) => resultIsForTestCase(result, test)),
+    );
+
+    // If we found matches and don't have scenarios, return only the matched tests
+    // (for backwards compatibility with existing tests)
+    if (!hasScenarios) {
+      return matchedTests;
+    }
+
+    // Add matched original tests when we have scenarios
+    for (const test of matchedTests) {
+      const testKey = JSON.stringify({
+        vars: test.vars || {},
+        provider: test.provider,
+        assert: test.assert,
+      });
+      if (!seenTestKeys.has(testKey)) {
+        seenTestKeys.add(testKey);
+        allTests.push(test);
+      }
+    }
+  }
+
+  // When we have scenarios or no original tests, also collect test cases from results
+  // This handles scenario-expanded tests
+  if (hasScenarios || !hasOriginalTests) {
+    for (const result of filteredResults) {
+      if (result.testCase) {
+        // Create a unique key for deduplication based on vars and provider
+        const testKey = JSON.stringify({
+          vars: result.testCase.vars || {},
+          provider: result.testCase.provider,
+          assert: result.testCase.assert,
+        });
+
+        if (!seenTestKeys.has(testKey)) {
+          seenTestKeys.add(testKey);
+          allTests.push(result.testCase);
+        }
+      }
+    }
+  }
+
+  return allTests;
 }
