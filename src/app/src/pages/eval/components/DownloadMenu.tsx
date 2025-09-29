@@ -180,7 +180,10 @@ function DownloadMenu() {
     const headers = [
       ...(hasDescriptions ? ['Description'] : []),
       ...table.head.vars,
-      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+      ...table.head.prompts.flatMap((prompt) => [
+        `[${prompt.provider}] ${prompt.label}`,
+        'Latency (ms)',
+      ]),
     ];
     csvRows.push(headers);
 
@@ -190,14 +193,16 @@ function DownloadMenu() {
         ...row.vars,
         ...row.outputs
           .filter((output): output is EvaluateTableOutput => output != null)
-          .map(
-            ({ pass, text, failureReason: failureType }) =>
-              (pass
-                ? '[PASS] '
-                : failureType === ResultFailureReason.ASSERT
-                  ? '[FAIL] '
-                  : '[ERROR] ') + text,
-          ),
+          .flatMap(({ pass, text, failureReason, latencyMs }) => [
+            // Add pass/fail/error prefix to text
+            (pass
+              ? '[PASS] '
+              : failureReason === ResultFailureReason.ASSERT
+                ? '[FAIL] '
+                : '[ERROR] ') + (text || ''),
+            // Add latency
+            latencyMs ?? '',
+          ]),
       ];
       csvRows.push(rowValues);
     });
