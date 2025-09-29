@@ -1449,7 +1449,9 @@ describe('resolveConfigs', () => {
     );
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest eval -c'));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('npx promptfoo@latest eval -c'),
+    );
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest init'));
   });
 
