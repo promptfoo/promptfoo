@@ -21,7 +21,6 @@ export const ANTHROPIC_MODELS = [
   })),
   ...[
     'claude-sonnet-4-5-20250929',
-    'claude-sonnet-4-5-latest',
     'claude-sonnet-4-20250514',
     'claude-sonnet-4-0',
     'claude-sonnet-4-latest',
@@ -204,6 +203,25 @@ export function calculateAnthropicCost(
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
+  // Claude Sonnet 4.5 models have tiered pricing based on prompt size
+  const isSonnet45 = ['claude-sonnet-4-5-20250929'].includes(modelName);
+
+  if (
+    isSonnet45 &&
+    Number.isFinite(promptTokens) &&
+    Number.isFinite(completionTokens) &&
+    typeof promptTokens !== 'undefined' &&
+    typeof completionTokens !== 'undefined'
+  ) {
+    // Tiered pricing for Claude Sonnet 4.5:
+    // - If prompt > 200k tokens: $6/MTok input, $22.50/MTok output
+    // - Otherwise: $3/MTok input, $15/MTok output
+    const inputCost = config.cost ?? (promptTokens > 200_000 ? 6 / 1e6 : 3 / 1e6);
+    const outputCost = config.cost ?? (promptTokens > 200_000 ? 22.5 / 1e6 : 15 / 1e6);
+
+    return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  }
+
   return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
 }
 
