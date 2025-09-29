@@ -24,6 +24,7 @@ import {
   displayNameOverrides,
   type Plugin,
   Severity,
+  severityDisplayNames,
   severityRiskScores,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
@@ -34,6 +35,11 @@ import { getStrategyIdFromTest } from './shared';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
+import {
+  formatPolicyIdentifierAsMetric,
+  isValidPolicyObject,
+  makeInlinePolicyId,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import {
   calculatePluginRiskScore,
   prepareTestResultsFromStats,
@@ -73,7 +79,7 @@ const getRiskScoreColor = (riskScore: number, theme: any): string => {
   }
 };
 
-const TestSuites: React.FC<TestSuitesProps> = ({
+const TestSuites = ({
   evalId,
   categoryStats,
   plugins,
@@ -82,7 +88,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
   vulnerabilitiesDataGridRef,
   vulnerabilitiesDataGridFilterModel,
   setVulnerabilitiesDataGridFilterModel,
-}) => {
+}: TestSuitesProps) => {
   const navigate = useNavigate();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
@@ -90,58 +96,115 @@ const TestSuites: React.FC<TestSuitesProps> = ({
     { field: 'riskScore', sort: 'desc' },
   ]);
 
+  const pluginSeverityMap = React.useMemo(() => getRiskCategorySeverityMap(plugins), [plugins]);
+
+  const pluginsById = React.useMemo(() => {
+    return plugins.reduce(
+      (acc, plugin) => {
+        let pluginId: string;
+        if (plugin.id === 'policy' && plugin.config?.policy) {
+          // Use the policy id as the plugin id in order to differentiate custom policies from each other.
+          // Either get the policy id from the metadata or construct it by hashing the policy text.
+          pluginId = isValidPolicyObject(plugin.config.policy)
+            ? plugin.config.policy.id
+            : makeInlinePolicyId(plugin.config.policy as string);
+        } else {
+          pluginId = plugin.id;
+        }
+
+        acc[pluginId] = {
+          ...plugin,
+          // If the plugin does not have a severity defined, assign it here. Use original `plugin.id`
+          // for `pluginSeverityMap` lookups.
+          severity: plugin.severity ?? pluginSeverityMap[plugin.id as Plugin],
+        };
+        return acc;
+      },
+      {} as Record<string, RedteamPluginObject>,
+    );
+  }, [plugins, pluginSeverityMap]);
+
   const rows = React.useMemo(() => {
-    return Object.entries(categoryStats)
-      .filter(([_, stats]) => stats.total > 0)
-      .map(([pluginName, stats]) => {
-        const severity = getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown';
+    return (
+      Object.entries(categoryStats)
+        .filter(([_, stats]) => stats.total > 0)
+        .map(([pluginName, stats]) => {
+          const plugin = pluginsById[pluginName];
 
-        // Calculate risk score with details
-        const riskDetails = (() => {
-          // Prepare test results using the helper function
-          const testResults = prepareTestResultsFromStats(
-            failuresByPlugin,
-            passesByPlugin,
-            pluginName,
-            categoryStats,
-            getStrategyIdFromTest,
-          );
+          // Handle case where plugin is not found (e.g., when plugins array is empty)
+          // Use the severity map directly or default to 'Unknown'
+          const severity =
+            plugin?.severity || pluginSeverityMap[pluginName as Plugin] || ('Unknown' as Severity);
 
-          if (testResults.length === 0) {
+          // Calculate risk score with details
+          const riskDetails = (() => {
+            // Prepare test results using the helper function
+            const testResults = prepareTestResultsFromStats(
+              failuresByPlugin,
+              passesByPlugin,
+              pluginName,
+              categoryStats,
+              getStrategyIdFromTest,
+            );
+
+            if (testResults.length === 0) {
+              return {
+                riskScore: 0,
+                complexityScore: 0,
+                worstStrategy: 'none',
+              };
+            }
+
+            // Calculate risk score once and extract values
+            const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
             return {
-              riskScore: 0,
-              complexityScore: 0,
-              worstStrategy: 'none',
+              riskScore: riskScoreResult.score,
+              complexityScore: riskScoreResult.complexityScore,
+              worstStrategy: riskScoreResult.worstStrategy,
             };
+          })();
+
+          let type = categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName;
+          let description =
+            subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '';
+
+          // Read custom policy metadata from `pluginsById`.
+          if (plugin?.id === 'policy' && plugin?.config?.policy) {
+            if (isValidPolicyObject(plugin.config.policy)) {
+              type = formatPolicyIdentifierAsMetric(
+                plugin.config.policy.name ?? plugin.config.policy.id,
+              );
+              if (plugin.config.policy.text) {
+                description = plugin.config.policy.text;
+              }
+            } else {
+              type = formatPolicyIdentifierAsMetric(
+                makeInlinePolicyId(plugin.config?.policy as string),
+              );
+              description = plugin.config?.policy as string;
+            }
           }
 
-          // Calculate risk score once and extract values
-          const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
           return {
-            riskScore: riskScoreResult.score,
-            complexityScore: riskScoreResult.complexityScore,
-            worstStrategy: riskScoreResult.worstStrategy,
+            id: pluginName,
+            pluginName,
+            type,
+            description,
+            severity,
+            passRate: (stats.pass / stats.total) * 100,
+            passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
+            attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
+            total: stats.total,
+            successfulAttacks: stats.total - stats.pass,
+            riskScore: riskDetails.riskScore,
+            complexityScore: riskDetails.complexityScore,
+            worstStrategy: riskDetails.worstStrategy,
           };
-        })();
-
-        return {
-          id: pluginName,
-          pluginName,
-          type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
-          description:
-            subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
-          severity,
-          passRate: (stats.pass / stats.total) * 100,
-          passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-          attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
-          total: stats.total,
-          successfulAttacks: stats.total - stats.pass,
-          riskScore: riskDetails.riskScore,
-          complexityScore: riskDetails.complexityScore,
-          worstStrategy: riskDetails.worstStrategy,
-        };
-      });
-  }, [categoryStats, plugins, failuresByPlugin, passesByPlugin]);
+        })
+        // Filter out rows where ASR = 0
+        .filter((row) => row.successfulAttacks > 0)
+    );
+  }, [categoryStats, plugins, failuresByPlugin, passesByPlugin, pluginsById, pluginSeverityMap]);
 
   const exportToCSV = React.useCallback(() => {
     // Format data for CSV
@@ -156,33 +219,48 @@ const TestSuites: React.FC<TestSuitesProps> = ({
       'Severity',
     ];
 
-    // Get the sorted data based on current sort model
-    const sortedData = [...rows].sort((a, b) => {
+    const compareRows = (a: (typeof rows)[number], b: (typeof rows)[number]) => {
       if (sortModel.length > 0 && sortModel[0].field === 'attackSuccessRate') {
         return sortModel[0].sort === 'asc'
           ? a.attackSuccessRate - b.attackSuccessRate
           : b.attackSuccessRate - a.attackSuccessRate;
-      } else if (sortModel.length > 0 && sortModel[0].field === 'severity') {
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'severity') {
         const severityOrder = {
           [Severity.Critical]: 4,
           [Severity.High]: 3,
           [Severity.Medium]: 2,
           [Severity.Low]: 1,
-        };
+        } as const;
+
         return sortModel[0].sort === 'asc'
-          ? severityOrder[a.severity] - severityOrder[b.severity]
-          : severityOrder[b.severity] - severityOrder[a.severity];
-      } else if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
+          ? severityOrder[a.severity as Severity] - severityOrder[b.severity as Severity]
+          : severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity];
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
         return sortModel[0].sort === 'asc' ? a.riskScore - b.riskScore : b.riskScore - a.riskScore;
-      } else if (sortModel.length > 0 && sortModel[0].field === 'complexityScore') {
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'complexityScore') {
         return sortModel[0].sort === 'asc'
           ? a.complexityScore - b.complexityScore
           : b.complexityScore - a.complexityScore;
-      } else {
-        // Default sort
-        return b.riskScore - a.riskScore;
       }
-    });
+
+      return b.riskScore - a.riskScore;
+    };
+
+    const sortedData = rows.reduce<Array<(typeof rows)[number]>>((acc, current) => {
+      const insertIndex = acc.findIndex((item) => compareRows(current, item) < 0);
+      if (insertIndex === -1) {
+        acc.push(current);
+      } else {
+        acc.splice(insertIndex, 0, current);
+      }
+      return acc;
+    }, []);
 
     // Serialize the rows to CSV
     const csvData = sortedData.map((subCategory) => [
@@ -194,7 +272,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
       subCategory.successfulAttacks,
       subCategory.total,
       subCategory.attackSuccessRate.toFixed(2) + '%',
-      subCategory.severity,
+      severityDisplayNames[subCategory.severity as Severity],
     ]);
 
     // Combine headers and data with proper escaping for CSV
@@ -339,6 +417,12 @@ const TestSuites: React.FC<TestSuitesProps> = ({
       },
     },
     {
+      field: 'successfulAttacks',
+      headerName: 'Successful Attacks',
+      type: 'number',
+      flex: 0.75,
+    },
+    {
       field: 'attackSuccessRate',
       headerName: 'Attack Success Rate',
       type: 'number',
@@ -348,7 +432,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
         const passRateWithFilter = params.row.passRateWithFilter;
         const passRate = params.row.passRate;
         return (
-          <Box className={value >= 75 ? 'asr-high' : value >= 50 ? 'asr-medium' : 'asr-low'}>
+          <Box>
             <strong>{value.toFixed(2)}%</strong>
             {passRateWithFilter !== passRate && (
               <>
@@ -364,10 +448,13 @@ const TestSuites: React.FC<TestSuitesProps> = ({
       headerName: 'Severity',
       type: 'singleSelect',
       flex: 0.5,
-      valueOptions: Object.values(Severity),
-      renderCell: (params: GridRenderCellParams) => (
-        <Box className={`vuln-${params.value.toLowerCase()} vuln`}>{params.value}</Box>
-      ),
+      valueFormatter: (value: Severity) => severityDisplayNames[value],
+      valueOptions: [
+        ...Object.values(Severity).map((severity) => ({
+          value: severity,
+          label: severityDisplayNames[severity],
+        })),
+      ],
       sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
@@ -392,7 +479,9 @@ const TestSuites: React.FC<TestSuitesProps> = ({
             size="small"
             onClick={() => {
               const pluginId = params.row.pluginName;
-              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
+              const plugin = pluginsById[pluginId];
+              const key = plugin?.id === 'policy' ? 'policy' : 'plugin';
+              navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}&mode=failures`);
             }}
           >
             View logs

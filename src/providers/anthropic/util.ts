@@ -1,7 +1,7 @@
 import { calculateCost as calculateCostBase } from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { TokenUsage } from '../../types';
+import type { TokenUsage } from '../../types/index';
 import type { AnthropicToolConfig, WebFetchToolConfig, WebSearchToolConfig } from './types';
 
 // Model definitions with cost information

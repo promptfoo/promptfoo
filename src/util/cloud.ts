@@ -7,7 +7,8 @@ import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
 
 import type { Plugin, Severity } from '../redteam/constants';
-import type { PolicyObject, PolicyTexts, UnifiedConfig } from '../types';
+import type { PoliciesById } from '../redteam/types';
+import type { UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
@@ -367,9 +368,9 @@ export async function canCreateTargets(teamId: string | undefined): Promise<bool
  * Given a list of policy IDs, fetches custom policies from Promptfoo Cloud.
  * @param ids - The IDs of the policies to fetch.
  * @param teamId - The ID of the team to fetch policies from. Note that all policies must belong to this team.
- * @returns A record mapping policy IDs to their texts.
+ * @returns A map of policy IDs to their texts and severities.
  */
-export async function getPoliciesFromCloud(ids: string[], teamId: string): Promise<PolicyTexts> {
+export async function getPoliciesFromCloud(ids: string[], teamId: string): Promise<PoliciesById> {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
       `Could not fetch policies from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
@@ -394,10 +395,17 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     }
 
     const body = await response.json();
-    // Deserialize the body into a map of policy IDs to policy texts.
-    return Object.fromEntries(
-      body.map((policy: Required<PolicyObject>) => [policy.id, policy.text]),
-    );
+
+    const policiesById = new Map();
+    body.forEach((policy: { id: string; text: string; severity: Severity; name: string }) => {
+      policiesById.set(policy.id, {
+        text: policy.text,
+        severity: policy.severity,
+        name: policy.name,
+      });
+    });
+
+    return policiesById;
   } catch (e) {
     logger.error(`Failed to fetch policies from cloud.`);
     logger.error(String(e));

@@ -10,7 +10,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
-import { isRunningUnderNpx } from './util';
+import { promptfooCommand } from './util/promptfooCommand';
 import { getNunjucksEngine } from './util/templates';
 
 import type { EnvOverrides } from './types/env';
@@ -633,7 +633,7 @@ export async function initializeProject(directory: string | null, interactive: b
     const result = await createDummyFiles(directory, interactive);
     const { outDirectory, ...telemetryDetails } = result;
 
-    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+    const runCommand = promptfooCommand('eval');
 
     if (outDirectory === '.') {
       logger.info(chalk.green(`✅ Run \`${chalk.bold(runCommand)}\` to get started!`));
@@ -651,7 +651,7 @@ export async function initializeProject(directory: string | null, interactive: b
     return telemetryDetails;
   } catch (err) {
     if (err instanceof ExitPromptError) {
-      const runCommand = isRunningUnderNpx() ? 'npx promptfoo@latest init' : 'promptfoo init';
+      const runCommand = promptfooCommand('init');
       logger.info(
         '\n' +
           chalk.blue('Initialization paused. To continue setup later, use the command: ') +

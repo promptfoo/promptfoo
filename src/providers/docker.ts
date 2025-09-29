@@ -5,7 +5,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';

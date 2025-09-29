@@ -4,9 +4,9 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { validateAssertions } from '../../../src/assertions/validateAssertions';
 import cliState from '../../../src/cliState';
-import { readPrompts, readProviderPromptMap } from '../../../src/prompts';
-import { loadApiProviders } from '../../../src/providers';
-import { readFilters } from '../../../src/util';
+import { readPrompts, readProviderPromptMap } from '../../../src/prompts/index';
+import { loadApiProviders } from '../../../src/providers/index';
+import { readFilters } from '../../../src/util/index';
 // Import after mocking
 import { resolveConfigs } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';

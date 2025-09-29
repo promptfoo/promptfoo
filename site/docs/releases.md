@@ -10,6 +10,47 @@ keywords: [Promptfoo releases, changelog, updates, features, monthly summaries]
 
 Full release history for Promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
 
+## August 2025 Release Highlights {#august-2025}
+
+### Providers
+
+- Support for Claude Opus 4.1, gpt-5, gpt-5-mini, gpt-5-nano added. View our [foundation model security reports](https://promptfoo.dev/models/reports).
+- **Prompt config override** - Available for all providers (prompt functions that return a structured object with both prompt content and configuration to merge with the provider). [Example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-prompt-function).
+- **Gemini 2.5 Pro** - Updated grading provider for Vertex and Google AI Studio to use Gemini 2.5 Pro.
+- **Ollama** - Think and passthrough parameter support added.
+- **Preset targets added** - Vertex AI, AWS Bedrock, and SageMaker added as preset targets for Enterprise.
+
+#### Assertions and metrics
+
+- **[Conversational relevancy](/docs/configuration/expected-outputs/model-graded/conversation-relevance)** - New model graded metric. Evaluates whether responses in a conversation remain relevant throughout the dialogue.
+- **[contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)** - New assertion. Checks if output contains HTML content without requiring specific tags
+- **[is-html](/docs/configuration/expected-outputs/deterministic/#is-html)** - New assertion. Validates that the entire output is valid HTML
+
+### Red-teaming
+
+- **Plugin selection** - Improved with a plugin 'cart'.
+
+![Plugin Cart Selection](/img/release-notes/aug-25/plugin-cart-selection-aug-25.png)
+
+You can also click the magic wand to generate a test case sample.
+
+![Magic Wand Feature](/img/release-notes/aug-25/magic-wand-aug-25.png)
+
+- **Provider selection menu** - Has been improved with better support for agents; provider types can be selected from the red team setup.
+
+![Provider Selection Menu](/img/release-notes/aug-25/provider-selection-aug-25.png)
+
+- **[Unverifiable claims](/docs/red-team/plugins/unverifiable-claims/)** - New plugin. Detects when AI models make claims that cannot be verified even in principle.
+- **[Medical off-label use](/docs/red-team/plugins/medical/#medical-off-label-use)** - New plugin. Tests whether AI systems inappropriately recommend off-label use of medications without proper requirements.
+
+### Model Audit
+
+- **Model audit** is a Static Security Scanner for AI/LLM models. Scan results are now saved in the database; they can be viewed under /model-audit page. Model audits can also be shared to the cloud. Further information about the types of security risks found and installation can be found on the [model audit page](/docs/model-audit/).
+
+![Model Audit UI](/img/release-notes/aug-25/model-audit-aug-25.png)
+
+---
+
 ## July 2025 Release Highlights {#july-2025}
 
 This month we focused on expanding **provider support**, enhancing **evaluation capabilities**, and strengthening **enterprise features** to help you build more reliable and secure AI applications.

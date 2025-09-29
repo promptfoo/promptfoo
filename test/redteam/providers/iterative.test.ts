@@ -350,6 +350,72 @@ describe('RedteamIterativeProvider', () => {
       expect(result.metadata.redteamHistory).toHaveLength(3);
     });
 
+    it('should parse judge ratings provided as strings and accept 0 as valid previous score', async () => {
+      // Arrange sequence: attacker improvement → onTopic → judge (string ratings)
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'test', prompt: 'test' }),
+        })
+        .mockResolvedValueOnce({ output: JSON.stringify({ onTopic: true }) })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: '5', explanation: 'ok' },
+            previousBestResponse: { rating: '0', explanation: 'none' },
+          }),
+        });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.metadata.highestScore).toBe(5);
+      expect(result.metadata.finalIteration).toBe(1);
+    });
+
+    it('should extract JSON object from fenced/narrative judge output', async () => {
+      const fenced =
+        "I'll evaluate now.\n```json\n{" +
+        '"currentResponse": { "rating": 6, "explanation": "ok" },' +
+        '"previousBestResponse": { "rating": 0, "explanation": "none" }' +
+        '}\n```\nThanks!';
+
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'test', prompt: 'test' }),
+        })
+        .mockResolvedValueOnce({ output: JSON.stringify({ onTopic: true }) })
+        .mockResolvedValueOnce({ output: fenced });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.metadata.highestScore).toBe(6);
+      expect(result.metadata.finalIteration).toBe(1);
+    });
+
     it('should include goal in additional rubric when goal is present', async () => {
       const mockGrader = {
         getResult: jest.fn<any>().mockResolvedValue({

@@ -1,10 +1,10 @@
 import OpenAI from 'openai';
-import { renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
 
-import type { TokenUsage } from '../../types';
+import type { TokenUsage } from '../../types/index';
 import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
@@ -298,6 +298,13 @@ export const OPENAI_CHAT_MODELS = [
     cost: {
       input: 1.5 / 1e6,
       output: 6.0 / 1e6,
+    },
+  })),
+  ...['gpt-5-codex'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
     },
   })),
 ];

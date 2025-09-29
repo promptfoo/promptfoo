@@ -2,11 +2,16 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
+import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
 import Link from '@mui/material/Link';
-import Paper from '@mui/material/Paper';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
@@ -42,7 +47,10 @@ type Eval = {
 declare module '@mui/x-data-grid' {
   interface ToolbarPropsOverrides {
     showUtilityButtons: boolean;
+    deletionEnabled: boolean;
     focusQuickFilterOnMount: boolean;
+    selectedCount: number;
+    onDeleteSelected: () => void;
   }
 }
 
@@ -72,10 +80,16 @@ QuickFilter.displayName = 'QuickFilter';
 
 function CustomToolbar({
   showUtilityButtons,
+  deletionEnabled,
   focusQuickFilterOnMount,
+  selectedCount,
+  onDeleteSelected,
 }: {
   showUtilityButtons: boolean;
+  deletionEnabled: boolean;
   focusQuickFilterOnMount: boolean;
+  selectedCount: number;
+  onDeleteSelected: () => void;
 }) {
   const theme = useTheme();
   const quickFilterRef = useRef<HTMLInputElement>(null);
@@ -88,12 +102,29 @@ function CustomToolbar({
 
   return (
     <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      {showUtilityButtons && (
+      {(showUtilityButtons || selectedCount > 0) && (
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <GridToolbarColumnsButton />
-          <GridToolbarFilterButton />
-          <GridToolbarDensitySelector />
-          <GridToolbarExport />
+          {showUtilityButtons && (
+            <>
+              <GridToolbarColumnsButton />
+              <GridToolbarFilterButton />
+              <GridToolbarDensitySelector />
+              <GridToolbarExport />
+            </>
+          )}
+          {deletionEnabled && selectedCount > 0 && (
+            <Button
+              color="error"
+              variant="outlined"
+              size="small"
+              onClick={onDeleteSelected}
+              data-testid="delete-selected-button"
+              startIcon={<DeleteIcon />}
+              sx={{ border: 0 }}
+            >
+              Delete ({selectedCount})
+            </Button>
+          )}
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
@@ -116,12 +147,14 @@ export default function EvalsDataGrid({
   showUtilityButtons = false,
   filterByDatasetId = false,
   focusQuickFilterOnMount = false,
+  deletionEnabled = false,
 }: {
   onEvalSelected: (evalId: string) => void;
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
   filterByDatasetId?: boolean;
   focusQuickFilterOnMount?: boolean;
+  deletionEnabled?: boolean;
 }) {
   if (filterByDatasetId) {
     invariant(focusedEvalId, 'focusedEvalId is required when filterByDatasetId is true');
@@ -130,6 +163,7 @@ export default function EvalsDataGrid({
   const [evals, setEvals] = useState<Eval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
     focusedEvalId ? [focusedEvalId] : [],
@@ -205,6 +239,47 @@ export default function EvalsDataGrid({
 
   const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
 
+  /**
+   * Handles the deletion of selected evals.
+   * @returns A promise that resolves when the evals are deleted.
+   */
+  const handleDeleteSelected = () => {
+    if (rowSelectionModel.length === 0) {
+      return;
+    }
+    setConfirmDeleteOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      setIsLoading(true);
+      const res = await callApi(`/eval`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids: rowSelectionModel }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete evals');
+      }
+
+      setEvals((prev) => prev.filter((e) => !rowSelectionModel.includes(e.evalId)));
+      setRowSelectionModel([]);
+      setConfirmDeleteOpen(false);
+    } catch (error) {
+      console.error('Failed to delete evals:', error);
+      alert('Failed to delete evals');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setConfirmDeleteOpen(false);
+  };
+
   const columns: GridColDef<Eval>[] = useMemo(
     () =>
       [
@@ -227,6 +302,12 @@ export default function EvalsDataGrid({
                   e.preventDefault();
                   onEvalSelected(params.row.evalId);
                   return false;
+                }}
+                sx={{
+                  textDecoration: 'none',
+                  color: 'primary.main',
+                  fontFamily: 'monospace',
+                  '&:hover': { textDecoration: 'underline' },
                 }}
               >
                 {params.row.evalId}
@@ -338,31 +419,16 @@ export default function EvalsDataGrid({
   );
 
   return (
-    <Paper elevation={2} sx={{ height: '100%' }}>
+    <>
+      {/* Evals data grid */}
       <DataGrid
         rows={rows}
         columns={columns}
         loading={isLoading}
         getRowId={(row) => row.evalId}
+        checkboxSelection={deletionEnabled}
         slots={{
           toolbar: CustomToolbar,
-          loadingOverlay: () => (
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                gap: 2,
-              }}
-            >
-              <CircularProgress />
-              <Typography variant="body2" color="text.secondary">
-                Loading evaluations...
-              </Typography>
-            </Box>
-          ),
           noRowsOverlay: () => (
             <Box
               sx={{
@@ -403,11 +469,17 @@ export default function EvalsDataGrid({
         slotProps={{
           toolbar: {
             showUtilityButtons,
+            deletionEnabled,
             focusQuickFilterOnMount,
+            selectedCount: rowSelectionModel.length,
+            onDeleteSelected: handleDeleteSelected,
+          },
+          loadingOverlay: {
+            variant: 'linear-progress',
           },
         }}
         onCellClick={(params) => {
-          if (params.id !== focusedEvalId) {
+          if (params.id !== focusedEvalId && params.field !== '__check__') {
             handleCellClick(params);
           }
         }}
@@ -458,6 +530,32 @@ export default function EvalsDataGrid({
         pageSizeOptions={[10, 25, 50, 100]}
         isRowSelectable={(params) => params.id !== focusedEvalId}
       />
-    </Paper>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
+        <DialogTitle>
+          Delete {rowSelectionModel.length} eval{rowSelectionModel.length === 1 ? '' : 's'}?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete the selected eval
+            {rowSelectionModel.length === 1 ? '' : 's'}? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelDelete} variant="outlined">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+            startIcon={<DeleteIcon />}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }

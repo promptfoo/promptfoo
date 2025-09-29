@@ -10,7 +10,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 const MISTRAL_CHAT_MODELS = [

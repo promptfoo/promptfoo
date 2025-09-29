@@ -13,16 +13,16 @@ interface CustomTargetConfigurationProps {
   updateCustomTarget: (field: string, value: any) => void;
   rawConfigJson: string;
   setRawConfigJson: (value: string) => void;
-  bodyError: string | null;
+  bodyError: string | React.ReactNode | null;
 }
 
-const CustomTargetConfiguration: React.FC<CustomTargetConfigurationProps> = ({
+const CustomTargetConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   rawConfigJson,
   setRawConfigJson,
   bodyError,
-}) => {
+}: CustomTargetConfigurationProps) => {
   const [targetId, setTargetId] = useState(selectedTarget.id || '');
 
   useEffect(() => {

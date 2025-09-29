@@ -67,6 +67,9 @@ const baseMockTableStore = {
     .mockResolvedValue({ table: mockTable, config: {}, totalCount: 0, filteredCount: 0 }),
   resetFilters: vi.fn(),
   setIsStreaming: vi.fn(),
+  setFilterMode: vi.fn(),
+  resetFilterMode: vi.fn(),
+  addFilter: vi.fn(),
 };
 
 describe('Eval Page Metadata', () => {

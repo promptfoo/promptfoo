@@ -29,7 +29,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type GradingResult,
-} from '../types';
+} from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -89,7 +89,7 @@ import type {
   BaseAssertionTypes,
   ProviderResponse,
   ScoringFunction,
-} from '../types';
+} from '../types/index';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 

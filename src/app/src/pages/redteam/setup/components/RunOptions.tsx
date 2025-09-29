@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { FormControlLabel, Switch } from '@mui/material';
@@ -31,13 +31,13 @@ interface RunOptionsProps {
   useGuardrailAssertion?: boolean;
 }
 
-export const RunOptionsContent: React.FC<RunOptionsProps> = ({
+export const RunOptionsContent = ({
   numTests,
   runOptions,
   updateConfig,
   updateRunOption,
   useGuardrailAssertion,
-}) => {
+}: RunOptionsProps) => {
   // These two settings are mutually exclusive
   const canSetDelay = Boolean(!runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1);
 
@@ -94,7 +94,6 @@ export const RunOptionsContent: React.FC<RunOptionsProps> = ({
           return Number.isNaN(n) || n < 1;
         })()}
       />
-
       {/**
        * Delay between API calls (ms)
        * - Enabled only when maxConcurrency is 1 (mutual exclusivity rule)
@@ -157,7 +156,6 @@ export const RunOptionsContent: React.FC<RunOptionsProps> = ({
           return Number.isNaN(n) || n < 0;
         })()}
       />
-
       {/**
        * Max number of concurrent requests
        * - Enabled only when delay is 0 (mutual exclusivity rule)
@@ -218,7 +216,6 @@ export const RunOptionsContent: React.FC<RunOptionsProps> = ({
           return Number.isNaN(n) || n < 1;
         })()}
       />
-
       <FormControlLabel
         control={
           <Switch
@@ -239,7 +236,7 @@ export const RunOptionsContent: React.FC<RunOptionsProps> = ({
   );
 };
 
-export const RunOptions: React.FC<RunOptionsProps> = (props) => {
+export const RunOptions = (props: RunOptionsProps) => {
   const [expanded, setExpanded] = useState(true);
 
   const normalizedProps: RunOptionsProps = {

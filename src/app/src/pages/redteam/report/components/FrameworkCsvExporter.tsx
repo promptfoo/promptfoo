@@ -1,5 +1,3 @@
-import React from 'react';
-
 import DownloadIcon from '@mui/icons-material/Download';
 import Button from '@mui/material/Button';
 import {
@@ -23,7 +21,7 @@ interface CSVExporterProps {
   pluginPassRateThreshold: number;
 }
 
-const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRateThreshold }) => {
+const CSVExporter = ({ categoryStats, pluginPassRateThreshold }: CSVExporterProps) => {
   // Function to export framework compliance data to CSV
   const exportToCSV = () => {
     // Collect data for all frameworks
