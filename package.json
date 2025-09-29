@@ -118,8 +118,7 @@
     "playwright": "^1.55.0",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "sharp": "^0.34.4",
-    "xlsx": "^0.20.0"
+    "sharp": "^0.34.4"
   },
   "devDependencies": {
     "@adaline/anthropic": "1.7.1",
@@ -273,6 +272,7 @@
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "ws": "^8.18.3",
+    "xlsx": "^0.18.5",
     "zod": "^3.25.76",
     "zod-validation-error": "^3.5.3"
   },
