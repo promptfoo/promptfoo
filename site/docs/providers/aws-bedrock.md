@@ -2,7 +2,7 @@
 title: AWS Bedrock
 sidebar_label: AWS Bedrock
 sidebar_position: 3
-description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
+description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
 ---
 
 # Bedrock
@@ -134,14 +134,14 @@ Amazon Bedrock supports multiple authentication methods, including the new API k
 
 ### Credential Resolution Order
 
-Promptfoo resolves AWS credentials in the following priority order:
+Credentials are resolved in the following priority order:
 
-1.  **Explicit credentials in config** (e.g. `accessKeyId`, `secretAccessKey`)
-2.  **Bedrock API Key authentication** (e.g. `apiKey`)
-3.  **SSO profile authentication** (e.g. `profile`)
-4.  **AWS default credential chain** (e.g. environment variables, `~/.aws/credentials`)
+1. **Explicit credentials in config** (`accessKeyId`, `secretAccessKey`)
+2. **Bedrock API Key authentication** (`apiKey`)
+3. **SSO profile authentication** (`profile`)
+4. **AWS default credential chain** (environment variables, `~/.aws/credentials`)
 
-Promptfoo automatically uses the first available credential method in this order. The sections below provide more detail on each option.
+The first available credential method is used automatically.
 
 ### Authentication Options
 
@@ -177,7 +177,7 @@ This method overrides all other credential sources, including EC2 instance roles
 
 #### 2. API Key authentication
 
-Amazon Bedrock API keys provide a simplified authentication method that doesn't require managing AWS IAM credentials. This is especially useful for developers who want quick access to Bedrock models.
+Amazon Bedrock API keys provide simplified authentication without managing AWS IAM credentials.
 
 **Using environment variables:**
 
@@ -220,7 +220,7 @@ For these advanced features, use traditional AWS IAM credentials instead.
 
 #### 3. SSO profile authentication
 
-Use a named profile from your AWS configuration, which is especially useful for AWS SSO (Single Sign-On) setups or when managing multiple AWS accounts:
+Use a named profile from your AWS configuration for AWS SSO setups or managing multiple AWS accounts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -265,7 +265,7 @@ providers:
 
 #### 4. Default credentials (lowest priority)
 
-Let AWS SDK automatically resolve credentials using the standard credential chain:
+Use the AWS SDK's standard credential chain:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -274,18 +274,18 @@ providers:
       region: 'us-east-1' # Only region specified
 ```
 
-**The AWS SDK will automatically check these sources in order:**
+**The AWS SDK checks these sources in order:**
 
 1. **Environment variables**: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
 2. **Shared credentials file**: `~/.aws/credentials` (from `aws configure`)
 3. **AWS IAM roles**: EC2 instance profiles, ECS task roles, Lambda execution roles
 4. **Shared AWS CLI credentials**: Including cached SSO credentials
 
-**Best use cases:**
+**Use default credentials when:**
 
 - Running on AWS infrastructure (EC2, ECS, Lambda) with IAM roles
-- Local development with AWS CLI configured (`aws configure`)
-- CI/CD environments with IAM roles or environment variables
+- Developing locally with AWS CLI configured (`aws configure`)
+- Working in CI/CD environments with IAM roles or environment variables
 
 **Quick setup for local development:**
 
