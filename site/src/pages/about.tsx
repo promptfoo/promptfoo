@@ -149,6 +149,12 @@ const AboutPageContent = () => {
                 image: '/img/team/alan.jpeg',
                 bio: 'Alan brings almost two decades of experience building and shipping software at scale. He has led and contributed on teams at companies like Ceros, Thoughtworks, and Parature.',
               },
+                            {
+                name: 'James Hiester',
+                title: 'Deployment Engineer',
+                image: '/img/team/james.jpeg',
+                bio: 'James brings years of experience in professional services helping leading financial institutions and energy sector clients.  James specializes in managing transformation initiatives and deploying enterprise solutions.',
+              },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">
