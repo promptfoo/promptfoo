@@ -118,6 +118,15 @@ The OG image generation process can take several minutes and may cause CI timeou
 ## Git Workflow - CRITICAL
 
 ### NEVER COMMIT DIRECTLY TO MAIN BRANCH
+### NEVER MERGE BRANCHES INTO MAIN DIRECTLY
+### NEVER PUSH TO MAIN BRANCH - EVER
+
+**ABSOLUTELY FORBIDDEN ACTIONS:**
+- `git push origin main` or `git push main` - NEVER DO THIS
+- `git merge feature-branch` while on main - NEVER DO THIS
+- Any direct commits to main branch - NEVER DO THIS
+
+All changes to main MUST go through pull requests and code review process.
 
 Always follow this workflow:
 
