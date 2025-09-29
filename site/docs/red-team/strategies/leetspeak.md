@@ -1,7 +1,7 @@
 ---
 sidebar_label: Leetspeak
 title: Leetspeak Strategy
-description: Test how AI systems handle text with character substitutions that may bypass content filters
+description: Evaluate AI robustness against leetspeak obfuscation techniques using character substitutions to evade content filtering
 ---
 
 # Leetspeak Strategy

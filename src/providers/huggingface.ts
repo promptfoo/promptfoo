@@ -10,7 +10,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   ProviderSimilarityResponse,
-} from '../types';
+} from '../types/index';
 
 interface HuggingfaceProviderOptions {
   apiKey?: string;

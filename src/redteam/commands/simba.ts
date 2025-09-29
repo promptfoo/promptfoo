@@ -1,14 +1,14 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { z } from 'zod';
-import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
+import { API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { TestSuite, UnifiedConfig } from '../../types';
+import { TestSuite, UnifiedConfig } from '../../types/index';
 import { CallApiContextParams, CallApiOptionsParams } from '../../types/providers';
-import { setupEnv } from '../../util';
+import { setupEnv } from '../../util/index';
 import { resolveConfigs } from '../../util/config/load';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { fetchWithProxy } from '../../util/fetch/index';
 
 const SimbaCommandSchema = z.object({
   config: z.union([z.string(), z.array(z.string())]).optional(),
@@ -63,11 +63,8 @@ interface SimbaBatchResponse {
 }
 
 async function callSimbaApi(endpoint: string, data: any): Promise<any> {
-  const apiHost = getRemoteGenerationUrl();
-  const url = `${apiHost}/api/v1/simba${endpoint}`;
-
-  logger.debug(`Calling Simba API: ${url}`);
-  logger.debug(`Request data: ${JSON.stringify(data)}`);
+  const host = cloudConfig.getApiHost() ?? API_HOST;
+  const url = `${host}/api/v1/simba${endpoint}`;
 
   const response = await fetchWithProxy(url, {
     method: 'POST',
@@ -158,8 +155,6 @@ async function runSimbaSession(options: SimbaCommandOptions, testSuite: TestSuit
         `/sessions/${sessionId}/next`,
         nextRequest,
       );
-
-      logger.debug(`Next response: ${JSON.stringify(batchResponse)}`);
 
       if (batchResponse.completed) {
         logger.info(chalk.green('\nWe are DONE!'));

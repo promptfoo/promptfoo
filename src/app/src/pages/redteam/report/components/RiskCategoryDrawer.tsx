@@ -21,7 +21,6 @@ import {
 } from '@promptfoo/redteam/constants';
 import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
-import { getMetricNameFromPlugin } from '../utils/metricMapping';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getStrategyIdFromTest } from './shared';
@@ -114,7 +113,7 @@ function getOutputDisplay(output: string | object) {
   return JSON.stringify(output);
 }
 
-const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
+const RiskCategoryDrawer = ({
   open,
   onClose,
   category,
@@ -124,7 +123,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   numPassed,
   numFailed,
   strategyStats,
-}) => {
+}: RiskCategoryDrawerProps) => {
   const navigate = useNavigate();
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
@@ -209,9 +208,9 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
             const testWithPluginId = firstFailure || firstPass;
             const pluginId = testWithPluginId?.result?.metadata?.pluginId;
 
-            const metricName = getMetricNameFromPlugin(pluginId || categoryName, categoryName);
-
-            const url = `/eval/${evalId}?metric=${encodeURIComponent(metricName)}`;
+            const url = pluginId
+              ? `/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`
+              : `/eval/${evalId}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {

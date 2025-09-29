@@ -4,7 +4,7 @@ import logger from '../logger';
 import { ellipsize } from '../util/text';
 import type { Cache } from 'cache-manager';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 type FalProviderOptions = {

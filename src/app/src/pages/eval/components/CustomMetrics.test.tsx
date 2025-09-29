@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import CustomMetrics from './CustomMetrics';
 
 describe('CustomMetrics', () => {
@@ -133,56 +133,6 @@ describe('CustomMetrics', () => {
 
     expect(screen.queryByTestId('metric-value-metric1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('metric-value-metric2')).toHaveTextContent('0');
-  });
-
-  it('shows/hides metrics based on show more/less button', () => {
-    const lookup = Object.fromEntries(
-      Array.from({ length: 15 }, (_, i) => [`metric${i + 1}`, i + 1]),
-    );
-
-    render(<CustomMetrics lookup={lookup} />);
-
-    expect(screen.getAllByTestId(/^metric-metric\d+$/)).toHaveLength(10);
-
-    fireEvent.click(screen.getByTestId('toggle-show-more'));
-    expect(screen.getAllByTestId(/^metric-metric\d+$/)).toHaveLength(15);
-
-    fireEvent.click(screen.getByTestId('toggle-show-more'));
-    expect(screen.getAllByTestId(/^metric-metric\d+$/)).toHaveLength(10);
-  });
-
-  it('does not display toggle when number of metrics equals NUM_METRICS_TO_DISPLAY_ABOVE_FOLD', () => {
-    const lookup = Object.fromEntries(
-      Array.from({ length: 10 }, (_, i) => [`metric${i + 1}`, i + 1]),
-    );
-
-    render(<CustomMetrics lookup={lookup} />);
-
-    expect(screen.queryByTestId('toggle-show-more')).not.toBeInTheDocument();
-  });
-
-  it('calls onSearchTextChange when metric is clicked', () => {
-    const onSearchTextChange = vi.fn();
-    const lookup = {
-      metric1: 10,
-    };
-
-    render(<CustomMetrics lookup={lookup} onSearchTextChange={onSearchTextChange} />);
-
-    fireEvent.click(screen.getByTestId('metric-metric1'));
-    expect(onSearchTextChange).toHaveBeenCalledWith('metric=metric1:');
-  });
-
-  it('calls onMetricFilter with the metric name when a metric chip is clicked and onMetricFilter is provided', () => {
-    const onMetricFilter = vi.fn();
-    const lookup = {
-      metric1: 10,
-    };
-
-    render(<CustomMetrics lookup={lookup} onMetricFilter={onMetricFilter} />);
-
-    fireEvent.click(screen.getByTestId('metric-metric1'));
-    expect(onMetricFilter).toHaveBeenCalledWith('metric1');
   });
 
   it('displays metric names correctly', () => {

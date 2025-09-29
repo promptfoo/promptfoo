@@ -36,12 +36,8 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import {
-  accumulateTokenUsage,
-  createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
-} from '../../util/tokenUsageUtils';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
 import {
@@ -176,6 +172,7 @@ export async function evaluateResponse(
     },
     vars: {},
   });
+  TokenUsageTracker.getInstance().trackUsage(provider.id(), judgeResp.tokenUsage);
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
@@ -241,10 +238,39 @@ export async function getNewPrompt(
   if (redteamResp.error) {
     throw new Error(`Error from redteam provider: ${redteamResp.error}`);
   }
-  const retObj =
-    typeof redteamResp.output === 'string'
-      ? extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output)
-      : redteamResp.output;
+  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+
+  let retObj: { improvement: string; prompt: string };
+  if (typeof redteamResp.output === 'string') {
+    try {
+      // Primary path: extract first JSON object from possibly fenced/prose output
+      retObj = extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output);
+    } catch (primaryErr) {
+      // Fallback: sometimes models return a JSON-encoded string; try one decode then extract
+      try {
+        const decoded = JSON.parse(redteamResp.output);
+        if (typeof decoded === 'string') {
+          retObj = extractFirstJsonObject<{ improvement: string; prompt: string }>(decoded);
+        } else {
+          retObj = decoded as { improvement: string; prompt: string };
+        }
+      } catch (fallbackErr) {
+        logger.info(
+          `[IterativeTree] Failed to parse attacker response as JSON (primary and fallback). Skipping this turn. primary=${String(
+            primaryErr,
+          )} fallback=${String(fallbackErr)} outputPreview="${redteamResp.output.slice(0, 200)}"`,
+        );
+        // Gracefully skip this turn to keep the conversation going
+        return {
+          improvement: 'parse failure – skipping turn',
+          prompt: '',
+          tokenUsage: redteamResp.tokenUsage,
+        };
+      }
+    }
+  } else {
+    retObj = redteamResp.output as { improvement: string; prompt: string };
+  }
   return {
     ...retObj,
     tokenUsage: redteamResp.tokenUsage,
@@ -280,6 +306,7 @@ export async function checkIfOnTopic(
     },
     vars: {},
   });
+  TokenUsageTracker.getInstance().trackUsage(provider.id(), isOnTopicResp.tokenUsage);
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
@@ -577,18 +604,10 @@ async function runRedteamConversation({
           loggerTag: '[IterativeTree]',
         });
 
-        const {
-          improvement,
-          prompt: newInjectVar,
-          tokenUsage: redteamTokenUsage,
-        } = await getNewPrompt(redteamProvider, [
+        const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
           ...redteamHistory,
           { role: 'assistant', content: node.prompt },
         ]);
-
-        if (redteamTokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, redteamTokenUsage);
-        }
 
         attempts++;
         logger.debug(
@@ -605,14 +624,11 @@ async function runRedteamConversation({
           targetProvider,
         );
 
-        const { isOnTopic, tokenUsage: isOnTopicTokenUsage } = await checkIfOnTopic(
+        const { isOnTopic } = await checkIfOnTopic(
           gradingProvider,
           onTopicSystemPrompt,
           targetPrompt,
         );
-        if (isOnTopicTokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, isOnTopicTokenUsage);
-        }
 
         const targetResponse = await getTargetResponse(
           targetProvider,
@@ -623,7 +639,10 @@ async function runRedteamConversation({
         if (targetResponse.error) {
           throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
         }
-        invariant(targetResponse.output, '[IterativeTree] Target did not return an output');
+        invariant(
+          Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
+          '[IterativeTree] Target did not return an output property',
+        );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
@@ -695,10 +714,6 @@ async function runRedteamConversation({
             );
             storedGraderResult = grade;
             graderPassed = grade.pass;
-
-            if (grade.tokensUsed) {
-              accumulateGraderTokenUsage(totalTokenUsage, grade);
-            }
           }
         }
 

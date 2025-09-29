@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Max-score assertion for objective output selection
+
+# This example demonstrates how max-score can objectively select the best implementation
+# based on weighted scores from multiple assertions (correctness, documentation, efficiency)
+
+prompts:
+  - 'Generate a Python function to {{task}}'
+  - 'Write an efficient Python function to {{task}}'
+  - 'Create a well-documented Python function to {{task}}'
+
+providers:
+  - openai:o4-mini
+  - anthropic:claude-4-sonnet
+  - google:gemini-2.5-flash
+
+tests:
+  - vars:
+      task: 'merge two sorted lists into one sorted list'
+    assert:
+      # Correctness test
+      - type: python
+        value: |
+          # Test the merge function
+          list1 = [1, 3, 5, 7, 9]
+          list2 = [2, 4, 6, 8, 10]
+          result = merge_sorted_lists(list1, list2)
+          assert result == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], f"Expected [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], got {result}"
+
+          # Test with empty lists
+          assert merge_sorted_lists([], [1, 2, 3]) == [1, 2, 3]
+          assert merge_sorted_lists([1, 2, 3], []) == [1, 2, 3]
+          assert merge_sorted_lists([], []) == []
+
+      # Documentation test
+      - type: llm-rubric
+        value: 'Code includes a clear docstring explaining parameters, return value, and complexity'
+
+      # Code structure and efficiency
+      - type: llm-rubric
+        value: 'The implementation uses an efficient algorithm (O(m+n) time complexity) and follows Python best practices'
+
+      # Max-score selects the best implementation objectively
+      - type: max-score
+        value:
+          weights:
+            python: 3 # Correctness is most important
+            llm-rubric: 1.5 # Documentation and code quality weighted together
+
+  - vars:
+      task: 'check if a string is a palindrome (ignoring case and spaces)'
+    assert:
+      # Correctness
+      - type: python
+        value: |
+          assert is_palindrome("racecar") == True
+          assert is_palindrome("A man a plan a canal Panama") == True
+          assert is_palindrome("race a car") == False
+          assert is_palindrome("hello") == False
+          assert is_palindrome("") == True
+
+      # Edge case handling
+      - type: llm-rubric
+        value: 'Handles edge cases like empty strings and single characters correctly'
+
+      # Efficiency
+      - type: llm-rubric
+        value: 'Uses an efficient algorithm (O(n) time complexity)'
+
+      # Simple max-score (all assertions equally weighted)
+      - type: max-score

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import { formatDataGridDate } from '@app/utils/date';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Paper from '@mui/material/Paper';
@@ -70,7 +71,13 @@ export default function Prompts({
     open: false,
     selectedIndex: 0,
   });
-  const hasShownPopup = useRef(false);
+
+  // Reset dialog state when data changes to prevent invalid index
+  useEffect(() => {
+    if (dialogState.open && dialogState.selectedIndex >= data.length) {
+      setDialogState({ open: false, selectedIndex: 0 });
+    }
+  }, [data, dialogState.open, dialogState.selectedIndex]);
 
   const handleClickOpen = (index: number) => {
     setDialogState({ open: true, selectedIndex: index });
@@ -81,16 +88,11 @@ export default function Prompts({
   };
 
   useEffect(() => {
-    if (hasShownPopup.current) {
-      return;
-    }
-
     const promptId = searchParams.get('id');
-    if (promptId) {
+    if (promptId && data.length > 0) {
       const promptIndex = data.findIndex((prompt) => prompt.id.startsWith(promptId));
       if (promptIndex !== -1) {
         handleClickOpen(promptIndex);
-        hasShownPopup.current = true;
       }
     }
   }, [data, searchParams]);
@@ -134,7 +136,7 @@ export default function Prompts({
                   '&:hover': { textDecoration: 'underline' },
                 }}
               >
-                {params.value}
+                {formatDataGridDate(params.value)}
               </Typography>
             </Link>
           );
@@ -186,7 +188,7 @@ export default function Prompts({
         }}
       >
         <DataGrid
-          rows={data}
+          rows={error ? [] : data}
           columns={columns}
           loading={isLoading}
           getRowId={(row) => row.id}
@@ -279,14 +281,16 @@ export default function Prompts({
         />
       </Paper>
 
-      {data[dialogState.selectedIndex] && (
-        <PromptDialog
-          openDialog={dialogState.open}
-          handleClose={handleClose}
-          selectedPrompt={data[dialogState.selectedIndex]}
-          showDatasetColumn={showDatasetColumn}
-        />
-      )}
+      {dialogState.open &&
+        dialogState.selectedIndex < data.length &&
+        data[dialogState.selectedIndex] && (
+          <PromptDialog
+            openDialog={dialogState.open}
+            handleClose={handleClose}
+            selectedPrompt={data[dialogState.selectedIndex]}
+            showDatasetColumn={showDatasetColumn}
+          />
+        )}
     </Box>
   );
 }

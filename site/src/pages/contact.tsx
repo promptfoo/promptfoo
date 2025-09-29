@@ -386,7 +386,7 @@ function Contact(): JSX.Element {
                   🐙 View on GitHub
                 </Link>
                 <Link
-                  href="mailto:enterprise@promptfoo.dev"
+                  href="mailto:inquiries@promptfoo.dev"
                   className={styles.quickLink}
                   sx={{
                     fontSize: '0.75rem',
@@ -395,7 +395,7 @@ function Contact(): JSX.Element {
                     textDecoration: 'none',
                   }}
                 >
-                  📧 enterprise@promptfoo.dev
+                  📧 inquiries@promptfoo.dev
                 </Link>
               </Box>
             </Box>

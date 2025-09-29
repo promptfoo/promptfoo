@@ -10,7 +10,7 @@ import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
 import { TestGrader } from '../util/utils';
 
-import type { ApiProvider, Assertion, GradingConfig } from '../../src/types';
+import type { ApiProvider, Assertion, GradingConfig } from '../../src/types/index';
 
 jest.mock('../../src/esm', () => ({
   importModule: jest.fn(),
@@ -137,6 +137,16 @@ describe('matchesLlmRubric', () => {
 
     expect(options.provider.callApi).toHaveBeenCalledWith(
       expect.stringContaining(JSON.stringify(rubric)),
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: expect.stringContaining(JSON.stringify(rubric)),
+        }),
+        vars: expect.objectContaining({
+          output: 'Sample output',
+          rubric: rubric,
+        }),
+      }),
     );
   });
 
@@ -461,7 +471,19 @@ describe('matchesLlmRubric', () => {
         numRequests: 0,
       },
     });
-    expect(mockCallApi).toHaveBeenCalledWith('Grading prompt');
+    expect(mockCallApi).toHaveBeenCalledWith(
+      'Grading prompt',
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: 'Grading prompt',
+        }),
+        vars: expect.objectContaining({
+          output: 'Sample output',
+          rubric: 'Expected output',
+        }),
+      }),
+    );
 
     mockCallApi.mockRestore();
   });
@@ -815,7 +837,19 @@ describe('matchesLlmRubric', () => {
       expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
       'utf8',
     );
-    expect(grading.provider.callApi).toHaveBeenCalledWith(expect.stringContaining(mockFileContent));
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining(mockFileContent),
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: expect.stringContaining(mockFileContent),
+        }),
+        vars: expect.objectContaining({
+          output: 'Test output',
+          rubric: 'Test rubric',
+        }),
+      }),
+    );
     expect(result).toEqual({
       pass: true,
       score: 1,
@@ -858,6 +892,16 @@ describe('matchesLlmRubric', () => {
 
     expect(grading.provider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Do this: Test rubric'),
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: expect.stringContaining('Do this: Test rubric'),
+        }),
+        vars: expect.objectContaining({
+          output: 'Test output',
+          rubric: 'Test rubric',
+        }),
+      }),
     );
     expect(mockImportModule).toHaveBeenCalledWith(filePath, undefined);
 
@@ -915,7 +959,19 @@ describe('matchesLlmRubric', () => {
     const { doRemoteGrading } = remoteGrading;
     expect(doRemoteGrading).not.toHaveBeenCalled();
 
-    expect(grading.provider.callApi).toHaveBeenCalledWith(expect.stringContaining('Custom prompt'));
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Custom prompt'),
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: expect.stringContaining('Custom prompt'),
+        }),
+        vars: expect.objectContaining({
+          output: 'Test output',
+          rubric: 'Test rubric',
+        }),
+      }),
+    );
   });
 
   it('should call remote when redteam is enabled and rubric prompt is not overridden', async () => {

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Llama.cpp
+description: "Execute quantized LLMs efficiently on CPUs using llama.cpp's optimized inference engine for resource-constrained deployments"
 ---
 
 # Llama.cpp

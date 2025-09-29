@@ -1,5 +1,6 @@
 ---
 sidebar_label: Cohere
+description: Configure Cohere's Command-R and Command models for RAG-optimized chat inference, with built-in web search connectors and flexible prompt truncation controls
 ---
 
 # Cohere

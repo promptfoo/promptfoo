@@ -97,6 +97,14 @@ export interface CompletionOptions {
   apiVersion?: string; // For Live API: 'v1alpha' or 'v1' (default: v1alpha)
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format
+  /**
+   * Google service account credentials.
+   * Can be:
+   * 1. JSON string containing service account key
+   * 2. File path prefixed with 'file://' to load from external file
+   * 3. Undefined to use default authentication (Application Default Credentials)
+   */
+  credentials?: string;
 
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
@@ -110,6 +118,19 @@ export interface CompletionOptions {
   top_p?: number; // Alternative format for Claude models
   topK?: number;
   top_k?: number; // Alternative format for Claude models
+
+  // Image generation options
+  n?: number; // Number of images to generate
+  aspectRatio?: '1:1' | '16:9' | '9:16' | '3:4' | '4:3'; // Valid aspect ratios
+  personGeneration?: 'allow_all' | 'allow_adult' | 'dont_allow';
+  safetyFilterLevel?:
+    | 'block_most'
+    | 'block_some'
+    | 'block_few'
+    | 'block_fewest'
+    | 'block_low_and_above';
+  addWatermark?: boolean;
+  seed?: number;
 
   // Live API websocket timeout
   timeoutMs?: number;
@@ -198,6 +219,13 @@ export interface CompletionOptions {
   };
 
   mcp?: MCPConfig;
+
+  /**
+   * Controls role mapping when converting from OpenAI format to Gemini format.
+   * If true, uses 'assistant' role (for older Gemini versions).
+   * If false (default), maps 'assistant' to 'model' (for newer Gemini versions).
+   */
+  useAssistantRole?: boolean;
 }
 
 // Claude API interfaces

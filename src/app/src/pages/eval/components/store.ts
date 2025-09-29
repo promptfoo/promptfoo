@@ -1,18 +1,26 @@
 import { callApi } from '@app/utils/api';
+import { Severity } from '@promptfoo/redteam/constants';
+import {
+  isPolicyMetric,
+  isValidPolicyObject,
+  makeInlinePolicyId,
+} from '@promptfoo/redteam/plugins/policy/utils';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { VisibilityState } from '@tanstack/table-core';
-
+import type { PolicyObject } from '@promptfoo/redteam/types';
 import type {
+  EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTable,
-  FilterMode,
+  RedteamPluginObject,
   ResultsFile,
   UnifiedConfig,
-} from './types';
+} from '@promptfoo/types';
+import type { VisibilityState } from '@tanstack/table-core';
 
 function computeHighlightCount(table: EvaluateTable | null): number {
   if (!table) {
@@ -34,19 +42,136 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   const metrics = new Set<string>();
   table.head.prompts.forEach((prompt) => {
     if (prompt.metrics?.namedScores) {
-      Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
+      Object.keys(prompt.metrics.namedScores).forEach((metric) => {
+        // Exclude policy metrics as they are handled by the separate policy filter
+        if (!isPolicyMetric(metric)) {
+          metrics.add(metric);
+        }
+      });
     }
   });
 
   return Array.from(metrics).sort();
 }
 
+/**
+ * Extracts unique policy IDs from plugins.
+ */
+function buildPolicyOptions(plugins?: RedteamPluginObject[]): string[] {
+  const policyIds = new Set<string>();
+  plugins?.forEach((plugin) => {
+    if (typeof plugin !== 'string' && plugin.id === 'policy') {
+      const policy = plugin?.config?.policy;
+      if (policy) {
+        if (isValidPolicyObject(policy)) {
+          policyIds.add(policy.id);
+        } else {
+          policyIds.add(makeInlinePolicyId(policy));
+        }
+      }
+    }
+  });
+
+  return Array.from(policyIds).sort();
+}
+
+type PolicyIdToNameMap = Record<PolicyObject['id'], PolicyObject['name']>;
+
+/**
+ * Creates a mapping of policy IDs to their names for display purposes.
+ * Used by the filter form to show policy names in the dropdown.
+ */
+function extractPolicyIdToNameMap(plugins: RedteamPluginObject[]): PolicyIdToNameMap {
+  const policyMap: PolicyIdToNameMap = {};
+
+  plugins.forEach((plugin) => {
+    if (typeof plugin !== 'string' && plugin.id === 'policy') {
+      const policy = plugin?.config?.policy;
+      if (policy && isValidPolicyObject(policy)) {
+        policyMap[policy.id] = policy.name;
+      }
+    }
+  });
+
+  return policyMap;
+}
+
+function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
+  const strategyIds =
+    strategies?.map((strategy) => (typeof strategy === 'string' ? strategy : strategy.id)) ?? [];
+
+  return Array.from(new Set([...strategyIds, 'basic']));
+}
+
+/**
+ * The `plugin`, `strategy`, `severity`, and `policy` filter options are only available for redteam evaluations.
+ * This function conditionally constructs these based on whether the evaluation was a red team. If it was not,
+ * it returns an empty object.
+ *
+ * @param config - The eval config
+ * @param table - The eval table (needed to extract policy options from metrics)
+ */
+function buildRedteamFilterOptions(
+  config?: Partial<UnifiedConfig> | null,
+  table?: EvaluateTable | null,
+): { plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {} {
+  const isRedteam = Boolean(config?.redteam);
+
+  // For non-redteam evaluations, don't provide redteam-specific filter options.
+  // Note: This is separate from metadata filtering - if users have metadata fields
+  // named "plugin", "strategy", or "severity", they can still filter on them using
+  // the metadata filter type (which uses field/value pairs).
+  if (!isRedteam) {
+    return {};
+  }
+
+  return {
+    // Deduplicate plugins (handles custom plugins)
+    plugin: Array.from(
+      new Set(
+        config?.redteam?.plugins?.map((plugin) =>
+          typeof plugin === 'string' ? plugin : plugin.id,
+        ) ?? [],
+      ),
+    ),
+    strategy: extractUniqueStrategyIds(config?.redteam?.strategies),
+    severity: computeAvailableSeverities(config?.redteam?.plugins),
+    policy: buildPolicyOptions(config?.redteam?.plugins),
+  };
+}
+
+function computeAvailableSeverities(
+  plugins?: Array<string | { id: string; severity?: string }> | null,
+): string[] {
+  if (!plugins || plugins.length === 0) {
+    return [];
+  }
+
+  // Get the risk category severity map with any overrides from plugins
+  const severityMap = getRiskCategorySeverityMap(
+    plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)) as any,
+  );
+
+  // Extract unique severities from the map
+  const severities = new Set<string>();
+  Object.values(severityMap).forEach((severity) => {
+    if (severity) {
+      severities.add(severity);
+    }
+  });
+
+  // Return sorted array of severity values (in order of criticality)
+  const severityOrder = [Severity.Critical, Severity.High, Severity.Medium, Severity.Low];
+  return severityOrder.filter((sev) => severities.has(sev));
+}
+
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
-  filterMode?: FilterMode;
+  filterMode?: EvalResultsFilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
+  skipLoadingState?: boolean;
   filters?: ResultsFilter[];
 }
 
@@ -60,7 +185,13 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric' | 'metadata';
+export type ResultsFilterType =
+  | 'metric'
+  | 'metadata'
+  | 'plugin'
+  | 'strategy'
+  | 'severity'
+  | 'policy';
 
 export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
 
@@ -110,6 +241,10 @@ interface TableState {
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
+  isStreaming: boolean;
+  setIsStreaming: (isStreaming: boolean) => void;
+
+  shouldHighlightSearchText: boolean;
 
   /**
    * Adds a new filter to the filters array.
@@ -165,9 +300,32 @@ interface TableState {
      * The options for each filter type.
      */
     options: {
-      [key in ResultsFilterType]: string[];
+      metric: string[];
+      metadata: string[];
+      // Redteam-specific filter options are only available for redteam evaluations.
+      plugin?: string[];
+      strategy?: string[];
+      severity?: string[];
+      policy?: string[];
     };
+    /**
+     * Mapping of policy IDs to their names for display purposes.
+     */
+    policyIdToNameMap?: Record<string, string | undefined>;
   };
+
+  /**
+   * Metadata keys for dropdown population
+   */
+  metadataKeys: string[];
+  metadataKeysLoading: boolean;
+  metadataKeysError: boolean;
+  fetchMetadataKeys: (id: string) => Promise<string[]>;
+  currentMetadataKeysRequest: AbortController | null;
+
+  filterMode: EvalResultsFilterMode;
+  setFilterMode: (filterMode: EvalResultsFilterMode) => void;
+  resetFilterMode: () => void;
 }
 
 interface SettingsState {
@@ -258,21 +416,23 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setVersion: (version: number) => set(() => ({ version })),
 
   table: null,
-  setTable: (table: EvaluateTable | null) =>
+
+  /**
+   * Note: This method is only used when ratings are updated; therefore filters
+   * are not updated.
+   */
+  setTable: (table: EvaluateTable | null) => {
     set((prevState) => ({
       table,
       highlightedResultsCount: computeHighlightCount(table),
-      filters: {
-        ...prevState.filters,
-        options: {
-          metric: computeAvailableMetrics(table),
-          metadata: [],
-        },
-      },
-    })),
+      filters: prevState.filters,
+    }));
+  },
+
   setTableFromResultsFile: (resultsFile: ResultsFile) => {
     if (resultsFile.version && resultsFile.version >= 4) {
       const table = convertResultsToTable(resultsFile);
+
       set((prevState) => ({
         table,
         version: resultsFile.version,
@@ -282,7 +442,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(table),
             metadata: [],
+            ...buildRedteamFilterOptions(resultsFile.config, table),
           },
+          policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
         },
       }));
     } else {
@@ -296,7 +458,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(results.table),
             metadata: [],
+            ...buildRedteamFilterOptions(resultsFile.config, results.table),
           },
+          policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
         },
       }));
     }
@@ -312,20 +476,40 @@ export const useTableStore = create<TableState>()((set, get) => ({
   highlightedResultsCount: 0,
 
   isFetching: false,
+  isStreaming: false,
+  setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
+
+  shouldHighlightSearchText: false,
 
   fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
     const {
       pageIndex = 0,
       pageSize = 50,
-      filterMode = 'all',
+      // Default to current store value to keep initial load consistent with UI state
+      filterMode = get().filterMode,
       searchText = '',
       skipSettingEvalId = false,
+      skipLoadingState = false,
       filters = [],
     } = options;
 
     const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
-    set({ isFetching: true });
+    // Cancel any existing metadata keys request and reset state for new eval
+    const currentState = get();
+    if (currentState.currentMetadataKeysRequest) {
+      currentState.currentMetadataKeysRequest.abort();
+    }
+
+    set({
+      isFetching: skipLoadingState ? get().isFetching : true,
+      shouldHighlightSearchText: false,
+      // Clear previous metadata keys to prevent memory accumulation
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: false,
+      currentMetadataKeysRequest: null,
+    });
 
     try {
       console.log(`Fetching data for eval ${id} with options:`, options);
@@ -380,24 +564,36 @@ export const useTableStore = create<TableState>()((set, get) => ({
           version: data.version,
           author: data.author,
           evalId: skipSettingEvalId ? get().evalId : id,
-          isFetching: false,
+          isFetching: skipLoadingState ? prevState.isFetching : false,
+          shouldHighlightSearchText: searchText !== '',
           filters: {
             ...prevState.filters,
             options: {
               metric: computeAvailableMetrics(data.table),
               metadata: [],
+              ...buildRedteamFilterOptions(data.config, data.table),
             },
+            policyIdToNameMap: extractPolicyIdToNameMap(data.config.redteam?.plugins ?? []),
           },
         }));
+
+        // Metadata keys will be fetched lazily when user opens metadata filter dropdown
 
         return data;
       }
 
-      set({ isFetching: false });
+      if (!skipLoadingState) {
+        set({ isFetching: false });
+      }
       return null;
     } catch (error) {
       console.error('Error fetching eval data:', error);
-      set({ isFetching: false });
+      set({
+        isFetching: skipLoadingState ? get().isFetching : false,
+        isStreaming: false,
+        metadataKeysLoading: false,
+        currentMetadataKeysRequest: null,
+      });
       return null;
     }
   },
@@ -535,4 +731,97 @@ export const useTableStore = create<TableState>()((set, get) => ({
       };
     });
   },
+
+  // Metadata keys implementation
+  metadataKeys: [],
+  metadataKeysLoading: false,
+  metadataKeysError: false,
+  currentMetadataKeysRequest: null,
+
+  fetchMetadataKeys: async (id: string) => {
+    // Cancel any existing request to prevent race conditions
+    const currentState = get();
+    if (currentState.currentMetadataKeysRequest) {
+      currentState.currentMetadataKeysRequest.abort();
+    }
+
+    const abortController = new AbortController();
+
+    // Add timeout to prevent hanging requests
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+    }, 30000); // 30 second timeout
+
+    set({
+      currentMetadataKeysRequest: abortController,
+      metadataKeysLoading: true,
+      metadataKeysError: false,
+    });
+
+    try {
+      // Get comparison eval IDs from settings store
+      const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
+
+      // Build URL with comparison eval IDs as query params
+      const url = new URL(`/eval/${id}/metadata-keys`, window.location.origin);
+      comparisonEvalIds.forEach((compId) => {
+        url.searchParams.append('comparisonEvalIds', compId);
+      });
+
+      const resp = await callApi(url.toString().replace(window.location.origin, ''), {
+        signal: abortController.signal,
+      });
+
+      // Clear timeout on successful response
+      clearTimeout(timeoutId);
+
+      if (resp.ok) {
+        const data = await resp.json();
+
+        // Check if this request is still current before updating state
+        const latestState = get();
+        if (latestState.currentMetadataKeysRequest === abortController) {
+          set({
+            metadataKeys: data.keys,
+            metadataKeysLoading: false,
+            currentMetadataKeysRequest: null,
+          });
+        }
+        return data.keys;
+      } else {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      }
+    } catch (error) {
+      // Always clear timeout
+      clearTimeout(timeoutId);
+
+      if ((error as Error).name === 'AbortError') {
+        // Request was aborted - clean up state but don't show error
+        const latestState = get();
+        if (latestState.currentMetadataKeysRequest === abortController) {
+          set({
+            metadataKeysLoading: false,
+            currentMetadataKeysRequest: null,
+          });
+        }
+      } else {
+        // Actual error occurred - only update if this is still the current request
+        console.error('Error fetching metadata keys:', error);
+        const latestState = get();
+        if (latestState.currentMetadataKeysRequest === abortController) {
+          set({
+            metadataKeysError: true,
+            metadataKeysLoading: false,
+            currentMetadataKeysRequest: null,
+          });
+        }
+      }
+    }
+    return [];
+  },
+
+  filterMode: 'all',
+  setFilterMode: (filterMode: EvalResultsFilterMode) =>
+    set((prevState) => ({ ...prevState, filterMode })),
+  resetFilterMode: () => set((prevState) => ({ ...prevState, filterMode: 'all' })),
 }));

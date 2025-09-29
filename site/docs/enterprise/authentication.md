@@ -2,7 +2,7 @@
 sidebar_label: Authentication
 sidebar_position: 10
 title: Authenticating into Promptfoo Enterprise
-description: Learn how to authenticate into Promptfoo Enterprise using SSO, basic authentication, and CLI methods
+description: Configure enterprise authentication with SSO providers, API keys, service accounts, and CLI access for secure team collaboration
 keywords: [authentication, login, logout, promptfoo enterprise, promptfoo app, sso, saml, oidc]
 ---
 

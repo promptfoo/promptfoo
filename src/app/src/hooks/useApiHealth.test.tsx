@@ -6,6 +6,9 @@ import { useApiHealth } from './useApiHealth';
 // Mock the API call
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('useApiHealth', () => {

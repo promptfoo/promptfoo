@@ -18,6 +18,11 @@ jest.mock('google-auth-library');
 
 jest.mock('glob', () => ({
   globSync: jest.fn().mockReturnValue([]),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('fs', () => ({
@@ -252,6 +257,58 @@ describe('util', () => {
       });
     });
 
+    it('should map assistant role to model role by default', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'model', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant mapped to model
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should preserve assistant role when useAssistantRole is true', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'assistant', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant preserved
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should map assistant to model when useAssistantRole is false', () => {
+      const input = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'Hello' }] },
+          { role: 'model', parts: [{ text: 'Hi there' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
     it('should handle OpenAI chat format with array content', () => {
       const input = [
         {
@@ -270,6 +327,21 @@ describe('util', () => {
         coerced: true,
         systemInstruction: undefined,
       });
+    });
+
+    it('should respect useAssistantRole flag with array content', () => {
+      const input = [
+        { role: 'user', content: [{ type: 'text', text: 'Question' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'Answer' }] },
+      ];
+
+      // Test with useAssistantRole: true
+      const resultWithAssistant = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(resultWithAssistant.contents[1].role).toBe('assistant');
+
+      // Test with useAssistantRole: false (default)
+      const resultWithModel = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(resultWithModel.contents[1].role).toBe('model');
     });
 
     it('should handle OpenAI chat format with object content', () => {
@@ -510,6 +582,34 @@ describe('util', () => {
         systemInstruction: {
           parts: [{ text: 'You are a helpful assistant.' }],
         },
+      });
+    });
+
+    it('should convert system-only prompts to user messages', () => {
+      const input = [{ role: 'system', content: 'You are a helpful assistant.' }];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [{ role: 'user', parts: [{ text: 'You are a helpful assistant.' }] }],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should convert multiple system-only messages to single user message', () => {
+      const input = [
+        { role: 'system', content: 'First instruction.' },
+        { role: 'system', content: 'Second instruction.' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'First instruction.' }, { text: 'Second instruction.' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
       });
     });
 
@@ -1256,6 +1356,89 @@ describe('util', () => {
           },
         ]);
       });
+
+      it('should correctly detect and process WebP images', () => {
+        // WebP file starts with "RIFF" (UklGR in base64) followed by file size
+        // This is a longer base64 string to meet the 100 character minimum requirement
+        const webpBase64 =
+          'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vuUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Here is a WebP image:\n${webpBase64}\nEnd of image.`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          webpImage: webpBase64,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Here is a WebP image:',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/webp',
+                  data: webpBase64,
+                },
+              },
+              {
+                text: 'End of image.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should correctly detect WebP images with variable file sizes', () => {
+        // Different valid WebP base64 strings that start with UklGR (not UklGRg)
+        // These represent "RIFF" followed by different file size bytes
+        // Each is padded to be over 100 characters to meet the minimum requirement
+        const webpVariants = [
+          'UklGRjAAAABXRUJQVlA4IBQAAAAwAQCdASoBAAEAAQAcJaACdLoB/AAAA0AA/v359OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+          'UklGRkAAAABXRUJQVlA4IEQAAAAwAgCdASoCAAIAAQAcJaACdLoD/AAAA8AAAAj17Zs+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+          'UklGRlAAAABXRUJQVlA4IEQAAAAwAgCdASoCAAIAAQAcJaACdLoD/AAAA8AAAAj17Zs+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+        ];
+
+        webpVariants.forEach((webpData, index) => {
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: webpData,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            [`webpImage${index}`]: webpData,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts).toEqual([
+            {
+              inlineData: {
+                mimeType: 'image/webp',
+                data: webpData,
+              },
+            },
+          ]);
+        });
+      });
     });
   });
 
@@ -1357,6 +1540,120 @@ describe('util', () => {
       const tools: any[] = [];
       const normalized = normalizeTools(tools);
       expect(normalized).toEqual([]);
+    });
+  });
+
+  describe('resolveProjectId', () => {
+    const mockProjectId = 'google-auth-project';
+
+    beforeEach(async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Re-mock google-auth-library after module reset
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+    });
+
+    afterEach(() => {
+      jest.dontMock('google-auth-library');
+    });
+
+    it('should prioritize explicit config over environment variables', async () => {
+      // Import resolveProject after mocking in beforeEach
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = { projectId: 'explicit-project' };
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+    });
+
+    it('should use environment variables when no explicit config', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('env-project');
+    });
+
+    it('should fall back to Google Auth Library when no config or env vars', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe(mockProjectId);
+    });
+
+    it('should handle Google Auth Library getProjectId failure gracefully', async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Mock Google Auth Library where getProjectId throws an error
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        fromJSON: jest.fn().mockResolvedValue({ name: 'mockCredentialClient' }),
+        getProjectId: jest
+          .fn()
+          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      // Test that explicit config projectId is still used even when getProjectId fails
+      const config = {
+        projectId: 'explicit-project',
+        credentials: '{"type": "service_account", "project_id": "creds-project"}',
+      };
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+
+      // Verify that getProjectId was called but failed gracefully
+      expect(mockAuth.getProjectId).toHaveBeenCalled();
+      expect(mockAuth.fromJSON).toHaveBeenCalled();
+    });
+
+    it('should return empty string when all sources fail', async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Mock Google Auth Library where getProjectId throws an error
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: jest
+          .fn()
+          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      // Test that when no projectId is available anywhere, we get empty string
+      const config = {};
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('');
+
+      // Verify that getProjectId was called but failed gracefully
+      expect(mockAuth.getProjectId).toHaveBeenCalled();
     });
   });
 });

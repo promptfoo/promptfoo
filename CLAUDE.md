@@ -71,6 +71,39 @@ When the CI style check is failing, run these commands to fix style issues:
 
 - `promptfoo` or `pf` - Access the CLI tool
 
+## Testing in Development
+
+When testing changes during development, use the local build:
+
+```bash
+npm run local -- eval -c path/to/config.yaml
+```
+
+This ensures you're testing with your current changes instead of the installed version.
+
+## Documentation Testing
+
+When testing documentation changes that require building the site, you can speed up the process by skipping OG (Open Graph) image generation:
+
+```bash
+cd site
+SKIP_OG_GENERATION=true npm run build
+```
+
+The OG image generation process can take several minutes and may cause CI timeouts. For documentation-only changes, skipping it is safe and recommended.
+
+**When to use `SKIP_OG_GENERATION=true`:**
+
+- Testing documentation changes locally
+- CI builds timing out due to OG image generation
+- Documentation-only PRs where OG images aren't critical
+
+**When NOT to skip OG generation:**
+
+- Final production builds
+- When OG image changes are specifically needed
+- When testing social media sharing functionality
+
 ## Code Style Guidelines
 
 - Use TypeScript with strict type checking
@@ -82,10 +115,42 @@ When the CI style check is failing, run these commands to fix style issues:
 - Follow Jest best practices with describe/it blocks
 - Use consistent error handling with proper type checks
 
+## Git Workflow - CRITICAL
+
+### NEVER COMMIT DIRECTLY TO MAIN BRANCH
+
+Always follow this workflow:
+
+1. **Create a feature branch**:
+
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout -b feature/your-branch-name
+   ```
+
+2. **Make your changes and commit**:
+
+   ```bash
+   git add .
+   git commit -m "your commit message"
+   ```
+
+   NEVER blindly `git add` everything - there might be other unrelated files lying around.
+
+3. **Push and create PR**:
+
+   ```bash
+   git push -u origin feature/your-branch-name
+   gh pr create --title "Your PR Title" --body "PR description"
+   ```
+
+4. **Wait for review and CI checks** before merging
+
 ## Project Conventions
 
 - Use CommonJS modules (type: "commonjs" in package.json)
-- Node.js version requirement (>=18.0.0)
+- Node.js version requirement (>=20.0.0). Use `nvm use` to align with `.nvmrc` (currently v24.7.0).
 - Follow file structure: core logic in src/, tests in test/
 - Examples belong in examples/ with clear README.md
 - Document provider configurations following examples in existing code

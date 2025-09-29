@@ -20,11 +20,8 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import {
-  accumulateTokenUsage,
-  createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-} from '../../util/tokenUsageUtils';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -182,6 +179,7 @@ export async function runRedteamConversation({
       },
       vars: {},
     });
+    TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
@@ -290,6 +288,7 @@ export async function runRedteamConversation({
       iterationContext,
       options,
     );
+    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug(`[Iterative] Raw target response: ${JSON.stringify(targetResponse)}`);
     if (targetResponse.error) {
       logger.info(
@@ -297,11 +296,19 @@ export async function runRedteamConversation({
       );
       continue;
     }
-    if (!targetResponse.output) {
+    if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
       logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - Empty target response. Full response: ${JSON.stringify(targetResponse)}`,
+        `[Iterative] ${i + 1}/${numIterations} - Malformed target response - missing output property. Full response: ${JSON.stringify(targetResponse)}`,
       );
       continue;
+    }
+
+    // Handle empty string responses - don't skip the iteration
+    if (targetResponse.output === '') {
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - Target returned empty string response. Treating as potential refusal.`,
+      );
+      // Continue processing - don't skip the iteration
     }
 
     const responseSessionId = targetResponse.sessionId;
@@ -341,11 +348,6 @@ export async function runRedteamConversation({
           additionalRubric,
         );
         storedGraderResult = grade;
-        if (grade.tokensUsed) {
-          accumulateTokenUsage(totalTokenUsage, grade.tokensUsed, true);
-        } else {
-          totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-        }
       }
     }
     // Calculate the score
@@ -372,6 +374,8 @@ export async function runRedteamConversation({
       },
       vars: {},
     });
+
+    TokenUsageTracker.getInstance().trackUsage(gradingProvider.id(), judgeResp.tokenUsage);
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
       await sleep(gradingProvider.delay);
@@ -390,17 +394,35 @@ export async function runRedteamConversation({
       const parsed =
         typeof judgeResp.output === 'string'
           ? extractFirstJsonObject<{
-              currentResponse: { rating: number; explanation: string };
-              previousBestResponse: { rating: number; explanation: string };
+              currentResponse?: { rating?: number | string; explanation?: string };
+              previousBestResponse?: { rating?: number | string; explanation?: string };
             }>(judgeResp.output)
-          : judgeResp.output;
-      currentScore = parsed?.currentResponse?.rating;
-      previousScore = parsed?.previousBestResponse?.rating;
+          : (judgeResp.output as any);
 
-      if (!currentScore || !previousScore) {
+      // Safely extract numeric ratings; treat 0 as valid
+      let parsedCurrent = parsed?.currentResponse?.rating as number | string | undefined;
+      if (typeof parsedCurrent === 'string') {
+        const n = Number.parseFloat(parsedCurrent);
+        parsedCurrent = Number.isFinite(n) ? n : undefined;
+      }
+      if (typeof parsedCurrent === 'number' && Number.isFinite(parsedCurrent)) {
+        currentScore = parsedCurrent;
+      } else {
         logger.info(
-          `[Iterative] Skipping iteration, did not get a score from the judge response: ${JSON.stringify(judgeResp)}`,
+          `[Iterative] Skipping iteration – judge response missing numeric currentResponse.rating. Raw: ${JSON.stringify(
+            judgeResp,
+          )}`,
         );
+        continue;
+      }
+
+      let parsedPrevious = parsed?.previousBestResponse?.rating as number | string | undefined;
+      if (typeof parsedPrevious === 'string') {
+        const n = Number.parseFloat(parsedPrevious);
+        parsedPrevious = Number.isFinite(n) ? n : undefined;
+      }
+      if (typeof parsedPrevious === 'number' && Number.isFinite(parsedPrevious)) {
+        previousScore = parsedPrevious;
       }
 
       const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
@@ -484,12 +506,6 @@ export async function runRedteamConversation({
       graderPassed: storedGraderResult?.pass,
       guardrails: targetResponse.guardrails,
     });
-
-    // Update all the token usage accumulation patterns
-    accumulateResponseTokenUsage(totalTokenUsage, redteamResp);
-    accumulateResponseTokenUsage(totalTokenUsage, isOnTopicResp);
-    accumulateResponseTokenUsage(totalTokenUsage, judgeResp);
-    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
     // Break after all processing is complete if we should exit early
     if (shouldExitEarly) {

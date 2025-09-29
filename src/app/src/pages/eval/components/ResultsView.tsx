@@ -28,6 +28,7 @@ import Stack from '@mui/material/Stack';
 import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
@@ -48,15 +49,14 @@ import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import type { StackProps } from '@mui/material/Stack';
+import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
-
-import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 import BarChartIcon from '@mui/icons-material/BarChart';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -64,7 +64,7 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
   [theme.breakpoints.down('sm')]: {
     flexDirection: 'column',
   },
-})) as React.FC<StackProps>;
+}));
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
@@ -181,6 +181,8 @@ export default function ResultsView({
     highlightedResultsCount,
     filters,
     removeFilter,
+    filterMode,
+    setFilterMode,
   } = useTableStore();
 
   const {
@@ -219,10 +221,8 @@ export default function ResultsView({
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
 
-  const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
-
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
-    const mode = event.target.value as FilterMode;
+    const mode = event.target.value as EvalResultsFilterMode;
     setFilterMode(mode);
 
     const newFailureFilter: { [key: string]: boolean } = {};
@@ -471,64 +471,16 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  // Handle metric parameter from URL
-  React.useEffect(() => {
-    const metricParam = searchParams.get('metric');
-    if (metricParam) {
-      const { addFilter, resetFilters } = useTableStore.getState();
-
-      resetFilters();
-
-      addFilter({
-        type: 'metric',
-        operator: 'equals',
-        value: metricParam,
-      });
-
-      setSearchParams((prev) => {
-        const newParams = new URLSearchParams(prev);
-        newParams.delete('metric');
-        return newParams;
-      });
-    }
-  }, [searchParams, setSearchParams]);
-
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
-  /**
-   * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
-   * (and the rendering of duplicative, useless scrollbars).
-   */
-  React.useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, []);
-
   return (
     <>
-      <Box
-        id="results-view-container"
-        px={2}
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-        ref={(el: HTMLDivElement | null) => {
-          const top = el?.getBoundingClientRect().top;
-          if (top) {
-            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-            el.style.height = `calc(100vh - ${top}px)`;
-          }
-        }}
-      >
-        <Box>
+      <Box px={2} pt={2}>
+        <Box sx={{ transition: 'all 0.3s ease' }}>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
               <TextField
@@ -675,10 +627,35 @@ export default function ResultsView({
                       }
                       const truncatedValue =
                         filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
-                      const label =
-                        filter.type === 'metric'
-                          ? `Metric: ${truncatedValue}`
-                          : `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+
+                      let label: string;
+                      if (filter.type === 'metric') {
+                        label = `Metric: ${truncatedValue}`;
+                      } else if (filter.type === 'plugin') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label = `Plugin: ${displayName}`;
+                      } else if (filter.type === 'strategy') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label = `Strategy: ${displayName}`;
+                      } else if (filter.type === 'severity') {
+                        // Capitalize the first letter of severity value for display
+                        const severityDisplay =
+                          filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
+                        label = `Severity: ${severityDisplay}`;
+                      } else if (filter.type === 'policy') {
+                        // For policy filters, use the policy name from the mapping
+                        // This should match the display format used in the dropdown
+                        const policyName = filters.policyIdToNameMap?.[filter.value];
+                        label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
+                      } else {
+                        // metadata type
+                        label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      }
+
                       return (
                         <Chip
                           key={filter.id}
@@ -778,23 +755,18 @@ export default function ResultsView({
                       </MenuItem>
                     </Tooltip>
                     <DownloadMenu />
-                    {config?.sharing && (
-                      <Tooltip
-                        title="Generate a unique URL that others can access"
-                        placement="left"
-                      >
-                        <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-                          <ListItemIcon>
-                            {shareLoading ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <ShareIcon fontSize="small" />
-                            )}
-                          </ListItemIcon>
-                          Share
-                        </MenuItem>
-                      </Tooltip>
-                    )}
+                    <Tooltip title="Generate a unique URL that others can access" placement="left">
+                      <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+                        <ListItemIcon>
+                          {shareLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <ShareIcon fontSize="small" />
+                          )}
+                        </ListItemIcon>
+                        Share
+                      </MenuItem>
+                    </Tooltip>
                     <Tooltip title="Delete this eval" placement="left">
                       <MenuItem onClick={handleDeleteEvalClick}>
                         <ListItemIcon>
@@ -812,7 +784,7 @@ export default function ResultsView({
                       color="primary"
                       variant="contained"
                       startIcon={<EyeIcon />}
-                      onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
+                      onClick={() => navigate(`/reports/?evalId=${evalId || defaultEvalId}`)}
                     >
                       Vulnerability Report
                     </Button>
@@ -832,11 +804,8 @@ export default function ResultsView({
           showStats={showInferenceDetails}
           filterMode={filterMode}
           failureFilter={failureFilter}
-          searchText={searchText}
           debouncedSearchText={debouncedSearchValue}
           onFailureFilterToggle={handleFailureFilterToggle}
-          onSearchTextChange={handleSearchTextChange}
-          setFilterMode={setFilterMode}
           zoom={resultsTableZoom}
         />
       </Box>

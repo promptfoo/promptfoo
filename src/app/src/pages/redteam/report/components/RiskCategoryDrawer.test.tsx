@@ -102,7 +102,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test normal click - should use navigate
     fireEvent.click(viewAllLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?metric=test-plugin');
+    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=test-plugin');
     expect(window.open).not.toHaveBeenCalled();
   });
 
@@ -114,7 +114,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test Ctrl+click - should open new tab
     fireEvent.click(viewAllLogsButton, { ctrlKey: true });
 
-    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?metric=test-plugin', '_blank');
+    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?plugin=test-plugin', '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
 
     // Reset mocks
@@ -123,33 +123,8 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test Cmd+click (Mac) - should also open new tab
     fireEvent.click(viewAllLogsButton, { metaKey: true });
 
-    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?metric=test-plugin', '_blank');
+    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?plugin=test-plugin', '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
-  });
-
-  it('should use metric search when plugin ID is not available', () => {
-    const propsWithoutPluginId = {
-      ...defaultProps,
-      failures: [
-        {
-          prompt: 'Test prompt',
-          output: 'Test output',
-          gradingResult: {
-            pass: false,
-            score: 0,
-            reason: 'Failed test',
-          },
-          result: createMockEvaluateResult({}),
-        },
-      ],
-    };
-
-    render(<RiskCategoryDrawer {...propsWithoutPluginId} />);
-
-    const viewAllLogsButton = screen.getByText('View All Logs');
-    fireEvent.click(viewAllLogsButton);
-
-    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?metric=Test%20Category');
   });
 
   it('should close drawer when close button is clicked', () => {

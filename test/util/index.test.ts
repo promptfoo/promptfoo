@@ -11,7 +11,7 @@ import {
   type EvaluateResult,
   ResultFailureReason,
   type TestCase,
-} from '../../src/types';
+} from '../../src/types/index';
 import {
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
@@ -24,7 +24,8 @@ import {
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
-} from '../../src/util';
+  createOutputMetadata,
+} from '../../src/util/index';
 import { TestGrader } from './utils';
 
 jest.mock('../../src/database', () => ({
@@ -37,6 +38,11 @@ jest.mock('proxy-agent', () => ({
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('fs', () => ({
@@ -737,14 +743,14 @@ describe('setupEnv', () => {
     jest.resetAllMocks();
   });
 
-  it('should call dotenv.config without parameters when envPath is undefined', () => {
+  it('should call dotenv.config with quiet=true when envPath is undefined', () => {
     setupEnv(undefined);
 
     expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
-    expect(dotenvConfigSpy).toHaveBeenCalledWith();
+    expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
   });
 
-  it('should call dotenv.config with path and override=true when envPath is specified', () => {
+  it('should call dotenv.config with path, override=true, and quiet=true when envPath is specified', () => {
     const testEnvPath = '.env.test';
 
     setupEnv(testEnvPath);
@@ -753,6 +759,7 @@ describe('setupEnv', () => {
     expect(dotenvConfigSpy).toHaveBeenCalledWith({
       path: testEnvPath,
       override: true,
+      quiet: true,
     });
   });
 
@@ -960,5 +967,94 @@ describe('renderVarsInObject', () => {
         metadata: { value: '{{ meta }}' },
       },
     });
+  });
+});
+
+describe('createOutputMetadata', () => {
+  it('should create metadata with all fields when evalRecord has all data', () => {
+    const evalRecord = {
+      createdAt: new Date('2025-01-01T12:00:00.000Z').getTime(),
+      author: 'test-author',
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: '2025-01-01T12:00:00.000Z',
+      author: 'test-author',
+    });
+  });
+
+  it('should handle missing createdAt gracefully', () => {
+    const evalRecord = {
+      author: 'test-author',
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: undefined,
+      author: 'test-author',
+    });
+  });
+
+  it('should handle missing author', () => {
+    const evalRecord = {
+      createdAt: new Date('2025-01-01T12:00:00.000Z').getTime(),
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: '2025-01-01T12:00:00.000Z',
+      author: undefined,
+    });
+  });
+
+  it('should handle invalid date in createdAt', () => {
+    const evalRecord = {
+      createdAt: 'invalid-date',
+      author: 'test-author',
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    // When new Date() is given invalid input, it returns "Invalid Date"
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: undefined,
+      author: 'test-author',
+    });
+  });
+
+  it('should create consistent exportedAt timestamps', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2025-01-15T10:30:00.000Z'));
+
+    const evalRecord = {} as any as Eval;
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata.exportedAt).toBe('2025-01-15T10:30:00.000Z');
+
+    jest.useRealTimers();
   });
 });

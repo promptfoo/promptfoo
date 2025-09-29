@@ -1,5 +1,6 @@
 ---
 sidebar_label: Preventing hallucinations
+description: Measure and reduce LLM hallucinations using perplexity metrics, RAG, and controlled decoding techniques to achieve 85%+ factual accuracy in AI outputs
 ---
 
 # How to Measure and Prevent LLM Hallucinations
@@ -235,7 +236,7 @@ In this example, we use the Ollama provider to test two versions of Meta's Llama
 prompts:
   - file://prompt1.txt
 providers:
-  - ollama:llama2
+  - ollama:chat:llama3.3
   - ollama:llama2-uncensored
 tests:
   - vars:

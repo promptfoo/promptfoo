@@ -1,7 +1,7 @@
 ---
 sidebar_label: Citation
 title: Authority-based Jailbreaking Strategy
-description: Exploit LLM bias toward academic authority by framing harmful requests within research contexts
+description: Bypass AI safety using academic citation exploitation that frames harmful content as legitimate research or scholarly inquiry
 ---
 
 # Authority-based Jailbreaking

@@ -1,7 +1,7 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ quiet: true });
 
 import cliState from './cliState';
-
 import type { EnvOverrides } from './types/env';
 
 // Define the supported environment variables and their types
@@ -53,6 +53,8 @@ type EnvVars = {
   PROMPTFOO_STRIP_RESPONSE_OUTPUT?: boolean;
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
+  PROMPTFOO_TRACING_ENABLED?: boolean;
+  PROMPTFOO_DISABLE_UNBLOCKING?: boolean;
 
   //=========================================================================
   // promptfoo configuration options
@@ -173,6 +175,7 @@ type EnvVars = {
   ANTHROPIC_TEMPERATURE?: number;
 
   // AWS Bedrock
+  AWS_BEARER_TOKEN_BEDROCK?: string;
   AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
   AWS_BEDROCK_MAX_NEW_TOKENS?: number;
@@ -183,6 +186,11 @@ type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+
+  // AWS Bedrock Agents
+  AWS_BEDROCK_AGENT_ID?: string;
+  AWS_BEDROCK_AGENT_ALIAS_ID?: string;
+
   CEREBRAS_API_KEY?: string;
 
   // Azure OpenAI auth params
@@ -243,6 +251,9 @@ type EnvVars = {
   // LLaMa
   LLAMA_BASE_URL?: string;
 
+  // Llama API
+  LLAMA_API_KEY?: string;
+
   // Local AI
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
@@ -252,6 +263,10 @@ type EnvVars = {
   MISTRAL_TEMPERATURE?: string;
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
+
+  // Nscale
+  NSCALE_SERVICE_TOKEN?: string;
+  NSCALE_API_KEY?: string;
 
   // Ollama
   OLLAMA_API_KEY?: string;
@@ -442,4 +457,13 @@ export function isCI() {
     getEnvBool('BUILDKITE') ||
     getEnvBool('TEAMCITY_VERSION')
   );
+}
+
+/**
+ * Check if the application is running in a non-interactive environment.
+ * This includes CI environments, cron jobs, SSH scripts without TTY, etc.
+ * @returns True if running in a non-interactive environment, false otherwise.
+ */
+export function isNonInteractive() {
+  return isCI() || !process.stdin.isTTY || !process.stdout.isTTY;
 }

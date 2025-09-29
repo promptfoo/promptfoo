@@ -52,7 +52,7 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 
 ![gen ai red team](https://www.promptfoo.dev/img/riskreport-1@2x.png)
 
-## Why promptfoo?
+## Why Promptfoo?
 
 - 🚀 **Developer-first**: Fast, with features like live reload and caching
 - 🔒 **Private**: Runs 100% locally - your prompts never leave your machine
@@ -60,14 +60,6 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 - 💪 **Battle-tested**: Powers LLM apps serving 10M+ users in production
 - 📊 **Data-driven**: Make decisions based on metrics, not gut feel
 - 🤝 **Open source**: MIT licensed, with an active community
-
-## Star the Project ⭐
-
-If you find promptfoo useful, please star it on GitHub! Stars help the project grow and ensure you stay updated on new releases and features.
-
-<p align="center">
-  <img src="site/static/img/github/star-animation.gif" alt="Star us on GitHub!" width="800" />
-</p>
 
 ## Learn More
 
@@ -77,13 +69,6 @@ If you find promptfoo useful, please star it on GitHub! Stars help the project g
 - 💻 [CLI Usage](https://www.promptfoo.dev/docs/usage/command-line/)
 - 📦 [Node.js Package](https://www.promptfoo.dev/docs/usage/node-package/)
 - 🤖 [Supported Models](https://www.promptfoo.dev/docs/providers/)
-
-## LLMs.txt Support
-
-Our docs include a [llms.txt](https://www.promptfoo.dev/llms.txt) and
-[llms-full.txt](https://www.promptfoo.dev/llms-full.txt) files following the
-[llms.txt specification](https://llmspec.ai/). These files make our documentation more accessible to
-AI-powered development tools and assistants.
 
 ## Contributing
 

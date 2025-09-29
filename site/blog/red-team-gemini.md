@@ -1,6 +1,6 @@
 ---
 title: "How to Red Team Gemini: Complete Security Testing Guide for Google's AI Models"
-description: 'Google Gemini handles text, images, and code - creating unique attack surfaces. Learn how to red team these multimodal capabilities and test for new vulnerabilities.'
+description: 'Comprehensive guide to red teaming Google Gemini models for multimodal vulnerabilities across text, vision, and code generation'
 image: /img/blog/red-team-gemini.png
 keywords:
   [
@@ -43,7 +43,7 @@ The unique capabilities of Gemini 2.5 Pro (and similar models in that family) pr
 
 Before you begin, ensure you have:
 
-- **Node.js**: Version 18 or later. [Download Node.js](https://nodejs.org/en/download/)
+- **Node.js**: Version 20 or later. [Download Node.js](https://nodejs.org/en/download/)
 - **Google AI Studio API Key**: Sign up for a [Google AI Studio account](https://aistudio.google.com/) and obtain an API key
 - **Promptfoo**: No prior installation needed; we'll use `npx` to run commands
 

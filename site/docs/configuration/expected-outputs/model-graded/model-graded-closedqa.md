@@ -1,5 +1,6 @@
 ---
 sidebar_label: Model-graded Closed QA
+description: 'Assess closed-domain QA performance using model-based evaluation for accuracy, completeness, and answer correctness'
 ---
 
 # Model-graded Closed QA

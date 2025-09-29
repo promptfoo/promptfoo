@@ -1,5 +1,6 @@
 ---
 sidebar_label: Cohere Command-R benchmarks
+description: Compare Cohere Command-R vs GPT-4 vs Claude performance with automated benchmarks to evaluate model accuracy on your specific use cases and datasets
 ---
 
 # Command R vs GPT vs Claude: create your own benchmark
@@ -17,7 +18,7 @@ The end result is a side-by-side comparison view that looks like this:
 - Cohere API key for Command-R
 - OpenAI API key for GPT-4
 - Anthropic API key for Claude Opus
-- Node 18+
+- Node 20+
 
 ## Step 1: Initial Setup
 

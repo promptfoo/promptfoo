@@ -1,5 +1,6 @@
 ---
 sidebar_label: Harmful Content
+description: Red team AI content moderation by testing responses to harmful inputs like violence and hate speech to prevent toxic content leakage in production systems
 ---
 
 import Tabs from '@theme/Tabs';

@@ -1,6 +1,6 @@
 ---
 title: GitHub Models Provider
-description: Access OpenAI, Anthropic, Google, and xAI models through GitHub's unified API with OpenAI-compatible format
+description: 'Leverage GitHub Models API to access OpenAI, Anthropic, Google, and xAI models with unified OpenAI-compatible formatting'
 keywords:
   [github models, llm providers, openai, anthropic, claude, gemini, grok, deepseek, ai models]
 sidebar_label: GitHub Models

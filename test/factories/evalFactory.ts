@@ -6,7 +6,7 @@ import { evalsTable } from '../../src/database/tables';
 import Eval from '../../src/models/eval';
 import { oldStyleEval } from './data/eval/database_records';
 
-import type { EvaluateResult } from '../../src/types';
+import type { EvaluateResult } from '../../src/types/index';
 
 interface CreateEvalOptions {
   numResults?: number;

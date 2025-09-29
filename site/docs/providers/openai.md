@@ -1,5 +1,6 @@
 ---
 sidebar_position: 1
+description: "Configure OpenAI's GPT models including GPT-4o, o1, GPT-3.5, embeddings, and assistants for comprehensive AI evaluations"
 ---
 
 # OpenAI
@@ -29,6 +30,19 @@ The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a
 or if you have a custom model.
 For example, if OpenAI releases `gpt-5` chat completion,
 you could begin using it immediately with `openai:chat:gpt-5`.
+
+```yaml title="GPT-5 only: verbosity and minimal reasoning"
+providers:
+  - id: openai:chat:gpt-5
+    config:
+      verbosity: high # low | medium | high
+      reasoning_effort: minimal
+  # For the Responses API, use a nested reasoning object:
+  - id: openai:responses:gpt-5
+    config:
+      reasoning:
+        effort: minimal
+```
 
 The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
 
@@ -74,6 +88,7 @@ Supported parameters include:
 | `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                              |
 | `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                     |
 | `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3, o3-pro, o3-mini, o4-mini).                                                                                                                                                                           |
+| `maxRetries`            | Maximum number of retry attempts for failed API requests. Defaults to 4. Set to 0 to disable retries.                                                                                                                                                                                             |
 | `metadata`              | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                             |
 | `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                     |
 | `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings. |
@@ -131,6 +146,7 @@ interface OpenAiConfig {
   apiBaseUrl?: string;
   organization?: string;
   headers?: { [key: string]: string };
+  maxRetries?: number;
 }
 ```
 
@@ -823,6 +839,11 @@ providers:
       instructions: 'You are a helpful assistant.'
       temperature: 0.7
       websocketTimeout: 60000 # 60 seconds
+      # Optional: point to custom/proxy endpoints; WS URL is derived automatically
+      # https:// → wss://, http:// → ws://
+      # Example: wss://my-custom-api.com/v1/realtime
+      # Example: ws://localhost:8080/v1/realtime
+      # apiBaseUrl: 'https://my-custom-api.com/v1'
 ```
 
 ### Realtime-specific Configuration Options
@@ -840,6 +861,23 @@ The Realtime API configuration supports these parameters in addition to standard
 | `max_response_output_tokens` | Maximum tokens in model response                    | 'inf'                  | Number or 'inf'                         |
 | `tools`                      | Array of tool definitions for function calling      | []                     | Array of tool objects                   |
 | `tool_choice`                | Controls how tools are selected                     | 'auto'                 | 'none', 'auto', 'required', or object   |
+
+#### Custom endpoints and proxies (Realtime)
+
+The Realtime provider respects the same base URL configuration as other OpenAI providers. The WebSocket URL is derived from `getApiUrl()` by converting protocols: `https://` → `wss://` and `http://` → `ws://`.
+
+You can use this to target Azure-compatible endpoints, proxies, or local/dev servers:
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview
+    config:
+      apiBaseUrl: 'https://my-custom-api.com/v1' # connects to wss://my-custom-api.com/v1/realtime
+      modalities: ['text']
+      temperature: 0.7
+```
+
+Environment variables `OPENAI_API_BASE_URL` and `OPENAI_BASE_URL` also apply to Realtime WebSocket connections.
 
 ### Function Calling with Realtime API
 
@@ -923,6 +961,7 @@ The Responses API supports a wide range of models, including:
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Latest fast, cost-effective reasoning model
 - `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
+- `gpt-5-codex` - GPT-5 based coding model optimized for code generation
 
 ### Using the Responses API
 
@@ -1297,6 +1336,23 @@ providers:
               required: ['location']
       tool_choice: 'auto'
 ```
+
+### Using with Azure
+
+The Responses API can also be used with Azure OpenAI endpoints by configuring the `apiHost`:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      apiKey: '${AZURE_API_KEY}'
+      temperature: 0.7
+      instructions: 'You are a helpful assistant.'
+      response_format: file://./response-schema.json
+```
+
+For comprehensive Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
 
 ### Complete Example
 

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Adaline Gateway
+description: "Access multiple LLM providers via Adaline's unified API gateway with automatic failover, routing, and usage optimization"
 ---
 
 # Adaline Gateway

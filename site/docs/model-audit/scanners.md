@@ -38,6 +38,9 @@ The Pickle Scanner analyzes Python pickle files for security risks, which are co
 - Encoded payloads and suspicious string patterns
 - Embedded executables in binary content
 - ML context detection to reduce false positives
+- Network communication patterns (URLs, IPs, sockets)
+- Embedded credentials (API keys, tokens, passwords)
+- JIT/Script execution patterns
 
 **Why it matters:**
 Pickle files are a common serialization format for ML models but can execute arbitrary code during unpickling. Attackers can craft malicious pickle files that execute harmful commands when loaded.
@@ -413,6 +416,69 @@ The SBOM includes component information, license metadata, risk scores, and copy
 
 **Why it matters:**
 AI/ML projects often combine components with different licenses. AGPL requires source disclosure for network services, non-commercial licenses block commercial use, and unlicensed datasets create legal risks.
+
+## Network Communication Detection
+
+ModelAudit includes comprehensive detection of network communication capabilities that could be used for data exfiltration or command & control:
+
+**Detection capabilities:**
+
+- **URL patterns**: HTTP(S), FTP, SSH, WebSocket URLs embedded in model data
+- **IP addresses**: Both IPv4 and IPv6 addresses that could indicate hardcoded endpoints
+- **Domain names**: Suspicious domain patterns that might be C&C servers
+- **Network libraries**: Imports of socket, urllib, requests, and 50+ other network libraries
+- **Network functions**: Calls to urlopen, socket.connect, requests.get, and other network operations
+- **C&C patterns**: Known command & control patterns like beacon_url, callback_url, exfil_endpoint
+- **Port numbers**: Common and suspicious port numbers for various protocols
+
+**Why it matters:**
+Malicious models could contain embedded network communication code to:
+
+- Exfiltrate sensitive data from the deployment environment
+- Download additional payloads or updates
+- Establish command & control channels
+- Report telemetry to unauthorized servers
+
+## Secrets Detection
+
+ModelAudit scans for embedded credentials and sensitive information:
+
+**Detection patterns:**
+
+- **API Keys**: AWS, Azure, GCP, OpenAI, and other service API keys
+- **Tokens**: JWT tokens, OAuth tokens, GitHub tokens, etc.
+- **Passwords**: Hardcoded passwords and authentication strings
+- **Private Keys**: SSH keys, SSL certificates, cryptographic keys
+- **Database Credentials**: Connection strings with embedded passwords
+- **Webhook URLs**: Slack, Discord, and other webhook endpoints
+
+**Why it matters:**
+Credentials embedded in models could:
+
+- Expose production infrastructure access
+- Lead to unauthorized cloud resource usage
+- Enable lateral movement in compromised systems
+- Result in data breaches or compliance violations
+
+## JIT/Script Detection
+
+ModelAudit detects Just-In-Time compilation and script execution patterns:
+
+**Detection capabilities:**
+
+- **TorchScript**: Embedded TorchScript code that could execute arbitrary operations
+- **ONNX Custom Ops**: Custom operators that might contain malicious functionality
+- **TensorFlow Eager Execution**: Dynamic execution patterns in TF models
+- **Compilation Patterns**: eval(), exec(), compile() calls in various contexts
+- **Script Injections**: JavaScript, Python, or shell script injection attempts
+
+**Why it matters:**
+JIT-compiled code can:
+
+- Bypass static analysis security checks
+- Execute arbitrary code at runtime
+- Modify model behavior dynamically
+- Access system resources without detection
 
 ## HuggingFace URL Support
 

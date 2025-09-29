@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Prompts
+description: Red team AI systems against malicious intent attacks by testing preset prompts and jailbreak strategies to prevent unauthorized manipulation and harmful content generation
 ---
 
 # Intent (Custom Prompts) Plugin

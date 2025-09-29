@@ -4,6 +4,9 @@ import { useLocation } from '@docusaurus/router';
 import styles from './styles.module.css';
 
 export default function EventsBanner(): JSX.Element | null {
+  // No events currently scheduled.
+  return null;
+
   const [isVisible, setIsVisible] = useState(true);
   const location = useLocation();
 

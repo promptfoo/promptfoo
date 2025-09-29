@@ -9,7 +9,7 @@ import type {
 } from '@ibm-generative-ai/node-sdk';
 
 import type { EnvVarKey } from '../envars';
-import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
+import type { ApiProvider, ProviderResponse, TokenUsage } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 interface BAMGenerationParameters {

@@ -45,4 +45,4 @@ To view the results in your browser:
 promptfoo view
 ```
 
-For more details on using CSV files in promptfoo, see our [Import from CSV](https://www.promptfoo.dev/docs/configuration/parameters/#import-from-csv) documentation.
+For more details on using CSV files in promptfoo, see our [Import from CSV](https://www.promptfoo.dev/docs/configuration/prompts/#import-from-csv) documentation.

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 55
+description: Implement OpenTelemetry tracing in your LLM evaluations to monitor provider performance, debug workflows, and visualize execution traces directly in Promptfoo's web UI.
 ---
 
 # Tracing

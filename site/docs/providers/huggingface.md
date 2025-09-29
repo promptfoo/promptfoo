@@ -1,5 +1,6 @@
 ---
 sidebar_label: HuggingFace
+description: Configure HuggingFace's text generation, classification, and embedding models with Mistral-7B and GPT-2 for comprehensive LLM testing and evaluation tasks
 ---
 
 # HuggingFace

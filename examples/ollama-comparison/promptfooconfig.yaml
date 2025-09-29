@@ -8,7 +8,7 @@ prompts:
     label: llama_prompt
 
 providers:
-  - id: ollama:llama2
+  - id: ollama:chat:llama3.3
     prompts:
       - llama_prompt
     config:

@@ -12,6 +12,8 @@ dist
 .aider*
 .vite
 *.tsbuildinfo
+src/generated/
+task.md
 
 # pnpm-specific
 .pnpm-store/
@@ -38,9 +40,10 @@ examples/redteam-medical-agent/redteam.yaml
 examples/grok-4-political-bias/results.json
 examples/grok-4-political-bias/results-multi-judge.json
 
+# LLM Tool Settings
 **/.claude/settings.local.json
+.serena/
 
 # Slack test files with credentials
 test-slack-setup.sh
 test-slack-live.yaml
-.env
