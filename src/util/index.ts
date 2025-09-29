@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { stringify } from 'csv-stringify/sync';
@@ -8,7 +9,6 @@ import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
 import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
-import * as os from 'os';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
@@ -27,8 +27,8 @@ import {
   type TestCase,
 } from '../types/index';
 import invariant from '../util/invariant';
-import { convertTestResultsToTableRow } from './exportToFile/index';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
+import { convertTestResultsToTableRow } from './exportToFile/index';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { safeResolve } from './pathUtils';
@@ -400,6 +400,18 @@ export function providerToIdentifier(
   return undefined;
 }
 
+/**
+ * Filters out runtime-only variables that are added during evaluation
+ * but aren't part of the original test definition
+ */
+function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
+  if (!vars) {
+    return vars;
+  }
+  const { _conversation, ...userVars } = vars;
+  return userVars;
+}
+
 export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
   return deepEqual(vars1, vars2);
 }
@@ -409,7 +421,11 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
     ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
     : true;
 
-  return varsMatch(testCase.vars, result.vars) && providersMatch;
+  // Filter out runtime variables like _conversation when matching
+  // These are added during evaluation but shouldn't affect test matching
+  const resultVars = filterRuntimeVars(result.testCase?.vars ?? result.vars);
+  const testVars = filterRuntimeVars(testCase.vars);
+  return varsMatch(testVars, resultVars) && providersMatch;
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
