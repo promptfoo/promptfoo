@@ -28,6 +28,10 @@ jest.mock('fs');
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 
 jest.mock('proxy-agent', () => ({

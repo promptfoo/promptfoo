@@ -247,9 +247,11 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
+
     const globPaths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
+
     if (globPaths.length === 0) {
       throw new Error(`No configuration file found at ${configPath}`);
     }
