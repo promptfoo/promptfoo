@@ -264,6 +264,10 @@ type EnvVars = {
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
 
+  // Nscale
+  NSCALE_SERVICE_TOKEN?: string;
+  NSCALE_API_KEY?: string;
+
   // Ollama
   OLLAMA_API_KEY?: string;
   OLLAMA_BASE_URL?: string;
@@ -450,4 +454,13 @@ export function isCI() {
     getEnvBool('BUILDKITE') ||
     getEnvBool('TEAMCITY_VERSION')
   );
+}
+
+/**
+ * Check if the application is running in a non-interactive environment.
+ * This includes CI environments, cron jobs, SSH scripts without TTY, etc.
+ * @returns True if running in a non-interactive environment, false otherwise.
+ */
+export function isNonInteractive() {
+  return isCI() || !process.stdin.isTTY || !process.stdout.isTTY;
 }

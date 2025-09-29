@@ -608,6 +608,9 @@ export default class Eval {
           } else {
             condition = `(${explicit})`;
           }
+        } else if (type === 'policy' && operator === 'equals') {
+          const sanitizedValue = sanitizeValue(value);
+          condition = `(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE '%${sanitizedValue}%')`;
         }
 
         if (condition) {

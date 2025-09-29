@@ -58,6 +58,10 @@ jest.mock('glob', () => ({
     }
     return [];
   }),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 
 // Mock importModule for JavaScript files

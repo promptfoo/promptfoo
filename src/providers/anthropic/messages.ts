@@ -14,6 +14,7 @@ import {
   getTokenUsage,
   outputFromMessage,
   parseMessages,
+  processAnthropicTools,
 } from './util';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -96,8 +97,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     if (this.mcpClient) {
       mcpTools = transformMCPToolsToAnthropic(this.mcpClient.getAllTools());
     }
-    const fileTools = maybeLoadToolsFromExternalFile(config.tools) || [];
-    const allTools = [...mcpTools, ...fileTools];
+
+    // Load and process tools from config (handles both external files and inline tool definitions)
+    const configTools = maybeLoadToolsFromExternalFile(config.tools) || [];
+    const { processedTools: processedConfigTools, requiredBetaFeatures } =
+      processAnthropicTools(configTools);
+
+    // Combine all tools
+    const allTools = [...mcpTools, ...processedConfigTools];
 
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
@@ -111,7 +118,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         config.thinking || thinking
           ? config.temperature
           : config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
-      ...(allTools.length > 0 ? { tools: allTools } : {}),
+      ...(allTools.length > 0 ? { tools: allTools as any } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
@@ -124,8 +131,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     };
 
     // Add beta features header if specified
-    if (config.beta?.length) {
-      headers['anthropic-beta'] = config.beta.join(',');
+    const allBetaFeatures = [...(config.beta || []), ...requiredBetaFeatures];
+    if (allBetaFeatures.length > 0) {
+      headers['anthropic-beta'] = allBetaFeatures.join(',');
     }
 
     const cache = await getCache();

@@ -1,15 +1,7 @@
 import dedent from 'dedent';
-import cliState from '../../cliState';
+
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import { retryWithDeduplication, sampleArray } from '../../util/generation';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import invariant from '../../util/invariant';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
-
 import type {
   ApiProvider,
   Assertion,
@@ -20,6 +12,13 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import invariant from '../../util/invariant';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { redteamProviderManager } from '../providers/shared';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
@@ -455,18 +454,7 @@ export abstract class RedteamGraderBase {
 
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
-      provider: await redteamProviderManager.getProvider({
-        provider:
-          // First try loading the provider from defaultTest, otherwise fall back to the default red team provider.
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.provider) ||
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.options?.provider?.text) ||
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.options?.provider) ||
-          undefined,
-        jsonOnly: true,
-      }),
+      provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
     });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 
