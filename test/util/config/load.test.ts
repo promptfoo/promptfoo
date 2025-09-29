@@ -58,11 +58,25 @@ jest.mock('../../../src/util', () => ({
   ...jest.requireActual('../../../src/util'),
 }));
 
-jest.mock('../../../src/util/promptfooCommand', () => ({
-  promptfooCommand: jest.fn().mockReturnValue('promptfoo'),
-  detectInstaller: jest.fn().mockReturnValue('unknown'),
-  isRunningUnderNpx: jest.fn(),
-}));
+jest.mock('../../../src/util/promptfooCommand', () => {
+  const mockPromptfooCommand = jest.fn();
+  const mockIsRunningUnderNpx = jest.fn();
+
+  // Set up the mock to return appropriate values based on isRunningUnderNpx
+  mockPromptfooCommand.mockImplementation((cmd) => {
+    const isNpx = mockIsRunningUnderNpx();
+    if (cmd === '') {
+      return isNpx ? 'npx promptfoo@latest' : 'promptfoo';
+    }
+    return isNpx ? `npx promptfoo@latest ${cmd}` : `promptfoo ${cmd}`;
+  });
+
+  return {
+    promptfooCommand: mockPromptfooCommand,
+    detectInstaller: jest.fn().mockReturnValue('unknown'),
+    isRunningUnderNpx: mockIsRunningUnderNpx,
+  };
+});
 
 jest.mock('../../../src/util/file', () => ({
   ...jest.requireActual('../../../src/util/file'),
@@ -1435,8 +1449,8 @@ describe('resolveConfigs', () => {
     );
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo eval -c'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo init'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest eval -c'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest init'));
   });
 
   it('should throw an error if no providers are provided', async () => {
