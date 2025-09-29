@@ -570,54 +570,6 @@ const App = () => {
     setSearchQuery('');
   };
 
-  const ActionButtons = () => (
-    <>
-      <Tooltip title="View all logs" placement="top">
-        <IconButton
-          sx={{ position: 'relative' }}
-          aria-label="view all logs"
-          onClick={(event) => {
-            const url = `/eval/${evalId}`;
-            if (event.ctrlKey || event.metaKey) {
-              window.open(url, '_blank');
-            } else if (evalId) {
-              navigate(url);
-            }
-          }}
-        >
-          <ListAltIcon />
-        </IconButton>
-      </Tooltip>
-      <ReportDownloadButton
-        evalDescription={evalData.config.description || evalId}
-        evalData={evalData}
-      />
-      <Tooltip
-        title="Print this page (Ctrl+P) and select 'Save as PDF' for best results"
-        placement="top"
-      >
-        <IconButton
-          sx={{ position: 'relative' }}
-          aria-label="print page"
-          onClick={() => window.print()}
-        >
-          <PrintIcon />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Filter results" placement="top">
-        <IconButton
-          sx={{ position: 'relative' }}
-          aria-label="filter results"
-          onClick={() => setIsFiltersVisible(!isFiltersVisible)}
-          color={hasActiveFilters ? 'primary' : 'default'}
-        >
-          <FilterListIcon />
-        </IconButton>
-      </Tooltip>
-      <ReportSettingsDialogButton />
-    </>
-  );
-
   return (
     <>
       <Box
@@ -661,7 +613,14 @@ const App = () => {
               {evalData.config.description && `: ${evalData.config.description}`}
             </Typography>
             <Box sx={{ display: 'flex', flexShrink: 0 }}>
-              <ActionButtons />
+              <Button
+                variant="contained"
+                color="primary"
+                href={`/eval/${evalId}`}
+                startIcon={<ListAltIcon />}
+              >
+                View Probes
+              </Button>
             </Box>
           </Box>
         </Container>
@@ -674,7 +633,14 @@ const App = () => {
               sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}
               className="print-hide"
             >
-              <ActionButtons />
+              <Button
+                variant="contained"
+                color="primary"
+                href={`/eval/${evalId}`}
+                startIcon={<ListAltIcon />}
+              >
+                View Probes
+              </Button>
             </Box>
             <Typography variant="h4">
               <strong>LLM Risk Assessment</strong>
@@ -744,6 +710,37 @@ const App = () => {
                   style={{ cursor: 'pointer' }}
                 />
               )}
+            </Box>
+            <Box sx={{ mt: 2 }}>
+              <Stack direction="row" spacing={0.25}>
+                <ReportDownloadButton
+                  evalDescription={evalData.config.description || evalId}
+                  evalData={evalData}
+                />
+                <Tooltip
+                  title="Print this page (Ctrl+P) and select 'Save as PDF' for best results"
+                  placement="top"
+                >
+                  <IconButton
+                    sx={{ position: 'relative' }}
+                    aria-label="print page"
+                    onClick={() => window.print()}
+                  >
+                    <PrintIcon />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Filter results" placement="top">
+                  <IconButton
+                    sx={{ position: 'relative' }}
+                    aria-label="filter results"
+                    onClick={() => setIsFiltersVisible(!isFiltersVisible)}
+                    color={hasActiveFilters ? 'primary' : 'default'}
+                  >
+                    <FilterListIcon />
+                  </IconButton>
+                </Tooltip>
+                <ReportSettingsDialogButton />
+              </Stack>
             </Box>
           </Card>
           {isFiltersVisible && (
