@@ -346,6 +346,17 @@ export const OPENAI_COMPLETION_MODELS = [
 
 // Realtime models for WebSocket API
 export const OPENAI_REALTIME_MODELS = [
+  // gpt-realtime models (latest)
+  {
+    id: 'gpt-realtime',
+    type: 'chat',
+    cost: {
+      input: 32 / 1e6,
+      output: 64 / 1e6,
+      audioInput: 32 / 1e6,
+      audioOutput: 64 / 1e6,
+    },
+  },
   // gpt-4o realtime models
   {
     id: 'gpt-realtime',
