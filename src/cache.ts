@@ -28,12 +28,19 @@ export function getCache() {
         logger.info(`Creating cache folder at ${cachePath}.`);
         fs.mkdirSync(cachePath, { recursive: true });
       }
-      // Lazy load fsStore only when disk cache is actually needed
-      // This prevents Windows lockfile errors during tests
+      // Lazy load fsStore only when disk cache is actually needed.
+      // This prevents module loading errors in tests and handles Windows compatibility issues.
+      // Note: cache-manager-fs-hash depends on lockfile@1.x which uses signal-exit@3.x,
+      // but other dependencies may pull in signal-exit@4.x which has breaking API changes.
+      // If loading fails (common on Windows), we gracefully fall back to memory cache.
       try {
         store = require('cache-manager-fs-hash');
       } catch (err) {
-        logger.warn(`Failed to load cache-manager-fs-hash, falling back to memory cache: ${err}`);
+        logger.warn(
+          `Failed to load cache-manager-fs-hash (${(err as Error).message}), ` +
+            `using memory cache instead. To use disk cache on Windows, ensure compatible ` +
+            `versions of signal-exit are installed.`,
+        );
         store = 'memory';
       }
     }
