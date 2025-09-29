@@ -16,6 +16,7 @@ import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
 import { addIterativeJailbreaks } from './iterative';
+import { addLayerTestCases } from './layer';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
@@ -30,19 +31,27 @@ import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
-import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { RedteamStrategyObject, TestCase } from '../../types/index';
+import type { Strategy } from './types';
 
-export interface Strategy {
-  id: string;
-  action: (
-    testCases: TestCaseWithPlugin[],
-    injectVar: string,
-    config: Record<string, any>,
-    strategyId?: string,
-  ) => Promise<TestCase[]>;
-}
+export type { Strategy };
 
 export const Strategies: Strategy[] = [
+  {
+    id: 'layer',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Layer strategy to ${testCases.length} test cases`);
+      const newTestCases = await addLayerTestCases(
+        testCases,
+        injectVar,
+        config,
+        Strategies,
+        loadStrategy,
+      );
+      logger.debug(`Added ${newTestCases.length} Layer test cases`);
+      return newTestCases;
+    },
+  },
   {
     id: 'base64',
     action: async (testCases, injectVar) => {

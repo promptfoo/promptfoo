@@ -11,6 +11,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
@@ -364,6 +365,12 @@ export default function EvalsDataGrid({
                   onEvalSelected(params.row.evalId);
                   return false;
                 }}
+                sx={{
+                  textDecoration: 'none',
+                  color: 'primary.main',
+                  fontFamily: 'monospace',
+                  '&:hover': { textDecoration: 'underline' },
+                }}
               >
                 {params.row.evalId}
               </Link>
@@ -609,24 +616,26 @@ export default function EvalsDataGrid({
       </Paper>
 
       {/* Delete confirmation dialog */}
-      <Dialog
-        open={confirmDeleteOpen}
-        onClose={handleCancelDelete}
-        maxWidth={false}
-        fullWidth={false}
-        slotProps={{ paper: { sx: { minWidth: 350 } } }}
-      >
+      <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
         <DialogTitle>
-          {`Delete ${rowSelectionModel.length} eval${rowSelectionModel.length === 1 ? '' : 's'}?`}
+          Delete {rowSelectionModel.length} eval{rowSelectionModel.length === 1 ? '' : 's'}?
         </DialogTitle>
         <DialogContent>
-          <Typography variant="body2" color="text.secondary">
-            This action cannot be undone.
-          </Typography>
+          <DialogContentText>
+            Are you sure you want to delete the selected eval
+            {rowSelectionModel.length === 1 ? '' : 's'}? This action cannot be undone.
+          </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete}>Cancel</Button>
-          <Button onClick={handleConfirmDelete} variant="contained" color="error">
+          <Button onClick={handleCancelDelete} variant="outlined">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+            startIcon={<DeleteIcon />}
+          >
             Delete
           </Button>
         </DialogActions>

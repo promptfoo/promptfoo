@@ -3,8 +3,13 @@ import {
   calculateAnthropicCost,
   outputFromMessage,
   parseMessages,
+  processAnthropicTools,
 } from '../../../src/providers/anthropic/util';
 import type Anthropic from '@anthropic-ai/sdk';
+import type {
+  WebFetchToolConfig,
+  WebSearchToolConfig,
+} from '../../../src/providers/anthropic/types';
 
 describe('Anthropic utilities', () => {
   describe('calculateAnthropicCost', () => {
@@ -659,6 +664,185 @@ describe('Anthropic utilities', () => {
           content: [{ type: 'text', text: 'Hello!' }],
         },
       ]);
+    });
+  });
+
+  describe('processAnthropicTools', () => {
+    it('should handle empty tools array', () => {
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([]);
+
+      expect(processedTools).toEqual([]);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should pass through standard Anthropic tools unchanged', () => {
+      const standardTool: Anthropic.Tool = {
+        name: 'get_weather',
+        description: 'Get weather information',
+        input_schema: {
+          type: 'object',
+          properties: {
+            location: { type: 'string', description: 'City name' },
+          },
+          required: ['location'],
+        },
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([standardTool]);
+
+      expect(processedTools).toEqual([standardTool]);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should process web_fetch_20250910 tool and add beta feature', () => {
+      const webFetchTool: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 5,
+        allowed_domains: ['example.com'],
+        citations: { enabled: true },
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 5,
+        allowed_domains: ['example.com'],
+        citations: { enabled: true },
+      });
+      expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
+    });
+
+    it('should process web_search_20250305 tool without adding beta feature', () => {
+      const webSearchTool: WebSearchToolConfig = {
+        type: 'web_search_20250305',
+        name: 'web_search',
+        max_uses: 3,
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webSearchTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_search_20250305',
+        name: 'web_search',
+        max_uses: 3,
+      });
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should handle mixed tool types', () => {
+      const standardTool: Anthropic.Tool = {
+        name: 'calculate',
+        description: 'Perform calculations',
+        input_schema: {
+          type: 'object',
+          properties: {
+            expression: { type: 'string' },
+          },
+        },
+      };
+
+      const webFetchTool: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 2,
+        blocked_domains: ['spam.com'],
+      };
+
+      const webSearchTool: WebSearchToolConfig = {
+        type: 'web_search_20250305',
+        name: 'web_search',
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([
+        standardTool,
+        webFetchTool,
+        webSearchTool,
+      ]);
+
+      expect(processedTools).toHaveLength(3);
+      expect(processedTools[0]).toEqual(standardTool);
+      expect(processedTools[1]).toMatchObject({
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 2,
+        blocked_domains: ['spam.com'],
+      });
+      expect(processedTools[2]).toMatchObject({
+        type: 'web_search_20250305',
+        name: 'web_search',
+      });
+      expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
+    });
+
+    it('should handle web_fetch tool with all optional parameters', () => {
+      const webFetchTool: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 10,
+        allowed_domains: ['docs.example.com', 'help.example.com'],
+        blocked_domains: ['ads.example.com'],
+        citations: { enabled: true },
+        max_content_tokens: 50000,
+        cache_control: { type: 'ephemeral' },
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 10,
+        allowed_domains: ['docs.example.com', 'help.example.com'],
+        blocked_domains: ['ads.example.com'],
+        citations: { enabled: true },
+        max_content_tokens: 50000,
+        cache_control: { type: 'ephemeral' },
+      });
+      expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
+    });
+
+    it('should handle web_fetch tool with minimal configuration', () => {
+      const webFetchTool: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+      });
+      expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
+    });
+
+    it('should not duplicate beta features', () => {
+      const webFetchTool1: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 2,
+      };
+
+      const webFetchTool2: WebFetchToolConfig = {
+        type: 'web_fetch_20250910',
+        name: 'web_fetch',
+        max_uses: 3,
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([
+        webFetchTool1,
+        webFetchTool2,
+      ]);
+
+      expect(processedTools).toHaveLength(2);
+      expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
     });
   });
 });

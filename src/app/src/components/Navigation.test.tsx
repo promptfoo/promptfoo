@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, cleanup } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Navigation from './Navigation';
@@ -164,5 +164,19 @@ describe('EvalsDropdown', () => {
     cleanup();
 
     expect(clearTimeoutSpy).toHaveBeenCalled();
+  });
+
+  it("should display the 'Vulnerability Reports' menu item with the correct description when the Results dropdown is open", () => {
+    render(
+      <MemoryRouter>
+        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+      </MemoryRouter>,
+    );
+
+    const evalsButton = screen.getByRole('button', { name: /Results/i });
+    fireEvent.click(evalsButton);
+
+    expect(screen.getByText('Red Team Vulnerability Reports')).toBeInTheDocument();
+    expect(screen.getByText('View findings from red teams')).toBeInTheDocument();
   });
 });

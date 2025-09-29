@@ -5,6 +5,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'owasp:api',
   'owasp:llm',
   'eu:ai-act',
+  'iso:42001',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
@@ -46,6 +47,7 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'layer',
   'audio',
   'base64',
   'best-of-n',
@@ -91,6 +93,7 @@ export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
+  'layer',
   'multilingual',
   'best-of-n',
   'goat',
