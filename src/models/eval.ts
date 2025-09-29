@@ -1062,6 +1062,7 @@ export async function getPaginatedEvalSummaries(
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
       prompts: evalsTable.prompts,
+      config: evalsTable.config,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId));
@@ -1158,6 +1159,32 @@ export async function getPaginatedEvalSummaries(
     const testCount = testCounts.length > 0 ? testCounts[0] : 0;
     const testRunCount = testCount * (result.prompts?.length ?? 0);
 
+    // Construct an array of providers (simplified for pagination)
+    const deserializedProviders = [];
+    const providers = result.config?.providers;
+    if (providers) {
+      if (typeof providers === 'string') {
+        deserializedProviders.push({
+          id: providers,
+          label: null,
+        });
+      } else if (Array.isArray(providers)) {
+        providers.forEach((p) => {
+          if (typeof p === 'string') {
+            deserializedProviders.push({
+              id: p,
+              label: null,
+            });
+          } else if (typeof p === 'object' && p !== null) {
+            deserializedProviders.push({
+              id: (p as any).id ?? 'unknown',
+              label: (p as any).label ?? null,
+            });
+          }
+        });
+      }
+    }
+
     return {
       evalId: result.evalId,
       createdAt: result.createdAt,
@@ -1167,6 +1194,7 @@ export async function getPaginatedEvalSummaries(
       isRedteam: result.isRedteam,
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+      providers: deserializedProviders,
     };
   });
 
