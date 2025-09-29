@@ -126,6 +126,10 @@ function DownloadMenu() {
   };
 
   const downloadConfig = () => {
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
+      return;
+    }
     const fileName = getFilename('config.yaml');
     downloadYamlConfig(config, fileName, 'Configuration downloaded successfully');
   };
@@ -133,6 +137,11 @@ function DownloadMenu() {
   const downloadFailedTestsConfig = () => {
     if (!config || !table) {
       showToast('No configuration or results available', 'error');
+      return;
+    }
+
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
 
@@ -163,6 +172,10 @@ function DownloadMenu() {
   const downloadDpoJson = () => {
     if (!table) {
       showToast('No table data', 'error');
+      return;
+    }
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
     const formattedData = table.body.map((row) => ({
@@ -206,6 +219,10 @@ function DownloadMenu() {
       showToast('No table data', 'error');
       return;
     }
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
+      return;
+    }
 
     const humanEvalCases = table.body
       .filter((row) => row.outputs.some((output) => output != null))
@@ -243,6 +260,11 @@ function DownloadMenu() {
 
     if (!config?.redteam) {
       showToast('No redteam config', 'error');
+      return;
+    }
+
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
 
@@ -395,10 +417,12 @@ function DownloadMenu() {
                       >
                         Download YAML Config
                       </Button>
-                      <CommandBlock
-                        fileName={getFilename('config.yaml')}
-                        helpText="Run this command to execute the eval again:"
-                      />
+                      {evalId && (
+                        <CommandBlock
+                          fileName={getFilename('config.yaml')}
+                          helpText="Run this command to execute the eval again:"
+                        />
+                      )}
                     </Box>
                   </Grid>
 
@@ -421,10 +445,12 @@ function DownloadMenu() {
                       >
                         Download Failed Tests
                       </Button>
-                      <CommandBlock
-                        fileName={getFilename('failed-tests.yaml')}
-                        helpText="Run this command to re-run just the failed tests:"
-                      />
+                      {evalId && (
+                        <CommandBlock
+                          fileName={getFilename('failed-tests.yaml')}
+                          helpText="Run this command to re-run just the failed tests:"
+                        />
+                      )}
                     </Box>
                   </Grid>
                 </Grid>

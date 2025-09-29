@@ -4,9 +4,12 @@ import * as downloadsApi from '../../../src/app/src/utils/api/downloads';
 
 // Mock the apiConfig store
 jest.mock('../../../src/app/src/stores/apiConfig', () => ({
-  useApiConfig: () => ({
-    apiBaseUrl: '',
-  }),
+  __esModule: true,
+  default: {
+    getState: () => ({
+      apiBaseUrl: '',
+    }),
+  },
 }));
 
 // Mock the useToast hook
