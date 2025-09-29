@@ -2,7 +2,7 @@
 title: AWS Bedrock
 sidebar_label: AWS Bedrock
 sidebar_position: 3
-description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
+description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
 ---
 
 # Bedrock
@@ -39,7 +39,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a comm
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
        config:
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
@@ -134,29 +134,14 @@ Amazon Bedrock supports multiple authentication methods, including the new API k
 
 ### Credential Resolution Order
 
-Promptfoo resolves AWS credentials in the following priority order (highest to lowest):
+Promptfoo resolves AWS credentials in the following priority order:
 
-1. **Explicit credentials in config** (highest priority)
-   - Directly specified `accessKeyId` and `secretAccessKey` in your promptfoo configuration
-   - Use when you have dedicated service credentials for promptfoo
-   - Security note: Store sensitive credentials in environment variables, not config files
+1.  **Explicit credentials in config** (e.g. `accessKeyId`, `secretAccessKey`)
+2.  **Bedrock API Key authentication** (e.g. `apiKey`)
+3.  **SSO profile authentication** (e.g. `profile`)
+4.  **AWS default credential chain** (e.g. environment variables, `~/.aws/credentials`)
 
-2. **Bedrock API Key authentication**
-   - Simplified authentication using Bedrock-specific API keys
-   - Use when you want simplified access without managing IAM credentials
-   - Limitation: Cannot use advanced Bedrock features (agents, streaming, etc.)
-
-3. **SSO profile authentication**
-   - Named profiles from your AWS configuration (`~/.aws/config`)
-   - Use when managing multi-account environments or centralized AWS SSO
-   - Common in enterprise environments with centralized AWS SSO
-
-4. **AWS default credential chain** (lowest priority)
-   - Environment variables → Shared credentials → Instance/container roles → CLI credentials
-   - Use when running on AWS infrastructure or using AWS CLI
-   - Common for local development or AWS-hosted applications
-
-Promptfoo will automatically use the first available credential method in this order.
+Promptfoo automatically uses the first available credential method in this order. The sections below provide more detail on each option.
 
 ### Authentication Options
 
@@ -184,7 +169,7 @@ export AWS_SESSION_TOKEN="your_session_token"  # Optional
 
 :::warning Security Best Practice
 
-**Never hardcode credentials in configuration files.** Always use environment variables or other secure credential management systems.
+**Do not commit credentials to version control.** Use environment variables or a dedicated secrets management system to handle sensitive keys.
 
 :::
 
@@ -271,12 +256,12 @@ providers:
    aws sso login --profile YOUR_SSO_PROFILE
    ```
 
-**Use SSO profiles for:**
+**Use SSO profiles when:**
 
-- Multi-account AWS environments
-- Organizations using AWS SSO for centralized access management
-- Development teams with different role-based permissions
-- Switching between different AWS contexts
+- Managing multi-account AWS environments
+- Working in organizations with centralized AWS SSO
+- Your team needs different role-based permissions
+- You need to switch between different AWS contexts
 
 #### 4. Default credentials (lowest priority)
 
