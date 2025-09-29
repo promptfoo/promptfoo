@@ -119,6 +119,19 @@ Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel 
    tests: file://test_cases.xlsx
    ```
 
+**Multi-sheet support:** By default, only the first sheet is used. To specify a different sheet, use the `#` syntax:
+
+- `file://test_cases.xlsx#Sheet2` - Select sheet by name
+- `file://test_cases.xlsx#2` - Select sheet by 1-based index (2 = second sheet)
+
+```yaml title="promptfooconfig.yaml"
+# Use a specific sheet by name
+tests: file://test_cases.xlsx#DataSheet
+
+# Or by index (1-based)
+tests: file://test_cases.xlsx#2
+```
+
 ### XLSX Example
 
 ```text title="test_cases.xlsx"

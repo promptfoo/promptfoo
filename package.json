@@ -118,7 +118,13 @@
     "playwright": "^1.55.0",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "sharp": "^0.34.4"
+    "sharp": "^0.34.4",
+    "xlsx": "^0.18.5"
+  },
+  "peerDependenciesMeta": {
+    "xlsx": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@adaline/anthropic": "1.7.1",
@@ -196,6 +202,7 @@
     "typescript": "^5.9.2",
     "undici-types": "^7.16.0",
     "winston-transport": "^4.9.0",
+    "xlsx": "^0.18.5",
     "zod-to-json-schema": "^3.24.6"
   },
   "optionalDependencies": {
@@ -272,7 +279,6 @@
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "ws": "^8.18.3",
-    "xlsx": "^0.18.5",
     "zod": "^3.25.76",
     "zod-validation-error": "^3.5.3"
   },

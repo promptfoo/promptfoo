@@ -7,12 +7,25 @@ jest.mock('xlsx', () => ({
   },
 }));
 
+jest.mock('fs', () => ({
+  existsSync: jest.fn(() => true),
+}));
+
 describe('parseXlsxFile', () => {
   let xlsx: any;
+  let fs: any;
 
   beforeEach(async () => {
     xlsx = await import('xlsx');
+    fs = require('fs');
     jest.resetAllMocks();
+
+    // Mock fs.existsSync to return true by default
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should parse xlsx file successfully', async () => {
@@ -86,5 +99,108 @@ describe('parseXlsxFile', () => {
     await parseXlsxFile('test.xlsx');
 
     expect(xlsx.utils.sheet_to_json).toHaveBeenCalledWith({}, { defval: '' });
+  });
+
+  it('should handle malformed Excel files gracefully', async () => {
+    xlsx.readFile.mockImplementation(() => {
+      throw new Error('Invalid file format or corrupted file');
+    });
+
+    await expect(parseXlsxFile('corrupted.xlsx')).rejects.toThrow(
+      'Failed to parse Excel file corrupted.xlsx: Invalid file format or corrupted file',
+    );
+  });
+
+  it('should throw specific error when file does not exist', async () => {
+    // Override the default mock for this test
+    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    await expect(parseXlsxFile('nonexistent.xlsx')).rejects.toThrow(
+      'Failed to parse Excel file nonexistent.xlsx: File not found: nonexistent.xlsx',
+    );
+  });
+
+  describe('sheet selection syntax', () => {
+    it('should select sheet by name using # syntax', async () => {
+      const mockData = [{ col1: 'sheet2data', col2: 'value2' }];
+
+      xlsx.readFile.mockReturnValue({
+        SheetNames: ['Sheet1', 'DataSheet', 'Sheet3'],
+        Sheets: {
+          Sheet1: { data: 'sheet1' },
+          DataSheet: { data: 'datasheet' },
+          Sheet3: { data: 'sheet3' },
+        },
+      });
+
+      xlsx.utils.sheet_to_json.mockReturnValue(mockData);
+
+      const result = await parseXlsxFile('test.xlsx#DataSheet');
+
+      expect(result).toEqual(mockData);
+      expect(xlsx.utils.sheet_to_json).toHaveBeenCalledWith({ data: 'datasheet' }, { defval: '' });
+    });
+
+    it('should select sheet by 1-based index using # syntax', async () => {
+      const mockData = [{ col1: 'sheet2data', col2: 'value2' }];
+
+      xlsx.readFile.mockReturnValue({
+        SheetNames: ['Sheet1', 'Sheet2', 'Sheet3'],
+        Sheets: {
+          Sheet1: { data: 'sheet1' },
+          Sheet2: { data: 'sheet2' },
+          Sheet3: { data: 'sheet3' },
+        },
+      });
+
+      xlsx.utils.sheet_to_json.mockReturnValue(mockData);
+
+      const result = await parseXlsxFile('test.xlsx#2');
+
+      expect(result).toEqual(mockData);
+      expect(xlsx.utils.sheet_to_json).toHaveBeenCalledWith({ data: 'sheet2' }, { defval: '' });
+    });
+
+    it('should throw error for non-existent sheet name', async () => {
+      xlsx.readFile.mockReturnValue({
+        SheetNames: ['Sheet1', 'Sheet2'],
+        Sheets: {
+          Sheet1: {},
+          Sheet2: {},
+        },
+      });
+
+      await expect(parseXlsxFile('test.xlsx#NonExistentSheet')).rejects.toThrow(
+        'Failed to parse Excel file test.xlsx#NonExistentSheet: Sheet "NonExistentSheet" not found. Available sheets: Sheet1, Sheet2',
+      );
+    });
+
+    it('should throw error for out-of-range sheet index', async () => {
+      xlsx.readFile.mockReturnValue({
+        SheetNames: ['Sheet1', 'Sheet2'],
+        Sheets: {
+          Sheet1: {},
+          Sheet2: {},
+        },
+      });
+
+      await expect(parseXlsxFile('test.xlsx#5')).rejects.toThrow(
+        'Failed to parse Excel file test.xlsx#5: Sheet index 5 is out of range. Available sheets: 2 (1-2)',
+      );
+    });
+
+    it('should throw error for zero or negative sheet index', async () => {
+      xlsx.readFile.mockReturnValue({
+        SheetNames: ['Sheet1', 'Sheet2'],
+        Sheets: {
+          Sheet1: {},
+          Sheet2: {},
+        },
+      });
+
+      await expect(parseXlsxFile('test.xlsx#0')).rejects.toThrow(
+        'Failed to parse Excel file test.xlsx#0: Sheet index 0 is out of range. Available sheets: 2 (1-2)',
+      );
+    });
   });
 });

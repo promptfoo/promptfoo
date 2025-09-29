@@ -49,6 +49,18 @@ To use Excel files instead of CSV:
 
 Excel files work exactly like CSV files - each row becomes a test case, and column headers become variable names.
 
+### Multi-sheet Excel Files
+
+For workbooks with multiple sheets, you can specify which sheet to use:
+
+```yaml
+# Use a specific sheet by name
+tests: file://tests.xlsx#MyDataSheet
+
+# Or by 1-based index (2 = second sheet)
+tests: file://tests.xlsx#2
+```
+
 ## Running the Tests
 
 From the root of this example, you can run the eval as:
