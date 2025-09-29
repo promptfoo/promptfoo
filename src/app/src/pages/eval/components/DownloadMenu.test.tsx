@@ -27,17 +27,20 @@ vi.mock('../../../hooks/useToast', () => ({
 }));
 
 // Mock the new download hooks
-const mockDownloadCsvFn = vi.fn().mockResolvedValue('test-eval-id-results.csv');
-const mockDownloadJsonFn = vi.fn().mockResolvedValue('test-eval-id-results.json');
+const mockDownloadCsvFn = vi.fn().mockResolvedValue('test-eval-id.csv');
+const mockDownloadJsonFn = vi.fn().mockResolvedValue('test-eval-id.json');
 
-vi.mock('../../../hooks/useDownloads', () => ({
-  downloadBlob: vi.fn(),
-  useDownloadCsv: vi.fn(() => ({
-    downloadCsv: mockDownloadCsvFn,
-    isLoading: false,
-  })),
-  useDownloadJson: vi.fn(() => ({
-    downloadJson: mockDownloadJsonFn,
+vi.mock('../../../hooks/useDownloadEval', () => ({
+  downloadBlob: vi.fn((blob, fileName) => {
+    global.URL.createObjectURL(blob);
+    HTMLAnchorElement.prototype.click();
+  }),
+  DownloadFormat: {
+    CSV: 'csv',
+    JSON: 'json',
+  },
+  useDownloadEval: vi.fn((format) => ({
+    download: format === 'csv' ? mockDownloadCsvFn : mockDownloadJsonFn,
     isLoading: false,
   })),
 }));
