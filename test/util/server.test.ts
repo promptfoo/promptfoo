@@ -61,6 +61,11 @@ describe('Server Utilities', () => {
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         `http://localhost:${getDefaultPort()}/health`,
+        {
+          headers: {
+            'x-promptfoo-silent': 'true',
+          },
+        },
       );
       expect(result).toBe(true);
     });
@@ -104,7 +109,11 @@ describe('Server Utilities', () => {
 
       await checkServerRunning(customPort);
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(`http://localhost:${customPort}/health`);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(`http://localhost:${customPort}/health`, {
+        headers: {
+          'x-promptfoo-silent': 'true',
+        },
+      });
     });
   });
 

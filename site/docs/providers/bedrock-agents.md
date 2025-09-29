@@ -1,15 +1,17 @@
 ---
-sidebar_label: AWS Bedrock AgentCore
+title: AWS Bedrock Agents
+description: Configure and test Amazon Bedrock Agents in promptfoo, including setup, authentication, session management, knowledge bases, and tracing options.
+sidebar_label: AWS Bedrock Agents
 ---
 
-# AWS Bedrock AgentCore
+# AWS Bedrock Agents
 
-The AWS Bedrock AgentCore provider enables you to test and evaluate AI agents deployed on Amazon Bedrock AgentCore, AWS's managed service for deploying and operating AI agents at scale.
+The AWS Bedrock Agents provider enables you to test and evaluate AI agents built with Amazon Bedrock Agents. Amazon Bedrock Agents uses the reasoning of foundation models (FMs), APIs, and data to break down user requests, gathers relevant information, and efficiently completes tasks—freeing teams to focus on high-value work.
 
 ## Prerequisites
 
-- AWS account with Bedrock AgentCore access
-- A deployed AgentCore agent with an active alias
+- AWS account with Bedrock Agents access
+- A deployed Bedrock agent with an active alias
 - AWS SDK installed: `npm install @aws-sdk/client-bedrock-agent-runtime`
 - IAM permissions for `bedrock:InvokeAgent`
 
@@ -17,7 +19,7 @@ The AWS Bedrock AgentCore provider enables you to test and evaluate AI agents de
 
 ```yaml
 providers:
-  - bedrock:agentcore:YOUR_AGENT_ID
+  - bedrock-agent:YOUR_AGENT_ID
     config:
       agentAliasId: PROD_ALIAS_ID  # Required
       region: us-east-1
@@ -25,11 +27,11 @@ providers:
 
 ## Full Configuration Options
 
-The AgentCore provider supports all features of AWS Bedrock agents:
+The Bedrock Agents provider supports all features of AWS Bedrock agents:
 
 ```yaml
 providers:
-  - id: bedrock:agentcore:my-agent
+  - id: bedrock-agent:my-agent
     config:
       # Required
       agentId: ABCDEFGHIJ
@@ -129,14 +131,14 @@ tests:
   - vars:
       query: "My order number is 12345"
     providers:
-      - bedrock:agentcore:support-agent
+      - bedrock-agent:support-agent
         config:
           sessionId: "customer-session-001"
 
   - vars:
       query: "What's the status of my order?"
     providers:
-      - bedrock:agentcore:support-agent
+      - bedrock-agent:support-agent
         config:
           sessionId: "customer-session-001"  # Same session
     assert:
@@ -293,23 +295,23 @@ The provider returns responses with the following structure:
 ### Basic Agent Testing
 
 ```yaml
-description: "Test customer support agent"
+description: 'Test customer support agent'
 
 providers:
   - id: support-agent
-    bedrock:agentcore:SUPPORT_AGENT_ID
+    provider: bedrock-agent:SUPPORT_AGENT_ID
     config:
       agentAliasId: PROD_ALIAS
       enableTrace: true
 
 prompts:
-  - "How do I reset my password?"
-  - "What are your business hours?"
-  - "I need to speak with a manager"
+  - 'How do I reset my password?'
+  - 'What are your business hours?'
+  - 'I need to speak with a manager'
 
 tests:
   - vars:
-      query: "{{prompt}}"
+      query: '{{prompt}}'
     assert:
       - type: not-empty
       - type: latency
@@ -325,24 +327,24 @@ tests:
       query: "I'm having trouble with product SKU-123"
     providers:
       - id: agent-session-1
-        bedrock:agentcore:AGENT_ID
+        provider: bedrock-agent:AGENT_ID
         config:
-          sessionId: "test-session-001"
+          sessionId: 'test-session-001'
           sessionState:
             sessionAttributes:
-              customerId: "CUST-456"
+              customerId: 'CUST-456'
 
   # Second turn - test context retention
   - vars:
-      query: "What warranty options are available?"
+      query: 'What warranty options are available?'
     providers:
       - id: agent-session-1
-        bedrock:agentcore:AGENT_ID
+        provider: bedrock-agent:AGENT_ID
         config:
-          sessionId: "test-session-001"  # Same session
+          sessionId: 'test-session-001' # Same session
     assert:
       - type: contains
-        value: "SKU-123"  # Should remember the product
+        value: 'SKU-123' # Should remember the product
 ```
 
 ### Knowledge Base Validation
@@ -352,7 +354,7 @@ tests:
   - vars:
       query: "What's the maximum file upload size?"
     providers:
-      - bedrock:agentcore:AGENT_ID
+      - bedrock-agent:AGENT_ID
         config:
           knowledgeBaseConfigurations:
             - knowledgeBaseId: "docs-kb"
@@ -371,7 +373,7 @@ tests:
   - vars:
       query: "What's the weather in Seattle?"
     providers:
-      - bedrock:agentcore:AGENT_ID
+      - bedrock-agent:AGENT_ID
         config:
           enableTrace: true
           actionGroups:
@@ -400,7 +402,7 @@ The provider includes specific error messages for common issues:
 
    ```yaml
    providers:
-     - bedrock:agentcore:AGENT_ID
+     - bedrock-agent:AGENT_ID
        config:
          cache: true  # Responses are cached by default
    ```
@@ -463,7 +465,7 @@ aws bedrock-agent list-agent-knowledge-bases --agent-id YOUR_AGENT_ID
 
 ## See Also
 
-- [AWS Bedrock AgentCore Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html)
+- [AWS Bedrock Agents Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html)
 - [Agent API Reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html)
 - [Knowledge Base Setup](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html)
 - [Guardrails Configuration](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html)

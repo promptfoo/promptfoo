@@ -2,6 +2,7 @@ import { calculateCost as calculateCostBase } from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
+import type { AnthropicToolConfig, WebFetchToolConfig, WebSearchToolConfig } from './types';
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
@@ -214,4 +215,100 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
     }
   }
   return {};
+}
+
+/**
+ * Processes tools configuration to handle web fetch and web search tools
+ */
+export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConfig)[] = []): {
+  processedTools: (
+    | Anthropic.Tool
+    | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+  )[];
+  requiredBetaFeatures: string[];
+} {
+  const processedTools: (
+    | Anthropic.Tool
+    | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+  )[] = [];
+  const requiredBetaFeatures: string[] = [];
+
+  for (const tool of tools) {
+    if ('type' in tool) {
+      // Handle our custom tool configs
+      if (tool.type === 'web_fetch_20250910') {
+        processedTools.push(transformWebFetchTool(tool as WebFetchToolConfig));
+        if (!requiredBetaFeatures.includes('web-fetch-2025-09-10')) {
+          requiredBetaFeatures.push('web-fetch-2025-09-10');
+        }
+      } else if (tool.type === 'web_search_20250305') {
+        processedTools.push(transformWebSearchTool(tool as WebSearchToolConfig));
+        // Web search doesn't need beta header in latest SDK
+      } else {
+        // Pass through other tool types (standard Anthropic tools)
+        processedTools.push(tool as Anthropic.Tool);
+      }
+    } else {
+      // Standard Anthropic tool
+      processedTools.push(tool as Anthropic.Tool);
+    }
+  }
+
+  return { processedTools, requiredBetaFeatures };
+}
+
+/**
+ * Transform web fetch tool config to Anthropic beta tool format
+ */
+function transformWebFetchTool(
+  config: WebFetchToolConfig,
+): Anthropic.Beta.Messages.BetaWebFetchTool20250910 {
+  const tool: Anthropic.Beta.Messages.BetaWebFetchTool20250910 = {
+    type: 'web_fetch_20250910',
+    name: 'web_fetch',
+  };
+
+  if (config.max_uses !== undefined) {
+    tool.max_uses = config.max_uses;
+  }
+  if (config.allowed_domains) {
+    tool.allowed_domains = config.allowed_domains;
+  }
+  if (config.blocked_domains) {
+    tool.blocked_domains = config.blocked_domains;
+  }
+  if (config.citations) {
+    tool.citations = config.citations;
+  }
+  if (config.max_content_tokens !== undefined) {
+    tool.max_content_tokens = config.max_content_tokens;
+  }
+  if (config.cache_control) {
+    tool.cache_control = config.cache_control;
+  }
+
+  return tool;
+}
+
+/**
+ * Transform web search tool config to Anthropic beta tool format
+ */
+function transformWebSearchTool(
+  config: WebSearchToolConfig,
+): Anthropic.Beta.Messages.BetaWebSearchTool20250305 {
+  const tool: Anthropic.Beta.Messages.BetaWebSearchTool20250305 = {
+    type: 'web_search_20250305',
+    name: 'web_search',
+  };
+
+  if (config.max_uses !== undefined) {
+    tool.max_uses = config.max_uses;
+  }
+  if (config.cache_control) {
+    tool.cache_control = config.cache_control;
+  }
+
+  return tool;
 }

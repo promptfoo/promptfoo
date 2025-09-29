@@ -961,6 +961,7 @@ The Responses API supports a wide range of models, including:
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Latest fast, cost-effective reasoning model
 - `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
+- `gpt-5-codex` - GPT-5 based coding model optimized for code generation
 
 ### Using the Responses API
 
@@ -1335,6 +1336,23 @@ providers:
               required: ['location']
       tool_choice: 'auto'
 ```
+
+### Using with Azure
+
+The Responses API can also be used with Azure OpenAI endpoints by configuring the `apiHost`:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      apiKey: '${AZURE_API_KEY}'
+      temperature: 0.7
+      instructions: 'You are a helpful assistant.'
+      response_format: file://./response-schema.json
+```
+
+For comprehensive Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
 
 ### Complete Example
 

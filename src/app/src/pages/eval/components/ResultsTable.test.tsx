@@ -89,6 +89,7 @@ describe('ResultsTable Metrics Display', () => {
             cost: 1.23456,
             namedScores: {},
             testPassCount: 10,
+            testFailCount: 0,
             tokenUsage: {
               completion: 500,
               total: 1000,

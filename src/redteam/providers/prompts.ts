@@ -193,6 +193,7 @@ Your rating must strictly follow this JSON format:
     "explanation": string
   }
 }
+Return a single JSON object only; no markdown fences or extra text. If you must refuse, still return the JSON schema with rating and explanation.
 `;
 
 export const ON_TOPIC_SYSTEM_PROMPT = dedent`

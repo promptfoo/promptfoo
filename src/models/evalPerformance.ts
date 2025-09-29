@@ -78,6 +78,8 @@ export async function queryTestIndicesOptimized(
     baseQuery = sql`${baseQuery} AND success = 0 AND failure_reason != ${2}`;
   } else if (mode === 'passes') {
     baseQuery = sql`${baseQuery} AND success = 1`;
+  } else if (mode === 'highlights') {
+    baseQuery = sql`${baseQuery} AND json_extract(grading_result, '$.comment') LIKE '!highlight%'`;
   }
 
   // For search queries, only search in response field if no filters

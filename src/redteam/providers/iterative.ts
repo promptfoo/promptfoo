@@ -1,8 +1,21 @@
 import dedent from 'dedent';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -23,19 +36,6 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
-
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -394,17 +394,35 @@ export async function runRedteamConversation({
       const parsed =
         typeof judgeResp.output === 'string'
           ? extractFirstJsonObject<{
-              currentResponse: { rating: number; explanation: string };
-              previousBestResponse: { rating: number; explanation: string };
+              currentResponse?: { rating?: number | string; explanation?: string };
+              previousBestResponse?: { rating?: number | string; explanation?: string };
             }>(judgeResp.output)
-          : judgeResp.output;
-      currentScore = parsed?.currentResponse?.rating;
-      previousScore = parsed?.previousBestResponse?.rating;
+          : (judgeResp.output as any);
 
-      if (!currentScore || !previousScore) {
+      // Safely extract numeric ratings; treat 0 as valid
+      let parsedCurrent = parsed?.currentResponse?.rating as number | string | undefined;
+      if (typeof parsedCurrent === 'string') {
+        const n = Number.parseFloat(parsedCurrent);
+        parsedCurrent = Number.isFinite(n) ? n : undefined;
+      }
+      if (typeof parsedCurrent === 'number' && Number.isFinite(parsedCurrent)) {
+        currentScore = parsedCurrent;
+      } else {
         logger.info(
-          `[Iterative] Skipping iteration, did not get a score from the judge response: ${JSON.stringify(judgeResp)}`,
+          `[Iterative] Skipping iteration – judge response missing numeric currentResponse.rating. Raw: ${JSON.stringify(
+            judgeResp,
+          )}`,
         );
+        continue;
+      }
+
+      let parsedPrevious = parsed?.previousBestResponse?.rating as number | string | undefined;
+      if (typeof parsedPrevious === 'string') {
+        const n = Number.parseFloat(parsedPrevious);
+        parsedPrevious = Number.isFinite(n) ? n : undefined;
+      }
+      if (typeof parsedPrevious === 'number' && Number.isFinite(parsedPrevious)) {
+        previousScore = parsedPrevious;
       }
 
       const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);

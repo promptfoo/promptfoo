@@ -1333,4 +1333,24 @@ describe('getTestCount', () => {
     const result = getTestCount(strategy, 10, []);
     expect(result).toBe(10);
   });
+  it('should multiply by language count for layer strategy with multilingual step', () => {
+    const strategy = {
+      id: 'layer',
+      config: {
+        steps: ['base64', { id: 'multilingual', config: { languages: ['es', 'fr'] } }, 'rot13'],
+      },
+    };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(20); // 10 * 2 languages
+  });
+  it('should return totalPluginTests for layer strategy without multilingual', () => {
+    const strategy = {
+      id: 'layer',
+      config: {
+        steps: ['base64', 'rot13'],
+      },
+    };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(10);
+  });
 });

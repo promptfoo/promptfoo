@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import * as path from 'path';
 
 import async from 'async';
 import chalk from 'chalk';
@@ -619,14 +618,20 @@ export function generateVarCombinations(
 
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+
+      // For glob patterns, we need to resolve the base directory and use relative patterns
+      const basePath = cliState.basePath || '';
       const filePaths =
-        globSync(resolvedPath.replace(/\\/g, '/'), {
+        globSync(filePath, {
+          cwd: basePath || process.cwd(),
           windowsPathsNoEscape: true,
         }) || [];
+
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
-        throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
+        throw new Error(
+          `No files found for variable ${key} at path ${filePath} in directory ${basePath || process.cwd()}`,
+        );
       }
     } else {
       values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
