@@ -522,6 +522,8 @@ export default class Eval {
       conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
     } else if (mode === 'passes') {
       conditions.push(`success = 1`);
+    } else if (mode === 'highlights') {
+      conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
     }
 
     // Add filters
@@ -606,6 +608,9 @@ export default class Eval {
           } else {
             condition = `(${explicit})`;
           }
+        } else if (type === 'policy' && operator === 'equals') {
+          const sanitizedValue = sanitizeValue(value);
+          condition = `(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE '%${sanitizedValue}%')`;
         }
 
         if (condition) {

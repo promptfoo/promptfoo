@@ -30,7 +30,8 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { isRunningUnderNpx, readFilters } from '../../util/index';
+import { readFilters } from '../../util/index';
+import { promptfooCommand } from '../promptfooCommand';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';
@@ -578,18 +579,16 @@ export async function resolveConfigs(
   const hasConfigFile = Boolean(configPaths);
 
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
-    const runCommand = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
-
     logger.warn(dedent`
       ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
 
       ${chalk.white('Try running with:')}
 
-      ${chalk.cyan(`${runCommand} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
+      ${chalk.cyan(`${promptfooCommand('')} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
 
       ${chalk.white('Or create a config with:')}
 
-      ${chalk.green(`${runCommand} init`)}
+      ${chalk.green(promptfooCommand('init'))}
     `);
     process.exit(1);
   }

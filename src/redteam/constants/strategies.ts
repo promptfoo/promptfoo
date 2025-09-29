@@ -5,6 +5,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'owasp:api',
   'owasp:llm',
   'eu:ai-act',
+  'iso:42001',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 

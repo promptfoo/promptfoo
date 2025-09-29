@@ -36,6 +36,10 @@ const redTeamSidebar = [
   },
   {
     type: 'doc',
+    id: 'red-team/iso-42001',
+  },
+  {
+    type: 'doc',
     id: 'red-team/risk-scoring',
   },
   {
