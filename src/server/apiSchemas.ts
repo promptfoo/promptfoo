@@ -31,6 +31,14 @@ export const ApiSchemas = {
         message: z.string().optional(),
       }),
     },
+    CloudStatus: {
+      Response: z.object({
+        isAuthenticated: z.boolean(),
+        hasApiKey: z.boolean(),
+        appUrl: z.string().url().nullable(),
+        isEnterprise: z.boolean(),
+      }),
+    },
   },
   Eval: {
     UpdateAuthor: {
