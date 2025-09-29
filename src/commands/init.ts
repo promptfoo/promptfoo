@@ -10,7 +10,7 @@ import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 import { fetchWithProxy } from '../util/fetch';
-import { nextCmd } from '../util/nextCommand';
+import { promptfooCommand } from '../util/promptfooCommand';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
@@ -157,7 +157,7 @@ async function handleExampleDownload(
   const isRedteam = /redteam/i.test(exampleName);
 
   // Build the right command for this environment
-  const cmd = nextCmd(isRedteam ? 'redteam init' : 'eval');
+  const cmd = promptfooCommand(isRedteam ? 'redteam init' : 'eval');
 
   logger.info(
     dedent`

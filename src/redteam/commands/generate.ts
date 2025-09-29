@@ -28,7 +28,8 @@ import {
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { getCustomPolicies } from '../../util/generation';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index';
+import { printBorder, setupEnv } from '../../util/index';
+import { promptfooCommand } from '../../util/promptfooCommand';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
@@ -221,7 +222,7 @@ export async function doGenerateRedteam(
     logger.info(
       chalk.red(
         `\nCan't generate without configuration - run ${chalk.yellow.bold(
-          isRunningUnderNpx() ? 'npx promptfoo redteam init' : 'promptfoo redteam init',
+          promptfooCommand('redteam init'),
         )} first`,
       ),
     );
@@ -519,7 +520,7 @@ export async function doGenerateRedteam(
     }
 
     if (!options.inRedteamRun) {
-      const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
+      const commandPrefix = promptfooCommand(''); // Get command prefix
       logger.info(
         '\n' +
           chalk.green(
@@ -576,10 +577,9 @@ export async function doGenerateRedteam(
     logger.info(
       `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
     );
-    const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
     const command = configPath.endsWith('promptfooconfig.yaml')
-      ? `${commandPrefix} eval`
-      : `${commandPrefix} eval -c ${path.relative(process.cwd(), configPath)}`;
+      ? promptfooCommand('eval')
+      : promptfooCommand(`eval -c ${path.relative(process.cwd(), configPath)}`);
     logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
   } else {
     const author = getAuthor();

@@ -11,7 +11,6 @@ import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
 import { type UnifiedConfig } from '../../../src/types';
-import { isRunningUnderNpx } from '../../../src/util/index';
 import {
   combineConfigs,
   dereferenceConfig,
@@ -57,6 +56,11 @@ jest.mock('../../../src/logger', () => ({
 
 jest.mock('../../../src/util', () => ({
   ...jest.requireActual('../../../src/util'),
+}));
+
+jest.mock('../../../src/util/promptfooCommand', () => ({
+  promptfooCommand: jest.fn().mockReturnValue('promptfoo'),
+  detectInstaller: jest.fn().mockReturnValue('unknown'),
   isRunningUnderNpx: jest.fn(),
 }));
 
@@ -1420,6 +1424,7 @@ describe('resolveConfigs', () => {
       throw new Error(`Process exited with code ${code}`);
     });
     jest.mocked(isCI).mockReturnValue(false);
+    const { isRunningUnderNpx } = require('../../../src/util/promptfooCommand');
     jest.mocked(isRunningUnderNpx).mockReturnValue(true);
 
     const cmdObj = {};

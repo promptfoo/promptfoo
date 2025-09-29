@@ -30,7 +30,8 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { isRunningUnderNpx, readFilters } from '../../util/index';
+import { readFilters } from '../../util/index';
+import { promptfooCommand } from '../promptfooCommand';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';
@@ -576,7 +577,7 @@ export async function resolveConfigs(
   const hasConfigFile = Boolean(configPaths);
 
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
-    const runCommand = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
+    const runCommand = promptfooCommand(''); // Get command prefix
 
     logger.warn(dedent`
       ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
