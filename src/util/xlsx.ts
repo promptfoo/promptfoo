@@ -7,12 +7,13 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     // Supports syntax: file.xlsx#SheetName or file.xlsx#2 (1-based index)
     const [actualFilePath, sheetSpecifier] = filePath.split('#');
 
+    // Try to import xlsx first to give proper error if not installed
+    const xlsx = await import('xlsx');
+
     // Check if file exists before attempting to read it
     if (!fs.existsSync(actualFilePath)) {
       throw new Error(`File not found: ${actualFilePath}`);
     }
-
-    const xlsx = await import('xlsx');
     const workbook = xlsx.readFile(actualFilePath);
 
     // Validate that the workbook has at least one sheet

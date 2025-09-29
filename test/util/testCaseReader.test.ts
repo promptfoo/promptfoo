@@ -453,6 +453,9 @@ describe('readStandaloneTestsFile', () => {
       { var1: 'value3', var2: 'value4', __expected: 'expected2' },
     ];
 
+    // Mock fs.existsSync to return true for our test file
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
     // Mock the dynamic import
     jest.doMock('xlsx', () => ({
       readFile: jest.fn().mockReturnValue({ SheetNames: ['Sheet1'], Sheets: { Sheet1: {} } }),
