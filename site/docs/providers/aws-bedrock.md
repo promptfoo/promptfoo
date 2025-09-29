@@ -153,9 +153,9 @@ Specify AWS access keys directly in your configuration. **For security, use envi
 providers:
   - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
-      accessKeyId: '${AWS_ACCESS_KEY_ID}'
-      secretAccessKey: '${AWS_SECRET_ACCESS_KEY}'
-      sessionToken: '${AWS_SESSION_TOKEN}' # Optional, for temporary credentials
+      accessKeyId: '{{env.AWS_ACCESS_KEY_ID}}'
+      secretAccessKey: '{{env.AWS_SECRET_ACCESS_KEY}}'
+      sessionToken: '{{env.AWS_SESSION_TOKEN}}' # Optional, for temporary credentials
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
