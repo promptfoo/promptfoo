@@ -1,11 +1,13 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
+import { isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { canCreateTargets, getDefaultTeam } from '../util/cloud';
 import { fetchWithProxy } from '../util/fetch/index';
+import { BrowserBehavior, openAuthBrowser } from '../util/server';
 import type { Command } from 'commander';
 
 export function authCommand(program: Command) {
@@ -44,13 +46,27 @@ export function authCommand(program: Command) {
           logger.info(chalk.green('Successfully logged in'));
           return;
         } else {
-          logger.info(
-            `Please login or sign up at ${chalk.green('https://promptfoo.app')} to get an API key.`,
-          );
+          // Use host parameter if provided, otherwise use stored app URL
+          const appUrl = cmdObj.host || cloudConfig.getAppUrl();
+          const authUrl = new URL(appUrl);
+          const welcomeUrl = new URL('/welcome', appUrl);
 
-          logger.info(
-            `After logging in, you can get your api token at ${chalk.green('https://promptfoo.app/welcome')}`,
-          );
+          if (isNonInteractive()) {
+            // CI Environment or non-interactive: Exit with error but show manual URLs
+            logger.error(
+              'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
+            );
+            logger.info(`Manual login URL: ${chalk.green(authUrl.toString())}`);
+            logger.info(
+              `After login, get your API token at: ${chalk.green(welcomeUrl.toString())}`,
+            );
+            process.exitCode = 1;
+            return;
+          }
+
+          // Interactive Environment: Offer to open browser
+          await openAuthBrowser(authUrl.toString(), welcomeUrl.toString(), BrowserBehavior.ASK);
+          return;
         }
 
         return;

@@ -18,7 +18,8 @@ import {
   TextField,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
+import { displayNameOverrides, severityDisplayNames } from '@promptfoo/redteam/constants/metadata';
+import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import { useDebounce } from 'use-debounce';
 import { type ResultsFilter, useTableStore } from '../store';
 
@@ -28,6 +29,7 @@ const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   plugin: 'Plugin',
   strategy: 'Strategy',
   severity: 'Severity',
+  policy: 'Policy',
 };
 
 const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
@@ -36,6 +38,13 @@ const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
   not_contains: 'Not Contains',
   exists: 'Exists',
 };
+
+/**
+ * Convenience predicate function to determine if a filter type solely has equals operator.
+ */
+function solelyHasEqualsOperator(type: ResultsFilter['type']): boolean {
+  return ['metric', 'plugin', 'strategy', 'severity', 'policy'].includes(type);
+}
 
 function Dropdown({
   id,
@@ -169,6 +178,11 @@ function Filter({
     .filter((filter) => filter.id !== value.id && filter.type === 'severity' && filter.value)
     .map((filter) => filter.value);
 
+  // Compute selected policy values (excluding current filter)
+  const selectedPolicyValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'policy' && filter.value)
+    .map((filter) => filter.value);
+
   /**
    * Updates the metadata field.
    * @param field - The new metadata field.
@@ -197,13 +211,7 @@ function Filter({
         updatedFilter.value = '';
       }
       // Reset operator to 'equals' when changing to types that only support 'equals'
-      if (
-        (filterType === 'metric' ||
-          filterType === 'plugin' ||
-          filterType === 'strategy' ||
-          filterType === 'severity') &&
-        value.operator !== 'equals'
-      ) {
+      if (solelyHasEqualsOperator(filterType) && value.operator !== 'equals') {
         updatedFilter.operator = 'equals';
       }
 
@@ -356,6 +364,9 @@ function Filter({
             ...((filters.options.severity?.length ?? 0) > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.severity, value: 'severity' }]
               : []),
+            ...((filters.options.policy?.length ?? 0) > 0
+              ? [{ label: TYPE_LABELS_BY_TYPE.policy, value: 'policy' }]
+              : []),
           ]}
           value={value.type}
           onChange={(e) => handleTypeChange(e as ResultsFilter['type'])}
@@ -410,10 +421,7 @@ function Filter({
           id={`${index}-operator-select`}
           label="Operator"
           values={
-            value.type === 'metric' ||
-            value.type === 'plugin' ||
-            value.type === 'strategy' ||
-            value.type === 'severity'
+            solelyHasEqualsOperator(value.type)
               ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
               : [
                   { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
@@ -429,11 +437,15 @@ function Filter({
 
         {/* Hide value input when exists operator is selected */}
         {value.operator !== 'exists' && (
-          <Box sx={{ flex: 1, minWidth: 200, maxWidth: 300 }}>
-            {value.type === 'metric' ||
-            value.type === 'plugin' ||
-            value.type === 'strategy' ||
-            value.type === 'severity' ? (
+          <Box
+            sx={{
+              // NOTE: Do not set a max-width here: this container requires dynamic width which resizes according
+              // to the width of its contents i.e. the dropdown values.
+              flex: 1,
+              minWidth: 250,
+            }}
+          >
+            {solelyHasEqualsOperator(value.type) ? (
               <Dropdown
                 id={`${index}-value-select`}
                 label={TYPE_LABELS_BY_TYPE[value.type]}
@@ -445,30 +457,44 @@ function Filter({
                       displayName = displayNameOverrides[
                         optionValue as keyof typeof displayNameOverrides
                       ] as string;
-                      if (displayName) {
-                        label = (
-                          <div
+                    }
+                    if (value.type === 'severity') {
+                      displayName = severityDisplayNames[
+                        optionValue as keyof typeof severityDisplayNames
+                      ] as string;
+                    }
+                    if (value.type === 'policy') {
+                      // For policies, use the name from the mapping if available, otherwise use the ID
+                      const policyName = filters.policyIdToNameMap?.[optionValue];
+                      displayName = policyName ?? formatPolicyIdentifierAsMetric(optionValue);
+                    }
+                    if (displayName) {
+                      // For policy filters, don't show the ID in the code section
+                      const showValue = value.type !== 'policy';
+                      label = showValue ? (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            width: '100%',
+                            gap: 16,
+                          }}
+                        >
+                          {displayName}
+                          <code
                             style={{
-                              display: 'flex',
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              width: '100%',
-                              gap: 16,
+                              fontSize: '0.8em',
+                              color: theme.palette.text.secondary,
                             }}
                           >
-                            {displayName}
-                            <code
-                              style={{
-                                fontSize: '0.8em',
-                                color: theme.palette.text.secondary,
-                              }}
-                            >
-                              {optionValue}
-                            </code>
-                          </div>
-                        );
-                      }
+                            {optionValue}
+                          </code>
+                        </div>
+                      ) : (
+                        displayName
+                      );
                     }
                     return { label, value: optionValue, sortValue: displayName ?? optionValue };
                   })
@@ -488,7 +514,9 @@ function Filter({
                         ? selectedStrategyValues
                         : value.type === 'severity'
                           ? selectedSeverityValues
-                          : []
+                          : value.type === 'policy'
+                            ? selectedPolicyValues
+                            : []
                 }
               />
             ) : (
@@ -542,6 +570,8 @@ export default function FiltersForm({
       defaultType = 'strategy';
     } else if ((filters.options.severity?.length ?? 0) > 0) {
       defaultType = 'severity';
+    } else if ((filters.options.policy?.length ?? 0) > 0) {
+      defaultType = 'policy';
     }
 
     addFilter({
