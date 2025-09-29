@@ -50,7 +50,13 @@ import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
-import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import {
+  usePassRates,
+  useTestCounts,
+  useFilteredPassingTestCounts,
+  useFilteredPassRates,
+  useFilteredTestCounts,
+} from './hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -509,9 +515,14 @@ function ResultsTable({
     // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
 
-  const testCounts = useTestCounts();
-  const passingTestCounts = usePassingTestCounts();
-  const passRates = usePassRates();
+  // Use filtered metrics for real-time updates based on applied filters
+  const testCounts = useFilteredTestCounts(debouncedSearchText || '');
+  const passingTestCounts = useFilteredPassingTestCounts(debouncedSearchText || '');
+  const passRates = useFilteredPassRates(debouncedSearchText || '');
+
+  // Keep original metrics for comparison (could be used for "was X% total" display)
+  const originalTestCounts = useTestCounts();
+  const originalPassRates = usePassRates();
 
   const numAsserts = React.useMemo(
     () =>
@@ -902,6 +913,20 @@ function ResultsTable({
                       >
                         <strong>{pct}% passing</strong> ({passingTestCounts[idx]}/{testCounts[idx]}{' '}
                         cases)
+                        {/* Show comparison with total metrics if filters are active */}
+                        {(filters.appliedCount > 0 ||
+                          filterMode !== 'all' ||
+                          (typeof debouncedSearchText === 'string' &&
+                            debouncedSearchText.trim())) &&
+                          originalTestCounts[idx] !== testCounts[idx] && (
+                            <div
+                              className="total-comparison"
+                              style={{ fontSize: '0.85em', opacity: 0.8 }}
+                            >
+                              (was {originalPassRates[idx]?.toFixed(1) ?? '0'}% of{' '}
+                              {originalTestCounts[idx] ?? 0} total)
+                            </div>
+                          )}
                       </div>
                     </div>
                     {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (

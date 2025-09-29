@@ -5,6 +5,7 @@ import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { applyClientSideFiltering } from './calculations';
 import type {
   EvalResultsFilterMode,
   EvalTableDTO,
@@ -748,3 +749,19 @@ export const useTableStore = create<TableState>()((set, get) => ({
     set((prevState) => ({ ...prevState, filterMode })),
   resetFilterMode: () => set((prevState) => ({ ...prevState, filterMode: 'all' })),
 }));
+
+// Selector for filtered rows - computes client-side filtered data in real-time
+export const useFilteredRows = (searchText: string = '') => {
+  return useTableStore((state) => {
+    if (!state.table?.body) {
+      return [];
+    }
+
+    // Get applied filters (those with values)
+    const appliedFilters = Object.values(state.filters.values).filter((filter) =>
+      filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
+    );
+
+    return applyClientSideFiltering(state.table.body, state.filterMode, searchText, appliedFilters);
+  });
+};

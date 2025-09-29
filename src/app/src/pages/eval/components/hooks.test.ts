@@ -2,7 +2,15 @@ import { renderHook } from '@testing-library/react';
 import type { EvaluateTable } from '@promptfoo/types';
 import { describe, expect, it, vi } from 'vitest';
 
-import { usePassingTestCounts, useTestCounts, usePassRates } from './hooks';
+import {
+  usePassingTestCounts,
+  useTestCounts,
+  usePassRates,
+  useFilteredMetrics,
+  useFilteredTestCounts,
+  useFilteredPassRates,
+  useFilteredPassingTestCounts
+} from './hooks';
 import { useTableStore } from './store';
 
 vi.mock('./store', () => ({
@@ -563,5 +571,227 @@ describe('usePassRates', () => {
     const { result } = renderHook(() => usePassRates());
 
     expect(result.current).toEqual([(120 / 140) * 100, 50]);
+  });
+});
+
+describe('Filtered Metrics Hooks', () => {
+  const mockTableWithBody: EvaluateTable = {
+    head: {
+      prompts: [
+        {
+          raw: 'Prompt 1',
+          label: 'Prompt 1',
+          provider: 'gpt-4',
+        },
+        {
+          raw: 'Prompt 2',
+          label: 'Prompt 2',
+          provider: 'gpt-3.5',
+        },
+      ],
+      vars: [],
+    },
+    body: [
+      {
+        outputs: [
+          { pass: true, cost: 0.01, latencyMs: 100 },
+          { pass: false, cost: 0.02, latencyMs: 150 }
+        ],
+        vars: ['test1'],
+        description: 'Test case 1',
+        test: { assert: [] },
+        testIdx: 0,
+      },
+      {
+        outputs: [
+          { pass: true, cost: 0.015, latencyMs: 120 },
+          { pass: true, cost: 0.018, latencyMs: 140 }
+        ],
+        vars: ['test2'],
+        description: 'Test case 2',
+        test: { assert: [] },
+        testIdx: 1,
+      },
+    ],
+  };
+
+  describe('useFilteredMetrics', () => {
+    it('should calculate all filtered metrics in one pass', () => {
+      mockedUseTableStore.mockReturnValue({
+        table: mockTableWithBody,
+        filterMode: 'all',
+        filters: { values: {} },
+      });
+
+      const { result } = renderHook(() => useFilteredMetrics(''));
+
+      expect(result.current.testCounts).toEqual([2, 2]); // 2 tests per prompt
+      expect(result.current.passingTestCounts).toEqual([2, 1]); // Prompt 0: 2 pass, Prompt 1: 1 pass
+      expect(result.current.passRates).toEqual([100, 50]); // 100% and 50% pass rates
+      expect(result.current.filteredRows).toHaveLength(2); // Both rows included
+    });
+
+    it('should handle empty table gracefully', () => {
+      mockedUseTableStore.mockReturnValue({
+        table: null,
+        filterMode: 'all',
+        filters: { values: {} },
+      });
+
+      const { result } = renderHook(() => useFilteredMetrics(''));
+
+      expect(result.current.testCounts).toEqual([]);
+      expect(result.current.passingTestCounts).toEqual([]);
+      expect(result.current.passRates).toEqual([]);
+      expect(result.current.filteredRows).toEqual([]);
+    });
+
+    it('should react to searchText changes', () => {
+      mockedUseTableStore.mockReturnValue({
+        table: mockTableWithBody,
+        filterMode: 'all',
+        filters: { values: {} },
+      });
+
+      const { result, rerender } = renderHook(
+        ({ searchText }) => useFilteredMetrics(searchText),
+        { initialProps: { searchText: '' } }
+      );
+
+      // Initially includes all rows
+      expect(result.current.filteredRows).toHaveLength(2);
+
+      // Filter to only test1
+      rerender({ searchText: 'test1' });
+      expect(result.current.filteredRows).toHaveLength(1);
+      expect(result.current.filteredRows[0].vars).toEqual(['test1']);
+    });
+
+    it('should react to filter mode changes', () => {
+      mockedUseTableStore.mockReturnValue({
+        table: mockTableWithBody,
+        filterMode: 'failures',
+        filters: { values: {} },
+      });
+
+      const { result } = renderHook(() => useFilteredMetrics(''));
+
+      // Only row with failures should remain
+      expect(result.current.filteredRows).toHaveLength(1);
+      expect(result.current.filteredRows[0].testIdx).toBe(0); // First row has failure in prompt 1
+    });
+
+    it('should handle complex filter objects with stable dependencies', () => {
+      const mockFilters = {
+        values: {
+          filter1: {
+            id: 'test-filter',
+            type: 'metadata' as const,
+            operator: 'equals' as const,
+            value: 'test',
+            field: 'category',
+            logicOperator: 'and' as const,
+            sortIndex: 0,
+          },
+        },
+      };
+
+      mockedUseTableStore.mockReturnValue({
+        table: mockTableWithBody,
+        filterMode: 'all',
+        filters: mockFilters,
+      });
+
+      const { result, rerender } = renderHook(() => useFilteredMetrics(''));
+
+      const firstResult = result.current;
+
+      // Same filter object content, different reference - should not recompute
+      mockedUseTableStore.mockReturnValue({
+        table: mockTableWithBody,
+        filterMode: 'all',
+        filters: {
+          values: {
+            filter1: {
+              id: 'test-filter',
+              type: 'metadata' as const,
+              operator: 'equals' as const,
+              value: 'test',
+              field: 'category',
+              logicOperator: 'and' as const,
+              sortIndex: 0,
+            },
+          },
+        },
+      });
+
+      rerender();
+
+      // Results should be stable due to appliedFiltersString memoization
+      expect(result.current).toBe(firstResult);
+    });
+  });
+
+  describe('useFilteredTestCounts', () => {
+    it('should return test counts from shared computation', () => {
+      mockedUseTableStore.mockReturnValue({
+        table: mockTableWithBody,
+        filterMode: 'all',
+        filters: { values: {} },
+      });
+
+      const { result } = renderHook(() => useFilteredTestCounts(''));
+
+      expect(result.current).toEqual([2, 2]); // 2 tests per prompt
+    });
+  });
+
+  describe('useFilteredPassRates', () => {
+    it('should return pass rates from shared computation', () => {
+      mockedUseTableStore.mockReturnValue({
+        table: mockTableWithBody,
+        filterMode: 'all',
+        filters: { values: {} },
+      });
+
+      const { result } = renderHook(() => useFilteredPassRates(''));
+
+      expect(result.current).toEqual([100, 50]); // 100% and 50% pass rates
+    });
+  });
+
+  describe('useFilteredPassingTestCounts', () => {
+    it('should return passing counts from shared computation', () => {
+      mockedUseTableStore.mockReturnValue({
+        table: mockTableWithBody,
+        filterMode: 'all',
+        filters: { values: {} },
+      });
+
+      const { result } = renderHook(() => useFilteredPassingTestCounts(''));
+
+      expect(result.current).toEqual([2, 1]); // Prompt 0: 2 pass, Prompt 1: 1 pass
+    });
+  });
+
+  describe('Performance and Memory Tests', () => {
+    it('should use shared computation to prevent redundancy', () => {
+      mockedUseTableStore.mockReturnValue({
+        table: mockTableWithBody,
+        filterMode: 'all',
+        filters: { values: {} },
+      });
+
+      // In a real component, these would all be called together
+      const { result: metricsResult } = renderHook(() => useFilteredMetrics(''));
+      const { result: testCountsResult } = renderHook(() => useFilteredTestCounts(''));
+      const { result: passRatesResult } = renderHook(() => useFilteredPassRates(''));
+      const { result: passingCountsResult } = renderHook(() => useFilteredPassingTestCounts(''));
+
+      // All hooks should return consistent data
+      expect(testCountsResult.current).toEqual(metricsResult.current.testCounts);
+      expect(passRatesResult.current).toEqual(metricsResult.current.passRates);
+      expect(passingCountsResult.current).toEqual(metricsResult.current.passingTestCounts);
+    });
   });
 });
