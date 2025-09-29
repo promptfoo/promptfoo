@@ -82,18 +82,21 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
     });
 
-    it('should calculate tiered cost for all Claude Sonnet 4.5 model variants with > 200k tokens', () => {
-      const models = [
-        'claude-sonnet-4-5-20250929',
-        'claude-sonnet-4-20250514',
-        'claude-sonnet-4-0',
-        'claude-sonnet-4-latest',
-      ];
+    it('should calculate tiered cost for Claude Sonnet 4.5 20250929 with > 200k tokens', () => {
+      // Only claude-sonnet-4-5-20250929 has tiered pricing
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 300_000, 20_000);
+      // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
+      expect(cost).toBe(2.25);
+    });
+
+    it('should use base pricing for other Claude Sonnet 4 models', () => {
+      // Other Sonnet 4 models don't have tiered pricing
+      const models = ['claude-sonnet-4-20250514', 'claude-sonnet-4-0', 'claude-sonnet-4-latest'];
 
       models.forEach((model) => {
         const cost = calculateAnthropicCost(model, {}, 300_000, 20_000);
-        // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
-        expect(cost).toBe(2.25);
+        // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2
+        expect(cost).toBe(1.2);
       });
     });
 
