@@ -33,8 +33,13 @@ export function detectInstaller(): InstallerType {
   const ua = process.env.npm_config_user_agent || '';
   const exec = process.execPath || '';
 
-  // Homebrew detection
-  if (/Homebrew\/Cellar/i.test(prefix) || /Homebrew|Cellar/i.test(exec)) {
+  // Homebrew detection (works on macOS and Linux)
+  if (
+    /Homebrew[\/\\]Cellar/i.test(prefix) ||
+    /Homebrew[\/\\]Cellar/i.test(exec) ||
+    /[\/\\]Homebrew[\/\\]/i.test(prefix) ||
+    /[\/\\]Homebrew[\/\\]/i.test(exec)
+  ) {
     return 'brew';
   }
 

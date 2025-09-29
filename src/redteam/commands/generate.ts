@@ -520,14 +520,13 @@ export async function doGenerateRedteam(
     }
 
     if (!options.inRedteamRun) {
-      const commandPrefix = promptfooCommand(''); // Get command prefix
       logger.info(
         '\n' +
           chalk.green(
             `Run ${chalk.bold(
               relativeOutputPath === 'redteam.yaml'
-                ? `${commandPrefix} redteam eval`
-                : `${commandPrefix} redteam eval -c ${relativeOutputPath}`,
+                ? promptfooCommand('redteam eval')
+                : promptfooCommand(`redteam eval -c ${relativeOutputPath}`),
             )} to run the red team!`,
           ),
       );

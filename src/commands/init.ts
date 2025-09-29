@@ -154,17 +154,27 @@ async function handleExampleDownload(
   const basePath = directory && directory !== '.' ? `${directory}/` : '';
   const readmePath = path.join(basePath, exampleName, 'README.md');
   const cdCommand = `cd ${path.join(basePath, exampleName)}`;
-  const isRedteam = /redteam/i.test(exampleName);
 
-  // Build the right command for this environment
-  const cmd = promptfooCommand(isRedteam ? 'redteam init' : 'eval');
+  if (exampleName.includes('redteam')) {
+    logger.info(
+      dedent`
 
-  logger.info(
-    dedent`
-      View the README: ${chalk.bold(readmePath)}
-      ${chalk.bold('Next:')} ${chalk.bold(`${cdCommand} && ${cmd}`)}
-    `,
-  );
+      View the README file at ${chalk.bold(readmePath)} to get started!
+      `,
+    );
+  } else {
+    const runCommand = promptfooCommand('eval');
+    logger.info(
+      dedent`
+
+      View the README at ${chalk.bold(readmePath)} or run:
+
+      \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
+
+      to get started!
+      `,
+    );
+  }
 
   return exampleName;
 }

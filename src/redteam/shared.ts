@@ -113,7 +113,6 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   );
 
   logger.info(chalk.green('\nRed team scan complete!'));
-  const commandPrefix = promptfooCommand(''); // Get command prefix
   if (options.loadedFromCloud) {
     const url = await createShareableUrl(evalResult, false);
     logger.info(`View results: ${chalk.greenBright.bold(url)}`);
@@ -121,12 +120,12 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     if (options.liveRedteamConfig) {
       logger.info(
         chalk.blue(
-          `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(`${commandPrefix} redteam report`)} on the command line.`,
+          `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(promptfooCommand('redteam report'))} on the command line.`,
         ),
       );
     } else {
       logger.info(
-        chalk.blue(`To view the results, run ${chalk.bold(`${commandPrefix} redteam report`)}`),
+        chalk.blue(`To view the results, run ${chalk.bold(promptfooCommand('redteam report'))}`),
       );
     }
   }

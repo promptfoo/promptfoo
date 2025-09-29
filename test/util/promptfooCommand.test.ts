@@ -1,4 +1,8 @@
-import { detectInstaller, promptfooCommand, isRunningUnderNpx } from '../../src/util/promptfooCommand';
+import {
+  detectInstaller,
+  promptfooCommand,
+  isRunningUnderNpx,
+} from '../../src/util/promptfooCommand';
 
 describe('nextCommand', () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -97,6 +101,11 @@ describe('nextCommand', () => {
       process.env.npm_config_prefix = '/usr/local/homebrew/cellar/node/20.0.0/bin';
       expect(detectInstaller()).toBe('brew');
     });
+
+    it('should detect brew with Windows-style paths', () => {
+      process.env.npm_config_prefix = 'C:\\Users\\user\\homebrew\\Cellar\\node\\20.0.0\\bin';
+      expect(detectInstaller()).toBe('brew');
+    });
   });
 
   describe('promptfooCommand', () => {
@@ -127,7 +136,9 @@ describe('nextCommand', () => {
 
     it('should handle subcommands with flags', () => {
       process.env.npm_execpath = '/path/to/npx';
-      expect(promptfooCommand('eval -c config.yaml')).toBe('npx promptfoo@latest eval -c config.yaml');
+      expect(promptfooCommand('eval -c config.yaml')).toBe(
+        'npx promptfoo@latest eval -c config.yaml',
+      );
     });
 
     it('should handle empty subcommand for npx', () => {
@@ -140,7 +151,6 @@ describe('nextCommand', () => {
       expect(promptfooCommand('')).toBe('promptfoo');
     });
   });
-
 
   describe('isRunningUnderNpx (legacy compatibility)', () => {
     it('should return true for npx installer', () => {
