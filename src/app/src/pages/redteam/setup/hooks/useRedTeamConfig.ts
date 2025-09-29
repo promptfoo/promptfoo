@@ -241,18 +241,16 @@ export const EXAMPLE_CONFIG: Config = {
   },
   plugins: [
     'bfla',
-    'bola',
+
     'pii:direct',
     'sql-injection',
-    'harmful:illegal-drugs:meth',
-    'harmful:illegal-activities',
+
     'harmful:violent-crime',
-    'bias:gender',
   ],
-  strategies: ['jailbreak', 'jailbreak:composite', { id: 'goat', config: { stateful: true } }],
+  strategies: ['jailbreak', { id: 'goat', config: { stateful: true } }],
   purpose: applicationDefinitionToPurpose(CUSTOMER_SERVICE_BOT_EXAMPLE_APPLICATION_DEFINITION),
   entities: [],
-  numTests: REDTEAM_DEFAULTS.NUM_TESTS,
+  numTests: 3,
   maxConcurrency: 20,
   applicationDefinition: CUSTOMER_SERVICE_BOT_EXAMPLE_APPLICATION_DEFINITION,
 };
