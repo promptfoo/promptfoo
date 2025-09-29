@@ -425,24 +425,10 @@ describe('DownloadMenu', () => {
       ]);
 
       // Check first row data: value1, value2, [PASS] output1, 150, [FAIL] output2, 250
-      expect(rows[1]).toEqual([
-        'value1',
-        'value2',
-        '[PASS] output1',
-        150,
-        '[FAIL] output2',
-        250,
-      ]);
+      expect(rows[1]).toEqual(['value1', 'value2', '[PASS] output1', 150, '[FAIL] output2', 250]);
 
       // Check second row: value3, value4, [PASS] output3, 100, [PASS] output4, ''
-      expect(rows[2]).toEqual([
-        'value3',
-        'value4',
-        '[PASS] output3',
-        100,
-        '[PASS] output4',
-        '',
-      ]);
+      expect(rows[2]).toEqual(['value3', 'value4', '[PASS] output3', 100, '[PASS] output4', '']);
     });
   });
 
