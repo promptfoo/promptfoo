@@ -76,6 +76,9 @@ describe('HttpProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset fetchWithCache to clear any queued mockReturnValueOnce/mockResolvedValueOnce
+    jest.mocked(fetchWithCache).mockReset();
+    jest.mocked(maybeLoadConfigFromExternalFile).mockReset().mockImplementation((input) => input);
   });
 
   it('should call the API and return the response', async () => {
@@ -2143,6 +2146,11 @@ describe('HttpProvider', () => {
 });
 
 describe('createTransformRequest', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(fetchWithCache).mockReset();
+  });
+
   it('should return identity function when no transform specified', async () => {
     const transform = await createTransformRequest(undefined);
     const result = await transform('test prompt', {} as any);
@@ -2352,6 +2360,11 @@ describe('constructor validation', () => {
 });
 
 describe('content type handling', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(fetchWithCache).mockReset();
+  });
+
   it('should handle JSON content type with object body', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
@@ -2430,8 +2443,12 @@ describe('content type handling', () => {
 });
 
 describe('request transformation', () => {
-  it('should handle string-based request transform', async () => {
+  beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(fetchWithCache).mockReset();
+  });
+
+  it('should handle string-based request transform', async () => {
 
     const provider = new HttpProvider('http://test.com', {
       config: {

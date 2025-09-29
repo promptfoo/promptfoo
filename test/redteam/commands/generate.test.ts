@@ -1176,8 +1176,9 @@ describe('doGenerateRedteam', () => {
 describe('doGenerateRedteam with external defaultTest', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.mocked(fs.existsSync).mockReturnValue(false);
-    jest.mocked(fs.readFileSync).mockReturnValue('');
+    // Reset to clear any queued mock return values from other tests
+    jest.mocked(fs.existsSync).mockReset().mockReturnValue(false);
+    jest.mocked(fs.readFileSync).mockReset().mockReturnValue('');
   });
 
   it('should handle string defaultTest when updating config', async () => {

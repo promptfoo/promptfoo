@@ -23,7 +23,7 @@ beforeAll(() => {
   nock.enableNetConnect((host) => {
     const isAllowed = host.includes('127.0.0.1') || host.includes('localhost');
 
-    // Log all connection attempts for monitoring
+    // Track connection attempts for monitoring (without logging)
     if (!isAllowed) {
       networkCalls.push({
         host,
@@ -31,7 +31,6 @@ beforeAll(() => {
         method: 'unknown',
         timestamp: Date.now(),
       });
-      console.warn(`🚫 Blocked network call to: ${host}`);
     }
 
     return isAllowed;
@@ -101,13 +100,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // Report any network calls that were attempted during the test
-  if (networkCalls.length > 0) {
-    console.log(`\n📊 Network calls attempted in this test: ${networkCalls.length}`);
-    networkCalls.forEach((call) => {
-      console.log(`  - ${call.method} ${call.host}${call.path}`);
-    });
-  }
+  // Only report network calls if there were unexpected ones (blocked by nock)
+  // We don't need to log successful mocked calls as they're expected
   networkCalls.length = 0; // Clear for next test
 });
 

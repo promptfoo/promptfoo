@@ -131,20 +131,26 @@ jest.mock('../../src/util/file', () => ({
 // Helper to clear all mocks
 const clearAllMocks = () => {
   jest.clearAllMocks();
-  jest.mocked(globSync).mockReset();
-  jest.mocked(fs.readFileSync).mockReset();
-  jest.mocked(getEnvBool).mockReset();
-  jest.mocked(getEnvString).mockReset();
-  jest.mocked(fetchCsvFromGoogleSheet).mockReset();
-  jest.mocked(loadApiProvider).mockReset();
+
+  // Force clear any queued mockReturnValueOnce/mockResolvedValueOnce calls
+  // by setting implementation to undefined and then resetting
+  jest.mocked(globSync).mockImplementation(undefined as any).mockReset();
+  jest.mocked(fs.readFileSync).mockImplementation(undefined as any).mockReset();
+  jest.mocked(getEnvBool).mockImplementation(undefined as any).mockReset();
+  jest.mocked(getEnvString).mockImplementation(undefined as any).mockReset();
+  jest.mocked(fetchCsvFromGoogleSheet).mockImplementation(undefined as any).mockReset();
+  jest.mocked(loadApiProvider).mockImplementation(undefined as any).mockReset();
+
   const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-  mockRunPython.mockReset();
+  mockRunPython.mockImplementation(undefined as any).mockReset();
+
   const mockImportModule = jest.requireMock('../../src/esm').importModule;
-  mockImportModule.mockReset();
+  mockImportModule.mockImplementation(undefined as any).mockReset();
+
   const mockFetchHuggingFaceDataset = jest.requireMock(
     '../../src/integrations/huggingfaceDatasets',
   ).fetchHuggingFaceDataset;
-  mockFetchHuggingFaceDataset.mockReset();
+  mockFetchHuggingFaceDataset.mockImplementation(undefined as any).mockReset();
 };
 
 describe('readStandaloneTestsFile', () => {

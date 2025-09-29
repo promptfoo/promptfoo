@@ -487,6 +487,8 @@ describe('Python file references', () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
+      jest.mocked(runPythonCode).mockReset();
+      jest.mocked(runPython).mockReset();
     });
 
     it('should FAIL when score=0 and no threshold', async () => {

@@ -11,10 +11,17 @@ jest.mock('../../../src/cliState');
 jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),
 }));
+jest.mock('../../../src/logger');
+
+// Mock process.exit to prevent test runner from exiting
+const mockExit = jest.spyOn(process, 'exit').mockImplementation((code?: number | string) => {
+  throw new Error(`process.exit called with code ${code}`);
+});
 
 describe('validateStrategies', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
+    mockExit.mockClear();
   });
 
   it('should validate valid strategies', async () => {
@@ -51,10 +58,11 @@ describe('validateStrategies', () => {
   });
 
   it('should exit for invalid strategies', async () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     const invalidStrategies: RedteamStrategyObject[] = [{ id: 'invalid-strategy' }];
 
-    await validateStrategies(invalidStrategies);
+    await expect(validateStrategies(invalidStrategies)).rejects.toThrow(
+      'process.exit called with code 1',
+    );
 
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid strategy(s)'));
     expect(mockExit).toHaveBeenCalledWith(1);
@@ -63,7 +71,7 @@ describe('validateStrategies', () => {
 
 describe('loadStrategy', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
   it('should load predefined strategy', async () => {
@@ -267,7 +275,7 @@ describe('custom strategy validation', () => {
       { id: 'notcustom:variant' },
     ];
 
-    await validateStrategies(strategies);
+    await expect(validateStrategies(strategies)).rejects.toThrow('process.exit called with code 1');
 
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid strategy(s)'));
   });
