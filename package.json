@@ -120,6 +120,12 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "sharp": "^0.34.4"
   },
+  "_comment_xlsx": "xlsx is an optional peer dependency for Excel file support. Users must install it manually: npm install xlsx. It's also in devDependencies for build/test purposes only.",
+  "peerDependenciesMeta": {
+    "xlsx": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@adaline/anthropic": "1.7.1",
     "@adaline/azure": "1.6.2",
@@ -196,6 +202,7 @@
     "typescript": "^5.9.2",
     "undici-types": "^7.16.0",
     "winston-transport": "^4.9.0",
+    "xlsx": "^0.18.5",
     "zod-to-json-schema": "^3.24.6"
   },
   "optionalDependencies": {
