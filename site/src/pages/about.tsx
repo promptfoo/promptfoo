@@ -149,7 +149,7 @@ const AboutPageContent = () => {
                 image: '/img/team/alan.jpeg',
                 bio: 'Alan brings almost two decades of experience building and shipping software at scale. He has led and contributed on teams at companies like Ceros, Thoughtworks, and Parature.',
               },
-                            {
+              {
                 name: 'James Hiester',
                 title: 'Deployment Engineer',
                 image: '/img/team/james.jpeg',
