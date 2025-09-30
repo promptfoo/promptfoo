@@ -339,7 +339,30 @@ Logout from the promptfoo cloud.
 
 ### `promptfoo auth whoami`
 
-Show current user information including the active team.
+Display current authentication status including user, organization, and active team.
+
+**Output includes:**
+
+- User email
+- Organization name
+- Current team (if logged in to a multi-team organization)
+- App URL
+
+Example:
+
+```sh
+promptfoo auth whoami
+```
+
+Output:
+
+```
+Currently logged in as:
+User: user@company.com
+Organization: Acme Corp
+Current Team: Engineering Team
+App URL: https://www.promptfoo.app
+```
 
 ### `promptfoo auth teams`
 
@@ -375,6 +398,32 @@ promptfoo auth teams set team_12345
 ```
 
 Your team selection is remembered across CLI sessions and applies to all promptfoo operations including evaluations and red team testing.
+
+#### Team Selection Across Organizations
+
+If you have access to multiple organizations, team selections are **isolated per organization**. This means:
+
+- Each organization remembers its own team selection
+- Switching between organizations preserves your team choice in each org
+- When you log into an organization, your previously selected team is automatically restored
+
+Example workflow:
+
+```sh
+# Login to Organization A
+promptfoo auth login --api-key <org-a-key>
+promptfoo auth teams set "Engineering"     # Set team in Org A
+
+# Login to Organization B
+promptfoo auth login --api-key <org-b-key>
+promptfoo auth teams set "Marketing"       # Set team in Org B
+
+# Login back to Organization A
+promptfoo auth login --api-key <org-a-key>
+promptfoo auth teams current              # Shows "Engineering" (preserved!)
+```
+
+Your team selection persists across login sessions within the same organization.
 
 ## `promptfoo config`
 

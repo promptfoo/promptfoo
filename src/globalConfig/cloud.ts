@@ -40,6 +40,7 @@ export class CloudConfig {
     appUrl: string;
     apiHost: string;
     apiKey?: string;
+    currentOrganizationId?: string;
     currentTeamId?: string;
     teams?: {
       [organizationId: string]: {
@@ -60,6 +61,7 @@ export class CloudConfig {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost || API_HOST,
       apiKey: savedConfig.apiKey,
+      currentOrganizationId: savedConfig.currentOrganizationId,
       currentTeamId: savedConfig.currentTeamId,
       teams: savedConfig.teams,
     };
@@ -111,6 +113,7 @@ export class CloudConfig {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost || API_HOST,
       apiKey: savedConfig.apiKey,
+      currentOrganizationId: savedConfig.currentOrganizationId,
       currentTeamId: savedConfig.currentTeamId,
       teams: savedConfig.teams,
     };
@@ -160,6 +163,15 @@ export class CloudConfig {
       }
       throw error;
     }
+  }
+
+  getCurrentOrganizationId(): string | undefined {
+    return this.config.currentOrganizationId;
+  }
+
+  setCurrentOrganization(organizationId: string): void {
+    this.config.currentOrganizationId = organizationId;
+    this.saveConfig();
   }
 
   getCurrentTeamId(organizationId?: string): string | undefined {

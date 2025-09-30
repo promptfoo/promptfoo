@@ -8,6 +8,7 @@ export interface GlobalConfig {
     appUrl?: string;
     apiHost?: string;
     apiKey?: string;
+    currentOrganizationId?: string;
     currentTeamId?: string;
     teams?: {
       [organizationId: string]: {

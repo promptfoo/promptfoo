@@ -274,6 +274,7 @@ describe('auth command', () => {
       jest.mocked(getDefaultTeam).mockResolvedValueOnce({
         id: 'team-1',
         name: 'Default Team',
+        organizationId: 'org-1',
         createdAt: '2023-01-01T00:00:00Z',
       });
 

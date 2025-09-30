@@ -8,6 +8,7 @@ import telemetry from '../telemetry';
 import {
   canCreateTargets,
   getDefaultTeam,
+  getTeamById,
   getUserTeams,
   resolveTeamFromIdentifier,
   resolveTeamId,
@@ -38,7 +39,7 @@ export function authCommand(program: Command) {
       try {
         if (cmdObj.apiKey) {
           token = cmdObj.apiKey;
-          const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost);
+          const { user, organization } = await cloudConfig.validateAndSetApiToken(token, apiHost);
           // Store token in global config and handle email sync
           const existingEmail = getUserEmail();
           if (existingEmail && existingEmail !== user.email) {
@@ -50,22 +51,39 @@ export function authCommand(program: Command) {
           }
           setUserEmail(user.email);
 
-          // Set up default team
+          // Set current organization context
+          cloudConfig.setCurrentOrganization(organization.id);
+
+          // Set up default team (only if no team is already selected for this org)
           try {
-            const defaultTeam = await getDefaultTeam();
-            cloudConfig.setCurrentTeamId(defaultTeam.id);
-
-            // Cache teams for faster future operations
             const allTeams = await getUserTeams();
-            if (allTeams.length > 0 && allTeams[0].organizationId) {
-              cloudConfig.cacheTeams(allTeams, allTeams[0].organizationId);
-            }
+            cloudConfig.cacheTeams(allTeams, organization.id);
 
-            logger.info(chalk.green('Successfully logged in'));
-            logger.info(`Team: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
-            if (allTeams.length > 1) {
-              logger.info(chalk.dim(`Use 'promptfoo auth teams list' to see all teams`));
-              logger.info(chalk.dim(`Use 'promptfoo auth teams set <name>' to switch teams`));
+            const existingTeamId = cloudConfig.getCurrentTeamId(organization.id);
+            if (existingTeamId) {
+              // Team already selected, keep it
+              try {
+                const currentTeam = await getTeamById(existingTeamId);
+                logger.info(chalk.green('Successfully logged in'));
+                logger.info(`Team: ${chalk.cyan(currentTeam.name)}`);
+              } catch (_error) {
+                // Stored team no longer valid, fall back to default
+                const defaultTeam = await getDefaultTeam();
+                cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
+                logger.info(chalk.green('Successfully logged in'));
+                logger.info(`Team: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
+              }
+            } else {
+              // No team selected yet, set the default
+              const defaultTeam = await getDefaultTeam();
+              cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
+
+              logger.info(chalk.green('Successfully logged in'));
+              logger.info(`Team: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
+              if (allTeams.length > 1) {
+                logger.info(chalk.dim(`Use 'promptfoo auth teams list' to see all teams`));
+                logger.info(chalk.dim(`Use 'promptfoo auth teams set <name>' to switch teams`));
+              }
             }
           } catch (teamError) {
             logger.warn(
@@ -227,7 +245,8 @@ export function authCommand(program: Command) {
         }
 
         const teams = await getUserTeams();
-        const currentTeamId = cloudConfig.getCurrentTeamId();
+        const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
+        const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
 
         if (teams.length === 0) {
           logger.info('No teams found');
@@ -271,7 +290,8 @@ export function authCommand(program: Command) {
           return;
         }
 
-        const currentTeamId = cloudConfig.getCurrentTeamId();
+        const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
+        const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
         if (!currentTeamId) {
           logger.info('No team currently selected');
           return;
@@ -310,7 +330,7 @@ export function authCommand(program: Command) {
         }
 
         const team = await resolveTeamFromIdentifier(teamIdentifier);
-        cloudConfig.setCurrentTeamId(team.id);
+        cloudConfig.setCurrentTeamId(team.id, team.organizationId);
 
         logger.info(chalk.green(`Switched to team: ${team.name}`));
 

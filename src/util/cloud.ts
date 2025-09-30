@@ -227,10 +227,15 @@ export async function getUserTeams(): Promise<
 /**
  * Retrieves the default team for the current user from Promptfoo Cloud.
  * The default team is determined as the oldest team by creation date.
- * @returns Promise resolving to an object with team id, name, and createdAt
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
  * @throws Error if the request fails or no teams are found
  */
-export async function getDefaultTeam(): Promise<{ id: string; name: string; createdAt: string }> {
+export async function getDefaultTeam(): Promise<{
+  id: string;
+  name: string;
+  organizationId: string;
+  createdAt: string;
+}> {
   const teams = await getUserTeams();
 
   if (teams.length === 0) {
@@ -242,18 +247,23 @@ export async function getDefaultTeam(): Promise<{ id: string; name: string; crea
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   })[0];
 
-  return { id: oldestTeam.id, name: oldestTeam.name, createdAt: oldestTeam.createdAt };
+  return {
+    id: oldestTeam.id,
+    name: oldestTeam.name,
+    organizationId: oldestTeam.organizationId,
+    createdAt: oldestTeam.createdAt,
+  };
 }
 
 /**
  * Retrieves a team by its ID.
  * @param teamId - The team ID to look up
- * @returns Promise resolving to an object with team id, name, and createdAt
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
  * @throws Error if the team is not found or not accessible
  */
 export async function getTeamById(
   teamId: string,
-): Promise<{ id: string; name: string; createdAt: string }> {
+): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
   const teams = await getUserTeams();
   const team = teams.find((t) => t.id === teamId);
 
@@ -261,36 +271,56 @@ export async function getTeamById(
     throw new Error(`Team with ID '${teamId}' not found or not accessible`);
   }
 
-  return { id: team.id, name: team.name, createdAt: team.createdAt };
+  return {
+    id: team.id,
+    name: team.name,
+    organizationId: team.organizationId,
+    createdAt: team.createdAt,
+  };
 }
 
 /**
  * Resolves a team identifier (name, slug, or ID) to a team object.
  * @param identifier - The team name, slug, or ID
- * @returns Promise resolving to an object with team id, name, and createdAt
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
  * @throws Error if the team is not found
  */
 export async function resolveTeamFromIdentifier(
   identifier: string,
-): Promise<{ id: string; name: string; createdAt: string }> {
+): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
   const teams = await getUserTeams();
 
   // Try exact ID match first
   let team = teams.find((t) => t.id === identifier);
   if (team) {
-    return { id: team.id, name: team.name, createdAt: team.createdAt };
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
   }
 
   // Try name match (case-insensitive)
   team = teams.find((t) => t.name.toLowerCase() === identifier.toLowerCase());
   if (team) {
-    return { id: team.id, name: team.name, createdAt: team.createdAt };
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
   }
 
   // Try slug match
   team = teams.find((t) => t.slug === identifier);
   if (team) {
-    return { id: team.id, name: team.name, createdAt: team.createdAt };
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
   }
 
   const availableTeams = teams.map((t) => t.name).join(', ');
@@ -314,8 +344,9 @@ export async function resolveTeamId(
     return await resolveTeamFromIdentifier(teamIdentifier);
   }
 
-  // 2. Use stored current team preference
-  const currentTeamId = cloudConfig.getCurrentTeamId();
+  // 2. Use stored current team preference (scoped to current organization)
+  const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
+  const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
   if (currentTeamId) {
     try {
       logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
@@ -331,8 +362,8 @@ export async function resolveTeamId(
   if (fallbackToDefault) {
     logger.debug(`[Team Resolution] Using server default team`);
     const defaultTeam = await getDefaultTeam();
-    // Store the default team for future use
-    cloudConfig.setCurrentTeamId(defaultTeam.id);
+    // Store the default team for future use (scoped to organization)
+    cloudConfig.setCurrentTeamId(defaultTeam.id, defaultTeam.organizationId);
     logger.info(
       `Using team: ${defaultTeam.name} (use 'promptfoo auth teams set <name>' to change)`,
     );
