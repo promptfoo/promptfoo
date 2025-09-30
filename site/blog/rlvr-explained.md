@@ -21,13 +21,13 @@ image: /img/blog/rlvr/rlvr-header.jpg
 
 # Reinforcement Learning with Verifiable Rewards: When It Works, When It Fails
 
-Multiple recent studies argue that [RLVR mostly converts pass@k into pass@1](https://arxiv.org/abs/2504.13837). In other words, training concentrates probability mass on reasoning paths the base model could already sample, with a smaller share attributable to true capability gains.
+Multiple recent studies argue that [RLVR mostly converts pass@k into pass@1](https://arxiv.org/abs/2504.13837). Training concentrates probability mass on reasoning paths the base model could already sample, with a smaller share attributable to true capability gains.
 
 Recent evidence suggests you're buying speed, not smarts. The model was already capable of reaching the right answer—RLVR just forces it to get there in fewer tries.
 
 <!-- truncate -->
 
-The remaining 20-30% represents real learning, but only under specific conditions. Here's the data, the failure modes, and how to tell if you're paying for intelligence or just faster search.
+The remaining 20-30% represents real learning, but only under specific conditions. The data, failure modes, and diagnostics below show how to tell if you're paying for intelligence or just faster search.
 
 ## Recent RLVR Results (September 2025)
 
@@ -50,7 +50,7 @@ def verifier(output: str, ground_truth: Any) -> float:
     return 1.0 if check_correctness(output, ground_truth) else 0.0
 ```
 
-This change has implications:
+**The tradeoffs:**
 
 - **No reward model training:** Skip weeks of training on preference pairs
 - **Deterministic feedback:** Same input produces same reward
@@ -141,7 +141,6 @@ def strong_sql_verifier(sql_query, expected_results, db_connection):
 
 [Research from June 2025](https://arxiv.org/abs/2506.10947) found Qwen2.5-Math-7B improved 21.4% on MATH-500 with _random_ rewards, nearly matching the 29.1% gain from ground truth rewards.
 
-**Why this happens:**
 The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward—the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. [These effects were strongest on Qwen2.5-Math and did not consistently replicate on Llama3 or OLMo2](https://arxiv.org/abs/2506.10947).
 
 **Always run this test:**
@@ -166,7 +165,6 @@ def random_baseline_test(model, dataset, real_verifier):
     return True
 ```
 
-**What this means:**
 Some "RLVR gains" are artifacts of the training process. Validate on held-out data from different distributions. Test across multiple model families.
 
 ### 3. Entropy Instability in Value-Free RL
@@ -186,7 +184,7 @@ baseline = np.quantile(rewards, q=0.5)  # Median
 # Or use K-quantile for finer control
 ```
 
-**Key insight:** Prefer quantile or robust baselines over simple means when reward distributions are heavy-tailed to avoid entropy collapse.
+Prefer quantile or robust baselines over simple means when reward distributions are heavy-tailed to avoid entropy collapse.
 
 **Monitor these metrics:**
 
@@ -225,7 +223,7 @@ $$
 A_i = R(s_i, a_i) - \text{baseline}(R_{\text{group}})
 $$
 
-Where $R(s_i, a_i)$ is the verifier's reward (0.0 or 1.0), and the baseline is computed from all samples in the batch (typically mean or median). Outputs with above-average rewards get positive advantages; below-average get negative. The policy gradient then increases probability of high-advantage trajectories.
+Where R(s_i, a_i) is the verifier's reward (0.0 or 1.0), and the baseline is computed from all samples in the batch (typically mean or median). Outputs with above-average rewards get positive advantages; below-average get negative. The policy gradient then increases probability of high-advantage trajectories.
 
 **Why value-free RL is popular for RLVR:**
 Verifiers provide clean binary signals, eliminating the need for value function approximation. This reduces training complexity and speeds convergence.
@@ -437,10 +435,10 @@ def sql_execution_verifier(generated_sql: str, expected_results: list, db) -> fl
         return 0.0
 ```
 
-**Why this works:** Multiple correct SQL queries can produce the same results. Execution-based verification handles this naturally—you don't need to enumerate all valid queries.
+Multiple correct SQL queries can produce the same results. Execution-based verification handles this naturally—you don't need to enumerate all valid queries.
 
 **Databricks case study:**
-Their [later paper reports 75.68% BIRD test accuracy](https://arxiv.org/abs/2509.21459) combining execution verifiers with schema validation. Key insight: Execution checking scales better than query pattern matching.
+Their [later paper reports 75.68% BIRD test accuracy](https://arxiv.org/abs/2509.21459) combining execution verifiers with schema validation. Execution checking scales better than query pattern matching.
 
 ### Writing Verifiers (Hard Mode)
 
@@ -468,7 +466,7 @@ requirements = {
 
 ### Verifier Design Principles
 
-**✅ Good verifiers are:**
+**Good verifiers are:**
 
 1. **Fast** (<100ms per check)
 2. **Deterministic** (same input → same output)
@@ -476,7 +474,7 @@ requirements = {
 4. **Interpretable** (easy to debug false positives/negatives)
 5. **Safe** (no side effects, sandboxed execution)
 
-**❌ Anti-patterns:**
+**Anti-patterns:**
 
 - Keyword matching (easily gamed)
 - Slow verifiers (>1s per check kills training speed)
@@ -487,7 +485,7 @@ requirements = {
 
 After training, validate two things: (1) Is the model better? (2) Is your verifier reliable?
 
-**The distinction:** Verifiers provide training rewards. Evaluation harnesses test if training worked. These are separate pipelines.
+Verifiers provide training rewards. Evaluation harnesses test if training worked. These are separate pipelines.
 
 ### Evaluating Model Quality
 
@@ -599,9 +597,9 @@ Do you have objective correctness criteria?
 
 Evidence to date suggests that for most applications, RLVR's gains are dominated by search compression rather than expanded reasoning capability. You're buying speed, not smarts. The model was already capable of finding the right answer—RLVR just optimizes the path to solutions it could already reach.
 
-The rule is simple: if you can write a verifier, you can scale learning. Where ground truth doesn't exist, RLVR fails and human preference data remains superior.
+If you can write a verifier, you can scale learning. Where ground truth doesn't exist, RLVR fails and human preference data remains superior.
 
-The real engineering challenge isn't just implementing RLVR; it's proving what you've actually gained. Run pass@k analysis to distinguish compression from capability. Run random baseline tests to check for spurious rewards. Test across multiple model families.
+The engineering challenge: proving what you've actually gained. Run pass@k analysis to distinguish compression from capability. Run random baseline tests to check for spurious rewards. Test across multiple model families.
 
 The next time you see a model's performance jump after an RL run, ask the hard question: did you build a better thinker, or did you just build a faster guesser? The answer determines whether your product is truly intelligent or just a fragile house of cards.
 
