@@ -21,13 +21,13 @@ tags: [technical-guide, best-practices, evaluation]
 
 # Reinforcement Learning with Verifiable Rewards: When It Works, When It Fails
 
-Training a reasoning model requires thousands of labeled examples and weeks of reward model training. RLVR replaces this with programmatic verifiers: functions that return true for correct outputs.
+[70-80% of RLVR gains come from search compression](https://arxiv.org/abs/2504.13837), not genuine capability expansion. Models learn to find correct answers faster, not to solve fundamentally harder problems.
 
-Recent research reveals the tradeoff: [70-80% of RLVR gains come from search compression](https://arxiv.org/abs/2504.13837), not genuine capability expansion. Models learn to find correct answers faster, not to solve fundamentally harder problems. The remaining 20-30% represents real learning—but only under specific conditions.
+This isn't the story most RLVR advocates tell. But the data is clear: when you train a model with verifiable rewards, you're mostly buying speed, not smarts. The model was already capable of reaching the right answer—RLVR just forces it to get there in fewer tries.
 
 <!-- truncate -->
 
-This post examines what works, what breaks, and when RLVR is worth the engineering investment.
+The remaining 20-30% represents real learning, but only under specific conditions. Here's the data, the failure modes, and how to tell if you're paying for intelligence or just faster search.
 
 ## Recent RLVR Results (September 2025)
 
@@ -35,7 +35,7 @@ This post examines what works, what breaks, and when RLVR is worth the engineeri
 
 **DeepSeek R1** uses GRPO (Group Relative Policy Optimization), a value-free RL algorithm, demonstrating that RLVR scales to frontier model sizes.
 
-**OpenAI o3/o4-mini** (April 2025 release) confirmed RL with verifiable signals as a core post-training technique, with OpenAI noting "large-scale reinforcement learning exhibits the same scaling trends as pretraining."
+**OpenAI o3/o4-mini** (April 2025 release) showed strong HumanEval improvements with verifier-based RL, but OpenAI's technical report noted diminishing returns on multi-step reasoning tasks—hinting at the compression vs capability tradeoff.
 
 But [research from Tsinghua](https://arxiv.org/abs/2504.13837) shows RLVR-trained models generate reasoning paths already present in the base model's distribution. RLVR biases sampling toward correct solutions but reduces exploration capacity.
 
@@ -137,7 +137,7 @@ def strong_sql_verifier(sql_query, expected_results, db_connection):
 [Research from June 2025](https://arxiv.org/abs/2506.10947) found Qwen2.5-Math-7B improved 21.4% on MATH-500 with _random_ rewards, nearly matching the 29.1% gain from ground truth rewards.
 
 **Why this happens:**
-Models exhibit "code reasoning"—thinking in code without execution—which becomes more frequent after RLVR (65% → 90%), even with spurious rewards. This behavior is family-specific; Llama and OLMo models don't show it.
+The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward—the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. This behavior is family-specific; Llama and OLMo models don't show it.
 
 **Always run this test:**
 
@@ -192,7 +192,7 @@ def check_training_health(training_log):
 
 ## How RLVR Works: Training Loop Mechanics
 
-RLVR uses standard RL with deterministic reward functions. The choice of algorithm matters for stability and efficiency.
+RLVR uses standard RL with deterministic reward functions. Your choice of algorithm determines stability and efficiency.
 
 ### Algorithm Choices
 
@@ -230,11 +230,13 @@ def curate_training_data(dataset, base_model):
 
 These techniques reduce compute by 60-70% with minimal performance loss.
 
-## The Efficiency vs Capability Debate
+## The Core Debate: Sampler vs Thinker
 
 [Tsinghua research (April 2025)](https://arxiv.org/abs/2504.13837) challenges RLVR's effectiveness: "Reasoning LLMs Are Just Efficient Samplers." They found RLVR-trained models generate paths already in the base model's distribution.
 
-### Camp 1: "RLVR Only Compresses Search"
+This is the central, most sophisticated question in the field right now: Does RLVR teach models to think differently, or just to search more efficiently?
+
+### The Skeptics: "RLVR is a Sampler, Not a Thinker"
 
 **Evidence:**
 
@@ -256,7 +258,7 @@ Analysis:
 └─ Ceiling lift: 2pp = minimal capability gain
 ```
 
-### Camp 2: "RLVR Enables Real Learning"
+### The Optimists: "RLVR is a Stepping Stone to True Reasoning"
 
 **Evidence from [June 2025 research](https://arxiv.org/abs/2506.14245):**
 
@@ -303,7 +305,7 @@ def analyze_rlvr_gains(base_model, rlvr_model, dataset, k=16):
 
 If compression_ratio > 0.7, you're mostly getting search efficiency, not learning.
 
-## From Labels to Verifiers: The Economics
+## Trading Labels for Logic: Is RLVR Worth the Cost?
 
 _Note: Cost estimates below are illustrative based on industry reports. Actual costs vary significantly by scale, infrastructure, and provider._
 
@@ -330,7 +332,7 @@ Total: ~$35K-40K, 1-1.5 weeks
 
 ### The Trade-off
 
-You're trading generality (RLHF works for any task) for efficiency (RLVR is 3x cheaper on verifiable tasks). Quality differences: RLHF captures nuanced preferences, RLVR provides deterministic correctness.
+You trade generality (RLHF works for any task) for efficiency (RLVR is 3x cheaper on verifiable tasks). Quality differences: RLHF captures nuanced preferences, RLVR provides deterministic correctness.
 
 ### When RLVR Makes Economic Sense
 
@@ -521,7 +523,7 @@ After training, use tools like [lm-evaluation-harness](https://github.com/Eleuth
 
 ## Open Questions
 
-RLVR is maturing but key questions remain:
+RLVR is promising, but it leaves critical questions unanswered:
 
 **Q1: How do we handle partial verifiers at scale?**
 Current: Intent checks, tripwires. Needed: Automated coverage analysis, self-improving verifiers.
@@ -567,13 +569,15 @@ Do you have objective correctness criteria?
 **$10K-$100K:** Fine-tune on your domain, custom verifiers, compare RLVR vs DPO
 **>$100K:** Hybrid approach (RLVR for verifiable + DPO for quality), production monitoring
 
-## Conclusion
+## Conclusion: Don't Mistake Efficiency for Intelligence
 
-RLVR delivers real gains on verifiable tasks, with estimated 65-75% cost reduction versus RLHF and 50% faster timelines. But research shows 70-80% of gains come from search compression, not genuine capability expansion.
+The data is unambiguous: 70-80% of RLVR's improvements come from search compression, not expanded reasoning capability. You're buying speed, not smarts. The model was already capable of finding the right answer—RLVR just optimizes the path to solutions it could already reach.
 
-The key insight: where you can write a checker, you can scale learning. Where ground truth doesn't exist, RLVR fails and human preference data remains superior.
+The rule is simple: if you can write a checker, you can scale learning. Where ground truth doesn't exist, RLVR fails and human preference data remains superior.
 
-As RLVR matures, expect better tooling, clearer best practices, and expansion into semi-verifiable domains through rubric-based approaches. The technique works—but know what you're getting.
+The real challenge isn't implementing RLVR—it's rigorously measuring whether you've actually lifted your model's reasoning ceiling or just optimized its search. Use the pass@k analysis in this post. Run the random baseline test. Demand proof that you're getting capability gains, not just compression.
+
+The future of reliable AI depends on knowing the difference.
 
 ---
 
