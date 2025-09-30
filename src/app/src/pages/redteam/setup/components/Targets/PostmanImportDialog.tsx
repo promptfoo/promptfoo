@@ -68,6 +68,47 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
       const text = e.target?.result as string;
       setPostmanJson(text);
       setPostmanError('');
+
+      // Automatically parse the collection after upload
+      try {
+        const parsed = JSON.parse(text);
+
+        // Find all request objects
+        let requests: Array<{ name: string; path: string; request: any }> = [];
+
+        if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
+          // It's a collection - recursively find all requests
+          requests = findAllRequests(parsed.item);
+        } else if (parsed.request) {
+          // It's a standalone request
+          requests = [
+            {
+              name: parsed.name || 'Request',
+              path: parsed.name || 'Request',
+              request: parsed.request,
+            },
+          ];
+        } else {
+          throw new Error(
+            'Unable to find requests in JSON. Please paste a Postman collection or request.',
+          );
+        }
+
+        if (requests.length === 0) {
+          throw new Error('No valid requests found in the collection.');
+        }
+
+        setPostmanRequests(requests);
+
+        // If only one request, auto-select it
+        if (requests.length === 1) {
+          setSelectedRequestIndex(0);
+        }
+      } catch (error) {
+        setPostmanError(
+          error instanceof Error ? error.message : 'Failed to parse Postman collection',
+        );
+      }
     };
     reader.onerror = () => {
       setPostmanError('Failed to read file');
