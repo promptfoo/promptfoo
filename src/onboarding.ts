@@ -481,7 +481,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[WatsonX] Llama, IBM Granite, ...',
         value: [
           'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
-          'watsonx:ibm/granite-13b-chat-v2',
+          'watsonx:ibm/granite-3-3-8b-instruct',
         ],
       },
     ];
