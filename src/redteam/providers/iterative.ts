@@ -103,6 +103,7 @@ export async function runRedteamConversation({
   output: string;
   metadata: IterativeMetadata;
   tokenUsage: TokenUsage;
+  error?: string;
 }> {
   const nunjucks = getNunjucksEngine();
 
@@ -154,6 +155,8 @@ export async function runRedteamConversation({
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[] = [];
+
+  let lastResponse: TargetResponse | undefined = undefined;
 
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[Iterative] Starting iteration ${i + 1}/${numIterations}`);
@@ -288,6 +291,7 @@ export async function runRedteamConversation({
       iterationContext,
       options,
     );
+    lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug(`[Iterative] Raw target response: ${JSON.stringify(targetResponse)}`);
     if (targetResponse.error) {
@@ -514,7 +518,8 @@ export async function runRedteamConversation({
   }
 
   return {
-    output: bestResponse,
+    output: bestResponse || lastResponse?.output || '',
+    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     metadata: {
       finalIteration,
       highestScore,

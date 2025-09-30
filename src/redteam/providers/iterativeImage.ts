@@ -1,7 +1,19 @@
 import dedent from 'dedent';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
@@ -14,18 +26,6 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
-
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types';
 
 interface ImageGenerationOutput {
   prompt: string;
@@ -250,6 +250,7 @@ async function runRedteamConversation({
 
   let highestScore = 0;
   let bestResponse: BestResponse | null = null;
+  let lastResponse: TargetResponse | undefined = undefined;
   const previousOutputs: ImageGenerationOutput[] = [];
   let finalIteration = 0;
 
@@ -345,8 +346,10 @@ async function runRedteamConversation({
         iterationContext,
         options,
       );
+      lastResponse = targetResponse;
       if (targetResponse.error) {
         logger.debug(`Iteration ${i + 1}: Target provider error: ${targetResponse.error}`);
+        // Keep lastResponse with its output so final result can surface mapped output while marking error
         continue;
       }
 
@@ -510,7 +513,9 @@ async function runRedteamConversation({
   }
 
   return {
-    output: bestResponse?.output || undefined,
+    output:
+      bestResponse?.output ||
+      (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
     metadata: {
       finalIteration,
       highestScore,
@@ -520,6 +525,7 @@ async function runRedteamConversation({
       bestImageDescription: bestResponse?.imageDescription,
     },
     tokenUsage: totalTokenUsage,
+    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
   };
 }
 

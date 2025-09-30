@@ -51,6 +51,7 @@ import {
   createIterationContext,
   getTargetResponse,
   redteamProviderManager,
+  type TargetResponse,
 } from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -581,6 +582,7 @@ async function runRedteamConversation({
     | 'GRADER_FAILED' = 'MAX_DEPTH';
 
   const treeOutputs: TreeSearchOutput[] = [];
+  let lastResponse: TargetResponse | undefined = undefined;
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -636,8 +638,34 @@ async function runRedteamConversation({
           iterationContext,
           options,
         );
+        lastResponse = targetResponse;
+        // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
         if (targetResponse.error) {
-          throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
+          logger.info(
+            `[IterativeTree] Target error at depth ${depth}, attempt ${attempts}: ${targetResponse.error}. Full response: ${JSON.stringify(
+              targetResponse,
+            )}`,
+          );
+          // Push a node to history with the output we have, then skip scoring for this branch
+          treeOutputs.push({
+            depth,
+            graderPassed: undefined,
+            id: uuidv4(),
+            improvement,
+            isOnTopic,
+            output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
+            parentId: node.id,
+            prompt: targetPrompt,
+            score: 0,
+            wasSelected: false,
+            guardrails: targetResponse.guardrails,
+            sessionId:
+              targetResponse.sessionId ||
+              (typeof iterationContext?.vars?.sessionId === 'string'
+                ? iterationContext.vars.sessionId
+                : undefined),
+          });
+          continue;
         }
         invariant(
           Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
@@ -909,6 +937,7 @@ async function runRedteamConversation({
     context,
     options,
   );
+  lastResponse = finalTargetResponse;
   if (finalTargetResponse.tokenUsage) {
     accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
   }
@@ -931,7 +960,7 @@ async function runRedteamConversation({
     sessionId: finalTargetResponse.sessionId,
   });
   return {
-    output: bestResponse,
+    output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),
     metadata: {
       highestScore: maxScore,
       redteamFinalPrompt: bestNode.prompt,
@@ -944,6 +973,7 @@ async function runRedteamConversation({
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse.guardrails,
+    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
   };
 }
 
