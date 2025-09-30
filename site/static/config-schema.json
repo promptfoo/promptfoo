@@ -234,6 +234,12 @@
                             "MISTRAL_API_KEY": {
                               "type": "string"
                             },
+                            "NSCALE_SERVICE_TOKEN": {
+                              "type": "string"
+                            },
+                            "NSCALE_API_KEY": {
+                              "type": "string"
+                            },
                             "OLLAMA_API_KEY": {
                               "type": "string"
                             },

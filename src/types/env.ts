@@ -59,6 +59,8 @@ export const ProviderEnvOverridesSchema = z.object({
   MISTRAL_API_BASE_URL: z.string().optional(),
   MISTRAL_API_HOST: z.string().optional(),
   MISTRAL_API_KEY: z.string().optional(),
+  NSCALE_SERVICE_TOKEN: z.string().optional(),
+  NSCALE_API_KEY: z.string().optional(),
   OLLAMA_API_KEY: z.string().optional(),
   OLLAMA_BASE_URL: z.string().optional(),
   OPENAI_API_BASE_URL: z.string().optional(),

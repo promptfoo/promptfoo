@@ -38,7 +38,7 @@ async function loadRedteamProvider({
     logger.debug(`Using redteam provider: ${redteamProvider}`);
     ret = redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
-    logger.debug(`Loading redteam provider: ${JSON.stringify(redteamProvider)}`);
+    logger.debug('Loading redteam provider', { provider: redteamProvider });
     const loadApiProvidersModule = await import('../../providers');
     // Async import to avoid circular dependency
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
@@ -99,13 +99,11 @@ class RedteamProviderManager {
       return jsonOnly ? this.jsonOnlyProvider : this.provider;
     }
 
-    logger.debug(
-      `[RedteamProviderManager] Loading redteam provider: ${JSON.stringify({
-        providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
-        jsonOnly,
-        preferSmallModel,
-      })}`,
-    );
+    logger.debug('[RedteamProviderManager] Loading redteam provider', {
+      providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
+      jsonOnly,
+      preferSmallModel,
+    });
     const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
     logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
     return redteamProvider;
@@ -352,11 +350,11 @@ export async function createIterationContext({
         'Transform function did not return a valid object',
       );
       iterationVars = { ...originalVars, ...transformedVars };
-      logger.debug(
-        `${loggerTag} Transformed vars for iteration ${iterationNumber}: ${safeJsonStringify(transformedVars)}`,
-      );
+      logger.debug(`${loggerTag} Transformed vars for iteration ${iterationNumber}`, {
+        transformedVars,
+      });
     } catch (error) {
-      logger.error(`${loggerTag} Error transforming vars: ${error}`);
+      logger.error(`${loggerTag} Error transforming vars`, { error });
       // Continue with original vars if transform fails
     }
   }
@@ -469,7 +467,7 @@ export async function tryUnblocking({
     }
 
     const parsed = response.output as any;
-    logger.debug(`[Unblocking] Unblocking analysis: ${JSON.stringify(parsed)}`);
+    logger.debug('[Unblocking] Unblocking analysis', { analysis: parsed });
 
     if (parsed.isBlocking && parsed.unblockingAnswer) {
       logger.debug(

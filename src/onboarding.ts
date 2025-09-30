@@ -10,7 +10,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
-import { isRunningUnderNpx } from './util/index';
+import { promptfooCommand } from './util/promptfooCommand';
 import { getNunjucksEngine } from './util/templates';
 
 import type { EnvOverrides } from './types/env';
@@ -423,7 +423,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-sonnet-4-20250514',
+          'anthropic:messages:claude-sonnet-4-5-20250929',
           'anthropic:messages:claude-opus-4-1-20250805',
           'anthropic:messages:claude-opus-4-20250514',
           'anthropic:messages:claude-3-7-sonnet-20250219',
@@ -467,7 +467,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: ['bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0'],
+        value: ['bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0'],
       },
       {
         name: '[Cohere] Command R, Command R+, ...',
@@ -481,7 +481,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[WatsonX] Llama, IBM Granite, ...',
         value: [
           'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
-          'watsonx:ibm/granite-13b-chat-v2',
+          'watsonx:ibm/granite-3-3-8b-instruct',
         ],
       },
     ];
@@ -633,7 +633,7 @@ export async function initializeProject(directory: string | null, interactive: b
     const result = await createDummyFiles(directory, interactive);
     const { outDirectory, ...telemetryDetails } = result;
 
-    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+    const runCommand = promptfooCommand('eval');
 
     if (outDirectory === '.') {
       logger.info(chalk.green(`✅ Run \`${chalk.bold(runCommand)}\` to get started!`));
@@ -651,7 +651,7 @@ export async function initializeProject(directory: string | null, interactive: b
     return telemetryDetails;
   } catch (err) {
     if (err instanceof ExitPromptError) {
-      const runCommand = isRunningUnderNpx() ? 'npx promptfoo@latest init' : 'promptfoo init';
+      const runCommand = promptfooCommand('init');
       logger.info(
         '\n' +
           chalk.blue('Initialization paused. To continue setup later, use the command: ') +
