@@ -91,9 +91,14 @@ RLVR works where ground truth exists. It fails for creative writing, brand voice
 
 ## What Breaks (Research-Backed Failure Modes)
 
-![RLVR Failure Modes](/img/blog/rlvr/failure-modes.png)
-
-Three failure modes account for most RLVR problems. Unlike traditional RL issues, these stem from verifier design and the specific challenges of language model training.
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', alignItems: 'center', margin: '2rem auto'}}>
+  <div>
+    <p>Three failure modes account for most RLVR problems. Unlike traditional RL issues, these stem from verifier design and the specific challenges of language model training.</p>
+  </div>
+  <div>
+    <img src="/img/blog/rlvr/failure-modes.jpg" alt="RLVR Failure Modes" style={{width: '100%', height: 'auto', borderRadius: '8px'}} />
+  </div>
+</div>
 
 ### 1. Partial Verifiers Create Exploitable Gaps
 
@@ -253,11 +258,15 @@ These techniques reduce compute by 60-70% with minimal performance loss.
 
 ## Sampler or Thinker? The Core RLVR Debate
 
-![Sampler vs Thinker Debate](/img/blog/rlvr/sampler-vs-thinker.png)
-
-[Tsinghua research (April 2025)](https://arxiv.org/abs/2504.13837) challenges RLVR's effectiveness: "Reasoning LLMs Are Just Efficient Samplers." They found RLVR-trained models generate paths already in the base model's distribution.
-
-This is the central, most sophisticated question in the field right now: Does RLVR teach models to think differently, or just to search more efficiently?
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', alignItems: 'center', margin: '2rem auto'}}>
+  <div>
+    <img src="/img/blog/rlvr/sampler-vs-thinker.jpg" alt="Sampler vs Thinker Debate" style={{width: '100%', height: 'auto', borderRadius: '8px'}} />
+  </div>
+  <div>
+    <p><a href="https://arxiv.org/abs/2504.13837">Tsinghua research (April 2025)</a> challenges RLVR's effectiveness: "Reasoning LLMs Are Just Efficient Samplers." They found RLVR-trained models generate paths already in the base model's distribution.</p>
+    <p>This is the central, most sophisticated question in the field right now: Does RLVR teach models to think differently, or just to search more efficiently?</p>
+  </div>
+</div>
 
 ### The Skeptics: "RLVR is a Sampler, Not a Thinker"
 
@@ -589,9 +598,11 @@ Do you have objective correctness criteria?
 
 ### Budget-Based Guidance
 
-**<$10K:** Open-source models, math/code domains, existing benchmarks (GSM8K, HumanEval)
+**Under $10K:** Open-source models, math/code domains, existing benchmarks (GSM8K, HumanEval)
+
 **$10K-$100K:** Fine-tune on your domain, custom verifiers, compare RLVR vs DPO
-**>$100K:** Hybrid approach (RLVR for verifiable + DPO for quality), production monitoring
+
+**Over $100K:** Hybrid approach (RLVR for verifiable + DPO for quality), production monitoring
 
 ## Conclusion: Don't Mistake Efficiency for Intelligence
 
@@ -605,30 +616,15 @@ The next time you see a model's performance jump after an RL run, ask the hard q
 
 ---
 
-## Resources
+## Further Reading
 
-**Key Papers:**
+**Implementation:**
 
-- [Does RL Incentivize Reasoning Beyond Base?](https://arxiv.org/abs/2504.13837) (April 2025) - The efficiency vs capability debate
-- [Spurious Rewards](https://arxiv.org/abs/2506.10947) (June 2025) - Random reward sensitivity in Qwen models
-- [RLVR Incentivizes Reasoning](https://arxiv.org/abs/2506.14245) (June 2025) - CoT-pass@k analysis
-- [DEPO](https://arxiv.org/abs/2509.01321) (September 2025) - Data-efficient training
+- [Databricks RLVR on BIRD](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks) - Production Text2SQL case study (73.5% → 75.68% accuracy)
+- [OpenRLHF](https://github.com/OpenRLHF/OpenRLHF) - Open-source training framework
 
-**Industry Applications:**
+**Research:**
 
-- [Databricks RLVR on BIRD](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks) - Text2SQL case study
-- [Scale AI Rubrics as Rewards](https://scale.com/blog/rubrics-as-rewards) - Extending to semi-verifiable tasks
-
-**Training Frameworks:**
-
-- [trlX](https://github.com/CarperAI/trlx) - RL for language models
-- [OpenRLHF](https://github.com/OpenRLHF/OpenRLHF) - Open-source RLHF/RLVR
-
-**Evaluation Tools:**
-
-- [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) - Standard benchmarks
-- [Promptfoo](https://promptfoo.dev) - Custom evaluations
-
----
-
-_Discussed RLVR in production? Share your verifier coverage results and failure modes in the comments._
+- [Reasoning LLMs Are Just Efficient Samplers](https://arxiv.org/abs/2504.13837) (Tsinghua, April 2025) - The sampler vs thinker debate
+- [Spurious Rewards in RL Fine-Tuning](https://arxiv.org/abs/2506.10947) (June 2025) - Random signal sensitivity
+- [DEPO: Data-Efficient Post-Training](https://arxiv.org/abs/2509.01321) (September 2025) - Compute optimization techniques
