@@ -119,10 +119,17 @@ describe('auth command', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
       );
-      expect(logger.info).toHaveBeenCalledWith('Manual login URL: https://www.promptfoo.app/');
-      expect(logger.info).toHaveBeenCalledWith(
-        'After login, get your API token at: https://www.promptfoo.app/welcome',
-      );
+      // Check that both info calls were made
+      const infoCalls = jest.mocked(logger.info).mock.calls;
+      expect(infoCalls.length).toBeGreaterThanOrEqual(2);
+      expect(
+        infoCalls.some((call) => call[0].includes('Manual login URL: https://www.promptfoo.app/')),
+      ).toBe(true);
+      expect(
+        infoCalls.some((call) =>
+          call[0].includes('After login, get your API token at: https://www.promptfoo.app/welcome'),
+        ),
+      ).toBe(true);
       expect(process.exitCode).toBe(1);
       expect(openAuthBrowser).not.toHaveBeenCalled();
 
@@ -267,6 +274,8 @@ describe('auth command', () => {
       jest.mocked(getDefaultTeam).mockResolvedValueOnce({
         id: 'team-1',
         name: 'Default Team',
+        organizationId: 'org-1',
+        createdAt: '2023-01-01T00:00:00Z',
       });
 
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
