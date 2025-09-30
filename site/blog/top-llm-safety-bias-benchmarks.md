@@ -1,6 +1,6 @@
 # Top 10 Open Datasets for LLM Safety, Toxicity & Bias Evaluation
 
-![LLM Safety Datasets Hero](/img/blog/safety-benchmarks/hero-image.svg)
+![LLM Safety Datasets Hero](/img/blog/safety-benchmarks/hero-image.png)
 
 Large language models have tremendous capabilities, but they are broken by default. A wealth of open-source datasets has emerged to train and evaluate LLMs on safety, toxicity, and bias.
 
