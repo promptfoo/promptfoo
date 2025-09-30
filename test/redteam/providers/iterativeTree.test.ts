@@ -745,6 +745,27 @@ describe('Tree Structure and Metadata', () => {
     expect(childOutput?.improvement).toBe(improvement);
   });
 
+  it('should not throw on target error and allow error-bearing output to be recorded', async () => {
+    // This test validates the non-throwing behavior at a unit level by calling shared.getTargetResponse directly
+    const mockTargetProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-target'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: 'This is 504',
+        error: 'HTTP 504',
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    const result = await getTargetResponse(
+      mockTargetProvider,
+      'prompt',
+      { prompt: { label: 'test', raw: 'prompt' }, vars: {} } as CallApiContextParams,
+      {} as CallApiOptionsParams,
+    );
+
+    expect(result.output).toBe('This is 504');
+    expect(result.error).toBe('HTTP 504');
+  });
+
   it('should track tree structure across multiple depths', () => {
     const rootId = uuidv4();
     const child1Id = uuidv4();

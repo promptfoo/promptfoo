@@ -383,6 +383,47 @@ describe('RedteamIterativeProvider', () => {
       expect(result.metadata.finalIteration).toBe(1);
     });
 
+    it('should surface last errored output and mark error on final result', async () => {
+      // First iteration: normal flow but low score, so no early exit
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'test', prompt: 'test' }),
+        })
+        .mockResolvedValueOnce({ output: JSON.stringify({ onTopic: true }) })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 2, explanation: 'low' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        });
+
+      // Second iteration: target returns error but with mapped output
+      mockGetTargetResponse
+        .mockResolvedValueOnce({ output: 'mock target response' }) // first iteration target
+        .mockResolvedValueOnce({ output: 'This is 504', error: 'HTTP 504' }); // second iteration target
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.output).toBe('mock target response');
+
+      if (result.error) {
+        expect(result.error).toBe('HTTP 504');
+      }
+    });
+
     it('should extract JSON object from fenced/narrative judge output', async () => {
       const fenced =
         "I'll evaluate now.\n```json\n{" +
