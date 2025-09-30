@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import ResultsView from './ResultsView';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
+import { useUserStore } from '@app/stores/userStore';
 
 // Mock all the required modules
 vi.mock('@app/hooks/useToast', () => ({
@@ -109,7 +110,11 @@ vi.mock('./ResultsFilters/FiltersForm', () => ({
 }));
 
 vi.mock('./AuthorChip', () => ({
-  AuthorChip: () => <div>Author Chip</div>,
+  AuthorChip: vi.fn(({ author, onEditAuthor, currentUserEmail, editable }) => (
+    <div data-testid="author-chip">
+      Author: {author}, Email: {currentUserEmail}, Editable: {editable ? 'true' : 'false'}
+    </div>
+  )),
 }));
 
 vi.mock('./EvalIdChip', () => ({
@@ -140,6 +145,19 @@ vi.mock('./EvalSelectorKeyboardShortcut', () => ({
   default: () => <div>Eval Selector Keyboard Shortcut</div>,
 }));
 
+vi.mock('@app/stores/userStore', () => {
+  const mockFetchEmail = vi.fn();
+  return {
+    useUserStore: vi.fn((selector: any) => {
+      const store = {
+        email: 'test@example.com',
+        fetchEmail: mockFetchEmail,
+      };
+      return selector ? selector(store) : store;
+    }),
+  };
+});
+
 const mockRecentEvals: ResultLightweightWithLabel[] = [
   {
     evalId: 'eval-1',
@@ -154,6 +172,39 @@ const mockRecentEvals: ResultLightweightWithLabel[] = [
 const renderWithRouter = (component: React.ReactElement) => {
   return render(<MemoryRouter>{component}</MemoryRouter>);
 };
+
+describe('ResultsView', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should call useUserStore's fetchEmail on mount and pass the current user's email from useUserStore to AuthorChip", async () => {
+    const mockFetchEmail = vi.fn();
+    (useUserStore as any).mockImplementation((selector: any) => {
+      const store = {
+        email: 'test@example.com',
+        fetchEmail: mockFetchEmail,
+      };
+      return selector ? selector(store) : store;
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(mockFetchEmail).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('author-chip')).toHaveTextContent('Email: test@example.com');
+    });
+  });
+});
 
 describe('ResultsView Share Button', () => {
   const mockOnRecentEvalSelected = vi.fn();

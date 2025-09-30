@@ -74,6 +74,24 @@ describe('useCloudConfig', () => {
     expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
   });
 
+  it('should handle malformed API responses (missing appUrl) gracefully', async () => {
+    (callApi as Mock).mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ isEnabled: true }),
+    });
+
+    const { result } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.data).toBeNull();
+    expect(result.current.error).toBe('Cloud config data is malformed');
+    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+  });
+
   it('should handle network errors gracefully', async () => {
     const networkError = new Error('Network error');
     (callApi as Mock).mockRejectedValue(networkError);

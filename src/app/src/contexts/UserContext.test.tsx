@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 
 import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
@@ -45,7 +45,7 @@ describe('UserProvider', () => {
     );
   };
 
-  const mockCallApi = (email: string | null) => {
+  const mockCallApi = (email: string | null, logoutSuccess: boolean = true) => {
     if (email === null) {
       mockedCallApi.mockResolvedValue({
         ok: false,
@@ -149,5 +149,116 @@ describe('UserProvider', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     expect(setEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('should handle error when fetchEmail fails', async () => {
+    mockedCallApi.mockRejectedValue(new Error('Failed to fetch user email'));
+
+    render(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user-email')).toBeInTheDocument();
+    });
+
+    const emailElement = screen.getByTestId('user-email');
+    expect(emailElement).toHaveTextContent('');
+    const { email, isLoading } = useUserStore.getState();
+    expect(email).toBeNull();
+    expect(isLoading).toBe(false);
+  });
+
+  it('should not trigger multiple fetchEmail calls when it re-renders', async () => {
+    const fetchEmailMock = vi.fn();
+    useUserStore.setState({ fetchEmail: fetchEmailMock } as any);
+
+    const TestComponent = () => {
+      const [count, setCount] = useState(0);
+
+      return (
+        <UserProvider>
+          <TestConsumer />
+          <button onClick={() => setCount(count + 1)}>Increment</button>
+        </UserProvider>
+      );
+    };
+
+    render(<TestComponent />);
+
+    expect(fetchEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not trigger multiple API calls when multiple UserProviders are mounted', async () => {
+    const testEmail = 'test.user@example.com';
+    mockCallApi(testEmail);
+
+    render(
+      <>
+        <UserProvider>
+          <TestConsumer />
+        </UserProvider>
+        <UserProvider>
+          <TestConsumer />
+        </UserProvider>
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText('User Info').length).toBe(2);
+    });
+
+    expect(mockedCallApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not trigger a new API call when remounted if the email has already been fetched', async () => {
+    const testEmail = 'test.user@example.com';
+    mockCallApi(testEmail);
+
+    const { unmount } = render(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user-email')).toHaveTextContent(testEmail);
+    });
+
+    unmount();
+
+    render(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(mockedCallApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should clear email on logout', async () => {
+    const testEmail = 'test.user@example.com';
+    mockCallApi(testEmail);
+
+    render(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
+
+    await assertLoadingCompletedWithEmail(testEmail);
+
+    const logout = useUserStore.getState().logout;
+    await logout();
+
+    await waitFor(() => {
+      const emailElement = screen.getByTestId('user-email');
+      expect(emailElement).toBeInTheDocument();
+      expect(emailElement).toHaveTextContent('');
+    });
   });
 });

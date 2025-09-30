@@ -55,6 +55,26 @@ describe('useVersionStore', () => {
       expect(mockedCallApi).toHaveBeenCalledWith('/version');
     });
 
+    it('should handle API response with missing latestVersion property', async () => {
+      const mockVersionInfo = {
+        currentVersion: '1.0.0',
+      };
+
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue(mockVersionInfo),
+      } as unknown as Response);
+
+      await act(async () => {
+        await useVersionStore.getState().fetchVersion();
+      });
+
+      const state = useVersionStore.getState();
+      expect(state.versionInfo).toEqual(mockVersionInfo);
+      expect(state.loading).toBe(false);
+      expect(state.error).toBeNull();
+    });
+
     it('should set dismissed=true if version was previously dismissed', async () => {
       const mockVersionInfo = {
         currentVersion: '1.0.0',
@@ -88,6 +108,23 @@ describe('useVersionStore', () => {
       const state = useVersionStore.getState();
       expect(state.versionInfo).toBeNull();
       expect(state.error).toEqual(error);
+      expect(state.loading).toBe(false);
+    });
+
+    it('should handle JSON parsing errors gracefully', async () => {
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockRejectedValue(new Error('JSON parsing error')),
+      } as unknown as Response);
+
+      await act(async () => {
+        await useVersionStore.getState().fetchVersion();
+      });
+
+      const state = useVersionStore.getState();
+      expect(state.versionInfo).toBeNull();
+      expect(state.error).toBeInstanceOf(Error);
+      expect(state.error?.message).toBe('JSON parsing error');
       expect(state.loading).toBe(false);
     });
 

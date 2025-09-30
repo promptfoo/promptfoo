@@ -159,6 +159,108 @@ describe('useCloudConfigStore', () => {
       expect(useCloudConfigStore.getState().data).toEqual(existingConfig);
       expect(useCloudConfigStore.getState().isLoading).toBe(false);
     });
+
+    it('should handle JSON parsing errors gracefully', async () => {
+      verifyInitialState();
+
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockRejectedValue(new Error('JSON parsing error')),
+      });
+
+      await act(async () => {
+        await useCloudConfigStore.getState().fetchCloudConfig();
+      });
+
+      const state = useCloudConfigStore.getState();
+      expect(state.data).toBeNull();
+      expect(state.error).toBe('JSON parsing error');
+      expect(state.isLoading).toBe(false);
+      verifyCloudConfigApiCall();
+    });
+
+    it('should recover from a hanging API request', async () => {
+      verifyInitialState();
+
+      let hangingResolve: (value: any) => void = () => {};
+      const hangingPromise = new Promise((resolve) => {
+        hangingResolve = resolve;
+      });
+
+      mockedCallApi.mockImplementationOnce(() => hangingPromise as any);
+
+      const firstFetch = useCloudConfigStore.getState().fetchCloudConfig();
+
+      const secondFetch = useCloudConfigStore.getState().fetchCloudConfig();
+
+      act(() => {
+        hangingResolve({ ok: false, json: () => ({}) });
+      });
+
+      await Promise.all([firstFetch, secondFetch]).catch(() => {});
+
+      const mockCloudConfig = {
+        appUrl: 'https://app.promptfoo.com',
+        isEnabled: true,
+      };
+
+      mockedCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue(mockCloudConfig),
+      });
+
+      await act(async () => {
+        await useCloudConfigStore.getState().fetchCloudConfig();
+      });
+
+      const state = useCloudConfigStore.getState();
+      expect(state.data).toEqual(mockCloudConfig);
+      expect(state.isLoading).toBe(false);
+      expect(state.error).toBeNull();
+      expect(mockedCallApi).toHaveBeenCalledTimes(2);
+    });
+
+    it('should clear _fetchPromise even when an unexpected error occurs', async () => {
+      verifyInitialState();
+
+      const unexpectedError = new Error('Unexpected error outside try/catch');
+      mockedCallApi.mockImplementation(() => {
+        throw unexpectedError;
+      });
+
+      const preFetchPromise = useCloudConfigStore.getState()._fetchPromise;
+      expect(preFetchPromise).toBeNull();
+
+      await act(async () => {
+        await useCloudConfigStore.getState().fetchCloudConfig();
+      });
+
+      const state = useCloudConfigStore.getState();
+      expect(state.error).toBe('Unexpected error outside try/catch');
+      expect(state.isLoading).toBe(false);
+      expect(state._fetchPromise).toBeNull();
+      verifyCloudConfigApiCall();
+    });
+
+    it('should not set _fetched to true when API returns successful response with invalid data structure', async () => {
+      verifyInitialState();
+
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue('invalid data'),
+      });
+
+      await act(async () => {
+        await useCloudConfigStore.getState().fetchCloudConfig();
+      });
+
+      const state = useCloudConfigStore.getState();
+      expect(state.data).toBeNull();
+      expect(state.error).toBeNull();
+      expect(state.isLoading).toBe(false);
+      expect(state._fetched).toBe(true);
+      verifyCloudConfigApiCall();
+    });
   });
 
   describe('refetch', () => {
@@ -277,6 +379,69 @@ describe('useCloudConfigStore', () => {
       expect(useCloudConfigStore.getState().error).toBe('Refetch failed');
       expect(useCloudConfigStore.getState().isLoading).toBe(false);
       expect(mockedCallApi).toHaveBeenCalledTimes(2);
+    });
+
+    it('should only make one API call when refetch is called multiple times simultaneously', async () => {
+      const initialConfig = {
+        appUrl: 'https://app.promptfoo.com',
+        isEnabled: true,
+      };
+
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue(initialConfig),
+      });
+
+      await act(async () => {
+        await useCloudConfigStore.getState().fetchCloudConfig();
+      });
+
+      expect(useCloudConfigStore.getState().data).toEqual(initialConfig);
+      expect(mockedCallApi).toHaveBeenCalledTimes(1);
+
+      const updatedConfig = {
+        appUrl: 'https://new.promptfoo.com',
+        isEnabled: false,
+      };
+
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue(updatedConfig),
+      });
+
+      const refetchPromises = Array(5)
+        .fill(null)
+        .map(() => useCloudConfigStore.getState().refetch());
+
+      await act(async () => {
+        await Promise.all(refetchPromises);
+      });
+
+      expect(useCloudConfigStore.getState().data).toEqual(updatedConfig);
+      expect(useCloudConfigStore.getState().error).toBeNull();
+      expect(mockedCallApi).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('clearConfig', () => {
+    it('should reset state to initial values', () => {
+      useCloudConfigStore.setState({
+        data: { appUrl: 'test', isEnabled: true },
+        isLoading: false,
+        error: 'test error',
+        _fetchPromise: Promise.resolve(),
+        _fetched: true,
+      });
+
+      act(() => {
+        useCloudConfigStore.getState().clearConfig();
+      });
+
+      expect(useCloudConfigStore.getState().data).toBeNull();
+      expect(useCloudConfigStore.getState().isLoading).toBe(true);
+      expect(useCloudConfigStore.getState().error).toBeNull();
+      expect(useCloudConfigStore.getState()._fetchPromise).toBeNull();
+      expect(useCloudConfigStore.getState()._fetched).toBe(false);
     });
   });
 });

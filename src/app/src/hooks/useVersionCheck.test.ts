@@ -175,4 +175,138 @@ describe('useVersionCheck', () => {
     expect(callApi).toHaveBeenCalledTimes(1);
     expect(callApi).toHaveBeenCalledWith('/version');
   });
+
+  it('should only trigger a single fetchVersion call when multiple components mount simultaneously', async () => {
+    const mockVersionInfo = {
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      selfHosted: true,
+      isNpx: false,
+      updateCommands: {
+        primary: 'npm i -g promptfoo@latest',
+        alternative: 'npx promptfoo@latest',
+      },
+    };
+
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockVersionInfo),
+    } as Response);
+
+    const { result: result1 } = renderHook(() => useVersionCheck());
+    const { result: result2 } = renderHook(() => useVersionCheck());
+    const { result: result3 } = renderHook(() => useVersionCheck());
+
+    await waitFor(() => {
+      expect(result1.current.loading).toBe(false);
+      expect(result2.current.loading).toBe(false);
+      expect(result3.current.loading).toBe(false);
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(result1.current.versionInfo).toEqual(mockVersionInfo);
+    expect(result2.current.versionInfo).toEqual(mockVersionInfo);
+    expect(result3.current.versionInfo).toEqual(mockVersionInfo);
+  });
+
+  it('should handle API responses with non-200 status codes but valid JSON error bodies', async () => {
+    const mockErrorResponse = {
+      message: 'Rate limit exceeded',
+      code: 'RATE_LIMIT',
+    };
+
+    vi.mocked(callApi).mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: () => Promise.resolve(mockErrorResponse),
+    } as Response);
+
+    const { result } = renderHook(() => useVersionCheck());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeInstanceOf(Error);
+    expect(result.current.error?.message).toBe('Failed to fetch version information');
+    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(callApi).toHaveBeenCalledWith('/version');
+  });
+
+  it('should allow refetching version information after a previous request has failed', async () => {
+    vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
+
+    const { result } = renderHook(() => useVersionCheck());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.error).toBeInstanceOf(Error);
+    expect(result.current.error?.message).toBe('Network error');
+
+    const mockVersionInfo = {
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      selfHosted: true,
+      isNpx: false,
+      updateCommands: {
+        primary: 'npm i -g promptfoo@latest',
+        alternative: 'npx promptfoo@latest',
+      },
+    };
+
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockVersionInfo),
+    } as Response);
+
+    await useVersionStore.getState().fetchVersion();
+
+    await waitFor(() => {
+      expect(result.current.versionInfo).toEqual(mockVersionInfo);
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('should reset state on logout when version information is loading', async () => {
+    vi.mocked(callApi).mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return {
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            currentVersion: '1.0.0',
+            latestVersion: '1.1.0',
+            updateAvailable: true,
+            selfHosted: true,
+            isNpx: false,
+            updateCommands: {
+              primary: 'npm i -g promptfoo@latest',
+              alternative: 'npx promptfoo@latest',
+            },
+          }),
+      } as Response;
+    });
+
+    const { result } = renderHook(() => useVersionCheck());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(true);
+    });
+
+    act(() => {
+      useVersionStore.setState(initialState, true);
+    });
+
+    expect(result.current.versionInfo).toBeNull();
+    expect(result.current.loading).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(result.current.dismissed).toBe(false);
+  });
 });

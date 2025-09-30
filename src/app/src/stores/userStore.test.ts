@@ -2,6 +2,7 @@ import { act } from '@testing-library/react';
 import { callApi, fetchUserId } from '@app/utils/api';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { useUserStore } from './userStore';
+import { useCloudConfigStore } from './cloudConfigStore';
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
@@ -10,8 +11,17 @@ vi.mock('@app/utils/api', () => ({
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
+vi.mock('./cloudConfigStore', () => ({
+  useCloudConfigStore: {
+    getState: vi.fn().mockReturnValue({
+      clearConfig: vi.fn(),
+    }),
+  },
+}));
+
 const mockedCallApi = callApi as Mock;
 const mockedFetchUserId = fetchUserId as Mock;
+const mockedUseCloudConfigStoreGetState = useCloudConfigStore.getState as Mock;
 
 describe('useUserStore', () => {
   const initialState = useUserStore.getState();
@@ -140,6 +150,40 @@ describe('useUserStore', () => {
       expect(useUserStore.getState().email).toBe(testEmail);
       expect(useUserStore.getState().isLoading).toBe(false);
     });
+
+    it('should set _emailFetched to true after a failed fetchEmail call', async () => {
+      verifyInitialState();
+      mockedCallApi.mockRejectedValue(new Error('Failed to fetch user email'));
+
+      await act(async () => {
+        await useUserStore.getState().fetchEmail();
+      });
+
+      expect(useUserStore.getState()._emailFetched).toBe(true);
+      expect(useUserStore.getState().email).toBe(null);
+      expect(useUserStore.getState().isLoading).toBe(false);
+      verifyEmailApiCall();
+
+      await act(async () => {
+        await useUserStore.getState().fetchEmail();
+      });
+
+      expect(mockedCallApi).toHaveBeenCalledTimes(1);
+    });
+
+    it('should clear _fetchEmailPromise after a failed API call', async () => {
+      verifyInitialState();
+      mockedCallApi.mockRejectedValue(new Error('API Error'));
+
+      await act(async () => {
+        await useUserStore.getState().fetchEmail();
+      });
+
+      expect(useUserStore.getState()._fetchEmailPromise).toBeNull();
+      expect(useUserStore.getState().email).toBeNull();
+      expect(useUserStore.getState().isLoading).toBe(false);
+      verifyEmailApiCall();
+    });
   });
 
   describe('fetchUserId', () => {
@@ -195,6 +239,29 @@ describe('useUserStore', () => {
       // API should only be called once, not four times
       expect(mockedFetchUserId).toHaveBeenCalledTimes(1);
       expect(useUserStore.getState().userId).toBe(testUserId);
+    });
+
+    it('should update isLoading to false after fetchUserId completes when fetchEmail is already completed', async () => {
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ email: 'test@example.com' }),
+      });
+
+      mockedFetchUserId.mockResolvedValue('test-user-id');
+
+      expect(useUserStore.getState().isLoading).toBe(true);
+
+      await act(async () => {
+        await useUserStore.getState().fetchEmail();
+      });
+
+      expect(useUserStore.getState().isLoading).toBe(false);
+
+      await act(async () => {
+        await useUserStore.getState().fetchUserId();
+      });
+
+      expect(useUserStore.getState().isLoading).toBe(false);
     });
   });
 
@@ -296,6 +363,37 @@ describe('useUserStore', () => {
       verifyEmailState(null);
       verifyUserIdState(null);
       expect(useUserStore.getState().isLoading).toBe(false);
+    });
+
+    it('should clear user state even if clearConfig throws an error', () => {
+      useUserStore.setState({
+        email: 'test@example.com',
+        userId: 'test-user-id',
+        isLoading: true,
+        _emailFetched: true,
+        _userIdFetched: true,
+        _fetchEmailPromise: Promise.resolve(),
+        _fetchUserIdPromise: Promise.resolve(),
+      });
+
+      mockedUseCloudConfigStoreGetState().clearConfig.mockImplementation(() => {
+        throw new Error('clearConfig failed');
+      });
+
+      act(() => {
+        try {
+          useUserStore.getState().clearUser();
+        } catch {}
+      });
+
+      const state = useUserStore.getState();
+      expect(state.email).toBeNull();
+      expect(state.userId).toBeNull();
+      expect(state.isLoading).toBe(false);
+      expect(state._emailFetched).toBe(false);
+      expect(state._userIdFetched).toBe(false);
+      expect(state._fetchEmailPromise).toBeNull();
+      expect(state._fetchUserIdPromise).toBeNull();
     });
   });
 });
