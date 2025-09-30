@@ -95,11 +95,7 @@ export default function ModelAuditSetupPage() {
 
       // If scan was persisted, navigate to the result page
       if (data.persisted && data.auditId) {
-        console.log(`Scan saved to history with ID: ${data.auditId}`);
         navigate(`/model-audit/history/${data.auditId}`);
-      } else {
-        // Show non-persisted results on this page
-        console.log('Scan completed but not persisted');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';

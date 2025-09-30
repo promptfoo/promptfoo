@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
   Container,
@@ -54,6 +54,7 @@ export default function ModelAuditResult() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const deleteControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -88,6 +89,10 @@ export default function ModelAuditResult() {
     // Cleanup: abort request when component unmounts or id changes
     return () => {
       abortController.abort();
+      // Also abort any pending delete operation
+      if (deleteControllerRef.current) {
+        deleteControllerRef.current.abort();
+      }
     };
   }, [id]);
 
@@ -97,6 +102,7 @@ export default function ModelAuditResult() {
     }
 
     const deleteController = new AbortController();
+    deleteControllerRef.current = deleteController;
     setIsDeleting(true);
 
     try {
@@ -121,6 +127,8 @@ export default function ModelAuditResult() {
       if (!deleteController.signal.aborted) {
         setIsDeleting(false);
       }
+      // Clear the ref
+      deleteControllerRef.current = null;
     }
   };
 

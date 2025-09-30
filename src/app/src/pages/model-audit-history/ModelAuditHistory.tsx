@@ -54,6 +54,7 @@ const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((p
       {...props}
       inputRef={ref}
       placeholder="Search scans..."
+      aria-label="Search model audit scans"
       slotProps={{
         input: {
           'aria-label': 'Search model audit scans',

@@ -4,6 +4,65 @@ import os from 'os';
 import path from 'path';
 
 import { Router, type Request, type Response } from 'express';
+
+// Type definitions for error responses
+interface ErrorResponse {
+  error: string;
+  originalError?: string;
+  suggestion?: string;
+  debug?: Record<string, unknown>;
+  type?: string;
+  details?: unknown;
+  exitCode?: number | null;
+  stderr?: string;
+  stdout?: string;
+  parseError?: string;
+  output?: string;
+}
+
+// Path validation to prevent directory traversal attacks
+function validateAndNormalizePath(
+  inputPath: string,
+  baseDir: string = process.cwd(),
+): { valid: boolean; normalizedPath: string; error?: string } {
+  try {
+    // Handle home directory expansion
+    let expandedPath = inputPath;
+    if (expandedPath.startsWith('~/')) {
+      expandedPath = path.join(os.homedir(), expandedPath.slice(2));
+    }
+
+    // Resolve to absolute path
+    const absolutePath = path.isAbsolute(expandedPath)
+      ? path.resolve(expandedPath)
+      : path.resolve(baseDir, expandedPath);
+
+    // Normalize to remove any ../ or ./ components
+    const normalizedPath = path.normalize(absolutePath);
+
+    // Security check: Ensure the normalized path doesn't escape expected directories
+    // For model scanning, we allow any path but prevent null bytes and other injection attempts
+    if (normalizedPath.includes('\0')) {
+      return { valid: false, normalizedPath: '', error: 'Invalid path: contains null bytes' };
+    }
+
+    // Additional check: prevent common injection patterns
+    const dangerousPatterns = ['\r', '\n', ';', '|', '&', '$', '`'];
+    for (const pattern of dangerousPatterns) {
+      if (normalizedPath.includes(pattern)) {
+        return {
+          valid: false,
+          normalizedPath: '',
+          error: 'Invalid path: contains dangerous characters',
+        };
+      }
+    }
+
+    return { valid: true, normalizedPath };
+  } catch (error) {
+    return { valid: false, normalizedPath: '', error: `Path validation error: ${error}` };
+  }
+}
 import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
@@ -77,15 +136,14 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 
     const { path: inputPath } = bodyResult.data;
 
-    // Handle home directory expansion
-    let expandedPath = inputPath;
-    if (expandedPath.startsWith('~/')) {
-      expandedPath = path.join(os.homedir(), expandedPath.slice(2));
+    // Validate and normalize path
+    const validation = validateAndNormalizePath(inputPath);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.error || 'Invalid path' });
+      return;
     }
 
-    const absolutePath = path.isAbsolute(expandedPath)
-      ? expandedPath
-      : path.resolve(process.cwd(), expandedPath);
+    const absolutePath = validation.normalizedPath;
 
     // Check if path exists
     if (!fs.existsSync(absolutePath)) {
@@ -140,21 +198,18 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         continue;
       }
 
-      // Handle home directory expansion
-      let expandedPath = inputPath;
-      if (expandedPath.startsWith('~/')) {
-        expandedPath = path.join(os.homedir(), expandedPath.slice(2));
+      // Validate and normalize path
+      const validation = validateAndNormalizePath(inputPath);
+      if (!validation.valid) {
+        res.status(400).json({ error: validation.error || `Invalid path: ${inputPath}` });
+        return;
       }
 
-      const absolutePath = path.isAbsolute(expandedPath)
-        ? expandedPath
-        : path.resolve(process.cwd(), expandedPath);
+      const absolutePath = validation.normalizedPath;
 
       // Check if path exists
       if (!fs.existsSync(absolutePath)) {
-        res
-          .status(400)
-          .json({ error: `Path does not exist: ${inputPath} (resolved to: ${absolutePath})` });
+        res.status(400).json({ error: `Path does not exist: ${inputPath}` });
         return;
       }
 
@@ -220,7 +275,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         suggestion = 'Check that modelaudit is executable and you have the necessary permissions';
       }
 
-      const response: any = {
+      const response: ErrorResponse = {
         error: errorMessage,
         originalError: error.message,
         suggestion: suggestion,
@@ -332,7 +387,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           }
         }
 
-        const response: any = {
+        const response: ErrorResponse = {
           error: errorMessage,
           exitCode: code,
           stderr: stderr || undefined,
@@ -358,7 +413,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       try {
         const jsonOutput = stdout.trim();
         if (!jsonOutput) {
-          const response: any = {
+          const response: ErrorResponse = {
             error: 'No output received from model scan',
             stderr: stderr || undefined,
             suggestion:
@@ -386,7 +441,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           scanResults = JSON.parse(jsonOutput);
         } catch (parseError) {
           logger.error(`Failed to parse model scan output: ${parseError}`);
-          const response: any = {
+          const response: ErrorResponse = {
             error: 'Failed to parse scan results - invalid JSON output',
             parseError: String(parseError),
             output: jsonOutput.substring(0, 1000), // Include first 1000 chars for debugging

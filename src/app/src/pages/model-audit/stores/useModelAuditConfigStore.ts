@@ -196,8 +196,6 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
             return { installed: data.installed, cwd: data.cwd || '' };
           })
           .catch((error) => {
-            console.error('Error checking ModelAudit installation:', error);
-
             // Update with error
             set({
               installationStatus: {

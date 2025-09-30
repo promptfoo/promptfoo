@@ -65,7 +65,6 @@ export default function ModelAuditResultLatestPage() {
           }
         } catch (_err) {
           // If latest endpoint doesn't exist, fallback to scans list
-          console.log('Latest endpoint not available, falling back to scans list');
         }
 
         // Fallback: fetch first scan from the scans list

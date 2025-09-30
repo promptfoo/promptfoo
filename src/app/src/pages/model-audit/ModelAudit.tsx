@@ -89,11 +89,6 @@ export default function ModelAudit() {
       setScanResults(data);
       setActiveTab(1); // Switch to Results tab
       addRecentScan(paths); // Add to recent scans
-
-      // If scan was persisted, user can view it in history
-      if (data.persisted && data.auditId) {
-        console.log(`Scan saved to history with ID: ${data.auditId}`);
-      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
       setError(errorMessage);
