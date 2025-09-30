@@ -615,22 +615,6 @@ def call_api(prompt, options, context):
 
    This allows interactive debugging directly in your terminal during evaluation runs.
 
-### Performance Optimization
-
-:::tip
-Initialize expensive resources (models, connections) outside the function to avoid reloading on each call:
-
-```python
-# Initialize once
-model = load_model()
-
-def call_api(prompt, options, context):
-    # Use pre-loaded model
-    return {"output": model.generate(prompt)}
-```
-
-:::
-
 ## Migration Guide
 
 ### From HTTP Provider

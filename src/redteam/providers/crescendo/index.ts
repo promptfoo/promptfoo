@@ -17,7 +17,7 @@ import type {
   TokenUsage,
 } from '../../../types/index';
 import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, isValidJson, safeJsonStringify } from '../../../util/json';
+import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
@@ -146,9 +146,7 @@ export class CrescendoProvider implements ApiProvider {
     // Ensure continueAfterSuccess defaults to false
     this.config.continueAfterSuccess = config.continueAfterSuccess ?? false;
 
-    logger.debug(
-      `[Crescendo] CrescendoProvider initialized with config: ${JSON.stringify(config)}`,
-    );
+    logger.debug('[Crescendo] CrescendoProvider initialized with config', { config });
   }
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
@@ -197,7 +195,7 @@ export class CrescendoProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<CrescendoResponse> {
-    logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[Crescendo] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -593,7 +591,7 @@ export class CrescendoProvider implements ApiProvider {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
     if (!response.output) {
-      logger.debug(`[Crescendo] No output from redteam provider: ${JSON.stringify(response)}`);
+      logger.debug('[Crescendo] No output from redteam provider', { response });
       return {
         generatedQuestion: undefined,
       };
@@ -786,7 +784,7 @@ export class CrescendoProvider implements ApiProvider {
           }>(refusalResponse.output)
         : refusalResponse.output;
 
-    logger.debug(`[Crescendo] Refusal score parsed response: ${JSON.stringify(parsed)}`);
+    logger.debug('[Crescendo] Refusal score parsed response', { parsed });
     invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
     invariant(
       typeof parsed.metadata === 'number',
@@ -843,7 +841,7 @@ export class CrescendoProvider implements ApiProvider {
           }>(evalResponse.output)
         : evalResponse.output;
 
-    logger.debug(`[Crescendo] Eval score parsed response: ${JSON.stringify(parsed)}`);
+    logger.debug('[Crescendo] Eval score parsed response', { parsed });
     invariant(
       typeof parsed.value === 'boolean',
       `Expected eval grader value to be a boolean: ${parsed}`,

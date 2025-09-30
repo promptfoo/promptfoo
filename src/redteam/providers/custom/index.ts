@@ -17,7 +17,7 @@ import type {
   TokenUsage,
 } from '../../../types/index';
 import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
+import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
@@ -185,7 +185,7 @@ export class CustomProvider implements ApiProvider {
     // Ensure continueAfterSuccess defaults to false
     this.config.continueAfterSuccess = config.continueAfterSuccess ?? false;
 
-    logger.debug(`[Custom] CustomProvider initialized with config: ${JSON.stringify(config)}`);
+    logger.debug('[Custom] CustomProvider initialized with config', { config });
   }
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
@@ -234,7 +234,7 @@ export class CustomProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<CustomResponse> {
-    logger.debug(`[Custom] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[Custom] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -654,7 +654,7 @@ export class CustomProvider implements ApiProvider {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
     if (!response.output) {
-      logger.debug(`[Custom] No output from redteam provider: ${JSON.stringify(response)}`);
+      logger.debug('[Custom] No output from redteam provider', { response });
       return {
         generatedQuestion: undefined,
         tokenUsage: undefined,
@@ -826,7 +826,7 @@ export class CustomProvider implements ApiProvider {
           }>(refusalResponse.output)
         : refusalResponse.output;
 
-    logger.debug(`[Custom] Refusal score parsed response: ${JSON.stringify(parsed)}`);
+    logger.debug('[Custom] Refusal score parsed response', { parsed });
     invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
     invariant(
       typeof parsed.metadata === 'number',
@@ -881,7 +881,7 @@ export class CustomProvider implements ApiProvider {
           }>(evalResponse.output)
         : evalResponse.output;
 
-    logger.debug(`[Custom] Eval score parsed response: ${JSON.stringify(parsed)}`);
+    logger.debug('[Custom] Eval score parsed response', { parsed });
     invariant(
       typeof parsed.value === 'boolean',
       `Expected eval grader value to be a boolean: ${parsed}`,
