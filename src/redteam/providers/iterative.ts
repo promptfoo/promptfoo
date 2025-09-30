@@ -27,7 +27,6 @@ import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
 } from './prompts';
 import {
   checkPenalizedPhrases,
@@ -66,7 +65,6 @@ interface IterativeMetadata {
     prompt: string;
     output: string;
     score: number;
-    isOnTopic: boolean;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[];
@@ -122,8 +120,6 @@ export async function runRedteamConversation({
       })
     : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose: test?.metadata?.purpose });
 
-  const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
-
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
   const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
@@ -150,7 +146,6 @@ export async function runRedteamConversation({
     prompt: string;
     output: string;
     score: number;
-    isOnTopic: boolean;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[] = [];
@@ -232,55 +227,7 @@ export async function runRedteamConversation({
       targetProvider,
     );
 
-    // Is it on topic?
-    const isOnTopicBody = JSON.stringify([
-      {
-        role: 'system',
-        content: onTopicSystemPrompt,
-      },
-      {
-        role: 'user',
-        content: targetPrompt,
-      },
-    ]);
-    const isOnTopicResp = await gradingProvider.callApi(isOnTopicBody, {
-      prompt: {
-        raw: isOnTopicBody,
-        label: 'on-topic',
-      },
-      vars: {},
-    });
-    if (gradingProvider.delay) {
-      logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
-      await sleep(gradingProvider.delay);
-    }
-    logger.debug(`[Iterative] Raw onTopic response: ${JSON.stringify(isOnTopicResp)}`);
-
-    if (isOnTopicResp.error) {
-      logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - OnTopic error: ${isOnTopicResp.error}. Full response: ${JSON.stringify(isOnTopicResp)}`,
-      );
-    }
-
-    let isOnTopic = false;
-    if (typeof isOnTopicResp.output === 'string') {
-      try {
-        isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
-      } catch (err) {
-        logger.info(
-          `[Iterative] ${i + 1}/${numIterations} - Failed to parse onTopic: ${err}. Full response: ${JSON.stringify(isOnTopicResp)}`,
-        );
-        continue;
-      }
-    } else {
-      isOnTopic = isOnTopicResp.output.onTopic;
-    }
-    logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
-    if (typeof isOnTopic !== 'boolean') {
-      logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - Could not parse a boolean from the onTopic request. Raw response: ${JSON.stringify(isOnTopicResp)}`,
-      );
-    }
+    // Removed on-topic check
 
     const targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
@@ -465,7 +412,7 @@ export async function runRedteamConversation({
           ? dedent`
           OBJECTIVE: ${goal}
 
-          CURRENT SCORE: ${currentScore} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
+          CURRENT SCORE: ${currentScore}${
             containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
           }
           PREVIOUS BEST SCORE: ${previousScore}
@@ -476,7 +423,7 @@ export async function runRedteamConversation({
 
           OBJECTIVE: ${goal}
 
-          CURRENT SCORE: ${currentScore} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
+          CURRENT SCORE: ${currentScore}${
             containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
           }
           PREVIOUS BEST SCORE: ${previousScore}
@@ -502,7 +449,6 @@ export async function runRedteamConversation({
       prompt: targetPrompt,
       output: targetResponse.output,
       score: currentScore,
-      isOnTopic,
       graderPassed: storedGraderResult?.pass,
       guardrails: targetResponse.guardrails,
     });
