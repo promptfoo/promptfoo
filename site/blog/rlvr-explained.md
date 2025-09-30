@@ -219,11 +219,11 @@ RLVR uses standard RL with deterministic reward functions. Your choice of algori
 
 The advantage calculation uses group statistics as the baseline:
 
-$$
-A_i = R(s_i, a_i) - \text{baseline}(R_{\text{group}})
-$$
+```
+A_i = R(s_i, a_i) - baseline(R_group)
+```
 
-Where R(s_i, a_i) is the verifier's reward (0.0 or 1.0), and the baseline is computed from all samples in the batch (typically mean or median). Outputs with above-average rewards get positive advantages; below-average get negative. The policy gradient then increases probability of high-advantage trajectories.
+Where `R(s_i, a_i)` is the verifier's reward (0.0 or 1.0), and the baseline is computed from all samples in the batch (typically mean or median). Outputs with above-average rewards get positive advantages; below-average get negative. The policy gradient then increases probability of high-advantage trajectories.
 
 **Why value-free RL is popular for RLVR:**
 Verifiers provide clean binary signals, eliminating the need for value function approximation. This reduces training complexity and speeds convergence.
