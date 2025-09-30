@@ -573,7 +573,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
               metadata: [],
               ...buildRedteamFilterOptions(data.config, data.table),
             },
-            policyIdToNameMap: extractPolicyIdToNameMap(data.config.redteam?.plugins ?? []),
+            policyIdToNameMap: extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           },
         }));
 

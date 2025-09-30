@@ -18,11 +18,11 @@ import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluator
 import logger from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
+import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
-import { CIProgressReporter } from './progress/ciProgressReporter';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,

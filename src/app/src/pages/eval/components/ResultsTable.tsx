@@ -623,14 +623,12 @@ function ResultsTable({
                     value = `\`\`\`json\n${value}\n\`\`\``;
                   }
                 }
-                const truncatedValue =
-                  value.length > maxTextLength
-                    ? `${value.substring(0, maxTextLength - 3).trim()}...`
-                    : value;
-
                 const cellContent = renderMarkdown ? (
                   <MarkdownErrorBoundary fallback={value}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                    <TruncatedText
+                      text={<ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>}
+                      maxLength={maxTextLength}
+                    />
                   </MarkdownErrorBoundary>
                 ) : (
                   <TruncatedText text={value} maxLength={maxTextLength} />
