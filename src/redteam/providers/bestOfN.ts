@@ -7,7 +7,6 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch';
 import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
@@ -58,7 +57,7 @@ export default class BestOfNProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    logger.debug(`[Best-of-N] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[Best-of-N] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 

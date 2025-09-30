@@ -33,7 +33,7 @@ import type {
   TokenUsage,
 } from '../../types';
 import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
@@ -177,7 +177,7 @@ export async function evaluateResponse(
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
   }
-  logger.debug(`[IterativeTree] Judge response: ${JSON.stringify(judgeResp)}`);
+  logger.debug('[IterativeTree] Judge response', { response: judgeResp });
   if (judgeResp.error) {
     throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
   }
@@ -234,7 +234,7 @@ export async function getNewPrompt(
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);
   }
-  logger.debug(`[IterativeTree] Redteam response: ${JSON.stringify(redteamResp)}`);
+  logger.debug('[IterativeTree] Redteam response', { response: redteamResp });
   if (redteamResp.error) {
     throw new Error(`Error from redteam provider: ${redteamResp.error}`);
   }
@@ -311,7 +311,7 @@ export async function checkIfOnTopic(
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
   }
-  logger.debug(`[IterativeTree] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
+  logger.debug('[IterativeTree] On-topic response', { response: isOnTopicResp });
   if (isOnTopicResp.error) {
     throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
   }
@@ -320,7 +320,7 @@ export async function checkIfOnTopic(
     typeof isOnTopicResp.output === 'string'
       ? extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output)
       : isOnTopicResp.output;
-  logger.debug(`[IterativeTree] Parsed onTopic value: ${JSON.stringify(onTopic)}`);
+  logger.debug('[IterativeTree] Parsed onTopic value', { onTopic });
   invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
   return {
     isOnTopic: onTopic,
@@ -960,7 +960,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
    * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
   constructor(readonly config: Record<string, string | object>) {
-    logger.debug(`[IterativeTree] Constructor config: ${JSON.stringify(config)}`);
+    logger.debug('[IterativeTree] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
@@ -988,7 +988,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<RedteamTreeResponse> {
-    logger.debug(`[IterativeTree] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[IterativeTree] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
