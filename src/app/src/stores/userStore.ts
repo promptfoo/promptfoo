@@ -25,11 +25,12 @@ export const useUserStore = create<UserState>((set, getState) => ({
       return;
     }
     try {
-      const response = await callApi('/user/email');
+      const response = await callApi('/user/email', { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         set({ email: data.email, isLoading: false });
       } else if (response.status === 404) {
+        // 404 is expected when running locally with no email configured - silently handle it
         set({ email: null, isLoading: false });
       } else {
         throw new Error('Failed to fetch user email');

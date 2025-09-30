@@ -210,7 +210,14 @@ export default function Eval({ fetchId }: EvalOptions) {
       /**
        * Populates the table store with the most recent eval result.
        */
-      const handleResultsFile = async (data: ResultsFile, isInit: boolean = false) => {
+      const handleResultsFile = async (data: ResultsFile | null, isInit: boolean = false) => {
+        // If no data provided (e.g., no evals exist yet), just mark as loaded
+        if (!data) {
+          console.log('No eval data available');
+          setLoaded(true);
+          return;
+        }
+
         // Set streaming state when we start receiving data
         setIsStreaming(true);
 
@@ -263,11 +270,7 @@ export default function Eval({ fetchId }: EvalOptions) {
             setDefaultEvalId(defaultEvalId);
           }
         } else {
-          return (
-            <div className="notice">
-              No evals yet. Share some evals to this server and they will appear here.
-            </div>
-          );
+          setLoaded(true);
         }
       };
       run();
@@ -316,7 +319,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     return <div className="notice">404 Eval not found</div>;
   }
 
-  if (!loaded || !table) {
+  if (!loaded) {
     return (
       <div className="notice">
         <div>
@@ -327,7 +330,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     );
   }
 
-  if (loaded && !table) {
+  if (!table) {
     return <EmptyState />;
   }
 
