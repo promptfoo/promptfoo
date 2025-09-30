@@ -99,6 +99,9 @@ async function writeJsonOutputSafely(
   try {
     const summary = await evalRecord.toEvaluateSummary();
     const outputData: OutputFile = {
+      id: evalRecord.id,
+      createdAt: new Date(evalRecord.createdAt).toISOString(),
+      author: evalRecord.author,
       evalId: evalRecord.id,
       results: summary,
       config: evalRecord.config,
