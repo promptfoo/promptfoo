@@ -553,7 +553,6 @@ async function runRedteamConversation({
             graderPassed: undefined,
             id: uuidv4(),
             improvement,
-            isOnTopic,
             output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
             parentId: node.id,
             prompt: targetPrompt,
