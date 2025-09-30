@@ -3,19 +3,17 @@ title: 'Reinforcement Learning with Verifiable Rewards: When It Works, When It F
 description: 'RLVR trains reasoning models with programmatic verifiers instead of human labels. Research shows 70-80% of gains come from search compression, not new capabilities. Here's what actually works.'
 image: /img/blog/rlvr/rlvr-header.jpg
 keywords:
-  [
-    RLVR,
-    reinforcement learning verifiable rewards,
-    AI training efficiency,
-    verifiable rewards,
-    LLM post-training,
-    reasoning models,
-    GRPO,
-    verifier design,
-    model evaluation,
-  ]
+  - RLVR
+  - reinforcement learning verifiable rewards
+  - AI training efficiency
+  - verifiable rewards
+  - LLM post-training
+  - reasoning models
+  - GRPO
+  - verifier design
+  - model evaluation
 date: 2025-09-30
-authors: [ian]
+authors: [michael]
 tags: [technical-guide, best-practices, evaluation]
 ---
 
