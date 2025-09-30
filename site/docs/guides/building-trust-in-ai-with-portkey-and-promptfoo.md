@@ -1,4 +1,5 @@
 ---
+title: Building trust in AI with Portkey and Promptfoo
 sidebar_label: Building trust in AI with Portkey and Promptfoo
 description: "Supercharge Promptfoo evaluations with Portkey's AI gateway. Run tests across 1600+ models, manage prompts collaboratively, and gain detailed analytics for production-ready AI trust."
 keywords:
@@ -19,7 +20,9 @@ keywords:
 # Building trust in AI with Portkey and Promptfoo
 
 :::info Author
+
 This guide was written by **Drishti Shah** from [Portkey](https://portkey.ai/), a guest author contributing to the Promptfoo community.
+
 :::
 
 ## Supercharge Promptfoo runs with Portkey
@@ -36,9 +39,16 @@ With Portkey, you can store your prompts in a central library with history, tags
 
 ### Example config
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - 'portkey://pp-customer-support-v3'
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  - vars:
+      customer_query: 'How do I reset my password?'
 ```
 
 Instead of evaluating a local snippet, Promptfoo is now testing the **production prompt stored in Portkey**. Teams can review changes, roll back if needed, and lock evaluations to specific versions for cleaner comparisons.
@@ -51,7 +61,10 @@ Portkey's AI gateway for Promptfoo allows you to run the same evaluation suite a
 
 ![Portkey Model Catalog](/img/blog/building-trust-in-ai-with-portkey-and-promptfoo/portkey_model_catalog.png)
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'Summarize the following text: {{text}}'
+
 providers:
   - id: portkey:gpt-5
     label: GPT-5 (via Portkey)
@@ -66,6 +79,10 @@ providers:
       portkeyApiKey: ${PORTKEY_API_KEY}
       portkeyApiBaseUrl: https://api.portkey.ai/v1
       portkeyProvider: meta
+
+tests:
+  - vars:
+      text: 'AI evaluation is critical for production deployments...'
 ```
 
 With this setup, you can run one test suite across multiple providers, no rewiring or custom adapters needed.
@@ -80,11 +97,11 @@ Portkey helps keep runs stable and predictable:
 - **Automatic retries**: recover gracefully from transient provider errors.
 - **Response caching**: return cached outputs for identical inputs, so repeat runs are faster and cheaper.
 
-This ensures your CI/CD pipelines and large-scale evaluation runs are reliable, no more flakiness from bursty test cases.
+This ensures your CI/CD pipelines and large-scale evaluation runs are reliable—no more flakiness from bursty test cases.
 
 ## Elevate security testing with Promptfoo red-teaming + Portkey
 
-Promptfoo makes it easy to run adversarial test cases against your prompts from prompt injections and jailbreak attempts to data exfiltration and toxic content checks. These red-team suites help uncover vulnerabilities before they reach production.
+Promptfoo makes it easy to run adversarial test cases against your prompts—from prompt injections and jailbreak attempts to data exfiltration and toxic content checks. These red-team suites help uncover vulnerabilities before they reach production.
 
 With Portkey in the loop, red-teaming becomes even more powerful:
 
