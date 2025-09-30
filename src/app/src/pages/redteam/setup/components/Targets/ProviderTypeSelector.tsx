@@ -760,7 +760,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'watsonx') {
       setProvider(
         {
-          id: 'watsonx:ibm/granite-13b-chat-v2',
+          id: 'watsonx:ibm/granite-3-3-8b-instruct',
           config: {},
           label: currentLabel,
         },
