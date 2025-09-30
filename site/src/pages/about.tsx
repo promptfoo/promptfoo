@@ -110,7 +110,7 @@ const AboutPageContent = () => {
                 name: 'Travis Willhite',
                 title: 'Enterprise GTM Lead',
                 image: '/img/team/travis.png',
-                bio: 'Travis has spent the past decade driving revenue at high-growth, venture-backed AI companies. He has extensive experience helping Fortune 500 companies develop and launch cutting-edge AI applications. He enjoys building relationships, public speaking, and solving challenging business problems.',
+                bio: 'Travis has spent the past decade driving revenue at high-growth, venture-backed AI companies. He has extensive experience helping Fortune 500 companies develop and launch cutting-edge AI applications.',
               },
               {
                 name: 'Vanessa Sauter',
