@@ -33,7 +33,7 @@ The remaining 20-30% represents real learning, but only under specific condition
 
 **Databricks** achieved 75.68% accuracy on the [BIRD Text2SQL benchmark](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks) using RLVR with execution-based verifiers.
 
-**DeepSeek R1** uses GRPO with rule-based rewards (format compliance, verifiable correctness), demonstrating that RLVR scales to frontier model sizes.
+**DeepSeek R1's** use of GRPO with rule-based rewards (format compliance, verifiable correctness) demonstrates that RLVR can scale to frontier model sizes.
 
 **OpenAI o3/o4-mini** (April 2025 release) showed strong HumanEval improvements using RL techniques. While OpenAI hasn't detailed their exact approach, their technical report noted diminishing returns on multi-step reasoning tasks—consistent with the compression vs capability tradeoff RLVR research identifies.
 
@@ -142,7 +142,7 @@ def strong_sql_verifier(sql_query, expected_results, db_connection):
 [Research from June 2025](https://arxiv.org/abs/2506.10947) found Qwen2.5-Math-7B improved 21.4% on MATH-500 with _random_ rewards, nearly matching the 29.1% gain from ground truth rewards.
 
 **Why this happens:**
-The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward—the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. This behavior is family-specific; Llama and OLMo models don't show it.
+The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward—the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. This behavior is family-specific; Llama and OLMo models appear immune.
 
 **Always run this test:**
 
@@ -588,11 +588,13 @@ Do you have objective correctness criteria?
 
 ## Conclusion: Don't Mistake Efficiency for Intelligence
 
-The data is unambiguous: 70-80% of RLVR's improvements come from search compression, not expanded reasoning capability. You're buying speed, not smarts. The model was already capable of finding the right answer—RLVR just optimizes the path to solutions it could already reach.
+The data is unambiguous: for most applications, 70-80% of RLVR's gains are from search compression, not expanded reasoning capability. You're buying speed, not smarts. The model was already capable of finding the right answer—RLVR just optimizes the path to solutions it could already reach.
 
 The rule is simple: if you can write a checker, you can scale learning. Where ground truth doesn't exist, RLVR fails and human preference data remains superior.
 
-The real engineering challenge isn't just implementing RLVR; it's proving what you've actually gained. We should be running pass@k analysis to distinguish compression from capability. We should be running random baseline tests to check for spurious rewards. As a community, we need to demand proof of genuine improvement, because the future of reliable AI depends on us knowing the difference.
+The real engineering challenge isn't just implementing RLVR; it's proving what you've actually gained. We should be running pass@k analysis to distinguish compression from capability. We should be running random baseline tests to check for spurious rewards.
+
+The next time you see a model's performance jump after an RL run, ask the hard question: did you build a better thinker, or did you just build a faster guesser? The answer determines whether your product is truly intelligent or just a fragile house of cards.
 
 ---
 
