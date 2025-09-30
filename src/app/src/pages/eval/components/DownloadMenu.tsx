@@ -19,11 +19,10 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
-import { removeEmpty } from '@promptfoo/util/objectUtils';
 import invariant from '@promptfoo/util/invariant';
-import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
+import { removeEmpty } from '@promptfoo/util/objectUtils';
 import yaml from 'js-yaml';
+import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
 
@@ -35,25 +34,23 @@ function DownloadMenu() {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
 
-  // DRY helper to get filename with proper type narrowing
-  const getFilename = (suffix: string): string => {
-    if (evalId) {
-      return `${evalId}-${suffix}`;
-    }
-    invariant(false, 'evalId is required for file downloads');
-  };
+  // Use the new hooks for CSV and JSON downloads
+  const { download: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(
+    DownloadFormat.CSV,
+    {
+      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
+    },
+  );
+  const { download: downloadJsonApi, isLoading: isLoadingJson } = useDownloadEval(
+    DownloadFormat.JSON,
+
+    {
+      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
+    },
+  );
 
   const openDownloadDialog = (blob: Blob, downloadName: string) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = downloadName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    // Mark this file as downloaded
+    downloadBlob(blob, downloadName);
     setDownloadedFiles((prev) => new Set([...prev, downloadName]));
   };
 
@@ -61,6 +58,13 @@ function DownloadMenu() {
     setOpen(false);
     // Reset download states when dialog is closed
     setDownloadedFiles(new Set());
+  };
+
+  const getFilename = (suffix: string): string => {
+    if (evalId) {
+      return `${evalId}-${suffix}`;
+    }
+    invariant(false, 'evalId is required for file downloads');
   };
 
   const copyToClipboard = (text: string) => {
@@ -105,6 +109,10 @@ function DownloadMenu() {
   };
 
   const downloadConfig = () => {
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
+      return;
+    }
     const fileName = getFilename('config.yaml');
     downloadYamlConfig(config, fileName, 'Configuration downloaded successfully');
   };
@@ -112,6 +120,11 @@ function DownloadMenu() {
   const downloadFailedTestsConfig = () => {
     if (!config || !table) {
       showToast('No configuration or results available', 'error');
+      return;
+    }
+
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
 
@@ -144,6 +157,10 @@ function DownloadMenu() {
       showToast('No table data', 'error');
       return;
     }
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
+      return;
+    }
     const formattedData = table.body.map((row) => ({
       chosen: row.outputs.filter((output) => output?.pass).map((output) => output!.text),
       rejected: row.outputs.filter((output) => output && !output.pass).map((output) => output.text),
@@ -156,61 +173,37 @@ function DownloadMenu() {
     handleClose();
   };
 
-  const downloadTable = () => {
-    if (!table) {
-      showToast('No table data', 'error');
+  const downloadTable = async () => {
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
-    const blob = new Blob([JSON.stringify(table, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, getFilename('table.json'));
-    handleClose();
+    try {
+      await downloadJsonApi(evalId);
+    } catch {
+      // Error is already handled by the hook
+    }
   };
 
-  const downloadCsv = () => {
-    if (!table) {
-      showToast('No table data', 'error');
+  const downloadCsv = async () => {
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
-
-    const csvRows = [];
-
-    // Check if any rows have descriptions
-    const hasDescriptions = table.body.some((row) => row.test.description);
-
-    const headers = [
-      ...(hasDescriptions ? ['Description'] : []),
-      ...table.head.vars,
-      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-    ];
-    csvRows.push(headers);
-
-    table.body.forEach((row) => {
-      const rowValues = [
-        ...(hasDescriptions ? [row.test.description || ''] : []),
-        ...row.vars,
-        ...row.outputs
-          .filter((output): output is EvaluateTableOutput => output != null)
-          .map(
-            ({ pass, text, failureReason: failureType }) =>
-              (pass
-                ? '[PASS] '
-                : failureType === ResultFailureReason.ASSERT
-                  ? '[FAIL] '
-                  : '[ERROR] ') + text,
-          ),
-      ];
-      csvRows.push(rowValues);
-    });
-
-    const output = csvStringify(csvRows);
-    const blob = new Blob([output], { type: 'text/csv;charset=utf-8;' });
-    openDownloadDialog(blob, getFilename('table.csv'));
-    handleClose();
+    try {
+      await downloadCsvApi(evalId);
+    } catch {
+      // Error is already handled by the hook
+    }
   };
 
   const downloadHumanEvalTestCases = () => {
     if (!table) {
       showToast('No table data', 'error');
+      return;
+    }
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
 
@@ -250,6 +243,11 @@ function DownloadMenu() {
 
     if (!config?.redteam) {
       showToast('No redteam config', 'error');
+      return;
+    }
+
+    if (!evalId) {
+      showToast('No evaluation ID', 'error');
       return;
     }
 
@@ -402,10 +400,12 @@ function DownloadMenu() {
                       >
                         Download YAML Config
                       </Button>
-                      <CommandBlock
-                        fileName={getFilename('config.yaml')}
-                        helpText="Run this command to execute the eval again:"
-                      />
+                      {evalId && (
+                        <CommandBlock
+                          fileName={getFilename('config.yaml')}
+                          helpText="Run this command to execute the eval again:"
+                        />
+                      )}
                     </Box>
                   </Grid>
 
@@ -428,10 +428,12 @@ function DownloadMenu() {
                       >
                         Download Failed Tests
                       </Button>
-                      <CommandBlock
-                        fileName={getFilename('failed-tests.yaml')}
-                        helpText="Run this command to re-run just the failed tests:"
-                      />
+                      {evalId && (
+                        <CommandBlock
+                          fileName={getFilename('failed-tests.yaml')}
+                          helpText="Run this command to re-run just the failed tests:"
+                        />
+                      )}
                     </Box>
                   </Grid>
                 </Grid>
@@ -442,7 +444,7 @@ function DownloadMenu() {
             <Card elevation={0} sx={{ border: `1px solid ${theme.palette.divider}` }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
-                  Table Data Exports
+                  Export Results
                 </Typography>
 
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
@@ -456,9 +458,10 @@ function DownloadMenu() {
                       startIcon={<DownloadIcon />}
                       variant="outlined"
                       fullWidth
+                      disabled={isLoadingCsv}
                       sx={{ height: 48 }}
                     >
-                      CSV Export
+                      {isLoadingCsv ? 'Downloading...' : 'Download Results CSV'}
                     </Button>
                   </Grid>
 
@@ -468,9 +471,10 @@ function DownloadMenu() {
                       startIcon={<DownloadIcon />}
                       variant="outlined"
                       fullWidth
+                      disabled={isLoadingJson}
                       sx={{ height: 48 }}
                     >
-                      JSON Export
+                      {isLoadingJson ? 'Downloading...' : 'Download Results JSON'}
                     </Button>
                   </Grid>
                 </Grid>
