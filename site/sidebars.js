@@ -36,6 +36,10 @@ const redTeamSidebar = [
   },
   {
     type: 'doc',
+    id: 'red-team/iso-42001',
+  },
+  {
+    type: 'doc',
     id: 'red-team/risk-scoring',
   },
   {
@@ -203,7 +207,11 @@ const redTeamSidebar = [
         type: 'category',
         label: 'Custom',
         collapsed: true,
-        items: ['red-team/strategies/custom-strategy', 'red-team/strategies/custom'],
+        items: [
+          'red-team/strategies/layer',
+          'red-team/strategies/custom-strategy',
+          'red-team/strategies/custom',
+        ],
       },
       {
         type: 'category',

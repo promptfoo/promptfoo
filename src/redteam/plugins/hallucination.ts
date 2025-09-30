@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 
-import type { Assertion } from '../../types';
+import type { Assertion } from '../../types/index';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 const PLUGIN_ID = 'promptfoo:redteam:hallucination';

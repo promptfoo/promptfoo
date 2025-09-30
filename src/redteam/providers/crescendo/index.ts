@@ -4,7 +4,7 @@ import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, isValidJson, safeJsonStringify } from '../../../util/json';
+import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
@@ -34,7 +34,7 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
-} from '../../../types';
+} from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
 
@@ -146,9 +146,7 @@ export class CrescendoProvider implements ApiProvider {
     // Ensure continueAfterSuccess defaults to false
     this.config.continueAfterSuccess = config.continueAfterSuccess ?? false;
 
-    logger.debug(
-      `[Crescendo] CrescendoProvider initialized with config: ${JSON.stringify(config)}`,
-    );
+    logger.debug('[Crescendo] CrescendoProvider initialized with config', { config });
   }
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
@@ -197,7 +195,7 @@ export class CrescendoProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<CrescendoResponse> {
-    logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[Crescendo] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -592,7 +590,7 @@ export class CrescendoProvider implements ApiProvider {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
     if (!response.output) {
-      logger.debug(`[Crescendo] No output from redteam provider: ${JSON.stringify(response)}`);
+      logger.debug('[Crescendo] No output from redteam provider', { response });
       return {
         generatedQuestion: undefined,
       };
@@ -714,7 +712,7 @@ export class CrescendoProvider implements ApiProvider {
     logger.debug(targetPrompt);
 
     const targetResponse = await getTargetResponse(provider, targetPrompt, context, options);
-    logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
+    logger.debug('[Crescendo] Target response', { response: targetResponse });
     if (targetResponse.error) {
       throw new Error(`[Crescendo] Target returned an error: ${targetResponse.error}`);
     }
@@ -787,7 +785,7 @@ export class CrescendoProvider implements ApiProvider {
           }>(refusalResponse.output)
         : refusalResponse.output;
 
-    logger.debug(`[Crescendo] Refusal score parsed response: ${JSON.stringify(parsed)}`);
+    logger.debug('[Crescendo] Refusal score parsed response', { parsed });
     invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
     invariant(
       typeof parsed.metadata === 'number',
@@ -844,7 +842,7 @@ export class CrescendoProvider implements ApiProvider {
           }>(evalResponse.output)
         : evalResponse.output;
 
-    logger.debug(`[Crescendo] Eval score parsed response: ${JSON.stringify(parsed)}`);
+    logger.debug('[Crescendo] Eval score parsed response', { parsed });
     invariant(
       typeof parsed.value === 'boolean',
       `Expected eval grader value to be a boolean: ${parsed}`,

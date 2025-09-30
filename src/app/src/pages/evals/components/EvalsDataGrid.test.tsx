@@ -1,18 +1,27 @@
-import React from 'react';
-import { render, waitFor, screen } from '@testing-library/react';
-import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import React, { useState } from 'react';
+
 import { callApi } from '@app/utils/api';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalsDataGrid from './EvalsDataGrid';
-import { useState } from 'react';
-import { act } from '@testing-library/react';
 
 // Mock the API
 vi.mock('@app/utils/api');
 
 // Mock the DataGrid component to simplify testing
 vi.mock('@mui/x-data-grid', () => ({
-  DataGrid: ({ rows, loading, slots, getRowClassName, filterModel, columns }: any) => {
+  DataGrid: ({
+    rows,
+    loading,
+    slots = {},
+    slotProps = {},
+    getRowClassName,
+    filterModel,
+    columns,
+    rowSelectionModel = [],
+    onRowSelectionModelChange,
+  }: any) => {
     if (loading && slots?.loadingOverlay) {
       const LoadingOverlay = slots.loadingOverlay;
       return <LoadingOverlay />;
@@ -30,23 +39,43 @@ vi.mock('@mui/x-data-grid', () => ({
       return <NoRowsOverlay />;
     }
 
-    return (
-      <div data-testid="data-grid">
-        {!loading &&
-          rows.map((row: any) => {
-            const className = getRowClassName ? getRowClassName({ id: row.evalId }) : '';
-            const typeColumn = columns?.find((col: any) => col.field === 'type');
-            const typeValue = typeColumn?.valueGetter
-              ? typeColumn.valueGetter(row.type, row)
-              : null;
+    const Toolbar = slots.toolbar;
+    const toolbarProps = slotProps.toolbar || {};
 
-            return (
-              <div key={row.evalId} data-testid={`eval-${row.evalId}`} className={className}>
-                {row.description || row.label}
-                {typeValue && <span data-testid={`eval-${row.evalId}-type`}>{typeValue}</span>}
-              </div>
-            );
-          })}
+    return (
+      <div>
+        {Toolbar && <Toolbar {...toolbarProps} />}
+        <div data-testid="data-grid">
+          {!loading &&
+            rows.map((row: any) => {
+              const className = getRowClassName ? getRowClassName({ id: row.evalId }) : '';
+              const typeColumn = columns?.find((col: any) => col.field === 'type');
+              const typeValue = typeColumn?.valueGetter
+                ? typeColumn.valueGetter(row.type, row)
+                : null;
+              const checked = rowSelectionModel.includes(row.evalId);
+
+              return (
+                <div key={row.evalId}>
+                  <input
+                    type="checkbox"
+                    data-testid={`checkbox-${row.evalId}`}
+                    checked={checked}
+                    onChange={(e) => {
+                      const newSelection = e.target.checked
+                        ? [...rowSelectionModel, row.evalId]
+                        : rowSelectionModel.filter((id: string) => id !== row.evalId);
+                      onRowSelectionModelChange?.(newSelection);
+                    }}
+                  />
+                  <div data-testid={`eval-${row.evalId}`} className={className}>
+                    {row.description || row.label}
+                    {typeValue && <span data-testid={`eval-${row.evalId}-type`}>{typeValue}</span>}
+                  </div>
+                </div>
+              );
+            })}
+        </div>
       </div>
     );
   },
@@ -199,7 +228,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -447,7 +476,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -767,5 +796,326 @@ describe('EvalsDataGrid', () => {
 
     // The first request should have been aborted and not display "Original Description"
     expect(screen.queryByText('Original Description')).not.toBeInTheDocument();
+  });
+
+  it('should delete selected evals when delete button is clicked', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+
+    const mockCall = vi.mocked(callApi);
+    mockCall.mockImplementation((url: string, options?: any) => {
+      if (!options || options.method !== 'DELETE') {
+        return Promise.resolve(mockResponse as any);
+      }
+      return Promise.resolve({ ok: true } as any);
+    });
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
+
+    const deleteButton = await screen.findByTestId('delete-selected-button');
+    fireEvent.click(deleteButton);
+    const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
+    fireEvent.click(confirmDelete);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('eval-eval-1')).toBeNull();
+    });
+
+    expect(mockCall).toHaveBeenCalledWith('/eval', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ids: ['eval-1'] }),
+    });
+  });
+
+  it('should delete multiple selected evals when delete button is clicked', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+
+    const mockCall = vi.mocked(callApi);
+    mockCall.mockImplementation((url: string, options?: any) => {
+      if (!options || options.method !== 'DELETE') {
+        return Promise.resolve(mockResponse as any);
+      }
+      return Promise.resolve({ ok: true } as any);
+    });
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+      expect(screen.getByTestId('eval-eval-2')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
+    fireEvent.click(screen.getByTestId('checkbox-eval-2'));
+
+    const deleteButton = await screen.findByTestId('delete-selected-button');
+    expect(deleteButton).toHaveTextContent('Delete (2)');
+
+    fireEvent.click(deleteButton);
+    const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
+    fireEvent.click(confirmDelete);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('eval-eval-1')).toBeNull();
+      expect(screen.queryByTestId('eval-eval-2')).toBeNull();
+    });
+
+    expect(mockCall).toHaveBeenCalledWith('/eval', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ids: ['eval-1', 'eval-2'] }),
+    });
+  });
+
+  it('should not delete evals when user cancels the confirmation dialog', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+
+    const mockCall = vi.mocked(callApi);
+    mockCall.mockResolvedValue(mockResponse as any);
+
+    vi.spyOn(window, 'confirm').mockReturnValue(false); // User cancels
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
+
+    const deleteButton = await screen.findByTestId('delete-selected-button');
+    fireEvent.click(deleteButton);
+    const cancelButton = await screen.findByRole('button', { name: 'Cancel' });
+    fireEvent.click(cancelButton);
+
+    // Evals should still be present since deletion was cancelled
+    expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+
+    // DELETE API should not have been called
+    expect(mockCall).not.toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('should handle API errors during deletion gracefully', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+
+    const mockCall = vi.mocked(callApi);
+    let callCount = 0;
+    mockCall.mockImplementation((url: string, options?: any) => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve(mockResponse as any); // Initial fetch
+      }
+      // DELETE request fails
+      return Promise.resolve({ ok: false } as any);
+    });
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
+
+    const deleteButton = await screen.findByTestId('delete-selected-button');
+    fireEvent.click(deleteButton);
+    const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
+    fireEvent.click(confirmDelete);
+
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to delete evals:', expect.any(Error));
+      expect(alertSpy).toHaveBeenCalledWith('Failed to delete evals');
+    });
+
+    // Eval should still be present since deletion failed
+    expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+
+    consoleErrorSpy.mockRestore();
+    alertSpy.mockRestore();
+  });
+
+  it('should show delete button only when evals are selected', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+    });
+
+    // Delete button should not be visible initially
+    expect(screen.queryByTestId('delete-selected-button')).toBeNull();
+
+    // Select an eval
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
+
+    // Delete button should now be visible
+    const deleteButton = await screen.findByTestId('delete-selected-button');
+    expect(deleteButton).toBeInTheDocument();
+
+    // Deselect the eval
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
+
+    // Delete button should disappear
+    await waitFor(() => {
+      expect(screen.queryByTestId('delete-selected-button')).toBeNull();
+    });
+  });
+
+  it('should handle network errors during deletion gracefully', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+
+    const mockCall = vi.mocked(callApi);
+    let callCount = 0;
+    mockCall.mockImplementation((url: string, options?: any) => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve(mockResponse as any);
+      }
+      return Promise.reject(new TypeError('Failed to fetch'));
+    });
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
+
+    const deleteButton = await screen.findByTestId('delete-selected-button');
+    fireEvent.click(deleteButton);
+    const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
+    fireEvent.click(confirmDelete);
+
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Failed to delete evals:',
+        expect.any(TypeError),
+      );
+      expect(alertSpy).toHaveBeenCalledWith('Failed to delete evals');
+    });
+
+    expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+
+    consoleErrorSpy.mockRestore();
+    alertSpy.mockRestore();
+  });
+
+  it('should handle deletion failure when eval is in use', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+
+    const mockCall = vi.mocked(callApi);
+    let callCount = 0;
+    mockCall.mockImplementation((url: string, options?: any) => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve(mockResponse as any);
+      }
+      return Promise.resolve({ ok: false, status: 409, statusText: 'Eval in use' } as any);
+    });
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
+
+    const deleteButton = await screen.findByTestId('delete-selected-button');
+    fireEvent.click(deleteButton);
+    const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
+    fireEvent.click(confirmDelete);
+
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to delete evals:', expect.any(Error));
+      expect(alertSpy).toHaveBeenCalledWith('Failed to delete evals');
+    });
+
+    expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+
+    consoleErrorSpy.mockRestore();
+    alertSpy.mockRestore();
   });
 });

@@ -1,5 +1,5 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import type { ApiProvider, ProviderOptions } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 export const LLAMA_API_MODELS = [

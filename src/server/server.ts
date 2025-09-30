@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
 dotenv.config({ quiet: true });
 
 import http from 'node:http';

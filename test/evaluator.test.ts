@@ -14,7 +14,12 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
-import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types';
+import {
+  type ApiProvider,
+  type Prompt,
+  ResultFailureReason,
+  type TestSuite,
+} from '../src/types/index';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
@@ -183,6 +188,10 @@ jest.mock('glob', () => ({
       return [pattern];
     }
     return [];
+  }),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
   }),
 }));
 
@@ -3592,9 +3601,8 @@ describe('evaluator defaultTest merging', () => {
           vars: { text: 'Hello world' },
           assert: [
             {
-              type: 'similar',
-              value: 'expected output',
-              threshold: 0.8,
+              type: 'equals',
+              value: 'Test output',
             },
           ],
         },

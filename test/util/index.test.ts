@@ -11,7 +11,7 @@ import {
   type EvaluateResult,
   ResultFailureReason,
   type TestCase,
-} from '../../src/types';
+} from '../../src/types/index';
 import {
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
@@ -25,7 +25,7 @@ import {
   writeMultipleOutputs,
   writeOutput,
   createOutputMetadata,
-} from '../../src/util';
+} from '../../src/util/index';
 import { TestGrader } from './utils';
 
 jest.mock('../../src/database', () => ({
@@ -38,6 +38,11 @@ jest.mock('proxy-agent', () => ({
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('fs', () => ({

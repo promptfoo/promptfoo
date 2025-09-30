@@ -5,7 +5,7 @@ import {
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
 
-import type { CallApiContextParams } from '../../src/types';
+import type { CallApiContextParams } from '../../src/types/index';
 
 jest.mock('../../src/cache');
 

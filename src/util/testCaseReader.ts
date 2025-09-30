@@ -13,7 +13,7 @@ import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
 import logger from '../logger';
-import { loadApiProvider } from '../providers';
+import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { maybeLoadConfigFromExternalFile } from './file';
@@ -25,7 +25,7 @@ import type {
   TestCase,
   TestCaseWithVarsFile,
   TestSuiteConfig,
-} from '../types';
+} from '../types/index';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -38,6 +38,7 @@ export async function readTestFiles(
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
+
     const paths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
@@ -310,6 +311,7 @@ export async function loadTestsFromGlob(
     loadTestsGlob = loadTestsGlob.slice('file://'.length);
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
+
   const testFiles: Array<string> = globSync(resolvedPath, {
     windowsPathsNoEscape: true,
   });

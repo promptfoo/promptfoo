@@ -8,7 +8,7 @@ import { checkServerFeatureSupport } from './server';
 
 import type { Plugin, Severity } from '../redteam/constants';
 import type { PoliciesById } from '../redteam/types';
-import type { UnifiedConfig } from '../types';
+import type { UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
@@ -397,10 +397,11 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     const body = await response.json();
 
     const policiesById = new Map();
-    body.forEach((policy: { id: string; text: string; severity: Severity }) => {
+    body.forEach((policy: { id: string; text: string; severity: Severity; name: string }) => {
       policiesById.set(policy.id, {
         text: policy.text,
         severity: policy.severity,
+        name: policy.name,
       });
     });
 

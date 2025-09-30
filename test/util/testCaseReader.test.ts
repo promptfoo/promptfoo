@@ -7,7 +7,7 @@ import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
@@ -16,7 +16,7 @@ import {
   readTests,
 } from '../../src/util/testCaseReader';
 
-import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types/index';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 jest.mock('../../src/util/fetch', () => ({
@@ -28,6 +28,10 @@ jest.mock('proxy-agent', () => ({
 }));
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),

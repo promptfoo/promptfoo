@@ -24,6 +24,7 @@ import ModelAuditHistoryPage from './pages/model-audit-history/page';
 import ModelAuditResultPage from './pages/model-audit-result/page';
 import ModelAuditSetupPage from './pages/model-audit-setup/page';
 import ModelAuditLatestPage from './pages/model-audit-latest/page';
+import NotFoundPage from './pages/NotFoundPage';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
@@ -86,6 +87,7 @@ const router = createBrowserRouter(
           <Route path="/reports" element={<ReportPage />} />
           <Route path="/setup" element={<EvalCreatorPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
     </>,

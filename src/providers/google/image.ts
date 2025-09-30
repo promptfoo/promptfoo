@@ -5,7 +5,7 @@ import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 

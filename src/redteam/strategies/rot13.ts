@@ -1,4 +1,4 @@
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 export function addRot13(testCases: TestCase[], injectVar: string): TestCase[] {
   const rot13 = (str: string): string => {

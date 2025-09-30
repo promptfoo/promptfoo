@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -10,7 +10,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161
@@ -175,7 +175,7 @@ export class OllamaCompletionProvider implements ApiProvider {
       params.think = this.config.think;
     }
 
-    logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Ollama API', { params });
     let response;
     try {
       response = await fetchWithCache(
@@ -294,7 +294,7 @@ export class OllamaChatProvider implements ApiProvider {
       params.tools = maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
     }
 
-    logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Ollama API', { params });
     let response;
     try {
       response = await fetchWithCache(
@@ -377,7 +377,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       prompt: text,
     };
 
-    logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Ollama API', { params });
     let response;
     try {
       response = await fetchWithCache(

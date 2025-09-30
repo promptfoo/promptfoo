@@ -23,11 +23,13 @@ import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
+import { AzureResponsesProvider } from './azure/responses';
 import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
+import { createEnvoyProvider } from './envoy';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { EchoProvider } from './echo';
@@ -49,7 +51,6 @@ import {
   HuggingfaceTokenExtractionProvider,
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
-import { createLambdaLabsProvider } from './lambdalabs';
 import { LlamaProvider } from './llama';
 import {
   LocalAiChatProvider,
@@ -91,8 +92,9 @@ import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
 import { createLlamaApiProvider } from './llamaApi';
+import { createNscaleProvider } from './nscale';
 
-import type { LoadApiProviderContext } from '../types';
+import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 interface ProviderFactory {
@@ -250,8 +252,11 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'completion') {
         return new AzureCompletionProvider(deploymentName, providerOptions);
       }
+      if (modelType === 'responses') {
+        return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
+      }
       throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>, azure:responses:<model name>`,
       );
     },
   },
@@ -290,10 +295,10 @@ export const providerMap: ProviderFactory[] = [
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
-      // Handle AgentCore
-      if (modelType === 'agentcore' || modelType === 'agent-core') {
-        const { AwsBedrockAgentCoreProvider } = await import('./bedrock/agentcore');
-        return new AwsBedrockAgentCoreProvider(modelName, providerOptions);
+      // Handle Bedrock Agents
+      if (modelType === 'agents') {
+        const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
+        return new AwsBedrockAgentsProvider(modelName, providerOptions);
       }
 
       if (modelType === 'completion') {
@@ -310,6 +315,18 @@ export const providerMap: ProviderFactory[] = [
       // Reconstruct the full model name preserving the original format
       const fullModelName = splits.slice(1).join(':');
       return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('bedrock-agent:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const agentId = providerPath.substring('bedrock-agent:'.length);
+      const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
+      return new AwsBedrockAgentsProvider(agentId, providerOptions);
     },
   },
   {
@@ -465,6 +482,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new EchoProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('envoy:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createEnvoyProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -645,6 +675,19 @@ export const providerMap: ProviderFactory[] = [
         return new MistralEmbeddingProvider(providerOptions);
       }
       return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('nscale:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createNscaleProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -1231,19 +1274,6 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('lambdalabs:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createLambdaLabsProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
     },
   },
 ];

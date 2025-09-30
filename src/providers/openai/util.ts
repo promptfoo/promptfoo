@@ -1,10 +1,10 @@
 import OpenAI from 'openai';
-import { renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
 
-import type { TokenUsage } from '../../types';
+import type { TokenUsage } from '../../types/index';
 import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
@@ -300,6 +300,13 @@ export const OPENAI_CHAT_MODELS = [
       output: 6.0 / 1e6,
     },
   })),
+  ...['gpt-5-codex'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
 ];
 
 // Deep research models for Responses API
@@ -339,6 +346,17 @@ export const OPENAI_COMPLETION_MODELS = [
 
 // Realtime models for WebSocket API
 export const OPENAI_REALTIME_MODELS = [
+  // gpt-realtime models (latest)
+  {
+    id: 'gpt-realtime',
+    type: 'chat',
+    cost: {
+      input: 32 / 1e6,
+      output: 64 / 1e6,
+      audioInput: 32 / 1e6,
+      audioOutput: 64 / 1e6,
+    },
+  },
   // gpt-4o realtime models
   {
     id: 'gpt-realtime',

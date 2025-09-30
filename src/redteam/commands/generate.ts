@@ -14,10 +14,9 @@ import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { getProviderIds } from '../../providers';
+import { getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
   checkCloudPermissions,
   getCloudDatabaseId,
@@ -29,6 +28,8 @@ import {
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { getCustomPolicies } from '../../util/generation';
+import { printBorder, setupEnv } from '../../util/index';
+import { promptfooCommand } from '../../util/promptfooCommand';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
@@ -42,11 +43,11 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
-import { isValidPolicyObject } from '../plugins/policy';
+import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
 import type {
   PolicyObject,
   RedteamCliGenerateOptions,
@@ -221,7 +222,7 @@ export async function doGenerateRedteam(
     logger.info(
       chalk.red(
         `\nCan't generate without configuration - run ${chalk.yellow.bold(
-          isRunningUnderNpx() ? 'npx promptfoo redteam init' : 'promptfoo redteam init',
+          promptfooCommand('redteam init'),
         )} first`,
       ),
     );
@@ -329,7 +330,11 @@ export async function doGenerateRedteam(
       const policyData = policiesById.get(policyId);
       if (policyData) {
         // Set the policy details
-        policyPlugin.config!.policy = { id: policyId, text: policyData.text } as PolicyObject;
+        policyPlugin.config!.policy = {
+          id: policyId,
+          name: policyData.name,
+          text: policyData.text,
+        } as PolicyObject;
         // Set the plugin severity if it hasn't been set already; this allows the user to override the severity
         // on a per-config basis if necessary.
         if (policyPlugin.severity == null) {
@@ -515,14 +520,13 @@ export async function doGenerateRedteam(
     }
 
     if (!options.inRedteamRun) {
-      const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
         '\n' +
           chalk.green(
             `Run ${chalk.bold(
               relativeOutputPath === 'redteam.yaml'
-                ? `${commandPrefix} redteam eval`
-                : `${commandPrefix} redteam eval -c ${relativeOutputPath}`,
+                ? promptfooCommand('redteam eval')
+                : promptfooCommand(`redteam eval -c ${relativeOutputPath}`),
             )} to run the red team!`,
           ),
       );
@@ -572,10 +576,9 @@ export async function doGenerateRedteam(
     logger.info(
       `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
     );
-    const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
     const command = configPath.endsWith('promptfooconfig.yaml')
-      ? `${commandPrefix} eval`
-      : `${commandPrefix} eval -c ${path.relative(process.cwd(), configPath)}`;
+      ? promptfooCommand('eval')
+      : promptfooCommand(`eval -c ${path.relative(process.cwd(), configPath)}`);
     logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
   } else {
     const author = getAuthor();

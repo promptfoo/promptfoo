@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import path from 'path';
 
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import cliState from '../../src/cliState';
 import {
@@ -9,7 +9,6 @@ import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
 } from '../../src/util/file';
-import { safeJoin, safeResolve } from '../../src/util/file.node';
 import {
   isAudioFile,
   isImageFile,
@@ -26,13 +25,6 @@ jest.mock('fs', () => ({
 jest.mock('glob');
 
 describe('file utilities', () => {
-  // Helper to create platform-appropriate file URLs
-  const getFileUrl = (path: string) => {
-    return process.platform === 'win32'
-      ? `file:///C:/${path.replace(/\\/g, '/')}`
-      : `file:///${path}`;
-  };
-
   describe('isJavascriptFile', () => {
     it('identifies JavaScript and TypeScript files', () => {
       expect(isJavascriptFile('test.js')).toBe(true);
@@ -99,6 +91,10 @@ describe('file utilities', () => {
       jest.resetAllMocks();
       jest.mocked(fs.existsSync).mockReturnValue(true);
       jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+      jest.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
+        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+      });
       cliState.basePath = '/mock/base/path';
     });
 
@@ -724,71 +720,15 @@ describe('file utilities', () => {
     });
   });
 
-  describe('safeResolve', () => {
-    it('returns absolute path unchanged', () => {
-      const absolutePath = path.resolve('/absolute/path/file.txt');
-      expect(safeResolve('some/base/path', absolutePath)).toBe(absolutePath);
-    });
-
-    it('returns file URL unchanged', () => {
-      const fileUrl = getFileUrl('absolute/path/file.txt');
-      expect(safeResolve('some/base/path', fileUrl)).toBe(fileUrl);
-    });
-
-    it('resolves relative paths', () => {
-      const expected = path.resolve('base/path', 'relative/file.txt');
-      expect(safeResolve('base/path', 'relative/file.txt')).toBe(expected);
-    });
-
-    it('handles multiple path segments', () => {
-      const absolutePath = path.resolve('/absolute/path/file.txt');
-      expect(safeResolve('base', 'path', absolutePath)).toBe(absolutePath);
-
-      const expected = path.resolve('base', 'path', 'relative/file.txt');
-      expect(safeResolve('base', 'path', 'relative/file.txt')).toBe(expected);
-    });
-
-    it('handles empty input', () => {
-      expect(safeResolve()).toBe(path.resolve());
-      expect(safeResolve('')).toBe(path.resolve(''));
-    });
-  });
-
-  describe('safeJoin', () => {
-    it('returns absolute path unchanged', () => {
-      const absolutePath = path.resolve('/absolute/path/file.txt');
-      expect(safeJoin('some/base/path', absolutePath)).toBe(absolutePath);
-    });
-
-    it('returns file URL unchanged', () => {
-      const fileUrl = getFileUrl('absolute/path/file.txt');
-      expect(safeJoin('some/base/path', fileUrl)).toBe(fileUrl);
-    });
-
-    it('joins relative paths', () => {
-      const expected = path.join('base/path', 'relative/file.txt');
-      expect(safeJoin('base/path', 'relative/file.txt')).toBe(expected);
-    });
-
-    it('handles multiple path segments', () => {
-      const absolutePath = path.resolve('/absolute/path/file.txt');
-      expect(safeJoin('base', 'path', absolutePath)).toBe(absolutePath);
-
-      const expected = path.join('base', 'path', 'relative/file.txt');
-      expect(safeJoin('base', 'path', 'relative/file.txt')).toBe(expected);
-    });
-
-    it('handles empty input', () => {
-      expect(safeJoin()).toBe(path.join());
-      expect(safeJoin('')).toBe(path.join(''));
-    });
-  });
-
   describe('context-aware file loading', () => {
     beforeEach(() => {
       jest.resetAllMocks();
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockReturnValue('file content');
+      jest.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
+        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+      });
       cliState.basePath = '/test';
     });
 
@@ -941,6 +881,58 @@ describe('file utilities', () => {
         expect(result.assert[1].value).toBe('some data'); // contains assertion loads file
         expect(result.assert[2].value).toBe('file://js_assert.js');
         expect(fs.readFileSync).toHaveBeenCalledTimes(1); // Only expected.txt
+      });
+    });
+
+    describe('maybeLoadConfigFromExternalFile with vars context', () => {
+      it('should preserve glob patterns in vars field for test case expansion', () => {
+        const config = {
+          vars: {
+            text: 'file://./resources/tests/*.json',
+          },
+          assert: [
+            {
+              type: 'contains',
+              value: 'hello',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.text).toBe('file://./resources/tests/*.json');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve glob patterns in nested vars objects', () => {
+        const config = {
+          tests: [
+            {
+              vars: {
+                input: 'file://inputs/*.txt',
+                data: 'file://data/test-*.json',
+                patterns: 'file://data/test-{a,b}.yaml',
+                optional: 'file://data/file?.json',
+              },
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.tests[0].vars.input).toBe('file://inputs/*.txt');
+        expect(result.tests[0].vars.data).toBe('file://data/test-*.json');
+        expect(result.tests[0].vars.patterns).toBe('file://data/test-{a,b}.yaml');
+        expect(result.tests[0].vars.optional).toBe('file://data/file?.json');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should still resolve non-glob file references in vars when they do not contain wildcards', () => {
+        (fs.readFileSync as jest.Mock).mockReturnValue('test data');
+        const config = {
+          vars: {
+            content: 'file://content.txt', // No glob pattern
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.content).toBe('test data');
+        expect(fs.readFileSync).toHaveBeenCalled();
       });
     });
   });

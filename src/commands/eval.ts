@@ -15,13 +15,14 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { loadApiProvider } from '../providers';
+import { loadApiProvider } from '../providers/index';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
+import { promptfooCommand } from '../util/promptfooCommand';
 import { checkCloudPermissions } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
@@ -32,6 +33,7 @@ import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
+import { getErrorResultIds, deleteErrorResults, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
 
@@ -42,7 +44,7 @@ import type {
   TestSuite,
   TokenUsage,
   UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -50,8 +52,10 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
+  retryErrors: z.boolean().optional(),
   // Allow --resume or --resume <id>
-  resume: z.union([z.string(), z.boolean()]).optional(),
+  // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
+  // resume: z.union([z.string(), z.boolean()]).optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -152,9 +156,20 @@ export async function doEval(
       }
     }
 
+    // Check for conflicting options
+    const resumeRaw = (cmdObj as any).resume as string | boolean | undefined;
+    const retryErrors = cmdObj.retryErrors;
+
+    if (resumeRaw && retryErrors) {
+      logger.error(
+        chalk.red('Cannot use --resume and --retry-errors together. Please use one or the other.'),
+      );
+      process.exitCode = 1;
+      return new Eval({}, { persisted: false });
+    }
+
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
     let resumeEval: Eval | undefined;
-    const resumeRaw = (cmdObj as any).resume as string | boolean | undefined;
     const resumeId =
       resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
     if (resumeRaw) {
@@ -193,6 +208,72 @@ export async function doEval(
             }) as any,
         );
       }
+      // Mark resume mode in CLI state so evaluator can skip completed work
+      cliState.resume = true;
+    } else if (retryErrors) {
+      // Check if --no-write is set with --retry-errors
+      if (cmdObj.write === false) {
+        logger.error(
+          chalk.red(
+            'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.',
+          ),
+        );
+        process.exitCode = 1;
+        return new Eval({}, { persisted: false });
+      }
+
+      logger.info('🔄 Retrying ERROR results from latest evaluation...');
+
+      // Find the latest evaluation
+      const latestEval = await Eval.latest();
+      if (!latestEval) {
+        logger.error('No previous evaluation found to retry errors from');
+        process.exitCode = 1;
+        return new Eval({}, { persisted: false });
+      }
+
+      // Get all ERROR result IDs
+      const errorResultIds = await getErrorResultIds(latestEval.id);
+      if (errorResultIds.length === 0) {
+        logger.info('✅ No ERROR results found in the latest evaluation');
+        return latestEval;
+      }
+
+      logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
+
+      // Delete the ERROR results so they will be re-evaluated when we run with resume
+      await deleteErrorResults(errorResultIds);
+
+      // Recalculate prompt metrics after deleting ERROR results to avoid double-counting
+      await recalculatePromptMetrics(latestEval);
+
+      logger.info(
+        `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
+      );
+
+      // Set up for resume mode
+      resumeEval = latestEval;
+
+      // Use the saved config as our base to ensure identical test ordering
+      ({
+        config,
+        testSuite,
+        basePath: _basePath,
+        commandLineOptions,
+      } = await resolveConfigs({}, resumeEval.config));
+
+      // Ensure prompts exactly match the previous run to preserve IDs and content
+      if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
+        testSuite.prompts = resumeEval.prompts.map(
+          (p) =>
+            ({
+              raw: p.raw,
+              label: p.label,
+              config: p.config,
+            }) as any,
+        );
+      }
+
       // Mark resume mode in CLI state so evaluator can skip completed work
       cliState.resume = true;
     } else {
@@ -289,7 +370,7 @@ export async function doEval(
     }
 
     // Apply filtering only when not resuming, to preserve test indices
-    if (!resumeRaw) {
+    if (!resumeEval) {
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
         errorsOnly: cmdObj.filterErrorsOnly,
@@ -312,7 +393,7 @@ export async function doEval(
       await checkEmailStatusOrExit();
     }
 
-    if (!resumeRaw) {
+    if (!resumeEval) {
       testSuite.providers = filterProviders(
         testSuite.providers,
         cmdObj.filterProviders || cmdObj.filterTargets,
@@ -337,7 +418,7 @@ export async function doEval(
       cache,
     };
 
-    if (!resumeRaw && cmdObj.grader) {
+    if (!resumeEval && cmdObj.grader) {
       if (typeof testSuite.defaultTest === 'string') {
         testSuite.defaultTest = {};
       }
@@ -345,14 +426,14 @@ export async function doEval(
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
     }
-    if (!resumeRaw && cmdObj.var) {
+    if (!resumeEval && cmdObj.var) {
       if (typeof testSuite.defaultTest === 'string') {
         testSuite.defaultTest = {};
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (!resumeRaw && cmdObj.generateSuggestions) {
+    if (!resumeEval && cmdObj.generateSuggestions) {
       options.generateSuggestions = true;
     }
     // load scenarios or tests from an external file
@@ -388,6 +469,8 @@ export async function doEval(
         : new Eval(config, { runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
+    // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
+    /*
     const abortController = new AbortController();
     const previousAbortSignal = evaluateOptions.abortSignal;
     evaluateOptions.abortSignal = previousAbortSignal
@@ -412,6 +495,7 @@ export async function doEval(
       };
       process.once('SIGINT', sigintHandler);
     }
+    */
 
     // Run the evaluation!!!!!!
     const ret = await evaluate(testSuite, evalRecord, {
@@ -422,6 +506,7 @@ export async function doEval(
     });
 
     // Cleanup signal handler
+    /*
     if (sigintHandler) {
       process.removeListener('SIGINT', sigintHandler);
     }
@@ -438,6 +523,7 @@ export async function doEval(
       printBorder();
       return ret;
     }
+      */
 
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
@@ -690,7 +776,7 @@ export async function doEval(
       isRedteam,
     });
 
-    if (cmdObj.watch && !resumeRaw) {
+    if (cmdObj.watch && !resumeEval) {
       if (initialization) {
         const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
         if (!configPaths.length) {
@@ -916,6 +1002,7 @@ export function evalCommand(
       '--resume [evalId]',
       'Resume a paused/incomplete evaluation. Defaults to latest when omitted',
     )
+    .option('--retry-errors', 'Retry all ERROR results from the latest evaluation')
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',
@@ -964,7 +1051,7 @@ export function evalCommand(
       }
 
       if (validatedOpts.interactiveProviders) {
-        const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+        const runCommand = promptfooCommand('eval');
         logger.warn(
           chalk.yellow(dedent`
           Warning: The --interactive-providers option has been removed.
