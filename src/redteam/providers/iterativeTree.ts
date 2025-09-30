@@ -275,15 +275,6 @@ export async function getNewPrompt(
 }
 
 /**
- * Checks if the target prompt is on-topic.
- * @param provider - The provider used for evaluation.
- * @param onTopicSystemPrompt - The system prompt for the on-topic check.
- * @param targetPrompt - The prompt to be checked.
- * @returns A promise that resolves to a boolean indicating if the prompt is on-topic.
- */
-// Removed on-topic check: goal alignment keeps prompts on-topic
-
-/**
  * Updates the red team's conversation history with the latest interaction results.
  * @param targetResponse - The response from the target provider.
  * @param goal - The current goal or objective.

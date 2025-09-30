@@ -485,8 +485,6 @@ describe('Tree Structure', () => {
   });
 
   describe('selectNodes', () => {
-    // no provider needed for selection now
-
     it('should mark selected nodes in treeOutputs', async () => {
       const nodes = [
         createTreeNode('node1', 3, 0),
