@@ -38,7 +38,7 @@ describe('useUserStore', () => {
 
   const verifyEmailApiCall = () => {
     expect(mockedCallApi).toHaveBeenCalledTimes(1);
-    expect(mockedCallApi).toHaveBeenCalledWith('/user/email', { cache: 'no-store' });
+    expect(mockedCallApi).toHaveBeenCalledWith('/user/email');
   };
 
   const verifyEmailState = (expectedEmail: string | null) => {

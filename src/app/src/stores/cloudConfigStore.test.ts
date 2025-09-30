@@ -256,7 +256,7 @@ describe('useCloudConfigStore', () => {
 
       const state = useCloudConfigStore.getState();
       expect(state.data).toBeNull();
-      expect(state.error).toBeNull();
+      expect(state.error).toBe('Cloud config data is malformed');
       expect(state.isLoading).toBe(false);
       expect(state._fetched).toBe(true);
       verifyCloudConfigApiCall();

@@ -38,26 +38,57 @@ export const useCloudConfigStore = create<CloudConfigState>((set, getState) => (
       return existingPromise;
     }
 
+    // Set loading state
+    set({ isLoading: true, error: null });
+
+    let isPromiseCleared = false;
     const fetchPromise = (async () => {
       try {
-        set({ isLoading: true, error: null });
         const response = await callApi('/user/cloud-config');
         if (!response.ok) {
           throw new Error('Failed to fetch cloud config');
         }
         const responseData = await response.json();
-        set({ data: responseData, isLoading: false, _fetchPromise: null, _fetched: true });
+        // Validate data structure
+        if (
+          typeof responseData === 'object' &&
+          responseData !== null &&
+          typeof responseData.appUrl === 'string' &&
+          typeof responseData.isEnabled === 'boolean'
+        ) {
+          set({ data: responseData, isLoading: false, _fetchPromise: null, _fetched: true });
+        } else {
+          // Invalid data structure - set error and mark as fetched
+          set({
+            data: null,
+            error: 'Cloud config data is malformed',
+            isLoading: false,
+            _fetchPromise: null,
+            _fetched: true,
+          });
+        }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         set({ error: errorMessage, isLoading: false, _fetchPromise: null });
+        isPromiseCleared = true;
         console.error('Error fetching cloud config:', err);
       }
     })();
 
-    set({ _fetchPromise: fetchPromise });
+    // Only set the promise if it wasn't already cleared by a synchronous error
+    if (!isPromiseCleared) {
+      set({ _fetchPromise: fetchPromise });
+    }
     return fetchPromise;
   },
   refetch: async () => {
+    const state = getState();
+
+    // If there's already a refetch in progress, wait for it
+    if (state._fetchPromise && !state._fetched) {
+      return state._fetchPromise;
+    }
+
     // Force refetch by clearing data and fetched flag first
     set({ data: null, _fetchPromise: null, _fetched: false });
     await getState().fetchCloudConfig();
