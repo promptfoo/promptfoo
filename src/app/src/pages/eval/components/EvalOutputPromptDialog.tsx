@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import CheckIcon from '@mui/icons-material/Check';
@@ -12,6 +12,8 @@ import Paper from '@mui/material/Paper';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
+import type { GradingResult } from '@promptfoo/types';
+
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
@@ -19,7 +21,6 @@ import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
 import { useTableStore } from './store';
-import type { GradingResult } from '@promptfoo/types';
 
 // Common style object for copy buttons
 const copyButtonSx = {
@@ -318,13 +319,7 @@ export default function EvalOutputPromptDialog({
   const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
     .filter((entry: any) => entry?.prompt && entry?.output)
     .flatMap(
-      (entry: {
-        prompt: string;
-        output: string;
-        score?: number;
-        isOnTopic?: boolean;
-        graderPassed?: boolean;
-      }) => [
+      (entry: { prompt: string; output: string; score?: number; graderPassed?: boolean }) => [
         {
           role: 'user' as const,
           content: entry.prompt,
