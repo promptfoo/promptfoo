@@ -331,13 +331,99 @@ Login to the promptfoo cloud.
 | `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
 | `-k, --api-key <key>` | Login using an API key                                                     |
 
+After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
+
 ### `promptfoo auth logout`
 
 Logout from the promptfoo cloud.
 
 ### `promptfoo auth whoami`
 
-Show current user information.
+Display current authentication status including user, organization, and active team.
+
+**Output includes:**
+
+- User email
+- Organization name
+- Current team (if logged in to a multi-team organization)
+- App URL
+
+Example:
+
+```sh
+promptfoo auth whoami
+```
+
+Output:
+
+```
+Currently logged in as:
+User: user@company.com
+Organization: Acme Corp
+Current Team: Engineering Team
+App URL: https://www.promptfoo.app
+```
+
+### `promptfoo auth teams`
+
+Manage team switching for organizations with multiple teams.
+
+#### `promptfoo auth teams list`
+
+List all teams you have access to in the current organization.
+
+#### `promptfoo auth teams current`
+
+Show the currently active team.
+
+#### `promptfoo auth teams set <teamIdentifier>`
+
+Switch to a specific team. The team identifier can be:
+
+- Team name (e.g., "Engineering")
+- Team slug (e.g., "engineering")
+- Team ID (e.g., "team_12345")
+
+Examples:
+
+```sh
+# Switch to team by name
+promptfoo auth teams set "Engineering Team"
+
+# Switch to team by slug
+promptfoo auth teams set engineering
+
+# Switch to team by ID
+promptfoo auth teams set team_12345
+```
+
+Your team selection is remembered across CLI sessions and applies to all promptfoo operations including evaluations and red team testing.
+
+#### Team Selection Across Organizations
+
+If you have access to multiple organizations, team selections are **isolated per organization**. This means:
+
+- Each organization remembers its own team selection
+- Switching between organizations preserves your team choice in each org
+- When you log into an organization, your previously selected team is automatically restored
+
+Example workflow:
+
+```sh
+# Login to Organization A
+promptfoo auth login --api-key <org-a-key>
+promptfoo auth teams set "Engineering"     # Set team in Org A
+
+# Login to Organization B
+promptfoo auth login --api-key <org-b-key>
+promptfoo auth teams set "Marketing"       # Set team in Org B
+
+# Login back to Organization A
+promptfoo auth login --api-key <org-a-key>
+promptfoo auth teams current              # Shows "Engineering" (preserved!)
+```
+
+Your team selection persists across login sessions within the same organization.
 
 ## `promptfoo config`
 
