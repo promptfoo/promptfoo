@@ -34,6 +34,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const {
     table,
+    setTable,
     setTableFromResultsFile,
     config,
     setConfig,
@@ -211,9 +212,13 @@ export default function Eval({ fetchId }: EvalOptions) {
        * Populates the table store with the most recent eval result.
        */
       const handleResultsFile = async (data: ResultsFile | null, isInit: boolean = false) => {
-        // If no data provided (e.g., no evals exist yet), just mark as loaded
+        // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
         if (!data) {
           console.log('No eval data available');
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
           setLoaded(true);
           return;
         }
@@ -270,6 +275,11 @@ export default function Eval({ fetchId }: EvalOptions) {
             setDefaultEvalId(defaultEvalId);
           }
         } else {
+          // No evals exist - clear stale state and show empty state
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
           setLoaded(true);
         }
       };
