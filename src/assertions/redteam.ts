@@ -28,7 +28,6 @@ export const handleRedteam = async ({
     return {
       ...storedResult,
       assertion: {
-        // Prefer the stored assertion if it is not null.
         ...(storedResult.assertion ?? assertion),
         value: storedResult.assertion?.value || assertion.value,
       },
