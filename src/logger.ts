@@ -5,7 +5,8 @@ import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
-import { sanitizeBody, sanitizeUrl } from './util/sanitizer';
+import { safeJsonStringify } from './util/json';
+import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
 
@@ -31,6 +32,18 @@ export const LOG_LEVELS = {
 } as const;
 
 type LogLevel = keyof typeof LOG_LEVELS;
+
+/**
+ * Context object for sanitized logging
+ * Allows passing structured data that will be automatically sanitized
+ */
+export interface SanitizedLogContext {
+  url?: string;
+  headers?: Record<string, string>;
+  body?: any;
+  queryParams?: Record<string, string>;
+  [key: string]: any;
+}
 
 // Lazy source map support - only loaded when debug is enabled
 export let sourceMapSupportInitialized = false;
@@ -321,12 +334,50 @@ export function setLogger(customLogger: Pick<StrictLogger, 'debug' | 'info' | 'w
   internalLogger = customLogger as StrictLogger;
 }
 
+/**
+ * Sanitizes context object for logging using generic sanitization
+ */
+function sanitizeContext(context: SanitizedLogContext): Record<string, any> {
+  // Special handling for URLs to preserve the URL-specific sanitization logic
+  const contextWithSanitizedUrls: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(context)) {
+    if (key === 'url' && typeof value === 'string') {
+      contextWithSanitizedUrls[key] = sanitizeUrl(value);
+    } else {
+      contextWithSanitizedUrls[key] = value;
+    }
+  }
+
+  // Apply generic object sanitization to handle all sensitive fields
+  return sanitizeObject(contextWithSanitizedUrls, { context: 'log context' });
+}
+
+/**
+ * Creates a log method that accepts an optional context parameter
+ * If context is provided, it will be sanitized and formatted
+ */
+function createLogMethodWithContext(
+  level: keyof typeof LOG_LEVELS,
+): (message: string, context?: SanitizedLogContext) => void {
+  return (message: string, context?: SanitizedLogContext) => {
+    if (!context) {
+      internalLogger[level](message);
+      return;
+    }
+
+    const sanitized = sanitizeContext(context);
+    const contextStr = safeJsonStringify(sanitized, true);
+    internalLogger[level](`${message}\n${contextStr}`);
+  };
+}
+
 // Wrapper that delegates to the current logger instance
 const logger = {
-  error: (message: string) => internalLogger.error(message),
-  warn: (message: string) => internalLogger.warn(message),
-  info: (message: string) => internalLogger.info(message),
-  debug: (message: string) => internalLogger.debug(message),
+  error: createLogMethodWithContext('error'),
+  warn: createLogMethodWithContext('warn'),
+  info: createLogMethodWithContext('info'),
+  debug: createLogMethodWithContext('debug'),
   add: (transport: winston.transport) =>
     internalLogger.add ? internalLogger.add(transport) : undefined,
   remove: (transport: winston.transport) =>
@@ -370,35 +421,23 @@ export async function logRequestResponse(options: {
       responseText = 'Unable to read response';
     }
   }
+  const logObject = {
+    message: 'API request',
+    url: sanitizeUrl(url),
+    method: requestMethod,
+    requestBody: sanitizeObject(requestBody, { context: 'request body' }),
+    ...(response && {
+      status: response.status,
+      statusText: response.statusText,
+    }),
+    ...(responseText && { response: responseText }),
+  };
 
   if (useStructuredLogging) {
-    const logObject = {
-      message: 'API request',
-      url: sanitizeUrl(url),
-      method: requestMethod,
-      requestBody: sanitizeBody(requestBody),
-      ...(response && {
-        status: response.status,
-        statusText: response.statusText,
-      }),
-      ...(responseText && { response: responseText }),
-    };
-
     // @ts-expect-error - the native logger expects a string but we're using a structured logger
     logMethod(logObject);
   } else {
-    const details = [
-      `URL: ${sanitizeUrl(url)}`,
-      `Method: ${requestMethod}`,
-      `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
-      response ? `Status: ${response.status} ${response.statusText}` : '',
-      responseText ? `Response: ${responseText}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    const message = `API request:\n${details}`;
-    logMethod(message);
+    logMethod(`Api Request`, logObject);
   }
 }
 

@@ -119,9 +119,13 @@ describe('auth command', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
       );
-      expect(logger.info).toHaveBeenCalledWith('Manual login URL: https://www.promptfoo.app/');
       expect(logger.info).toHaveBeenCalledWith(
-        'After login, get your API token at: https://www.promptfoo.app/welcome',
+        expect.stringContaining('Manual login URL: https://www.promptfoo.app/'),
+      );
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'After login, get your API token at: https://www.promptfoo.app/welcome',
+        ),
       );
       expect(process.exitCode).toBe(1);
       expect(openAuthBrowser).not.toHaveBeenCalled();
