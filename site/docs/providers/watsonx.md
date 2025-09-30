@@ -97,7 +97,7 @@ To install the WatsonX provider, use the following steps:
 
    ```yaml
    providers:
-     - id: watsonx:ibm/granite-13b-chat-v2
+     - id: watsonx:ibm/granite-3-3-8b-instruct
        config:
          # Option 1: IAM Authentication
          apiKey: your-ibm-cloud-api-key
@@ -115,7 +115,7 @@ Once configured, you can use the WatsonX provider to generate text responses bas
 
 ```yaml
 providers:
-  - watsonx:ibm/granite-13b-chat-v2 # for Meta models, use watsonx:meta-llama/llama-3-2-1b-instruct
+  - watsonx:ibm/granite-3-3-8b-instruct # for Meta models, use watsonx:meta-llama/llama-3-2-1b-instruct
 
 prompts:
   - "Answer the following question: '{{question}}'"
