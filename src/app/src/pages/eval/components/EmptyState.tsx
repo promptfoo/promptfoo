@@ -23,11 +23,15 @@ const EmptyState = () => {
           maxWidth: 500,
         }}
       >
-        <Stack direction="row" spacing={1} alignItems="center" justifyContent="center" sx={{ mb: 2 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          justifyContent="center"
+          sx={{ mb: 2 }}
+        >
           <img src={logo} alt="Promptfoo logo" style={{ width: 48, height: 48 }} />
-          <Typography variant="h5">
-            Welcome to Promptfoo
-          </Typography>
+          <Typography variant="h5">Welcome to Promptfoo</Typography>
         </Stack>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
           Get started by creating an eval or red team

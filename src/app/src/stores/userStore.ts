@@ -29,9 +29,6 @@ export const useUserStore = create<UserState>((set, getState) => ({
       if (response.ok) {
         const data = await response.json();
         set({ email: data.email, isLoading: false });
-      } else if (response.status === 404) {
-        // 404 is expected when running locally with no email configured - silently handle it
-        set({ email: null, isLoading: false });
       } else {
         throw new Error('Failed to fetch user email');
       }
