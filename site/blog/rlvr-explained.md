@@ -1,18 +1,29 @@
 ---
 title: 'Reinforcement Learning with Verifiable Rewards: When It Works, When It Fails'
-description: 'RLVR trains reasoning models with programmatic verifiers instead of human labels. Research shows 70-80% of gains come from search compression, not new capabilities. Here is what actually works.'
+description: 'RLVR trains reasoning models with programmatic verifiers instead of human labels. Recent research suggests most gains come from search compression rather than new capabilities. Here is what actually works.'
 authors: [michael]
 tags: [technical-guide, best-practices, evaluation]
-keywords: [RLVR, reinforcement learning verifiable rewards, AI training efficiency, verifiable rewards, LLM post-training, reasoning models, GRPO, verifier design, model evaluation]
+keywords:
+  [
+    RLVR,
+    reinforcement learning verifiable rewards,
+    AI training efficiency,
+    verifiable rewards,
+    LLM post-training,
+    reasoning models,
+    GRPO,
+    verifier design,
+    model evaluation,
+  ]
 date: 2025-09-30
 image: /img/blog/rlvr/rlvr-header.jpg
 ---
 
 # Reinforcement Learning with Verifiable Rewards: When It Works, When It Fails
 
-[Recent research suggests 70-80% of RLVR gains come from search compression](https://arxiv.org/abs/2504.13837), not genuine capability expansion. Models learn to find correct answers faster, not to solve fundamentally harder problems.
+Multiple recent studies argue that [RLVR mostly converts pass@k into pass@1](https://arxiv.org/abs/2504.13837). In other words, training concentrates probability mass on reasoning paths the base model could already sample, with a smaller share attributable to true capability gains.
 
-This isn't the story most RLVR advocates tell. But the data is clear: when you train a model with verifiable rewards, you're mostly buying speed, not smarts. The model was already capable of reaching the right answer—RLVR just forces it to get there in fewer tries.
+Recent evidence suggests you're buying speed, not smarts. The model was already capable of reaching the right answer—RLVR just forces it to get there in fewer tries.
 
 <!-- truncate -->
 
@@ -20,13 +31,13 @@ The remaining 20-30% represents real learning, but only under specific condition
 
 ## Recent RLVR Results (September 2025)
 
-**Databricks** achieved 75.68% accuracy on the [BIRD Text2SQL benchmark](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks) using RLVR with execution-based verifiers.
+**Databricks Text2SQL:** [73.5% BIRD test accuracy reported in July](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks); a [later paper reports 75.68%](https://arxiv.org/abs/2509.21459) with few-sample self-consistency. Both use execution-based verifiers, not pattern matching.
 
-**DeepSeek R1's** use of GRPO with rule-based rewards (format compliance, verifiable correctness) demonstrates that RLVR can scale to frontier model sizes.
+**DeepSeek R1:** Scales GRPO with rule-based rewards (format compliance, verifiable correctness) for math, code, and logic. Details in the R1 paper and Nature write-up.
 
-**OpenAI o3/o4-mini** (April 2025 release) showed strong HumanEval improvements using RL techniques. While OpenAI hasn't detailed their exact approach, their technical report noted diminishing returns on multi-step reasoning tasks—consistent with the compression vs capability tradeoff RLVR research identifies.
+**OpenAI o3 and o4-mini:** [April 16, 2025 release](https://openai.com/index/introducing-o3-and-o4-mini/) emphasizes scaling RL and tool-use, with strong results on AIME, SWE-bench, and Codeforces. OpenAI's public materials do not provide HumanEval deltas.
 
-But [research from Tsinghua](https://arxiv.org/abs/2504.13837) shows RLVR-trained models generate reasoning paths already present in the base model's distribution. RLVR biases sampling toward correct solutions but reduces exploration capacity.
+**Compression vs capability:** [Tsinghua finds](https://arxiv.org/abs/2504.13837) RLVR mostly improves sampling efficiency rather than expanding the reasoning boundary; [Scale formalizes](https://arxiv.org/abs/2506.13923) "self-distillation" vs "capability gain."
 
 ## What RLVR Is (and Isn't)
 
@@ -44,7 +55,7 @@ This change has implications:
 - **No reward model training:** Skip weeks of training on preference pairs
 - **Deterministic feedback:** Same input produces same reward
 - **Fast iteration:** Change verifier logic without retraining
-- **Scalable:** Verifiers run in milliseconds
+- **Scalable:** Verifiers can be cheap relative to model inference if engineered carefully (though SQL execution and unit tests can take seconds)
 
 ### Comparison to Other Methods
 
@@ -131,21 +142,26 @@ def strong_sql_verifier(sql_query, expected_results, db_connection):
 [Research from June 2025](https://arxiv.org/abs/2506.10947) found Qwen2.5-Math-7B improved 21.4% on MATH-500 with _random_ rewards, nearly matching the 29.1% gain from ground truth rewards.
 
 **Why this happens:**
-The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward—the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. This behavior is family-specific; Llama and OLMo models appear immune.
+The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward—the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. [These effects were strongest on Qwen2.5-Math and did not consistently replicate on Llama3 or OLMo2](https://arxiv.org/abs/2506.10947).
 
 **Always run this test:**
 
 ```python
-def random_baseline_test(model, dataset):
+def random_baseline_test(model, dataset, real_verifier):
     # Train with real verifier
     real_results = train_rlvr(model, dataset, real_verifier)
 
-    # Train with random rewards
-    random_verifier = lambda output, answer: random.choice([0.0, 1.0])
+    # Compute reward hit-rate p from real verifier
+    real_rewards = [real_verifier(ex.output, ex.answer) for ex in dataset]
+    p = sum(real_rewards) / len(real_rewards)
+
+    # Train with random rewards matching base rate
+    random_verifier = lambda output, answer: 1.0 if random.random() < p else 0.0
     random_results = train_rlvr(model, dataset, random_verifier)
 
     if random_results['improvement'] > 0.05:
         print("⚠️ WARNING: Spurious reward sensitivity detected")
+        print(f"Test across multiple model families (Llama, OLMo, Qwen)")
         return False
     return True
 ```
@@ -159,15 +175,18 @@ Some "RLVR gains" are artifacts of the training process. Validate on held-out da
 
 GRPO and value-free algorithms can cause entropy collapse (outputs become deterministic) or explosion (outputs become random) without proper baseline selection.
 
-Recent work suggests quantile-based baselines (q=0.5) stabilize training better than mean baselines:
+[Quantile Advantage Estimation (QAE)](https://arxiv.org/abs/2509.22611) diagnoses entropy collapse/explosion from mean baselines in value-free RL and proposes quantile baselines to reduce outlier sensitivity:
 
 ```python
-# Instead of mean baseline (can be unstable)
+# Instead of mean baseline (can be unstable with heavy-tailed rewards)
 baseline = np.mean(rewards)
 
-# Use quantile baseline (more stable)
-baseline = np.quantile(rewards, q=0.5)
+# Use quantile baseline (more stable) - QAE recommendation
+baseline = np.quantile(rewards, q=0.5)  # Median
+# Or use K-quantile for finer control
 ```
+
+**Key insight:** Prefer quantile or robust baselines over simple means when reward distributions are heavy-tailed to avoid entropy collapse.
 
 **Monitor these metrics:**
 
@@ -213,7 +232,7 @@ Verifiers provide clean binary signals, eliminating the need for value function 
 
 ### Data Efficiency Tactics
 
-[DEPO research](https://arxiv.org/abs/2509.01321) achieved comparable performance using only 20% of training data through:
+[DEPO](https://arxiv.org/abs/2509.01321) reports comparable performance with only 20% of training data, yielding 1.85× and 1.66× speedups on AIME24/25 for R1-Distill Qwen-7B vs GRPO trained on the full set. Key techniques:
 
 **Offline curation:**
 
@@ -313,28 +332,7 @@ If compression_ratio > 0.7, you're mostly getting search efficiency, not learnin
 
 ## Trading Labels for Logic: Is RLVR Worth the Cost?
 
-_Note: Cost estimates below are illustrative based on industry reports. Actual costs vary significantly by scale, infrastructure, and provider._
-
-### Estimated Cost Comparison
-
-**Traditional RLHF Pipeline:**
-
-```
-1. Collect human preferences: ~$50K-100K
-2. Train reward model: ~$20K compute
-3. PPO training: ~$30K compute
-Total: ~$100K-150K, 3-4 weeks
-```
-
-**RLVR Pipeline:**
-
-```
-1. Write verifiers: ~$5K-10K engineer time
-2. GRPO training: ~$30K compute
-Total: ~$35K-40K, 1-1.5 weeks
-```
-
-**Estimated savings: 65-75% on cost, 50% on timeline**
+> **Note on cost estimates:** The figures below are illustrative order-of-magnitude estimates for planning purposes. Actual costs depend on model size, dataset size, iteration count, cloud provider, and engineering rates. For your specific use case, build a spreadsheet model with: token counts, $/1K tokens, rollout counts (K samples per prompt), number of training steps, verifier execution cost, and engineering hours. Treat these numbers as directional, not precise.
 
 ### The Trade-off
 
@@ -344,7 +342,7 @@ You trade generality (RLHF works for any task) for efficiency (RLVR is 3x cheape
 
 **Use RLVR when:**
 
-- Verifier covers >90% of errors
+- Verifier has high coverage (target >90% in adversarial tests)
 - Domain is stable (not rapidly changing)
 - Engineers understand the domain well
 - Correctness > style
@@ -383,12 +381,18 @@ def math_verifier(output: str, expected_answer: float) -> float:
 **Pattern: Unit Test Execution**
 
 ```python
-# Production code should sandbox execution
-def code_verifier(generated_code: str, test_cases: list) -> float:
-    """Run code against test suite"""
+# CRITICAL: Never exec() untrusted code in production without sandboxing.
+# Use Docker containers, gVisor, or hermetic runners with:
+# - No network access
+# - No file I/O
+# - Strict timeouts (e.g., 5s)
+# - Resource limits (CPU, memory)
+
+def code_verifier_unsafe_example(generated_code: str, test_cases: list) -> float:
+    """THIS IS UNSAFE - for illustration only"""
     try:
         namespace = {}
-        exec(generated_code, namespace)
+        exec(generated_code, namespace)  # DANGER: arbitrary code execution
 
         for test in test_cases:
             exec(test, namespace)
@@ -396,6 +400,9 @@ def code_verifier(generated_code: str, test_cases: list) -> float:
         return 1.0
     except Exception:
         return 0.0
+
+# In production: Use isolated execution environments
+# Example: subprocess with timeout, Docker, or cloud functions
 ```
 
 **What works:** Deterministic checking, fast execution (<100ms), clear failure modes
@@ -406,13 +413,26 @@ def code_verifier(generated_code: str, test_cases: list) -> float:
 **Pattern: Execution Equivalence**
 
 ```python
+from collections import Counter
+
 def sql_execution_verifier(generated_sql: str, expected_results: list, db) -> float:
-    """Execute and compare result sets"""
+    """Execute and compare result sets
+
+    WARNING: Executing model-generated SQL is dangerous.
+    - Use read-only database connections
+    - Whitelist allowed tables/schemas
+    - Set query timeouts
+    - Never interpolate model output into queries (SQL injection risk)
+    """
     try:
         actual = db.execute(generated_sql).fetchall()
-        actual_set = set(map(tuple, actual))
-        expected_set = set(map(tuple, expected_results))
-        return 1.0 if actual_set == expected_set else 0.0
+
+        # Use Counter for multiset equality (handles duplicates and order)
+        # Set equality drops duplicates; many benchmarks care about row counts
+        actual_multiset = Counter(map(tuple, actual))
+        expected_multiset = Counter(map(tuple, expected_results))
+
+        return 1.0 if actual_multiset == expected_multiset else 0.0
     except Exception:
         return 0.0
 ```
@@ -420,7 +440,7 @@ def sql_execution_verifier(generated_sql: str, expected_results: list, db) -> fl
 **Why this works:** Multiple correct SQL queries can produce the same results. Execution-based verification handles this naturally—you don't need to enumerate all valid queries.
 
 **Databricks case study:**
-Their [BIRD benchmark work](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks) combined execution verifiers with schema validation, achieving 75.68% test accuracy. Key insight: Execution checking scales better than query pattern matching.
+Their [later paper reports 75.68% BIRD test accuracy](https://arxiv.org/abs/2509.21459) combining execution verifiers with schema validation. Key insight: Execution checking scales better than query pattern matching.
 
 ### Writing Verifiers (Hard Mode)
 
@@ -577,11 +597,11 @@ Do you have objective correctness criteria?
 
 ## Conclusion: Don't Mistake Efficiency for Intelligence
 
-The data is unambiguous: for most applications, 70-80% of RLVR's gains are from search compression, not expanded reasoning capability. You're buying speed, not smarts. The model was already capable of finding the right answer—RLVR just optimizes the path to solutions it could already reach.
+Evidence to date suggests that for most applications, RLVR's gains are dominated by search compression rather than expanded reasoning capability. You're buying speed, not smarts. The model was already capable of finding the right answer—RLVR just optimizes the path to solutions it could already reach.
 
-The rule is simple: if you can write a checker, you can scale learning. Where ground truth doesn't exist, RLVR fails and human preference data remains superior.
+The rule is simple: if you can write a verifier, you can scale learning. Where ground truth doesn't exist, RLVR fails and human preference data remains superior.
 
-The real engineering challenge isn't just implementing RLVR; it's proving what you've actually gained. We should be running pass@k analysis to distinguish compression from capability. We should be running random baseline tests to check for spurious rewards.
+The real engineering challenge isn't just implementing RLVR; it's proving what you've actually gained. Run pass@k analysis to distinguish compression from capability. Run random baseline tests to check for spurious rewards. Test across multiple model families.
 
 The next time you see a model's performance jump after an RL run, ask the hard question: did you build a better thinker, or did you just build a faster guesser? The answer determines whether your product is truly intelligent or just a fragile house of cards.
 
