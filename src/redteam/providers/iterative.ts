@@ -1,23 +1,10 @@
 import dedent from 'dedent';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types';
 import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
@@ -36,6 +23,19 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -184,11 +184,12 @@ export async function runRedteamConversation({
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
     }
-    logger.debug(`[Iterative] Raw redteam response: ${JSON.stringify(redteamResp)}`);
+    logger.debug('[Iterative] Raw redteam response', { response: redteamResp });
     if (redteamResp.error) {
-      logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - Error: ${redteamResp.error}. Full response: ${JSON.stringify(redteamResp)}`,
-      );
+      logger.info(`[Iterative] ${i + 1}/${numIterations} - Error`, {
+        error: redteamResp.error,
+        response: redteamResp,
+      });
       continue;
     }
 
@@ -202,9 +203,10 @@ export async function runRedteamConversation({
         improvement = parsed.improvement;
         newInjectVar = parsed.prompt;
       } catch (err) {
-        logger.info(
-          `[Iterative] ${i + 1}/${numIterations} - Failed to parse response: ${err}. Full response: ${JSON.stringify(redteamResp)}`,
-        );
+        logger.info(`[Iterative] ${i + 1}/${numIterations} - Failed to parse response`, {
+          error: err,
+          response: redteamResp,
+        });
         continue;
       }
     } else {
@@ -213,9 +215,9 @@ export async function runRedteamConversation({
     }
 
     if (improvement === undefined || newInjectVar === undefined) {
-      logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - Missing improvement or injectVar. Full response: ${JSON.stringify(redteamResp)}`,
-      );
+      logger.info(`[Iterative] ${i + 1}/${numIterations} - Missing improvement or injectVar`, {
+        response: redteamResp,
+      });
       continue;
     }
 
@@ -254,12 +256,13 @@ export async function runRedteamConversation({
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
       await sleep(gradingProvider.delay);
     }
-    logger.debug(`[Iterative] Raw onTopic response: ${JSON.stringify(isOnTopicResp)}`);
+    logger.debug('[Iterative] Raw onTopic response', { response: isOnTopicResp });
 
     if (isOnTopicResp.error) {
-      logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - OnTopic error: ${isOnTopicResp.error}. Full response: ${JSON.stringify(isOnTopicResp)}`,
-      );
+      logger.info(`[Iterative] ${i + 1}/${numIterations} - OnTopic error`, {
+        error: isOnTopicResp.error,
+        response: isOnTopicResp,
+      });
     }
 
     let isOnTopic = false;
@@ -267,9 +270,10 @@ export async function runRedteamConversation({
       try {
         isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
       } catch (err) {
-        logger.info(
-          `[Iterative] ${i + 1}/${numIterations} - Failed to parse onTopic: ${err}. Full response: ${JSON.stringify(isOnTopicResp)}`,
-        );
+        logger.info(`[Iterative] ${i + 1}/${numIterations} - Failed to parse onTopic`, {
+          error: err,
+          response: isOnTopicResp,
+        });
         continue;
       }
     } else {
@@ -278,7 +282,8 @@ export async function runRedteamConversation({
     logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
     if (typeof isOnTopic !== 'boolean') {
       logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - Could not parse a boolean from the onTopic request. Raw response: ${JSON.stringify(isOnTopicResp)}`,
+        `[Iterative] ${i + 1}/${numIterations} - Could not parse a boolean from the onTopic request`,
+        { response: isOnTopicResp },
       );
     }
 
@@ -289,16 +294,18 @@ export async function runRedteamConversation({
       options,
     );
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
-    logger.debug(`[Iterative] Raw target response: ${JSON.stringify(targetResponse)}`);
+    logger.debug('[Iterative] Raw target response', { response: targetResponse });
     if (targetResponse.error) {
-      logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - Target error: ${targetResponse.error}. Full response: ${JSON.stringify(targetResponse)}`,
-      );
+      logger.info(`[Iterative] ${i + 1}/${numIterations} - Target error`, {
+        error: targetResponse.error,
+        response: targetResponse,
+      });
       continue;
     }
     if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
       logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - Malformed target response - missing output property. Full response: ${JSON.stringify(targetResponse)}`,
+        `[Iterative] ${i + 1}/${numIterations} - Malformed target response - missing output property`,
+        { response: targetResponse },
       );
       continue;
     }
@@ -380,11 +387,12 @@ export async function runRedteamConversation({
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
       await sleep(gradingProvider.delay);
     }
-    logger.debug(`[Iterative] Raw judge response: ${JSON.stringify(judgeResp)}`);
+    logger.debug('[Iterative] Raw judge response', { response: judgeResp });
     if (judgeResp.error) {
-      logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - Judge error: ${judgeResp.error}. Full response: ${JSON.stringify(judgeResp)}`,
-      );
+      logger.info(`[Iterative] ${i + 1}/${numIterations} - Judge error`, {
+        error: judgeResp.error,
+        response: judgeResp,
+      });
       continue;
     }
 
@@ -409,9 +417,8 @@ export async function runRedteamConversation({
         currentScore = parsedCurrent;
       } else {
         logger.info(
-          `[Iterative] Skipping iteration – judge response missing numeric currentResponse.rating. Raw: ${JSON.stringify(
-            judgeResp,
-          )}`,
+          '[Iterative] Skipping iteration – judge response missing numeric currentResponse.rating',
+          { response: judgeResp },
         );
         continue;
       }
@@ -490,11 +497,10 @@ export async function runRedteamConversation({
         // We'll break after the token usage tracking and previousOutputs.push
       }
     } catch (err) {
-      logger.info(
-        `[Iterative] Failed to parse judge response, likely refusal: ${err} ${JSON.stringify(
-          judgeResp,
-        )}`,
-      );
+      logger.info('[Iterative] Failed to parse judge response, likely refusal', {
+        error: err,
+        response: judgeResp,
+      });
       continue;
     }
 
@@ -535,7 +541,7 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly gradingProvider: RedteamFileConfig['provider'];
   constructor(readonly config: Record<string, string | object>) {
-    logger.debug(`[Iterative] Constructor config: ${JSON.stringify(config)}`);
+    logger.debug('[Iterative] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
@@ -575,7 +581,7 @@ class RedteamIterativeProvider implements ApiProvider {
     metadata: IterativeMetadata;
     tokenUsage: TokenUsage;
   }> {
-    logger.debug(`[Iterative] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[Iterative] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context.vars, 'Expected vars to be set');
 

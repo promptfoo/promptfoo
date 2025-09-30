@@ -1930,7 +1930,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       this.modelName,
     );
 
-    logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Amazon Bedrock API', { params });
 
     const cache = await getCache();
     const cacheKey = `bedrock:${this.modelName}:${JSON.stringify(params)}`;
@@ -2061,7 +2061,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           : {}),
       };
     } catch (err) {
-      logger.error(`Bedrock API response error: ${String(err)}: ${JSON.stringify(response)}`);
+      logger.error('Bedrock API response error', { error: String(err), response });
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
       };
@@ -2086,7 +2086,7 @@ export class AwsBedrockEmbeddingProvider
           inputText: text,
         };
 
-    logger.debug(`Calling AWS Bedrock API for embeddings: ${JSON.stringify(params)}`);
+    logger.debug('Calling AWS Bedrock API for embeddings', { params });
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();

@@ -125,7 +125,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
-    logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Anthropic Messages API', { params });
 
     const headers: Record<string, string> = {
       ...(config.headers || {}),
@@ -178,7 +178,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
         // Wait for the stream to complete and get the final message
         const finalMessage = await stream.finalMessage();
-        logger.debug(`Anthropic Messages API streaming complete: ${JSON.stringify(finalMessage)}`);
+        logger.debug(`Anthropic Messages API streaming complete`, { finalMessage });
 
         if (isCacheEnabled()) {
           try {
@@ -205,7 +205,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         const response = (await this.anthropic.messages.create(params, {
           ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
         })) as Anthropic.Messages.Message;
-        logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
+        logger.debug(`Anthropic Messages API response`, { response });
 
         if (isCacheEnabled()) {
           try {
