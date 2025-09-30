@@ -21,7 +21,7 @@ tags: [technical-guide, best-practices, evaluation]
 
 # Reinforcement Learning with Verifiable Rewards: When It Works, When It Fails
 
-[70-80% of RLVR gains come from search compression](https://arxiv.org/abs/2504.13837), not genuine capability expansion. Models learn to find correct answers faster, not to solve fundamentally harder problems.
+[Recent research suggests 70-80% of RLVR gains come from search compression](https://arxiv.org/abs/2504.13837), not genuine capability expansion. Models learn to find correct answers faster, not to solve fundamentally harder problems.
 
 This isn't the story most RLVR advocates tell. But the data is clear: when you train a model with verifiable rewards, you're mostly buying speed, not smarts. The model was already capable of reaching the right answer—RLVR just forces it to get there in fewer tries.
 
@@ -31,11 +31,11 @@ The remaining 20-30% represents real learning, but only under specific condition
 
 ## Recent RLVR Results (September 2025)
 
-**Databricks** achieved 73.5% accuracy on the [BIRD Text2SQL benchmark](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks) using RLVR with execution-based verifiers.
+**Databricks** achieved 75.68% accuracy on the [BIRD Text2SQL benchmark](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks) using RLVR with execution-based verifiers.
 
-**DeepSeek R1** uses GRPO (Group Relative Policy Optimization), a value-free RL algorithm, demonstrating that RLVR scales to frontier model sizes.
+**DeepSeek R1** uses GRPO with rule-based rewards (format compliance, verifiable correctness), demonstrating that RLVR scales to frontier model sizes.
 
-**OpenAI o3/o4-mini** (April 2025 release) showed strong HumanEval improvements with verifier-based RL, but OpenAI's technical report noted diminishing returns on multi-step reasoning tasks—hinting at the compression vs capability tradeoff.
+**OpenAI o3/o4-mini** (April 2025 release) showed strong HumanEval improvements using RL techniques. While OpenAI hasn't detailed their exact approach, their technical report noted diminishing returns on multi-step reasoning tasks—consistent with the compression vs capability tradeoff RLVR research identifies.
 
 But [research from Tsinghua](https://arxiv.org/abs/2504.13837) shows RLVR-trained models generate reasoning paths already present in the base model's distribution. RLVR biases sampling toward correct solutions but reduces exploration capacity.
 
@@ -419,7 +419,7 @@ def sql_execution_verifier(generated_sql: str, expected_results: list, db) -> fl
 **Why this works:** Multiple correct SQL queries can produce the same results. Execution-based verification handles this naturally—you don't need to enumerate all valid queries.
 
 **Databricks case study:**
-Their [BIRD benchmark work](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks) combined execution verifiers with schema validation, achieving 73.5% test accuracy. Key insight: Execution checking scales better than query pattern matching.
+Their [BIRD benchmark work](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks) combined execution verifiers with schema validation, achieving 75.68% test accuracy. Key insight: Execution checking scales better than query pattern matching.
 
 ### Writing Verifiers (Hard Mode)
 
