@@ -255,6 +255,14 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
           }
           body = JSON.stringify(urlEncodedObj, null, 2);
         }
+
+        // Replace single {{variable}} with {{prompt}}
+        if (body) {
+          const variableMatches = body.match(/\{\{[^}]+\}\}/g);
+          if (variableMatches && variableMatches.length === 1) {
+            body = body.replace(variableMatches[0], '{{prompt}}');
+          }
+        }
       }
 
       // Call the import callback
