@@ -1554,6 +1554,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
@@ -1588,6 +1589,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
@@ -1601,6 +1603,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
@@ -1624,6 +1627,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'us.meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -1926,7 +1930,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       this.modelName,
     );
 
-    logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Amazon Bedrock API', { params });
 
     const cache = await getCache();
     const cacheKey = `bedrock:${this.modelName}:${JSON.stringify(params)}`;
@@ -2057,7 +2061,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           : {}),
       };
     } catch (err) {
-      logger.error(`Bedrock API response error: ${String(err)}: ${JSON.stringify(response)}`);
+      logger.error('Bedrock API response error', { error: String(err), response });
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
       };
@@ -2082,7 +2086,7 @@ export class AwsBedrockEmbeddingProvider
           inputText: text,
         };
 
-    logger.debug(`Calling AWS Bedrock API for embeddings: ${JSON.stringify(params)}`);
+    logger.debug('Calling AWS Bedrock API for embeddings', { params });
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();

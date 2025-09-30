@@ -34,6 +34,7 @@ export interface AnthropicMessageOptions {
   headers?: Record<string, string>;
   max_tokens?: number;
   model?: string;
+  stream?: boolean; // Enable streaming for long-running operations like extended thinking
   temperature?: number;
   thinking?: Anthropic.Messages.ThinkingConfigParam;
   tool_choice?: Anthropic.Messages.ToolChoice;
