@@ -91,6 +91,8 @@ RLVR works where ground truth exists. It fails for creative writing, brand voice
 
 ## What Breaks (Research-Backed Failure Modes)
 
+![RLVR Failure Modes](/img/blog/rlvr/failure-modes.png)
+
 Three failure modes account for most RLVR problems. Unlike traditional RL issues, these stem from verifier design and the specific challenges of language model training.
 
 ### 1. Partial Verifiers Create Exploitable Gaps
@@ -244,6 +246,8 @@ def curate_training_data(dataset, base_model):
 These techniques reduce compute by 60-70% with minimal performance loss.
 
 ## Sampler or Thinker? The Core RLVR Debate
+
+![Sampler vs Thinker Debate](/img/blog/rlvr/sampler-vs-thinker.png)
 
 [Tsinghua research (April 2025)](https://arxiv.org/abs/2504.13837) challenges RLVR's effectiveness: "Reasoning LLMs Are Just Efficient Samplers." They found RLVR-trained models generate paths already in the base model's distribution.
 
