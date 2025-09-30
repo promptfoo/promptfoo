@@ -434,8 +434,7 @@ export async function logRequestResponse(options: {
   };
 
   if (useStructuredLogging) {
-    // @ts-expect-error - the native logger expects a string but we're using a structured logger
-    logMethod(logObject);
+    logMethod(sanitizeObject(logObject, { context: 'log object for structured logging' }));
   } else {
     logMethod(`Api Request`, logObject);
   }

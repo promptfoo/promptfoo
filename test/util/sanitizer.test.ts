@@ -718,7 +718,6 @@ describe('sanitizeObject', () => {
 
     it('should log context in error messages', () => {
       const input = { key: 'value' };
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
       jest.spyOn(JSON, 'parse').mockImplementationOnce(() => {
         throw new Error('Parse error');
       });
@@ -728,7 +727,6 @@ describe('sanitizeObject', () => {
         expect.stringContaining('test context'),
         expect.any(Error),
       );
-      consoleErrorSpy.mockRestore();
     });
   });
 
@@ -755,6 +753,38 @@ describe('sanitizeObject', () => {
       expect(result.headers['x-api-key']).toBe('[REDACTED]');
       expect(result.body.password).toBe('[REDACTED]');
       expect(result.body.data).toBe('public-data');
+    });
+
+    it('should sanitize URLs with sensitive query parameters in url field', () => {
+      const requestConfig = {
+        method: 'GET',
+        url: 'https://api.example.com/v1/resource?api_key=secret123&token=bearer-token&data=public',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      };
+      const result = sanitizeObject(requestConfig);
+      expect(result.method).toBe('GET');
+      expect(result.url).toBe(
+        'https://api.example.com/v1/resource?api_key=%5BREDACTED%5D&token=%5BREDACTED%5D&data=public',
+      );
+      expect(result.url).not.toContain('secret123');
+      expect(result.url).not.toContain('bearer-token');
+      expect(result.url).toContain('data=public');
+    });
+
+    it('should sanitize URLs with basic auth credentials in url field', () => {
+      const requestConfig = {
+        method: 'POST',
+        url: 'https://user:password@api.example.com/endpoint',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      };
+      const result = sanitizeObject(requestConfig);
+      expect(result.url).toBe('https://***:***@api.example.com/endpoint');
+      expect(result.url).not.toContain('user');
+      expect(result.url).not.toContain('password');
     });
 
     it('should sanitize database connection config', () => {

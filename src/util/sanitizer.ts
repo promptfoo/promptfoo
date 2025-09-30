@@ -20,6 +20,7 @@ const SECRET_FIELD_NAMES = new Set([
   // Secret variants
   'secret',
   'secrets',
+  'secretkey',
 
   // API keys and tokens
   'apikey',
@@ -42,6 +43,7 @@ const SECRET_FIELD_NAMES = new Set([
   'xauth', // x-auth
   'xsecret', // x-secret
   'xcsrftoken', // x-csrf-token
+  'xsessiondata', // x-session-data
   'csrftoken', // csrf-token
   'sessionid', // session-id
   'session', // session
@@ -86,11 +88,14 @@ function isSecretField(fieldName: string): boolean {
  */
 function isClassInstance(obj: any): boolean {
   const proto = Object.getPrototypeOf(obj);
-  const hasCustomPrototype = proto !== null && proto !== Object.prototype;
+  // Bail out early if proto is null or Object.prototype
+  if (!proto || proto === Object.prototype) {
+    return false;
+  }
   const hasMethods = Object.getOwnPropertyNames(proto).some(
     (prop) => prop !== 'constructor' && typeof proto[prop] === 'function',
   );
-  return hasCustomPrototype && hasMethods;
+  return hasMethods;
 }
 
 /**
@@ -115,7 +120,11 @@ function sanitizeJsonString(str: string, depth: number): string {
 function sanitizePlainObject(obj: any, depth: number): any {
   const sanitized: any = {};
   for (const [key, value] of Object.entries(obj)) {
-    sanitized[key] = isSecretField(key) ? '[REDACTED]' : recursiveSanitize(value, depth + 1);
+    if (key === 'url' && typeof value === 'string') {
+      sanitized[key] = sanitizeUrl(value);
+    } else {
+      sanitized[key] = isSecretField(key) ? '[REDACTED]' : recursiveSanitize(value, depth + 1);
+    }
   }
   return sanitized;
 }

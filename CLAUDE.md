@@ -175,7 +175,9 @@ The sanitizer automatically redacts these sensitive field names (case-insensitiv
 
 ### When to Use Sanitization
 
-**ALWAYS sanitize when logging:**
+**ALWAYS sanitize objects when logging:**
+
+Our logging methods take in an object as the second argument and will automatically sanitize them. So anything that may contain secrets needs to be sanitized:
 
 - HTTP request/response headers
 - Request/response bodies
@@ -186,8 +188,8 @@ The sanitizer automatically redacts these sensitive field names (case-insensitiv
 **Example - HTTP Provider:**
 
 ```typescript
-// ✅ Good - uses sanitized logging
-logger.debugSanitized('[HTTP Provider]: Calling endpoint', {
+// ✅ Good - uses sanitized logging (context object is automatically sanitized)
+logger.debug('[HTTP Provider]: Calling endpoint', {
   url,
   method: 'POST',
   headers: requestHeaders,
@@ -198,22 +200,7 @@ logger.debugSanitized('[HTTP Provider]: Calling endpoint', {
 logger.debug(`Calling ${url} with headers: ${JSON.stringify(headers)}`);
 ```
 
-**Example - Error Handling:**
-
-```typescript
-// ✅ Good - sanitizes error context
-try {
-  await makeRequest();
-} catch (err) {
-  logger.errorSanitized(`Request failed: ${err}`, {
-    headers: request.headers,
-    body: request.body,
-  });
-}
-
-// ❌ Bad - may expose secrets in error logs
-logger.error(`Request failed: ${JSON.stringify(request)}`);
-```
+````
 
 ## Git Workflow - CRITICAL
 
@@ -239,7 +226,7 @@ Always follow this workflow:
    git checkout main
    git pull origin main
    git checkout -b feature/your-branch-name
-   ```
+````
 
 2. **Make your changes and commit**:
 
