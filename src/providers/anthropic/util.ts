@@ -21,6 +21,7 @@ export const ANTHROPIC_MODELS = [
   })),
   ...[
     'claude-sonnet-4-5-20250929',
+    'claude-sonnet-4-5-latest',
     'claude-sonnet-4-20250514',
     'claude-sonnet-4-0',
     'claude-sonnet-4-latest',
