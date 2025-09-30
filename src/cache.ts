@@ -37,9 +37,9 @@ export function getCache() {
         store = require('cache-manager-fs-hash');
       } catch (err) {
         logger.warn(
-          `Failed to load cache-manager-fs-hash (${(err as Error).message}), ` +
-            `using memory cache instead. To use disk cache on Windows, ensure compatible ` +
-            `versions of signal-exit are installed.`,
+          `Failed to load disk cache module (${(err as Error).message}). ` +
+            `Using memory cache instead. This is a known limitation on some systems ` +
+            `due to dependency compatibility issues and does not affect functionality.`,
         );
         store = 'memory';
       }

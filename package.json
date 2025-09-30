@@ -228,7 +228,7 @@
     "async": "^3.2.6",
     "better-sqlite3": "11.10.0",
     "cache-manager": "^4.1.0",
-    "cache-manager-fs-hash": "^1.1.0",
+    "cache-manager-fs-hash": "^3.0.0",
     "chalk": "^4.1.2",
     "chokidar": "4.0.3",
     "cli-progress": "^3.12.0",
