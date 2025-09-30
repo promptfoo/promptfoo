@@ -44,7 +44,6 @@ import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
 } from './prompts';
 import {
   checkPenalizedPhrases,
@@ -121,14 +120,12 @@ export function renderSystemPrompts(
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
 ): {
   redteamSystemPrompt: string;
-  onTopicSystemPrompt: string;
   judgeSystemPrompt: string;
 } {
   return {
     redteamSystemPrompt: excludeTargetOutputFromAgenticAttackGeneration
       ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal, purpose })
       : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose }),
-    onTopicSystemPrompt: nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal }),
     judgeSystemPrompt: nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal }),
   };
 }
@@ -278,62 +275,10 @@ export async function getNewPrompt(
 }
 
 /**
- * Checks if the target prompt is on-topic.
- * @param provider - The provider used for evaluation.
- * @param onTopicSystemPrompt - The system prompt for the on-topic check.
- * @param targetPrompt - The prompt to be checked.
- * @returns A promise that resolves to a boolean indicating if the prompt is on-topic.
- */
-export async function checkIfOnTopic(
-  provider: ApiProvider,
-  onTopicSystemPrompt: string,
-  targetPrompt: string,
-): Promise<{ isOnTopic: boolean; tokenUsage?: TokenUsage }> {
-  const isOnTopicBody = JSON.stringify([
-    {
-      role: 'system',
-      content: onTopicSystemPrompt,
-    },
-    {
-      role: 'user',
-      content: targetPrompt,
-    },
-  ]);
-  const isOnTopicResp = await provider.callApi(isOnTopicBody, {
-    prompt: {
-      raw: isOnTopicBody,
-      label: 'on-topic',
-    },
-    vars: {},
-  });
-  TokenUsageTracker.getInstance().trackUsage(provider.id(), isOnTopicResp.tokenUsage);
-  if (provider.delay) {
-    logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
-    await sleep(provider.delay);
-  }
-  logger.debug('[IterativeTree] On-topic response', { response: isOnTopicResp });
-  if (isOnTopicResp.error) {
-    throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
-  }
-
-  const { onTopic } =
-    typeof isOnTopicResp.output === 'string'
-      ? extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output)
-      : isOnTopicResp.output;
-  logger.debug('[IterativeTree] Parsed onTopic value', { onTopic });
-  invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
-  return {
-    isOnTopic: onTopic,
-    tokenUsage: isOnTopicResp.tokenUsage,
-  };
-}
-
-/**
  * Updates the red team's conversation history with the latest interaction results.
  * @param targetResponse - The response from the target provider.
  * @param goal - The current goal or objective.
  * @param score - The evaluation score for the response.
- * @param isOnTopic - Whether the prompt was on-topic.
  * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
  * @param excludeTargetOutputFromAgenticAttackGeneration - Whether to exclude target output from the attack generation process.
  * @param explanation - The explanation from the judge.
@@ -342,7 +287,6 @@ export function updateRedteamHistory(
   targetResponse: string,
   goal: string,
   score: number,
-  isOnTopic: boolean,
   containsPenalizedPhrase: boolean,
   excludeTargetOutputFromAgenticAttackGeneration: boolean,
   explanation?: string,
@@ -353,9 +297,7 @@ export function updateRedteamHistory(
       ? dedent`
           OBJECTIVE: ${goal}
 
-          SCORE: ${score} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
-            containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
-          }
+          SCORE: ${score}${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}
           ${explanation ? `EXPLANATION: ${explanation}` : ''}
         `
       : dedent`
@@ -363,9 +305,7 @@ export function updateRedteamHistory(
 
           OBJECTIVE: ${goal}
 
-          SCORE: ${score} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
-            containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
-          }
+          SCORE: ${score}${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}
           ${explanation ? `EXPLANATION: ${explanation}` : ''}
         `,
   };
@@ -406,31 +346,7 @@ export function createTreeNode(
 }
 
 /**
- * Phase 1 pruning: Off-topic check
- * @param nodes - The list of nodes to prune.
- * @param redteamProvider - The OpenAI provider for the red team.
- * @param onTopicSystemPrompt - The system prompt for the on-topic check.
- * @param goal - The goal or objective for the red team.
- * @returns A promise that resolves to the pruned list of nodes.
- */
-async function pruneOffTopicNodes(
-  nodes: TreeNode[],
-  redteamProvider: ApiProvider,
-  onTopicSystemPrompt: string,
-  goal: string,
-): Promise<TreeNode[]> {
-  const remainingNodes: TreeNode[] = [];
-
-  for (const node of nodes) {
-    const { isOnTopic } = await checkIfOnTopic(redteamProvider, onTopicSystemPrompt, node.prompt);
-
-    if (isOnTopic) {
-      remainingNodes.push(node);
-    }
-  }
-
-  return remainingNodes;
-}
+ * Phase 1 pruning removed: assume on-topic due to goal alignment
 
 /**
  * Phase 2 pruning: Keep top w nodes by score
@@ -450,17 +366,9 @@ function pruneToWidth(nodes: TreeNode[], width: number): TreeNode[] {
  * @param goal - The goal or objective for the red team.
  * @returns The selected diverse nodes.
  */
-export async function selectNodes(
-  nodes: TreeNode[],
-  redteamProvider: ApiProvider,
-  onTopicSystemPrompt: string,
-  goal: string,
-): Promise<TreeNode[]> {
-  // First do Phase 1 pruning (off-topic check)
-  const onTopicNodes = await pruneOffTopicNodes(nodes, redteamProvider, onTopicSystemPrompt, goal);
-
-  // Then do Phase 2 pruning (keep top w scoring nodes)
-  return pruneToWidth(onTopicNodes, MAX_WIDTH);
+export async function selectNodes(nodes: TreeNode[]): Promise<TreeNode[]> {
+  // Keep top w scoring nodes
+  return pruneToWidth(nodes, MAX_WIDTH);
 }
 
 /**
@@ -471,7 +379,6 @@ export interface TreeSearchOutput {
   prompt: string;
   output: string;
   score: number;
-  isOnTopic: boolean;
   depth: number;
   parentId?: string; // UUID
   improvement?: string;
@@ -546,7 +453,7 @@ async function runRedteamConversation({
     `Starting red team conversation. Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHING_FACTOR=${BRANCHING_FACTOR}, MAX_ATTEMPTS=${MAX_ATTEMPTS}, TARGET_SCORE=${TARGET_SCORE} Goal: "${goal.substring(0, 50)}...".`,
   );
 
-  const { redteamSystemPrompt, onTopicSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
+  const { redteamSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
     nunjucks,
     goal,
     test?.metadata?.purpose,
@@ -624,12 +531,6 @@ async function runRedteamConversation({
           targetProvider,
         );
 
-        const { isOnTopic } = await checkIfOnTopic(
-          gradingProvider,
-          onTopicSystemPrompt,
-          targetPrompt,
-        );
-
         const targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
@@ -656,7 +557,7 @@ async function runRedteamConversation({
         );
 
         logger.debug(
-          `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, on-topic=${isOnTopic}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
+          `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
         );
 
         // Create new node for the next level
@@ -742,7 +643,6 @@ async function runRedteamConversation({
             depth,
             graderPassed,
             id: uuidv4(),
-            isOnTopic,
             output: targetResponse.output,
             parentId: node.id,
             prompt: targetPrompt,
@@ -782,7 +682,6 @@ async function runRedteamConversation({
             prompt: targetPrompt,
             output: bestResponse,
             score,
-            isOnTopic,
             depth,
             parentId: node.id,
             wasSelected: false,
@@ -819,7 +718,6 @@ async function runRedteamConversation({
             depth,
             graderPassed,
             id: uuidv4(),
-            isOnTopic,
             output: bestResponse,
             parentId: node.id,
             prompt: targetPrompt,
@@ -854,7 +752,6 @@ async function runRedteamConversation({
             targetResponse.output,
             goal,
             score,
-            isOnTopic,
             containsPenalizedPhrase,
             excludeTargetOutputFromAgenticAttackGeneration,
             explanation,
@@ -866,7 +763,6 @@ async function runRedteamConversation({
           graderPassed,
           id: uuidv4(),
           improvement,
-          isOnTopic,
           output: targetResponse.output,
           parentId: node.id,
           prompt: targetPrompt,
@@ -882,12 +778,7 @@ async function runRedteamConversation({
       }
     }
 
-    currentBestNodes = await selectNodes(
-      nextLevelNodes,
-      redteamProvider,
-      onTopicSystemPrompt,
-      goal,
-    );
+    currentBestNodes = await selectNodes(nextLevelNodes);
     logger.debug(
       `[Depth ${depth}] Exploration complete. Selected ${currentBestNodes.length} diverse nodes for next depth. Current best score: ${bestScore}. Max score: ${maxScore}`,
     );
@@ -923,7 +814,6 @@ async function runRedteamConversation({
     prompt: finalTargetPrompt,
     output: bestResponse,
     score: maxScore,
-    isOnTopic: true,
     depth: MAX_DEPTH - 1,
     parentId: bestNode.id,
     wasSelected: false,

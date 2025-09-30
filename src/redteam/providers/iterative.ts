@@ -1,29 +1,9 @@
 import dedent from 'dedent';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../remoteGeneration';
-import {
-  ATTACKER_SYSTEM_PROMPT,
-  CLOUD_ATTACKER_SYSTEM_PROMPT,
-  JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
-} from './prompts';
-import {
-  checkPenalizedPhrases,
-  createIterationContext,
-  getTargetResponse,
-  redteamProviderManager,
-  type TargetResponse,
-} from './shared';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -36,6 +16,25 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../types';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+} from './prompts';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -66,7 +65,6 @@ interface IterativeMetadata {
     prompt: string;
     output: string;
     score: number;
-    isOnTopic: boolean;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[];
@@ -122,8 +120,6 @@ export async function runRedteamConversation({
       })
     : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose: test?.metadata?.purpose });
 
-  const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
-
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
   const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
@@ -150,7 +146,6 @@ export async function runRedteamConversation({
     prompt: string;
     output: string;
     score: number;
-    isOnTopic: boolean;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
   }[] = [];
@@ -233,59 +228,6 @@ export async function runRedteamConversation({
       filters,
       targetProvider,
     );
-
-    // Is it on topic?
-    const isOnTopicBody = JSON.stringify([
-      {
-        role: 'system',
-        content: onTopicSystemPrompt,
-      },
-      {
-        role: 'user',
-        content: targetPrompt,
-      },
-    ]);
-    const isOnTopicResp = await gradingProvider.callApi(isOnTopicBody, {
-      prompt: {
-        raw: isOnTopicBody,
-        label: 'on-topic',
-      },
-      vars: {},
-    });
-    if (gradingProvider.delay) {
-      logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
-      await sleep(gradingProvider.delay);
-    }
-    logger.debug('[Iterative] Raw onTopic response', { response: isOnTopicResp });
-
-    if (isOnTopicResp.error) {
-      logger.info(`[Iterative] ${i + 1}/${numIterations} - OnTopic error`, {
-        error: isOnTopicResp.error,
-        response: isOnTopicResp,
-      });
-    }
-
-    let isOnTopic = false;
-    if (typeof isOnTopicResp.output === 'string') {
-      try {
-        isOnTopic = (extractFirstJsonObject(isOnTopicResp.output) as { onTopic: boolean }).onTopic;
-      } catch (err) {
-        logger.info(`[Iterative] ${i + 1}/${numIterations} - Failed to parse onTopic`, {
-          error: err,
-          response: isOnTopicResp,
-        });
-        continue;
-      }
-    } else {
-      isOnTopic = isOnTopicResp.output.onTopic;
-    }
-    logger.debug(`[Iterative] Parsed onTopic value: ${isOnTopic}`);
-    if (typeof isOnTopic !== 'boolean') {
-      logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - Could not parse a boolean from the onTopic request`,
-        { response: isOnTopicResp },
-      );
-    }
 
     const targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
@@ -472,7 +414,7 @@ export async function runRedteamConversation({
           ? dedent`
           OBJECTIVE: ${goal}
 
-          CURRENT SCORE: ${currentScore} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
+          CURRENT SCORE: ${currentScore}${
             containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
           }
           PREVIOUS BEST SCORE: ${previousScore}
@@ -483,7 +425,7 @@ export async function runRedteamConversation({
 
           OBJECTIVE: ${goal}
 
-          CURRENT SCORE: ${currentScore} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
+          CURRENT SCORE: ${currentScore}${
             containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
           }
           PREVIOUS BEST SCORE: ${previousScore}
@@ -508,7 +450,6 @@ export async function runRedteamConversation({
       prompt: targetPrompt,
       output: targetResponse.output,
       score: currentScore,
-      isOnTopic,
       graderPassed: storedGraderResult?.pass,
       guardrails: targetResponse.guardrails,
     });
