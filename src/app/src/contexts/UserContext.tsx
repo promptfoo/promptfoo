@@ -1,21 +1,14 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect } from 'react';
 
-import { fetchUserEmail } from '@app/utils/api';
+import { useUserStore } from '@app/stores/userStore';
 import { UserContext } from './UserContextDef';
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [email, setEmail] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { email, isLoading, setEmail, fetchEmail } = useUserStore();
 
   useEffect(() => {
-    const loadUserEmail = async () => {
-      const userEmail = await fetchUserEmail();
-      setEmail(userEmail);
-      setIsLoading(false);
-    };
-
-    loadUserEmail();
-  }, []);
+    fetchEmail();
+  }, [fetchEmail]);
 
   return (
     <UserContext.Provider value={{ email, setEmail, isLoading }}>{children}</UserContext.Provider>

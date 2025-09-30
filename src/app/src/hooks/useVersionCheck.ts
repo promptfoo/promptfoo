@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { callApi } from '@app/utils/api';
+import { useEffect } from 'react';
+import { useVersionStore } from '@app/stores/versionStore';
 
 interface VersionInfo {
   currentVersion: string;
@@ -22,63 +22,18 @@ interface UseVersionCheckResult {
   dismiss: () => void;
 }
 
-const STORAGE_KEY = 'promptfoo:update:dismissedVersion';
-
+/**
+ * Hook to check for Promptfoo version updates.
+ *
+ * This hook uses a Zustand store to share state across all components, preventing duplicate
+ * API requests when multiple components mount simultaneously.
+ */
 export function useVersionCheck(): UseVersionCheckResult {
-  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  const [dismissed, setDismissed] = useState(false);
-  const isMountedRef = useRef(true);
+  const { versionInfo, loading, error, dismissed, fetchVersion, dismiss } = useVersionStore();
 
   useEffect(() => {
-    isMountedRef.current = true;
-
-    const checkVersion = async () => {
-      try {
-        const response = await callApi('/version');
-        if (!response.ok) {
-          throw new Error('Failed to fetch version information');
-        }
-        const data: VersionInfo = await response.json();
-
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setVersionInfo(data);
-
-          // Check if this version update was already dismissed
-          const dismissedVersion = localStorage.getItem(STORAGE_KEY);
-          if (dismissedVersion === data.latestVersion) {
-            setDismissed(true);
-          }
-        }
-      } catch (err) {
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setError(err instanceof Error ? err : new Error('Unknown error'));
-        }
-      } finally {
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setLoading(false);
-        }
-      }
-    };
-
-    checkVersion();
-
-    // Cleanup function to mark component as unmounted
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const dismiss = () => {
-    if (versionInfo?.latestVersion) {
-      localStorage.setItem(STORAGE_KEY, versionInfo.latestVersion);
-      setDismissed(true);
-    }
-  };
+    fetchVersion();
+  }, [fetchVersion]);
 
   return {
     versionInfo,

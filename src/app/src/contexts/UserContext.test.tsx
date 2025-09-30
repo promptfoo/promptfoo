@@ -1,18 +1,27 @@
 import React, { useContext } from 'react';
 
-import * as api from '@app/utils/api';
+import { useUserStore } from '@app/stores/userStore';
+import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { UserProvider } from './UserContext';
 import { UserContext } from './UserContextDef';
 
-vi.mock('@app/utils/api');
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
+  fetchUserEmail: vi.fn(),
+  fetchUserId: vi.fn(),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
 
 describe('UserProvider', () => {
-  const mockedFetchUserEmail = vi.mocked(api.fetchUserEmail);
+  const mockedCallApi = callApi as Mock;
+  const initialState = useUserStore.getState();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset store to initial state
+    useUserStore.setState(initialState, true);
   });
 
   const TestConsumer = () => {
@@ -36,8 +45,18 @@ describe('UserProvider', () => {
     );
   };
 
-  const mockFetchUserEmail = (returnValue: string | null) => {
-    mockedFetchUserEmail.mockResolvedValue(returnValue);
+  const mockCallApi = (email: string | null) => {
+    if (email === null) {
+      mockedCallApi.mockResolvedValue({
+        ok: false,
+        status: 404,
+      } as Response);
+    } else {
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ email }),
+      } as unknown as Response);
+    }
   };
 
   const assertLoadingCompletedWithEmail = async (expectedEmail: string | null) => {
@@ -51,12 +70,12 @@ describe('UserProvider', () => {
     expect(emailElement).toBeInTheDocument();
     expect(emailElement).toHaveTextContent(expectedEmail || '');
 
-    expect(mockedFetchUserEmail).toHaveBeenCalledTimes(1);
+    expect(mockedCallApi).toHaveBeenCalledWith('/user/email');
   };
 
   it('should provide email as null and isLoading as true to its children before fetchUserEmail resolves', async () => {
     const testEmail = 'test.user@example.com';
-    mockFetchUserEmail(testEmail);
+    mockCallApi(testEmail);
 
     const TestConsumer = () => {
       const context = useContext(UserContext);
@@ -90,7 +109,7 @@ describe('UserProvider', () => {
     { scenario: 'valid email', email: 'test.user@example.com' },
     { scenario: 'null email', email: null },
   ])('should handle $scenario case after mounting', async ({ email }) => {
-    mockFetchUserEmail(email);
+    mockCallApi(email);
 
     render(
       <UserProvider>
@@ -104,7 +123,7 @@ describe('UserProvider', () => {
   it('should not update state after unmounting', async () => {
     const testEmail = 'test.user@example.com';
     const setEmailMock = vi.fn();
-    mockFetchUserEmail(testEmail);
+    mockCallApi(testEmail);
 
     const originalContext = React.createContext<any>({});
     const UserContextSpy = vi

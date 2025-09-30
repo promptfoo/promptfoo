@@ -1,6 +1,7 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { callApi } from '@app/utils/api';
+import { useVersionStore } from '@app/stores/versionStore';
 import { useVersionCheck } from './useVersionCheck';
 
 vi.mock('@app/utils/api', () => ({
@@ -11,9 +12,13 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 describe('useVersionCheck', () => {
+  const initialState = useVersionStore.getState();
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    // Reset store to initial state
+    useVersionStore.setState(initialState, true);
   });
 
   it('should initialize with loading=true, error=null, dismissed=false, and versionInfo=null', () => {

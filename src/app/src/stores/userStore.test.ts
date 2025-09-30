@@ -106,7 +106,7 @@ describe('useUserStore', () => {
 
     it('should return early when email is already set', async () => {
       const initialEmail = 'existing@example.com';
-      useUserStore.setState({ email: initialEmail });
+      useUserStore.setState({ email: initialEmail, _emailFetched: true });
       expect(useUserStore.getState().email).toBe(initialEmail);
 
       await act(async () => {
@@ -115,6 +115,30 @@ describe('useUserStore', () => {
 
       expect(mockedCallApi).not.toHaveBeenCalled();
       expect(useUserStore.getState().email).toBe(initialEmail);
+    });
+
+    it('should deduplicate concurrent fetchEmail calls', async () => {
+      verifyInitialState();
+      const testEmail = 'concurrent@example.com';
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ email: testEmail }),
+      });
+
+      // Make multiple concurrent calls
+      await act(async () => {
+        await Promise.all([
+          useUserStore.getState().fetchEmail(),
+          useUserStore.getState().fetchEmail(),
+          useUserStore.getState().fetchEmail(),
+          useUserStore.getState().fetchEmail(),
+        ]);
+      });
+
+      // API should only be called once, not four times
+      expect(mockedCallApi).toHaveBeenCalledTimes(1);
+      expect(useUserStore.getState().email).toBe(testEmail);
+      expect(useUserStore.getState().isLoading).toBe(false);
     });
   });
 
@@ -131,9 +155,9 @@ describe('useUserStore', () => {
       verifyUserIdState(testUserId);
     });
 
-    it('should not make an API call if userId is already present in the state', async () => {
+    it('should not make an API call if userId is already fetched', async () => {
       const existingUserId = 'some-user-id';
-      useUserStore.setState({ userId: existingUserId });
+      useUserStore.setState({ userId: existingUserId, _userIdFetched: true });
 
       await act(async () => {
         await useUserStore.getState().fetchUserId();
@@ -151,6 +175,26 @@ describe('useUserStore', () => {
       });
 
       verifyUserIdState(null);
+    });
+
+    it('should deduplicate concurrent fetchUserId calls', async () => {
+      verifyUserIdState(null);
+      const testUserId = 'concurrent-user-id';
+      mockedFetchUserId.mockResolvedValue(testUserId);
+
+      // Make multiple concurrent calls
+      await act(async () => {
+        await Promise.all([
+          useUserStore.getState().fetchUserId(),
+          useUserStore.getState().fetchUserId(),
+          useUserStore.getState().fetchUserId(),
+          useUserStore.getState().fetchUserId(),
+        ]);
+      });
+
+      // API should only be called once, not four times
+      expect(mockedFetchUserId).toHaveBeenCalledTimes(1);
+      expect(useUserStore.getState().userId).toBe(testUserId);
     });
   });
 

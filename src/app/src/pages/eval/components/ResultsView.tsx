@@ -3,7 +3,8 @@ import React from 'react';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
+import { callApi, updateEvalAuthor } from '@app/utils/api';
+import { useUserStore } from '@app/stores/userStore';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ClearIcon from '@mui/icons-material/Clear';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -440,13 +441,13 @@ export default function ResultsView({
     }
   };
 
-  const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
+  const currentUserEmail = useUserStore((state) => state.email);
+  const fetchEmail = useUserStore((state) => state.fetchEmail);
 
+  // Defensively fetch email on mount to ensure it's available
   React.useEffect(() => {
-    fetchUserEmail().then((email) => {
-      setCurrentUserEmail(email);
-    });
-  }, []);
+    fetchEmail();
+  }, [fetchEmail]);
 
   const handleEditAuthor = async (newAuthor: string) => {
     if (evalId) {

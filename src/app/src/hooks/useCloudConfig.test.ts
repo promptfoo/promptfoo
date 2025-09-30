@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { callApi } from '../utils/api';
+import { useCloudConfigStore } from '../stores/cloudConfigStore';
 import useCloudConfig from './useCloudConfig';
 
 vi.mock('../utils/api', () => ({
@@ -11,8 +12,12 @@ vi.mock('../utils/api', () => ({
 }));
 
 describe('useCloudConfig', () => {
+  const initialState = useCloudConfigStore.getState();
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset the store to initial state before each test
+    useCloudConfigStore.setState(initialState, true);
   });
 
   it('should initialize with isLoading=true, data=null, and error=null', () => {
@@ -245,8 +250,8 @@ describe('useCloudConfig', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Data should remain unchanged when refetch fails
-      expect(result.current.data).toEqual(mockCloudConfig);
+      // Data should be cleared when refetch fails (store clears data on refetch)
+      expect(result.current.data).toBeNull();
       expect(result.current.error).toBe('Refetch failed');
       expect(callApi).toHaveBeenCalledTimes(2);
     });
@@ -316,5 +321,39 @@ describe('useCloudConfig', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     expect(callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should share state across multiple hook instances', async () => {
+    const mockCloudConfig = {
+      appUrl: 'https://app.promptfoo.com',
+      isEnabled: true,
+    };
+
+    (callApi as Mock).mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(mockCloudConfig),
+    });
+
+    // Render multiple instances of the hook
+    const { result: result1 } = renderHook(() => useCloudConfig());
+    const { result: result2 } = renderHook(() => useCloudConfig());
+    const { result: result3 } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(result1.current.isLoading).toBe(false);
+    });
+
+    // API should only be called once, not three times
+    expect(callApi).toHaveBeenCalledTimes(1);
+
+    // All instances should have the same data
+    expect(result1.current.data).toEqual(mockCloudConfig);
+    expect(result2.current.data).toEqual(mockCloudConfig);
+    expect(result3.current.data).toEqual(mockCloudConfig);
+
+    // All instances should have the same loading state
+    expect(result1.current.isLoading).toBe(false);
+    expect(result2.current.isLoading).toBe(false);
+    expect(result3.current.isLoading).toBe(false);
   });
 });
