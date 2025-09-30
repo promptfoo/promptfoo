@@ -543,9 +543,8 @@ async function runRedteamConversation({
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
         if (targetResponse.error) {
           logger.info(
-            `[IterativeTree] Target error at depth ${depth}, attempt ${attempts}: ${targetResponse.error}. Full response: ${JSON.stringify(
-              targetResponse,
-            )}`,
+            `[IterativeTree] Target error at depth ${depth}, attempt ${attempts}: ${targetResponse.error}`,
+            { targetResponse },
           );
           // Push a node to history with the output we have, then skip scoring for this branch
           treeOutputs.push({

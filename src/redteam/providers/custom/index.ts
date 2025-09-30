@@ -424,9 +424,8 @@ export class CustomProvider implements ApiProvider {
           if (lastResponse.error) {
             lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
             logger.info(
-              `[Custom] ROUND ${roundNum} - Target error after unblocking: ${lastResponse.error}. Full response: ${JSON.stringify(
-                lastResponse,
-              )}`,
+              `[Custom] ROUND ${roundNum} - Target error after unblocking: ${lastResponse.error}.`,
+              { lastResponse },
             );
             continue;
           }
@@ -754,7 +753,7 @@ export class CustomProvider implements ApiProvider {
     logger.debug(targetPrompt);
 
     const targetResponse = await getTargetResponse(provider, targetPrompt, context, options);
-    logger.debug(`[Custom] Target response: ${JSON.stringify(targetResponse)}`);
+    logger.debug('[Custom] Target response', { response: targetResponse });
 
     invariant(
       Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
