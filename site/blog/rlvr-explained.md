@@ -403,7 +403,7 @@ def code_verifier_unsafe_example(generated_code: str, test_cases: list) -> float
 # Example: subprocess with timeout, Docker, or cloud functions
 ```
 
-**What works:** Deterministic checking, fast execution (<100ms), clear failure modes
+**What works:** Deterministic checking, fast execution (under 100ms), clear failure modes
 **What doesn't:** Style preferences, efficiency requirements, partial credit schemes
 
 ### Text2SQL Verifiers (Medium Mode)
@@ -468,7 +468,7 @@ requirements = {
 
 **Good verifiers are:**
 
-1. **Fast** (<100ms per check)
+1. **Fast** (under 100ms per check)
 2. **Deterministic** (same input → same output)
 3. **High coverage** (>90% of errors caught)
 4. **Interpretable** (easy to debug false positives/negatives)
@@ -477,7 +477,7 @@ requirements = {
 **Anti-patterns:**
 
 - Keyword matching (easily gamed)
-- Slow verifiers (>1s per check kills training speed)
+- Slow verifiers (over 1s per check kills training speed)
 - Non-deterministic checks (external API calls)
 - Verifiers with side effects (database writes, API charges)
 
@@ -539,7 +539,7 @@ def test_verifier_coverage(verifier, test_cases):
     return coverage, failures
 ```
 
-**Target coverage:** >90% (below 70% is exploitable)
+**Target coverage:** Over 90% (below 70% is exploitable)
 
 ### Using Evaluation Harnesses
 
