@@ -188,6 +188,8 @@ function DownloadMenu() {
       ...table.head.vars,
       ...table.head.prompts.flatMap((prompt) => [
         `[${prompt.provider}] ${prompt.label}`,
+        'Grader Reason',
+        'Comment',
         'Latency (ms)',
       ]),
     ];
@@ -199,13 +201,17 @@ function DownloadMenu() {
         ...row.vars,
         ...row.outputs
           .filter((output): output is EvaluateTableOutput => output != null)
-          .flatMap(({ pass, text, failureReason, latencyMs }) => [
+          .flatMap(({ pass, text, failureReason, gradingResult, metadata, latencyMs }) => [
             // Add pass/fail/error prefix to text
             (pass
               ? '[PASS] '
               : failureReason === ResultFailureReason.ASSERT
                 ? '[FAIL] '
                 : '[ERROR] ') + (text || ''),
+            // Add grader reason
+            gradingResult?.reason || '',
+            // Add comment
+            gradingResult?.comment || '',
             // Add latency
             latencyMs ?? '',
           ]),

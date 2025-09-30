@@ -368,7 +368,7 @@ describe('DownloadMenu', () => {
     });
   });
 
-  it('includes latency data in CSV export headers and rows', async () => {
+  it('includes grader reason, comment, and latency data in CSV export headers and rows', async () => {
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       table: {
         head: {
@@ -383,8 +383,19 @@ describe('DownloadMenu', () => {
             test: { vars: { testVar: 'value' } },
             vars: ['value1', 'value2'],
             outputs: [
-              { pass: true, text: 'output1', latencyMs: 150 },
-              { pass: false, text: 'output2', latencyMs: 250, failureReason: 1 }, // ASSERT = 1
+              {
+                pass: true,
+                text: 'output1',
+                latencyMs: 150,
+                gradingResult: { reason: 'Good response', comment: 'Well done' },
+              },
+              {
+                pass: false,
+                text: 'output2',
+                latencyMs: 250,
+                failureReason: 1, // ASSERT = 1
+                gradingResult: { reason: 'Failed assertion', comment: 'Needs improvement' },
+              },
             ],
           },
           {
@@ -392,7 +403,7 @@ describe('DownloadMenu', () => {
             vars: ['value3', 'value4'],
             outputs: [
               { pass: true, text: 'output3', latencyMs: 100 },
-              { pass: true, text: 'output4' }, // No latency
+              { pass: true, text: 'output4' }, // No latency, grader reason, or comment
             ],
           },
         ],
@@ -410,25 +421,55 @@ describe('DownloadMenu', () => {
       expect(calls.length).toBeGreaterThan(0);
       const rows = calls[0][0] as string[][];
 
-      // Check headers include latency columns
+      // Check headers include grader reason, comment, and latency columns
+      expect(rows[0]).toContain('Grader Reason');
+      expect(rows[0]).toContain('Comment');
       expect(rows[0]).toContain('Latency (ms)');
+      expect(rows[0].filter((h: string) => h === 'Grader Reason')).toHaveLength(2); // Two prompts
+      expect(rows[0].filter((h: string) => h === 'Comment')).toHaveLength(2); // Two prompts
       expect(rows[0].filter((h: string) => h === 'Latency (ms)')).toHaveLength(2); // Two prompts
 
-      // Check structure: var1, var2, [openai] gpt-4, Latency (ms), [anthropic] claude, Latency (ms)
+      // Check structure: var1, var2, [openai] gpt-4, Grader Reason, Comment, Latency (ms), [anthropic] claude, Grader Reason, Comment, Latency (ms)
       expect(rows[0]).toEqual([
         'var1',
         'var2',
         '[openai] gpt-4',
+        'Grader Reason',
+        'Comment',
         'Latency (ms)',
         '[anthropic] claude',
+        'Grader Reason',
+        'Comment',
         'Latency (ms)',
       ]);
 
-      // Check first row data: value1, value2, [PASS] output1, 150, [FAIL] output2, 250
-      expect(rows[1]).toEqual(['value1', 'value2', '[PASS] output1', 150, '[FAIL] output2', 250]);
+      // Check first row data: value1, value2, [PASS] output1, Good response, Well done, 150, [FAIL] output2, Failed assertion, Needs improvement, 250
+      expect(rows[1]).toEqual([
+        'value1',
+        'value2',
+        '[PASS] output1',
+        'Good response',
+        'Well done',
+        150,
+        '[FAIL] output2',
+        'Failed assertion',
+        'Needs improvement',
+        250,
+      ]);
 
-      // Check second row: value3, value4, [PASS] output3, 100, [PASS] output4, ''
-      expect(rows[2]).toEqual(['value3', 'value4', '[PASS] output3', 100, '[PASS] output4', '']);
+      // Check second row: value3, value4, [PASS] output3, '', '', 100, [PASS] output4, '', '', ''
+      expect(rows[2]).toEqual([
+        'value3',
+        'value4',
+        '[PASS] output3',
+        '',
+        '',
+        100,
+        '[PASS] output4',
+        '',
+        '',
+        '',
+      ]);
     });
   });
 
