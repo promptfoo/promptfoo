@@ -3,6 +3,10 @@ import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+/**
+ * As the name implies, this function "handles" redteam assertions by either calling the
+ * grader or preferably returning a `storedGraderResult` if it exists on the provider response.
+ */
 export const handleRedteam = async ({
   assertion,
   baseType,
@@ -20,12 +24,14 @@ export const handleRedteam = async ({
     assertion.type.includes(test.metadata.pluginId)
   ) {
     const storedResult = providerResponse.metadata.storedGraderResult;
+
     return {
+      ...storedResult,
       assertion: {
-        ...assertion,
+        // Prefer the stored assertion if it is not null.
+        ...(storedResult.assertion ?? assertion),
         value: storedResult.assertion?.value || assertion.value,
       },
-      ...storedResult,
       metadata: {
         ...test.metadata,
         ...storedResult.metadata,
@@ -43,12 +49,13 @@ export const handleRedteam = async ({
     provider,
     renderedValue,
   );
+
   return {
+    ...grade,
     assertion: {
-      ...assertion,
+      ...(grade.assertion ?? assertion),
       value: rubric,
     },
-    ...grade,
     suggestions,
     metadata: {
       // Pass through all test metadata for redteam
