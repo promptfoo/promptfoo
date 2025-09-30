@@ -95,7 +95,8 @@ Three failure modes account for most RLVR problems. Unlike traditional RL issues
 
 ### 1. Partial Verifiers Create Exploitable Gaps
 
-**The Problem:**
+**Your model will learn to cheat any test that isn't comprehensive.**
+
 A verifier catching 60% of errors creates a 40% gap. Models find and exploit these gaps.
 
 **Real Example from SQL Generation:**
@@ -134,6 +135,8 @@ def strong_sql_verifier(sql_query, expected_results, db_connection):
 
 ### 2. Spurious Rewards: Models Improve with Random Signals
 
+**Your gains might be an accidental side effect of training, not a result of your verifier.**
+
 [Research from June 2025](https://arxiv.org/abs/2506.10947) found Qwen2.5-Math-7B improved 21.4% on MATH-500 with _random_ rewards, nearly matching the 29.1% gain from ground truth rewards.
 
 **Why this happens:**
@@ -160,6 +163,8 @@ def random_baseline_test(model, dataset):
 Some "RLVR gains" are artifacts of the training process. Validate on held-out data from different distributions. Test across multiple model families.
 
 ### 3. Entropy Instability in Value-Free RL
+
+**Value-free methods are fast but can make your model's outputs collapse into repetition or explode into gibberish.**
 
 GRPO and value-free algorithms can cause entropy collapse (outputs become deterministic) or explosion (outputs become random) without proper baseline selection.
 
@@ -230,7 +235,7 @@ def curate_training_data(dataset, base_model):
 
 These techniques reduce compute by 60-70% with minimal performance loss.
 
-## The Core Debate: Sampler vs Thinker
+## Sampler or Thinker? The Core RLVR Debate
 
 [Tsinghua research (April 2025)](https://arxiv.org/abs/2504.13837) challenges RLVR's effectiveness: "Reasoning LLMs Are Just Efficient Samplers." They found RLVR-trained models generate paths already in the base model's distribution.
 
@@ -575,9 +580,7 @@ The data is unambiguous: 70-80% of RLVR's improvements come from search compress
 
 The rule is simple: if you can write a checker, you can scale learning. Where ground truth doesn't exist, RLVR fails and human preference data remains superior.
 
-The real challenge isn't implementing RLVR—it's rigorously measuring whether you've actually lifted your model's reasoning ceiling or just optimized its search. Use the pass@k analysis in this post. Run the random baseline test. Demand proof that you're getting capability gains, not just compression.
-
-The future of reliable AI depends on knowing the difference.
+The real engineering challenge isn't just implementing RLVR; it's proving what you've actually gained. We should be running pass@k analysis to distinguish compression from capability. We should be running random baseline tests to check for spurious rewards. As a community, we need to demand proof of genuine improvement, because the future of reliable AI depends on us knowing the difference.
 
 ---
 
