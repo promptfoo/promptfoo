@@ -29,7 +29,8 @@ The `anthropic` provider supports the following models via the messages API:
 | -------------------------------------------------------------------------- | -------------------------------- |
 | `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Latest Claude 4.1 Opus model     |
 | `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Latest Claude 4 Opus model       |
-| `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Latest Claude 4 Sonnet model     |
+| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Latest Claude 4.5 Sonnet model   |
+| `anthropic:messages:claude-sonnet-4-latest` (claude-sonnet-4-latest)       | Latest Claude 4 Sonnet model     |
 | `anthropic:messages:claude-3-7-sonnet-20250219` (claude-3-7-sonnet-latest) | Latest Claude 3.7 Sonnet model   |
 | `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Latest Claude 3.5 Sonnet model   |
 | `anthropic:messages:claude-3-5-sonnet-20240620`                            | Previous Claude 3.5 Sonnet model |
@@ -45,6 +46,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | ----------------- | ----------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
 | Claude 4.1 Opus   | claude-opus-4-1-20250805                              | anthropic.claude-opus-4-1-20250805-v1:0                    | claude-opus-4-1@20250805                                |
 | Claude 4 Opus     | claude-opus-4-20250514 (claude-opus-4-latest)         | anthropic.claude-opus-4-20250514-v1:0                      | claude-opus-4@20250514                                  |
+| Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5-latest) | anthropic.claude-sonnet-4-5-20250929-v1:0                  | claude-sonnet-4-5@20250929                              |
 | Claude 4 Sonnet   | claude-sonnet-4-20250514 (claude-sonnet-4-latest)     | anthropic.claude-sonnet-4-20250514-v1:0                    | claude-sonnet-4@20250514                                |
 | Claude 3.7 Sonnet | claude-3-7-sonnet-20250219 (claude-3-7-sonnet-latest) | anthropic.claude-3-7-sonnet-20250219-v1:0                  | claude-3-7-sonnet@20250219                              |
 | Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 (claude-3-5-sonnet-latest) | anthropic.claude-3-5-sonnet-20241022-v2:0                  | claude-3-5-sonnet-v2@20241022                           |
@@ -108,7 +110,7 @@ Example configuration with options and prompts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       temperature: 0.0
       max_tokens: 512
@@ -124,7 +126,7 @@ The Anthropic provider supports tool use (or function calling). Here's an exampl
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       tools:
         - name: get_weather
@@ -154,7 +156,7 @@ The web fetch tool allows Claude to retrieve full content from web pages and PDF
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       tools:
         - type: web_fetch_20250910
@@ -186,7 +188,7 @@ The web search tool allows Claude to search the internet for information:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       tools:
         - type: web_search_20250305
@@ -208,7 +210,7 @@ You can use both tools together for comprehensive web information gathering:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       tools:
         - type: web_search_20250305
@@ -253,7 +255,7 @@ Supported on all Claude 3, 3.5, and 4 models. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
   - file://prompts.yaml
 ```
@@ -288,7 +290,7 @@ Claude can provide detailed citations when answering questions about documents. 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
   - file://prompts.yaml
 ```
@@ -315,7 +317,7 @@ Claude supports an extended thinking capability that allows you to see the model
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       max_tokens: 20000
       thinking:
@@ -374,7 +376,7 @@ By default, thinking content is included in the response output. You can control
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       thinking:
         type: 'enabled'
@@ -411,7 +413,7 @@ Claude 4 models provide enhanced output capabilities and extended thinking suppo
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       max_tokens: 64000 # Claude 4 Sonnet supports up to 64K output tokens
       thinking:
@@ -444,7 +446,7 @@ You can override the grading provider in several ways:
 ```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
-    provider: anthropic:messages:claude-sonnet-4-20250514
+    provider: anthropic:messages:claude-sonnet-4-5-20250929
 ```
 
 2. For individual assertions:
@@ -454,7 +456,7 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: anthropic:messages:claude-sonnet-4-20250514
+      id: anthropic:messages:claude-sonnet-4-5-20250929
       config:
         temperature: 0.0
 ```
@@ -467,7 +469,7 @@ tests:
       question: What is the capital of France?
     options:
       provider:
-        id: anthropic:messages:claude-sonnet-4-20250514
+        id: anthropic:messages:claude-sonnet-4-5-20250929
     assert:
       - type: llm-rubric
         value: Answer should mention Paris
