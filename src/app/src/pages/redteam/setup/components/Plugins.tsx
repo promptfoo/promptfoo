@@ -11,7 +11,6 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { Grid2 } from '@mui/material';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -43,6 +42,7 @@ import {
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   HUGGINGFACE_GATED_PLUGINS,
+  ISO_42001_MAPPING,
   MCP_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
@@ -102,6 +102,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
     );
   });
+
+  // Track if user has interacted to prevent config updates from overriding user selections
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
   const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>(() => {
@@ -175,8 +178,28 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
   }, [debouncedPlugins]);
 
+  // Sync selectedPlugins from config only on initial load or when user hasn't interacted
+  useEffect(() => {
+    if (!hasUserInteracted) {
+      const configPlugins = new Set(
+        config.plugins
+          .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
+          .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
+      );
+
+      // Only update if the sets are actually different to avoid unnecessary re-renders
+      if (
+        configPlugins.size !== selectedPlugins.size ||
+        !Array.from(configPlugins).every((plugin) => selectedPlugins.has(plugin))
+      ) {
+        setSelectedPlugins(configPlugins);
+      }
+    }
+  }, [config.plugins, hasUserInteracted, selectedPlugins]);
+
   const handlePluginToggle = useCallback(
     (plugin: Plugin) => {
+      setHasUserInteracted(true);
       setSelectedPlugins((prev) => {
         const newSet = new Set(prev);
 
@@ -223,6 +246,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       feature: 'redteam_config_plugins_preset_selected',
       preset: preset.name,
     });
+    setHasUserInteracted(true);
     if (preset.name === 'Custom') {
       setIsCustomMode(true);
     } else {
@@ -374,6 +398,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'EU AI Act',
       plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
+    },
+    {
+      name: 'ISO 42001',
+      plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
     },
   ];
 
@@ -695,32 +723,24 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 Presets
               </Typography>
 
-              <Grid2 container spacing={2} sx={{ mb: 3 }}>
+              <Grid spacing={2} container sx={{ mb: 3 }}>
                 {presets.map((preset) => {
                   const isSelected =
                     preset.name === 'Custom'
                       ? isCustomMode
                       : preset.name === currentlySelectedPreset?.name;
                   return (
-                    <Grid
-                      item
-                      xs={12}
-                      sm={6}
-                      md={4}
-                      lg={3}
-                      key={preset.name}
-                      sx={{ minWidth: '200px' }}
-                    >
+                    <Box key={preset.name}>
                       <PresetCard
                         name={preset.name}
                         description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
                         isSelected={isSelected}
                         onClick={() => handlePresetSelect(preset)}
                       />
-                    </Grid>
+                    </Box>
                   );
                 })}
-              </Grid2>
+              </Grid>
             </Box>
 
             {/* Search and Filter section */}
@@ -795,6 +815,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <Box
                 component="span"
                 onClick={() => {
+                  setHasUserInteracted(true);
                   filteredPlugins.forEach(({ plugin }) => {
                     if (!selectedPlugins.has(plugin)) {
                       handlePluginToggle(plugin);
@@ -807,6 +828,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <Box
                 component="span"
                 onClick={() => {
+                  setHasUserInteracted(true);
                   filteredPlugins.forEach(({ plugin }) => {
                     if (selectedPlugins.has(plugin)) {
                       handlePluginToggle(plugin);
@@ -1658,6 +1680,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     size="small"
                     fullWidth
                     onClick={() => {
+                      setHasUserInteracted(true);
                       selectedPlugins.forEach((plugin) => handlePluginToggle(plugin));
                     }}
                     sx={{ fontSize: '0.875rem' }}

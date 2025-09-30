@@ -6,7 +6,7 @@ import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import * as os from 'os';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
@@ -485,7 +485,11 @@ export function parsePathOrGlob(
     }
   }
 
-  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
+  // Check for glob patterns in the original path or the resolved path
+  // On Windows, normalize separators for cross-platform glob pattern detection
+  const normalizedFilePath = filePath.replace(/\\/g, '/');
+  const isPathPattern =
+    stats?.isDirectory() || hasMagic(promptPath) || hasMagic(normalizedFilePath);
   const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
   return {
     extension: isPathPattern ? undefined : path.parse(safeFilename).ext,

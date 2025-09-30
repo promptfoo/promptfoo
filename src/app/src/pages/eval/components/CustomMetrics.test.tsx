@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import CustomMetrics from './CustomMetrics';
 
 describe('CustomMetrics', () => {
@@ -133,30 +133,6 @@ describe('CustomMetrics', () => {
 
     expect(screen.queryByTestId('metric-value-metric1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('metric-value-metric2')).toHaveTextContent('0');
-  });
-
-  it('calls onSearchTextChange when metric is clicked', () => {
-    const onSearchTextChange = vi.fn();
-    const lookup = {
-      metric1: 10,
-    };
-
-    render(<CustomMetrics lookup={lookup} onSearchTextChange={onSearchTextChange} />);
-
-    fireEvent.click(screen.getByTestId('metric-metric1'));
-    expect(onSearchTextChange).toHaveBeenCalledWith('metric=metric1:');
-  });
-
-  it('calls onMetricFilter with the metric name when a metric chip is clicked and onMetricFilter is provided', () => {
-    const onMetricFilter = vi.fn();
-    const lookup = {
-      metric1: 10,
-    };
-
-    render(<CustomMetrics lookup={lookup} onMetricFilter={onMetricFilter} />);
-
-    fireEvent.click(screen.getByTestId('metric-metric1'));
-    expect(onMetricFilter).toHaveBeenCalledWith('metric1');
   });
 
   it('displays metric names correctly', () => {

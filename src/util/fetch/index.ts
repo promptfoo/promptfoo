@@ -3,7 +3,7 @@ import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
-import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
+import { Agent, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -13,9 +13,7 @@ import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
-
-// Override global fetch
-global.fetch = monkeyPatchFetch;
+import type { FetchOptions } from './types';
 
 /**
  * Options for configuring TLS in proxy connections
@@ -28,14 +26,6 @@ interface ProxyTlsOptions {
 }
 
 /**
- * Extended options for fetch requests with promptfoo-specific headers
- */
-interface PromptfooRequestInit extends RequestInit {
-  // Make headers type compatible with standard HeadersInit
-  headers?: HeadersInit;
-}
-
-/**
  * Error with additional system information
  */
 interface SystemError extends Error {
@@ -43,12 +33,100 @@ interface SystemError extends Error {
   cause?: unknown;
 }
 
+/**
+ * Cache for agents to avoid recreating them on every request
+ */
+interface AgentCache {
+  agent: Agent | ProxyAgent;
+}
+
+// Cache multiple agents based on their configuration
+const agentCache = new Map<string, AgentCache>();
+
+/**
+ * Clear the cached agents - primarily for testing
+ */
+export function clearAgentCache(): void {
+  agentCache.clear();
+}
+
+/**
+ * Generate a cache key based on the agent configuration
+ */
+function getAgentCacheKey(
+  proxyUrl: string,
+  tlsOptions: ConnectionOptions,
+  caCertPath?: string,
+): string {
+  // Create a deterministic key based on the configuration
+  const tlsConfig = JSON.stringify({
+    rejectUnauthorized: tlsOptions.rejectUnauthorized,
+    ca: tlsOptions.ca ? 'present' : 'absent', // Don't include actual CA in key, just its presence
+  });
+  return `${proxyUrl}|${tlsConfig}|${caCertPath || ''}`;
+}
+
+/**
+ * Get or create an agent based on the current configuration
+ */
+function getOrCreateAgent(url: string): Agent | ProxyAgent {
+  const tlsOptions: ConnectionOptions = {
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+  };
+
+  // Support custom CA certificates
+  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
+  if (caCertPath) {
+    try {
+      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
+      const ca = fs.readFileSync(resolvedPath, 'utf8');
+      tlsOptions.ca = ca;
+      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+    } catch (e) {
+      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+    }
+  }
+
+  const proxyUrl = getProxyForUrl(url);
+  const cacheKey = getAgentCacheKey(proxyUrl, tlsOptions, caCertPath);
+  const cachedEntry = agentCache.get(cacheKey);
+  if (cachedEntry) {
+    if (proxyUrl) {
+      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)} (cached agent)`);
+    }
+
+    return cachedEntry.agent;
+  }
+
+  // Create a new agent
+  let agent: Agent | ProxyAgent;
+  if (proxyUrl) {
+    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+    agent = new ProxyAgent({
+      uri: proxyUrl,
+      proxyTls: tlsOptions,
+      requestTls: tlsOptions,
+      headersTimeout: REQUEST_TIMEOUT_MS,
+    } as ProxyTlsOptions);
+  } else {
+    logger.debug('Creating new Agent (no proxy)');
+    agent = new Agent({
+      headersTimeout: REQUEST_TIMEOUT_MS,
+    });
+  }
+
+  // Cache the agent
+  agentCache.set(cacheKey, { agent });
+
+  return agent;
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: FetchOptions = {},
 ): Promise<Response> {
   let finalUrl = url;
-  let finalUrlString: string | undefined;
+  let finalUrlString: string | undefined = undefined;
 
   if (typeof url === 'string') {
     finalUrlString = url;
@@ -58,12 +136,18 @@ export async function fetchWithProxy(
     finalUrlString = url.url;
   }
 
-  const finalOptions: PromptfooRequestInit = {
+  if (!finalUrlString) {
+    throw new Error('Invalid URL');
+  }
+
+  // This is overridden globally but Node v20 is still complaining so we need to add it here too
+  const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...options,
     headers: {
       ...(options.headers as Record<string, string>),
       'x-promptfoo-version': VERSION,
     },
+    dispatcher: getOrCreateAgent(finalUrlString),
   };
 
   if (typeof url === 'string') {
@@ -97,46 +181,12 @@ export async function fetchWithProxy(
     }
   }
 
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-  };
-
-  // Support custom CA certificates
-  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
-  if (caCertPath) {
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = fs.readFileSync(resolvedPath, 'utf8');
-      tlsOptions.ca = ca;
-      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
-    } catch (e) {
-      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
-    }
-  }
-  const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
-
-  if (proxyUrl) {
-    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-    const agent = new ProxyAgent({
-      uri: proxyUrl,
-      proxyTls: tlsOptions,
-      requestTls: tlsOptions,
-      headersTimeout: REQUEST_TIMEOUT_MS,
-    } as ProxyTlsOptions);
-    setGlobalDispatcher(agent);
-  } else {
-    const agent = new Agent({
-      headersTimeout: REQUEST_TIMEOUT_MS,
-    });
-    setGlobalDispatcher(agent);
-  }
-
-  return await fetch(finalUrl, finalOptions);
+  return await monkeyPatchFetch(finalUrl, finalOptions);
 }
 
 export function fetchWithTimeout(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: FetchOptions = {},
   timeout: number,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
@@ -209,9 +259,11 @@ export async function handleRateLimit(response: Response): Promise<void> {
 /**
  * Fetch with automatic retries and rate limit handling
  */
+export type { FetchOptions } from './types';
+
 export async function fetchWithRetries(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: FetchOptions = {},
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {

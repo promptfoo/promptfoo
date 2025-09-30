@@ -43,6 +43,7 @@ jest.mock('fs', () => ({
 
 jest.mock('zlib', () => ({
   createGzip: jest.fn(),
+  gzip: jest.fn(),
 }));
 
 jest.mock('../../src/database', () => ({

@@ -28,6 +28,27 @@ import type { TokenUsage } from '../../types/shared';
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
   value === undefined ? undefined : typeof value === 'string' ? Number(value) : value;
 
+export type BedrockModelFamily =
+  | 'claude'
+  | 'nova'
+  | 'llama'
+  | 'llama2'
+  | 'llama3'
+  | 'llama3.1'
+  | 'llama3_1'
+  | 'llama3.2'
+  | 'llama3_2'
+  | 'llama3.3'
+  | 'llama3_3'
+  | 'llama4'
+  | 'mistral'
+  | 'cohere'
+  | 'ai21'
+  | 'titan'
+  | 'deepseek'
+  | 'openai'
+  | 'qwen';
+
 interface BedrockOptions {
   accessKeyId?: string;
   apiKey?: string;
@@ -39,6 +60,8 @@ interface BedrockOptions {
   guardrailVersion?: string;
   trace?: Trace;
   showThinking?: boolean;
+  endpoint?: string;
+  inferenceModelType?: BedrockModelFamily;
 }
 
 export interface TextGenerationOptions {
@@ -319,6 +342,32 @@ export interface BedrockOpenAIGenerationOptions extends BedrockOptions {
   presence_penalty?: number;
   stop?: string[];
   reasoning_effort?: 'low' | 'medium' | 'high';
+}
+
+interface BedrockQwenGenerationOptions extends BedrockOptions {
+  max_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  stop?: string[];
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  tools?: {
+    type: 'function';
+    function: {
+      name: string;
+      description: string;
+      parameters: any;
+    };
+  }[];
+  tool_choice?:
+    | 'auto'
+    | 'none'
+    | {
+        type: 'function';
+        function: {
+          name: string;
+        };
+      };
 }
 
 export interface IBedrockModel {
@@ -1370,6 +1419,121 @@ ${prompt}
       };
     },
   },
+  QWEN: {
+    params: (
+      config: BedrockQwenGenerationOptions,
+      prompt: string,
+      stop?: string[],
+      modelName?: string,
+    ) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+      const params: any = {
+        messages,
+      };
+
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
+        undefined,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+        0.7,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
+      if ((stop && stop.length > 0) || config?.stop) {
+        addConfigParam(params, 'stop', stop || config?.stop, getEnvString('AWS_BEDROCK_STOP'));
+      }
+      addConfigParam(
+        params,
+        'frequency_penalty',
+        config?.frequency_penalty,
+        getEnvFloat('AWS_BEDROCK_FREQUENCY_PENALTY'),
+      );
+      addConfigParam(
+        params,
+        'presence_penalty',
+        config?.presence_penalty,
+        getEnvFloat('AWS_BEDROCK_PRESENCE_PENALTY'),
+      );
+      addConfigParam(
+        params,
+        'tools',
+        maybeLoadToolsFromExternalFile(config?.tools),
+        undefined,
+        undefined,
+      );
+      addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
+
+      return params;
+    },
+    output: (config: BedrockOptions, responseJson: any) => {
+      if (responseJson.error) {
+        throw new Error(`Qwen API error: ${responseJson.error}`);
+      }
+
+      // Handle thinking mode output similar to DeepSeek
+      if (responseJson.choices && Array.isArray(responseJson.choices)) {
+        const choice = responseJson.choices[0];
+
+        // Handle tool calls
+        if (choice?.message?.tool_calls && Array.isArray(choice.message.tool_calls)) {
+          const toolCalls = choice.message.tool_calls
+            .map((toolCall: any) => {
+              return `Called function ${toolCall.function.name} with arguments: ${toolCall.function.arguments}`;
+            })
+            .join('\n');
+
+          // If there's also content, combine them
+          if (choice.message.content) {
+            return `${choice.message.content}\n\n${toolCalls}`;
+          }
+          return toolCalls;
+        }
+
+        if (choice?.message?.content) {
+          const content = choice.message.content;
+
+          // Check if response contains thinking content
+          if (content.includes('<think>') && content.includes('</think>')) {
+            if (config.showThinking === false) {
+              // Extract only the final response after thinking
+              const parts = content.split('</think>');
+              return parts.length > 1 ? parts[1].trim() : content;
+            }
+          }
+
+          return content;
+        }
+      }
+
+      return responseJson.choices?.[0]?.message?.content;
+    },
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      if (responseJson?.usage) {
+        return {
+          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+          completion: coerceStrToNum(responseJson.usage.completion_tokens),
+          total: coerceStrToNum(responseJson.usage.total_tokens),
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
+  },
 };
 
 export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
@@ -1390,6 +1554,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
@@ -1424,6 +1589,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
@@ -1437,6 +1603,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
@@ -1460,6 +1627,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
   'us.meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
@@ -1476,10 +1644,72 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // OpenAI Models via Bedrock
   'openai.gpt-oss-120b-1:0': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-20b-1:0': BEDROCK_MODEL.OPENAI,
+
+  // Qwen Models via Bedrock
+  'qwen.qwen3-coder-480b-a35b-v1:0': BEDROCK_MODEL.QWEN,
+  'qwen.qwen3-coder-30b-a3b-v1:0': BEDROCK_MODEL.QWEN,
+  'qwen.qwen3-235b-a22b-2507-v1:0': BEDROCK_MODEL.QWEN,
+  'qwen.qwen3-32b-v1:0': BEDROCK_MODEL.QWEN,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
-function getHandlerForModel(modelName: string) {
+function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedrockModel {
+  // Check if it's an inference profile ARN
+  if (modelName.includes('arn:') && modelName.includes('inference-profile')) {
+    // For inference profiles, use the model type from config to determine handler
+    const inferenceModelType = config?.inferenceModelType;
+
+    if (!inferenceModelType) {
+      throw new Error(
+        'Inference profile requires inferenceModelType to be specified in config. ' +
+          'Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen',
+      );
+    }
+
+    // Map model type to appropriate handler
+    switch (inferenceModelType) {
+      case 'claude':
+        return BEDROCK_MODEL.CLAUDE_MESSAGES;
+      case 'nova':
+        return BEDROCK_MODEL.AMAZON_NOVA;
+      case 'llama':
+        // Default to the latest Llama version for generic 'llama' inference profiles
+        return BEDROCK_MODEL.LLAMA4;
+      case 'llama2':
+        return BEDROCK_MODEL.LLAMA2;
+      case 'llama3':
+        return BEDROCK_MODEL.LLAMA3;
+      case 'llama3.1':
+      case 'llama3_1':
+        return BEDROCK_MODEL.LLAMA3_1;
+      case 'llama3.2':
+      case 'llama3_2':
+        return BEDROCK_MODEL.LLAMA3_2;
+      case 'llama3.3':
+      case 'llama3_3':
+        return BEDROCK_MODEL.LLAMA3_3;
+      case 'llama4':
+        return BEDROCK_MODEL.LLAMA4;
+      case 'mistral':
+        return BEDROCK_MODEL.MISTRAL;
+      case 'cohere':
+        return BEDROCK_MODEL.COHERE_COMMAND_R;
+      case 'ai21':
+        return BEDROCK_MODEL.AI21;
+      case 'titan':
+        return BEDROCK_MODEL.TITAN_TEXT;
+      case 'deepseek':
+        return BEDROCK_MODEL.DEEPSEEK;
+      case 'openai':
+        return BEDROCK_MODEL.OPENAI;
+      case 'qwen':
+        return BEDROCK_MODEL.QWEN;
+      default:
+        throw new Error(`Unknown inference model type: ${inferenceModelType}`);
+    }
+  }
+
+  // Existing logic for direct model IDs
   const ret = AWS_BEDROCK_MODELS[modelName];
   if (ret) {
     return ret;
@@ -1522,6 +1752,9 @@ function getHandlerForModel(modelName: string) {
   }
   if (modelName.startsWith('deepseek.')) {
     return BEDROCK_MODEL.DEEPSEEK;
+  }
+  if (modelName.startsWith('qwen.')) {
+    return BEDROCK_MODEL.QWEN;
   }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }
@@ -1648,6 +1881,7 @@ export abstract class AwsBedrockGenericProvider {
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
+          ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
         });
 
         this.bedrock = bedrock;
@@ -1682,7 +1916,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    let model = getHandlerForModel(this.modelName);
+    let model = getHandlerForModel(this.modelName, { ...this.config, ...context?.prompt.config });
     if (!model) {
       logger.warn(
         `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,

@@ -6,6 +6,7 @@ import yaml from 'js-yaml';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { fetchWithProxy } from '../../util/fetch';
 import { setupEnv } from '../../util/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 import type { Command } from 'commander';
@@ -57,7 +58,7 @@ export async function generatePoisonedDocument(
   document: string,
   goal?: PoisonOptions['goal'],
 ): Promise<PoisonResponse> {
-  const response = await fetch(getRemoteGenerationUrl(), {
+  const response = await fetchWithProxy(getRemoteGenerationUrl(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

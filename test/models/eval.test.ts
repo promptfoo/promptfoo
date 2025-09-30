@@ -1,7 +1,7 @@
 import { getDb } from '../../src/database';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
-import Eval, { getEvalSummaries } from '../../src/models/eval';
+import Eval, { EvalQueries, getEvalSummaries } from '../../src/models/eval';
 import EvalFactory from '../factories/evalFactory';
 
 import type { Prompt } from '../../src/types/index';
@@ -77,6 +77,75 @@ describe('evaluator', () => {
       expect(evaluations[1].evalId).toBe(eval2.id);
       expect(evaluations[2].evalId).toBe(eval1.id);
     });
+
+    it('should correctly deserialize all provider types', async () => {
+      // Test different provider formats
+      const testCases = [
+        // String provider
+        { providers: 'openai:gpt-4', expected: [{ id: 'openai:gpt-4', label: null }] },
+        // Array with strings
+        {
+          providers: ['openai:gpt-4', 'anthropic:claude'],
+          expected: [
+            { id: 'openai:gpt-4', label: null },
+            { id: 'anthropic:claude', label: null },
+          ],
+        },
+        // Array with ProviderOptions (explicit id)
+        {
+          providers: [{ id: 'custom-provider', label: 'Custom Label' }],
+          expected: [{ id: 'custom-provider', label: 'Custom Label' }],
+        },
+        // Array with declarative providers (record format)
+        {
+          providers: [
+            { 'openai:gpt-4': { config: { temperature: 0.5 }, label: 'GPT-4' } },
+            { 'anthropic:claude': { config: { maxTokens: 1000 } } },
+          ],
+          expected: [
+            { id: 'openai:gpt-4', label: 'GPT-4' },
+            { id: 'anthropic:claude', label: null },
+          ],
+        },
+        // Mixed array
+        {
+          providers: [
+            'openai:gpt-3.5',
+            { id: 'custom', label: 'Custom' },
+            { 'anthropic:claude': { label: 'Claude' } },
+          ],
+          expected: [
+            { id: 'openai:gpt-3.5', label: null },
+            { id: 'custom', label: 'Custom' },
+            { id: 'anthropic:claude', label: 'Claude' },
+          ],
+        },
+      ];
+
+      for (const testCase of testCases) {
+        const evaluation = await Eval.create(
+          {
+            providers: testCase.providers as any,
+            prompts: ['Test prompt'],
+            tests: [{ vars: { test: 'value' } }],
+          },
+          [{ raw: 'Test prompt', label: 'Test prompt' }],
+        );
+
+        const summaries = await getEvalSummaries(undefined, undefined, true);
+        const summary = summaries.find((s) => s.evalId === evaluation.id);
+
+        expect(summary).toBeDefined();
+        expect(summary?.providers).toEqual(testCase.expected);
+
+        // Clean up
+        await evaluation.delete();
+      }
+    });
+
+    // Note: Function providers cannot be serialized to the database,
+    // so they won't appear in getEvalSummaries() results.
+    // The deserialization logic handles them, but they're lost during storage.
   });
 
   describe('delete', () => {
@@ -357,7 +426,7 @@ describe('evaluator', () => {
     });
 
     it('should return paginated results with default parameters', async () => {
-      const result = await evalWithResults.getTablePage({});
+      const result = await evalWithResults.getTablePage({ filters: [] });
 
       expect(result).toHaveProperty('head');
       expect(result).toHaveProperty('body');
@@ -376,8 +445,8 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const firstPage = await largeEval.getTablePage({ offset: 0, limit: 5 });
-      const secondPage = await largeEval.getTablePage({ offset: 5, limit: 5 });
+      const firstPage = await largeEval.getTablePage({ offset: 0, limit: 5, filters: [] });
+      const secondPage = await largeEval.getTablePage({ offset: 5, limit: 5, filters: [] });
 
       expect(firstPage.body.length).toBeLessThanOrEqual(5);
       expect(secondPage.body.length).toBeLessThanOrEqual(5);
@@ -396,7 +465,7 @@ describe('evaluator', () => {
     });
 
     it('should filter by errors', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'errors' });
+      const result = await evalWithResults.getTablePage({ filterMode: 'errors', filters: [] });
 
       // Ensure there are results for the test to be meaningful
       const hasResults = result.body.length > 0;
@@ -413,7 +482,7 @@ describe('evaluator', () => {
     });
 
     it('should filter by failures', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'failures' });
+      const result = await evalWithResults.getTablePage({ filterMode: 'failures', filters: [] });
 
       // Ensure there are results for the test to be meaningful
       const hasResults = result.body.length > 0;
@@ -429,7 +498,7 @@ describe('evaluator', () => {
     });
 
     it('should filter by passes', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'passes' });
+      const result = await evalWithResults.getTablePage({ filterMode: 'passes', filters: [] });
 
       // Ensure there are results for the test to be meaningful
       const hasResults = result.body.length > 0;
@@ -444,7 +513,7 @@ describe('evaluator', () => {
 
     it('should filter by specific test indices', async () => {
       const testIndices = [1, 3, 5];
-      const result = await evalWithResults.getTablePage({ testIndices });
+      const result = await evalWithResults.getTablePage({ testIndices, filters: [] });
 
       // Should only return results for the specified test indices
       const returnedIndices = result.body.map((row) => row.testIdx);
@@ -459,7 +528,7 @@ describe('evaluator', () => {
     it('should handle search queries across fields', async () => {
       // This test requires setting up specific search terms in the eval factory
       const searchTerm = 'searchable_content';
-      const result = await evalWithResults.getTablePage({ searchQuery: searchTerm });
+      const result = await evalWithResults.getTablePage({ searchQuery: searchTerm, filters: [] });
 
       // Results should contain the search term in at least one field
       expect(result.body.length).toBeGreaterThan(0);
@@ -539,8 +608,11 @@ describe('evaluator', () => {
     });
 
     it('should return correct counts for filtered results', async () => {
-      const allResults = await evalWithResults.getTablePage({});
-      const filteredResults = await evalWithResults.getTablePage({ filterMode: 'passes' });
+      const allResults = await evalWithResults.getTablePage({ filters: [] });
+      const filteredResults = await evalWithResults.getTablePage({
+        filterMode: 'passes',
+        filters: [],
+      });
 
       // Total count should be the same for both queries
       expect(filteredResults.totalCount).toBe(allResults.totalCount);
@@ -553,6 +625,7 @@ describe('evaluator', () => {
       // Test with input containing SQL injection attempt
       const result = await evalWithResults.getTablePage({
         searchQuery: "'; DROP TABLE eval_results; --",
+        filters: [],
       });
 
       // Should still return results without error
@@ -564,11 +637,269 @@ describe('evaluator', () => {
       // Create an eval with no results
       const emptyEval = await EvalFactory.create({ numResults: 0 });
 
-      const result = await emptyEval.getTablePage({});
+      const result = await emptyEval.getTablePage({ filters: [] });
 
       expect(result.body).toEqual([]);
       expect(result.totalCount).toBe(0);
       expect(result.filteredCount).toBe(0);
+    });
+  });
+
+  describe('EvalQueries.getMetadataKeysFromEval', () => {
+    it('should return unique metadata keys from all eval results', async () => {
+      const eval_ = await EvalFactory.create();
+
+      // Add eval results with different metadata
+      const db = getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{"key1": "value1", "key2": "value2"}'),
+        ('result2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}'),
+        ('result3', '${eval_.id}', 0, 2, '{}', '{}', '{}', 1, 1.0, '{"key1": "value5", "key4": "value6"}')`,
+      );
+
+      const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
+
+      expect(keys).toEqual(['key1', 'key2', 'key3', 'key4']);
+    });
+
+    it('should return empty array for eval with no metadata', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
+
+      expect(keys).toEqual([]);
+    });
+
+    it('should handle empty metadata objects gracefully', async () => {
+      const eval_ = await EvalFactory.create();
+
+      // Add eval result with empty metadata
+      const db = getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{}')`,
+      );
+
+      const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
+
+      expect(keys).toEqual([]);
+    });
+  });
+
+  describe('queryTestIndices', () => {
+    it('returns indices with default params and correct ordering', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 10,
+        resultTypes: ['success', 'error', 'failure'],
+      });
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({});
+
+      expect(filteredCount).toBe(10);
+      expect(testIndices.length).toBeLessThanOrEqual(10);
+      // Ensure ascending order
+      const sorted = [...testIndices].sort((a, b) => a - b);
+      expect(testIndices).toEqual(sorted);
+    });
+
+    it('respects offset and limit', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 12,
+        resultTypes: ['success', 'failure', 'error'],
+      });
+      const page1 = await (eval_ as any).queryTestIndices({ offset: 0, limit: 5 });
+      const page2 = await (eval_ as any).queryTestIndices({ offset: 5, limit: 5 });
+
+      expect(page1.testIndices.length).toBeLessThanOrEqual(5);
+      expect(page2.testIndices.length).toBeLessThanOrEqual(5);
+
+      // Verify disjoint sets for the first 10 indices
+      const overlap = page1.testIndices.filter((i: number) => page2.testIndices.includes(i));
+      expect(overlap).toHaveLength(0);
+    });
+
+    it('Mode Filtering: filters by errors, failures, and passes', async () => {
+      const numResults = 15;
+      const eval_ = await EvalFactory.create({
+        numResults,
+        resultTypes: ['success', 'error', 'failure'],
+      });
+
+      const errors = await (eval_ as any).queryTestIndices({ filterMode: 'errors' });
+      const failures = await (eval_ as any).queryTestIndices({ filterMode: 'failures' });
+      const passes = await (eval_ as any).queryTestIndices({ filterMode: 'passes' });
+
+      // With the cycling order, counts should roughly split by thirds
+      expect(errors.filteredCount).toBeGreaterThan(0);
+      expect(failures.filteredCount).toBeGreaterThan(0);
+      expect(passes.filteredCount).toBeGreaterThan(0);
+
+      // No index should appear in more than one mode simultaneously
+      const sErrors = new Set(errors.testIndices);
+      const sFailures = new Set(failures.testIndices);
+      const sPasses = new Set(passes.testIndices);
+      for (const idx of sErrors) {
+        expect(sFailures.has(idx)).toBe(false);
+        expect(sPasses.has(idx)).toBe(false);
+      }
+    });
+
+    it('filters by metric equals', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 8,
+        resultTypes: ['success', 'failure'],
+        withNamedScores: true,
+      });
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metric',
+            operator: 'equals',
+            value: 'accuracy',
+          }),
+        ],
+      });
+
+      expect(testIndices.length).toBeGreaterThan(0);
+      expect(filteredCount).toBeGreaterThan(0);
+      // With named scores on every row, all indices should match
+      expect(filteredCount).toBe(8);
+    });
+
+    it('filters by metadata equals and contains', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 6,
+        resultTypes: ['success', 'failure'],
+      });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"unit","note":"hello world"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"source":"integration"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+
+      // equals on source=unit should return only test 1
+      const eqRes = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'equals',
+            field: 'source',
+            value: 'unit',
+          }),
+        ],
+      });
+      expect(eqRes.filteredCount).toBe(1);
+      expect(eqRes.testIndices).toEqual([1]);
+
+      // contains on note
+      const containsRes = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'contains',
+            field: 'note',
+            value: 'hello',
+          }),
+        ],
+      });
+      expect(containsRes.filteredCount).toBe(1);
+      expect(containsRes.testIndices).toEqual([1]);
+    });
+
+    it('filters by plugin and strategy', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 6,
+        resultTypes: ['success', 'failure'],
+      });
+      const db = getDb();
+      // Set pluginId on one row and strategyId on another
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx = 3`,
+      );
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"strategyId":"s1"}') WHERE eval_id = '${eval_.id}' AND test_idx = 5`,
+      );
+
+      // Category filter should match pluginId that starts with harmful:
+      const pluginCategory = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'plugin',
+            operator: 'equals',
+            value: 'harmful',
+          }),
+        ],
+      });
+      expect(pluginCategory.testIndices).toEqual([3]);
+
+      // Strategy equals specific id
+      const strategyEq = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'strategy',
+            operator: 'equals',
+            value: 's1',
+          }),
+        ],
+      });
+      expect(strategyEq.testIndices).toEqual([5]);
+    });
+
+    it('filters by explicit severity override', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 4,
+        resultTypes: ['success', 'failure'],
+      });
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'severity',
+            operator: 'equals',
+            value: 'high',
+          }),
+        ],
+      });
+      expect(filteredCount).toBe(1);
+      expect(testIndices).toEqual([0]);
+    });
+
+    it('searches across response, grading, named scores, metadata, and vars', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 9,
+        resultTypes: ['success', 'failure', 'error'],
+        withNamedScores: true,
+        searchableContent: 'needle',
+      });
+      const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
+        searchQuery: 'needle',
+      });
+
+      expect(testIndices.length).toBeGreaterThan(0);
+      expect(filteredCount).toBeGreaterThan(0);
+      // Sanity: limit should still apply
+      const limited = await (eval_ as any).queryTestIndices({ searchQuery: 'needle', limit: 2 });
+      expect(limited.testIndices.length).toBeLessThanOrEqual(2);
+      expect(limited.filteredCount).toBeGreaterThanOrEqual(limited.testIndices.length);
     });
   });
 });

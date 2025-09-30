@@ -71,6 +71,80 @@ describe('useTableStore', () => {
     vi.clearAllMocks();
   });
 
+  it('should set `filterMode` to the provided value when `setFilterMode` is called', () => {
+    const newFilterMode = 'failures';
+
+    act(() => {
+      useTableStore.getState().setFilterMode(newFilterMode);
+    });
+
+    const state = useTableStore.getState();
+    expect(state.filterMode).toBe(newFilterMode);
+  });
+
+  it('should reset filterMode to "all" when resetFilterMode is called', () => {
+    act(() => {
+      useTableStore.getState().setFilterMode('failures');
+    });
+
+    act(() => {
+      useTableStore.getState().resetFilterMode();
+    });
+
+    const state = useTableStore.getState();
+    expect(state.filterMode).toBe('all');
+  });
+
+  describe('filterMode', () => {
+    it('should handle interaction between URL-based filterMode setting and direct calls to setFilterMode/resetFilterMode', () => {
+      act(() => {
+        useTableStore.setState({ filterMode: 'failures' });
+      });
+
+      let state = useTableStore.getState();
+      expect(state.filterMode).toBe('failures');
+
+      act(() => {
+        useTableStore.getState().setFilterMode('all');
+      });
+
+      state = useTableStore.getState();
+      expect(state.filterMode).toBe('all');
+
+      act(() => {
+        useTableStore.getState().resetFilterMode();
+      });
+
+      state = useTableStore.getState();
+      expect(state.filterMode).toBe('all');
+    });
+  });
+
+  describe('filterMode persistence', () => {
+    it('should persist the existing filterMode when fetchEvalData is called without a filterMode option', async () => {
+      const mockEvalId = 'test-eval-id';
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+        }),
+      });
+
+      act(() => {
+        useTableStore.getState().setFilterMode('failures');
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filterMode).toBe('failures');
+    });
+  });
+
   describe('extractUniqueStrategyIds', () => {
     it('should handle strategies with special characters and long IDs', () => {
       const strategies = [
@@ -480,20 +554,28 @@ describe('useTableStore', () => {
         value: filter.value,
       });
 
-      const mockCallApi = vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          table: { head: { prompts: [] }, body: [] },
-          totalCount: 0,
-          filteredCount: 0,
-        }),
-      } as any);
+      const mockCallApi = vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url.includes('metadata-keys')) {
+          return {
+            ok: true,
+            json: async () => ({ keys: [] }),
+          } as any;
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            table: { head: { prompts: [] }, body: [] },
+            totalCount: 0,
+            filteredCount: 0,
+          }),
+        } as any;
+      });
 
       await act(async () => {
         await useTableStore.getState().fetchEvalData(evalId, { filters: [filter] });
       });
 
-      expect(mockCallApi).toHaveBeenCalledTimes(1);
+      expect(mockCallApi).toHaveBeenCalledTimes(1); // table endpoint only (metadata-keys fetched lazily)
       const url = mockCallApi.mock.calls[0][0];
       const urlParams = new URL(url, 'http://example.com').searchParams;
       const rawFilterParam = urlParams.get('filter');
@@ -620,8 +702,19 @@ describe('useTableStore', () => {
       } as Response);
 
       let isFetchingDuringFetch: boolean = false;
-      mockCallApi.mockImplementation(async () => {
-        isFetchingDuringFetch = useTableStore.getState().isFetching;
+      mockCallApi.mockImplementation(async (url: string) => {
+        // Only check isFetching during the table call, not the metadata-keys call
+        if (!url.includes('metadata-keys')) {
+          isFetchingDuringFetch = useTableStore.getState().isFetching;
+        }
+
+        if (url.includes('metadata-keys')) {
+          return {
+            ok: true,
+            json: async () => ({ keys: [] }),
+          } as any;
+        }
+
         return {
           ok: true,
           json: async () => ({
@@ -670,6 +763,10 @@ describe('useTableStore', () => {
           table: { head: { prompts: [] }, body: [] },
           totalCount: 0,
           filteredCount: 0,
+          config: {},
+          author: null,
+          version: 1,
+          id: mockEvalId,
         }),
       });
 
@@ -874,6 +971,10 @@ describe('useTableStore', () => {
             table: { head: { prompts: [] }, body: [] },
             totalCount: 0,
             filteredCount: 0,
+            config: {},
+            author: null,
+            version: 1,
+            id: mockEvalId,
           }),
         });
 
@@ -902,12 +1003,16 @@ describe('useTableStore', () => {
           resolvePromise = resolve;
         });
 
-        (callApi as Mock).mockReturnValue({
+        (callApi as Mock).mockResolvedValue({
           ok: true,
           json: async () => ({
             table: { head: { prompts: [] }, body: [] },
             totalCount: 0,
             filteredCount: 0,
+            config: {},
+            author: null,
+            version: 1,
+            id: mockEvalId,
           }),
         });
 
@@ -933,6 +1038,10 @@ describe('useTableStore', () => {
             table: { head: { prompts: [] }, body: [] },
             totalCount: 0,
             filteredCount: 0,
+            config: {},
+            author: null,
+            version: 1,
+            id: mockEvalId,
           });
         });
 
