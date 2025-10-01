@@ -21,13 +21,20 @@ export enum PackageManager {
 }
 
 /**
- * Helper function to check if a path contains a pattern (case-insensitive on Windows)
+ * Helper function to check if a path contains a pattern.
+ * Normalizes both paths for cross-platform compatibility:
+ * - Converts backslashes to forward slashes
+ * - Case-insensitive comparison on Windows
  */
 export function pathContains(haystack: string, needle: string): boolean {
+  // Normalize both paths: replace backslashes with forward slashes
+  const normalizedHaystack = haystack.replace(/\\/g, '/');
+  const normalizedNeedle = needle.replace(/\\/g, '/');
+
   if (process.platform === 'win32') {
-    return haystack.toLowerCase().includes(needle.toLowerCase());
+    return normalizedHaystack.toLowerCase().includes(normalizedNeedle.toLowerCase());
   }
-  return haystack.includes(needle);
+  return normalizedHaystack.includes(normalizedNeedle);
 }
 
 /**
@@ -139,10 +146,15 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
     }
 
     // Check for yarn global - support multiple path patterns
+    // Unix: ~/.yarn/global, ~/.config/yarn/global
+    // Windows: %LOCALAPPDATA%\Yarn\Data\global (case-insensitive match needed)
+    const lowerPath = realPath.toLowerCase();
     if (
       pathContains(realPath, '/.yarn/global') ||
       pathContains(realPath, '/.config/yarn/global') ||
-      pathContains(realPath, '/yarn/global')
+      pathContains(realPath, '/yarn/global') ||
+      lowerPath.includes('/yarn/data/global') || // Windows: case-insensitive for Yarn/Data
+      (process.env.YARN_GLOBAL_FOLDER && pathContains(realPath, process.env.YARN_GLOBAL_FOLDER))
     ) {
       return PackageManager.YARN;
     }

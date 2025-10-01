@@ -268,6 +268,66 @@ describe('getInstallationInfo', () => {
     delete process.env.PNPM_HOME;
   });
 
+  it('should detect PNPM global installation from PNPM_HOME on Windows', () => {
+    process.env.PNPM_HOME = 'C:\\pnpm-global';
+    process.argv = [
+      'node',
+      'C:\\pnpm-global\\global\\5\\node_modules\\promptfoo\\dist\\src\\main.js',
+    ];
+    mockFs.realpathSync.mockReturnValue(
+      'C:\\pnpm-global\\global\\5\\node_modules\\promptfoo\\dist\\src\\main.js',
+    );
+
+    const result = getInstallationInfo('/project', false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.PNPM,
+      isGlobal: true,
+      updateCommand: 'pnpm add -g promptfoo@latest',
+      updateMessage: 'Installed with pnpm. Attempting to automatically update now...',
+    });
+
+    delete process.env.PNPM_HOME;
+  });
+
+  it('should detect Yarn global installation on Windows', () => {
+    process.argv = [
+      'node',
+      'C:\\Users\\user\\AppData\\Local\\Yarn\\Data\\global\\node_modules\\promptfoo\\dist\\src\\main.js',
+    ];
+    mockFs.realpathSync.mockReturnValue(
+      'C:\\Users\\user\\AppData\\Local\\Yarn\\Data\\global\\node_modules\\promptfoo\\dist\\src\\main.js',
+    );
+
+    const result = getInstallationInfo('/project', false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.YARN,
+      isGlobal: true,
+      updateCommand: 'yarn global add promptfoo@latest',
+      updateMessage: 'Installed with yarn. Attempting to automatically update now...',
+    });
+  });
+
+  it('should detect Yarn global installation from YARN_GLOBAL_FOLDER', () => {
+    process.env.YARN_GLOBAL_FOLDER = '/custom/yarn/path';
+    process.argv = ['node', '/custom/yarn/path/node_modules/promptfoo/dist/src/main.js'];
+    mockFs.realpathSync.mockReturnValue(
+      '/custom/yarn/path/node_modules/promptfoo/dist/src/main.js',
+    );
+
+    const result = getInstallationInfo('/project', false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.YARN,
+      isGlobal: true,
+      updateCommand: 'yarn global add promptfoo@latest',
+      updateMessage: 'Installed with yarn. Attempting to automatically update now...',
+    });
+
+    delete process.env.YARN_GLOBAL_FOLDER;
+  });
+
   it('should detect BUNX installation', () => {
     process.argv = [
       'node',

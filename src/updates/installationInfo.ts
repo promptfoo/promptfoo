@@ -15,6 +15,18 @@ export interface InstallationInfo {
   updateMessage?: string;
 }
 
+/**
+ * Helper to check if a normalized path contains a pattern.
+ * Both paths should already be normalized (backslashes → forward slashes).
+ * Case-insensitive on Windows.
+ */
+function normalizedPathContains(normalizedPath: string, pattern: string): boolean {
+  if (process.platform === 'win32') {
+    return normalizedPath.toLowerCase().includes(pattern.toLowerCase());
+  }
+  return normalizedPath.includes(pattern);
+}
+
 export function getInstallationInfo(
   projectRoot: string,
   isAutoUpdateDisabled: boolean,
@@ -81,10 +93,11 @@ export function getInstallationInfo(
 
       case PackageManager.PNPM: {
         // Check if it's global or local - support multiple path patterns
+        const pnpmHome = process.env.PNPM_HOME?.replace(/\\/g, '/');
         const isGlobal =
-          realPath.includes('/.pnpm/global') ||
-          realPath.includes('/pnpm/global') ||
-          (process.env.PNPM_HOME && realPath.includes(process.env.PNPM_HOME));
+          normalizedPathContains(realPath, '/.pnpm/global') ||
+          normalizedPathContains(realPath, '/pnpm/global') ||
+          (pnpmHome && normalizedPathContains(realPath, pnpmHome));
         if (isGlobal) {
           const updateCommand = 'pnpm add -g promptfoo@latest';
           return {
@@ -105,10 +118,16 @@ export function getInstallationInfo(
 
       case PackageManager.YARN: {
         // Check if it's global or local - support multiple path patterns
+        // Unix: ~/.yarn/global, ~/.config/yarn/global
+        // Windows: %LOCALAPPDATA%\Yarn\Data\global (case-insensitive)
+        const yarnGlobalFolder = process.env.YARN_GLOBAL_FOLDER?.replace(/\\/g, '/');
+        const lowerPath = realPath.toLowerCase();
         const isGlobal =
-          realPath.includes('/.yarn/global') ||
-          realPath.includes('/.config/yarn/global') ||
-          realPath.includes('/yarn/global');
+          normalizedPathContains(realPath, '/.yarn/global') ||
+          normalizedPathContains(realPath, '/.config/yarn/global') ||
+          normalizedPathContains(realPath, '/yarn/global') ||
+          lowerPath.includes('/yarn/data/global') || // Windows pattern (case-insensitive)
+          (yarnGlobalFolder && normalizedPathContains(realPath, yarnGlobalFolder));
         if (isGlobal) {
           const updateCommand = 'yarn global add promptfoo@latest';
           return {
@@ -128,7 +147,7 @@ export function getInstallationInfo(
       }
 
       case PackageManager.BUN: {
-        const isGlobal = realPath.includes('/.bun/bin');
+        const isGlobal = normalizedPathContains(realPath, '/.bun/bin');
         if (isGlobal) {
           const updateCommand = 'bun add -g promptfoo@latest';
           return {
