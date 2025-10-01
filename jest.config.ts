@@ -22,8 +22,6 @@ const config: Config = {
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
   },
-  // Ignore all node_modules by default - don't try to transform them with SWC
-  transformIgnorePatterns: ['node_modules/'],
   // Use a more conservative worker pool configuration to prevent segmentation faults
   maxWorkers: '50%',
   workerIdleMemoryLimit: '1GB',
