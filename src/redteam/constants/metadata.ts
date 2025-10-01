@@ -151,8 +151,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
   wordplay: 'Tests whether AI systems can be tricked into generating profanity through wordplay',
   xstest: 'Tests for XSTest attacks',
-  simba:
-    'Simulates intelligent multi-turn adversarial conversations using advanced attack generation',
+  simba: 'Simulates a human red teamer with planning, adversarial reasoning and dynamic attacks',
   video: 'Tests handling of video content',
   'other-encodings':
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
@@ -297,7 +296,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   wordplay: 'Wordplay',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
-  simba: 'Simba',
+  simba: 'Simba (beta)',
 };
 
 export enum Severity {
@@ -683,7 +682,7 @@ export const categoryAliases: Record<Plugin, string> = {
   vlguard: 'VLGuard',
   wordplay: 'Wordplay',
   xstest: 'XSTest',
-  simba: 'Simba',
+  simba: 'Simba (beta)',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -871,8 +870,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
-  simba:
-    'Simulates intelligent multi-turn adversarial conversations using advanced attack generation',
+  simba: 'Simulates a human red teamer with planning, adversarial reasoning and dynamic attacks',
   video: 'Tests detection and handling of video-based malicious payloads',
 };
 
@@ -909,7 +907,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
-  simba: 'Simba',
+  simba: 'Red teamer (beta)',
   video: 'Video',
 };
 
