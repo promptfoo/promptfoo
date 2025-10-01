@@ -23,6 +23,7 @@ describe('handleAutoUpdate', () => {
 
     mockProcess = {
       on: jest.fn(),
+      unref: jest.fn(),
       stderr: {
         on: jest.fn(),
       } as any,
@@ -123,7 +124,7 @@ describe('handleAutoUpdate', () => {
     handleAutoUpdate(info, false, false, '/project', mockSpawn);
 
     expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
-      stdio: 'pipe',
+      stdio: 'ignore',
       shell: false,
     });
   });
@@ -293,6 +294,21 @@ describe('setUpdateHandler', () => {
     expect(onUpdateReceived).toHaveBeenCalledTimes(1);
 
     realEmitter.emit('update-success', { message: 'Update complete' });
+
+    // Fast-forward 60 seconds
+    jest.advanceTimersByTime(60000);
+
+    // Should not be called again
+    expect(onUpdateReceived).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not repeat onUpdateReceived if update fails', () => {
+    setUpdateHandler(onUpdateReceived, onUpdateSuccess, onUpdateFailed);
+
+    realEmitter.emit('update-received', { message: 'Update available' });
+    expect(onUpdateReceived).toHaveBeenCalledTimes(1);
+
+    realEmitter.emit('update-failed', { message: 'Update failed' });
 
     // Fast-forward 60 seconds
     jest.advanceTimersByTime(60000);

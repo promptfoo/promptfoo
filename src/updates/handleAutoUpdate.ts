@@ -42,7 +42,13 @@ export function handleAutoUpdate(
   const command = commandParts[0];
   const args = commandParts.slice(1);
 
-  const updateProcess = spawnFn(command, args, { stdio: 'pipe', shell: false });
+  // Use 'ignore' to prevent deadlocks from pipe buffer filling
+  // The update runs in background, we don't need to capture output
+  const updateProcess = spawnFn(command, args, { stdio: 'ignore', shell: false });
+
+  // Unref the process so it doesn't keep the event loop alive
+  // This allows the CLI to exit normally even if update is still running
+  updateProcess.unref();
 
   updateProcess.on('close', (code) => {
     if (code === 0) {
@@ -77,23 +83,32 @@ export function setUpdateHandler(
   onUpdateFailed: UpdateEventHandler,
 ) {
   let successfullyInstalled = false;
+  let reminderTimer: NodeJS.Timeout | undefined;
 
   const handleUpdateReceived = (info: { message: string }) => {
     onUpdateReceived(info);
     const savedMessage = info.message;
-    setTimeout(() => {
+    // Use unref() so timer doesn't keep event loop alive and block CLI exit
+    reminderTimer = setTimeout(() => {
       if (!successfullyInstalled) {
         onUpdateReceived({ message: savedMessage });
       }
-    }, 60000);
+    }, 60000).unref();
   };
 
   const handleUpdateFailed = (info: { message: string }) => {
+    successfullyInstalled = true; // Don't show reminders if update failed
+    if (reminderTimer) {
+      clearTimeout(reminderTimer);
+    }
     onUpdateFailed(info);
   };
 
   const handleUpdateSuccess = (info: { message: string }) => {
     successfullyInstalled = true;
+    if (reminderTimer) {
+      clearTimeout(reminderTimer);
+    }
     onUpdateSuccess(info);
   };
 
@@ -102,6 +117,9 @@ export function setUpdateHandler(
   updateEventEmitter.on('update-success', handleUpdateSuccess);
 
   return () => {
+    if (reminderTimer) {
+      clearTimeout(reminderTimer);
+    }
     updateEventEmitter.off('update-received', handleUpdateReceived);
     updateEventEmitter.off('update-failed', handleUpdateFailed);
     updateEventEmitter.off('update-success', handleUpdateSuccess);

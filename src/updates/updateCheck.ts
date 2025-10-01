@@ -1,7 +1,7 @@
 import semver from 'semver';
-import { readFileSync } from 'fs';
-import path from 'path';
 import { fetchWithTimeout } from '../util/fetch';
+// Use require to load package.json - works reliably in both dev and published package
+import packageJson from '../../package.json';
 
 export const FETCH_TIMEOUT_MS = 2000;
 
@@ -21,9 +21,6 @@ export interface UpdateObject {
  */
 function getPackageJson(): { name: string; version: string } | null {
   try {
-    // Try to find package.json from the current module
-    const packagePath = path.join(__dirname, '../../package.json');
-    const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
     return {
       name: packageJson.name || 'promptfoo',
       version: packageJson.version,

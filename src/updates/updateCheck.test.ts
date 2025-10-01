@@ -2,21 +2,21 @@ jest.mock('../util/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-}));
-
 jest.mock('semver', () => ({
   gt: jest.fn(),
 }));
 
+// Mock package.json import
+jest.mock('../../package.json', () => ({
+  name: 'promptfoo',
+  version: '1.0.0',
+}));
+
 import { checkForUpdates } from './updateCheck';
 import { fetchWithTimeout } from '../util/fetch';
-import { readFileSync } from 'fs';
 import semver from 'semver';
 
 const mockFetchWithTimeout = fetchWithTimeout as jest.MockedFunction<typeof fetchWithTimeout>;
-const mockReadFileSync = readFileSync as jest.MockedFunction<typeof readFileSync>;
 const mockSemverGt = semver.gt as jest.MockedFunction<typeof semver.gt>;
 
 describe('checkForUpdates', () => {
@@ -32,23 +32,7 @@ describe('checkForUpdates', () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
-  it('should return null if package.json cannot be read', async () => {
-    mockReadFileSync.mockImplementation(() => {
-      throw new Error('File not found');
-    });
-
-    const result = await checkForUpdates();
-    expect(result).toBeNull();
-  });
-
   it('should return update info when update is available', async () => {
-    mockReadFileSync.mockReturnValue(
-      JSON.stringify({
-        name: 'promptfoo',
-        version: '1.0.0',
-      }),
-    );
-
     mockFetchWithTimeout.mockResolvedValue({
       ok: true,
       json: async () => ({ latestVersion: '1.1.0' }),
@@ -75,13 +59,6 @@ describe('checkForUpdates', () => {
   });
 
   it('should return null when no update is available', async () => {
-    mockReadFileSync.mockReturnValue(
-      JSON.stringify({
-        name: 'promptfoo',
-        version: '1.0.0',
-      }),
-    );
-
     mockFetchWithTimeout.mockResolvedValue({
       ok: true,
       json: async () => ({ latestVersion: '1.0.0' }),
@@ -94,13 +71,6 @@ describe('checkForUpdates', () => {
   });
 
   it('should return null on network error', async () => {
-    mockReadFileSync.mockReturnValue(
-      JSON.stringify({
-        name: 'promptfoo',
-        version: '1.0.0',
-      }),
-    );
-
     mockFetchWithTimeout.mockRejectedValue(new Error('Network error'));
 
     const result = await checkForUpdates();
