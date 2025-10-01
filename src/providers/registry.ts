@@ -463,6 +463,7 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
+      // As of Sept 2025, deepseek-chat and deepseek-reasoner are upgraded to DeepSeek-V3.2-Exp
       const modelName = splits.slice(1).join(':') || 'deepseek-chat';
       return new OpenAiChatCompletionProvider(modelName, {
         ...providerOptions,

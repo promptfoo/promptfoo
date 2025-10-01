@@ -41,23 +41,25 @@ providers:
 
 :::note
 
-The API model names are aliases that automatically point to the latest versions: `deepseek-chat` points to DeepSeek-V3-0324 and `deepseek-reasoner` points to DeepSeek-R1-0528.
+As of September 29, 2025, both `deepseek-chat` and `deepseek-reasoner` have been upgraded to use **DeepSeek-V3.2-Exp**, featuring significant cost reductions (50% lower pricing) and improved efficiency through DeepSeek Sparse Attention (DSA) technology.
 
 :::
 
-### deepseek-chat (DeepSeek-V3)
+### deepseek-chat (DeepSeek-V3.2-Exp)
 
+- Non-thinking mode of DeepSeek-V3.2-Exp
 - General purpose model for conversations and content
 - 64K context window, 8K output tokens
-- Input: $0.07/1M (cache), $0.27/1M (no cache)
-- Output: $1.10/1M
+- Input: $0.028/1M (cache hit), $0.28/1M (cache miss)
+- Output: $0.42/1M
 
-### deepseek-reasoner (DeepSeek-R1)
+### deepseek-reasoner (DeepSeek-V3.2-Exp)
 
+- Thinking mode of DeepSeek-V3.2-Exp
 - Specialized for reasoning and problem-solving
 - 64K context, 32K reasoning tokens, 8K output tokens
-- Input: $0.14/1M (cache), $0.55/1M (no cache)
-- Output: $2.19/1M
+- Input: $0.028/1M (cache hit), $0.28/1M (cache miss)
+- Output: $0.42/1M
 - Supports showing or hiding reasoning content through the `showThinking` parameter
 
 :::warning
