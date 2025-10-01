@@ -1,33 +1,18 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as childProcess from 'node:child_process';
+import {
+  PackageManager,
+  detectPackageManagerFromPath,
+  isGitRepository,
+} from '../util/installationDetection';
 
-export enum PackageManager {
-  NPM = 'npm',
-  YARN = 'yarn',
-  PNPM = 'pnpm',
-  PNPX = 'pnpx',
-  BUN = 'bun',
-  BUNX = 'bunx',
-  HOMEBREW = 'homebrew',
-  NPX = 'npx',
-  DOCKER = 'docker',
-  UNKNOWN = 'unknown',
-}
+// Re-export for backward compatibility
+export { PackageManager };
 
 export interface InstallationInfo {
   packageManager: PackageManager;
   isGlobal: boolean;
   updateCommand?: string;
   updateMessage?: string;
-}
-
-function isGitRepository(cwd: string): boolean {
-  try {
-    return fs.existsSync(path.join(cwd, '.git'));
-  } catch {
-    return false;
-  }
 }
 
 export function getInstallationInfo(
@@ -40,150 +25,146 @@ export function getInstallationInfo(
   }
 
   try {
-    // Normalize path separators to forward slashes for consistent matching.
-    const realPath = fs.realpathSync(cliPath).replace(/\\/g, '/');
-    const normalizedProjectRoot = projectRoot?.replace(/\\/g, '/');
+    const packageManager = detectPackageManagerFromPath(cliPath, projectRoot);
     const isGit = isGitRepository(process.cwd());
+    const normalizedProjectRoot = projectRoot?.replace(/\\/g, '/');
+    const realPath = fs.realpathSync(cliPath).replace(/\\/g, '/');
 
-    // Helper function to check if a path contains a pattern (case-insensitive on Windows)
-    const pathContains = (haystack: string, needle: string): boolean => {
-      if (process.platform === 'win32') {
-        return haystack.toLowerCase().includes(needle.toLowerCase());
-      }
-      return haystack.includes(needle);
-    };
-
-    // Check for Docker environment
-    if (process.env.DOCKER === 'true' || fs.existsSync('/.dockerenv')) {
-      return {
-        packageManager: PackageManager.DOCKER,
-        isGlobal: false,
-        updateMessage:
-          'Running in Docker. Please update with "docker pull promptfoo/promptfoo:latest".',
-      };
-    }
-
-    // Check for local git clone first
-    if (
-      isGit &&
-      normalizedProjectRoot &&
-      realPath.startsWith(normalizedProjectRoot) &&
-      !pathContains(realPath, '/node_modules/')
-    ) {
-      return {
-        packageManager: PackageManager.UNKNOWN, // Not managed by a package manager in this sense
-        isGlobal: false,
-        updateMessage: 'Running from a local git clone. Please update with "git pull".',
-      };
-    }
-
-    // Check for npx/pnpx
-    if (pathContains(realPath, '/.npm/_npx') || pathContains(realPath, '/npm/_npx')) {
-      return {
-        packageManager: PackageManager.NPX,
-        isGlobal: false,
-        updateMessage: 'Running via npx, update not applicable.',
-      };
-    }
-    if (pathContains(realPath, '/.pnpm/_pnpx')) {
-      return {
-        packageManager: PackageManager.PNPX,
-        isGlobal: false,
-        updateMessage: 'Running via pnpx, update not applicable.',
-      };
-    }
-
-    // Check for Homebrew
-    if (process.platform === 'darwin') {
-      try {
-        // The package name in homebrew is promptfoo
-        childProcess.execSync('brew list -1 | grep -q "^promptfoo$"', {
-          stdio: 'ignore',
-        });
+    // Build installation info based on detected package manager
+    switch (packageManager) {
+      case PackageManager.DOCKER:
         return {
-          packageManager: PackageManager.HOMEBREW,
+          packageManager,
+          isGlobal: false,
+          updateMessage:
+            'Running in Docker. Please update with "docker pull promptfoo/promptfoo:latest".',
+        };
+
+      case PackageManager.UNKNOWN:
+        // Check if it's a git clone
+        if (isGit && normalizedProjectRoot && realPath.startsWith(normalizedProjectRoot)) {
+          return {
+            packageManager,
+            isGlobal: false,
+            updateMessage: 'Running from a local git clone. Please update with "git pull".',
+          };
+        }
+        return { packageManager, isGlobal: false };
+
+      case PackageManager.NPX:
+        return {
+          packageManager,
+          isGlobal: false,
+          updateMessage: 'Running via npx, update not applicable.',
+        };
+
+      case PackageManager.PNPX:
+        return {
+          packageManager,
+          isGlobal: false,
+          updateMessage: 'Running via pnpx, update not applicable.',
+        };
+
+      case PackageManager.BUNX:
+        return {
+          packageManager,
+          isGlobal: false,
+          updateMessage: 'Running via bunx, update not applicable.',
+        };
+
+      case PackageManager.HOMEBREW:
+        return {
+          packageManager,
           isGlobal: true,
           updateMessage: 'Installed via Homebrew. Please update with "brew upgrade promptfoo".',
         };
-      } catch (_error) {
-        // Brew is not installed or promptfoo is not installed via brew.
-        // Continue to the next check.
+
+      case PackageManager.PNPM: {
+        // Check if it's global or local
+        const isGlobal = realPath.includes('/.pnpm/global');
+        if (isGlobal) {
+          const updateCommand = 'pnpm add -g promptfoo@latest';
+          return {
+            packageManager,
+            isGlobal: true,
+            updateCommand,
+            updateMessage: isAutoUpdateDisabled
+              ? `Please run ${updateCommand} to update`
+              : 'Installed with pnpm. Attempting to automatically update now...',
+          };
+        }
+        return {
+          packageManager,
+          isGlobal: false,
+          updateMessage: "Locally installed. Please update via your project's package.json.",
+        };
       }
-    }
 
-    // Check for pnpm
-    if (pathContains(realPath, '/.pnpm/global')) {
-      const updateCommand = 'pnpm add -g promptfoo@latest';
-      return {
-        packageManager: PackageManager.PNPM,
-        isGlobal: true,
-        updateCommand,
-        updateMessage: isAutoUpdateDisabled
-          ? `Please run ${updateCommand} to update`
-          : 'Installed with pnpm. Attempting to automatically update now...',
-      };
-    }
-
-    // Check for yarn
-    if (pathContains(realPath, '/.yarn/global')) {
-      const updateCommand = 'yarn global add promptfoo@latest';
-      return {
-        packageManager: PackageManager.YARN,
-        isGlobal: true,
-        updateCommand,
-        updateMessage: isAutoUpdateDisabled
-          ? `Please run ${updateCommand} to update`
-          : 'Installed with yarn. Attempting to automatically update now...',
-      };
-    }
-
-    // Check for bun
-    if (pathContains(realPath, '/.bun/install/cache')) {
-      return {
-        packageManager: PackageManager.BUNX,
-        isGlobal: false,
-        updateMessage: 'Running via bunx, update not applicable.',
-      };
-    }
-    if (pathContains(realPath, '/.bun/bin')) {
-      const updateCommand = 'bun add -g promptfoo@latest';
-      return {
-        packageManager: PackageManager.BUN,
-        isGlobal: true,
-        updateCommand,
-        updateMessage: isAutoUpdateDisabled
-          ? `Please run ${updateCommand} to update`
-          : 'Installed with bun. Attempting to automatically update now...',
-      };
-    }
-
-    // Check for local install
-    if (normalizedProjectRoot && realPath.startsWith(`${normalizedProjectRoot}/node_modules`)) {
-      let pm = PackageManager.NPM;
-      if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
-        pm = PackageManager.YARN;
-      } else if (fs.existsSync(path.join(projectRoot, 'pnpm-lock.yaml'))) {
-        pm = PackageManager.PNPM;
-      } else if (fs.existsSync(path.join(projectRoot, 'bun.lockb'))) {
-        pm = PackageManager.BUN;
+      case PackageManager.YARN: {
+        const isGlobal = realPath.includes('/.yarn/global');
+        if (isGlobal) {
+          const updateCommand = 'yarn global add promptfoo@latest';
+          return {
+            packageManager,
+            isGlobal: true,
+            updateCommand,
+            updateMessage: isAutoUpdateDisabled
+              ? `Please run ${updateCommand} to update`
+              : 'Installed with yarn. Attempting to automatically update now...',
+          };
+        }
+        return {
+          packageManager,
+          isGlobal: false,
+          updateMessage: "Locally installed. Please update via your project's package.json.",
+        };
       }
-      return {
-        packageManager: pm,
-        isGlobal: false,
-        updateMessage: "Locally installed. Please update via your project's package.json.",
-      };
-    }
 
-    // Assume global npm
-    const updateCommand = 'npm install -g promptfoo@latest';
-    return {
-      packageManager: PackageManager.NPM,
-      isGlobal: true,
-      updateCommand,
-      updateMessage: isAutoUpdateDisabled
-        ? `Please run ${updateCommand} to update`
-        : 'Installed with npm. Attempting to automatically update now...',
-    };
+      case PackageManager.BUN: {
+        const isGlobal = realPath.includes('/.bun/bin');
+        if (isGlobal) {
+          const updateCommand = 'bun add -g promptfoo@latest';
+          return {
+            packageManager,
+            isGlobal: true,
+            updateCommand,
+            updateMessage: isAutoUpdateDisabled
+              ? `Please run ${updateCommand} to update`
+              : 'Installed with bun. Attempting to automatically update now...',
+          };
+        }
+        return {
+          packageManager,
+          isGlobal: false,
+          updateMessage: "Locally installed. Please update via your project's package.json.",
+        };
+      }
+
+      case PackageManager.NPM: {
+        // Check if it's global or local
+        const isLocal =
+          normalizedProjectRoot && realPath.startsWith(`${normalizedProjectRoot}/node_modules`);
+        if (isLocal) {
+          return {
+            packageManager,
+            isGlobal: false,
+            updateMessage: "Locally installed. Please update via your project's package.json.",
+          };
+        }
+        const updateCommand = 'npm install -g promptfoo@latest';
+        return {
+          packageManager,
+          isGlobal: true,
+          updateCommand,
+          updateMessage: isAutoUpdateDisabled
+            ? `Please run ${updateCommand} to update`
+            : 'Installed with npm. Attempting to automatically update now...',
+        };
+      }
+
+      default:
+        return { packageManager: PackageManager.UNKNOWN, isGlobal: false };
+    }
   } catch (error) {
     console.log(error);
     return { packageManager: PackageManager.UNKNOWN, isGlobal: false };

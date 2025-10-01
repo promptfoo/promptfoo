@@ -1,0 +1,165 @@
+/**
+ * Shared installation detection utilities used across promptfoo.
+ * Combines path-based detection (for updates) and env-based detection (for command generation).
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as childProcess from 'node:child_process';
+
+export enum PackageManager {
+  NPM = 'npm',
+  YARN = 'yarn',
+  PNPM = 'pnpm',
+  PNPX = 'pnpx',
+  BUN = 'bun',
+  BUNX = 'bunx',
+  HOMEBREW = 'homebrew',
+  NPX = 'npx',
+  DOCKER = 'docker',
+  UNKNOWN = 'unknown',
+}
+
+/**
+ * Helper function to check if a path contains a pattern (case-insensitive on Windows)
+ */
+export function pathContains(haystack: string, needle: string): boolean {
+  if (process.platform === 'win32') {
+    return haystack.toLowerCase().includes(needle.toLowerCase());
+  }
+  return haystack.includes(needle);
+}
+
+/**
+ * Check if running in a git repository
+ */
+export function isGitRepository(cwd: string): boolean {
+  try {
+    return fs.existsSync(path.join(cwd, '.git'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Detects package manager from environment variables (fast, for command generation).
+ * This is useful for showing users what command to run.
+ */
+export function detectPackageManagerFromEnv(): PackageManager {
+  const npmExecPath = process.env.npm_execpath || '';
+  const npmLifecycleScript = process.env.npm_lifecycle_script || '';
+  const npmConfigPrefix = process.env.npm_config_prefix || '';
+  const npmConfigUserAgent = process.env.npm_config_user_agent || '';
+  const execPath = process.execPath || '';
+
+  // NPX detection
+  if (
+    (npmExecPath && npmExecPath.includes('npx')) ||
+    execPath.includes('npx') ||
+    (npmLifecycleScript && npmLifecycleScript.includes('npx')) ||
+    /\bnpx\/\d+/i.test(npmConfigUserAgent)
+  ) {
+    return PackageManager.NPX;
+  }
+
+  // Homebrew detection
+  if (
+    /Homebrew[\/\\]Cellar/i.test(npmConfigPrefix) ||
+    /Homebrew[\/\\]Cellar/i.test(execPath) ||
+    /[\/\\]Homebrew[\/\\]/i.test(npmConfigPrefix) ||
+    /[\/\\]Homebrew[\/\\]/i.test(execPath)
+  ) {
+    return PackageManager.HOMEBREW;
+  }
+
+  // NPM global
+  if (/\bnpm\/\d+/i.test(npmConfigUserAgent)) {
+    return PackageManager.NPM;
+  }
+
+  return PackageManager.UNKNOWN;
+}
+
+/**
+ * Detects package manager from file paths (comprehensive, for update logic).
+ * This examines the actual CLI path to determine installation method.
+ */
+export function detectPackageManagerFromPath(cliPath: string, projectRoot: string): PackageManager {
+  try {
+    // Normalize path separators to forward slashes for consistent matching
+    const realPath = fs.realpathSync(cliPath).replace(/\\/g, '/');
+    const normalizedProjectRoot = projectRoot?.replace(/\\/g, '/');
+    const isGit = isGitRepository(process.cwd());
+
+    // Check for Docker environment
+    if (process.env.DOCKER === 'true' || fs.existsSync('/.dockerenv')) {
+      return PackageManager.DOCKER;
+    }
+
+    // Check for local git clone first
+    if (
+      isGit &&
+      normalizedProjectRoot &&
+      realPath.startsWith(normalizedProjectRoot) &&
+      !pathContains(realPath, '/node_modules/')
+    ) {
+      return PackageManager.UNKNOWN; // Git clone, not managed by package manager
+    }
+
+    // Check for npx/pnpx
+    if (pathContains(realPath, '/.npm/_npx') || pathContains(realPath, '/npm/_npx')) {
+      return PackageManager.NPX;
+    }
+    if (pathContains(realPath, '/.pnpm/_pnpx')) {
+      return PackageManager.PNPX;
+    }
+
+    // Check for Homebrew (only on macOS)
+    if (process.platform === 'darwin') {
+      try {
+        childProcess.execSync('brew list -1 | grep -q "^promptfoo$"', {
+          stdio: 'ignore',
+        });
+        return PackageManager.HOMEBREW;
+      } catch {
+        // Not installed via brew, continue checking
+      }
+    }
+
+    // Check for pnpm
+    if (pathContains(realPath, '/.pnpm/global')) {
+      return PackageManager.PNPM;
+    }
+
+    // Check for yarn
+    if (pathContains(realPath, '/.yarn/global')) {
+      return PackageManager.YARN;
+    }
+
+    // Check for bun
+    if (pathContains(realPath, '/.bun/install/cache')) {
+      return PackageManager.BUNX;
+    }
+    if (pathContains(realPath, '/.bun/bin')) {
+      return PackageManager.BUN;
+    }
+
+    // Check for local install
+    if (normalizedProjectRoot && realPath.startsWith(`${normalizedProjectRoot}/node_modules`)) {
+      // Detect which package manager based on lock files
+      if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
+        return PackageManager.YARN;
+      } else if (fs.existsSync(path.join(projectRoot, 'pnpm-lock.yaml'))) {
+        return PackageManager.PNPM;
+      } else if (fs.existsSync(path.join(projectRoot, 'bun.lockb'))) {
+        return PackageManager.BUN;
+      }
+      return PackageManager.NPM;
+    }
+
+    // Default to npm
+    return PackageManager.NPM;
+  } catch {
+    return PackageManager.UNKNOWN;
+  }
+}

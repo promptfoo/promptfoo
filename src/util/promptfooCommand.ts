@@ -1,7 +1,8 @@
 /**
  * Utilities for detecting CLI installation method and generating appropriate next commands.
- * Combines multiple detection strategies for robust installer identification.
  */
+
+import { detectPackageManagerFromEnv, PackageManager } from './installationDetection';
 
 /**
  * Supported installer types that affect command generation.
@@ -9,52 +10,24 @@
 export type InstallerType = 'npx' | 'brew' | 'npm-global' | 'unknown';
 
 /**
- * Detects how the CLI was invoked by checking various environment variables and paths.
- * Uses a combination of the original isRunningUnderNpx logic and new detection methods.
+ * Detects how the CLI was invoked by checking various environment variables.
+ * Uses shared detection logic from installationDetection.ts.
  *
  * @returns The detected installer type
  */
 export function detectInstaller(): InstallerType {
-  // Original detection logic from isRunningUnderNpx - check npm environment variables
-  const npmExecPath = process.env.npm_execpath || '';
-  const npmLifecycleScript = process.env.npm_lifecycle_script || '';
+  const pm = detectPackageManagerFromEnv();
 
-  // Primary npx detection using original logic
-  if (
-    (npmExecPath && npmExecPath.includes('npx')) ||
-    process.execPath.includes('npx') ||
-    (npmLifecycleScript && npmLifecycleScript.includes('npx'))
-  ) {
-    return 'npx';
+  switch (pm) {
+    case PackageManager.NPX:
+      return 'npx';
+    case PackageManager.HOMEBREW:
+      return 'brew';
+    case PackageManager.NPM:
+      return 'npm-global';
+    default:
+      return 'unknown';
   }
-
-  // Additional detection methods
-  const prefix = process.env.npm_config_prefix || '';
-  const ua = process.env.npm_config_user_agent || '';
-  const exec = process.execPath || '';
-
-  // Homebrew detection (works on macOS and Linux)
-  if (
-    /Homebrew[\/\\]Cellar/i.test(prefix) ||
-    /Homebrew[\/\\]Cellar/i.test(exec) ||
-    /[\/\\]Homebrew[\/\\]/i.test(prefix) ||
-    /[\/\\]Homebrew[\/\\]/i.test(exec)
-  ) {
-    return 'brew';
-  }
-
-  // User agent fallback for npx (useful for testing)
-  // npm_config_user_agent='npx/...' node dist/src/main.js init
-  if (/\bnpx\/\d+/i.test(ua)) {
-    return 'npx';
-  }
-
-  // npm global installation
-  if (/\bnpm\/\d+/i.test(ua)) {
-    return 'npm-global';
-  }
-
-  return 'unknown';
 }
 
 /**
