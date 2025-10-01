@@ -194,7 +194,9 @@ export function getInstallationInfo(
     }
   } catch (error) {
     // Silent failure - detection errors shouldn't interrupt normal operation
-    logger.debug(`Installation detection error: ${error instanceof Error ? error.message : String(error)}`);
+    logger.debug(
+      `Installation detection error: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return { packageManager: PackageManager.UNKNOWN, isGlobal: false };
   }
 }
