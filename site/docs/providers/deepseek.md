@@ -39,6 +39,8 @@ providers:
 
 ## Available Models
 
+The API model names are aliases that automatically point to the latest versions: both `deepseek-chat` and `deepseek-reasoner` currently point to DeepSeek-V3.2, with the chat model using non-thinking mode and the reasoner model using thinking mode.
+
 ### deepseek-chat
 
 - General purpose model for conversations and content generation
