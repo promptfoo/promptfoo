@@ -54,10 +54,12 @@ export const useUserStore = create<UserState>((set, getState) => ({
             _fetchEmailPromise: null,
             _emailFetched: true,
           });
-        } else if (response.status === 404) {
-          set({ email: null, isLoading: false, _fetchEmailPromise: null, _emailFetched: true });
         } else {
-          throw new Error('Failed to fetch user email');
+          // Handle 404 and other errors uniformly
+          if (response.status !== 404) {
+            console.error('Failed to fetch user email:', response.status);
+          }
+          set({ email: null, isLoading: false, _fetchEmailPromise: null, _emailFetched: true });
         }
       } catch (error) {
         console.error('Error fetching user email:', error);

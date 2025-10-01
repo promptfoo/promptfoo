@@ -71,6 +71,8 @@ export const useVersionStore = create<VersionState>((set, getState) => ({
         });
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Unknown error');
+        // Note: We intentionally do NOT set _fetched to true on error,
+        // so that failed requests can be retried on next component mount.
         set({ error, loading: false, _fetchPromise: null });
       }
     })();

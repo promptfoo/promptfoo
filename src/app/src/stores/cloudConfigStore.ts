@@ -41,6 +41,7 @@ export const useCloudConfigStore = create<CloudConfigState>((set, getState) => (
     // Set loading state
     set({ isLoading: true, error: null });
 
+    // Track if promise was cleared by synchronous error to prevent overwriting
     let isPromiseCleared = false;
     const fetchPromise = (async () => {
       try {
@@ -70,12 +71,15 @@ export const useCloudConfigStore = create<CloudConfigState>((set, getState) => (
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         set({ error: errorMessage, isLoading: false, _fetchPromise: null });
+        // Mark as cleared to prevent line 81 from overwriting with stale promise
         isPromiseCleared = true;
         console.error('Error fetching cloud config:', err);
       }
     })();
 
-    // Only set the promise if it wasn't already cleared by a synchronous error
+    // Only set the promise if it wasn't already cleared by a synchronous error.
+    // Without this check, a synchronous error from callApi() would set _fetchPromise: null
+    // in the catch block, then line 81 would immediately overwrite it with the promise.
     if (!isPromiseCleared) {
       set({ _fetchPromise: fetchPromise });
     }
