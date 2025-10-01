@@ -1,9 +1,11 @@
 jest.mock('node:fs');
 jest.mock('node:child_process');
+jest.mock('../logger');
 
 import * as fs from 'node:fs';
 import * as childProcess from 'node:child_process';
 import { getInstallationInfo, PackageManager } from './installationInfo';
+import logger from '../logger';
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockChildProcess = childProcess as jest.Mocked<typeof childProcess>;
@@ -363,14 +365,17 @@ describe('getInstallationInfo', () => {
   it('should detect local npm installation', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
-    mockFs.existsSync.mockImplementation(
-      (path) =>
-        path !== '/.dockerenv' &&
-        path !== '/project/.git' &&
-        path !== '/project/yarn.lock' &&
-        path !== '/project/pnpm-lock.yaml' &&
-        path !== '/project/bun.lockb',
-    );
+    mockFs.existsSync.mockImplementation((path) => {
+      // Normalize path for cross-platform comparison
+      const normalizedPath = path.toString().replace(/\\/g, '/');
+      return (
+        normalizedPath !== '/.dockerenv' &&
+        normalizedPath !== '/project/.git' &&
+        normalizedPath !== '/project/yarn.lock' &&
+        normalizedPath !== '/project/pnpm-lock.yaml' &&
+        normalizedPath !== '/project/bun.lockb'
+      );
+    });
 
     const result = getInstallationInfo('/project', false);
 
@@ -384,10 +389,14 @@ describe('getInstallationInfo', () => {
   it('should detect local yarn installation from yarn.lock', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
-    mockFs.existsSync.mockImplementation(
-      (path) =>
-        path === '/project/yarn.lock' || (path !== '/.dockerenv' && path !== '/project/.git'),
-    );
+    mockFs.existsSync.mockImplementation((path) => {
+      // Normalize path for cross-platform comparison
+      const normalizedPath = path.toString().replace(/\\/g, '/');
+      return (
+        normalizedPath === '/project/yarn.lock' ||
+        (normalizedPath !== '/.dockerenv' && normalizedPath !== '/project/.git')
+      );
+    });
 
     const result = getInstallationInfo('/project', false);
 
@@ -401,14 +410,17 @@ describe('getInstallationInfo', () => {
   it('should detect local pnpm installation from pnpm-lock.yaml', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
-    mockFs.existsSync.mockImplementation(
-      (path) =>
-        path === '/project/pnpm-lock.yaml' ||
-        (path !== '/.dockerenv' &&
-          path !== '/project/.git' &&
-          path !== '/project/yarn.lock' &&
-          path !== '/project/bun.lockb'),
-    );
+    mockFs.existsSync.mockImplementation((path) => {
+      // Normalize path for cross-platform comparison
+      const normalizedPath = path.toString().replace(/\\/g, '/');
+      return (
+        normalizedPath === '/project/pnpm-lock.yaml' ||
+        (normalizedPath !== '/.dockerenv' &&
+          normalizedPath !== '/project/.git' &&
+          normalizedPath !== '/project/yarn.lock' &&
+          normalizedPath !== '/project/bun.lockb')
+      );
+    });
 
     const result = getInstallationInfo('/project', false);
 
@@ -422,14 +434,17 @@ describe('getInstallationInfo', () => {
   it('should detect local bun installation from bun.lockb', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
-    mockFs.existsSync.mockImplementation(
-      (path) =>
-        path === '/project/bun.lockb' ||
-        (path !== '/.dockerenv' &&
-          path !== '/project/.git' &&
-          path !== '/project/yarn.lock' &&
-          path !== '/project/pnpm-lock.yaml'),
-    );
+    mockFs.existsSync.mockImplementation((path) => {
+      // Normalize path for cross-platform comparison
+      const normalizedPath = path.toString().replace(/\\/g, '/');
+      return (
+        normalizedPath === '/project/bun.lockb' ||
+        (normalizedPath !== '/.dockerenv' &&
+          normalizedPath !== '/project/.git' &&
+          normalizedPath !== '/project/yarn.lock' &&
+          normalizedPath !== '/project/pnpm-lock.yaml')
+      );
+    });
 
     const result = getInstallationInfo('/project', false);
 
@@ -460,8 +475,6 @@ describe('getInstallationInfo', () => {
       throw new Error('Path resolution failed');
     });
 
-    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-
     const result = getInstallationInfo('/project', false);
 
     expect(result).toEqual({
@@ -469,7 +482,9 @@ describe('getInstallationInfo', () => {
       isGlobal: false,
     });
 
-    expect(consoleSpy).toHaveBeenCalledWith(expect.any(Error));
-    consoleSpy.mockRestore();
+    // Should log error to debug level
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Installation detection error'),
+    );
   });
 });

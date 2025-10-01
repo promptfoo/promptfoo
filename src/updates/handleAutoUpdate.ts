@@ -38,6 +38,7 @@ export function handleAutoUpdate(
 
   // Parse command into array to avoid shell injection
   // Example: "npm install -g promptfoo@1.2.3" -> ["npm", "install", "-g", "promptfoo@1.2.3"]
+  // Note: Simple split on spaces - doesn't handle quoted args, but our commands don't need that
   const commandParts = updateCommand.split(' ');
   const command = commandParts[0];
   const args = commandParts.slice(1);

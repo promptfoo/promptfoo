@@ -4,6 +4,7 @@ import {
   detectPackageManagerFromPath,
   isGitRepository,
 } from '../util/installationDetection';
+import logger from '../logger';
 
 // Re-export for backward compatibility
 export { PackageManager };
@@ -192,7 +193,8 @@ export function getInstallationInfo(
         return { packageManager: PackageManager.UNKNOWN, isGlobal: false };
     }
   } catch (error) {
-    console.log(error);
+    // Silent failure - detection errors shouldn't interrupt normal operation
+    logger.debug(`Installation detection error: ${error instanceof Error ? error.message : String(error)}`);
     return { packageManager: PackageManager.UNKNOWN, isGlobal: false };
   }
 }
