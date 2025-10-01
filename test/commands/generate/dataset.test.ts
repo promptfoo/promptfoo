@@ -26,7 +26,6 @@ jest.mock('../../../src/util', () => ({
 
 jest.mock('../../../src/util/promptfooCommand', () => ({
   promptfooCommand: jest.fn().mockReturnValue('promptfoo eval'),
-  detectInstaller: jest.fn().mockReturnValue('unknown'),
   isRunningUnderNpx: jest.fn().mockReturnValue(false),
 }));
 

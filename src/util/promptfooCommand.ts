@@ -5,32 +5,6 @@
 import { detectPackageManagerFromEnv, PackageManager } from './installationDetection';
 
 /**
- * Supported installer types that affect command generation.
- */
-export type InstallerType = 'npx' | 'brew' | 'npm-global' | 'unknown';
-
-/**
- * Detects how the CLI was invoked by checking various environment variables.
- * Uses shared detection logic from installationDetection.ts.
- *
- * @returns The detected installer type
- */
-export function detectInstaller(): InstallerType {
-  const pm = detectPackageManagerFromEnv();
-
-  switch (pm) {
-    case PackageManager.NPX:
-      return 'npx';
-    case PackageManager.HOMEBREW:
-      return 'brew';
-    case PackageManager.NPM:
-      return 'npm-global';
-    default:
-      return 'unknown';
-  }
-}
-
-/**
  * Builds the appropriate promptfoo command based on how the CLI was installed.
  * Automatically adds the correct prefix (npx, etc.) for the user's environment.
  *
@@ -52,9 +26,9 @@ export function detectInstaller(): InstallerType {
  * ```
  */
 export function promptfooCommand(subcommand: string): string {
-  const installer = detectInstaller();
+  const packageManager = detectPackageManagerFromEnv();
 
-  if (installer === 'npx') {
+  if (packageManager === PackageManager.NPX) {
     return subcommand ? `npx promptfoo@latest ${subcommand}` : 'npx promptfoo@latest';
   }
 
@@ -64,8 +38,8 @@ export function promptfooCommand(subcommand: string): string {
 
 /**
  * Legacy function for backwards compatibility.
- * @deprecated Use detectInstaller() instead
+ * @deprecated Use promptfooCommand() to generate commands instead
  */
 export function isRunningUnderNpx(): boolean {
-  return detectInstaller() === 'npx';
+  return detectPackageManagerFromEnv() === PackageManager.NPX;
 }
