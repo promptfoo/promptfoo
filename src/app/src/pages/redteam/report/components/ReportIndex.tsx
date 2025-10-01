@@ -81,7 +81,7 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
         cellClassName: 'dg-cursor-pointer',
       },
       {
-        field: 'passRate',
+        field: 'attackSuccessRate',
         headerName: 'Attack Success Rate',
         type: 'number',
         flex: 1,
@@ -89,7 +89,6 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
           <>
             <Typography
               variant="body2"
-              color="success.main"
               sx={{
                 height: '100%',
                 display: 'flex',
