@@ -1,5 +1,6 @@
 import semver from 'semver';
 import { fetchWithTimeout } from '../util/fetch';
+import logger from '../logger';
 // Use require to load package.json - works reliably in both dev and published package
 import packageJson from '../../package.json';
 
@@ -72,8 +73,11 @@ export async function checkForUpdates(): Promise<UpdateObject | null> {
     }
 
     return null;
-  } catch (e) {
-    console.warn('Failed to check for updates: ' + e);
+  } catch (err) {
+    // Use debug level to avoid spamming users with network errors
+    // Don't expose full error object which might contain sensitive info
+    const message = err instanceof Error ? err.message : String(err);
+    logger.debug(`Failed to check for updates: ${message}`);
     return null;
   }
 }
