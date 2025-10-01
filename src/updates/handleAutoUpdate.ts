@@ -36,7 +36,13 @@ export function handleAutoUpdate(
 
   const updateCommand = installationInfo.updateCommand.replace('@latest', `@${info.update.latest}`);
 
-  const updateProcess = spawnFn(updateCommand, { stdio: 'pipe', shell: true });
+  // Parse command into array to avoid shell injection
+  // Example: "npm install -g promptfoo@1.2.3" -> ["npm", "install", "-g", "promptfoo@1.2.3"]
+  const commandParts = updateCommand.split(' ');
+  const command = commandParts[0];
+  const args = commandParts.slice(1);
+
+  const updateProcess = spawnFn(command, args, { stdio: 'pipe', shell: false });
   let errorOutput = '';
 
   updateProcess.stderr?.on('data', (data) => {

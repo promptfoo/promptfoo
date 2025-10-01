@@ -49,27 +49,29 @@ Note: This only disables the notification. You can still manually update using `
 ## Automatic Updates
 
 :::caution Experimental Feature
-Automatic background updates are **disabled by default** and considered experimental. Use with caution in production environments.
+Automatic background updates are **disabled by default** and considered experimental. This is an opt-in feature. Use with caution in production environments.
 :::
 
 When enabled, promptfoo will attempt to automatically update itself in the background when a new version is detected. The update runs silently without interrupting your workflow, and the new version will be available on your next command.
 
 ### Enabling Auto-Updates
 
-To enable automatic background updates:
+Auto-updates are **opt-in**. To enable automatic background updates:
 
 ```sh
-# Enable auto-updates (disabled by default)
-unset PROMPTFOO_DISABLE_AUTO_UPDATE
+# Enable auto-updates (opt-in, disabled by default)
+export PROMPTFOO_ENABLE_AUTO_UPDATE=1
 ```
 
 ### Disabling Auto-Updates
 
-Auto-updates are disabled by default. To explicitly disable them:
+Auto-updates are disabled by default. No action needed unless you've previously enabled them:
 
 ```sh
 # Disable auto-updates (default behavior)
-export PROMPTFOO_DISABLE_AUTO_UPDATE=1
+unset PROMPTFOO_ENABLE_AUTO_UPDATE
+# Or explicitly disable
+export PROMPTFOO_ENABLE_AUTO_UPDATE=0
 ```
 
 ### How It Works

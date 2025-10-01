@@ -82,7 +82,8 @@ async function main() {
 
   // Check for updates and show notification (non-blocking)
   const disableUpdateNag = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
-  const disableAutoUpdate = getEnvBool('PROMPTFOO_DISABLE_AUTO_UPDATE');
+  // Auto-update is opt-in: only enabled if explicitly set to true
+  const enableAutoUpdate = getEnvBool('PROMPTFOO_ENABLE_AUTO_UPDATE');
 
   if (!disableUpdateNag) {
     checkForUpdates()
@@ -91,9 +92,9 @@ async function main() {
           logger.info(info.message);
           logger.info('Run "promptfoo update" to upgrade to the latest version.');
 
-          // Attempt auto-update in background if enabled
-          if (!disableAutoUpdate) {
-            handleAutoUpdate(info, disableUpdateNag, disableAutoUpdate, process.cwd());
+          // Attempt auto-update in background if explicitly enabled
+          if (enableAutoUpdate) {
+            handleAutoUpdate(info, disableUpdateNag, !enableAutoUpdate, process.cwd());
           }
         }
       })

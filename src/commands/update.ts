@@ -54,11 +54,17 @@ export function updateCommand(program: Command) {
 
         logger.info(`Running: ${updateCommand}`);
 
+        // Parse command into array to avoid shell injection
+        // Example: "npm install -g promptfoo@1.2.3" -> ["npm", "install", "-g", "promptfoo@1.2.3"]
+        const commandParts = updateCommand.split(' ');
+        const command = commandParts[0];
+        const args = commandParts.slice(1);
+
         // Execute the update command and wait for it to complete
         await new Promise<void>((resolve, reject) => {
-          const updateProcess = spawn(updateCommand, {
+          const updateProcess = spawn(command, args, {
             stdio: 'inherit',
-            shell: true,
+            shell: false, // Safer: no shell injection
           });
 
           updateProcess.on('close', (code) => {

@@ -107,9 +107,9 @@ describe('update command', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(mockGetInstallationInfo).toHaveBeenCalledWith(process.cwd(), false);
-    expect(mockSpawn).toHaveBeenCalledWith('npm install -g promptfoo@1.1.0', {
+    expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
       stdio: 'inherit',
-      shell: true,
+      shell: false,
     });
   });
 
@@ -178,9 +178,9 @@ describe('update command', () => {
     // Wait for async operations
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(mockSpawn).toHaveBeenCalledWith('npm install -g promptfoo@latest', {
+    expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@latest'], {
       stdio: 'inherit',
-      shell: true,
+      shell: false,
     });
   });
 });
