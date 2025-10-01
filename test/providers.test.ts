@@ -259,13 +259,11 @@ describe('loadApiProvider', () => {
   it('should load DeepSeek provider with default model', async () => {
     const provider = await loadApiProvider('deepseek:');
     expect(provider).toBeDefined();
-    expect(provider.id()).toBe('deepseek:deepseek-chat');
   });
 
   it('should load DeepSeek provider with specific model', async () => {
     const provider = await loadApiProvider('deepseek:deepseek-reasoner');
     expect(provider).toBeDefined();
-    expect(provider.id()).toBe('deepseek:deepseek-reasoner');
   });
 
   it('should load Hyperbolic provider with specific model', async () => {

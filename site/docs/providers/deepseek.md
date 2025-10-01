@@ -42,14 +42,14 @@ providers:
 ### deepseek-chat
 
 - General purpose model for conversations and content generation
-- 64K context window, 8K output tokens
+- 128K context window, up to 8K output tokens
 - Input: $0.028/1M (cache hit), $0.28/1M (cache miss)
 - Output: $0.42/1M
 
 ### deepseek-reasoner
 
 - Specialized reasoning model with extended thinking capabilities
-- 64K context, 32K reasoning tokens, 8K output tokens
+- 128K context window, up to 64K output tokens (32K reasoning + final answer)
 - Input: $0.028/1M (cache hit), $0.28/1M (cache miss)
 - Output: $0.42/1M
 - Supports showing or hiding reasoning content through the `showThinking` parameter
