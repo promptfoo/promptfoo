@@ -1,7 +1,6 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -20,7 +19,11 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import { useTableStore } from './store';
+import type { ResultsFilterType, ResultsFilterOperator } from './store';
+import type { Trace } from '../../../components/traces/TraceView';
+
+// Keys to hide from metadata display
+const HIDDEN_METADATA_KEYS = ['citations', '_promptfooFileMetadata'];
 
 // Common style object for copy buttons
 const copyButtonSx = {
@@ -145,19 +148,147 @@ function CodeDisplay({
   );
 }
 
-interface EvalOutputPromptDialogProps {
-  open: boolean;
-  onClose: () => void;
-  prompt: string;
-  provider?: string;
-  output?: string;
-  gradingResults?: GradingResult[];
-  metadata?: Record<string, any>;
-  evaluationId?: string;
-  testCaseId?: string;
+/**
+ * Parameters for replaying an evaluation with a modified prompt.
+ */
+export interface ReplayEvaluationParams {
+  evaluationId: string;
   testIndex?: number;
-  promptIndex?: number;
+  prompt: string;
   variables?: Record<string, any>;
+}
+
+/**
+ * Result from replaying an evaluation.
+ */
+export interface ReplayEvaluationResult {
+  output?: string;
+  error?: string;
+}
+
+/**
+ * Configuration for cloud-specific features.
+ */
+export interface CloudConfig {
+  appUrl: string;
+  isEnabled: boolean;
+}
+
+/**
+ * Filter configuration for table filtering.
+ */
+export interface FilterConfig {
+  type: ResultsFilterType;
+  operator: ResultsFilterOperator;
+  value: string;
+  field?: string;
+}
+
+/**
+ * Dependency injection configuration for external services.
+ *
+ * This groups all external dependencies to make it clear what capabilities
+ * need to be injected and to simplify the component's interface.
+ */
+export interface DialogDependencies {
+  /**
+   * Filter operations for table state management.
+   */
+  filters?: {
+    /** Add a filter to the current filter set */
+    add?: (filter: FilterConfig) => void;
+    /** Clear all active filters */
+    reset?: () => void;
+  };
+
+  /**
+   * API operations for evaluation and debugging.
+   */
+  api?: {
+    /** Replay an evaluation with modified parameters */
+    replay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
+    /** Fetch trace data for debugging */
+    fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
+  };
+
+  /**
+   * Cloud platform configuration (null if running in OSS mode).
+   */
+  cloudConfig?: CloudConfig | null;
+}
+
+/**
+ * Props for the EvalOutputPromptDialog component.
+ *
+ * This dialog displays detailed information about an evaluation result,
+ * including the prompt, output, grading results, metadata, and traces.
+ *
+ * ## Dependency Injection Pattern
+ *
+ * All external dependencies (store access, API calls, cloud config) are injected
+ * via the `dependencies` prop to enable complete isolation and testing. The component
+ * gracefully handles missing dependencies by disabling features when they're undefined.
+ *
+ * @example
+ * ```tsx
+ * // Basic usage without dependencies (view-only mode)
+ * <EvalOutputPromptDialog
+ *   open={true}
+ *   onClose={handleClose}
+ *   prompt="What is 2+2?"
+ *   output="4"
+ * />
+ *
+ * // Full-featured usage with all dependencies
+ * <EvalOutputPromptDialog
+ *   open={true}
+ *   onClose={handleClose}
+ *   prompt="What is 2+2?"
+ *   output="4"
+ *   dependencies={{
+ *     filters: {
+ *       add: addFilter,
+ *       reset: resetFilters,
+ *     },
+ *     api: {
+ *       replay: handleReplay,
+ *       fetchTraces: handleFetchTraces,
+ *     },
+ *     cloudConfig: { appUrl: 'https://cloud.example.com', isEnabled: true },
+ *   }}
+ * />
+ * ```
+ */
+interface EvalOutputPromptDialogProps {
+  /** Controls dialog visibility */
+  open: boolean;
+  /** Callback fired when dialog should close */
+  onClose: () => void;
+  /** The prompt text that was evaluated */
+  prompt: string;
+  /** Provider/model identifier (displayed in header) */
+  provider?: string;
+  /** The output/response from the evaluation */
+  output?: string;
+  /** Grading results for evaluation assertions */
+  gradingResults?: GradingResult[];
+  /** Additional metadata about the evaluation */
+  metadata?: Record<string, any>;
+  /** Evaluation ID for fetching traces and replays */
+  evaluationId?: string;
+  /** Test case ID for trace correlation */
+  testCaseId?: string;
+  /** Test case index in the evaluation */
+  testIndex?: number;
+  /** Prompt index in the evaluation */
+  promptIndex?: number;
+  /** Variables used in the prompt template */
+  variables?: Record<string, any>;
+  /**
+   * External dependencies for filters, API calls, and cloud config.
+   * All dependencies are optional - features gracefully degrade when missing.
+   */
+  dependencies?: DialogDependencies;
 }
 
 export default function EvalOutputPromptDialog({
@@ -173,6 +304,7 @@ export default function EvalOutputPromptDialog({
   testIndex,
   promptIndex,
   variables,
+  dependencies,
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -184,7 +316,6 @@ export default function EvalOutputPromptDialog({
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
-  const { addFilter, resetFilters } = useTableStore();
 
   useEffect(() => {
     setCopied(false);
@@ -221,40 +352,27 @@ export default function EvalOutputPromptDialog({
       return;
     }
 
+    if (!dependencies?.api?.replay) {
+      setReplayError('Replay functionality is not available');
+      return;
+    }
+
     setReplayLoading(true);
     setReplayError(null);
     setReplayOutput(null);
 
     try {
-      const response = await callApi('/eval/replay', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          evaluationId,
-          testIndex,
-          prompt: editedPrompt,
-          variables,
-        }),
+      const result = await dependencies.api.replay({
+        evaluationId,
+        testIndex,
+        prompt: editedPrompt,
+        variables,
       });
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || 'Failed to replay evaluation');
-      }
-
-      const data = await response.json();
-
-      // Handle the response, checking for output in various locations
-      if (data.output) {
-        setReplayOutput(data.output);
-      } else if (data.response?.output) {
-        setReplayOutput(data.response.output);
-      } else if (data.response?.raw) {
-        setReplayOutput(data.response.raw);
-      } else if (data.error) {
-        setReplayError(`Provider error: ${data.error}`);
+      if (result.error) {
+        setReplayError(result.error);
+      } else if (result.output) {
+        setReplayOutput(result.output);
       } else {
         setReplayOutput('(No output returned)');
       }
@@ -285,9 +403,9 @@ export default function EvalOutputPromptDialog({
     operator: 'equals' | 'contains' = 'equals',
   ) => {
     // Reset all filters first
-    resetFilters();
+    dependencies?.filters?.reset?.();
     // Then apply only this filter
-    addFilter({
+    dependencies?.filters?.add?.({
       type: 'metadata',
       operator,
       value: typeof value === 'string' ? value : JSON.stringify(value),
@@ -335,7 +453,8 @@ export default function EvalOutputPromptDialog({
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
   const hasMetadata =
-    metadata && Object.keys(metadata).filter((key) => key !== 'citations').length > 0;
+    metadata &&
+    Object.keys(metadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
 
   // Build visible tabs list to handle dynamic tab indices
   const visibleTabs: string[] = ['prompt-output'];
@@ -494,6 +613,7 @@ export default function EvalOutputPromptDialog({
                 onMetadataClick={handleMetadataClick}
                 onCopy={copyFieldToClipboard}
                 onApplyFilter={handleApplyFilter}
+                cloudConfig={dependencies?.cloudConfig}
               />
             </Box>
           )}
@@ -506,6 +626,7 @@ export default function EvalOutputPromptDialog({
                 testCaseId={testCaseId}
                 testIndex={testIndex}
                 promptIndex={promptIndex}
+                onFetchTraces={dependencies?.api?.fetchTraces}
               />
             </Box>
           )}

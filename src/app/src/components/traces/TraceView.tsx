@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import TraceTimeline from './TraceTimeline';
+
+export interface Trace {
+  traceId: string;
+  testCaseId?: string | number;
+  spans?: any[];
+}
 
 interface TraceViewProps {
   evaluationId?: string;
@@ -13,6 +18,7 @@ interface TraceViewProps {
   testIndex?: number;
   promptIndex?: number;
   onVisibilityChange?: (shouldShow: boolean) => void;
+  onFetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
 }
 
 export default function TraceView({
@@ -21,8 +27,9 @@ export default function TraceView({
   testIndex,
   promptIndex,
   onVisibilityChange,
+  onFetchTraces,
 }: TraceViewProps) {
-  const [traces, setTraces] = useState<any[]>([]);
+  const [traces, setTraces] = useState<Trace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,28 +43,29 @@ export default function TraceView({
         return;
       }
 
+      if (!onFetchTraces) {
+        setLoading(false);
+        setError('Trace fetching is not available');
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
-        const response = await callApi(`/traces/evaluation/${evaluationId}`, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
+        const fetchedTraces = await onFetchTraces(evaluationId, controller.signal);
         if (!isActive) {
           return;
         }
-        setTraces(Array.isArray(data.traces) ? data.traces : []);
+        setTraces(fetchedTraces);
       } catch (err) {
         console.error('Error fetching traces:', err);
         if (!isActive) {
           return;
         }
-        setError(err instanceof Error ? err.message : 'Failed to fetch traces');
+        // Don't show error if request was aborted
+        if ((err as Error).name !== 'AbortError') {
+          setError(err instanceof Error ? err.message : 'Failed to fetch traces');
+        }
       } finally {
         if (!isActive) {
           return;
@@ -72,7 +80,7 @@ export default function TraceView({
       isActive = false;
       controller.abort();
     };
-  }, [evaluationId]);
+  }, [evaluationId, onFetchTraces]);
 
   useEffect(() => {
     if (onVisibilityChange) {

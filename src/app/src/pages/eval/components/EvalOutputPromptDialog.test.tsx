@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
-import { useTableStore } from './store';
 import * as ReactDOM from 'react-dom';
 
 // Mock the Citations component to verify it receives the correct props
@@ -33,18 +32,27 @@ vi.mock('./DebuggingPanel', () => {
 
 import { DebuggingPanel as MockDebuggingPanel } from './DebuggingPanel';
 
-vi.mock('./store', () => {
-  const actualStore = vi.importActual('./store');
-  return {
-    ...actualStore,
-    useTableStore: vi.fn().mockReturnValue({
-      addFilter: vi.fn(),
-      resetFilters: vi.fn(),
-    }),
-  };
-});
-
 const mockOnClose = vi.fn();
+const mockAddFilter = vi.fn();
+const mockResetFilters = vi.fn();
+const mockReplayEvaluation = vi.fn();
+const mockFetchTraces = vi.fn();
+
+const mockDependencies = {
+  filters: {
+    add: mockAddFilter,
+    reset: mockResetFilters,
+  },
+  api: {
+    replay: mockReplayEvaluation,
+    fetchTraces: mockFetchTraces,
+  },
+  cloudConfig: {
+    appUrl: 'https://cloud.example.com',
+    isEnabled: true,
+  },
+};
+
 const defaultProps = {
   open: true,
   onClose: mockOnClose,
@@ -68,6 +76,7 @@ const defaultProps = {
   },
   evaluationId: 'test-eval-id',
   testCaseId: 'test-case-id',
+  dependencies: mockDependencies,
 };
 
 describe('EvalOutputPromptDialog', () => {
@@ -478,11 +487,6 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     user = userEvent.setup();
-
-    (useTableStore as any).mockReturnValue({
-      addFilter: vi.fn(),
-      resetFilters: vi.fn(),
-    });
   });
 
   it('expands metadata value on single click', async () => {
@@ -571,14 +575,19 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
   });
 
   it('should reset filters, apply the selected metadata filter, and close the dialog when the filter button is clicked in the Metadata tab', async () => {
-    const mockResetFilters = vi.fn();
-    const mockAddFilter = vi.fn();
-    (useTableStore as any).mockReturnValue({
-      addFilter: mockAddFilter,
-      resetFilters: mockResetFilters,
-    });
+    const localMockResetFilters = vi.fn();
+    const localMockAddFilter = vi.fn();
+    const propsWithMocks = {
+      ...defaultProps,
+      dependencies: {
+        filters: {
+          add: localMockAddFilter,
+          reset: localMockResetFilters,
+        },
+      },
+    };
 
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    render(<EvalOutputPromptDialog {...propsWithMocks} />);
     await act(async () => {
       await user.click(screen.getByRole('tab', { name: 'Metadata' }));
     });
@@ -588,14 +597,309 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
       await user.click(filterButton);
     });
 
-    expect(mockResetFilters).toHaveBeenCalledTimes(1);
-    expect(mockAddFilter).toHaveBeenCalledTimes(1);
-    expect(mockAddFilter).toHaveBeenCalledWith({
+    expect(localMockResetFilters).toHaveBeenCalledTimes(1);
+    expect(localMockAddFilter).toHaveBeenCalledTimes(1);
+    expect(localMockAddFilter).toHaveBeenCalledWith({
       type: 'metadata',
       operator: 'equals',
       value: 'testValue',
       field: 'testKey',
     });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('EvalOutputPromptDialog dependency injection', () => {
+  let user: ReturnType<typeof userEvent.setup>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    user = userEvent.setup();
+  });
+
+  it('should work without dependencies (graceful degradation)', async () => {
+    const propsWithoutDependencies = {
+      open: true,
+      onClose: mockOnClose,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      metadata: {
+        testKey: 'testValue',
+      },
+      // No dependencies prop
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutDependencies} />);
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    const filterButton = screen.getByLabelText('Filter by testKey');
+    await act(async () => {
+      await user.click(filterButton);
+    });
+
+    // Should close dialog without errors
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should call injected filter functions with correct parameters', async () => {
+    const customAddFilter = vi.fn();
+    const customResetFilters = vi.fn();
+    const propsWithCustomFilters = {
+      ...defaultProps,
+      dependencies: {
+        filters: {
+          add: customAddFilter,
+          reset: customResetFilters,
+        },
+      },
+      metadata: {
+        customField: 'customValue',
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCustomFilters} />);
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    const filterButton = screen.getByLabelText('Filter by customField');
+    await act(async () => {
+      await user.click(filterButton);
+    });
+
+    expect(customResetFilters).toHaveBeenCalledTimes(1);
+    expect(customAddFilter).toHaveBeenCalledWith({
+      type: 'metadata',
+      operator: 'equals',
+      value: 'customValue',
+      field: 'customField',
+    });
+  });
+
+  it('should handle object metadata values correctly', async () => {
+    const customAddFilter = vi.fn();
+    const customResetFilters = vi.fn();
+    const objectValue = { nested: 'data', count: 42 };
+    const propsWithObjectMetadata = {
+      ...defaultProps,
+      dependencies: {
+        filters: {
+          add: customAddFilter,
+          reset: customResetFilters,
+        },
+      },
+      metadata: {
+        objectField: objectValue,
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithObjectMetadata} />);
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    const filterButton = screen.getByLabelText('Filter by objectField');
+    await act(async () => {
+      await user.click(filterButton);
+    });
+
+    expect(customAddFilter).toHaveBeenCalledWith({
+      type: 'metadata',
+      operator: 'equals',
+      value: JSON.stringify(objectValue),
+      field: 'objectField',
+    });
+  });
+
+  it('should work without filter functions in dependencies', async () => {
+    const propsWithoutFilterFunctions = {
+      open: true,
+      onClose: mockOnClose,
+      prompt: 'Test prompt',
+      metadata: {
+        key: 'value',
+      },
+      dependencies: {
+        // No filters property
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutFilterFunctions} />);
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    const filterButton = screen.getByLabelText('Filter by key');
+
+    // Should not throw error
+    await act(async () => {
+      await user.click(filterButton);
+    });
+
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('EvalOutputPromptDialog replay evaluation', () => {
+  let user: ReturnType<typeof userEvent.setup>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    user = userEvent.setup();
+  });
+
+  it('should call replay function when Replay button is clicked', async () => {
+    const customReplay = vi.fn().mockResolvedValue({ output: 'Replayed output' });
+    const propsWithReplay = {
+      ...defaultProps,
+      dependencies: {
+        api: {
+          replay: customReplay,
+        },
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithReplay} />);
+
+    // Click edit button to enter edit mode
+    await act(async () => {
+      await user.click(screen.getByLabelText('Edit & Replay'));
+    });
+
+    // Click replay button
+    const replayButton = screen.getByRole('button', { name: /replay/i });
+    await act(async () => {
+      await user.click(replayButton);
+    });
+
+    expect(customReplay).toHaveBeenCalledWith({
+      evaluationId: 'test-eval-id',
+      testIndex: undefined,
+      prompt: 'Test prompt',
+      variables: undefined,
+    });
+  });
+
+  it('should display replay output when successful', async () => {
+    const customReplay = vi.fn().mockResolvedValue({ output: 'Replayed output text' });
+    const propsWithReplay = {
+      ...defaultProps,
+      dependencies: {
+        api: {
+          replay: customReplay,
+        },
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithReplay} />);
+
+    await act(async () => {
+      await user.click(screen.getByLabelText('Edit & Replay'));
+    });
+
+    const replayButton = screen.getByRole('button', { name: /replay/i });
+    await act(async () => {
+      await user.click(replayButton);
+    });
+
+    await screen.findByText('Replay Output');
+    expect(screen.getByText('Replayed output text')).toBeInTheDocument();
+  });
+
+  it('should display error when replay fails', async () => {
+    const customReplay = vi.fn().mockResolvedValue({ error: 'Replay failed' });
+    const propsWithReplay = {
+      ...defaultProps,
+      dependencies: {
+        api: {
+          replay: customReplay,
+        },
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithReplay} />);
+
+    await act(async () => {
+      await user.click(screen.getByLabelText('Edit & Replay'));
+    });
+
+    const replayButton = screen.getByRole('button', { name: /replay/i });
+    await act(async () => {
+      await user.click(replayButton);
+    });
+
+    await screen.findByText('Replay failed');
+  });
+
+  it('should show error if replay function is not provided', async () => {
+    const propsWithoutReplay = {
+      ...defaultProps,
+      dependencies: {
+        // No api property
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutReplay} />);
+
+    await act(async () => {
+      await user.click(screen.getByLabelText('Edit & Replay'));
+    });
+
+    const replayButton = screen.getByRole('button', { name: /replay/i });
+    await act(async () => {
+      await user.click(replayButton);
+    });
+
+    await screen.findByText('Replay functionality is not available');
+  });
+});
+
+describe('EvalOutputPromptDialog cloud config', () => {
+  it('should pass cloudConfig to MetadataPanel', async () => {
+    const customCloudConfig = {
+      appUrl: 'https://custom.cloud.com',
+      isEnabled: true,
+    };
+    const propsWithCustomConfig = {
+      ...defaultProps,
+      dependencies: {
+        cloudConfig: customCloudConfig,
+      },
+      metadata: {
+        policyName: 'Test Policy',
+        policyId: 'policy-123',
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCustomConfig} />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    // Check that policy link is rendered (MetadataPanel uses cloudConfig)
+    expect(screen.getByText('View policy in Promptfoo Cloud')).toBeInTheDocument();
+  });
+
+  it('should work without cloudConfig', async () => {
+    const propsWithoutConfig = {
+      ...defaultProps,
+      dependencies: {
+        cloudConfig: null,
+      },
+      metadata: {
+        policyName: 'Test Policy',
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutConfig} />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    // Should just show the policy name without link
+    expect(screen.getByText('Test Policy')).toBeInTheDocument();
+    expect(screen.queryByText('View policy in Promptfoo Cloud')).not.toBeInTheDocument();
   });
 });

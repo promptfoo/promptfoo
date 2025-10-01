@@ -1,13 +1,20 @@
 import React, { useMemo } from 'react';
 
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { callApi } from '@app/utils/api';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
-import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import EvalOutputPromptDialog, {
+  type DialogDependencies,
+  type ReplayEvaluationParams,
+  type ReplayEvaluationResult,
+} from './EvalOutputPromptDialog';
+import type { Trace } from '../../../components/traces/TraceView';
 import FailReasonCarousel from './FailReasonCarousel';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
@@ -81,7 +88,8 @@ function EvalOutputCell({
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText } = useTableStore();
+  const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
+  const { data: cloudConfig } = useCloudConfig();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -103,6 +111,75 @@ function EvalOutputCell({
   const handlePromptClose = () => {
     setOpen(false);
   };
+
+  const handleReplayEvaluation = React.useCallback(
+    async (params: ReplayEvaluationParams): Promise<ReplayEvaluationResult> => {
+      try {
+        const response = await callApi('/eval/replay', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(params),
+        });
+
+        if (!response.ok) {
+          const error = await response.text();
+          return { error: error || 'Failed to replay evaluation' };
+        }
+
+        const data = await response.json();
+
+        // Handle the response, checking for output in various locations
+        if (data.output) {
+          return { output: data.output };
+        } else if (data.response?.output) {
+          return { output: data.response.output };
+        } else if (data.response?.raw) {
+          return { output: data.response.raw };
+        } else if (data.error) {
+          return { error: `Provider error: ${data.error}` };
+        } else {
+          return { output: undefined };
+        }
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'An error occurred' };
+      }
+    },
+    [],
+  );
+
+  const handleFetchTraces = React.useCallback(
+    async (evalId: string, signal: AbortSignal): Promise<Trace[]> => {
+      const response = await callApi(`/traces/evaluation/${evalId}`, {
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data.traces) ? data.traces : [];
+    },
+    [],
+  );
+
+  // Group all dependencies for the dialog
+  const dialogDependencies = React.useMemo<DialogDependencies>(
+    () => ({
+      filters: {
+        add: addFilter,
+        reset: resetFilters,
+      },
+      api: {
+        replay: handleReplayEvaluation,
+        fetchTraces: handleFetchTraces,
+      },
+      cloudConfig,
+    }),
+    [addFilter, resetFilters, handleReplayEvaluation, handleFetchTraces, cloudConfig],
+  );
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
@@ -633,6 +710,7 @@ function EvalOutputCell({
               testIndex={rowIndex}
               promptIndex={promptIndex}
               variables={output.testCase?.vars}
+              dependencies={dialogDependencies}
             />
           )}
         </>

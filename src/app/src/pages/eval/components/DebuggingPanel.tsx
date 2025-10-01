@@ -2,7 +2,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { ErrorBoundary } from 'react-error-boundary';
-import TraceView from '../../../components/traces/TraceView';
+import TraceView, { type Trace } from '../../../components/traces/TraceView';
 
 const subtitleTypographySx = {
   mb: 1,
@@ -14,6 +14,7 @@ interface DebuggingPanelProps {
   testCaseId?: string;
   testIndex?: number;
   promptIndex?: number;
+  onFetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
 }
 
 export function DebuggingPanel({
@@ -21,6 +22,7 @@ export function DebuggingPanel({
   testCaseId,
   testIndex,
   promptIndex,
+  onFetchTraces,
 }: DebuggingPanelProps) {
   return (
     <Box>
@@ -35,6 +37,7 @@ export function DebuggingPanel({
               testCaseId={testCaseId}
               testIndex={testIndex}
               promptIndex={promptIndex}
+              onFetchTraces={onFetchTraces}
             />
           </ErrorBoundary>
         </Box>
