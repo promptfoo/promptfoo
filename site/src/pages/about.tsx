@@ -155,6 +155,12 @@ const AboutPageContent = () => {
                 image: '/img/team/james.jpeg',
                 bio: 'James brings years of experience in professional services helping leading financial institutions and energy sector clients.  James specializes in managing transformation initiatives and deploying enterprise solutions.',
               },
+              {
+                name: 'Yash Chhabria',
+                title: 'Software Engineer',
+                image: '/img/team/yash.png',
+                bio: 'Yash specializes in securing ML infrastructure, distributed systems, and multi-tenant platforms. His work spans threat modeling, purple teaming, and building proactive defenses against supply chain risks and privacy attacks in AI systems.',
+              },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">
