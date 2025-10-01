@@ -129,13 +129,21 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
       }
     }
 
-    // Check for pnpm
-    if (pathContains(realPath, '/.pnpm/global')) {
+    // Check for pnpm global - support multiple path patterns
+    if (
+      pathContains(realPath, '/.pnpm/global') ||
+      pathContains(realPath, '/pnpm/global') ||
+      (process.env.PNPM_HOME && pathContains(realPath, process.env.PNPM_HOME))
+    ) {
       return PackageManager.PNPM;
     }
 
-    // Check for yarn
-    if (pathContains(realPath, '/.yarn/global')) {
+    // Check for yarn global - support multiple path patterns
+    if (
+      pathContains(realPath, '/.yarn/global') ||
+      pathContains(realPath, '/.config/yarn/global') ||
+      pathContains(realPath, '/yarn/global')
+    ) {
       return PackageManager.YARN;
     }
 

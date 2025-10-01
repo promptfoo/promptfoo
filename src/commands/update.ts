@@ -31,7 +31,8 @@ export function updateCommand(program: Command) {
           return;
         }
 
-        const installationInfo = getInstallationInfo(process.cwd(), false);
+        // Pass true for manual update command to get proper error messages (not auto-update wording)
+        const installationInfo = getInstallationInfo(process.cwd(), true);
 
         // Show what we detected
         logger.info(

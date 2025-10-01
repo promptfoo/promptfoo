@@ -106,7 +106,7 @@ describe('update command', () => {
     // Wait for async operations
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(mockGetInstallationInfo).toHaveBeenCalledWith(process.cwd(), false);
+    expect(mockGetInstallationInfo).toHaveBeenCalledWith(process.cwd(), true);
     expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
       stdio: 'inherit',
       shell: false,

@@ -80,23 +80,19 @@ export function addCommonOptionsRecursively(command: Command) {
 async function main() {
   initializeRunLogging();
 
-  // Track background update process for cleanup
-  let updateProcess: ReturnType<typeof handleAutoUpdate> | undefined;
+  // Track event handlers for cleanup
   let cleanupUpdateHandlers: (() => void) | undefined;
 
-  // Cleanup function for background processes
+  // Cleanup function - only cleans up event handlers, NOT the background update process
+  // The update process is detached and unref'd, so it can continue after CLI exits
   const cleanup = () => {
-    if (updateProcess && !updateProcess.killed) {
-      logger.debug('Cleaning up background update process');
-      updateProcess.kill('SIGTERM');
-    }
     if (cleanupUpdateHandlers) {
       cleanupUpdateHandlers();
     }
   };
 
-  // Register cleanup handlers
-  process.on('exit', cleanup);
+  // Register cleanup handlers only for forced exits (SIGINT/SIGTERM)
+  // Don't hook 'exit' because we want background update to continue on normal exit
   process.on('SIGINT', () => {
     cleanup();
     process.exit(130); // Standard exit code for SIGINT
@@ -127,12 +123,7 @@ async function main() {
 
           // Attempt auto-update in background if explicitly enabled
           if (enableAutoUpdate) {
-            updateProcess = handleAutoUpdate(
-              info,
-              disableUpdateNag,
-              !enableAutoUpdate,
-              process.cwd(),
-            );
+            handleAutoUpdate(info, disableUpdateNag, !enableAutoUpdate, process.cwd());
           }
         }
       })

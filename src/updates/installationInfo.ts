@@ -80,8 +80,11 @@ export function getInstallationInfo(
         };
 
       case PackageManager.PNPM: {
-        // Check if it's global or local
-        const isGlobal = realPath.includes('/.pnpm/global');
+        // Check if it's global or local - support multiple path patterns
+        const isGlobal =
+          realPath.includes('/.pnpm/global') ||
+          realPath.includes('/pnpm/global') ||
+          (process.env.PNPM_HOME && realPath.includes(process.env.PNPM_HOME));
         if (isGlobal) {
           const updateCommand = 'pnpm add -g promptfoo@latest';
           return {
@@ -101,7 +104,11 @@ export function getInstallationInfo(
       }
 
       case PackageManager.YARN: {
-        const isGlobal = realPath.includes('/.yarn/global');
+        // Check if it's global or local - support multiple path patterns
+        const isGlobal =
+          realPath.includes('/.yarn/global') ||
+          realPath.includes('/.config/yarn/global') ||
+          realPath.includes('/yarn/global');
         if (isGlobal) {
           const updateCommand = 'yarn global add promptfoo@latest';
           return {

@@ -43,8 +43,13 @@ export function handleAutoUpdate(
   const args = commandParts.slice(1);
 
   // Use 'ignore' to prevent deadlocks from pipe buffer filling
+  // Use 'detached' so the process can continue after parent exits (especially on Windows)
   // The update runs in background, we don't need to capture output
-  const updateProcess = spawnFn(command, args, { stdio: 'ignore', shell: false });
+  const updateProcess = spawnFn(command, args, {
+    stdio: 'ignore',
+    shell: false,
+    detached: true,
+  });
 
   // Unref the process so it doesn't keep the event loop alive
   // This allows the CLI to exit normally even if update is still running

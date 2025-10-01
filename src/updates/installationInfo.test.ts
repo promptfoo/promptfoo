@@ -227,6 +227,47 @@ describe('getInstallationInfo', () => {
     });
   });
 
+  it('should detect Yarn global installation in .config directory', () => {
+    process.argv = [
+      'node',
+      '/home/user/.config/yarn/global/node_modules/promptfoo/dist/src/main.js',
+    ];
+    mockFs.realpathSync.mockReturnValue(
+      '/home/user/.config/yarn/global/node_modules/promptfoo/dist/src/main.js',
+    );
+
+    const result = getInstallationInfo('/project', false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.YARN,
+      isGlobal: true,
+      updateCommand: 'yarn global add promptfoo@latest',
+      updateMessage: 'Installed with yarn. Attempting to automatically update now...',
+    });
+  });
+
+  it('should detect PNPM global installation from PNPM_HOME', () => {
+    process.env.PNPM_HOME = '/usr/local/share/pnpm';
+    process.argv = [
+      'node',
+      '/usr/local/share/pnpm/global/5/node_modules/promptfoo/dist/src/main.js',
+    ];
+    mockFs.realpathSync.mockReturnValue(
+      '/usr/local/share/pnpm/global/5/node_modules/promptfoo/dist/src/main.js',
+    );
+
+    const result = getInstallationInfo('/project', false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.PNPM,
+      isGlobal: true,
+      updateCommand: 'pnpm add -g promptfoo@latest',
+      updateMessage: 'Installed with pnpm. Attempting to automatically update now...',
+    });
+
+    delete process.env.PNPM_HOME;
+  });
+
   it('should detect BUNX installation', () => {
     process.argv = [
       'node',

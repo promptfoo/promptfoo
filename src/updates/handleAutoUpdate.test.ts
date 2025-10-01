@@ -126,6 +126,7 @@ describe('handleAutoUpdate', () => {
     expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
       stdio: 'ignore',
       shell: false,
+      detached: true,
     });
   });
 
