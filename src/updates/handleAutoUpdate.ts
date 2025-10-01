@@ -43,11 +43,6 @@ export function handleAutoUpdate(
   const args = commandParts.slice(1);
 
   const updateProcess = spawnFn(command, args, { stdio: 'pipe', shell: false });
-  let errorOutput = '';
-
-  updateProcess.stderr?.on('data', (data) => {
-    errorOutput += data.toString();
-  });
 
   updateProcess.on('close', (code) => {
     if (code === 0) {
@@ -55,15 +50,17 @@ export function handleAutoUpdate(
         message: 'Update successful! The new version will be used on your next run.',
       });
     } else {
+      // Sanitize error output by not including it (could contain secrets)
       updateEventEmitter.emit('update-failed', {
-        message: `Automatic update failed. Please try updating manually. (command: ${updateCommand}, stderr: ${errorOutput.trim()})`,
+        message: `Automatic update failed with exit code ${code}. Please try updating manually: ${installationInfo.updateCommand}`,
       });
     }
   });
 
   updateProcess.on('error', (err) => {
+    // Only include error name, not full message which might contain paths/secrets
     updateEventEmitter.emit('update-failed', {
-      message: `Automatic update failed. Please try updating manually. (error: ${err.message})`,
+      message: `Automatic update failed (${err.name}). Please try updating manually: ${installationInfo.updateCommand}`,
     });
   });
 

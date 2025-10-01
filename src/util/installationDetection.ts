@@ -115,10 +115,13 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
     }
 
     // Check for Homebrew (only on macOS)
+    // Note: We use sync here because this is called during initialization
+    // The performance impact is minimal as it only runs on macOS during startup
     if (process.platform === 'darwin') {
       try {
         childProcess.execSync('brew list -1 | grep -q "^promptfoo$"', {
           stdio: 'ignore',
+          timeout: 1000, // 1 second timeout to prevent hanging
         });
         return PackageManager.HOMEBREW;
       } catch {

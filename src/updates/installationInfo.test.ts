@@ -164,6 +164,7 @@ describe('getInstallationInfo', () => {
 
     expect(mockChildProcess.execSync).toHaveBeenCalledWith('brew list -1 | grep -q "^promptfoo$"', {
       stdio: 'ignore',
+      timeout: 1000,
     });
   });
 

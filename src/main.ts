@@ -35,7 +35,7 @@ import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
 import telemetry from './telemetry';
 import { checkForUpdates } from './updates/updateCheck';
-import { handleAutoUpdate } from './updates/handleAutoUpdate';
+import { handleAutoUpdate, setUpdateHandler } from './updates/handleAutoUpdate';
 import { updateCommand } from './commands/update';
 import { getEnvBool } from './envars';
 import { loadDefaultConfig } from './util/config/default';
@@ -80,6 +80,39 @@ export function addCommonOptionsRecursively(command: Command) {
 async function main() {
   initializeRunLogging();
 
+  // Track background update process for cleanup
+  let updateProcess: ReturnType<typeof handleAutoUpdate> | undefined;
+  let cleanupUpdateHandlers: (() => void) | undefined;
+
+  // Cleanup function for background processes
+  const cleanup = () => {
+    if (updateProcess && !updateProcess.killed) {
+      logger.debug('Cleaning up background update process');
+      updateProcess.kill('SIGTERM');
+    }
+    if (cleanupUpdateHandlers) {
+      cleanupUpdateHandlers();
+    }
+  };
+
+  // Register cleanup handlers
+  process.on('exit', cleanup);
+  process.on('SIGINT', () => {
+    cleanup();
+    process.exit(130); // Standard exit code for SIGINT
+  });
+  process.on('SIGTERM', () => {
+    cleanup();
+    process.exit(143); // Standard exit code for SIGTERM
+  });
+
+  // Set up update event handlers (for future use by web UI or other consumers)
+  cleanupUpdateHandlers = setUpdateHandler(
+    (info) => logger.debug(`Update notification: ${info.message}`),
+    (info) => logger.info(info.message),
+    (info) => logger.warn(info.message),
+  );
+
   // Check for updates and show notification (non-blocking)
   const disableUpdateNag = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
   // Auto-update is opt-in: only enabled if explicitly set to true
@@ -94,7 +127,12 @@ async function main() {
 
           // Attempt auto-update in background if explicitly enabled
           if (enableAutoUpdate) {
-            handleAutoUpdate(info, disableUpdateNag, !enableAutoUpdate, process.cwd());
+            updateProcess = handleAutoUpdate(
+              info,
+              disableUpdateNag,
+              !enableAutoUpdate,
+              process.cwd(),
+            );
           }
         }
       })
