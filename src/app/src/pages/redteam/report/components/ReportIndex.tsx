@@ -21,6 +21,7 @@ import {
 } from '@mui/x-data-grid';
 import { useNavigate } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
+import { getASRColor } from '@promptfoo/app/src/utils/redteam';
 
 function CustomToolbar() {
   return (
@@ -95,6 +96,8 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
                 alignItems: 'center',
                 // `type: number` gets overwritten by flex; manually justify content.
                 justifyContent: 'end',
+                color: getASRColor(params.value),
+                fontWeight: 500,
               }}
             >
               {params.value.toFixed(2)}%
