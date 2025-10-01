@@ -45,6 +45,14 @@ export function getInstallationInfo(
     const normalizedProjectRoot = projectRoot?.replace(/\\/g, '/');
     const isGit = isGitRepository(process.cwd());
 
+    // Helper function to check if a path contains a pattern (case-insensitive on Windows)
+    const pathContains = (haystack: string, needle: string): boolean => {
+      if (process.platform === 'win32') {
+        return haystack.toLowerCase().includes(needle.toLowerCase());
+      }
+      return haystack.includes(needle);
+    };
+
     // Check for Docker environment
     if (process.env.DOCKER === 'true' || fs.existsSync('/.dockerenv')) {
       return {
@@ -60,7 +68,7 @@ export function getInstallationInfo(
       isGit &&
       normalizedProjectRoot &&
       realPath.startsWith(normalizedProjectRoot) &&
-      !realPath.includes('/node_modules/')
+      !pathContains(realPath, '/node_modules/')
     ) {
       return {
         packageManager: PackageManager.UNKNOWN, // Not managed by a package manager in this sense
@@ -70,14 +78,14 @@ export function getInstallationInfo(
     }
 
     // Check for npx/pnpx
-    if (realPath.includes('/.npm/_npx') || realPath.includes('/npm/_npx')) {
+    if (pathContains(realPath, '/.npm/_npx') || pathContains(realPath, '/npm/_npx')) {
       return {
         packageManager: PackageManager.NPX,
         isGlobal: false,
         updateMessage: 'Running via npx, update not applicable.',
       };
     }
-    if (realPath.includes('/.pnpm/_pnpx')) {
+    if (pathContains(realPath, '/.pnpm/_pnpx')) {
       return {
         packageManager: PackageManager.PNPX,
         isGlobal: false,
@@ -104,7 +112,7 @@ export function getInstallationInfo(
     }
 
     // Check for pnpm
-    if (realPath.includes('/.pnpm/global')) {
+    if (pathContains(realPath, '/.pnpm/global')) {
       const updateCommand = 'pnpm add -g promptfoo@latest';
       return {
         packageManager: PackageManager.PNPM,
@@ -117,7 +125,7 @@ export function getInstallationInfo(
     }
 
     // Check for yarn
-    if (realPath.includes('/.yarn/global')) {
+    if (pathContains(realPath, '/.yarn/global')) {
       const updateCommand = 'yarn global add promptfoo@latest';
       return {
         packageManager: PackageManager.YARN,
@@ -130,14 +138,14 @@ export function getInstallationInfo(
     }
 
     // Check for bun
-    if (realPath.includes('/.bun/install/cache')) {
+    if (pathContains(realPath, '/.bun/install/cache')) {
       return {
         packageManager: PackageManager.BUNX,
         isGlobal: false,
         updateMessage: 'Running via bunx, update not applicable.',
       };
     }
-    if (realPath.includes('/.bun/bin')) {
+    if (pathContains(realPath, '/.bun/bin')) {
       const updateCommand = 'bun add -g promptfoo@latest';
       return {
         packageManager: PackageManager.BUN,

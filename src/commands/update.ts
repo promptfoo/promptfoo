@@ -54,33 +54,36 @@ export function updateCommand(program: Command) {
 
         logger.info(`Running: ${updateCommand}`);
 
-        // Execute the update command
-        const updateProcess = spawn(updateCommand, {
-          stdio: 'inherit',
-          shell: true,
-        });
+        // Execute the update command and wait for it to complete
+        await new Promise<void>((resolve, reject) => {
+          const updateProcess = spawn(updateCommand, {
+            stdio: 'inherit',
+            shell: true,
+          });
 
-        updateProcess.on('close', (code) => {
-          if (code === 0) {
-            logger.info('✓ Update completed successfully!');
-            logger.info('The new version will be used on your next run.');
-          } else {
-            logger.error(`Update failed with exit code ${code}`);
+          updateProcess.on('close', (code) => {
+            if (code === 0) {
+              logger.info('✓ Update completed successfully!');
+              logger.info('The new version will be used on your next run.');
+              resolve();
+            } else {
+              logger.error(`Update failed with exit code ${code}`);
+              if (installationInfo.updateMessage) {
+                logger.info('Manual update instructions:');
+                logger.info(installationInfo.updateMessage);
+              }
+              reject(new Error(`Update failed with exit code ${code}`));
+            }
+          });
+
+          updateProcess.on('error', (err) => {
+            logger.error(`Update failed: ${err.message}`);
             if (installationInfo.updateMessage) {
               logger.info('Manual update instructions:');
               logger.info(installationInfo.updateMessage);
             }
-            process.exit(1);
-          }
-        });
-
-        updateProcess.on('error', (err) => {
-          logger.error(`Update failed: ${err.message}`);
-          if (installationInfo.updateMessage) {
-            logger.info('Manual update instructions:');
-            logger.info(installationInfo.updateMessage);
-          }
-          process.exit(1);
+            reject(err);
+          });
         });
       } catch (error) {
         logger.error(`Failed to update: ${error}`);
