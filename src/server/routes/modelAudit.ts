@@ -20,7 +20,7 @@ interface ErrorResponse {
   output?: string;
 }
 
-// Path validation to prevent directory traversal attacks
+// Path normalization helper - expands ~ and converts to absolute paths
 function validateAndNormalizePath(
   inputPath: string,
   baseDir: string = process.cwd(),
@@ -40,27 +40,9 @@ function validateAndNormalizePath(
     // Normalize to remove any ../ or ./ components
     const normalizedPath = path.normalize(absolutePath);
 
-    // Security check: Ensure the normalized path doesn't escape expected directories
-    // For model scanning, we allow any path but prevent null bytes and other injection attempts
-    if (normalizedPath.includes('\0')) {
-      return { valid: false, normalizedPath: '', error: 'Invalid path: contains null bytes' };
-    }
-
-    // Additional check: prevent common injection patterns
-    const dangerousPatterns = ['\r', '\n', ';', '|', '&', '$', '`'];
-    for (const pattern of dangerousPatterns) {
-      if (normalizedPath.includes(pattern)) {
-        return {
-          valid: false,
-          normalizedPath: '',
-          error: 'Invalid path: contains dangerous characters',
-        };
-      }
-    }
-
     return { valid: true, normalizedPath };
   } catch (error) {
-    return { valid: false, normalizedPath: '', error: `Path validation error: ${error}` };
+    return { valid: false, normalizedPath: '', error: `Path normalization error: ${error}` };
   }
 }
 import { checkModelAuditInstalled } from '../../commands/modelScan';
