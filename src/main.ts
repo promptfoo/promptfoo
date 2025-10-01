@@ -35,6 +35,7 @@ import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
 import telemetry from './telemetry';
 import { checkForUpdates } from './updates/updateCheck';
+import { handleAutoUpdate } from './updates/handleAutoUpdate';
 import { updateCommand } from './commands/update';
 import { getEnvBool } from './envars';
 import { loadDefaultConfig } from './util/config/default';
@@ -80,12 +81,20 @@ async function main() {
   initializeRunLogging();
 
   // Check for updates and show notification (non-blocking)
-  if (!getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
+  const disableUpdateNag = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
+  const disableAutoUpdate = getEnvBool('PROMPTFOO_DISABLE_AUTO_UPDATE');
+
+  if (!disableUpdateNag) {
     checkForUpdates()
       .then((info) => {
         if (info) {
           logger.info(info.message);
           logger.info('Run "promptfoo update" to upgrade to the latest version.');
+
+          // Attempt auto-update in background if enabled
+          if (!disableAutoUpdate) {
+            handleAutoUpdate(info, disableUpdateNag, disableAutoUpdate, process.cwd());
+          }
         }
       })
       .catch((err) => {

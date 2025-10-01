@@ -45,3 +45,54 @@ PROMPTFOO_DISABLE_UPDATE=1
 ```
 
 Note: This only disables the notification. You can still manually update using `promptfoo update` at any time.
+
+## Automatic Updates
+
+:::caution Experimental Feature
+Automatic background updates are **disabled by default** and considered experimental. Use with caution in production environments.
+:::
+
+When enabled, promptfoo will attempt to automatically update itself in the background when a new version is detected. The update runs silently without interrupting your workflow, and the new version will be available on your next command.
+
+### Enabling Auto-Updates
+
+To enable automatic background updates:
+
+```sh
+# Enable auto-updates (disabled by default)
+unset PROMPTFOO_DISABLE_AUTO_UPDATE
+```
+
+### Disabling Auto-Updates
+
+Auto-updates are disabled by default. To explicitly disable them:
+
+```sh
+# Disable auto-updates (default behavior)
+export PROMPTFOO_DISABLE_AUTO_UPDATE=1
+```
+
+### How It Works
+
+- Auto-updates only work for globally installed instances (npm, yarn, pnpm, bun)
+- Updates run in the background without blocking your commands
+- The new version takes effect on the next promptfoo command
+- No updates occur for local project installations, Docker, or npx usage
+- Updates are skipped if `PROMPTFOO_DISABLE_UPDATE=1` is set
+
+### Supported Installation Methods
+
+Auto-updates work with:
+
+- ✅ Global npm (`npm install -g promptfoo`)
+- ✅ Global yarn (`yarn global add promptfoo`)
+- ✅ Global pnpm (`pnpm add -g promptfoo`)
+- ✅ Global bun (`bun add -g promptfoo`)
+
+Auto-updates are **not available** for:
+
+- ❌ Local project installations (update via `package.json`)
+- ❌ Homebrew (use `brew upgrade promptfoo`)
+- ❌ Docker (use `docker pull promptfoo/promptfoo:latest`)
+- ❌ npx/pnpx/bunx (always runs latest by default)
+- ❌ Git clones (use `git pull`)
