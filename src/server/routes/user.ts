@@ -19,11 +19,8 @@ export const userRouter = Router();
 userRouter.get('/email', async (req: Request, res: Response): Promise<void> => {
   try {
     const email = getUserEmail();
-    if (email) {
-      res.json(ApiSchemas.User.Get.Response.parse({ email }));
-    } else {
-      res.status(404).json({ error: 'User not found' });
-    }
+    // Return 200 with null email instead of 404 to avoid console errors when no email is configured
+    res.json(ApiSchemas.User.Get.Response.parse({ email: email || null }));
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.error(`Error getting email: ${fromError(error)}`);
@@ -176,5 +173,25 @@ userRouter.post('/logout', async (req: Request, res: Response): Promise<void> =>
       `Error during logout: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
     res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+/**
+ * Returns information about the Promptfoo Cloud config for the current user.
+ */
+userRouter.get('/cloud-config', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const cloudConfigData = {
+      appUrl: cloudConfig.getAppUrl(),
+      isEnabled: cloudConfig.isEnabled(),
+    };
+
+    res.json({
+      appUrl: cloudConfigData.appUrl,
+      isEnabled: cloudConfigData.isEnabled,
+    });
+  } catch (error) {
+    logger.error(`Error getting cloud config: ${error}`);
+    res.status(500).json({ error: 'Failed to get cloud config' });
   }
 });

@@ -132,7 +132,6 @@ interface ResultsTableProps {
   debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
-  onSearchTextChange: (text: string) => void;
   zoom: number;
 }
 
@@ -232,7 +231,6 @@ function ResultsTable({
   debouncedSearchText,
   showStats,
   onFailureFilterToggle,
-  onSearchTextChange,
   zoom,
 }: ResultsTableProps) {
   const {
@@ -245,7 +243,6 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
-    addFilter,
     setFilterMode,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
@@ -435,9 +432,18 @@ function ResultsTable({
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
-      .filter((filter) =>
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
-      )
+      .filter((filter) => {
+        // For metadata filters with exists operator, only field is required
+        if (filter.type === 'metadata' && filter.operator === 'exists') {
+          return Boolean(filter.field);
+        }
+        // For other metadata operators, both field and value are required
+        if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        // For non-metadata filters, value is required
+        return Boolean(filter.value);
+      })
       .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
     // Create a stable string representation of applied filters
     return JSON.stringify(
@@ -483,18 +489,24 @@ function ResultsTable({
       return;
     }
 
-    console.log('Fetching data for filtering/pagination', evalId);
-
     fetchEvalData(evalId, {
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
-      // Only pass the filters that have been applied (have a value).
-      // For metadata filters, both field and value must be present.
-      filters: Object.values(filters.values).filter((filter) =>
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
-      ),
+      // Only pass the filters that have been applied.
+      // For metadata filters with exists operator, only field is required.
+      // For other metadata operators, both field and value are required.
+      // For non-metadata filters, value is required.
+      filters: Object.values(filters.values).filter((filter) => {
+        if (filter.type === 'metadata' && filter.operator === 'exists') {
+          return Boolean(filter.field);
+        }
+        if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        return Boolean(filter.value);
+      }),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -626,14 +638,12 @@ function ResultsTable({
                     value = `\`\`\`json\n${value}\n\`\`\``;
                   }
                 }
-                const truncatedValue =
-                  value.length > maxTextLength
-                    ? `${value.substring(0, maxTextLength - 3).trim()}...`
-                    : value;
-
                 const cellContent = renderMarkdown ? (
                   <MarkdownErrorBoundary fallback={value}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                    <TruncatedText
+                      text={<ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>}
+                      maxLength={maxTextLength}
+                    />
                   </MarkdownErrorBoundary>
                 ) : (
                   <TruncatedText text={value} maxLength={maxTextLength} />
@@ -731,37 +741,6 @@ function ResultsTable({
     });
     return totals;
   }, [table?.head?.prompts, table?.body]);
-
-  const handleMetricFilterClick = React.useCallback(
-    (metric: string | null) => {
-      if (!metric) {
-        return;
-      }
-
-      const filter = {
-        type: 'metric' as const,
-        operator: 'equals' as const,
-        value: metric,
-        logicOperator: 'or' as const,
-      };
-
-      // If this filter is already applied, do not re-apply it.
-      if (
-        Object.values(filters.values).find(
-          (f) =>
-            f.type === filter.type &&
-            f.value === filter.value &&
-            f.operator === filter.operator &&
-            f.logicOperator === filter.logicOperator,
-        )
-      ) {
-        return;
-      }
-
-      addFilter(filter);
-    },
-    [addFilter, filters.values],
-  );
 
   const promptColumns = React.useMemo(() => {
     return [
@@ -918,8 +897,6 @@ function ResultsTable({
                           lookup={prompt.metrics.namedScores}
                           counts={prompt.metrics.namedScoresCount}
                           metricTotals={metricTotals}
-                          onSearchTextChange={onSearchTextChange}
-                          onMetricFilter={handleMetricFilterClick}
                           onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
                       </Box>
@@ -983,7 +960,6 @@ function ResultsTable({
                     showStats={showStats}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
-                    onMetricFilter={handleMetricFilterClick}
                     isRedteam={isRedteam}
                   />
                 </ErrorBoundary>
@@ -1014,7 +990,6 @@ function ResultsTable({
     debouncedSearchText,
     showStats,
     filters.appliedCount,
-    handleMetricFilterClick,
     passRates,
     passingTestCounts,
     testCounts,

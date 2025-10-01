@@ -1,15 +1,22 @@
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
+import {
+  isPolicyMetric,
+  isValidPolicyObject,
+  makeInlinePolicyId,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTable,
+  RedteamPluginObject,
   ResultsFile,
   UnifiedConfig,
 } from '@promptfoo/types';
@@ -35,11 +42,58 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   const metrics = new Set<string>();
   table.head.prompts.forEach((prompt) => {
     if (prompt.metrics?.namedScores) {
-      Object.keys(prompt.metrics.namedScores).forEach((metric) => metrics.add(metric));
+      Object.keys(prompt.metrics.namedScores).forEach((metric) => {
+        // Exclude policy metrics as they are handled by the separate policy filter
+        if (!isPolicyMetric(metric)) {
+          metrics.add(metric);
+        }
+      });
     }
   });
 
   return Array.from(metrics).sort();
+}
+
+/**
+ * Extracts unique policy IDs from plugins.
+ */
+function buildPolicyOptions(plugins?: RedteamPluginObject[]): string[] {
+  const policyIds = new Set<string>();
+  plugins?.forEach((plugin) => {
+    if (typeof plugin !== 'string' && plugin.id === 'policy') {
+      const policy = plugin?.config?.policy;
+      if (policy) {
+        if (isValidPolicyObject(policy)) {
+          policyIds.add(policy.id);
+        } else {
+          policyIds.add(makeInlinePolicyId(policy));
+        }
+      }
+    }
+  });
+
+  return Array.from(policyIds).sort();
+}
+
+type PolicyIdToNameMap = Record<PolicyObject['id'], PolicyObject['name']>;
+
+/**
+ * Creates a mapping of policy IDs to their names for display purposes.
+ * Used by the filter form to show policy names in the dropdown.
+ */
+function extractPolicyIdToNameMap(plugins: RedteamPluginObject[]): PolicyIdToNameMap {
+  const policyMap: PolicyIdToNameMap = {};
+
+  plugins.forEach((plugin) => {
+    if (typeof plugin !== 'string' && plugin.id === 'policy') {
+      const policy = plugin?.config?.policy;
+      if (policy && isValidPolicyObject(policy)) {
+        policyMap[policy.id] = policy.name;
+      }
+    }
+  });
+
+  return policyMap;
 }
 
 function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
@@ -50,13 +104,17 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
 }
 
 /**
- * The `plugin`, `strategy`, and `severity` filter options are only available for redteam evaluations.
+ * The `plugin`, `strategy`, `severity`, and `policy` filter options are only available for redteam evaluations.
  * This function conditionally constructs these based on whether the evaluation was a red team. If it was not,
  * it returns an empty object.
+ *
+ * @param config - The eval config
+ * @param table - The eval table (needed to extract policy options from metrics)
  */
 function buildRedteamFilterOptions(
   config?: Partial<UnifiedConfig> | null,
-): { plugin: string[]; strategy: string[]; severity: string[] } | {} {
+  table?: EvaluateTable | null,
+): { plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {} {
   const isRedteam = Boolean(config?.redteam);
 
   // For non-redteam evaluations, don't provide redteam-specific filter options.
@@ -68,12 +126,17 @@ function buildRedteamFilterOptions(
   }
 
   return {
-    plugin:
-      config?.redteam?.plugins?.map((plugin) =>
-        typeof plugin === 'string' ? plugin : plugin.id,
-      ) ?? [],
+    // Deduplicate plugins (handles custom plugins)
+    plugin: Array.from(
+      new Set(
+        config?.redteam?.plugins?.map((plugin) =>
+          typeof plugin === 'string' ? plugin : plugin.id,
+        ) ?? [],
+      ),
+    ),
     strategy: extractUniqueStrategyIds(config?.redteam?.strategies),
     severity: computeAvailableSeverities(config?.redteam?.plugins),
+    policy: buildPolicyOptions(config?.redteam?.plugins),
   };
 }
 
@@ -122,9 +185,15 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy' | 'severity';
+export type ResultsFilterType =
+  | 'metric'
+  | 'metadata'
+  | 'plugin'
+  | 'strategy'
+  | 'severity'
+  | 'policy';
 
-export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
+export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains' | 'exists';
 
 export type ResultsFilter = {
   /**
@@ -237,7 +306,12 @@ interface TableState {
       plugin?: string[];
       strategy?: string[];
       severity?: string[];
+      policy?: string[];
     };
+    /**
+     * Mapping of policy IDs to their names for display purposes.
+     */
+    policyIdToNameMap?: Record<string, string | undefined>;
   };
 
   /**
@@ -331,6 +405,20 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
   ),
 );
 
+// Helper function to determine if a filter is applied
+const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolean => {
+  if (filter.type === 'metadata') {
+    // For metadata filters with exists operator, only field is required
+    if (filter.operator === 'exists') {
+      return Boolean(filter.field);
+    }
+    // For other metadata operators, both field and value are required
+    return Boolean(filter.value && filter.field);
+  }
+  // For non-metadata filters, value is required
+  return Boolean(filter.value);
+};
+
 export const useTableStore = create<TableState>()((set, get) => ({
   evalId: null,
   setEvalId: (evalId: string) => set(() => ({ evalId })),
@@ -368,8 +456,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(table),
             metadata: [],
-            ...buildRedteamFilterOptions(resultsFile.config),
+            ...buildRedteamFilterOptions(resultsFile.config, table),
           },
+          policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
         },
       }));
     } else {
@@ -383,8 +472,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
           options: {
             metric: computeAvailableMetrics(results.table),
             metadata: [],
-            ...buildRedteamFilterOptions(resultsFile.config),
+            ...buildRedteamFilterOptions(resultsFile.config, results.table),
           },
+          policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
         },
       }));
     }
@@ -495,8 +585,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
             options: {
               metric: computeAvailableMetrics(data.table),
               metadata: [],
-              ...buildRedteamFilterOptions(data.config),
+              ...buildRedteamFilterOptions(data.config, data.table),
             },
+            policyIdToNameMap: extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           },
         }));
 
@@ -534,9 +625,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
     const filterId = uuidv4();
 
     set((prevState) => {
-      // For metadata filters, only count as applied if both field and value are present
-      const isApplied =
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value);
+      const isApplied = isFilterApplied(filter);
       const appliedCount = prevState.filters.appliedCount + (isApplied ? 1 : 0);
 
       // Calculate the next sortIndex
@@ -569,9 +658,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
   removeFilter: (id: ResultsFilter['id']) => {
     set((prevState) => {
       const target = prevState.filters.values[id];
-      // For metadata filters, only count as applied if both field and value were present
-      const wasApplied =
-        target.type === 'metadata' ? Boolean(target.value && target.field) : Boolean(target.value);
+      const wasApplied = isFilterApplied(target);
       const appliedCount = prevState.filters.appliedCount - (wasApplied ? 1 : 0);
       const values = { ...prevState.filters.values };
       delete values[id];
@@ -619,11 +706,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
   updateFilter: (filter: ResultsFilter) => {
     set((prevState) => {
       const target = prevState.filters.values[filter.id];
-      // For metadata filters, only count as applied if both field and value are present
-      const targetWasApplied =
-        target.type === 'metadata' ? Boolean(target.value && target.field) : Boolean(target.value);
-      const filterIsApplied =
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value);
+      const targetWasApplied = isFilterApplied(target);
+      const filterIsApplied = isFilterApplied(filter);
       const appliedCount =
         prevState.filters.appliedCount - (targetWasApplied ? 1 : 0) + (filterIsApplied ? 1 : 0);
 

@@ -69,16 +69,23 @@ const Overview = ({
 
   const severityCounts = Object.values(Severity).reduce(
     (acc, severity) => {
-      acc[severity] = Object.keys(categoryStats).reduce((count, category) => {
-        const stats = categoryStats[category as PluginType];
-        const passRate = stats.pass / stats.total;
-        if (
-          getRiskCategorySeverityMap(plugins)[category as PluginType] === severity &&
-          passRate < pluginPassRateThreshold
-        ) {
-          return count + 1;
+      acc[severity] = plugins.reduce((count, plugin) => {
+        const stats = categoryStats[plugin.id as PluginType];
+        if (!stats || stats.total <= 0) {
+          return count;
         }
-        return count;
+
+        // Get the severity from the plugin definition or, if it's undefined (most cases; no override is set),
+        // the risk category severity map.
+        const pluginSeverity =
+          plugin?.severity ?? getRiskCategorySeverityMap(plugins)[plugin.id as PluginType];
+
+        if (pluginSeverity !== severity) {
+          return count;
+        }
+
+        const passRate = stats.total > 0 ? stats.pass / stats.total : 1;
+        return passRate < pluginPassRateThreshold ? count + 1 : count;
       }, 0);
       return acc;
     },
