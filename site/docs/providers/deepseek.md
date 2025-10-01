@@ -39,24 +39,16 @@ providers:
 
 ## Available Models
 
-:::note
+### deepseek-chat
 
-As of September 29, 2025, both `deepseek-chat` and `deepseek-reasoner` have been upgraded to use **DeepSeek-V3.2-Exp**, featuring significant cost reductions (50% lower pricing) and improved efficiency through DeepSeek Sparse Attention (DSA) technology.
-
-:::
-
-### deepseek-chat (DeepSeek-V3.2-Exp)
-
-- Non-thinking mode of DeepSeek-V3.2-Exp
-- General purpose model for conversations and content
+- General purpose model for conversations and content generation
 - 64K context window, 8K output tokens
 - Input: $0.028/1M (cache hit), $0.28/1M (cache miss)
 - Output: $0.42/1M
 
-### deepseek-reasoner (DeepSeek-V3.2-Exp)
+### deepseek-reasoner
 
-- Thinking mode of DeepSeek-V3.2-Exp
-- Specialized for reasoning and problem-solving
+- Specialized reasoning model with extended thinking capabilities
 - 64K context, 32K reasoning tokens, 8K output tokens
 - Input: $0.028/1M (cache hit), $0.28/1M (cache miss)
 - Output: $0.42/1M

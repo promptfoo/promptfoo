@@ -258,24 +258,14 @@ describe('loadApiProvider', () => {
 
   it('should load DeepSeek provider with default model', async () => {
     const provider = await loadApiProvider('deepseek:');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('deepseek-chat', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://api.deepseek.com/v1',
-        apiKeyEnvar: 'DEEPSEEK_API_KEY',
-      }),
-    });
     expect(provider).toBeDefined();
+    expect(provider.id()).toBe('deepseek:deepseek-chat');
   });
 
   it('should load DeepSeek provider with specific model', async () => {
-    const provider = await loadApiProvider('deepseek:deepseek-coder');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('deepseek-coder', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://api.deepseek.com/v1',
-        apiKeyEnvar: 'DEEPSEEK_API_KEY',
-      }),
-    });
+    const provider = await loadApiProvider('deepseek:deepseek-reasoner');
     expect(provider).toBeDefined();
+    expect(provider.id()).toBe('deepseek:deepseek-reasoner');
   });
 
   it('should load Hyperbolic provider with specific model', async () => {

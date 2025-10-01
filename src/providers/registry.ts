@@ -93,6 +93,7 @@ import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
 import { createLlamaApiProvider } from './llamaApi';
 import { createNscaleProvider } from './nscale';
+import { createDeepSeekProvider } from './deepseek';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -462,16 +463,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      // As of Sept 2025, deepseek-chat and deepseek-reasoner are upgraded to DeepSeek-V3.2-Exp
-      const modelName = splits.slice(1).join(':') || 'deepseek-chat';
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.deepseek.com/v1',
-          apiKeyEnvar: 'DEEPSEEK_API_KEY',
-        },
+      return createDeepSeekProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
