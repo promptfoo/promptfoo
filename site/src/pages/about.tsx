@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
 import Avatar from '@mui/material/Avatar';
@@ -6,8 +7,8 @@ import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
-import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 
 const AboutPageContent = () => {
@@ -108,6 +109,12 @@ const AboutPageContent = () => {
                 bio: 'Ben brings go-to-market expertise as an early GTM hire at multiple high-growth startups including Windsurf, Applied Intuition, and Amplitude. He specializes in building strategic relationships and helping enterprises implement and secure their AI solutions.',
               },
               {
+                name: 'Travis Willhite',
+                title: 'Enterprise GTM Lead',
+                image: '/img/team/travis.png',
+                bio: 'Travis has spent the past decade driving revenue at high-growth, venture-backed AI companies. He has extensive experience helping Fortune 500 companies develop and launch cutting-edge AI applications.',
+              },
+              {
                 name: 'Vanessa Sauter',
                 title: 'Principal Solutions Architect',
                 image: '/img/team/vanessa.jpeg',
@@ -154,6 +161,12 @@ const AboutPageContent = () => {
                 title: 'Deployment Engineer',
                 image: '/img/team/james.jpeg',
                 bio: 'James brings years of experience in professional services helping leading financial institutions and energy sector clients.  James specializes in managing transformation initiatives and deploying enterprise solutions.',
+              },
+              {
+                name: 'Yash Chhabria',
+                title: 'Software Engineer',
+                image: '/img/team/yash.png',
+                bio: 'Yash specializes in securing ML infrastructure, distributed systems, and multi-tenant platforms. His work spans threat modeling, purple teaming, and building proactive defenses against supply chain risks and privacy attacks in AI systems.',
               },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
