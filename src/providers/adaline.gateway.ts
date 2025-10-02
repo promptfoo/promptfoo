@@ -462,6 +462,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           throw new Error('Vertex API token is not set. Please configure the Google Cloud SDK');
         }
         gatewayChatModel = provider.chatModel({
+          authType: 'accessToken',
           modelName: this.modelName,
           accessToken: token.token as string,
           location: parentClass.getRegion(),
