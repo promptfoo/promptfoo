@@ -197,7 +197,25 @@ export async function getTargetResponse(
     await sleep(targetProvider.delay);
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
-  if (targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output')) {
+  const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
+  const hasError = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error');
+
+  if (hasError) {
+    const output = hasOutput
+      ? ((typeof targetRespRaw.output === 'string'
+          ? targetRespRaw.output
+          : safeJsonStringify(targetRespRaw.output)) as string)
+      : '';
+    return {
+      output,
+      error: targetRespRaw.error,
+      sessionId: targetRespRaw.sessionId,
+      tokenUsage,
+      guardrails: targetRespRaw.guardrails,
+    };
+  }
+
+  if (hasOutput) {
     const output = (
       typeof targetRespRaw.output === 'string'
         ? targetRespRaw.output
