@@ -1,4 +1,20 @@
 import * as path from 'path';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+
+// Global variable defined by build system
+declare const BUILD_FORMAT: string | undefined;
+
+// Use currentDir instead of __dirname to avoid Jest/CJS conflicts
+// Guard import.meta usage for dual CJS/ESM builds
+const currentDir = (() => {
+  // Check if BUILD_FORMAT is available at compile time, otherwise check typeof for runtime
+  const isESM = typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'esm';
+  if (isESM) {
+    return path.dirname(fileURLToPath(import.meta.url));
+  }
+  return __dirname;
+})();
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database/index';
@@ -17,8 +33,20 @@ export async function runDbMigrations(): Promise<void> {
     setImmediate(() => {
       try {
         const db = getDb();
-        const migrationsFolder = path.join(__dirname, '..', 'drizzle');
-        logger.debug(`Running database migrations...`);
+
+        // Handle different deployment scenarios for migration folder location
+        let migrationsFolder: string;
+        if (currentDir.includes('dist/src')) {
+          // When running from bundled server (e.g., dist/src/server/index.js)
+          // Navigate to project root and find drizzle folder
+          const projectRoot = currentDir.split('dist/src')[0];
+          migrationsFolder = path.join(projectRoot, 'drizzle');
+        } else {
+          // When running from source (e.g., src/migrate.ts)
+          migrationsFolder = path.join(currentDir, '..', 'drizzle');
+        }
+
+        logger.debug(`Running database migrations from: ${migrationsFolder}`);
         migrate(db, { migrationsFolder });
         logger.debug('Database migrations completed');
         resolve();
@@ -30,9 +58,19 @@ export async function runDbMigrations(): Promise<void> {
   });
 }
 
-if (require.main === module) {
-  // Run migrations and exit with appropriate code
-  runDbMigrations()
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1));
+// ESM replacement for require.main === module check
+// Check if BUILD_FORMAT is available at compile time, otherwise check typeof for runtime
+const isESM = typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'esm';
+if (isESM) {
+  const currentModulePath = resolve(fileURLToPath(import.meta.url));
+  const mainModulePath = resolve(process.argv[1]);
+  const isMainModule = currentModulePath === mainModulePath;
+  // Only run if this specific migrate module is being executed directly, not when imported by main.js
+  const isMigrateModuleMainExecution = isMainModule && currentModulePath.endsWith('migrate.js');
+  if (isMigrateModuleMainExecution) {
+    // Run migrations and exit with appropriate code
+    runDbMigrations()
+      .then(() => process.exit(0))
+      .catch(() => process.exit(1));
+  }
 }

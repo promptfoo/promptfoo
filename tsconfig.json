@@ -3,9 +3,9 @@
     "declaration": true,
     "declarationMap": true,
     "esModuleInterop": true,
-    "target": "es2020",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "outDir": "dist",
     "skipLibCheck": true,
     "sourceMap": true,
@@ -13,7 +13,8 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
-    "baseUrl": "./"
+    "baseUrl": "./",
+    "emitDeclarationOnly": true
   },
   "ts-node": {
     "swc": true

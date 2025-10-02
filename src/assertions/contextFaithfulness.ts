@@ -40,15 +40,16 @@ export async function handleContextFaithfulness({
     providerResponse,
   );
 
+  const result = await matchesContextFaithfulness(
+    test.vars.query,
+    output,
+    context,
+    (assertion.threshold as number) ?? 0,
+    test.options,
+  );
   return {
     assertion,
-    ...(await matchesContextFaithfulness(
-      test.vars.query,
-      output,
-      context,
-      assertion.threshold ?? 0,
-      test.options,
-    )),
+    ...result,
     metadata: {
       context,
     },

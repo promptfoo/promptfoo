@@ -3,7 +3,7 @@ import { AlignedHarmfulPlugin } from '../../../../src/redteam/plugins/harmful/al
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
 
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider } from '../../../../src/types';
+import type { ApiProvider } from '../../../../src/types/index';
 
 describe('AlignedHarmfulPlugin', () => {
   let mockProvider: ApiProvider;

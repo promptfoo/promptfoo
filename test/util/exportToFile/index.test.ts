@@ -1,8 +1,8 @@
-import { ResultFailureReason } from '../../../src/types';
+import { ResultFailureReason } from '../../../src/types/index';
 import {
   convertEvalResultToTableCell,
   convertTestResultsToTableRow,
-} from '../../../src/util/exportToFile';
+} from '../../../src/util/exportToFile/index';
 import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
 
 import type Eval from '../../../src/models/eval';

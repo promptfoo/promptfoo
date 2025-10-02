@@ -1,6 +1,6 @@
 import { addHexEncoding } from '../../../src/redteam/strategies/hex';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('addHexEncoding', () => {
   it('should encode variable value as hex and append /Hex to metrics', () => {

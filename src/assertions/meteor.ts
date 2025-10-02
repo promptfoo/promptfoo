@@ -1,6 +1,7 @@
-import { PorterStemmer, WordNet } from 'natural';
+import natural from 'natural';
+const { PorterStemmer, WordNet } = natural;
 import invariant from '../util/invariant';
-import type { DataRecord, Stemmer } from 'natural';
+import type { DataRecord, Stemmer, WordNet as WordNetType } from 'natural';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -88,7 +89,7 @@ function matchStemEnums(
 async function matchSynonymEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  wordnet: WordNet = new WordNet(),
+  wordnet: WordNetType = new WordNet(),
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
   const wordMatch: MatchPair[] = [];
   const candidateCopy = [...enumCandidateList];

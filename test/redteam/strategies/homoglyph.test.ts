@@ -4,7 +4,7 @@ import {
   toHomoglyphs,
 } from '../../../src/redteam/strategies/homoglyph';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('homoglyph strategy', () => {
   const testCases: TestCase[] = [

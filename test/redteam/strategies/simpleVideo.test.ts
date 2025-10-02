@@ -13,7 +13,7 @@ import {
   writeVideoFile,
 } from '../../../src/redteam/strategies/simpleVideo';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 // Mock for dummy video data
 const DUMMY_VIDEO_BASE64 = 'AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAu1tZGF0';

@@ -3,6 +3,19 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import util from 'util';
+import { fileURLToPath } from 'node:url';
+
+// Global variable defined by build system
+declare const BUILD_FORMAT: string | undefined;
+
+// Use currentDir instead of __dirname to avoid Jest/CJS conflicts
+// Guard import.meta usage for dual CJS/ESM builds
+const currentDir = (() => {
+  if (process.env.BUILD_FORMAT === 'esm') {
+    return path.dirname(fileURLToPath(import.meta.url));
+  }
+  return __dirname;
+})();
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
@@ -128,7 +141,7 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
+        fs.copyFileSync(path.join(currentDir, '../golang/wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);

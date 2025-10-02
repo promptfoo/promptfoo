@@ -2,7 +2,7 @@ import {
   UnverifiableClaimsPlugin,
   UnverifiableClaimsGrader,
 } from '../../../src/redteam/plugins/unverifiableClaims';
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 describe('UnverifiableClaimsPlugin', () => {
   let plugin: UnverifiableClaimsPlugin;

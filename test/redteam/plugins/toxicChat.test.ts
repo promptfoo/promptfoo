@@ -5,7 +5,7 @@ import {
   ToxicChatPlugin,
 } from '../../../src/redteam/plugins/toxicChat';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');
 

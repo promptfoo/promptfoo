@@ -7,7 +7,7 @@ import logger from '../../../src/logger';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../../src/util/config/manage';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
 
-import type { UnifiedConfig } from '../../../src/types';
+import type { UnifiedConfig } from '../../../src/types/index';
 
 jest.mock('os');
 jest.mock('fs', () => ({

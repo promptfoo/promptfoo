@@ -5,7 +5,7 @@ import {
 } from '../../../src/redteam/plugins/shellInjection';
 
 import type { RedteamObjectConfig } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 describe('ShellInjectionPlugin', () => {
   let mockProvider: ApiProvider;

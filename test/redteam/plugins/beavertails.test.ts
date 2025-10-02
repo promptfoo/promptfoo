@@ -5,7 +5,7 @@ import {
   fetchAllDatasets,
 } from '../../../src/redteam/plugins/beavertails';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');
 

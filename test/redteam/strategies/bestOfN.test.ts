@@ -1,6 +1,6 @@
 import { addBestOfNTestCases } from '../../../src/redteam/strategies/bestOfN';
 
-import type { TestCaseWithPlugin } from '../../../src/types';
+import type { TestCaseWithPlugin } from '../../../src/types/index';
 
 describe('addBestOfNTestCases', () => {
   it('should add best-of-n configuration to test cases with basic refusal', async () => {
