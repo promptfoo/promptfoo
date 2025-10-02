@@ -64,7 +64,7 @@ jest.mock('../../../src/util', () => ({
 jest.mock('../../../src/util/promptfooCommand', () => ({
   detectInstaller: jest.fn(),
   promptfooCommand: jest.fn((subcommand: string) =>
-    subcommand ? `promptfoo ${subcommand}` : 'promptfoo'
+    subcommand ? `promptfoo ${subcommand}` : 'promptfoo',
   ),
   isRunningUnderNpx: jest.fn(),
 }));
@@ -1430,9 +1430,11 @@ describe('resolveConfigs', () => {
     });
     jest.mocked(isCI).mockReturnValue(false);
     jest.mocked(isRunningUnderNpx).mockReturnValue(true);
-    jest.mocked(promptfooCommand).mockImplementation((subcommand: string) =>
-      subcommand ? `npx promptfoo ${subcommand}` : 'npx promptfoo'
-    );
+    jest
+      .mocked(promptfooCommand)
+      .mockImplementation((subcommand: string) =>
+        subcommand ? `npx promptfoo ${subcommand}` : 'npx promptfoo',
+      );
 
     const cmdObj = {};
     const defaultConfig = {};
