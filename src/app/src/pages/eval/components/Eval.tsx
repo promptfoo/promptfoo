@@ -196,10 +196,10 @@ export default function Eval({ fetchId }: EvalOptions) {
       const run = async () => {
         const success = await loadEvalById(fetchId);
         if (success) {
-          setLoaded(true);
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
           fetchRecentFileEvals();
+          // Note: setLoaded(true) is handled by the useEffect that watches for table updates
         }
       };
       run();
@@ -271,8 +271,8 @@ export default function Eval({ fetchId }: EvalOptions) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
           if (success) {
-            setLoaded(true);
             setDefaultEvalId(defaultEvalId);
+            // Note: setLoaded(true) is handled by the useEffect that watches for table updates
           }
         } else {
           // No evals exist - clear stale state and show empty state
