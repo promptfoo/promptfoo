@@ -6,7 +6,7 @@ import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
-import { fetchWithRetries } from './util/fetch';
+import { fetchWithRetries } from './util/fetch/index';
 import type { Cache } from 'cache-manager';
 
 let cacheInstance: Cache | undefined;

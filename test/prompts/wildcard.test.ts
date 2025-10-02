@@ -1,4 +1,4 @@
-import { processPrompts } from '../../src/prompts';
+import { processPrompts } from '../../src/prompts/index';
 
 // Mock the python execution
 jest.mock('../../src/python/pythonUtils', () => ({

@@ -1,6 +1,6 @@
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { fetchWithProxy } from '../util/fetch';
+import { fetchWithProxy } from '../util/fetch/index';
 
 import type {
   ApiProvider,

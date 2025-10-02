@@ -26,6 +26,40 @@ You can also create service accounts at the team level, which will allow you to 
 Only system admins can create service accounts.
 :::
 
+## CLI Team Context
+
+When using the Promptfoo CLI with multiple teams, you can control which team context your operations use:
+
+### Setting Your Active Team
+
+After logging in, set your active team using:
+
+```sh
+promptfoo auth teams set "Your Team Name"
+```
+
+All subsequent CLI operations (evaluations, sharing results, etc.) will use this team context.
+
+### Verifying Team Context
+
+Before running important operations, verify your active team:
+
+```sh
+promptfoo auth whoami
+```
+
+This displays your current organization and team.
+
+### Team Isolation
+
+- **API keys are organization-scoped**: Your API key determines which organization you're logged into
+- **Team selections are isolated per organization**: If you have access to multiple organizations, each organization remembers its own team selection independently
+- **Resources are team-scoped**: Evaluations, configurations, and results are associated with your active team
+
+:::tip
+Always verify your team context with `promptfoo auth whoami` before sharing evaluation results or running scans to ensure they go to the correct team.
+:::
+
 ## Creating Roles
 
 Promptfoo allows you to create custom roles to manage user access to your organization's resources. To create a role, navigate to the "Roles" tab in the sidebar and click the "New Role" button.

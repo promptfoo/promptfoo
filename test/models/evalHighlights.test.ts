@@ -1,4 +1,4 @@
-import { getDb } from '../../src/database';
+import { getDb } from '../../src/database/index';
 import { ResultFailureReason } from '../../src/types';
 import { runDbMigrations } from '../../src/migrate';
 import { queryTestIndicesOptimized } from '../../src/models/evalPerformance';
