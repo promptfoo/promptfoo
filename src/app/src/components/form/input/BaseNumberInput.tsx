@@ -9,7 +9,7 @@ export interface BaseNumberInputProps extends Omit<TextFieldProps, 'onChange'> {
   /** min provides a more convenient way to define the minimum allowable value for the input. The up/down arrows will not allow the value to go below this setting, though the user can type a lower value so validation is still required. */
   min?: number;
 
-  /** max provides a more convenient way to define the maximum allowable value for the input. The up/down arrows will no allow the value to go avoe this setting, though the user can type a higher value so validation is still required */
+  /** max provides a more convenient way to define the maximum allowable value for the input. The up/down arrows will not allow the value to go avoe this setting, though the user can type a higher value so validation is still required */
   max?: number;
 }
 
