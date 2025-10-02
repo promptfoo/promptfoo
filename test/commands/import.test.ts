@@ -3,7 +3,7 @@ import path from 'path';
 
 import { Command } from 'commander';
 import { importCommand } from '../../src/commands/import';
-import { getDb } from '../../src/database';
+import { getDb } from '../../src/database/index';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
