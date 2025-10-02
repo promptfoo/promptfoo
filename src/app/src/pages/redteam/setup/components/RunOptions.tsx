@@ -82,7 +82,6 @@ export const NumberOfTestCasesInput = ({
       min={1}
       onChange={(v) => {
         setValue(v?.toString() || '');
-        updateConfig('numTests', v);
       }}
       onBlur={() => {
         if (readOnly) {
