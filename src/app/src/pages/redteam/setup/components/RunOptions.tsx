@@ -1,18 +1,31 @@
 import { useState } from 'react';
 
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import { FormControlLabel, Switch } from '@mui/material';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import InputAdornment from '@mui/material/InputAdornment';
-import type { RedteamRunOptions } from '@promptfoo/types';
+import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { Config } from '../types';
+import type { RedteamRunOptions } from '@promptfoo/types';
+
+// Shared helper and error text constants for RunOptions inputs
+export const RUNOPTIONS_TEXT = {
+  numberOfTests: {
+    helper: 'Number of test cases to generate for each plugin',
+    error: 'Number of test cases must be greater than 0',
+  },
+  delayBetweenApiCalls: {
+    helper:
+      'Add a delay between API calls to avoid rate limits. This will not override a delay set on the target.',
+    error: 'Delay must be 0 or greater',
+  },
+  maxConcurrentRequests: {
+    helper: 'The maximum number of concurrent requests to make to the target.',
+    error: 'Max number of concurrent requests must be greater than 0',
+  },
+} as const;
 
 const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
   return (
@@ -31,6 +44,212 @@ interface RunOptionsProps {
   useGuardrailAssertion?: boolean;
 }
 
+export interface NumberOfTestCasesInputProps {
+  value: string;
+  setValue: (value: string) => void;
+  updateConfig: (section: keyof Config, value: any) => void;
+  readOnly?: boolean;
+  defaultNumberOfTests?: number;
+}
+
+const isBelowMin = (value: string, min: number) => {
+  if (value === '') {
+    return false;
+  }
+  const n = Number(value);
+  return Number.isNaN(n) || n < min;
+};
+
+/**
+ * Number of test cases
+ * - Accepts only digits as the user types (temporary empty state allowed)
+ * - onBlur clamps to a minimum of 1 and persists via updateConfig
+ * - Prevents non-numeric characters like e/E/+/−/.
+ */
+export const NumberOfTestCasesInput = ({
+  value,
+  setValue,
+  updateConfig,
+  readOnly,
+  defaultNumberOfTests = REDTEAM_DEFAULTS.NUM_TESTS,
+}: NumberOfTestCasesInputProps) => {
+  const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.numberOfTests.error : undefined;
+  return (
+    <BaseNumberInput
+      fullWidth
+      label="Number of test cases"
+      value={value}
+      min={1}
+      onChange={(v) => {
+        setValue(v?.toString() || '');
+        updateConfig('numTests', v);
+      }}
+      onBlur={() => {
+        if (readOnly) {
+          return;
+        }
+        if (value === '') {
+          updateConfig('numTests', defaultNumberOfTests);
+          setValue('5');
+          return;
+        }
+        const parsed = Number(value);
+        const safe = Number.isNaN(parsed) || parsed < 1 ? defaultNumberOfTests : parsed;
+        updateConfig('numTests', safe);
+        setValue(String(safe));
+      }}
+      slotProps={{
+        input: { readOnly },
+      }}
+      helperText={error ? error : RUNOPTIONS_TEXT.numberOfTests.helper}
+      error={Boolean(error)}
+    />
+  );
+};
+
+export interface DelayBetweenAPICallsInputProps {
+  value: string;
+  setValue: (value: string) => void;
+  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  readOnly?: boolean;
+  canSetDelay?: boolean;
+  setMaxConcurrencyValue: (value: string) => void;
+}
+
+/**
+ * Delay between API calls (ms)
+ * - Enabled only when maxConcurrency is 1 (mutual exclusivity rule)
+ * - Accepts only digits; onBlur clamps to ≥ 0 and persists via updateRunOption
+ * - If delay > 0, we force maxConcurrency to 1 to uphold exclusivity
+ * - Prevents non-numeric characters like e/E/+/−/.
+ */
+export const DelayBetweenAPICallsInput = ({
+  canSetDelay,
+  readOnly,
+  setValue,
+  setMaxConcurrencyValue,
+  updateRunOption,
+  value,
+}: DelayBetweenAPICallsInputProps) => {
+  const error = isBelowMin(value, 0) ? RUNOPTIONS_TEXT.delayBetweenApiCalls.error : undefined;
+  return (
+    <BaseNumberInput
+      fullWidth
+      label={
+        canSetDelay ? (
+          'Delay between API calls (ms)'
+        ) : (
+          <LabelWithTooltip
+            label="Delay between API calls (ms)"
+            tooltip="To set a delay, you must set the number of concurrent requests to 1."
+          />
+        )
+      }
+      value={value}
+      disabled={!canSetDelay || readOnly}
+      onChange={(v) => {
+        if (readOnly) {
+          return;
+        }
+        setValue(v?.toString() || '');
+      }}
+      onBlur={() => {
+        if (readOnly) {
+          return;
+        }
+        const parsed = value === '' ? 0 : Number(value);
+        const safe = Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
+        updateRunOption('delay', safe);
+        setValue(String(safe));
+        // Enforce mutual exclusivity
+        updateRunOption('maxConcurrency', 1);
+        setMaxConcurrencyValue('1');
+      }}
+      min={0}
+      slotProps={{
+        input: {
+          readOnly,
+          endAdornment: (
+            <Box sx={{ pl: 1 }}>
+              <Typography variant="caption">ms</Typography>
+            </Box>
+          ),
+        },
+      }}
+      helperText={error || RUNOPTIONS_TEXT.delayBetweenApiCalls.helper}
+      error={Boolean(error)}
+    />
+  );
+};
+
+export interface MaxNumberOfConcurrentRequestsInputProps {
+  value: string;
+  setValue: (value: string) => void;
+  setDelayValue: (value: string) => void;
+  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  readOnly?: boolean;
+  canSetMaxConcurrency?: boolean;
+}
+
+export const MaxNumberOfConcurrentRequestsInput = ({
+  value,
+  setValue,
+  setDelayValue,
+  updateRunOption,
+  readOnly,
+  canSetMaxConcurrency,
+}: MaxNumberOfConcurrentRequestsInputProps) => {
+  const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.maxConcurrentRequests.error : undefined;
+  return (
+    <BaseNumberInput
+      fullWidth
+      label={
+        canSetMaxConcurrency ? (
+          'Max number of concurrent requests'
+        ) : (
+          <LabelWithTooltip
+            label="Max number of concurrent requests"
+            tooltip="To set a max concurrency, you must set the delay to 0."
+          />
+        )
+      }
+      value={value}
+      disabled={!canSetMaxConcurrency || readOnly}
+      onChange={(v) => {
+        if (readOnly) {
+          return;
+        }
+        setValue(v?.toString() || '');
+      }}
+      min={1}
+      onBlur={() => {
+        if (readOnly) {
+          return;
+        }
+        const parsed = value === '' ? 1 : Number(value);
+        const safe = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+        updateRunOption('maxConcurrency', safe);
+        setValue(String(safe));
+        // Enforce mutual exclusivity
+        updateRunOption('delay', 0);
+        setDelayValue('0');
+      }}
+      slotProps={{
+        input: {
+          readOnly,
+          endAdornment: (
+            <Box sx={{ pl: 1 }}>
+              <Typography variant="caption">requests</Typography>
+            </Box>
+          ),
+        },
+      }}
+      helperText={error || RUNOPTIONS_TEXT.maxConcurrentRequests.helper}
+      error={Boolean(error)}
+    />
+  );
+};
+
 export const RunOptionsContent = ({
   numTests,
   runOptions,
@@ -42,6 +261,7 @@ export const RunOptionsContent = ({
   const canSetDelay = Boolean(!runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1);
 
   const canSetMaxConcurrency = Boolean(!runOptions?.delay || runOptions?.delay === 0);
+
   const [numTestsInput, setNumTestsInput] = useState<string>(
     numTests !== undefined ? String(numTests) : '0',
   );
@@ -53,108 +273,19 @@ export const RunOptionsContent = ({
   );
   return (
     <Stack spacing={3}>
-      {/**
-       * Number of test cases
-       * - Accepts only digits as the user types (temporary empty state allowed)
-       * - onBlur clamps to a minimum of 1 and persists via updateConfig
-       * - Prevents non-numeric characters like e/E/+/−/.
-       */}
-      <TextField
-        fullWidth
-        type="number"
-        label="Number of test cases"
+      <NumberOfTestCasesInput
         value={numTestsInput}
-        onChange={(e) => {
-          const raw = e.target.value;
-          const digitsOnly = raw.replace(/\D/g, '');
-          setNumTestsInput(digitsOnly);
-        }}
-        onBlur={() => {
-          if (numTestsInput === '') {
-            updateConfig('numTests', undefined);
-            return;
-          }
-          const parsed = Number(numTestsInput);
-          const safe = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
-          updateConfig('numTests', safe);
-          setNumTestsInput(String(safe));
-        }}
-        onKeyDown={(e) => {
-          if (['e', 'E', '+', '-', '.'].includes(e.key)) {
-            e.preventDefault();
-          }
-        }}
-        slotProps={{ input: { inputProps: { inputMode: 'numeric', pattern: '[0-9]*' } } }}
-        helperText="Number of test cases to generate for each plugin"
-        error={(() => {
-          if (numTestsInput === '') {
-            return false;
-          }
-          const n = Number(numTestsInput);
-          return Number.isNaN(n) || n < 1;
-        })()}
+        setValue={setNumTestsInput}
+        updateConfig={updateConfig}
       />
-      {/**
-       * Delay between API calls (ms)
-       * - Enabled only when maxConcurrency is 1 (mutual exclusivity rule)
-       * - Accepts only digits; onBlur clamps to ≥ 0 and persists via updateRunOption
-       * - If delay > 0, we force maxConcurrency to 1 to uphold exclusivity
-       * - Prevents non-numeric characters like e/E/+/−/.
-       */}
-      <TextField
-        fullWidth
-        type="number"
-        label={
-          canSetDelay ? (
-            'Delay between API calls (ms)'
-          ) : (
-            <LabelWithTooltip
-              label="Delay between API calls (ms)"
-              tooltip="To set a delay, you must set the number of concurrent requests to 1."
-            />
-          )
-        }
+
+      <DelayBetweenAPICallsInput
         value={delayInput}
-        disabled={!canSetDelay}
-        onChange={(e) => {
-          const raw = e.target.value;
-          const digitsOnly = raw.replace(/\D/g, '');
-          setDelayInput(digitsOnly);
-        }}
-        onBlur={() => {
-          const parsed = delayInput === '' ? 0 : Number(delayInput);
-          const safe = Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
-          updateRunOption('delay', safe);
-          setDelayInput(String(safe));
-          // Enforce mutual exclusivity only when delay > 0
-          if (safe > 0) {
-            updateRunOption('maxConcurrency', 1);
-            setMaxConcurrencyInput('1');
-          }
-        }}
-        onKeyDown={(e) => {
-          if (['e', 'E', '+', '-', '.'].includes(e.key)) {
-            e.preventDefault();
-          }
-        }}
-        slotProps={{
-          input: {
-            endAdornment: (
-              <InputAdornment position="end">
-                <Typography variant="caption">ms</Typography>
-              </InputAdornment>
-            ),
-            inputProps: { inputMode: 'numeric', pattern: '[0-9]*', step: 1, min: 0 },
-          },
-        }}
-        helperText="Add a delay between API calls to avoid rate limits. This will not override a delay set on the target."
-        error={(() => {
-          if (delayInput === '') {
-            return false;
-          }
-          const n = Number(delayInput);
-          return Number.isNaN(n) || n < 0;
-        })()}
+        setValue={setDelayInput}
+        updateRunOption={updateRunOption}
+        readOnly={!canSetDelay}
+        canSetDelay={canSetDelay}
+        setMaxConcurrencyValue={setMaxConcurrencyInput}
       />
       {/**
        * Max number of concurrent requests
@@ -163,58 +294,13 @@ export const RunOptionsContent = ({
        * - Any change forces delay to 0 to uphold exclusivity
        * - Prevents non-numeric characters like e/E/+/−/.
        */}
-      <TextField
-        fullWidth
-        type="number"
-        label={
-          canSetMaxConcurrency ? (
-            'Max number of concurrent requests'
-          ) : (
-            <LabelWithTooltip
-              label="Max number of concurrent requests"
-              tooltip="To set a max concurrency, you must set the delay to 0."
-            />
-          )
-        }
+      <MaxNumberOfConcurrentRequestsInput
         value={maxConcurrencyInput}
-        disabled={!canSetMaxConcurrency}
-        onChange={(e) => {
-          const raw = e.target.value;
-          const digitsOnly = raw.replace(/\D/g, '');
-          setMaxConcurrencyInput(digitsOnly);
-        }}
-        onBlur={() => {
-          const parsed = maxConcurrencyInput === '' ? 1 : Number(maxConcurrencyInput);
-          const safe = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
-          updateRunOption('maxConcurrency', safe);
-          setMaxConcurrencyInput(String(safe));
-          // Enforce mutual exclusivity
-          updateRunOption('delay', 0);
-          setDelayInput('0');
-        }}
-        onKeyDown={(e) => {
-          if (['e', 'E', '+', '-', '.'].includes(e.key)) {
-            e.preventDefault();
-          }
-        }}
-        slotProps={{
-          input: {
-            endAdornment: (
-              <InputAdornment position="end">
-                <Typography variant="caption">requests</Typography>
-              </InputAdornment>
-            ),
-            inputProps: { inputMode: 'numeric', pattern: '[0-9]*', step: 1, min: 1 },
-          },
-        }}
-        helperText="The maximum number of concurrent requests to make to the target."
-        error={(() => {
-          if (maxConcurrencyInput === '') {
-            return false;
-          }
-          const n = Number(maxConcurrencyInput);
-          return Number.isNaN(n) || n < 1;
-        })()}
+        setValue={setMaxConcurrencyInput}
+        updateRunOption={updateRunOption}
+        readOnly={!canSetMaxConcurrency}
+        canSetMaxConcurrency={canSetMaxConcurrency}
+        setDelayValue={setDelayInput}
       />
       <FormControlLabel
         control={
@@ -233,36 +319,5 @@ export const RunOptionsContent = ({
         }
       />
     </Stack>
-  );
-};
-
-export const RunOptions = (props: RunOptionsProps) => {
-  const [expanded, setExpanded] = useState(true);
-
-  const normalizedProps: RunOptionsProps = {
-    ...props,
-    numTests: props.numTests ?? 0,
-    runOptions: {
-      delay: props.runOptions?.delay ?? 0,
-      maxConcurrency: props.runOptions?.maxConcurrency ?? 5,
-      verbose: props.runOptions?.verbose,
-    },
-  };
-
-  return (
-    <Box mb={4}>
-      <Accordion expanded={expanded} onChange={(e, next) => setExpanded(next)}>
-        <AccordionSummary
-          expandIcon={<ExpandMoreIcon />}
-          aria-controls="run-options-content"
-          id="run-options-header"
-        >
-          <Typography variant="h6">Run Options</Typography>
-        </AccordionSummary>
-        <AccordionDetails>
-          <RunOptionsContent {...normalizedProps} />
-        </AccordionDetails>
-      </Accordion>
-    </Box>
   );
 };

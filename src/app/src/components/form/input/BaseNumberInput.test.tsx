@@ -95,7 +95,9 @@ describe('BaseNumberInput', () => {
     const handleChange = vi.fn();
     const user = userEvent.setup();
 
-    renderWithTheme(<BaseNumberInput label="Non-negative" defaultValue={1} min={0} onChange={handleChange} />);
+    renderWithTheme(
+      <BaseNumberInput label="Non-negative" defaultValue={1} min={0} onChange={handleChange} />,
+    );
 
     const input = screen.getByLabelText('Non-negative');
 
