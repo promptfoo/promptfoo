@@ -54,6 +54,8 @@ const baseMockTableStore = {
   totalResultsCount: 0,
   highlightedResultsCount: 0,
   isFetching: false,
+  filters: { values: {} },
+  filterMode: undefined,
   setEvalId: vi.fn(),
   setAuthor: vi.fn(),
   setVersion: vi.fn(),
@@ -71,6 +73,12 @@ const baseMockTableStore = {
   resetFilterMode: vi.fn(),
   addFilter: vi.fn(),
 };
+
+// Mock getState for the store
+(useTableStore as any).getState = vi.fn(() => ({
+  filters: { values: {} },
+  filterMode: undefined,
+}));
 
 describe('Eval Page Metadata', () => {
   beforeEach(() => {
@@ -326,5 +334,62 @@ describe('Eval', () => {
     });
 
     expect(fetchEvalDataMock).not.toHaveBeenCalled();
+  });
+
+  it('should not show empty state while waiting for table construction', async () => {
+    // Simulate a successful loadEvalById but table not yet constructed
+    const fetchEvalDataMock = vi
+      .fn()
+      .mockResolvedValue({ table: mockTable, config: {}, totalCount: 0, filteredCount: 0 });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      table: null, // Table not yet available
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'test-eval' }] }),
+    } as Response);
+
+    const { queryByText } = render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // Should show loading state, NOT empty state
+    expect(queryByText('Waiting for eval data')).toBeInTheDocument();
+    expect(queryByText('Welcome to Promptfoo')).not.toBeInTheDocument();
+  });
+
+  it('should show results when table is available', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      table: mockTable, // Table is available
+    });
+
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'test-eval' }] }),
+    } as Response);
+
+    const { queryByTestId } = render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    // Should show results view when table exists
+    expect(queryByTestId('results-view')).toBeInTheDocument();
   });
 });
