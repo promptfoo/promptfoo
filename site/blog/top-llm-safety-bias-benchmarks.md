@@ -1,3 +1,9 @@
+---
+title: 'Top 10 Open Datasets for LLM Safety, Toxicity & Bias Evaluation'
+description: 'A comprehensive guide to the most important open-source datasets for evaluating LLM safety, including toxicity detection, bias measurement, and truthfulness benchmarks.'
+image: /img/blog/safety-benchmarks/hero-image.png
+---
+
 # Top 10 Open Datasets for LLM Safety, Toxicity & Bias Evaluation
 
 ![LLM Safety Datasets Hero](/img/blog/safety-benchmarks/hero-image.png)
