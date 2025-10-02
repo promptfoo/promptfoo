@@ -226,12 +226,6 @@ export default function Eval({ fetchId }: EvalOptions) {
         // Set streaming state when we start receiving data
         setIsStreaming(true);
 
-        // Populate values which do not change while the eval results are being streamed.
-        if (isInit) {
-          setTableFromResultsFile(data);
-          setConfig(data.config);
-          setAuthor(data.author ?? null);
-        }
         const newRecentEvals = await fetchRecentFileEvals();
         if (newRecentEvals && newRecentEvals.length > 0) {
           const newId = newRecentEvals[0].evalId;
