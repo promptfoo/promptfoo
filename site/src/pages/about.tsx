@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
 import Avatar from '@mui/material/Avatar';
@@ -6,8 +7,8 @@ import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
-import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 
 const AboutPageContent = () => {
