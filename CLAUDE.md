@@ -115,9 +115,108 @@ The OG image generation process can take several minutes and may cause CI timeou
 - Follow Jest best practices with describe/it blocks
 - Use consistent error handling with proper type checks
 
+## Logging and Sanitization
+
+**IMPORTANT**: Always sanitize sensitive data before logging to prevent exposing secrets, API keys, passwords, and other credentials in logs.
+
+### Sanitized Logging
+
+All logger methods (`debug`, `info`, `warn`, `error`) accept an optional second parameter for context objects that will be automatically sanitized:
+
+```typescript
+import logger from './logger';
+
+// For logging with structured context (headers, body, URLs, etc.)
+logger.debug('[Provider]: Making API request', {
+  url: 'https://api.example.com',
+  method: 'POST',
+  headers: { Authorization: 'Bearer secret-token' },
+  body: { apiKey: 'secret-key', data: 'value' },
+  queryParams: { token: 'secret-token' },
+});
+// Output: All sensitive fields automatically redacted as [REDACTED]
+
+// Works with all log levels
+logger.error('Request failed', {
+  headers: response.headers,
+  body: errorResponse,
+});
+```
+
+### Manual Sanitization
+
+For cases where you need to sanitize data before using it in non-logging contexts:
+
+```typescript
+import { sanitizeObject } from './util/sanitizer';
+
+// Sanitize any object - works recursively up to 4 levels deep
+const sanitizedConfig = sanitizeObject(providerConfig, {
+  context: 'provider config', // optional context for error messages
+});
+
+// Sanitize response metadata before saving
+const metadata = {
+  headers: sanitizeObject(response.headers, { context: 'response headers' }),
+  // ... other metadata
+};
+```
+
+### What Gets Sanitized
+
+The sanitizer automatically redacts these sensitive field names (case-insensitive, works with `-`, `_`, camelCase):
+
+- **Passwords**: password, passwd, pwd, pass, passphrase
+- **API Keys & Tokens**: apiKey, api_key, token, accessToken, refreshToken, bearerToken, etc.
+- **Secrets**: secret, clientSecret, webhookSecret
+- **Headers**: authorization, cookie, x-api-key, x-auth-token, x-access-token
+- **Certificates**: privateKey, certificatePassword, pfxPassword, keystorePassword, certificateContent, etc.
+- **Signatures**: signature, sig, signingKey
+
+### When to Use Sanitization
+
+**ALWAYS sanitize objects when logging:**
+
+Our logging methods take in an object as the second argument and will automatically sanitize them. So anything that may contain secrets needs to be sanitized:
+
+- HTTP request/response headers
+- Request/response bodies
+- Configuration objects
+- Query parameters
+- Error details that may contain request data
+
+**Example - HTTP Provider:**
+
+```typescript
+// ✅ Good - uses sanitized logging (context object is automatically sanitized)
+logger.debug('[HTTP Provider]: Calling endpoint', {
+  url,
+  method: 'POST',
+  headers: requestHeaders,
+  body: requestBody,
+});
+
+// ❌ Bad - exposes secrets in logs
+logger.debug(`Calling ${url} with headers: ${JSON.stringify(headers)}`);
+```
+
+````
+
 ## Git Workflow - CRITICAL
 
 ### NEVER COMMIT DIRECTLY TO MAIN BRANCH
+
+### NEVER MERGE BRANCHES INTO MAIN DIRECTLY
+
+### NEVER PUSH TO MAIN BRANCH - EVER
+
+**ABSOLUTELY FORBIDDEN ACTIONS:**
+
+- `git push origin main` or `git push main` - NEVER DO THIS
+- `git merge feature-branch` while on main - NEVER DO THIS
+- Any direct commits to main branch - NEVER DO THIS
+
+All changes to main MUST go through pull requests and code review process.
 
 Always follow this workflow:
 
@@ -127,7 +226,7 @@ Always follow this workflow:
    git checkout main
    git pull origin main
    git checkout -b feature/your-branch-name
-   ```
+````
 
 2. **Make your changes and commit**:
 
@@ -135,6 +234,8 @@ Always follow this workflow:
    git add .
    git commit -m "your commit message"
    ```
+
+   NEVER blindly `git add` everything - there might be other unrelated files lying around.
 
 3. **Push and create PR**:
 

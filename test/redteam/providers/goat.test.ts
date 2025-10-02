@@ -177,9 +177,9 @@ describe('RedteamGoatProvider', () => {
       getRemoteGenerationUrl(),
       expect.objectContaining({
         method: 'POST',
-        headers: {
+        headers: expect.objectContaining({
           'Content-Type': 'application/json',
-        },
+        }),
         body: expect.any(String),
       }),
     );

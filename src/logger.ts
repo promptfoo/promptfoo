@@ -5,7 +5,8 @@ import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
-import { sanitizeBody, sanitizeUrl } from './util/sanitizer';
+import { safeJsonStringify } from './util/json';
+import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
 
@@ -16,6 +17,13 @@ export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
 }
 
+// Global configuration for structured logging
+let useStructuredLogging = false;
+
+export function setStructuredLogging(enabled: boolean) {
+  useStructuredLogging = enabled;
+}
+
 export const LOG_LEVELS = {
   error: 0,
   warn: 1,
@@ -24,6 +32,18 @@ export const LOG_LEVELS = {
 } as const;
 
 type LogLevel = keyof typeof LOG_LEVELS;
+
+/**
+ * Context object for sanitized logging
+ * Allows passing structured data that will be automatically sanitized
+ */
+export interface SanitizedLogContext {
+  url?: string;
+  headers?: Record<string, string>;
+  body?: any;
+  queryParams?: Record<string, string>;
+  [key: string]: any;
+}
 
 // Lazy source map support - only loaded when debug is enabled
 export let sourceMapSupportInitialized = false;
@@ -270,8 +290,8 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
   };
 }
 
-// Wrapper enforces strict single-string argument logging
-const logger: StrictLogger = Object.assign({}, winstonLogger, {
+// Internal logger implementation
+let internalLogger: StrictLogger = Object.assign({}, winstonLogger, {
   error: createLogMethod('error'),
   warn: createLogMethod('warn'),
   info: createLogMethod('info'),
@@ -286,6 +306,96 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
 };
 
 /**
+ * Replace the logger instance with a custom logger
+ * Useful for integrating with external logging systems
+ * @param customLogger - Logger instance that implements the required interface
+ * @throws Error if customLogger is missing required methods
+ */
+export function setLogger(customLogger: Pick<StrictLogger, 'debug' | 'info' | 'warn' | 'error'>) {
+  // Validate that customLogger is not null or undefined
+  if (!customLogger || typeof customLogger !== 'object') {
+    throw new Error('Custom logger must be a valid object with required logging methods.');
+  }
+
+  // Runtime validation guards
+  const requiredMethods = ['debug', 'info', 'warn', 'error'] as const;
+
+  const missingMethods = requiredMethods.filter(
+    (method) => typeof customLogger[method] !== 'function',
+  );
+
+  if (missingMethods.length > 0) {
+    throw new Error(
+      `Custom logger is missing required methods: ${missingMethods.join(', ')}. ` +
+        'Logger must implement { debug: Function; info: Function; warn: Function; error: Function }',
+    );
+  }
+
+  internalLogger = customLogger as StrictLogger;
+}
+
+/**
+ * Sanitizes context object for logging using generic sanitization
+ */
+function sanitizeContext(context: SanitizedLogContext): Record<string, any> {
+  // Special handling for URLs to preserve the URL-specific sanitization logic
+  const contextWithSanitizedUrls: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(context)) {
+    if (key === 'url' && typeof value === 'string') {
+      contextWithSanitizedUrls[key] = sanitizeUrl(value);
+    } else {
+      contextWithSanitizedUrls[key] = value;
+    }
+  }
+
+  // Apply generic object sanitization to handle all sensitive fields
+  return sanitizeObject(contextWithSanitizedUrls, { context: 'log context' });
+}
+
+/**
+ * Creates a log method that accepts an optional context parameter
+ * If context is provided, it will be sanitized and formatted
+ */
+function createLogMethodWithContext(
+  level: keyof typeof LOG_LEVELS,
+): (message: string, context?: SanitizedLogContext) => void {
+  return (message: string, context?: SanitizedLogContext) => {
+    if (!context) {
+      internalLogger[level](message);
+      return;
+    }
+
+    const sanitized = sanitizeContext(context);
+    const contextStr = safeJsonStringify(sanitized, true);
+    internalLogger[level](`${message}\n${contextStr}`);
+  };
+}
+
+// Wrapper that delegates to the current logger instance
+const logger = {
+  error: createLogMethodWithContext('error'),
+  warn: createLogMethodWithContext('warn'),
+  info: createLogMethodWithContext('info'),
+  debug: createLogMethodWithContext('debug'),
+  add: (transport: winston.transport) =>
+    internalLogger.add ? internalLogger.add(transport) : undefined,
+  remove: (transport: winston.transport) =>
+    internalLogger.remove ? internalLogger.remove(transport) : undefined,
+  get transports() {
+    return internalLogger.transports || [];
+  },
+  get level() {
+    return internalLogger.transports?.[0]?.level || 'info';
+  },
+  set level(newLevel: string) {
+    if (internalLogger.transports?.[0]) {
+      internalLogger.transports[0].level = newLevel;
+    }
+  },
+};
+
+/**
  * Logs request/response details in a formatted way
  * @param url - Request URL
  * @param requestBody - Request body object
@@ -294,7 +404,7 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
  */
 export async function logRequestResponse(options: {
   url: string;
-  requestBody: any;
+  requestBody: BodyInit | null | undefined;
   requestMethod: string;
   response?: Response | null;
   error?: boolean;
@@ -311,19 +421,23 @@ export async function logRequestResponse(options: {
       responseText = 'Unable to read response';
     }
   }
+  const logObject = {
+    message: 'API request',
+    url: sanitizeUrl(url),
+    method: requestMethod,
+    requestBody: sanitizeObject(requestBody, { context: 'request body' }),
+    ...(response && {
+      status: response.status,
+      statusText: response.statusText,
+    }),
+    ...(responseText && { response: responseText }),
+  };
 
-  const details = [
-    `URL: ${sanitizeUrl(url)}`,
-    `Method: ${requestMethod}`,
-    `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
-    response ? `Status: ${response.status} ${response.statusText}` : '',
-    responseText ? `Response: ${responseText}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  const message = `API request:\n${details}`;
-  logMethod(message);
+  if (useStructuredLogging) {
+    logMethod(sanitizeObject(logObject, { context: 'log object for structured logging' }));
+  } else {
+    logMethod(`Api Request`, logObject);
+  }
 }
 
 // Initialize source maps if debug is enabled at startup

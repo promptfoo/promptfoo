@@ -6,6 +6,7 @@ import {
   getConfigFromCloud,
   getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
+  getPoliciesFromCloud,
   getProviderFromCloud,
   makeRequest,
 } from '../../src/util/cloud';
@@ -557,6 +558,402 @@ describe('cloud utils', () => {
     });
   });
 
+  describe('getPoliciesFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should fetch and parse policies successfully with name attribute', async () => {
+      const mockPolicies = [
+        {
+          id: 'policy-1',
+          text: 'Policy text 1',
+          name: 'Policy Name 1',
+          severity: 'high',
+        },
+        {
+          id: 'policy-2',
+          text: 'Policy text 2',
+          name: 'Policy Name 2',
+          severity: 'medium',
+        },
+        {
+          id: 'policy-3',
+          text: 'Policy text 3',
+          name: 'Policy Name 3',
+          severity: 'low',
+        },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockPolicies),
+      } as Response);
+
+      const result = await getPoliciesFromCloud(['policy-1', 'policy-2', 'policy-3'], 'team-123');
+
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(3);
+
+      expect(result.get('policy-1')).toEqual({
+        text: 'Policy text 1',
+        name: 'Policy Name 1',
+        severity: 'high',
+      });
+
+      expect(result.get('policy-2')).toEqual({
+        text: 'Policy text 2',
+        name: 'Policy Name 2',
+        severity: 'medium',
+      });
+
+      expect(result.get('policy-3')).toEqual({
+        text: 'Policy text 3',
+        name: 'Policy Name 3',
+        severity: 'low',
+      });
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/custom-policies/?id=policy-1&id=policy-2&id=policy-3&teamId=team-123',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should handle single policy with name attribute', async () => {
+      const mockPolicies = [
+        {
+          id: 'single-policy',
+          text: 'Single policy text',
+          name: 'Single Policy Name',
+          severity: 'critical',
+        },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockPolicies),
+      } as Response);
+
+      const result = await getPoliciesFromCloud(['single-policy'], 'team-456');
+
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(1);
+      expect(result.get('single-policy')).toEqual({
+        text: 'Single policy text',
+        name: 'Single Policy Name',
+        severity: 'critical',
+      });
+    });
+
+    it('should handle policies with long names', async () => {
+      const longName =
+        'This is a very long policy name that contains many words and should be handled properly by the system';
+      const mockPolicies = [
+        {
+          id: 'long-name-policy',
+          text: 'Policy with long name',
+          name: longName,
+          severity: 'high',
+        },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockPolicies),
+      } as Response);
+
+      const result = await getPoliciesFromCloud(['long-name-policy'], 'team-789');
+
+      expect(result.get('long-name-policy')).toEqual({
+        text: 'Policy with long name',
+        name: longName,
+        severity: 'high',
+      });
+    });
+
+    it('should handle policies with special characters in names', async () => {
+      const mockPolicies = [
+        {
+          id: 'special-chars-policy',
+          text: 'Policy text',
+          name: 'Policy with special chars: @#$%^&*()_+[]{}|;\':",.<>?/',
+          severity: 'medium',
+        },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockPolicies),
+      } as Response);
+
+      const result = await getPoliciesFromCloud(['special-chars-policy'], 'team-special');
+
+      expect(result.get('special-chars-policy')).toEqual({
+        text: 'Policy text',
+        name: 'Policy with special chars: @#$%^&*()_+[]{}|;\':",.<>?/',
+        severity: 'medium',
+      });
+    });
+
+    it('should handle empty policy list', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response);
+
+      const result = await getPoliciesFromCloud([], 'team-empty');
+
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(0);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/custom-policies/?&teamId=team-empty',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(getPoliciesFromCloud(['policy-1'], 'team-123')).rejects.toThrow(
+        'Could not fetch policies from cloud. Cloud config is not enabled. Please run `promptfoo auth login` to login.',
+      );
+
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when response is not ok', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: () => Promise.resolve('Policies not found'),
+      } as Response);
+
+      await expect(getPoliciesFromCloud(['policy-1'], 'team-123')).rejects.toThrow(
+        'Failed to fetch policies from cloud.',
+      );
+    });
+
+    it('should throw error when fetch rejects', async () => {
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+
+      await expect(getPoliciesFromCloud(['policy-1'], 'team-123')).rejects.toThrow(
+        'Failed to fetch policies from cloud.',
+      );
+    });
+
+    it('should throw error when response has invalid JSON', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.reject(new Error('Invalid JSON')),
+      } as Response);
+
+      await expect(getPoliciesFromCloud(['policy-1'], 'team-123')).rejects.toThrow(
+        'Failed to fetch policies from cloud.',
+      );
+    });
+
+    it('should handle multiple policies with different severities and names', async () => {
+      const mockPolicies = [
+        {
+          id: 'critical-policy',
+          text: 'Critical policy text',
+          name: 'Critical Security Policy',
+          severity: 'critical',
+        },
+        {
+          id: 'high-policy',
+          text: 'High policy text',
+          name: 'High Priority Policy',
+          severity: 'high',
+        },
+        {
+          id: 'medium-policy',
+          text: 'Medium policy text',
+          name: 'Medium Risk Policy',
+          severity: 'medium',
+        },
+        {
+          id: 'low-policy',
+          text: 'Low policy text',
+          name: 'Low Impact Policy',
+          severity: 'low',
+        },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockPolicies),
+      } as Response);
+
+      const result = await getPoliciesFromCloud(
+        ['critical-policy', 'high-policy', 'medium-policy', 'low-policy'],
+        'team-all-severities',
+      );
+
+      expect(result.size).toBe(4);
+
+      expect(result.get('critical-policy')).toEqual({
+        text: 'Critical policy text',
+        name: 'Critical Security Policy',
+        severity: 'critical',
+      });
+
+      expect(result.get('high-policy')).toEqual({
+        text: 'High policy text',
+        name: 'High Priority Policy',
+        severity: 'high',
+      });
+
+      expect(result.get('medium-policy')).toEqual({
+        text: 'Medium policy text',
+        name: 'Medium Risk Policy',
+        severity: 'medium',
+      });
+
+      expect(result.get('low-policy')).toEqual({
+        text: 'Low policy text',
+        name: 'Low Impact Policy',
+        severity: 'low',
+      });
+    });
+
+    it('should properly encode multiple policy IDs in URL', async () => {
+      const policyIds = ['policy-1', 'policy-2', 'policy-3', 'policy-4', 'policy-5'];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response);
+
+      await getPoliciesFromCloud(policyIds, 'team-multi');
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/custom-policies/?id=policy-1&id=policy-2&id=policy-3&id=policy-4&id=policy-5&teamId=team-multi',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should handle policies with empty names', async () => {
+      const mockPolicies = [
+        {
+          id: 'empty-name-policy',
+          text: 'Policy with empty name',
+          name: '',
+          severity: 'high',
+        },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockPolicies),
+      } as Response);
+
+      const result = await getPoliciesFromCloud(['empty-name-policy'], 'team-empty-name');
+
+      expect(result.get('empty-name-policy')).toEqual({
+        text: 'Policy with empty name',
+        name: '',
+        severity: 'high',
+      });
+    });
+
+    it('should handle policies with unicode characters in names', async () => {
+      const mockPolicies = [
+        {
+          id: 'unicode-policy',
+          text: 'Unicode policy text',
+          name: 'Policy with unicode: 你好世界 🌍 مرحبا العالم',
+          severity: 'medium',
+        },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockPolicies),
+      } as Response);
+
+      const result = await getPoliciesFromCloud(['unicode-policy'], 'team-unicode');
+
+      expect(result.get('unicode-policy')).toEqual({
+        text: 'Unicode policy text',
+        name: 'Policy with unicode: 你好世界 🌍 مرحبا العالم',
+        severity: 'medium',
+      });
+    });
+
+    it('should handle response with missing fields gracefully', async () => {
+      const mockPolicies = [
+        {
+          id: 'incomplete-policy',
+          text: 'Incomplete policy text',
+          // name field might be missing in some edge cases
+          severity: 'high',
+        },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockPolicies),
+      } as Response);
+
+      const result = await getPoliciesFromCloud(['incomplete-policy'], 'team-incomplete');
+
+      // The function should still work even if name is undefined
+      expect(result.get('incomplete-policy')).toEqual({
+        text: 'Incomplete policy text',
+        name: undefined,
+        severity: 'high',
+      });
+    });
+
+    it('should handle team IDs with special characters', async () => {
+      const specialTeamId = 'team-123-@#$%';
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response);
+
+      await getPoliciesFromCloud(['policy-1'], specialTeamId);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        `https://api.example.com/api/v1/custom-policies/?id=policy-1&teamId=${specialTeamId}`,
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should handle HTTP error with detailed message', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        text: () => Promise.resolve('Database connection failed'),
+      } as Response);
+
+      await expect(getPoliciesFromCloud(['policy-1'], 'team-error')).rejects.toThrow(
+        'Failed to fetch policies from cloud.',
+      );
+    });
+  });
+
   describe('getDefaultTeam', () => {
     it('should return the oldest team', async () => {
       const mockTeams = [
@@ -625,7 +1022,7 @@ describe('cloud utils', () => {
         statusText: 'Unauthorized',
       } as Response);
 
-      await expect(getDefaultTeam()).rejects.toThrow('Failed to get default team id: Unauthorized');
+      await expect(getDefaultTeam()).rejects.toThrow('Failed to get user teams: Unauthorized');
     });
 
     it('should throw error when fetch throws', async () => {
@@ -640,9 +1037,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve([]),
       } as Response);
 
-      const result = await getDefaultTeam();
-
-      expect(result).toBeUndefined();
+      await expect(getDefaultTeam()).rejects.toThrow('No teams found for user');
     });
   });
 

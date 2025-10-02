@@ -150,6 +150,10 @@ export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac
 export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
+// Plugins that require HuggingFace API keys for their datasets
+export const HUGGINGFACE_GATED_PLUGINS = ['beavertails', 'unsafebench', 'aegis'] as const;
+export type HuggingFaceGatedPlugin = (typeof HUGGINGFACE_GATED_PLUGINS)[number];
+
 export const COLLECTIONS = [
   'default',
   'foundation',

@@ -8,12 +8,16 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
+import {
+  EvalResultsFilterMode,
+  type ResultLightweightWithLabel,
+  type ResultsFile,
+} from '@promptfoo/types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import './Eval.css';
 
 interface EvalOptions {
@@ -30,6 +34,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const {
     table,
+    setTable,
     setTableFromResultsFile,
     config,
     setConfig,
@@ -40,6 +45,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     resetFilters,
     addFilter,
     setIsStreaming,
+    setFilterMode,
+    resetFilterMode,
   } = useTableStore();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
@@ -80,11 +87,12 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         setEvalId(id);
 
-        const { filters } = useTableStore.getState();
+        const { filters, filterMode } = useTableStore.getState();
 
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
+          filterMode,
           filters: Object.values(filters.values).filter((filter) =>
             filter.type === 'metadata'
               ? Boolean(filter.value && filter.field)
@@ -135,6 +143,12 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Check for >=1 metric params in the URL.
     const metricParams = searchParams.getAll('metric');
 
+    // Check for >=1 policyId params in the URL.
+    const policyIdParams = searchParams.getAll('policy');
+
+    // Check for a `mode` param in the URL.
+    const modeParam = searchParams.get('mode');
+
     if (pluginParams.length > 0) {
       pluginParams.forEach((pluginParam) => {
         addFilter({
@@ -157,6 +171,26 @@ export default function Eval({ fetchId }: EvalOptions) {
       });
     }
 
+    if (policyIdParams.length > 0) {
+      policyIdParams.forEach((policyId) => {
+        addFilter({
+          type: 'policy',
+          operator: 'equals',
+          value: policyId,
+          logicOperator: 'or',
+        });
+      });
+    }
+
+    // If a mode param is provided, set the filter mode to the provided value.
+    // Otherwise, reset the filter mode to ensure that the filter mode from the previously viewed eval
+    // is not applied (again, because Zustand is a global store).
+    if (modeParam && EvalResultsFilterMode.safeParse(modeParam).success) {
+      setFilterMode(modeParam as EvalResultsFilterMode);
+    } else {
+      resetFilterMode();
+    }
+
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
@@ -177,7 +211,18 @@ export default function Eval({ fetchId }: EvalOptions) {
       /**
        * Populates the table store with the most recent eval result.
        */
-      const handleResultsFile = async (data: ResultsFile, isInit: boolean = false) => {
+      const handleResultsFile = async (data: ResultsFile | null, isInit: boolean = false) => {
+        // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
+        if (!data) {
+          console.log('No eval data available');
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
+          setLoaded(true);
+          return;
+        }
+
         // Set streaming state when we start receiving data
         setIsStreaming(true);
 
@@ -230,11 +275,12 @@ export default function Eval({ fetchId }: EvalOptions) {
             setDefaultEvalId(defaultEvalId);
           }
         } else {
-          return (
-            <div className="notice">
-              No evals yet. Share some evals to this server and they will appear here.
-            </div>
-          );
+          // No evals exist - clear stale state and show empty state
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
+          setLoaded(true);
         }
       };
       run();
@@ -283,7 +329,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     return <div className="notice">404 Eval not found</div>;
   }
 
-  if (!loaded || !table) {
+  if (!loaded) {
     return (
       <div className="notice">
         <div>
@@ -294,7 +340,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     );
   }
 
-  if (loaded && !table) {
+  if (!table) {
     return <EmptyState />;
   }
 

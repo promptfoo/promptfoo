@@ -31,8 +31,13 @@ jest.mock('uuid', () => ({
 }));
 jest.mock('../../../src/util', () => ({
   setupEnv: jest.fn(),
-  isRunningUnderNpx: jest.fn().mockReturnValue(false),
   printBorder: jest.fn(),
+}));
+
+jest.mock('../../../src/util/promptfooCommand', () => ({
+  promptfooCommand: jest.fn().mockReturnValue('promptfoo redteam init'),
+  detectInstaller: jest.fn().mockReturnValue('unknown'),
+  isRunningUnderNpx: jest.fn().mockReturnValue(false),
 }));
 jest.mock('../../../src/util/config/load', () => ({
   combineConfigs: jest.fn(),

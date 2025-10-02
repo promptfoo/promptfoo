@@ -257,7 +257,7 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
           customHeaders: this.config.headers,
         },
       };
-      logger.debug(`Adaline Gateway Embedding API Request: ${safeJsonStringify(gatewayRequest)}`);
+      logger.debug('Adaline Gateway Embedding API Request', { request: gatewayRequest });
       const response = (await this.gateway.getEmbeddings(
         gatewayRequest,
       )) as GetEmbeddingsHandlerResponseType;
@@ -593,7 +593,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         customHeaders: this.config.headers,
       },
     };
-    logger.debug(`Adaline Gateway Chat API request: ${safeJsonStringify(gatewayRequest)}`);
+    logger.debug('Adaline Gateway Chat API request', { request: gatewayRequest });
 
     try {
       response = (await this.gateway.completeChat(
@@ -601,9 +601,12 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
       )) as CompleteChatHandlerResponseType;
       logger.debug(`Adaline Gateway Chat API response: ${safeJsonStringify(response)}`);
     } catch (error) {
-      logger.error(`Adaline Gateway Chat API response error: ${String(error)}`);
+      logger.error('Adaline Gateway Chat API response error', {
+        error: String(error),
+        request: gatewayRequest,
+      });
       return {
-        error: `API response error: ${String(error)} : ${safeJsonStringify(gatewayRequest)}`,
+        error: `API response error: ${String(error)}`,
       };
     }
 

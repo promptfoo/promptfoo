@@ -111,8 +111,8 @@ describe('getModelAuditLatestVersion', () => {
     expect(version).toBe('0.1.7');
     expect(fetchWithTimeout).toHaveBeenCalledWith(
       'https://pypi.org/pypi/modelaudit/json',
-      {},
-      1000,
+      { headers: { 'x-promptfoo-silent': 'true' } },
+      10000,
     );
   });
 

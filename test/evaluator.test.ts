@@ -189,6 +189,10 @@ jest.mock('glob', () => ({
     }
     return [];
   }),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 
 jest.mock('../src/esm');
@@ -3597,9 +3601,8 @@ describe('evaluator defaultTest merging', () => {
           vars: { text: 'Hello world' },
           assert: [
             {
-              type: 'similar',
-              value: 'expected output',
-              threshold: 0.8,
+              type: 'equals',
+              value: 'Test output',
             },
           ],
         },
