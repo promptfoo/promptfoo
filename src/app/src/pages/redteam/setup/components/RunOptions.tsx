@@ -90,7 +90,7 @@ export const NumberOfTestCasesInput = ({
         }
         if (value === '') {
           updateConfig('numTests', defaultNumberOfTests);
-          setValue('5');
+          setValue(defaultNumberOfTests.toString());
           return;
         }
         const parsed = Number(value);

@@ -18,5 +18,4 @@ globs: **/*.{tsx,jsx}
 ## Iconography
 
 - Use icons from @mui/icons-material
-- NEVER USE EMOJIS.
 - Prefer commonly used icons from @mui/icons-material for intuitive experience.
