@@ -368,6 +368,111 @@ describe('DownloadMenu', () => {
     });
   });
 
+  it('includes grader reason, comment, and latency data in CSV export headers and rows', async () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        head: {
+          vars: ['var1', 'var2'],
+          prompts: [
+            { provider: 'openai', label: 'gpt-4' },
+            { provider: 'anthropic', label: 'claude' },
+          ],
+        },
+        body: [
+          {
+            test: { vars: { testVar: 'value' } },
+            vars: ['value1', 'value2'],
+            outputs: [
+              {
+                pass: true,
+                text: 'output1',
+                latencyMs: 150,
+                gradingResult: { reason: 'Good response', comment: 'Well done' },
+              },
+              {
+                pass: false,
+                text: 'output2',
+                latencyMs: 250,
+                failureReason: 1, // ASSERT = 1
+                gradingResult: { reason: 'Failed assertion', comment: 'Needs improvement' },
+              },
+            ],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [
+              { pass: true, text: 'output3', latencyMs: 100 },
+              { pass: true, text: 'output4' }, // No latency, grader reason, or comment
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('CSV Export'));
+
+    await waitFor(() => {
+      const calls = (csvStringify as unknown as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const rows = calls[0][0] as string[][];
+
+      // Check headers include grader reason, comment, and latency columns
+      expect(rows[0]).toContain('Grader Reason');
+      expect(rows[0]).toContain('Comment');
+      expect(rows[0]).toContain('Latency (ms)');
+      expect(rows[0].filter((h: string) => h === 'Grader Reason')).toHaveLength(2); // Two prompts
+      expect(rows[0].filter((h: string) => h === 'Comment')).toHaveLength(2); // Two prompts
+      expect(rows[0].filter((h: string) => h === 'Latency (ms)')).toHaveLength(2); // Two prompts
+
+      // Check structure: var1, var2, [openai] gpt-4, Grader Reason, Comment, Latency (ms), [anthropic] claude, Grader Reason, Comment, Latency (ms)
+      expect(rows[0]).toEqual([
+        'var1',
+        'var2',
+        '[openai] gpt-4',
+        'Grader Reason',
+        'Comment',
+        'Latency (ms)',
+        '[anthropic] claude',
+        'Grader Reason',
+        'Comment',
+        'Latency (ms)',
+      ]);
+
+      // Check first row data: value1, value2, [PASS] output1, Good response, Well done, 150, [FAIL] output2, Failed assertion, Needs improvement, 250
+      expect(rows[1]).toEqual([
+        'value1',
+        'value2',
+        '[PASS] output1',
+        'Good response',
+        'Well done',
+        150,
+        '[FAIL] output2',
+        'Failed assertion',
+        'Needs improvement',
+        250,
+      ]);
+
+      // Check second row: value3, value4, [PASS] output3, '', '', 100, [PASS] output4, '', '', ''
+      expect(rows[2]).toEqual([
+        'value3',
+        'value4',
+        '[PASS] output3',
+        '',
+        '',
+        100,
+        '[PASS] output4',
+        '',
+        '',
+        '',
+      ]);
+    });
+  });
+
   it('handles null gradingResult in downloadHumanEvalTestCases without crashing', async () => {
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       table: {

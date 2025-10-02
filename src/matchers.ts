@@ -18,7 +18,7 @@ import {
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
-} from './prompts';
+} from './prompts/index';
 import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
