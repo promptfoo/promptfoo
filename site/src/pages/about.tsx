@@ -106,7 +106,8 @@ const AboutPageContent = () => {
                 title: 'Enterprise GTM Lead',
                 image: '/img/team/ben.jpeg',
                 bio: 'Ben brings go-to-market expertise as an early GTM hire at multiple high-growth startups including Windsurf, Applied Intuition, and Amplitude. He specializes in building strategic relationships and helping enterprises implement and secure their AI solutions.',
-              },{
+              },
+              {
                 name: 'Travis Willhite',
                 title: 'Enterprise GTM Lead',
                 image: '/img/team/travis.png',
