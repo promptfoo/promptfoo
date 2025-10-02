@@ -77,8 +77,6 @@ const router = createBrowserRouter(
           <Route path="/model-audit/history/:id" element={<ModelAuditResultPage />} />
           <Route path="/model-audit/:id" element={<ModelAuditResultPage />} />
 
-          {/* Legacy Model Audit route - redirect to latest */}
-          <Route path="/model-audit-legacy" element={<ModelAuditPage />} />
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />
 
