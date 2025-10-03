@@ -384,6 +384,7 @@ export interface GradingResult {
   componentResults?: GradingResult[];
 
   // The assertion that was evaluated
+  // TODO(Will): Can we move to this being required?
   assertion?: Assertion | null;
 
   // User comment
