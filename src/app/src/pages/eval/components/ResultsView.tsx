@@ -473,6 +473,9 @@ export default function ResultsView({
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const resultsChartsScores = React.useMemo(() => {
+    if (!table?.body) {
+      return [];
+    }
     return table?.body
       .flatMap((row) => row.outputs.map((output) => output?.score))
       .filter((score) => typeof score === 'number' && !Number.isNaN(score));
