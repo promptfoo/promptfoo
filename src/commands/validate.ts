@@ -3,7 +3,7 @@ import dedent from 'dedent';
 import { fromError } from 'zod-validation-error';
 import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
-import { testHTTPProviderConnectivity, testProviderSession } from '../providers/test';
+import { testHTTPProviderConnectivity, testProviderSession } from '../providers/testProvider';
 import telemetry from '../telemetry';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
@@ -17,7 +17,12 @@ import type { ApiProvider } from '../types/providers';
 interface ValidateOptions {
   config?: string[];
   envPath?: string;
+}
+
+interface ValidateTargetOptions {
   target?: string;
+  config?: string;
+  envPath?: string;
 }
 
 /**
@@ -261,18 +266,6 @@ export async function doValidate(
   setupEnv(opts.envPath);
   const configPaths = opts.config || (defaultConfigPath ? [defaultConfigPath] : undefined);
 
-  // If only -t flag is provided without a config, just test the target
-  if (opts.target && !configPaths) {
-    logger.info('Testing provider...');
-    try {
-      await runProviderTests(opts.target, {} as UnifiedConfig);
-    } catch (err) {
-      logger.error(`Failed to test provider: ${err instanceof Error ? err.message : String(err)}`);
-      process.exitCode = 1;
-    }
-    return;
-  }
-
   try {
     const { config, testSuite } = await resolveConfigs(
       { ...opts, config: configPaths },
@@ -295,11 +288,40 @@ ${fromError(configParse.error).message}`,
       return;
     }
     logger.info(chalk.green('Configuration is valid.'));
-
-    // Run provider tests (for specific target or all providers in config)
-    await runProviderTests(opts.target, configParse.data);
   } catch (err) {
     logger.error(`Failed to validate configuration: ${err instanceof Error ? err.message : err}`);
+    process.exitCode = 1;
+  }
+}
+
+/**
+ * Validate a specific target (provider)
+ */
+export async function doValidateTarget(
+  opts: ValidateTargetOptions,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+): Promise<void> {
+  setupEnv(opts.envPath);
+
+  if (!opts.target && !opts.config) {
+    logger.error('Please specify a target with -t <provider-id> or -c <path|uuid>');
+    process.exitCode = 1;
+    return;
+  }
+
+  const target = opts.target || opts.config;
+  if (!target) {
+    logger.error('Target cannot be empty');
+    process.exitCode = 1;
+    return;
+  }
+
+  logger.info('Testing provider...');
+  try {
+    await runProviderTests(target, {} as UnifiedConfig);
+  } catch (err) {
+    logger.error(`Failed to test provider: ${err instanceof Error ? err.message : String(err)}`);
     process.exitCode = 1;
   }
 }
@@ -309,19 +331,26 @@ export function validateCommand(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
 ) {
-  program
+  const validateCmd = program
     .command('validate')
     .description('Validate a promptfoo configuration file')
     .option(
       '-c, --config <paths...>',
       'Path to configuration file. Automatically loads promptfooconfig.yaml',
     )
-    .option(
-      '-t, --target <target>',
-      'Provider ID or cloud provider UUID to test. If not specified, tests all providers from config',
-    )
     .action(async (opts: ValidateOptions) => {
       telemetry.record('command_used', { name: 'validate' });
       await doValidate(opts, defaultConfig, defaultConfigPath);
+    });
+
+  // Add 'target' subcommand
+  validateCmd
+    .command('target')
+    .description('Test a specific provider target')
+    .option('-t, --target <id>', 'Provider ID to test')
+    .option('-c, --config <path|uuid>', 'Config path or cloud provider UUID to test')
+    .action(async (opts: ValidateTargetOptions) => {
+      telemetry.record('command_used', { name: 'validate_target' });
+      await doValidateTarget(opts, defaultConfig, defaultConfigPath);
     });
 }
