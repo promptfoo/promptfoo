@@ -139,7 +139,7 @@ function EvalOutputCell({
     setCommentText(newCommentText);
   };
 
-  let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
@@ -152,7 +152,7 @@ function EvalOutputCell({
   }
 
   if (showDiffs && firstOutput) {
-    let firstOutputText =
+    const firstOutputText =
       typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
 
     let diffResult;
