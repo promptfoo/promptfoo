@@ -123,7 +123,7 @@ export async function testHTTPProviderConnectivity(
       });
 
       return {
-        success: !result?.error,
+        success: false,
         message: 'Error evaluating the results. Please review the provider response manually.',
         error: 'Remote evaluation failed',
         providerResponse: { ...result, sessionId },
@@ -157,7 +157,7 @@ export async function testHTTPProviderConnectivity(
     });
 
     return {
-      success: !result?.error,
+      success: false,
       message: 'Error evaluating the results. Please review the provider response manually.',
       error: errorMessage,
       providerResponse: result,
