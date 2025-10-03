@@ -209,12 +209,21 @@ async function runProviderTests(target: string | undefined, config: UnifiedConfi
       }
     } else {
       // Test all providers from config
-      if (!config.providers || config.providers.length === 0) {
+      if (!config.providers || (Array.isArray(config.providers) && config.providers.length === 0)) {
         logger.info('No providers found in configuration to test.');
         return;
       }
 
-      const providers = await loadApiProviders(config.providers, {
+      // Patch HTTP providers before loading (only if providers is an array)
+      const patchedProviders = Array.isArray(config.providers)
+        ? config.providers.map((providerOption: any) =>
+            isHttpProviderOptions(providerOption)
+              ? patchHttpConfigForValidation(providerOption)
+              : providerOption,
+          )
+        : config.providers;
+
+      const providers = await loadApiProviders(patchedProviders, {
         env: config.env,
       });
 
