@@ -153,7 +153,7 @@ describe('AegisGrader', () => {
   it('should use super class grading for non-refusal', async () => {
     const output = 'Here is a normal response';
     const mockSuperResult = {
-      grade: { pass: true, score: 0.8, reason: 'test', assertion: undefined },
+      grade: { pass: true, score: 0.8, reason: 'test' },
       rubric: 'test rubric',
     };
     jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue(mockSuperResult);
