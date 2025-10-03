@@ -104,6 +104,80 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-factuality',
 ]);
 
+const ASSERTION_HANDLERS: Record<
+  BaseAssertionTypes,
+  (params: AssertionParams) => GradingResult | Promise<GradingResult>
+> = {
+  'answer-relevance': handleAnswerRelevance,
+  bleu: handleBleuScore,
+  classifier: handleClassifier,
+  contains: handleContains,
+  'contains-all': handleContainsAll,
+  'contains-any': handleContainsAny,
+  'contains-html': handleContainsHtml,
+  'contains-json': handleContainsJson,
+  'contains-sql': handleContainsSql,
+  'contains-xml': handleIsXml,
+  'context-faithfulness': handleContextFaithfulness,
+  'context-recall': handleContextRecall,
+  'context-relevance': handleContextRelevance,
+  'conversation-relevance': handleConversationRelevance,
+  cost: handleCost,
+  equals: handleEquals,
+  factuality: handleFactuality,
+  'finish-reason': handleFinishReason,
+  'g-eval': handleGEval,
+  gleu: handleGleuScore,
+  guardrails: handleGuardrails,
+  icontains: handleIContains,
+  'icontains-all': handleIContainsAll,
+  'icontains-any': handleIContainsAny,
+  'is-html': handleIsHtml,
+  'is-json': handleIsJson,
+  'is-refusal': handleIsRefusal,
+  'is-sql': handleIsSql,
+  'is-valid-function-call': handleIsValidFunctionCall,
+  'is-valid-openai-function-call': handleIsValidFunctionCall,
+  'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
+  'is-xml': handleIsXml,
+  javascript: handleJavascript,
+  latency: handleLatency,
+  levenshtein: handleLevenshtein,
+  'llm-rubric': handleLlmRubric,
+  meteor: async (params: AssertionParams) => {
+    try {
+      const { handleMeteorAssertion } = await import('./meteor');
+      return handleMeteorAssertion(params);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Cannot find module')) {
+        return {
+          pass: false,
+          score: 0,
+          reason:
+            'METEOR assertion requires the natural package. Please install it using: npm install natural',
+          assertion: params.assertion,
+        };
+      }
+      throw error;
+    }
+  },
+  'model-graded-closedqa': handleModelGradedClosedQa,
+  'model-graded-factuality': handleFactuality,
+  moderation: handleModeration,
+  perplexity: handlePerplexity,
+  'perplexity-score': handlePerplexityScore,
+  pi: handlePiScorer,
+  python: handlePython,
+  regex: handleRegex,
+  'rouge-n': handleRougeScore,
+  similar: handleSimilar,
+  'starts-with': handleStartsWith,
+  'trace-error-spans': handleTraceErrorSpans,
+  'trace-span-count': handleTraceSpanCount,
+  'trace-span-duration': handleTraceSpanDuration,
+  webhook: handleWebhook,
+};
+
 const nunjucks = getNunjucksEngine();
 
 /**
@@ -271,86 +345,12 @@ export async function runAssertion({
     valueFromScript,
   };
 
-  const assertionHandlers: Record<
-    BaseAssertionTypes,
-    (params: AssertionParams) => GradingResult | Promise<GradingResult>
-  > = {
-    'answer-relevance': handleAnswerRelevance,
-    bleu: handleBleuScore,
-    classifier: handleClassifier,
-    contains: handleContains,
-    'contains-all': handleContainsAll,
-    'contains-any': handleContainsAny,
-    'contains-html': handleContainsHtml,
-    'contains-json': handleContainsJson,
-    'contains-sql': handleContainsSql,
-    'contains-xml': handleIsXml,
-    'context-faithfulness': handleContextFaithfulness,
-    'context-recall': handleContextRecall,
-    'context-relevance': handleContextRelevance,
-    'conversation-relevance': handleConversationRelevance,
-    cost: handleCost,
-    equals: handleEquals,
-    factuality: handleFactuality,
-    'finish-reason': handleFinishReason,
-    'g-eval': handleGEval,
-    gleu: handleGleuScore,
-    guardrails: handleGuardrails,
-    icontains: handleIContains,
-    'icontains-all': handleIContainsAll,
-    'icontains-any': handleIContainsAny,
-    'is-html': handleIsHtml,
-    'is-json': handleIsJson,
-    'is-refusal': handleIsRefusal,
-    'is-sql': handleIsSql,
-    'is-valid-function-call': handleIsValidFunctionCall,
-    'is-valid-openai-function-call': handleIsValidFunctionCall,
-    'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
-    'is-xml': handleIsXml,
-    javascript: handleJavascript,
-    latency: handleLatency,
-    levenshtein: handleLevenshtein,
-    'llm-rubric': handleLlmRubric,
-    meteor: async (params: AssertionParams) => {
-      try {
-        const { handleMeteorAssertion } = await import('./meteor');
-        return handleMeteorAssertion(params);
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('Cannot find module')) {
-          return {
-            pass: false,
-            score: 0,
-            reason:
-              'METEOR assertion requires the natural package. Please install it using: npm install natural',
-            assertion: params.assertion,
-          };
-        }
-        throw error;
-      }
-    },
-    'model-graded-closedqa': handleModelGradedClosedQa,
-    'model-graded-factuality': handleFactuality,
-    moderation: handleModeration,
-    perplexity: handlePerplexity,
-    'perplexity-score': handlePerplexityScore,
-    pi: handlePiScorer,
-    python: handlePython,
-    regex: handleRegex,
-    'rouge-n': handleRougeScore,
-    similar: handleSimilar,
-    'starts-with': handleStartsWith,
-    'trace-error-spans': handleTraceErrorSpans,
-    'trace-span-count': handleTraceSpanCount,
-    'trace-span-duration': handleTraceSpanDuration,
-    webhook: handleWebhook,
-  };
-
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
     return handleRedteam(assertionParams);
   }
 
-  const handler = assertionHandlers[assertionParams.baseType as keyof typeof assertionHandlers];
+  const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
     const result = await handler(assertionParams);
 
