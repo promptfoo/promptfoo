@@ -1,9 +1,11 @@
 import os
-import yaml
 from typing import Any, Dict
+
+import yaml
 
 try:
     from openai import OpenAI
+
     oai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     USE_OPENAI = True
 except ImportError:
@@ -56,7 +58,9 @@ Expected output:
     ]
 
 
-def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+def call_api(
+    prompt: str, options: Dict[str, Any], context: Dict[str, Any]
+) -> Dict[str, Any]:
     """Promptfoo entry point."""
     cfg = options.get("config", {})
     agent_id = cfg.get("agent_id", "trend_researcher")

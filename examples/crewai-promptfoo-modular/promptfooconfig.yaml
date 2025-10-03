@@ -1,9 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: "CrewAI modular agent-task evaluation (code-first)"
+description: 'CrewAI modular agent-task evaluation (code-first)'
 
 providers:
   - id: file://./composer.py
-    label: "Composer Provider"
+    label: 'Composer Provider'
     config:
       agent_id: trend_researcher
       task_id: trend_identification_task
@@ -11,7 +11,7 @@ providers:
       temperature: 0.2
 
 prompts:
-  - "{{input_text}}"
+  - '{{input_text}}'
 
 defaultTest:
   assert:
@@ -29,18 +29,18 @@ defaultTest:
         return /\n[-*•]\s/.test(String(output));
 
 tests:
-  - description: "Electric Vehicles Trend Analysis"
+  - description: 'Electric Vehicles Trend Analysis'
     options:
-      provider: "Composer Provider"
+      provider: 'Composer Provider'
     vars:
-      topic: "Electric Vehicles"
+      topic: 'Electric Vehicles'
       input_text: |
         The global EV market grew 35% year-over-year in 2024, driven by Asia and Europe...
-  
-  - description: "AI in Healthcare Trend Analysis"
+
+  - description: 'AI in Healthcare Trend Analysis'
     options:
-      provider: "Composer Provider"
+      provider: 'Composer Provider'
     vars:
-      topic: "Artificial Intelligence in Healthcare"
+      topic: 'Artificial Intelligence in Healthcare'
       input_text: |
         Hospitals are rapidly adopting AI diagnostic tools and pharmaceutical companies are investing in AI drug discovery...

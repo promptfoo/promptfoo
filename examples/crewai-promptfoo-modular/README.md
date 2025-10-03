@@ -4,7 +4,7 @@ This example shows how to use **CrewAI-style modular prompts** with **Promptfoo*
 
 ## What is CrewAI?
 
-CrewAI is a framework for orchestrating role-playing, autonomous AI agents. In modular setups, agent definitions include `role`, `goal`, and `backstory` (in `agents.yaml`), while tasks include `description` and `expected_output` (in `tasks.yaml`).  
+CrewAI is a framework for orchestrating role-playing, autonomous AI agents. In modular setups, agent definitions include `role`, `goal`, and `backstory` (in `agents.yaml`), while tasks include `description` and `expected_output` (in `tasks.yaml`).
 
 By separating these components, you can manage prompt complexity more effectively and evaluate them independently or in combination.
 
@@ -15,6 +15,7 @@ You can run this example with:
 ```bash
 npx promptfoo@latest init --example crewai-promptfoo-modular
 ```
+
 ## Prerequisites
 
 This example requires the following:
@@ -38,6 +39,7 @@ Create a `.env` file in this directory:
 ```dotenv
 OPENAI_API_KEY=your-api-key-here
 ```
+
 If using a `.env` file, uncomment `python-dotenv` in `requirements.txt` and reinstall dependencies.
 
 ## Installation
