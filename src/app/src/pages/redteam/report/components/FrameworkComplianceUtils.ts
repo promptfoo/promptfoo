@@ -1,5 +1,6 @@
 import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
 import type { Theme } from '@mui/material/styles';
+import { getASRColor, getPassRateColor } from '@promptfoo/app/src/utils/redteam';
 
 // Types for utility functions
 export type CategoryStats = Record<
@@ -104,35 +105,5 @@ export const getSeverityColor = (severity: Severity, theme: Theme): string => {
 };
 
 export const getProgressColor = (percentage: number, forAttackRate: boolean = false): string => {
-  if (forAttackRate) {
-    // For attack success rate, high percentages are bad
-    if (percentage >= 75) {
-      return '#d32f2f';
-    } // Dark Red
-    if (percentage >= 50) {
-      return '#f44336';
-    } // Red
-    if (percentage >= 25) {
-      return '#ff9800';
-    } // Orange
-    if (percentage >= 10) {
-      return '#ffc107';
-    } // Amber
-    return '#4caf50'; // Green (low attack success is good)
-  } else {
-    // For pass rate, high percentages are good
-    if (percentage >= 90) {
-      return '#4caf50';
-    } // Green
-    if (percentage >= 75) {
-      return '#8bc34a';
-    } // Light Green
-    if (percentage >= 50) {
-      return '#ffeb3b';
-    } // Yellow
-    if (percentage >= 25) {
-      return '#ff9800';
-    } // Orange
-    return '#f44336'; // Red
-  }
+  return forAttackRate ? getASRColor(percentage) : getPassRateColor(percentage);
 };

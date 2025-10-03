@@ -237,7 +237,7 @@ const App = () => {
           return acc;
         }
 
-        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
         acc[pluginId].total++;
 
         // Check if moderation tests failed but other tests passed - this indicates content was
@@ -252,9 +252,15 @@ const App = () => {
         } else if (moderationPassed) {
           acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
         }
+
+        // Increment for grader-originated failures
+        if(row.failureReason === ResultFailureReason.ASSERT) {
+          acc[pluginId].failCount++;
+        }
+
         return acc;
       },
-      {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
+      {} as Record<string, { pass: number; total: number; passWithFilter: number; failCount: number }>,
     );
   }, [evalData]);
 
@@ -393,16 +399,17 @@ const App = () => {
     return filtered;
   }, [passesByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
 
+  // TODO(Will): Verify working w/ filters
   const filteredCategoryStats = React.useMemo(() => {
-    const stats: Record<string, { pass: number; total: number; passWithFilter: number }> = {};
+    const stats: Record<string, { pass: number; total: number; passWithFilter: number; failCount: number }> = {};
 
     Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
-      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
       stats[pluginId].total += tests.length;
     });
 
     Object.entries(filteredPassesByPlugin).forEach(([pluginId, tests]) => {
-      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
       stats[pluginId].pass += tests.length;
       stats[pluginId].passWithFilter += tests.length;
       stats[pluginId].total += tests.length;

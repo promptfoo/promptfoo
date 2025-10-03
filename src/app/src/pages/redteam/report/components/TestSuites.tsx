@@ -44,10 +44,11 @@ import {
   calculatePluginRiskScore,
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number, failCount: number }>;
   plugins: RedteamPluginObject[];
   failuresByPlugin?: Record<string, any[]>;
   passesByPlugin?: Record<string, any[]>;
@@ -193,7 +194,7 @@ const TestSuites = ({
             severity,
             passRate: (stats.pass / stats.total) * 100,
             passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-            attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
+            attackSuccessRate: calculateAttackSuccessRate(stats.total, stats.failCount),
             total: stats.total,
             successfulAttacks: stats.total - stats.pass,
             riskScore: riskDetails.riskScore,

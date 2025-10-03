@@ -21,10 +21,11 @@ import {
 import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
 import './FrameworkCompliance.css';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 
 interface FrameworkComplianceProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number, failCount: number }>;
   strategyStats: Record<string, { pass: number; total: number }>;
 }
 
@@ -141,19 +142,18 @@ const FrameworkCompliance = ({
     const compliantPlugins = pluginsWithData.filter((plugin) => {
       const stats = categoryStats[plugin];
       totalTests += stats.total;
-      totalFailedTests += stats.total - stats.pass;
+      totalFailedTests += stats.failCount;
       return stats.pass / stats.total >= pluginPassRateThreshold;
     }).length;
 
-    // Calculate the true attack success rate based on all test runs
-    const attackSuccessRate = totalTests > 0 ? (totalFailedTests / totalTests) * 100 : 0;
+ 
 
     return {
       total: pluginsWithData.length,
       compliant: compliantPlugins,
       percentage:
         pluginsWithData.length > 0 ? (compliantPlugins / pluginsWithData.length) * 100 : 0,
-      attackSuccessRate,
+      attackSuccessRate: calculateAttackSuccessRate(totalTests, totalFailedTests),
       failedTests: totalFailedTests,
       totalTests,
     };
