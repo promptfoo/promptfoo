@@ -562,7 +562,7 @@ Your choice of attack provider is extremely important for the quality of your re
 
 By default, Promptfoo uses your local OpenAI key for redteam attack generation. If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
 
-You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
+You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REMOTE_GENERATION` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models. See the [Remote Generation](#remote-generation) section below for details on the difference between these variables.
 
 :::note
 Custom plugins and strategies require an OpenAI key or your own provider configuration.
@@ -600,17 +600,33 @@ Some providers such as Anthropic may disable your account for generating harmful
 
 ### Remote Generation
 
-By default, promptfoo uses a remote service for generating adversarial certain inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+By default, Promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases using specialized unaligned models.
+
+You can control remote generation with two environment variables:
+
+- **`PROMPTFOO_DISABLE_REMOTE_GENERATION`** - Disables ALL remote generation, including:
+  - Red team harmful content generation
+  - Red team adversarial strategies
+  - Red team simulated users
+  - Regular SimulatedUser provider (for non-redteam evaluations)
+
+- **`PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION`** - Disables remote generation for red team features only:
+  - Red team harmful content generation
+  - Red team adversarial strategies
+  - Red team simulated users
+  - Does NOT affect regular (non-redteam) SimulatedUser usage
+
+**Relationship:** `PROMPTFOO_DISABLE_REMOTE_GENERATION` is a superset of `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION`. Setting the former disables everything; setting only the latter allows you to keep regular SimulatedUser evaluations while disabling red team features.
 
 :::info Cloud Users
-If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
+If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REMOTE_GENERATION=1` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1`.
 :::
 
 :::warning
 Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.
 :::
 
-If you need to use a custom provider for generation, you can still benefit from our remote service by leaving `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` set to `false` (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
+If you need to use a custom provider for generation, you can still benefit from our remote service by leaving these variables unset (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
 
 ### Custom Providers/Targets
 
@@ -821,7 +837,9 @@ Configuration values can be set in multiple ways, with the following precedence 
 3. **Environment variables** - System-level settings
 
    ```bash
-   export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+   export PROMPTFOO_DISABLE_REMOTE_GENERATION=1  # Disables ALL remote generation
+   # OR
+   export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1  # Disables only red team remote generation
    export OPENAI_API_KEY=your-key-here
    ```
 

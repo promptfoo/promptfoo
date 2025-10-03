@@ -116,12 +116,16 @@ Set the following environment variables before running the CLI to disable all ou
 ```bash
 export PROMPTFOO_DISABLE_TELEMETRY=1
 export PROMPTFOO_DISABLE_UPDATE=1
-export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+export PROMPTFOO_DISABLE_REMOTE_GENERATION=1  # Disables ALL remote generation (SimulatedUser + red team)
 export PROMPTFOO_DISABLE_SHARING=1
 export PROMPTFOO_SELF_HOSTED=1
 ```
 
 Only configure local or self-hosted LLM providers (e.g., Ollama) so the CLI does not attempt to reach external APIs.
+
+:::note
+If you only want to disable red team remote generation while keeping regular SimulatedUser features enabled, use `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1` instead of `PROMPTFOO_DISABLE_REMOTE_GENERATION=1`.
+:::
 
 ### Do you publish an LLMs.txt?
 

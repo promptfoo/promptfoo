@@ -24,7 +24,21 @@ Promptfoo collects basic anonymous telemetry by default. This telemetry helps us
 
 To disable telemetry, set the following environment variable: `PROMPTFOO_DISABLE_TELEMETRY=1`.
 
-Promptfoo hosts free unaligned inference endpoints for harmful test case generation when running `promptfoo redteam generate`. You can disable remote generation with: `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1`
+## Remote Generation
+
+Some Promptfoo features use remote generation for specialized models:
+
+- **SimulatedUser provider** - Uses conversation simulation models for realistic user interactions
+- **Red team testing** - Uses unaligned models for harmful content generation and adversarial strategies
+
+By default, these features connect to Promptfoo's hosted inference endpoints. Your target model evaluations always run locally - only the test generation uses remote services.
+
+You can control remote generation with these environment variables:
+
+- `PROMPTFOO_DISABLE_REMOTE_GENERATION=1` - Disables ALL remote generation (including SimulatedUser and all red team features)
+- `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1` - Disables remote generation for red team features only (does NOT affect regular SimulatedUser usage)
+
+For completely offline operation, use `PROMPTFOO_DISABLE_REMOTE_GENERATION=1`.
 
 The CLI checks NPM's package registry for updates. If there is a newer version available, it will notify the user. To disable, set: `PROMPTFOO_DISABLE_UPDATE=1`.
 
