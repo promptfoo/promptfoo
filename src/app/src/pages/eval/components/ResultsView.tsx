@@ -187,8 +187,8 @@ export default function ResultsView({
 
   const {
     setInComparisonMode,
-    columnStates,
     setColumnState,
+    getColumnState,
     maxTextLength,
     wordBreak,
     showInferenceDetails,
@@ -347,9 +347,12 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const currentColumnState = columnStates[currentEvalId] || {
+  const currentColumnState = getColumnState(allColumns) || {
     selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
+    columnVisibility: allColumns.reduce(
+      (acc, col) => ({ ...acc, [col]: true }),
+      {} as VisibilityState,
+    ),
   };
 
   const visiblePromptCount = React.useMemo(
@@ -366,12 +369,12 @@ export default function ResultsView({
       allColumns.forEach((col) => {
         newColumnVisibility[col] = columns.includes(col);
       });
-      setColumnState(currentEvalId, {
+      setColumnState({
         selectedColumns: columns,
         columnVisibility: newColumnVisibility,
       });
     },
-    [allColumns, setColumnState, currentEvalId],
+    [allColumns, setColumnState],
   );
 
   const handleChange = React.useCallback(
