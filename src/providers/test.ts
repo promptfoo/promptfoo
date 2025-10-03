@@ -6,6 +6,7 @@ import { matchesLlmRubric } from '../matchers';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { fetchWithProxy } from '../util/fetch';
 import { sanitizeObject } from '../util/sanitizer';
+
 import type { ApiProvider } from '../types/providers';
 
 export interface ProviderTestResult {
@@ -41,7 +42,7 @@ export interface SessionTestResult {
  * Tests basic provider connectivity with "Hello, world!" prompt
  * Extracted from POST /providers/test endpoint
  */
-export async function testProviderConnectivity(
+export async function testHTTPProviderConnectivity(
   provider: ApiProvider,
 ): Promise<ProviderTestResult> {
   const vars: Record<string, string> = {};
@@ -65,20 +66,18 @@ export async function testProviderConnectivity(
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error('[testProviderConnectivity] Error calling provider API', {
+    logger.debug('[testProviderConnectivity] Error calling provider API', {
       error: errorMessage,
       providerId: provider.id,
     });
-
-    return {
+    result = {
       success: false,
       message: `Provider call failed: ${errorMessage}`,
       error: errorMessage,
     };
   }
 
-  const sessionId =
-    provider.getSessionId?.() ?? result?.sessionId ?? vars.sessionId ?? undefined;
+  const sessionId = provider.getSessionId?.() ?? result?.sessionId ?? vars.sessionId ?? undefined;
 
   // Skip remote grading if disabled
   if (neverGenerateRemote()) {
@@ -280,8 +279,10 @@ export async function testProviderSession(
 
       return {
         success: false,
-        message: 'Session extraction failed: The session parser did not extract a session ID from the server response',
-        reason: "The session parser expression did not return a valid session ID. Check that the parser matches your server's response format.",
+        message:
+          'Session extraction failed: The session parser did not extract a session ID from the server response',
+        reason:
+          "The session parser expression did not return a valid session ID. Check that the parser matches your server's response format.",
         details: {
           sessionSource: effectiveSessionSource,
           sessionId: 'Not extracted',
@@ -316,7 +317,8 @@ export async function testProviderSession(
     if (neverGenerateRemote()) {
       return {
         success: false,
-        message: 'Session test completed. Remote grading is disabled - please examine the results yourself.',
+        message:
+          'Session test completed. Remote grading is disabled - please examine the results yourself.',
         reason: 'Manual review required - remote grading is disabled',
         details: {
           sessionId: sessionId || 'Not extracted',

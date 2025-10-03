@@ -2,12 +2,12 @@ import { Command } from 'commander';
 import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
-import { testProviderConnectivity, testProviderSession } from '../../src/providers/test';
+import { testHTTPProviderConnectivity, testProviderSession } from '../../src/providers/test';
 import { getProviderFromCloud } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 
-import type { ApiProvider } from '../../src/types/providers';
 import type { UnifiedConfig } from '../../src/types/index';
+import type { ApiProvider } from '../../src/types/providers';
 
 jest.mock('../../src/logger');
 jest.mock('../../src/util/config/load');
@@ -81,7 +81,7 @@ describe('Validate Command Provider Tests', () => {
       });
 
       jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
-      jest.mocked(testProviderConnectivity).mockResolvedValue({
+      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Connectivity test passed',
         providerResponse: { output: 'test' },
@@ -99,7 +99,7 @@ describe('Validate Command Provider Tests', () => {
       );
 
       expect(loadApiProvider).toHaveBeenCalledWith('http://example.com');
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
+      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
       expect(testProviderSession).toHaveBeenCalledWith(mockHttpProvider, undefined, {
         skipConfigValidation: true,
       });
@@ -125,7 +125,7 @@ describe('Validate Command Provider Tests', () => {
       });
 
       jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
-      jest.mocked(testProviderConnectivity).mockResolvedValue({
+      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
         success: false,
         message: 'Connection failed',
         error: 'Network error',
@@ -139,7 +139,7 @@ describe('Validate Command Provider Tests', () => {
         defaultConfigPath,
       );
 
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
+      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
       expect(testProviderSession).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('Skipping session management test'),
@@ -173,7 +173,7 @@ describe('Validate Command Provider Tests', () => {
 
       expect(loadApiProvider).toHaveBeenCalledWith('echo');
       expect(mockEchoProvider.callApi).toHaveBeenCalledWith('Hello, world!', expect.any(Object));
-      expect(testProviderConnectivity).not.toHaveBeenCalled();
+      expect(testHTTPProviderConnectivity).not.toHaveBeenCalled();
       expect(testProviderSession).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test passed'));
     });
@@ -267,7 +267,7 @@ describe('Validate Command Provider Tests', () => {
       });
 
       jest.mocked(loadApiProviders).mockResolvedValue([mockHttpProvider]);
-      jest.mocked(testProviderConnectivity).mockResolvedValue({
+      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Connectivity test passed',
         providerResponse: { output: 'test' },
@@ -281,7 +281,7 @@ describe('Validate Command Provider Tests', () => {
       await doValidate({ config: ['test-config.yaml'] }, defaultConfig, defaultConfigPath);
 
       expect(loadApiProviders).toHaveBeenCalled();
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
+      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
       expect(testProviderSession).toHaveBeenCalledWith(mockHttpProvider, undefined, {
         skipConfigValidation: true,
       });
@@ -487,7 +487,7 @@ describe('Validate Command Provider Tests', () => {
       });
 
       jest.mocked(loadApiProviders).mockResolvedValue([mockHttpProvider]);
-      jest.mocked(testProviderConnectivity).mockResolvedValue({
+      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Test passed',
         providerResponse: { output: 'test' },
@@ -501,7 +501,7 @@ describe('Validate Command Provider Tests', () => {
       await doValidate({ config: ['test-config.yaml'] }, defaultConfig, defaultConfigPath);
 
       // Should call HTTP-specific tests
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
+      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
       expect(testProviderSession).toHaveBeenCalledWith(mockHttpProvider, undefined, {
         skipConfigValidation: true,
       });
@@ -532,7 +532,7 @@ describe('Validate Command Provider Tests', () => {
       });
 
       jest.mocked(loadApiProviders).mockResolvedValue([mockHttpProviderWithUrl]);
-      jest.mocked(testProviderConnectivity).mockResolvedValue({
+      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Test passed',
         providerResponse: { output: 'test' },
@@ -545,7 +545,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidate({ config: ['test-config.yaml'] }, defaultConfig, defaultConfigPath);
 
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProviderWithUrl);
+      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProviderWithUrl);
       expect(testProviderSession).toHaveBeenCalledWith(mockHttpProviderWithUrl, undefined, {
         skipConfigValidation: true,
       });
@@ -575,7 +575,7 @@ describe('Validate Command Provider Tests', () => {
       });
 
       jest.mocked(loadApiProviders).mockResolvedValue([mockHttpProviderById]);
-      jest.mocked(testProviderConnectivity).mockResolvedValue({
+      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Test passed',
         providerResponse: { output: 'test' },
@@ -589,7 +589,7 @@ describe('Validate Command Provider Tests', () => {
       await doValidate({ config: ['test-config.yaml'] }, defaultConfig, defaultConfigPath);
 
       // Should call HTTP-specific tests for providers with http:// id
-      expect(testProviderConnectivity).toHaveBeenCalled();
+      expect(testHTTPProviderConnectivity).toHaveBeenCalled();
       expect(testProviderSession).toHaveBeenCalled();
     });
   });
