@@ -151,7 +151,6 @@ function EvalOutputCell({
       .filter((reason) => reason); // Filter out empty/undefined reasons
   }
 
-
   if (showDiffs && firstOutput) {
     let firstOutputText =
       typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
