@@ -73,6 +73,7 @@ export class Telemetry {
           properties: {
             email: this.email,
             isLoggedIntoCloud: isLoggedIntoCloud(),
+            isRunningInCi: isCI(),
           },
         });
         client.flush().catch(() => {

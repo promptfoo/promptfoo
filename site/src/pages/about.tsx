@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
 import Avatar from '@mui/material/Avatar';
@@ -6,8 +7,8 @@ import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
-import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 
 const AboutPageContent = () => {
@@ -106,6 +107,12 @@ const AboutPageContent = () => {
                 title: 'Enterprise GTM Lead',
                 image: '/img/team/ben.jpeg',
                 bio: 'Ben brings go-to-market expertise as an early GTM hire at multiple high-growth startups including Windsurf, Applied Intuition, and Amplitude. He specializes in building strategic relationships and helping enterprises implement and secure their AI solutions.',
+              },
+              {
+                name: 'Travis Willhite',
+                title: 'Enterprise GTM Lead',
+                image: '/img/team/travis.png',
+                bio: 'Travis has spent the past decade driving revenue at high-growth, venture-backed AI companies. He has extensive experience helping Fortune 500 companies develop and launch cutting-edge AI applications.',
               },
               {
                 name: 'Vanessa Sauter',
