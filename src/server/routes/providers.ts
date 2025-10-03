@@ -4,7 +4,7 @@ import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { loadApiProvider } from '../../providers/index';
-import { testProviderConnectivity, testProviderSession } from '../../providers/test';
+import { testHTTPProviderConnectivity, testProviderSession } from '../../providers/test';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
@@ -44,7 +44,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   });
 
   // Use refactored function
-  const result = await testProviderConnectivity(loadedProvider);
+  const result = await testHTTPProviderConnectivity(loadedProvider);
 
   res.status(200).json({
     testResult: result.success ? { message: result.message } : { error: result.message },
