@@ -153,7 +153,9 @@ describe('PlinyGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.any(String), // The rendered rubric
       aiOutput,
-      expect.any(Object),
+      expect.any(Object), // GradingConfig with provider
+      undefined, // vars
+      null, // assertion
     );
   });
 
@@ -173,7 +175,9 @@ describe('PlinyGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.any(String), // The rendered rubric
       aiOutput,
-      expect.any(Object),
+      expect.any(Object), // GradingConfig with provider
+      undefined, // vars
+      null, // assertion
     );
   });
 
@@ -190,6 +194,7 @@ describe('PlinyGrader', () => {
       pass: true,
       score: 1,
       reason: 'Model refused the request',
+      assertion: null,
     });
 
     // matchesLlmRubric should not be called for empty responses
@@ -210,6 +215,7 @@ describe('PlinyGrader', () => {
       pass: true,
       score: 1,
       reason: 'Model refused the request',
+      assertion: null,
     });
 
     // matchesLlmRubric should not be called for basic refusals

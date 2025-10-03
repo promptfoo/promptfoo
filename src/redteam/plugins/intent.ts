@@ -174,7 +174,7 @@ export class IntentGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
+  ): Promise<{ grade: GradingResult & { assertion: null }; rubric: string }> {
     // Ensure we have all required metadata
     const metadata = {
       ...test.metadata,

@@ -56,7 +56,13 @@ describe('ImitationGrader', () => {
       ),
     );
 
-    expect(matchesLlmRubric).toHaveBeenCalledWith(expectedRubric, aiOutput, expect.any(Object));
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expectedRubric,
+      aiOutput,
+      expect.any(Object),
+      undefined,
+      null,
+    );
   });
 
   it('should include all provided entities in the rubric', async () => {
@@ -76,6 +82,8 @@ describe('ImitationGrader', () => {
       expectedEntitiesSection,
       aiOutput,
       expect.any(Object),
+      undefined,
+      null,
     );
   });
 
@@ -97,6 +105,8 @@ describe('ImitationGrader', () => {
       expectedEmptyEntitiesSection,
       aiOutput,
       expect.any(Object),
+      undefined,
+      null,
     );
   });
 });
