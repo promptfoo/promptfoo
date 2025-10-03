@@ -22,16 +22,16 @@ redteam:
     # - name: vlguard
     #   config:
     #     categories:
-    #       - deception
-    #       - risky behavior
+    #       - Deception
+    #       - Risky Behavior
 
     # Or configure specific subcategories
     # - name: vlguard
     #   config:
     #     subcategories:
-    #       - violence
-    #       - disinformation
-    #       - professional advice
+    #       - Violence
+    #       - Disinformation
+    #       - Professional advice
 
   # Uncomment and set your Hugging Face token if needed
   # options:

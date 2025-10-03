@@ -6,7 +6,7 @@ keywords: [red team, multi-modal, image, safety, content moderation, unsafe cont
 
 # VLGuard Plugin
 
-The VLGuard plugin tests multi-modal models with potentially unsafe images from the [VLGuard dataset](https://huggingface.co/datasets/kirito011024/vlguard_unsafes).
+The VLGuard plugin tests multi-modal models with potentially unsafe images from the [VLGuard dataset](https://huggingface.co/datasets/ys-zong/VLGuard), a safety evaluation benchmark for Vision Large Language Models published at ICML 2024.
 
 The plugin helps evaluate how well models:
 
@@ -17,7 +17,7 @@ The plugin helps evaluate how well models:
 
 ## Quick Start
 
-1. Set your Hugging Face API token as an environment variable (optional but recommended):
+1. Request access to the dataset at [huggingface.co/datasets/ys-zong/VLGuard](https://huggingface.co/datasets/ys-zong/VLGuard) and set your Hugging Face API token:
 
 ```bash
 export HF_TOKEN=your_huggingface_token  # or HF_API_TOKEN
@@ -33,14 +33,14 @@ redteam:
     - name: vlguard
       config:
         categories:
-          - deception
-          - risky behavior
+          - Deception
+          - Risky Behavior
     # OR with specific subcategories:
     - name: vlguard
       config:
         subcategories:
-          - violence
-          - disinformation
+          - Violence
+          - Disinformation
 ```
 
 :::warning No Strategies Needed
@@ -49,25 +49,29 @@ Unlike text-based plugins, the VLGuard plugin should not be used with any redtea
 
 ## Available Categories and Subcategories
 
-The VLGuard dataset contains 442 images organized into the following categories:
+The VLGuard dataset contains 2,000 training images (977 unsafe, 1,023 safe) organized into the following categories.
+
+:::note Performance
+The plugin fetches images in small batches (200 at a time) with bounded concurrency to avoid memory issues. This means the plugin is optimized for typical red teaming scenarios (5-50 test cases) rather than loading the entire 4GB dataset at once.
+:::
 
 ### Main Categories (4)
 
-- `deception`
-- `risky behavior`
-- `privacy`
-- `discrimination`
+- `Privacy`
+- `Risky Behavior`
+- `Deception`
+- `Hateful Speech`
 
-### Subcategories (9)
+### Subcategories (8)
 
-- `disinformation`
-- `violence`
-- `professional advice`
-- `political`
-- `sexually explicit`
-- `personal data`
-- `sex`
-- `other`
+- `Personal data`
+- `Professional advice`
+- `Political`
+- `Sexually explicit`
+- `Violence`
+- `Disinformation`
+- `Discrimination by sex`
+- `Discrimination by race`
 
 ## Usage
 
@@ -113,11 +117,11 @@ redteam:
     - name: vlguard
       config:
         categories:
-          - deception
-          - privacy
+          - Deception
+          - Privacy
         subcategories:
-          - violence
-          - disinformation
+          - Violence
+          - Disinformation
   num_tests: 5
 ```
 
@@ -146,10 +150,12 @@ The VLGuard grader evaluates whether model responses appropriately handle potent
 
 ## Dataset Characteristics
 
+- **Comprehensive coverage**: 2,000 training images including both safe (1,023) and unsafe (977) examples
 - **Organized categories**: Clear categorization with both high-level categories and specific subcategories
-- **Focused dataset**: 442 carefully curated images for testing safety boundaries
+- **MIT licensed**: Open dataset from the original VLGuard research at ICML 2024
 - **Hugging Face hosted**: Easy access through the Hugging Face datasets API
-- **Multi-category coverage**: Includes deception, risky behavior, privacy, and discrimination categories
+
+The plugin uses only unsafe images from the dataset to focus on safety evaluation.
 
 ## See Also
 
