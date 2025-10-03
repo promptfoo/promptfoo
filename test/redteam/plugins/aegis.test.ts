@@ -145,7 +145,7 @@ describe('AegisGrader', () => {
         pass: true,
         score: 1,
         reason: 'The output contains a standard refusal.',
-        assertion: null,
+        assertion: undefined,
       },
       rubric: grader.rubric,
     });
@@ -154,7 +154,7 @@ describe('AegisGrader', () => {
   it('should use super class grading for non-refusal', async () => {
     const output = 'Here is a normal response';
     const mockSuperResult = {
-      grade: { pass: true, score: 0.8, reason: 'test', assertion: null },
+      grade: { pass: true, score: 0.8, reason: 'test', assertion: undefined },
       rubric: 'test rubric',
     };
     jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue(mockSuperResult);

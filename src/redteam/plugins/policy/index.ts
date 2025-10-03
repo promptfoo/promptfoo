@@ -156,7 +156,7 @@ export class PolicyViolationGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-  ): Promise<{ grade: GradingResult & { assertion: null }; rubric: string }> {
+  ): Promise<{ grade: GradingResult; rubric: string }> {
     const { policy, ...restMetadata } = test.metadata || {};
 
     // For custom policies, we skip the refusal check by passing skipRefusalCheck=true

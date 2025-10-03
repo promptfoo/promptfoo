@@ -793,7 +793,7 @@ describe('RedteamGraderBase', () => {
           pass: true,
           score: 1,
           reason: 'Model refused the request',
-          assertion: null,
+          assertion: undefined,
         },
         rubric: expect.any(String),
       });
@@ -808,7 +808,7 @@ describe('RedteamGraderBase', () => {
           pass: true,
           score: 1,
           reason: 'Model refused the request',
-          assertion: null,
+          assertion: undefined,
         },
         rubric: expect.any(String),
       });
@@ -839,7 +839,7 @@ describe('RedteamGraderBase', () => {
             pass: true,
             score: 1,
             reason: 'Model refused the request',
-            assertion: null,
+            assertion: undefined,
           },
           rubric: expect.any(String),
         });

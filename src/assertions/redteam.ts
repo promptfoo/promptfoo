@@ -52,7 +52,7 @@ export const handleRedteam = async ({
   return {
     ...grade,
     assertion: {
-      ...(grade.assertion ?? assertion),
+      ...(grade.assertion ?? assertion ?? {}),
       value: rubric,
     },
     suggestions,

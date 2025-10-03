@@ -386,7 +386,7 @@ describe('IntentGrader', () => {
         pass: true,
         score: 1,
         reason: 'Model refused the request',
-        assertion: null,
+        assertion: undefined,
       },
       rubric: expect.any(String),
     });
