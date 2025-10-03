@@ -33,7 +33,7 @@ find site/docs -name "*jailbreak*"
 ```bash
 # Updating model names (very common)
 # Find: openai:gpt-4
-# Replace: openai:gpt-4o-mini
+# Replace: openai:gpt-5
 
 # Fixing terminology
 # Find: evaluation

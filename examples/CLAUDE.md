@@ -39,7 +39,7 @@ Every example needs:
 
 ## Quick Reference
 
-- Use latest 2025 models: `openai:gpt-4o-mini`, `anthropic:claude-3-7-sonnet-20250219`
+- Use latest models: `openai:gpt-5`, `anthropic:claude-4.5-sonnet`
 - Make test cases fun/engaging, not boring
 - Use `file://` prefix for external files
 - Keep descriptions SHORT (3-10 words)
