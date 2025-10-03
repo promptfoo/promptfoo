@@ -138,6 +138,9 @@
                             "CLOUDFLARE_API_KEY": {
                               "type": "string"
                             },
+                            "COMETAPI_KEY": {
+                              "type": "string"
+                            },
                             "COHERE_API_KEY": {
                               "type": "string"
                             },

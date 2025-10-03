@@ -40,6 +40,7 @@ providers:
 | [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers                     | Compatible with OpenAI syntax                                             |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's OpenAI-compatible AI platform                   | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`              |
 | [Cloudera](./cloudera.md)                           | Cloudera AI Inference Service                                | `cloudera:llama-2-13b-chat`                                               |
+| [CometAPI](./cometapi.md)                           | 500+ AI models from multiple providers via unified API       | `cometapi:chat:gpt-5-mini` or `cometapi:image:dall-e-3`                   |
 | [Cohere](./cohere.md)                               | Cohere's language models                                     | `cohere:command`                                                          |
 | [Databricks](./databricks.md)                       | Databricks Foundation Model APIs                             | `databricks:databricks-meta-llama-3-3-70b-instruct`                       |
 | [DeepSeek](./deepseek.md)                           | DeepSeek's language models                                   | `deepseek:deepseek-r1`                                                    |
