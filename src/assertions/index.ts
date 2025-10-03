@@ -106,6 +106,27 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
 
 const nunjucks = getNunjucksEngine();
 
+/**
+ * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
+ * or "not-contains" is inverse of "contains".
+ * @param assertion - The assertion to test
+ * @returns true if the assertion is inverse, false otherwise
+ */
+export function isAssertionInverse(assertion: Assertion): boolean {
+  return assertion.type.startsWith('not-');
+}
+
+/**
+ * Returns the base type of an assertion i.e. "not-equals" returns "equals"
+ * and "equals" returns "equals".
+ * @param assertion - The assertion to get the base type.
+ * @returns The base type of the assertion.
+ */
+export function getAssertionBaseType(assertion: Assertion): AssertionType {
+  const inverse = isAssertionInverse(assertion);
+  return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
+}
+
 export async function runAssertion({
   prompt,
   provider,
@@ -129,11 +150,6 @@ export async function runAssertion({
   let output = originalOutput;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
-
-  const inverse = assertion.type.startsWith('not-');
-  const baseType = inverse
-    ? (assertion.type.slice(4) as AssertionType)
-    : (assertion.type as AssertionType);
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
@@ -239,10 +255,10 @@ export async function runAssertion({
 
   const assertionParams: AssertionParams = {
     assertion,
-    baseType,
+    baseType: getAssertionBaseType(assertion),
     context,
     cost,
-    inverse,
+    inverse: isAssertionInverse(assertion),
     latencyMs,
     logProbs,
     output,
@@ -330,11 +346,11 @@ export async function runAssertion({
   };
 
   // Check for redteam assertions first
-  if (baseType.startsWith('promptfoo:redteam:')) {
+  if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
     return handleRedteam(assertionParams);
   }
 
-  const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
+  const handler = assertionHandlers[assertionParams.baseType as keyof typeof assertionHandlers];
   if (handler) {
     const result = await handler(assertionParams);
 
