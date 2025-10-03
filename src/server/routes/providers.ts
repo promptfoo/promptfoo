@@ -47,7 +47,13 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   const result = await testHTTPProviderConnectivity(loadedProvider);
 
   res.status(200).json({
-    testResult: result.success ? { message: result.message } : { error: result.message },
+    testResult: {
+      message: result.message,
+      error: result.error,
+      changes_needed: result.analysis?.changes_needed,
+      changes_needed_reason: result.analysis?.changes_needed_reason,
+      changes_needed_suggestions: result.analysis?.changes_needed_suggestions,
+    },
     providerResponse: result.providerResponse,
     transformedRequest: result.transformedRequest,
   } as ProviderTestResponse);
