@@ -179,7 +179,9 @@ export async function testProviderSession(
   try {
     // Determine effective session source
     const effectiveSessionSource =
-      sessionConfig?.sessionSource || provider.config?.sessionSource || 'server';
+      sessionConfig?.sessionSource ||
+      provider.config?.sessionSource ||
+      (provider.config.sessionParser ? 'server' : 'client');
 
     // Skip validation checks if requested (e.g., for CLI usage)
     if (!options?.skipConfigValidation) {
