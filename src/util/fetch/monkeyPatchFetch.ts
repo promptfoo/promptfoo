@@ -1,8 +1,10 @@
-import { gzip } from 'zlib';
 import { promisify } from 'util';
+import { gzip } from 'zlib';
+
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
+
 import type { FetchOptions } from './types';
 
 const gzipAsync = promisify(gzip);
