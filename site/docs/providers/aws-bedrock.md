@@ -2,7 +2,7 @@
 title: AWS Bedrock
 sidebar_label: AWS Bedrock
 sidebar_position: 3
-description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
+description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
 ---
 
 # Bedrock
@@ -30,7 +30,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a comm
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+     - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -39,7 +39,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a comm
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
        config:
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
@@ -134,38 +134,50 @@ Amazon Bedrock supports multiple authentication methods, including the new API k
 
 ### Credential Resolution Order
 
-When authenticating with AWS Bedrock, credentials are resolved in this sequence:
+Credentials are resolved in the following priority order:
 
-1. **Config file credentials**: Explicitly provided `accessKeyId` and `secretAccessKey` in your promptfoo configuration (highest priority)
-2. **API Key authentication**: Bedrock API keys via config or environment variable
-3. **SSO profile**: When a `profile` is specified in your config
-4. **AWS default credential chain**:
-   - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
-   - Shared credentials file (`~/.aws/credentials`)
-   - EC2 instance profile or ECS task role
-   - SSO credentials from AWS CLI
+1. **Explicit credentials in config** (`accessKeyId`, `secretAccessKey`)
+2. **Bedrock API Key authentication** (`apiKey`)
+3. **SSO profile authentication** (`profile`)
+4. **AWS default credential chain** (environment variables, `~/.aws/credentials`)
+
+The first available credential method is used automatically.
 
 ### Authentication Options
 
 #### 1. Explicit credentials (highest priority)
 
-Specify direct access keys in your config:
+Specify AWS access keys directly in your configuration. **For security, use environment variables instead of hardcoding credentials:**
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
-      accessKeyId: 'YOUR_ACCESS_KEY_ID'
-      secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
-      sessionToken: 'YOUR_SESSION_TOKEN' # Optional
+      accessKeyId: '{{env.AWS_ACCESS_KEY_ID}}'
+      secretAccessKey: '{{env.AWS_SECRET_ACCESS_KEY}}'
+      sessionToken: '{{env.AWS_SESSION_TOKEN}}' # Optional, for temporary credentials
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
-This method overrides all other credential sources, including EC2 instance roles.
+**Environment variables:**
+
+```bash
+export AWS_ACCESS_KEY_ID="your_access_key_id"
+export AWS_SECRET_ACCESS_KEY="your_secret_access_key"
+export AWS_SESSION_TOKEN="your_session_token"  # Optional
+```
+
+:::warning Security Best Practice
+
+**Do not commit credentials to version control.** Use environment variables or a dedicated secrets management system to handle sensitive keys.
+
+:::
+
+This method overrides all other credential sources, including EC2 instance roles and SSO profiles.
 
 #### 2. API Key authentication
 
-Amazon Bedrock API keys provide a simplified authentication method that doesn't require managing AWS IAM credentials. This is especially useful for developers who want quick access to Bedrock models.
+Amazon Bedrock API keys provide simplified authentication without managing AWS IAM credentials.
 
 **Using environment variables:**
 
@@ -208,28 +220,84 @@ For these advanced features, use traditional AWS IAM credentials instead.
 
 #### 3. SSO profile authentication
 
-Use a profile from your AWS configuration:
+Use a named profile from your AWS configuration for AWS SSO setups or managing multiple AWS accounts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       profile: 'YOUR_SSO_PROFILE'
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
+**Prerequisites for SSO profiles:**
+
+1. **Install AWS CLI v2**: Ensure AWS CLI v2 is installed and on your PATH.
+
+2. **Configure AWS SSO**: Set up AWS SSO using the AWS CLI:
+
+   ```bash
+   aws configure sso
+   ```
+
+3. **Profile configuration**: Your `~/.aws/config` should contain the profile:
+
+   ```ini
+   [profile YOUR_SSO_PROFILE]
+   sso_start_url = https://your-sso-portal.awsapps.com/start
+   sso_region = us-east-1
+   sso_account_id = 123456789012
+   sso_role_name = YourRoleName
+   region = us-east-1
+   ```
+
+4. **Active SSO session**: Ensure you have an active SSO session:
+   ```bash
+   aws sso login --profile YOUR_SSO_PROFILE
+   ```
+
+**Use SSO profiles when:**
+
+- Managing multi-account AWS environments
+- Working in organizations with centralized AWS SSO
+- Your team needs different role-based permissions
+- You need to switch between different AWS contexts
+
 #### 4. Default credentials (lowest priority)
 
-Rely on the AWS default credential chain:
+Use the AWS SDK's standard credential chain:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1' # Only region specified
 ```
 
-This method is ideal when running on EC2 instances with IAM roles, as it automatically uses the instance's credentials.
+**The AWS SDK checks these sources in order:**
+
+1. **Environment variables**: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
+2. **Shared credentials file**: `~/.aws/credentials` (from `aws configure`)
+3. **AWS IAM roles**: EC2 instance profiles, ECS task roles, Lambda execution roles
+4. **Shared AWS CLI credentials**: Including cached SSO credentials
+
+**Use default credentials when:**
+
+- Running on AWS infrastructure (EC2, ECS, Lambda) with IAM roles
+- Developing locally with AWS CLI configured (`aws configure`)
+- Working in CI/CD environments with IAM roles or environment variables
+
+**Quick setup for local development:**
+
+```bash
+# Option 1: Using AWS CLI
+aws configure
+
+# Option 2: Using environment variables
+export AWS_ACCESS_KEY_ID="your_access_key"
+export AWS_SECRET_ACCESS_KEY="your_secret_key"
+export AWS_DEFAULT_REGION="us-east-1"
+```
 
 ## Example
 
@@ -270,22 +338,27 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
+  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
   - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
-    config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
-    config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
   - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+  - id: bedrock:us.anthropic.claude-3-opus-20240229-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -420,7 +493,7 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
 ```yaml
 config:
@@ -849,7 +922,56 @@ These environment variables can be overridden by the configuration specified in 
 
 ## Troubleshooting
 
-### Inference profile requires inferenceModelType
+### Authentication Issues
+
+#### "Unable to locate credentials" Error
+
+```text
+Error: Unable to locate credentials. You can configure credentials by running "aws configure".
+```
+
+**Solutions:**
+
+1. **Check credential priority**: Ensure credentials are available in the expected priority order
+2. **Verify AWS CLI setup**: Run `aws configure list` to see active credentials
+3. **SSO session expired**: Run `aws sso login --profile YOUR_PROFILE`
+4. **Environment variables**: Verify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set
+
+#### "AccessDenied" or "UnauthorizedOperation" Errors
+
+**Solutions:**
+
+1. **Check IAM permissions**: Ensure your credentials have `bedrock:InvokeModel` permission
+2. **Model access**: Enable model access in the AWS Bedrock console
+3. **Region mismatch**: Verify the region in your config matches where you enabled model access
+
+#### SSO-Specific Issues
+
+**"SSO session has expired":**
+
+```bash
+aws sso login --profile YOUR_PROFILE
+```
+
+**"Profile not found":**
+
+- Check `~/.aws/config` contains the profile
+- Verify profile name matches exactly (case-sensitive)
+
+#### Debugging Authentication
+
+Enable debug logging to see which credentials are being used:
+
+```bash
+export AWS_SDK_JS_LOG=1
+npx promptfoo eval
+```
+
+This will show detailed AWS SDK logs including credential resolution.
+
+### Model Configuration Issues
+
+#### Inference profile requires inferenceModelType
 
 If you see this error when using an inference profile ARN:
 
@@ -870,7 +992,7 @@ providers:
       inferenceModelType: 'claude' # Specify the model family
 ```
 
-### ValidationException: On-demand throughput isn't supported
+#### ValidationException: On-demand throughput isn't supported
 
 If you see this error:
 
@@ -883,13 +1005,13 @@ This usually means you need to use the region-specific model ID. Update your pro
 ```yaml
 providers:
   # Instead of this:
-  - id: bedrock:anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:anthropic.claude-sonnet-4-5-20250929-v1:0
   # Use this:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0 # US region
+  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0 # US region
   # or
-  - id: bedrock:eu.anthropic.claude-sonnet-4-20250514-v1:0 # EU region
+  - id: bedrock:eu.anthropic.claude-sonnet-4-5-20250929-v1:0 # EU region
   # or
-  - id: bedrock:apac.anthropic.claude-sonnet-4-20250514-v1:0 # APAC region
+  - id: bedrock:apac.anthropic.claude-sonnet-4-5-20250929-v1:0 # APAC region
 ```
 
 Make sure to:
