@@ -168,29 +168,7 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
       let subcategory: string;
       let question: string;
 
-      if (!isSafe) {
-        // Unsafe record - try multiple field paths
-        category = getStringField(
-          record.category ||
-            record.vars?.category ||
-            record.unsafe_question_category ||
-            record.vars?.unsafe_question_category,
-          'unknown',
-        );
-        subcategory = getStringField(
-          record.subcategory ||
-            record.vars?.subcategory ||
-            record.unsafe_question_subcategory ||
-            record.vars?.unsafe_question_subcategory,
-          'unknown',
-        );
-        question = getStringField(
-          record.unsafe_instruction ||
-            record.vars?.unsafe_instruction ||
-            record.question ||
-            record.vars?.question,
-        );
-      } else {
+      if (isSafe) {
         // Safe record - look for safe_question_category, safe_question_subcategory
         // and also check instr-resp array if present
         const instrResp = record['instr-resp'] || record.vars?.['instr-resp'];
@@ -243,6 +221,28 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
               record.question ||
               record.vars?.question,
           );
+      } else {
+        // Unsafe record - try multiple field paths
+        category = getStringField(
+          record.category ||
+            record.vars?.category ||
+            record.unsafe_question_category ||
+            record.vars?.unsafe_question_category,
+          'unknown',
+        );
+        subcategory = getStringField(
+          record.subcategory ||
+            record.vars?.subcategory ||
+            record.unsafe_question_subcategory ||
+            record.vars?.unsafe_question_subcategory,
+          'unknown',
+        );
+        question = getStringField(
+          record.unsafe_instruction ||
+            record.vars?.unsafe_instruction ||
+            record.question ||
+            record.vars?.question,
+        );
       }
 
       return {
