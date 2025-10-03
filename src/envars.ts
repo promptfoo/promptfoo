@@ -26,6 +26,16 @@ type EnvVars = {
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
+  /**
+   * Disable ALL remote generation (superset of PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION).
+   * Affects: SimulatedUser, red team features, all promptfoo-hosted inference.
+   */
+  PROMPTFOO_DISABLE_REMOTE_GENERATION?: boolean;
+  /**
+   * Disable remote generation for red team features only (subset of PROMPTFOO_DISABLE_REMOTE_GENERATION).
+   * Affects: Harmful content generation, red team strategies, red team simulated users.
+   * Does NOT affect: Regular (non-redteam) SimulatedUser usage.
+   */
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;

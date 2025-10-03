@@ -1,5 +1,4 @@
-import { fetchWithCache } from '../../src/cache';
-import { getEnvString } from '../../src/envars';
+import { getEnvBool, getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
   PromptfooChatCompletionProvider,
@@ -28,6 +27,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     jest.resetAllMocks();
     jest.mocked(getUserEmail).mockReturnValue('test@example.com');
     jest.mocked(getEnvString).mockReturnValue('');
+    jest.mocked(getEnvBool).mockReturnValue(false);
   });
 
   const options = {
@@ -104,6 +104,31 @@ describe('PromptfooHarmfulCompletionProvider', () => {
 
     expect(result.error).toContain('[HarmfulCompletionProvider]');
   });
+
+  it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', async () => {
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toContain('Remote generation is disabled');
+    expect(result.error).toContain('Harmful content generation requires');
+    expect(result.error).toContain('PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    expect(fetchWithRetries).not.toHaveBeenCalled();
+  });
+
+  it('should return error when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set', async () => {
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toContain('Remote generation is disabled');
+    expect(result.error).toContain('Harmful content generation requires');
+    expect(fetchWithRetries).not.toHaveBeenCalled();
+  });
 });
 
 describe('PromptfooChatCompletionProvider', () => {
@@ -111,6 +136,7 @@ describe('PromptfooChatCompletionProvider', () => {
     jest.resetAllMocks();
     jest.mocked(getUserEmail).mockReturnValue('test@example.com');
     jest.mocked(getEnvString).mockReturnValue('');
+    jest.mocked(getEnvBool).mockReturnValue(false);
   });
 
   const options = {
@@ -174,12 +200,38 @@ describe('PromptfooChatCompletionProvider', () => {
 
     expect(result.error).toBe('API call error: Error: API Error');
   });
+
+  it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', async () => {
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toContain('Remote generation is disabled');
+    expect(result.error).toContain('This red team strategy requires');
+    expect(result.error).toContain('PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    expect(fetchWithRetries).not.toHaveBeenCalled();
+  });
+
+  it('should return error when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set', async () => {
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toContain('Remote generation is disabled');
+    expect(result.error).toContain('This red team strategy requires');
+    expect(fetchWithRetries).not.toHaveBeenCalled();
+  });
 });
 
 describe('PromptfooSimulatedUserProvider', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+    jest.mocked(getEnvBool).mockReturnValue(false);
   });
 
   const options = {
@@ -241,5 +293,82 @@ describe('PromptfooSimulatedUserProvider', () => {
     const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
 
     expect(result.error).toBe('API call error: Error: Network Error');
+  });
+
+  it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set for regular task', async () => {
+    const regularProvider = new PromptfooSimulatedUserProvider({}, 'tau');
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+
+    const result = await regularProvider.callApi(
+      JSON.stringify([{ role: 'user', content: 'hello' }]),
+    );
+
+    expect(result.error).toContain('Remote generation is disabled for regular evaluation');
+    expect(result.error).toContain('SimulatedUser requires');
+    expect(result.error).toContain('PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    expect(fetchWithRetries).not.toHaveBeenCalled();
+  });
+
+  it('should NOT be disabled when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set for regular task', async () => {
+    const regularProvider = new PromptfooSimulatedUserProvider({}, 'tau');
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+
+    const mockResponse = new Response(
+      JSON.stringify({
+        result: 'test result',
+        tokenUsage: { total: 100 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    const result = await regularProvider.callApi(
+      JSON.stringify([{ role: 'user', content: 'hello' }]),
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('test result');
+    expect(fetchWithRetries).toHaveBeenCalled();
+  });
+
+  it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set for redteam task', async () => {
+    const redteamProvider = new PromptfooSimulatedUserProvider({}, 'mischievous-user-redteam');
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+
+    const result = await redteamProvider.callApi(
+      JSON.stringify([{ role: 'user', content: 'hello' }]),
+    );
+
+    expect(result.error).toContain('Remote generation is disabled for red team');
+    expect(result.error).toContain(
+      'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
+    );
+    expect(fetchWithRetries).not.toHaveBeenCalled();
+  });
+
+  it('should return error when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set for redteam task', async () => {
+    const redteamProvider = new PromptfooSimulatedUserProvider({}, 'mischievous-user-redteam');
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+
+    const result = await redteamProvider.callApi(
+      JSON.stringify([{ role: 'user', content: 'hello' }]),
+    );
+
+    expect(result.error).toContain('Remote generation is disabled for red team');
+    expect(result.error).toContain(
+      'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
+    );
+    expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 });

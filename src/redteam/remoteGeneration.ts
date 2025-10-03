@@ -18,8 +18,29 @@ export function getRemoteGenerationUrl(): string {
   return 'https://api.promptfoo.app/api/v1/task';
 }
 
+/**
+ * Check if remote generation should never be used.
+ * Respects both the general and redteam-specific disable flags.
+ * @returns true if remote generation is disabled
+ */
 export function neverGenerateRemote(): boolean {
+  // Check the general disable flag first (superset)
+  if (getEnvBool('PROMPTFOO_DISABLE_REMOTE_GENERATION')) {
+    return true;
+  }
+  // Fall back to the redteam-specific flag (subset)
   return getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+}
+
+/**
+ * Check if remote generation should never be used for non-redteam features.
+ * This allows granular control: disable redteam remote generation while allowing
+ * regular SimulatedUser to use remote generation.
+ * @returns true if ALL remote generation is disabled
+ */
+export function neverGenerateRemoteForRegularEvals(): boolean {
+  // Only respect the general disable flag for non-redteam features
+  return getEnvBool('PROMPTFOO_DISABLE_REMOTE_GENERATION');
 }
 
 /**
