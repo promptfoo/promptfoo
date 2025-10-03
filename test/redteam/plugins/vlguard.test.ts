@@ -504,7 +504,7 @@ describe('VLGuardPlugin', () => {
             safe_question: 'safe question 2',
           },
         },
-      ];
+      ] as any[];
 
       mockFetchHuggingFaceDataset.mockResolvedValue(mockRecords);
 
@@ -540,7 +540,7 @@ describe('VLGuardPlugin', () => {
             safe_question: 'safe question',
           },
         },
-      ];
+      ] as any[];
 
       mockFetchHuggingFaceDataset.mockResolvedValue(mockRecords);
 
@@ -575,7 +575,7 @@ describe('VLGuardPlugin', () => {
             safe_question: 'safe question',
           },
         },
-      ];
+      ] as any[];
 
       mockFetchHuggingFaceDataset.mockResolvedValue(mockRecords);
 
@@ -629,7 +629,7 @@ describe('VLGuardPlugin', () => {
             safe_question: 'safe privacy',
           },
         },
-      ];
+      ] as any[];
 
       mockFetchHuggingFaceDataset.mockResolvedValue(mockRecords);
 
