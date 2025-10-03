@@ -151,6 +151,11 @@ export interface ProviderResponse {
     transcript?: string;
     format?: string;
   };
+  streamingMetrics?: {
+    timeToFirstToken?: number; // TTFT in milliseconds
+    tokensPerSecond?: number; // Streaming throughput
+    totalStreamTime?: number; // End-to-end streaming time in milliseconds
+  };
 }
 
 export interface ProviderEmbeddingResponse {
