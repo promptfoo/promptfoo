@@ -4,7 +4,7 @@ import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { loadApiProvider } from '../../providers/index';
-import { testHTTPProviderConnectivity, testProviderSession } from '../../providers/test';
+import { testHTTPProviderConnectivity, testProviderSession } from '../../providers/testProvider';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
