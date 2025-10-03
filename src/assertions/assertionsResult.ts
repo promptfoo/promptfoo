@@ -23,7 +23,6 @@ export class AssertionsResult {
       score: 1,
       reason: 'No assertions',
       tokensUsed: { ...DEFAULT_TOKENS_USED },
-      assertion: undefined,
     };
   }
 
@@ -156,7 +155,6 @@ export class AssertionsResult {
       namedScores: this.namedScores,
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      assertion: undefined,
     };
 
     if (scoringFunction) {

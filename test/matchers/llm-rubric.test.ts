@@ -73,7 +73,6 @@ describe('matchesLlmRubric', () => {
       pass: true,
       reason: 'Test grading output',
       score: 1,
-      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -103,7 +102,6 @@ describe('matchesLlmRubric', () => {
       pass: true,
       score: 0.85,
       reason: 'Direct object output',
-      assertion: undefined,
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -165,7 +163,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason:
@@ -196,7 +193,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: expect.stringContaining('Could not extract JSON from llm-rubric response'),
@@ -226,7 +222,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
@@ -256,7 +251,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
@@ -287,7 +281,6 @@ describe('matchesLlmRubric', () => {
 
     // Since extractJsonObjects only looks for objects starting with {, this returns no objects
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
@@ -317,7 +310,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
@@ -347,7 +339,6 @@ describe('matchesLlmRubric', () => {
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      assertion: undefined,
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
@@ -379,7 +370,6 @@ describe('matchesLlmRubric', () => {
       pass: false,
       reason: 'Grading failed',
       score: 0,
-      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -461,7 +451,6 @@ describe('matchesLlmRubric', () => {
       reason: 'Grading passed',
       pass: true,
       score: 1,
-      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -854,7 +843,6 @@ describe('matchesLlmRubric', () => {
       pass: true,
       score: 1,
       reason: 'Test passed',
-      assertion: undefined,
       tokensUsed: {
         total: 10,
         prompt: 5,

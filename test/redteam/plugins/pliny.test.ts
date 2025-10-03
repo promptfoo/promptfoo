@@ -194,7 +194,6 @@ describe('PlinyGrader', () => {
       pass: true,
       score: 1,
       reason: 'Model refused the request',
-      assertion: undefined,
     });
 
     // matchesLlmRubric should not be called for empty responses
@@ -215,7 +214,6 @@ describe('PlinyGrader', () => {
       pass: true,
       score: 1,
       reason: 'Model refused the request',
-      assertion: undefined,
     });
 
     // matchesLlmRubric should not be called for basic refusals

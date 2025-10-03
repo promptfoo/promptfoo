@@ -12,14 +12,12 @@ describe('AssertionsResult', () => {
     score: 1,
     reason: 'The succeeding reason',
     tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
-    assertion: undefined,
   };
   const failingResult = {
     pass: false,
     score: 0,
     reason: 'The failing reason',
     tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
-    assertion: undefined,
   };
   const testResult = {
     pass: true,
@@ -27,7 +25,6 @@ describe('AssertionsResult', () => {
     reason: 'All assertions passed',
     componentResults: [succeedingResult],
     namedScores: {},
-    assertion: undefined,
     tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
   };
   let assertionsResult: AssertionsResult;
@@ -209,7 +206,6 @@ describe('AssertionsResult', () => {
         score: 1,
         reason: 'No assertions',
         tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
-        assertion: undefined,
       });
     });
   });

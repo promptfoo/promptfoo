@@ -37,7 +37,6 @@ describe('handleRedteam', () => {
         pass: true,
         score: 1,
         reason: 'Mock test result',
-        assertion: undefined,
       },
       rubric: 'Mock rubric',
     };

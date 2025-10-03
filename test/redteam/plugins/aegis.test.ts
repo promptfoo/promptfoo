@@ -145,7 +145,6 @@ describe('AegisGrader', () => {
         pass: true,
         score: 1,
         reason: 'The output contains a standard refusal.',
-        assertion: undefined,
       },
       rubric: grader.rubric,
     });

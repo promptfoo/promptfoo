@@ -18,7 +18,6 @@ describe('AssertionsResult', () => {
         score: 1,
         reason: 'No assertions',
         tokensUsed: DEFAULT_TOKENS_USED,
-        assertion: undefined,
       });
     });
   });
@@ -36,7 +35,6 @@ describe('AssertionsResult', () => {
           completion: 50,
           cached: 0,
         },
-        assertion: undefined,
       };
 
       assertionsResult.addResult({
@@ -67,7 +65,6 @@ describe('AssertionsResult', () => {
         score: 0.3,
         reason: 'Test failed',
         tokensUsed: DEFAULT_TOKENS_USED,
-        assertion: undefined,
       };
 
       assertionsResult.addResult({
@@ -87,7 +84,6 @@ describe('AssertionsResult', () => {
         score: 0,
         reason: 'Critical failure',
         tokensUsed: DEFAULT_TOKENS_USED,
-        assertion: undefined,
       };
 
       expect(() =>
@@ -110,7 +106,6 @@ describe('AssertionsResult', () => {
           score: 0.6,
           reason: 'Test 1',
           tokensUsed: DEFAULT_TOKENS_USED,
-          assertion: undefined,
         },
         weight: 1,
       });
@@ -122,7 +117,6 @@ describe('AssertionsResult', () => {
           score: 0.8,
           reason: 'Test 2',
           tokensUsed: DEFAULT_TOKENS_USED,
-          assertion: undefined,
         },
         weight: 1,
       });
