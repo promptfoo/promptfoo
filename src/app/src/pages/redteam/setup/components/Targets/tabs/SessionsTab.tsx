@@ -245,7 +245,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   fullWidth
                   label="Session Parser (Required)"
                   value={selectedTarget.config.sessionParser || ''}
-                  placeholder="e.g., response.headers['session-id'] or JSON.parse(response.body).sessionId"
+                  placeholder="e.g., data.headers['session-id'] or JSON.parse(data.body).sessionId"
                   onChange={(e) => {
                     updateCustomTarget('sessionParser', e.target.value);
                     setTestResult(null); // Clear test results when configuration changes
@@ -263,13 +263,21 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   Common patterns:
                 </Typography>
                 <Typography variant="body2" component="div">
-                  • <strong>Header:</strong> <code>response.headers['x-session-id']</code>
-                  <br />• <strong>Cookie:</strong>{' '}
-                  <code>response.headers['set-cookie']?.match(/sessionId=([^;]+)/)?.[1]</code>
-                  <br />• <strong>JSON body:</strong>{' '}
-                  <code>JSON.parse(response.body).session.id</code>
-                  <br />• <strong>JWT token:</strong>{' '}
-                  <code>JSON.parse(response.body).auth_token</code>
+                  <ul style={{ margin: 0, paddingLeft: '1.2em' }}>
+                    <li>
+                      <strong>Header:</strong> <code>data.headers['x-session-id']</code>
+                    </li>
+                    <li>
+                      <strong>Cookie:</strong>{' '}
+                      <code>data.headers['set-cookie']?.match(/sessionId=([^;]+)/)?.[1]</code>
+                    </li>
+                    <li>
+                      <strong>JSON body:</strong> <code>JSON.parse(data.body).session.id</code>
+                    </li>
+                    <li>
+                      <strong>JWT token:</strong> <code>JSON.parse(data.body).auth_token</code>
+                    </li>
+                  </ul>
                 </Typography>
               </Alert>
             </>
