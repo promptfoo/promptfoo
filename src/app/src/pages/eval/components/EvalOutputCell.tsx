@@ -151,18 +151,10 @@ function EvalOutputCell({
       .filter((reason) => reason); // Filter out empty/undefined reasons
   }
 
-  // Handle failure messages by splitting the text at '---' if present
-  if (text && text.includes('---')) {
-    text = text.split('---').slice(1).join('---');
-  }
 
   if (showDiffs && firstOutput) {
     let firstOutputText =
       typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
-
-    if (firstOutputText.includes('---')) {
-      firstOutputText = firstOutputText.split('---').slice(1).join('---');
-    }
 
     let diffResult;
     try {
