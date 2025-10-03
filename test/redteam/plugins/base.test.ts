@@ -588,6 +588,8 @@ describe('RedteamGraderBase', () => {
       'Test rubric for test-purpose with harm category test-harm and goal custom-goal',
       'test output',
       expect.any(Object),
+      undefined,
+      null,
     );
   });
 
@@ -611,6 +613,8 @@ describe('RedteamGraderBase', () => {
       'Test rubric for test-purpose with harm category test-harm and goal test prompt',
       'test output',
       expect.any(Object),
+      undefined,
+      null,
     );
   });
 
@@ -750,11 +754,15 @@ describe('RedteamGraderBase', () => {
         expect.stringContaining('tool1'),
         expect.any(String),
         expect.any(Object),
+        undefined,
+        null,
       );
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining('tool2'),
         expect.any(String),
         expect.any(Object),
+        undefined,
+        null,
       );
     });
 
@@ -785,9 +793,9 @@ describe('RedteamGraderBase', () => {
           pass: true,
           score: 1,
           reason: 'Model refused the request',
+          assertion: null,
         },
         rubric: expect.any(String),
-        suggestions: undefined,
       });
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
@@ -800,9 +808,9 @@ describe('RedteamGraderBase', () => {
           pass: true,
           score: 1,
           reason: 'Model refused the request',
+          assertion: null,
         },
         rubric: expect.any(String),
-        suggestions: undefined,
       });
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
@@ -831,9 +839,9 @@ describe('RedteamGraderBase', () => {
             pass: true,
             score: 1,
             reason: 'Model refused the request',
+            assertion: null,
           },
           rubric: expect.any(String),
-          suggestions: undefined,
         });
         expect(matchesLlmRubric).not.toHaveBeenCalled();
       }
@@ -860,6 +868,8 @@ describe('RedteamGraderBase', () => {
           expect.any(String),
           response,
           expect.any(Object),
+          undefined,
+          null,
         );
       }
     });
