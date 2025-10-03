@@ -408,7 +408,7 @@ describe('matchesLlmRubric', () => {
 
     // With throwOnError: true - should throw
     await expect(
-      matchesLlmRubric(rubric, llmOutput, grading, {}, null, { throwOnError: true }),
+      matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, { throwOnError: true }),
     ).rejects.toThrow('Provider error');
   });
 
@@ -429,7 +429,7 @@ describe('matchesLlmRubric', () => {
 
     // With throwOnError: true - should throw
     await expect(
-      matchesLlmRubric(rubric, llmOutput, grading, {}, null, { throwOnError: true }),
+      matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, { throwOnError: true }),
     ).rejects.toThrow('No output');
   });
 

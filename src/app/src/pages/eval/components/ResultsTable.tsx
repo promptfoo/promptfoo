@@ -358,7 +358,7 @@ function ResultsTable({
         gradingResult.pass = finalPass;
         gradingResult.score = finalScore;
         gradingResult.reason = 'Manual result (overrides all other grading results)';
-        gradingResult.assertion = existingOutput.gradingResult?.assertion || null;
+        gradingResult.assertion = existingOutput.gradingResult?.assertion || undefined;
       }
 
       // Only include componentResults if we modified them, or if we didn't modify them but they exist and are not empty

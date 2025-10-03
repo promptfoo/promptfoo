@@ -137,7 +137,7 @@ const javascriptFunctionAssertion: Assertion = {
     pass: true,
     score: 0.5,
     reason: 'Assertion passed',
-    assertion: null,
+    assertion: undefined,
   }),
 };
 
@@ -147,7 +147,7 @@ const javascriptFunctionFailAssertion: Assertion = {
     pass: false,
     score: 0.5,
     reason: 'Assertion failed',
-    assertion: null,
+    assertion: undefined,
   }),
 };
 

@@ -384,7 +384,7 @@ export interface GradingResult {
   componentResults?: GradingResult[];
 
   // The assertion that was evaluated
-  assertion?: Assertion | null;
+  assertion?: Assertion;
 
   // User comment
   comment?: string;
