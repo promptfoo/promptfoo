@@ -4,7 +4,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import EvalsDataGrid from '../../evals/components/EvalsDataGrid';
+import EvalsDataGrid from '../../results/components/EvalsDataGrid';
 
 type Props = {
   open: boolean;

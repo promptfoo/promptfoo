@@ -60,24 +60,23 @@ describe('ReportIndex', () => {
         </MemoryRouter>,
       );
 
-      await waitFor(() => {
-        expect(screen.getByRole('link', { name: 'My First Redteam Report' })).toBeInTheDocument();
-      });
-
+      const firstDescriptionCell = await screen.findByTestId('redteams-description-eval-1');
+      expect(firstDescriptionCell).toHaveTextContent('My First Redteam Report');
       expect(screen.getByText('GPT-4')).toBeInTheDocument();
       expect(screen.getByText(formatDataGridDate(mockData[0].createdAt))).toBeInTheDocument();
       expect(screen.getByText('75.12%')).toBeInTheDocument();
       const numTestsCell1 = screen.getAllByRole('gridcell', { name: '100' });
       expect(numTestsCell1.length).toBeGreaterThan(0);
-      expect(screen.getByText('eval-1')).toBeInTheDocument();
+      expect(await screen.findByTestId('redteams-eval-id-eval-1')).toHaveTextContent('eval-1');
 
-      expect(screen.getByRole('link', { name: 'Another Security Scan' })).toBeInTheDocument();
+      const secondDescriptionCell = await screen.findByTestId('redteams-description-eval-2');
+      expect(secondDescriptionCell).toHaveTextContent('Another Security Scan');
       expect(screen.getByText('anthropic:claude-2')).toBeInTheDocument();
       expect(screen.getByText(formatDataGridDate(mockData[1].createdAt))).toBeInTheDocument();
       expect(screen.getByText('100.00%')).toBeInTheDocument();
       const numTestsCell2 = screen.getAllByRole('gridcell', { name: '50' });
       expect(numTestsCell2.length).toBeGreaterThan(0);
-      expect(screen.getByText('eval-2')).toBeInTheDocument();
+      expect(await screen.findByTestId('redteams-eval-id-eval-2')).toHaveTextContent('eval-2');
     });
 
     it('should render the CustomToolbar in the DataGrid toolbar slot', async () => {
@@ -153,9 +152,8 @@ describe('ReportIndex', () => {
         </MemoryRouter>,
       );
 
-      await waitFor(() => {
-        expect(screen.getByRole('link', { name: 'Untitled Evaluation' })).toBeInTheDocument();
-      });
+      const untitledDescriptionCell = await screen.findByTestId('redteams-description-eval-3');
+      expect(untitledDescriptionCell).toHaveTextContent('Untitled Evaluation');
     });
   });
 
@@ -175,12 +173,8 @@ describe('ReportIndex', () => {
         </MemoryRouter>,
       );
 
-      await waitFor(() => {
-        expect(screen.getByRole('link', { name: 'My First Redteam Report' })).toBeInTheDocument();
-      });
-
-      const linkElement = screen.getByRole('link', { name: 'My First Redteam Report' });
-      fireEvent.click(linkElement);
+      const descriptionCell = await screen.findByTestId('redteams-description-eval-1');
+      fireEvent.click(descriptionCell);
 
       expect(navigate).toHaveBeenCalledWith('/reports?evalId=eval-1');
     });
