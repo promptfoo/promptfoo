@@ -11,7 +11,7 @@ import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 import LogoPanda from '../../static/img/logo-panda.svg';
 import { SITE_CONSTANTS } from '../constants';
-import styles from './press.module.css';
+import styles from './card.module.css';
 
 const PressContent = () => {
   const { colorMode } = useColorMode();
@@ -239,134 +239,6 @@ const PressContent = () => {
                 <Link href="https://open.spotify.com/episode/6bdzElwFgZoBHjRrYyqHoN">
                   Listen on Spotify →
                 </Link>
-              </Box>
-            </Grid>
-          </Grid>
-
-          {/* Educational Resources Section */}
-          <Typography variant="h5" component="h4" id="educational-resources" gutterBottom mt={6}>
-            Educational Resources
-          </Typography>
-          <Typography variant="body1" paragraph>
-            Leading AI platforms have integrated Promptfoo into their official educational
-            materials, recognizing it as an essential tool for LLM application development,
-            evaluation, and security. These courses and workshops, developed in partnership with
-            industry leaders, provide comprehensive training on building reliable AI applications.
-          </Typography>
-          <Grid container spacing={4} mb={6}>
-            {/* OpenAI Build Hour */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Box
-                className={styles.coverageItem}
-                p={3}
-                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-              >
-                <Typography variant="h6" component="h4" gutterBottom>
-                  OpenAI Build Hour: Prompt Testing & Evaluation
-                </Typography>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  OpenAI • 2024
-                </Typography>
-                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
-                  Featured in OpenAI's Build Hour series, where they highlight that "Promptfoo is
-                  really powerful because you can iterate on prompts, configure tests in YAML, and
-                  view everything locally... it's faster and more straightforward."
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
-                  <Typography variant="caption" color="text.secondary">
-                    60 Minutes
-                  </Typography>
-                  <Link href="https://vimeo.com/1023317525">Watch video →</Link>
-                </Box>
-              </Box>
-            </Grid>
-
-            {/* Anthropic Course */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Box
-                className={styles.coverageItem}
-                p={3}
-                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-              >
-                <Typography variant="h6" component="h4" gutterBottom>
-                  Anthropic Prompt Evaluations Course
-                </Typography>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Anthropic • 2024
-                </Typography>
-                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
-                  A comprehensive nine-lesson course covering everything from basic evaluations to
-                  advanced model-graded techniques. Anthropic notes that "Promptfoo offers a
-                  streamlined, out-of-the-box solution that can significantly reduce the time and
-                  effort required for comprehensive prompt testing."
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
-                  <Typography variant="caption" color="text.secondary">
-                    6 Hours
-                  </Typography>
-                  <Link href="https://github.com/anthropics/courses/tree/master/prompt_evaluations">
-                    View course →
-                  </Link>
-                </Box>
-              </Box>
-            </Grid>
-
-            {/* AWS Workshop */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Box
-                className={styles.coverageItem}
-                p={3}
-                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-              >
-                <Typography variant="h6" component="h4" gutterBottom>
-                  AWS Workshop Studio: Mastering LLM Evaluation
-                </Typography>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Amazon Web Services • 2025
-                </Typography>
-                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
-                  A comprehensive workshop designed to equip you with the knowledge and practical
-                  skills needed to effectively evaluate and improve Large Language Model (LLM)
-                  applications using Amazon Bedrock and Promptfoo. The course covers everything from
-                  basic setup to advanced evaluation techniques.
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
-                  <Typography variant="caption" color="text.secondary">
-                    3 Hours
-                  </Typography>
-                  <Link href="https://catalog.us-east-1.prod.workshops.aws/promptfoo/en-US">
-                    View course →
-                  </Link>
-                </Box>
-              </Box>
-            </Grid>
-
-            {/* IBM Course */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Box
-                className={styles.coverageItem}
-                p={3}
-                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-              >
-                <Typography variant="h6" component="h4" gutterBottom>
-                  Move to the Best LLM Model for Your App
-                </Typography>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  IBM Skills Network • 2024
-                </Typography>
-                <Typography variant="body2" paragraph sx={{ flex: 1 }}>
-                  A hands-on guided project that teaches developers how to master model selection
-                  using Promptfoo. Learn to adapt to new models, handle pricing changes effectively,
-                  and perform regression testing through practical scenarios.
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
-                  <Typography variant="caption" color="text.secondary">
-                    2 Hours
-                  </Typography>
-                  <Link href="https://cognitiveclass.ai/courses/move-to-the-best-llm-model-for-your-app">
-                    View course →
-                  </Link>
-                </Box>
               </Box>
             </Grid>
           </Grid>

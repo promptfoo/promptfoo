@@ -184,6 +184,10 @@ const config: Config = {
               label: 'Docs',
             },
             {
+              to: '/learn/',
+              label: 'Learn',
+            },
+            {
               to: '/docs/api-reference/',
               label: 'API Reference',
             },
@@ -265,6 +269,10 @@ const config: Config = {
         {
           title: 'Resources',
           items: [
+            {
+              label: 'Learn',
+              to: '/learn/',
+            },
             {
               label: 'LLM Red Teaming',
               to: '/docs/red-team',
