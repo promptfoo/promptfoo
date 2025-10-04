@@ -162,7 +162,10 @@ describe('GolangProvider', () => {
     mockRmSync.mockImplementation(() => undefined);
 
     // Mock exec with proper async behavior
-    mockExec.mockImplementation(((cmd: string, callback: any) => {
+    mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+      // Handle both exec(cmd, callback) and exec(cmd, options, callback) signatures
+      const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
+
       if (!callback) {
         return {} as any;
       }
@@ -170,7 +173,7 @@ describe('GolangProvider', () => {
       // Use setImmediate to ensure proper async behavior
       setImmediate(() => {
         try {
-          if (cmd.includes('cd') && cmd.includes('go build')) {
+          if (cmd.includes('go build')) {
             callback(null, { stdout: '', stderr: '' }, '');
           } else if (cmd.includes('golang_wrapper')) {
             callback(null, { stdout: '{"output":"test output"}', stderr: '' }, '');
@@ -304,7 +307,9 @@ describe('GolangProvider', () => {
       };
       mockGetCache.mockResolvedValue(mockCache as never);
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -368,7 +373,9 @@ describe('GolangProvider', () => {
         set: jest.fn(),
       } as never);
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -391,7 +398,9 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -417,7 +426,9 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -442,7 +453,9 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -467,7 +480,9 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -522,7 +537,9 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to/subdir' },
       });
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -545,7 +562,9 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -579,7 +598,9 @@ describe('GolangProvider', () => {
       });
 
       let executedCommand = '';
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -604,7 +625,9 @@ describe('GolangProvider', () => {
       });
 
       let buildCommand = '';
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -713,7 +736,9 @@ describe('GolangProvider', () => {
         return undefined;
       });
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -764,7 +789,9 @@ describe('GolangProvider', () => {
         return undefined;
       });
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExec.mockImplementation(((cmd: string, optionsOrCallback: any, maybeCallback?: any) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
