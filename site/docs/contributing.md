@@ -224,7 +224,7 @@ Here's a simple example:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:gpt-5
 prompts:
   - Translate "{{input}}" to {{language}}
 tests:
@@ -408,7 +408,7 @@ This will generate static content in the `build` directory that can be served us
 
 ### Database
 
-Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database.ts` and migrations are stored in `drizzle`. Note that the migrations are all generated and you should not access these files directly.
+Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `~/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database/schema.ts` and migrations are stored in `drizzle/`. Note that the migrations are all generated and you should not access these files directly.
 
 #### Main Tables
 
@@ -422,14 +422,14 @@ You can view the contents of each of these tables by running `npx drizzle-kit st
 
 #### Adding a Migration
 
-1. **Modify Schema**: Make changes to your schema in `src/database.ts`.
+1. **Modify Schema**: Make changes to your schema in `src/database/schema.ts`.
 2. **Generate Migration**: Run the command to create a new migration:
 
    ```bash
    npm run db:generate
    ```
 
-   This command will create a new SQL file in the `drizzle` directory.
+   This command will create a new SQL file in the `drizzle/` directory.
 
 3. **Review Migration**: Inspect the generated migration file to ensure it captures your intended changes.
 4. **Apply Migration**: Apply the migration with:

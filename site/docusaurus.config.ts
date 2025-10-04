@@ -79,6 +79,9 @@ const config: Config = {
           sidebarCollapsed: false,
           showLastUpdateAuthor: true,
           showLastUpdateTime: true,
+          exclude: [
+            '**/CLAUDE.md', // Exclude Claude Code context files
+          ],
         },
         blog: {
           showReadingTime: false,
