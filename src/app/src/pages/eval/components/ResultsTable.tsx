@@ -41,7 +41,7 @@ import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from '../hooks';
 import TruncatedText from './TruncatedText';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 

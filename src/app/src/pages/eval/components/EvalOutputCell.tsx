@@ -9,7 +9,7 @@ import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from '../hooks';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 

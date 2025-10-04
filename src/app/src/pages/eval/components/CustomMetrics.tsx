@@ -17,7 +17,7 @@ import { styled } from '@mui/material/styles';
 import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import useCloudConfig from '../../../hooks/useCloudConfig';
-import { useTableStore } from './store';
+import { useTableStore } from '../hooks';
 import type { PolicyObject } from '@promptfoo/redteam/types';
 
 interface CustomMetricsProps {

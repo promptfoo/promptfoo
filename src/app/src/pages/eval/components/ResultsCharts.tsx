@@ -27,7 +27,7 @@ import {
 } from 'chart.js';
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
-import { useTableStore } from './store';
+import { useTableStore } from '../hooks';
 import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 interface ResultsChartsProps {

@@ -33,7 +33,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useModelAuditStore } from '../store';
+import { useModelAuditStore } from '../hooks';
 
 import type { ScanIssue } from '../ModelAudit.types';
 

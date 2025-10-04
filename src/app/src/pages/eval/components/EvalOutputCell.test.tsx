@@ -6,8 +6,10 @@ import {
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient, createQueryClientWrapper } from '../../../test/queryClientWrapper';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell from './EvalOutputCell';
+import { useResultsViewSettingsStore, useTableStore } from '../hooks';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -21,25 +23,37 @@ vi.mock('./EvalOutputPromptDialog', () => ({
 }));
 
 const renderWithProviders = (ui: React.ReactElement) => {
-  return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
+  const queryClient = createTestQueryClient();
+  return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>, {
+    wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+  });
 };
 
-vi.mock('./store', () => ({
-  useResultsViewSettingsStore: () => ({
-    prettifyJson: false,
-    renderMarkdown: true,
-    showPassFail: true,
-    showPrompts: true,
-    maxImageWidth: 256,
-    maxImageHeight: 256,
-  }),
-  useTableStore: () => ({
-    shouldHighlightSearchText: false,
-  }),
+vi.mock('../hooks', () => ({
+  useResultsViewSettingsStore: vi.fn(),
+  useTableStore: vi.fn(),
 }));
+
+// Set default mock return values
+vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+  prettifyJson: false,
+  renderMarkdown: true,
+  showPassFail: true,
+  showPrompts: true,
+  maxImageWidth: 256,
+  maxImageHeight: 256,
+} as any);
+
+vi.mocked(useTableStore).mockReturnValue({
+  shouldHighlightSearchText: false,
+} as any);
 
 vi.mock('../../../hooks/useShiftKey', () => ({
   useShiftKey: () => true,
+}));
+
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
 }));
 
 interface MockEvalOutputCellProps extends EvalOutputCellProps {
@@ -573,19 +587,18 @@ describe('EvalOutputCell search highlighting boundary conditions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mock('./store', () => ({
-      useResultsViewSettingsStore: () => ({
-        prettifyJson: false,
-        renderMarkdown: true,
-        showPassFail: true,
-        showPrompts: true,
-        maxImageWidth: 256,
-        maxImageHeight: 256,
-      }),
-      useTableStore: () => ({
-        shouldHighlightSearchText: true,
-      }),
-    }));
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      prettifyJson: false,
+      renderMarkdown: true,
+      showPassFail: true,
+      showPrompts: true,
+      maxImageWidth: 256,
+      maxImageHeight: 256,
+    } as any);
+
+    vi.mocked(useTableStore).mockReturnValue({
+      shouldHighlightSearchText: true,
+    } as any);
   });
 
   it('should highlight when searchText matches the beginning of the output text', () => {
@@ -692,19 +705,18 @@ describe('EvalOutputCell with prettified JSON', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mock('./store', () => ({
-      useResultsViewSettingsStore: () => ({
-        prettifyJson: true,
-        renderMarkdown: false,
-        showPassFail: true,
-        showPrompts: true,
-        maxImageWidth: 256,
-        maxImageHeight: 256,
-      }),
-      useTableStore: () => ({
-        shouldHighlightSearchText: true,
-      }),
-    }));
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      prettifyJson: true,
+      renderMarkdown: false,
+      showPassFail: true,
+      showPrompts: true,
+      maxImageWidth: 256,
+      maxImageHeight: 256,
+    } as any);
+
+    vi.mocked(useTableStore).mockReturnValue({
+      shouldHighlightSearchText: true,
+    } as any);
   });
 
   it('highlights search matches in prettified JSON content', () => {

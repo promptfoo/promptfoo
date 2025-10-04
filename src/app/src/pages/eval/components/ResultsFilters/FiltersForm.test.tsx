@@ -3,10 +3,10 @@ import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ResultsFilter, useTableStore } from '../store';
+import { type ResultsFilter, useTableStore } from '../../hooks';
 import FiltersForm from './FiltersForm';
 
-vi.mock('../store', () => ({
+vi.mock('../../hooks', () => ({
   useTableStore: vi.fn(),
 }));
 

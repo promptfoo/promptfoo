@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
-import { useTableStore } from './store';
+import { useTableStore } from '../hooks';
 
 vi.mock('./EvalSelectorDialog', () => ({
   default: vi.fn(({ open, onEvalSelected, onClose, focusedEvalId, filterByDatasetId }) => {
@@ -28,7 +28,7 @@ vi.mock('./EvalSelectorDialog', () => ({
   }),
 }));
 
-vi.mock('./store', () => ({
+vi.mock('../hooks', () => ({
   useTableStore: vi.fn(),
 }));
 

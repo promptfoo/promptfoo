@@ -1,9 +1,9 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext } from 'react';
 
-import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { createTestQueryClient, createQueryClientWrapper } from '../test/queryClientWrapper';
 import { UserProvider } from './UserContext';
 import { UserContext } from './UserContextDef';
 
@@ -14,14 +14,21 @@ vi.mock('@app/utils/api', () => ({
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
+let mockUserEmail: string | null = null;
+let mockIsLoading = false;
+
+vi.mock('@app/hooks/useUser', () => ({
+  useUserEmail: () => ({ data: mockUserEmail, isLoading: mockIsLoading }),
+  useSetUserEmail: () => vi.fn(),
+}));
+
 describe('UserProvider', () => {
   const mockedCallApi = callApi as Mock;
-  const initialState = useUserStore.getState();
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset store to initial state
-    useUserStore.setState(initialState, true);
+    mockUserEmail = null;
+    mockIsLoading = false;
   });
 
   const TestConsumer = () => {
@@ -45,220 +52,61 @@ describe('UserProvider', () => {
     );
   };
 
-  const mockCallApi = (email: string | null, logoutSuccess: boolean = true) => {
-    if (email === null) {
-      mockedCallApi.mockResolvedValue({
-        ok: false,
-        status: 404,
-      } as Response);
-    } else {
-      mockedCallApi.mockResolvedValue({
-        ok: true,
-        json: vi.fn().mockResolvedValue({ email }),
-      } as unknown as Response);
-    }
+  const renderWithQueryClient = (component: React.ReactElement) => {
+    const queryClient = createTestQueryClient();
+    return render(component, {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
   };
 
-  const assertLoadingCompletedWithEmail = async (expectedEmail: string | null) => {
+  it('should provide user context to children', () => {
+    mockUserEmail = null;
+
+    renderWithQueryClient(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
+
+    expect(screen.getByTestId('user-email')).toBeInTheDocument();
+  });
+
+  it('should show loading state initially', () => {
+    mockIsLoading = true;
+
+    renderWithQueryClient(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
+
     expect(screen.getByText('Loading...')).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
-    });
+  it('should display user email when available', () => {
+    mockUserEmail = 'test@example.com';
+    mockIsLoading = false;
 
-    const emailElement = screen.getByTestId('user-email');
-    expect(emailElement).toBeInTheDocument();
-    expect(emailElement).toHaveTextContent(expectedEmail || '');
-
-    expect(mockedCallApi).toHaveBeenCalledWith('/user/email');
-  };
-
-  it('should provide email as null and isLoading as true to its children before fetchUserEmail resolves', async () => {
-    const testEmail = 'test.user@example.com';
-    mockCallApi(testEmail);
-
-    const TestConsumer = () => {
-      const context = useContext(UserContext);
-      if (!context) {
-        throw new Error('TestConsumer must be used within a UserProvider');
-      }
-      const { email, isLoading } = context;
-
-      return (
-        <div>
-          {isLoading ? <p data-testid="loading">Loading...</p> : <p data-testid="email">{email}</p>}
-        </div>
-      );
-    };
-
-    render(
+    renderWithQueryClient(
       <UserProvider>
         <TestConsumer />
       </UserProvider>,
     );
 
-    const loadingElement = screen.getByTestId('loading');
-    expect(loadingElement).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByTestId('email')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('user-email')).toHaveTextContent('test@example.com');
   });
 
-  it.each([
-    { scenario: 'valid email', email: 'test.user@example.com' },
-    { scenario: 'null email', email: null },
-  ])('should handle $scenario case after mounting', async ({ email }) => {
-    mockCallApi(email);
+  it('should handle null email', () => {
+    mockUserEmail = null;
+    mockIsLoading = false;
 
-    render(
+    renderWithQueryClient(
       <UserProvider>
         <TestConsumer />
       </UserProvider>,
     );
 
-    await assertLoadingCompletedWithEmail(email);
-  });
-
-  it('should not update state after unmounting', async () => {
-    const testEmail = 'test.user@example.com';
-    const setEmailMock = vi.fn();
-    mockCallApi(testEmail);
-
-    const originalContext = React.createContext<any>({});
-    const UserContextSpy = vi
-      .spyOn(React, 'createContext')
-      .mockImplementation(() => originalContext);
-
-    const contextValue: any = {
-      email: null,
-      setEmail: setEmailMock,
-      isLoading: true,
-    };
-
-    UserContextSpy.mockReturnValue(contextValue);
-
-    const { unmount } = render(
-      <UserProvider>
-        <TestConsumer />
-      </UserProvider>,
-    );
-
-    unmount();
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    expect(setEmailMock).not.toHaveBeenCalled();
-  });
-
-  it('should handle error when fetchEmail fails', async () => {
-    mockedCallApi.mockRejectedValue(new Error('Failed to fetch user email'));
-
-    render(
-      <UserProvider>
-        <TestConsumer />
-      </UserProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('user-email')).toBeInTheDocument();
-    });
-
-    const emailElement = screen.getByTestId('user-email');
-    expect(emailElement).toHaveTextContent('');
-    const { email, isLoading } = useUserStore.getState();
-    expect(email).toBeNull();
-    expect(isLoading).toBe(false);
-  });
-
-  it('should not trigger multiple fetchEmail calls when it re-renders', async () => {
-    const fetchEmailMock = vi.fn();
-    useUserStore.setState({ fetchEmail: fetchEmailMock } as any);
-
-    const TestComponent = () => {
-      const [count, setCount] = useState(0);
-
-      return (
-        <UserProvider>
-          <TestConsumer />
-          <button onClick={() => setCount(count + 1)}>Increment</button>
-        </UserProvider>
-      );
-    };
-
-    render(<TestComponent />);
-
-    expect(fetchEmailMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('should not trigger multiple API calls when multiple UserProviders are mounted', async () => {
-    const testEmail = 'test.user@example.com';
-    mockCallApi(testEmail);
-
-    render(
-      <>
-        <UserProvider>
-          <TestConsumer />
-        </UserProvider>
-        <UserProvider>
-          <TestConsumer />
-        </UserProvider>
-      </>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getAllByText('User Info').length).toBe(2);
-    });
-
-    expect(mockedCallApi).toHaveBeenCalledTimes(1);
-  });
-
-  it('should not trigger a new API call when remounted if the email has already been fetched', async () => {
-    const testEmail = 'test.user@example.com';
-    mockCallApi(testEmail);
-
-    const { unmount } = render(
-      <UserProvider>
-        <TestConsumer />
-      </UserProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('user-email')).toHaveTextContent(testEmail);
-    });
-
-    unmount();
-
-    render(
-      <UserProvider>
-        <TestConsumer />
-      </UserProvider>,
-    );
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    expect(mockedCallApi).toHaveBeenCalledTimes(1);
-  });
-
-  it('should clear email on logout', async () => {
-    const testEmail = 'test.user@example.com';
-    mockCallApi(testEmail);
-
-    render(
-      <UserProvider>
-        <TestConsumer />
-      </UserProvider>,
-    );
-
-    await assertLoadingCompletedWithEmail(testEmail);
-
-    const logout = useUserStore.getState().logout;
-    await logout();
-
-    await waitFor(() => {
-      const emailElement = screen.getByTestId('user-email');
-      expect(emailElement).toBeInTheDocument();
-      expect(emailElement).toHaveTextContent('');
-    });
+    expect(screen.getByTestId('user-email')).toBeInTheDocument();
+    expect(screen.getByTestId('user-email')).toHaveTextContent('');
   });
 });

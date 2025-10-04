@@ -1,16 +1,28 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient, createQueryClientWrapper } from '../../../test/queryClientWrapper';
 import CustomMetrics from './CustomMetrics';
 
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
+}));
+
 describe('CustomMetrics', () => {
+  const renderWithQueryClient = (component: React.ReactElement) => {
+    const queryClient = createTestQueryClient();
+    return render(component, {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
+  };
+
   afterEach(() => {
     cleanup();
   });
 
   it('returns null when lookup is empty', () => {
-    const { container } = render(<CustomMetrics lookup={{}} />);
+    const { container } = renderWithQueryClient(<CustomMetrics lookup={{}} />);
     expect(container.firstChild).toBeNull();
   });
 
@@ -21,7 +33,7 @@ describe('CustomMetrics', () => {
       metric3: 30,
     };
 
-    render(<CustomMetrics lookup={lookup} />);
+    renderWithQueryClient(<CustomMetrics lookup={lookup} />);
     const customMetricsComponent = screen.getByText('metric1');
     expect(customMetricsComponent).toBeInTheDocument();
   });
@@ -32,7 +44,7 @@ describe('CustomMetrics', () => {
       metric2: 20.75,
     };
 
-    render(<CustomMetrics lookup={lookup} />);
+    renderWithQueryClient(<CustomMetrics lookup={lookup} />);
 
     const container = screen.getByTestId('custom-metrics');
     expect(container).toBeInTheDocument();
@@ -45,7 +57,7 @@ describe('CustomMetrics', () => {
       metric2: 20.75,
     };
 
-    render(<CustomMetrics lookup={lookup} />);
+    renderWithQueryClient(<CustomMetrics lookup={lookup} />);
 
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('10.50');
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('20.75');
@@ -61,7 +73,7 @@ describe('CustomMetrics', () => {
       metric2: 80,
     };
 
-    render(<CustomMetrics lookup={lookup} counts={counts} />);
+    renderWithQueryClient(<CustomMetrics lookup={lookup} counts={counts} />);
 
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.50 (30.00/60.00)');
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.50 (40.00/80.00)');
@@ -77,7 +89,7 @@ describe('CustomMetrics', () => {
       metric2: 80,
     };
 
-    render(<CustomMetrics lookup={lookup} metricTotals={metricTotals} />);
+    renderWithQueryClient(<CustomMetrics lookup={lookup} metricTotals={metricTotals} />);
 
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('50.00% (30.00/60.00)');
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('50.00% (40.00/80.00)');
@@ -89,7 +101,7 @@ describe('CustomMetrics', () => {
       metric2: 0,
     };
 
-    const { rerender } = render(<CustomMetrics lookup={lookup} />);
+    const { rerender } = renderWithQueryClient(<CustomMetrics lookup={lookup} />);
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.00');
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.00');
 
@@ -127,7 +139,7 @@ describe('CustomMetrics', () => {
       metric3: 0,
     };
 
-    render(<CustomMetrics lookup={lookup} />);
+    renderWithQueryClient(<CustomMetrics lookup={lookup} />);
 
     expect(screen.getByTestId('metric-value-metric3')).toHaveTextContent('0.00');
 
@@ -138,7 +150,7 @@ describe('CustomMetrics', () => {
   it('displays metric names correctly', () => {
     const lookup = { 'test-metric': 10 };
 
-    render(<CustomMetrics lookup={lookup} />);
+    renderWithQueryClient(<CustomMetrics lookup={lookup} />);
 
     expect(screen.getByTestId('metric-name-test-metric')).toHaveTextContent('test-metric');
   });
@@ -153,7 +165,7 @@ describe('CustomMetrics', () => {
       'metric-c': 6,
     };
 
-    render(<CustomMetrics lookup={lookup} />);
+    renderWithQueryClient(<CustomMetrics lookup={lookup} />);
 
     const metricNames = screen
       .getAllByTestId(/^metric-name-/)
@@ -174,7 +186,9 @@ describe('CustomMetrics', () => {
     const counts = { metric1: 20 };
     const metricTotals = { metric2: 40 };
 
-    render(<CustomMetrics lookup={lookup} counts={counts} metricTotals={metricTotals} />);
+    renderWithQueryClient(
+      <CustomMetrics lookup={lookup} counts={counts} metricTotals={metricTotals} />,
+    );
 
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.50 (10.00/20.00)');
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('50.00% (20.00/40.00)');

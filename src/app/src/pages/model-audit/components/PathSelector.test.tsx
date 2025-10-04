@@ -2,11 +2,11 @@ import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useModelAuditStore } from '../store';
+import { useModelAuditStore } from '../hooks';
 import PathSelector from './PathSelector';
 
 vi.mock('@app/utils/api');
-vi.mock('../store');
+vi.mock('../hooks');
 
 const mockCallApi = vi.mocked(callApi);
 const mockUseModelAuditStore = vi.mocked(useModelAuditStore);

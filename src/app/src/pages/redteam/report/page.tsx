@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import PylonChat from '@app/components/PylonChat';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { useUserStore } from '@app/stores/userStore';
+import { useUserEmail } from '@app/hooks/useUser';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useNavigate } from 'react-router-dom';
@@ -12,17 +12,13 @@ import ReportIndex from './components/ReportIndex';
 
 export default function ReportPage() {
   const navigate = useNavigate();
-  const { email, isLoading, fetchEmail } = useUserStore();
+  const { data: email, isLoading } = useUserEmail();
   const searchParams = new URLSearchParams(window.location.search);
   const evalId = searchParams.get('evalId');
   usePageMeta({
     title: 'Red Team Vulnerability Reports',
     description: 'View or browse red team results',
   });
-
-  useEffect(() => {
-    fetchEmail();
-  }, [fetchEmail]);
 
   useEffect(() => {
     if (!isLoading && !email) {

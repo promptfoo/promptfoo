@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DownloadMenu from './DownloadMenu';
-import { useTableStore as useResultsViewStore } from './store';
+import { useTableStore as useResultsViewStore } from '../hooks';
 
 // Get a reference to the mock
 const showToastMock = vi.fn();
@@ -16,7 +16,7 @@ Object.assign(navigator, {
   },
 });
 
-vi.mock('./store', () => ({
+vi.mock('../hooks', () => ({
   useTableStore: vi.fn(),
   useResultsViewSettingsStore: vi.fn(),
 }));

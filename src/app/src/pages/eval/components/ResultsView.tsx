@@ -2,9 +2,9 @@ import React from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
+import { useUserEmail } from '@app/hooks/useUser';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, updateEvalAuthor } from '@app/utils/api';
-import { useUserStore } from '@app/stores/userStore';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ClearIcon from '@mui/icons-material/Clear';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -47,7 +47,7 @@ import FiltersButton from './ResultsFilters/FiltersButton';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from '../hooks';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
@@ -441,13 +441,7 @@ export default function ResultsView({
     }
   };
 
-  const currentUserEmail = useUserStore((state) => state.email);
-  const fetchEmail = useUserStore((state) => state.fetchEmail);
-
-  // Defensively fetch email on mount to ensure it's available
-  React.useEffect(() => {
-    fetchEmail();
-  }, [fetchEmail]);
+  const { data: currentUserEmail } = useUserEmail();
 
   const handleEditAuthor = async (newAuthor: string) => {
     if (evalId) {
@@ -480,7 +474,7 @@ export default function ResultsView({
 
   return (
     <>
-      <Box px={2} pt={2}>
+      <Box px={2} pt={2} data-testid="results-view">
         <Box sx={{ transition: 'all 0.3s ease' }}>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
@@ -778,7 +772,6 @@ export default function ResultsView({
                     </Tooltip>
                   </Menu>
                 )}
-                {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
                 {(config?.redteam || config?.metadata?.redteam) && (
                   <Tooltip title="View vulnerability scan report" placement="bottom">
                     <Button

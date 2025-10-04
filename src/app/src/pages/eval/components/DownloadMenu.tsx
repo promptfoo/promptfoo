@@ -25,7 +25,7 @@ import invariant from '@promptfoo/util/invariant';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
 import { useToast } from '../../../hooks/useToast';
-import { useTableStore as useResultsViewStore } from './store';
+import { useTableStore as useResultsViewStore } from '../hooks';
 
 /**
  * Renders a "Download" menu item and a modal dialog that lets users export evaluation data

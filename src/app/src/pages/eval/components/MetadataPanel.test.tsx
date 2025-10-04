@@ -1,7 +1,12 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient, createQueryClientWrapper } from '../../../test/queryClientWrapper';
 import { MetadataPanel } from './MetadataPanel';
 import type { ExpandedMetadataState } from './MetadataPanel';
+
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
+}));
 
 describe('MetadataPanel', () => {
   const mockOnMetadataClick = vi.fn();
@@ -24,7 +29,10 @@ describe('MetadataPanel', () => {
       citations: [{ source: 'doc1', content: 'citation content' }],
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    const queryClient = createTestQueryClient();
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />, {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
 
     expect(screen.getByText('Key')).toBeInTheDocument();
     expect(screen.getByText('Value')).toBeInTheDocument();
@@ -46,7 +54,10 @@ describe('MetadataPanel', () => {
       urlKey: 'https://www.example.com',
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    const queryClient = createTestQueryClient();
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />, {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
 
     const linkElement = screen.getByRole('link', { name: 'https://www.example.com' });
     expect(linkElement).toBeInTheDocument();
@@ -63,12 +74,16 @@ describe('MetadataPanel', () => {
       longKey: { expanded: false, lastClickTime: 0 },
     };
 
+    const queryClient = createTestQueryClient();
     const { rerender } = render(
       <MetadataPanel
         {...defaultProps}
         metadata={mockMetadata}
         expandedMetadata={mockExpandedMetadata}
       />,
+      {
+        wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+      },
     );
 
     const truncatedValue = screen.getByText((content) => content.endsWith('...'));
@@ -102,8 +117,12 @@ describe('MetadataPanel', () => {
       testKey: true,
     };
 
+    const queryClient = createTestQueryClient();
     render(
       <MetadataPanel {...defaultProps} metadata={mockMetadata} copiedFields={mockCopiedFields} />,
+      {
+        wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+      },
     );
 
     const copyButton = screen.getByRole('button', { name: 'Copy metadata value for testKey' });
@@ -117,7 +136,10 @@ describe('MetadataPanel', () => {
       testField: 'testValue',
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    const queryClient = createTestQueryClient();
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />, {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
 
     const filterButton = screen.getByRole('button', { name: 'Filter by testField' });
     fireEvent.click(filterButton);
@@ -127,7 +149,10 @@ describe('MetadataPanel', () => {
 
   it('should return null when metadata is an empty object', () => {
     const mockMetadata = {};
-    const { container } = render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    const queryClient = createTestQueryClient();
+    const { container } = render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />, {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
     expect(container.firstChild).toBeNull();
   });
 
@@ -138,7 +163,10 @@ describe('MetadataPanel', () => {
       urlKey: urlWithSpecialChars,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    const queryClient = createTestQueryClient();
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />, {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
 
     const linkElement = screen.getByRole('link', { name: urlWithSpecialChars });
     expect(linkElement).toBeInTheDocument();

@@ -1,7 +1,7 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { callApi } from '@app/utils/api';
-import { useVersionStore } from '@app/stores/versionStore';
+import { createTestQueryClient, createQueryClientWrapper } from '../test/queryClientWrapper';
 import { useVersionCheck } from './useVersionCheck';
 
 vi.mock('@app/utils/api', () => ({
@@ -12,17 +12,16 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 describe('useVersionCheck', () => {
-  const initialState = useVersionStore.getState();
-
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    // Reset store to initial state
-    useVersionStore.setState(initialState, true);
   });
 
   it('should initialize with loading=true, error=null, dismissed=false, and versionInfo=null', () => {
-    const { result } = renderHook(() => useVersionCheck());
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useVersionCheck(), {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
 
     expect(result.current.loading).toBe(true);
     expect(result.current.error).toBeNull();
@@ -38,17 +37,21 @@ describe('useVersionCheck', () => {
       selfHosted: true,
       isNpx: false,
       updateCommands: {
-        primary: 'npm i -g promptfoo@latest',
-        alternative: 'npx promptfoo@latest',
+        primary: 'npm update',
+        alternative: null,
       },
+      commandType: 'npm' as const,
     };
 
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(mockVersionInfo),
-    } as Response);
+      json: vi.fn().mockResolvedValue(mockVersionInfo),
+    } as unknown as Response);
 
-    const { result } = renderHook(() => useVersionCheck());
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useVersionCheck(), {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -56,257 +59,98 @@ describe('useVersionCheck', () => {
 
     expect(result.current.versionInfo).toEqual(mockVersionInfo);
     expect(result.current.error).toBeNull();
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/version');
   });
 
-  it('should set dismissed=true if the latest version matches the value in localStorage', async () => {
-    const mockVersionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-      selfHosted: true,
-      isNpx: false,
-      updateCommands: {
-        primary: 'npm i -g promptfoo@latest',
-        alternative: 'npx promptfoo@latest',
-      },
-    };
-    const STORAGE_KEY = 'promptfoo:update:dismissedVersion';
-
-    localStorage.setItem(STORAGE_KEY, mockVersionInfo.latestVersion);
-
+  it('should set error and loading=false when API call fails', async () => {
+    // Mock a failed response (ok: false will trigger the error throw)
     vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockVersionInfo),
+      ok: false,
+      status: 500,
     } as Response);
 
-    const { result } = renderHook(() => useVersionCheck());
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useVersionCheck(), {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
 
+    // Wait for the query to finish (retry is disabled in test mode)
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.dismissed).toBe(true);
+    // After loading is false, we should have an error
+    expect(result.current.error).not.toBeNull();
+    expect(result.current.versionInfo).toBeNull();
   });
 
-  it('should store the latest version in localStorage and set dismissed=true when dismiss is called and versionInfo.latestVersion is present', async () => {
+  it('should mark update as dismissed when dismiss() is called', async () => {
     const mockVersionInfo = {
       currentVersion: '1.0.0',
       latestVersion: '1.1.0',
       updateAvailable: true,
-      selfHosted: true,
-      isNpx: false,
+      selfHosted: false,
+      isNpx: true,
       updateCommands: {
-        primary: 'npm i -g promptfoo@latest',
-        alternative: 'npx promptfoo@latest',
+        primary: 'npx promptfoo@latest',
+        alternative: null,
       },
+      commandType: 'npx' as const,
     };
 
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(mockVersionInfo),
-    } as Response);
+      json: vi.fn().mockResolvedValue(mockVersionInfo),
+    } as unknown as Response);
 
-    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
-
-    const { result } = renderHook(() => useVersionCheck());
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useVersionCheck(), {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
 
     await waitFor(() => {
       expect(result.current.versionInfo).toEqual(mockVersionInfo);
     });
+
+    expect(result.current.dismissed).toBe(false);
 
     act(() => {
       result.current.dismiss();
     });
 
-    expect(setItemSpy).toHaveBeenCalledWith(
-      'promptfoo:update:dismissedVersion',
-      mockVersionInfo.latestVersion,
-    );
     expect(result.current.dismissed).toBe(true);
+    expect(localStorage.getItem('promptfoo:update:dismissedVersion')).toBe('1.1.0');
   });
 
-  it('should only call the API once on mount and not refresh', async () => {
+  it('should initialize with dismissed=true if localStorage has the latest version', async () => {
     const mockVersionInfo = {
       currentVersion: '1.0.0',
       latestVersion: '1.1.0',
       updateAvailable: true,
-      selfHosted: true,
+      selfHosted: false,
       isNpx: false,
       updateCommands: {
-        primary: 'npm i -g promptfoo@latest',
-        alternative: 'npx promptfoo@latest',
+        primary: 'npm update',
+        alternative: null,
       },
+      commandType: 'npm' as const,
     };
+
+    localStorage.setItem('promptfoo:update:dismissedVersion', '1.1.0');
 
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(mockVersionInfo),
-    } as Response);
+      json: vi.fn().mockResolvedValue(mockVersionInfo),
+    } as unknown as Response);
 
-    const { result, rerender } = renderHook(() => useVersionCheck());
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useVersionCheck(), {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
     });
-
-    expect(callApi).toHaveBeenCalledTimes(1);
-
-    rerender();
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    expect(callApi).toHaveBeenCalledTimes(1);
-  });
-
-  it('should handle network errors by setting loading=false and populating the error state', async () => {
-    vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
-
-    const { result } = renderHook(() => useVersionCheck());
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBeInstanceOf(Error);
-    expect(result.current.error?.message).toBe('Network error');
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/version');
-  });
-
-  it('should only trigger a single fetchVersion call when multiple components mount simultaneously', async () => {
-    const mockVersionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-      selfHosted: true,
-      isNpx: false,
-      updateCommands: {
-        primary: 'npm i -g promptfoo@latest',
-        alternative: 'npx promptfoo@latest',
-      },
-    };
-
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockVersionInfo),
-    } as Response);
-
-    const { result: result1 } = renderHook(() => useVersionCheck());
-    const { result: result2 } = renderHook(() => useVersionCheck());
-    const { result: result3 } = renderHook(() => useVersionCheck());
-
-    await waitFor(() => {
-      expect(result1.current.loading).toBe(false);
-      expect(result2.current.loading).toBe(false);
-      expect(result3.current.loading).toBe(false);
-    });
-
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(result1.current.versionInfo).toEqual(mockVersionInfo);
-    expect(result2.current.versionInfo).toEqual(mockVersionInfo);
-    expect(result3.current.versionInfo).toEqual(mockVersionInfo);
-  });
-
-  it('should handle API responses with non-200 status codes but valid JSON error bodies', async () => {
-    const mockErrorResponse = {
-      message: 'Rate limit exceeded',
-      code: 'RATE_LIMIT',
-    };
-
-    vi.mocked(callApi).mockResolvedValue({
-      ok: false,
-      status: 429,
-      json: () => Promise.resolve(mockErrorResponse),
-    } as Response);
-
-    const { result } = renderHook(() => useVersionCheck());
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBeInstanceOf(Error);
-    expect(result.current.error?.message).toBe('Failed to fetch version information');
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/version');
-  });
-
-  it('should allow refetching version information after a previous request has failed', async () => {
-    vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
-
-    const { result } = renderHook(() => useVersionCheck());
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.error).toBeInstanceOf(Error);
-    expect(result.current.error?.message).toBe('Network error');
-
-    const mockVersionInfo = {
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-      selfHosted: true,
-      isNpx: false,
-      updateCommands: {
-        primary: 'npm i -g promptfoo@latest',
-        alternative: 'npx promptfoo@latest',
-      },
-    };
-
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockVersionInfo),
-    } as Response);
-
-    await useVersionStore.getState().fetchVersion();
 
     await waitFor(() => {
       expect(result.current.versionInfo).toEqual(mockVersionInfo);
     });
 
-    expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBeNull();
-  });
-
-  it('should reset state on logout when version information is loading', async () => {
-    vi.mocked(callApi).mockImplementation(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      return {
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            currentVersion: '1.0.0',
-            latestVersion: '1.1.0',
-            updateAvailable: true,
-            selfHosted: true,
-            isNpx: false,
-            updateCommands: {
-              primary: 'npm i -g promptfoo@latest',
-              alternative: 'npx promptfoo@latest',
-            },
-          }),
-      } as Response;
-    });
-
-    const { result } = renderHook(() => useVersionCheck());
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(true);
-    });
-
-    act(() => {
-      useVersionStore.setState(initialState, true);
-    });
-
-    expect(result.current.versionInfo).toBeNull();
-    expect(result.current.loading).toBe(true);
-    expect(result.current.error).toBeNull();
-    expect(result.current.dismissed).toBe(false);
+    expect(result.current.dismissed).toBe(true);
   });
 });

@@ -7,12 +7,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ModelAudit from './ModelAudit';
-import { useModelAuditStore } from './store';
+import { useModelAuditStore } from './hooks';
 
 import type { ScanResult } from './ModelAudit.types';
 
 vi.mock('@app/utils/api');
-vi.mock('./store');
+vi.mock('./hooks');
 
 vi.mock('./components/ResultsTab', () => ({
   default: ({
@@ -118,7 +118,13 @@ describe('ModelAudit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCheckInstallation.mockResolvedValue(undefined);
-    mockUseModelAuditStore.mockReturnValue(getDefaultStoreState());
+
+    const storeState = getDefaultStoreState();
+    mockUseModelAuditStore.mockReturnValue(storeState);
+
+    // Attach persist to the mock function itself to match production pattern
+    // (useModelAuditStoreCompat.persist = useModelAuditUIStore.persist)
+    mockUseModelAuditStore.persist = storeState.persist;
 
     // Mock successful API responses
     mockCallApi.mockImplementation(async (path: string) => {

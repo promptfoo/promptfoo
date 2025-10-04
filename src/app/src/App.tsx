@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import {
   createBrowserRouter,
   createRoutesFromElements,
@@ -26,6 +28,17 @@ import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
+
+// Create a client for React Query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes default
+      retry: 1,
+      refetchOnWindowFocus: false, // Disable auto-refetch on window focus
+    },
+  },
+});
 
 function TelemetryTracker() {
   const location = useLocation();
@@ -84,9 +97,12 @@ const router = createBrowserRouter(
 
 function App() {
   return (
-    <ToastProvider>
-      <RouterProvider router={router} />
-    </ToastProvider>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   );
 }
 

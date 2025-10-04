@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
-import { useTableStore } from './store';
+import { useTableStore } from '../hooks';
 
 // Mock Chart.js
 vi.mock('chart.js', () => {
@@ -40,7 +40,7 @@ vi.mock('@mui/material/styles', () => ({
 }));
 
 // Mock the store
-vi.mock('./store', () => ({
+vi.mock('../hooks', () => ({
   useTableStore: vi.fn(),
 }));
 

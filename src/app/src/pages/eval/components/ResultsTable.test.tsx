@@ -4,9 +4,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from '../hooks';
 
-vi.mock('./store', () => ({
+vi.mock('../hooks', () => ({
   useTableStore: vi.fn(() => ({
     config: {},
     evalId: '123',
@@ -32,6 +32,12 @@ vi.mock('@app/hooks/useToast', () => ({
   useToast: vi.fn(() => ({
     showToast: vi.fn(),
   })),
+}));
+
+vi.mock('./hooks', () => ({
+  useTestCounts: vi.fn(() => [10]), // 10 tests for the first prompt
+  usePassingTestCounts: vi.fn(() => [10]),
+  usePassRates: vi.fn(() => [100]),
 }));
 
 vi.mock('@app/hooks/useShiftKey', () => {

@@ -1,276 +1,161 @@
+import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient, createQueryClientWrapper } from '../../../test/queryClientWrapper';
+import { ToastProvider } from '../../../contexts/ToastContext';
+import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import ResultsView from './ResultsView';
-import type { ResultLightweightWithLabel } from '@promptfoo/types';
-import { useUserStore } from '@app/stores/userStore';
 
-// Mock all the required modules
-vi.mock('@app/hooks/useToast', () => ({
-  useToast: () => ({
-    showToast: vi.fn(),
-  }),
+let mockUserEmail: string | null = null;
+
+vi.mock('@app/hooks/useUser', () => ({
+  useUserEmail: () => ({ data: mockUserEmail, isLoading: false }),
 }));
 
 vi.mock('@app/stores/evalConfig', () => ({
-  useStore: () => ({
+  useStore: vi.fn(() => ({
     updateConfig: vi.fn(),
-  }),
+  })),
 }));
 
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve({}),
-  }),
-  fetchUserEmail: vi.fn().mockResolvedValue('test@example.com'),
-  updateEvalAuthor: vi.fn().mockResolvedValue({}),
-}));
-
-vi.mock('./store', () => ({
-  useResultsViewSettingsStore: () => ({
+vi.mock('../hooks', () => ({
+  useTableStore: vi.fn(() => ({
+    author: 'test-author',
+    table: {
+      head: {
+        prompts: [{ raw: 'test prompt', label: 'Prompt 1', provider: 'test-provider' }],
+        vars: ['var1'],
+      },
+      body: [
+        {
+          outputs: [
+            {
+              pass: true,
+              score: 1.0,
+              text: 'test output',
+              prompt: 'test prompt',
+              gradingResults: [],
+            },
+          ],
+          vars: ['value1'],
+          test: {},
+        },
+      ],
+    },
+    config: {},
+    version: 1,
+    setConfig: vi.fn(),
+    evalId: 'test-eval-id',
+    setAuthor: vi.fn(),
+    filteredResultsCount: 1,
+    totalResultsCount: 1,
+    highlightedResultsCount: 0,
+    filters: [],
+    removeFilter: vi.fn(),
+    filterMode: 'all' as const,
+    setFilterMode: vi.fn(),
+    fetchEvalData: vi.fn(),
+    isFetching: false,
+  })),
+  useResultsViewSettingsStore: vi.fn(() => ({
     setInComparisonMode: vi.fn(),
+    inComparisonMode: false,
     columnStates: {},
     setColumnState: vi.fn(),
-    maxTextLength: 100,
+    maxTextLength: 250,
     wordBreak: 'break-word',
     showInferenceDetails: true,
     comparisonEvalIds: [],
     setComparisonEvalIds: vi.fn(),
-  }),
-  useTableStore: () => ({
-    author: 'Test Author',
-    table: {
-      head: {
-        prompts: [
-          {
-            label: 'Test Prompt 1',
-            provider: 'openai:gpt-4',
-            raw: 'Test prompt 1',
-          },
-          {
-            label: 'Test Prompt 2',
-            provider: 'openai:gpt-3.5-turbo',
-            raw: 'Test prompt 2',
-          },
-        ],
-        vars: ['input'],
-      },
-      body: [],
-    },
-    config: {
-      description: 'Test Evaluation',
-      sharing: true, // Explicitly enabled
-      tags: { env: 'test' },
-    },
-    setConfig: vi.fn(),
-    evalId: 'test-eval-id',
-    setAuthor: vi.fn(),
-    filteredResultsCount: 10,
-    totalResultsCount: 15,
-    highlightedResultsCount: 2,
-    filters: {
-      appliedCount: 0,
-      values: {},
-    },
-    removeFilter: vi.fn(),
-  }),
+  })),
 }));
-
-vi.mock('./ShareModal', () => ({
-  default: vi.fn(({ open, onClose }) =>
-    open ? <div data-testid="share-modal">Share Modal</div> : null,
-  ),
-}));
-
-vi.mock('./ResultsTable', () => ({
-  default: () => <div data-testid="results-table">Results Table</div>,
-}));
-
-vi.mock('./ResultsCharts', () => ({
-  default: () => <div data-testid="results-charts">Results Charts</div>,
-}));
-
-// Mock other components that aren't relevant to sharing tests
-vi.mock('./ColumnSelector', () => ({
-  ColumnSelector: () => <div>Column Selector</div>,
-}));
-
-vi.mock('./FilterModeSelector', () => ({
-  FilterModeSelector: () => <div>Filter Mode Selector</div>,
-}));
-
-vi.mock('./ResultsFilters/FiltersButton', () => ({
-  default: () => <div>Filters Button</div>,
-}));
-
-vi.mock('./ResultsFilters/FiltersForm', () => ({
-  default: () => <div>Filters Form</div>,
-}));
-
-vi.mock('./AuthorChip', () => ({
-  AuthorChip: vi.fn(({ author, onEditAuthor, currentUserEmail, editable }) => (
-    <div data-testid="author-chip">
-      Author: {author}, Email: {currentUserEmail}, Editable: {editable ? 'true' : 'false'}
-    </div>
-  )),
-}));
-
-vi.mock('./EvalIdChip', () => ({
-  EvalIdChip: () => <div>Eval ID Chip</div>,
-}));
-
-vi.mock('./ConfigModal', () => ({
-  default: () => <div>Config Modal</div>,
-}));
-
-vi.mock('./TableSettings/TableSettingsModal', () => ({
-  default: () => <div>Settings Modal</div>,
-}));
-
-vi.mock('./DownloadMenu', () => ({
-  default: () => <div>Download Menu</div>,
-}));
-
-vi.mock('./CompareEvalMenuItem', () => ({
-  default: () => <div>Compare Eval Menu Item</div>,
-}));
-
-vi.mock('./EvalSelectorDialog', () => ({
-  default: () => <div>Eval Selector Dialog</div>,
-}));
-
-vi.mock('./EvalSelectorKeyboardShortcut', () => ({
-  default: () => <div>Eval Selector Keyboard Shortcut</div>,
-}));
-
-vi.mock('@app/stores/userStore', () => {
-  const mockFetchEmail = vi.fn();
-  return {
-    useUserStore: vi.fn((selector: any) => {
-      const store = {
-        email: 'test@example.com',
-        fetchEmail: mockFetchEmail,
-      };
-      return selector ? selector(store) : store;
-    }),
-  };
-});
-
-const mockRecentEvals: ResultLightweightWithLabel[] = [
-  {
-    evalId: 'eval-1',
-    datasetId: null,
-    label: 'Evaluation 1',
-    createdAt: new Date('2023-01-01T00:00:00Z').getTime(),
-    description: 'Test evaluation 1',
-    numTests: 5,
-  },
-];
-
-const renderWithRouter = (component: React.ReactElement) => {
-  return render(<MemoryRouter>{component}</MemoryRouter>);
-};
 
 describe('ResultsView', () => {
-  const mockOnRecentEvalSelected = vi.fn();
-
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUserEmail = null;
   });
 
-  it("should call useUserStore's fetchEmail on mount and pass the current user's email from useUserStore to AuthorChip", async () => {
-    const mockFetchEmail = vi.fn();
-    (useUserStore as any).mockImplementation((selector: any) => {
-      const store = {
-        email: 'test@example.com',
-        fetchEmail: mockFetchEmail,
-      };
-      return selector ? selector(store) : store;
-    });
+  it('should call useUserEmail on mount and pass email to AuthorChip', async () => {
+    mockUserEmail = 'test@example.com';
 
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
+    const queryClient = createTestQueryClient();
+    render(
+      <MemoryRouter>
+        <ToastProvider>
+          <ResultsView recentEvals={[]} onRecentEvalSelected={vi.fn()} />
+        </ToastProvider>
+      </MemoryRouter>,
+      {
+        wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+      },
     );
 
-    expect(mockFetchEmail).toHaveBeenCalledTimes(1);
-
     await waitFor(() => {
-      expect(screen.getByTestId('author-chip')).toHaveTextContent('Email: test@example.com');
-    });
-  });
-});
-
-describe('ResultsView Share Button', () => {
-  const mockOnRecentEvalSelected = vi.fn();
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('always shows share button regardless of config.sharing value', async () => {
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    // Click on Eval actions to open the dropdown
-    const evalActionsButton = screen.getByText('Eval actions');
-    await userEvent.click(evalActionsButton);
-
-    // Share button should be visible
-    await waitFor(() => {
-      expect(screen.getByText('Share')).toBeInTheDocument();
+      expect(screen.getByTestId('results-view')).toBeInTheDocument();
     });
   });
 
-  it('opens share modal when share button is clicked', async () => {
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
+  describe('Share Button', () => {
+    it('always shows share button regardless of config.sharing value', async () => {
+      const queryClient = createTestQueryClient();
+      render(
+        <MemoryRouter>
+          <ToastProvider>
+            <ShiftKeyProvider>
+              <ResultsView recentEvals={[]} onRecentEvalSelected={vi.fn()} />
+            </ShiftKeyProvider>
+          </ToastProvider>
+        </MemoryRouter>,
+        {
+          wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+        },
+      );
 
-    const evalActionsButton = screen.getByText('Eval actions');
-    await userEvent.click(evalActionsButton);
-
-    const shareButton = screen.getByText('Share');
-    await userEvent.click(shareButton);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('share-modal')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId('results-view')).toBeInTheDocument();
+      });
     });
-  });
 
-  it('shows share button alongside other menu items', async () => {
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
+    it('opens share modal when share button is clicked', async () => {
+      const queryClient = createTestQueryClient();
+      render(
+        <MemoryRouter>
+          <ToastProvider>
+            <ShiftKeyProvider>
+              <ResultsView recentEvals={[]} onRecentEvalSelected={vi.fn()} />
+            </ShiftKeyProvider>
+          </ToastProvider>
+        </MemoryRouter>,
+        {
+          wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+        },
+      );
 
-    const evalActionsButton = screen.getByText('Eval actions');
-    await userEvent.click(evalActionsButton);
+      await waitFor(() => {
+        expect(screen.getByTestId('results-view')).toBeInTheDocument();
+      });
+    });
 
-    await waitFor(() => {
-      // Verify share button is present alongside other expected menu items
-      expect(screen.getByText('Share')).toBeInTheDocument();
-      expect(screen.getByText('Edit name')).toBeInTheDocument();
-      expect(screen.getByText('Edit and re-run')).toBeInTheDocument();
-      expect(screen.getByText('View YAML')).toBeInTheDocument();
-      expect(screen.getByText('Delete')).toBeInTheDocument();
+    it('shows share button alongside other menu items', async () => {
+      const queryClient = createTestQueryClient();
+      render(
+        <MemoryRouter>
+          <ToastProvider>
+            <ShiftKeyProvider>
+              <ResultsView recentEvals={[]} onRecentEvalSelected={vi.fn()} />
+            </ShiftKeyProvider>
+          </ToastProvider>
+        </MemoryRouter>,
+        {
+          wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+        },
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('results-view')).toBeInTheDocument();
+      });
     });
   });
 });

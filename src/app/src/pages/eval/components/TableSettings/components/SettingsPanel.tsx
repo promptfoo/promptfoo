@@ -11,7 +11,7 @@ import ViewListIcon from '@mui/icons-material/ViewList';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
-import { useResultsViewSettingsStore } from '../../store';
+import { useResultsViewSettingsStore } from '../../../hooks';
 import { tokens } from '../tokens';
 import EnhancedRangeSlider from './EnhancedRangeSlider';
 import SettingItem from './SettingItem';

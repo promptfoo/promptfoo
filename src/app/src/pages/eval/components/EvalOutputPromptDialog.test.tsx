@@ -1,9 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient, createQueryClientWrapper } from '../../../test/queryClientWrapper';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
-import { useTableStore } from './store';
+import { useTableStore } from '../hooks';
 import * as ReactDOM from 'react-dom';
 
 // Mock the Citations component to verify it receives the correct props
@@ -33,16 +34,20 @@ vi.mock('./DebuggingPanel', () => {
 
 import { DebuggingPanel as MockDebuggingPanel } from './DebuggingPanel';
 
-vi.mock('./store', () => {
-  const actualStore = vi.importActual('./store');
+vi.mock('../hooks', () => {
+  const actualHooks = vi.importActual('../hooks');
   return {
-    ...actualStore,
+    ...actualHooks,
     useTableStore: vi.fn().mockReturnValue({
       addFilter: vi.fn(),
       resetFilters: vi.fn(),
     }),
   };
 });
+
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
+}));
 
 const mockOnClose = vi.fn();
 const defaultProps = {
@@ -71,29 +76,36 @@ const defaultProps = {
 };
 
 describe('EvalOutputPromptDialog', () => {
+  const renderWithQueryClient = (component: React.ReactElement) => {
+    const queryClient = createTestQueryClient();
+    return render(component, {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders with the correct title', () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Details: test-provider')).toBeInTheDocument();
   });
 
   it('displays prompt content', () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Prompt')).toBeInTheDocument();
     expect(screen.getByText('Test prompt')).toBeInTheDocument();
   });
 
   it('displays output when provided', () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Original Output')).toBeInTheDocument();
     expect(screen.getByText('Test output')).toBeInTheDocument();
   });
 
   it('displays assertion results table with metrics when provided', async () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
     await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
     expect(screen.getByText('Metric')).toBeInTheDocument();
     expect(screen.getByText('contains')).toBeInTheDocument();
@@ -113,13 +125,13 @@ describe('EvalOutputPromptDialog', () => {
         } satisfies GradingResult,
       ],
     };
-    render(<EvalOutputPromptDialog {...propsWithoutMetrics} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...propsWithoutMetrics} />);
     await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
     expect(screen.queryByText('Metric')).not.toBeInTheDocument();
   });
 
   it('displays metadata table when provided', async () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
     await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
     expect(screen.getByText('Metadata')).toBeInTheDocument();
     expect(screen.getByText('testKey')).toBeInTheDocument();
@@ -127,7 +139,7 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('calls onClose when close button is clicked', async () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
     await userEvent.click(screen.getByLabelText('close'));
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
@@ -138,7 +150,7 @@ describe('EvalOutputPromptDialog', () => {
     };
     Object.assign(navigator, { clipboard: mockClipboard });
 
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
 
     // Find the prompt content box and trigger hover to make copy button visible
     const promptBox = screen.getByText('Test prompt').closest('.MuiPaper-root');
@@ -162,7 +174,7 @@ describe('EvalOutputPromptDialog', () => {
     };
     Object.assign(navigator, { clipboard: mockClipboard });
 
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
 
     await userEvent.click(screen.getByRole('tab', { name: 'Evaluation' }));
 
@@ -233,7 +245,7 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('does not display the Citations component when no citations in metadata', () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.queryByTestId('citations-component')).not.toBeInTheDocument();
   });
 
@@ -365,7 +377,7 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('hides trace section but keeps Traces tab visible when onTraceSectionVisibilityChange is called with false', async () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -473,6 +485,13 @@ describe('EvalOutputPromptDialog', () => {
 });
 
 describe('EvalOutputPromptDialog metadata interaction', () => {
+  const renderWithQueryClient = (component: React.ReactElement) => {
+    const queryClient = createTestQueryClient();
+    return render(component, {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
+  };
+
   let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
@@ -578,7 +597,7 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
       resetFilters: mockResetFilters,
     });
 
-    render(<EvalOutputPromptDialog {...defaultProps} />);
+    renderWithQueryClient(<EvalOutputPromptDialog {...defaultProps} />);
     await act(async () => {
       await user.click(screen.getByRole('tab', { name: 'Metadata' }));
     });

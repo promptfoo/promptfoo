@@ -5,7 +5,7 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
-import { useTableStore } from './store';
+import { useTableStore } from '../hooks';
 import type { SelectChangeEvent } from '@mui/material/Select';
 
 export const MetricFilterSelector = () => {

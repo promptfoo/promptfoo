@@ -4,6 +4,7 @@ import { useToast } from '@app/hooks/useToast';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { createTestQueryClient, createQueryClientWrapper } from '../../../test/queryClientWrapper';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import RedTeamSetupPage from './page';
@@ -42,6 +43,10 @@ vi.mock('@app/utils/api', () => ({
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
+
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
 }));
 
 // Mock child components to isolate the page component
@@ -86,9 +91,16 @@ describe('RedTeamSetupPage', () => {
     });
   });
 
+  const renderWithQueryClient = (component: React.ReactElement) => {
+    const queryClient = createTestQueryClient();
+    return render(component, {
+      wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+    });
+  };
+
   describe('Page Metadata', () => {
     it("should set the page title to 'Red team setup' and description to 'Configure red team testing' when rendered", () => {
-      render(
+      renderWithQueryClient(
         <MemoryRouter initialEntries={['/redteam/setup']}>
           <RedTeamSetupPage />
         </MemoryRouter>,
@@ -104,7 +116,7 @@ describe('RedTeamSetupPage', () => {
 
   describe('Accessibility Fallback', () => {
     it('should display a fallback title when JavaScript is disabled', () => {
-      render(
+      renderWithQueryClient(
         <MemoryRouter initialEntries={['/redteam/setup']}>
           <RedTeamSetupPage />
         </MemoryRouter>,
@@ -117,7 +129,7 @@ describe('RedTeamSetupPage', () => {
 
   describe('URL Hash Updates', () => {
     it('should update the URL hash when the tab state changes', async () => {
-      render(
+      renderWithQueryClient(
         <MemoryRouter initialEntries={['/redteam/setup']}>
           <RedTeamSetupPage />
         </MemoryRouter>,
@@ -138,7 +150,7 @@ describe('RedTeamSetupPage', () => {
       markSetupAsSeen: vi.fn(),
     });
 
-    render(
+    renderWithQueryClient(
       <MemoryRouter initialEntries={['/redteam/setup']}>
         <RedTeamSetupPage />
       </MemoryRouter>,

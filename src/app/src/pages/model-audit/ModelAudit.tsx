@@ -26,7 +26,7 @@ import ConfigurationTab from './components/ConfigurationTab';
 import HistoryTab from './components/HistoryTab';
 import ResultsTab from './components/ResultsTab';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
-import { useModelAuditStore } from './store';
+import { useModelAuditStore } from './hooks';
 
 import type { ScanResult } from './ModelAudit.types';
 

@@ -102,64 +102,20 @@ describe('YamlEditor', () => {
     expect(editor.disabled).toBe(false);
   });
 
-  it.skip('handles file upload correctly', () => {
-    const setCodeSpy = vi.fn();
-    const parseAndUpdateStoreSpy = vi.fn().mockReturnValue(true);
-    // Mock isReadOnly to be false so the upload button will be rendered
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => [false, vi.fn()]); // isReadOnly
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => ['', setCodeSpy]); // code
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => [null, vi.fn()]); // parseError
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => [
-      { show: false, message: '' },
-      vi.fn(),
-    ]); // notification
+  it('handles file upload correctly', async () => {
+    // File input only appears when in editing mode
+    const { container } = render(<YamlEditorComponent />);
 
-    // Create a mock component with our own handleFileUpload function that uses the spies
-    const MockYamlEditor = () => {
-      const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const content = e.target?.result as string;
-            setCodeSpy(content);
-            parseAndUpdateStoreSpy(content);
-          };
-          reader.readAsText(file);
-        }
-      };
+    // Click "Edit YAML" button to enter editing mode
+    const editButton = screen.getByRole('button', { name: /edit yaml/i });
+    fireEvent.click(editButton);
 
-      return (
-        <div>
-          <input type="file" data-testid="file-input" onChange={handleFileUpload} />
-        </div>
-      );
-    };
+    // Now the file input should be rendered
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
 
-    const { getByTestId } = render(<MockYamlEditor />);
-
-    const mockFileContent = 'description: Uploaded content';
-    const mockFile = new File([mockFileContent], 'test.yaml', { type: 'application/yaml' });
-
-    const fileInput = getByTestId('file-input');
-    const originalFileReader = global.FileReader;
-    global.FileReader = vi.fn(() => ({
-      readAsText: vi.fn(),
-      onload: null,
-    })) as any;
-
-    Object.defineProperty(fileInput, 'files', {
-      value: [mockFile],
-    });
-
-    fireEvent.change(fileInput);
-
-    const reader = (FileReader as any).mock.instances[0];
-    reader.onload?.({ target: { result: mockFileContent } } as any);
-
-    expect(setCodeSpy).toHaveBeenCalled();
-
-    global.FileReader = originalFileReader;
+    expect(fileInput).toBeInTheDocument();
+    expect(fileInput).toHaveAttribute('accept', '.yaml,.yml');
+    expect(fileInput).toHaveAttribute('hidden');
   });
 
   it('initializes with initialConfig', () => {

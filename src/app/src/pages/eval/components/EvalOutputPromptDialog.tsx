@@ -20,7 +20,7 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import { useTableStore } from './store';
+import { useTableStore } from '../hooks';
 
 // Common style object for copy buttons
 const copyButtonSx = {

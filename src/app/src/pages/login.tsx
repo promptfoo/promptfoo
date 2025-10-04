@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { useUserStore } from '@app/stores/userStore';
+import { useUserEmail, useSetUserEmail } from '@app/hooks/useUser';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -31,15 +31,12 @@ export default function LoginPage() {
   const [customUrl, setCustomUrl] = useState('https://www.promptfoo.app');
   const navigate = useNavigate();
   const location = useLocation();
-  const { email, isLoading, setEmail, fetchEmail } = useUserStore();
+  const { data: email, isLoading } = useUserEmail();
+  const setEmail = useSetUserEmail();
   usePageMeta({
     title: 'Login to Promptfoo',
     description: 'Sign in to access your Promptfoo workspace',
   });
-
-  useEffect(() => {
-    fetchEmail();
-  }, [fetchEmail]);
 
   const handleRedirect = () => {
     // Handle special case where redirect URL contains query parameters

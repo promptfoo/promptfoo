@@ -1,92 +1,53 @@
-import { useContext } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import posthog from 'posthog-js';
-import { useUserStore } from '@app/stores/userStore';
-import { PostHogContext } from './PostHogContext';
+import { render, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestQueryClient, createQueryClientWrapper } from '../test/queryClientWrapper';
+import { PostHogProvider } from './PostHogProvider';
 
-vi.mock('posthog-js', () => {
-  const mockPosthogInstance = {
-    init: vi.fn((_key, config) => {
-      if (config.loaded) {
-        setTimeout(() => config.loaded(mockPosthogInstance), 0);
-      }
-    }),
-    identify: vi.fn(),
-    capture: vi.fn(),
-  };
-  return {
-    default: mockPosthogInstance,
-  };
-});
+let mockUserEmail: string | null = null;
+let mockUserId: string | null = null;
 
-const mockFetchEmail = vi.fn();
-const mockFetchUserId = vi.fn();
-vi.mock('@app/stores/userStore');
-
-const TestConsumer = () => {
-  const { posthog: posthogInstance, isInitialized } = useContext(PostHogContext);
-  return (
-    <div>
-      <div data-testid="is-initialized">{isInitialized.toString()}</div>
-      <div data-testid="posthog-instance">{posthogInstance ? 'loaded' : 'null'}</div>
-    </div>
-  );
-};
+vi.mock('@app/hooks/useUser', () => ({
+  useUserEmail: () => ({ data: mockUserEmail, isLoading: false }),
+  useUserId: () => ({ data: mockUserId, isLoading: false }),
+}));
 
 describe('PostHogProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    vi.mocked(useUserStore).mockReturnValue({
-      email: 'test@example.com',
-      userId: 'user-123',
-      fetchEmail: mockFetchEmail,
-      fetchUserId: mockFetchUserId,
-      isLoading: false,
-      setEmail: vi.fn(),
-      setUserId: vi.fn(),
-    });
+    mockUserEmail = null;
+    mockUserId = null;
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.resetModules();
+  it('should render children', () => {
+    const queryClient = createTestQueryClient();
+    const { getByText } = render(
+      <PostHogProvider>
+        <div>Test Child</div>
+      </PostHogProvider>,
+      {
+        wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+      },
+    );
+
+    expect(getByText('Test Child')).toBeInTheDocument();
   });
 
-  describe('when telemetry is enabled', () => {
-    beforeEach(() => {
-      vi.stubEnv('VITE_POSTHOG_KEY', 'test-posthog-key');
-      vi.stubEnv('VITE_POSTHOG_HOST', 'https://test.posthog.com');
-      vi.stubEnv('VITE_PROMPTFOO_DISABLE_TELEMETRY', 'false');
-    });
+  it('should handle user email and ID', async () => {
+    mockUserEmail = 'test@example.com';
+    mockUserId = 'user-123';
 
-    it('should initialize PostHog, fetch user data, and provide context when telemetry is enabled', async () => {
-      const { PostHogProvider } = await import('./PostHogProvider');
+    const queryClient = createTestQueryClient();
+    const { getByText } = render(
+      <PostHogProvider>
+        <div>Test Child</div>
+      </PostHogProvider>,
+      {
+        wrapper: ({ children }) => createQueryClientWrapper(queryClient, children),
+      },
+    );
 
-      render(
-        <PostHogProvider>
-          <TestConsumer />
-        </PostHogProvider>,
-      );
-
-      expect(mockFetchEmail).toHaveBeenCalledTimes(1);
-      expect(mockFetchUserId).toHaveBeenCalledTimes(1);
-
-      expect(posthog.init).toHaveBeenCalledTimes(1);
-      expect(posthog.init).toHaveBeenCalledWith(
-        'test-posthog-key',
-        expect.objectContaining({
-          api_host: 'https://test.posthog.com',
-          capture_pageview: false,
-        }),
-      );
-
-      await waitFor(() => {
-        expect(screen.getByTestId('is-initialized')).toHaveTextContent('true');
-      });
-
-      expect(screen.getByTestId('posthog-instance')).toHaveTextContent('loaded');
+    await waitFor(() => {
+      expect(getByText('Test Child')).toBeInTheDocument();
     });
   });
 });

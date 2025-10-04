@@ -22,7 +22,7 @@ import {
   isValidPolicyObject,
   makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { useTableStore } from './store';
+import { useTableStore } from '../hooks';
 import type { PolicyObject } from '@promptfoo/redteam/types';
 
 type MetricScore = {
