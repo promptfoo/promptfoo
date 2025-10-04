@@ -54,7 +54,7 @@ logger.debug('Debug info');
 
 // ❌ WRONG - NEVER use console
 console.log('message'); // Don't do this
-console.error('error');  // Don't do this
+console.error('error'); // Don't do this
 ```
 
 ### 2. Telemetry: Track All Command Usage
