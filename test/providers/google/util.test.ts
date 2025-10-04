@@ -1031,6 +1031,126 @@ describe('util', () => {
       expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
     });
 
+    it('should merge system messages from both prompt and config with string config', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' }
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        'config system instruction',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'config system instruction' },
+          { text: 'prompt system instruction' }
+        ]
+      });
+    });
+
+    it('should merge system messages from both prompt and config with object config', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' }
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        { parts: [{ text: 'config system instruction' }] },
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'config system instruction' },
+          { text: 'prompt system instruction' }
+        ]
+      });
+    });
+
+    it('should merge multiple parts from config systemInstruction', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' }
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        {
+          parts: [
+            { text: 'config system instruction 1' },
+            { text: 'config system instruction 2' }
+          ]
+        },
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'config system instruction 1' },
+          { text: 'config system instruction 2' },
+          { text: 'prompt system instruction' }
+        ]
+      });
+    });
+
+    it('should merge multiple system messages from prompt', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction 1' },
+        { role: 'system', content: 'prompt system instruction 2' },
+        { role: 'user', content: 'user message' }
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        'config system instruction',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'config system instruction' },
+          { text: 'prompt system instruction 1' },
+          { text: 'prompt system instruction 2' }
+        ]
+      });
+    });
+
+    it('should render Nunjucks templates in config systemInstruction', () => {
+      const prompt = [
+        { role: 'user', content: 'user message' }
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        { role: 'a helpful assistant', language: 'Japanese' },
+        'You are {{role}}. Respond in {{language}}.',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'You are a helpful assistant. Respond in Japanese.' }
+        ]
+      });
+    });
+
+    it('should skip empty string config systemInstruction', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' }
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        '',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      // Empty string is falsy, so config systemInstruction is not processed
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'prompt system instruction' }
+        ]
+      });
+    });
+
     describe('support for images in contents', () => {
       const validBase64Image =
         '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=';

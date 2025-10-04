@@ -675,6 +675,52 @@ function processImagesInContents(
   });
 }
 
+/**
+ * Parses and processes config-level systemInstruction.
+ * Handles file loading, string-to-Content conversion, and Nunjucks template rendering.
+ *
+ * @param configSystemInstruction - The systemInstruction from config (can be string, Content, or undefined)
+ * @param contextVars - Variables for Nunjucks template rendering
+ * @returns Processed Content object or undefined
+ */
+function parseConfigSystemInstruction(
+  configSystemInstruction: Content | string | undefined,
+  contextVars?: Record<string, string | object>,
+): Content | undefined {
+  if (!configSystemInstruction) {
+    return undefined;
+  }
+
+  // Make a copy to avoid mutating the original
+  let configInstruction = clone(configSystemInstruction);
+
+  // Load systemInstruction from file if it's a file path
+  if (typeof configSystemInstruction === 'string') {
+    configInstruction = loadFile(configSystemInstruction, contextVars);
+  }
+
+  // Convert string to Content structure
+  if (typeof configInstruction === 'string') {
+    configInstruction = { parts: [{ text: configInstruction }] };
+  }
+
+  // Render Nunjucks templates in all text parts
+  if (contextVars && configInstruction) {
+    const nunjucks = getNunjucksEngine();
+    for (const part of configInstruction.parts) {
+      if (part.text) {
+        try {
+          part.text = nunjucks.renderString(part.text, contextVars);
+        } catch (err) {
+          throw new Error(`Unable to render nunjucks in systemInstruction: ${err}`);
+        }
+      }
+    }
+  }
+
+  return configInstruction;
+}
+
 export function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, string | object>,
@@ -704,35 +750,13 @@ export function geminiFormatAndSystemInstructions(
     contents = updatedContents;
   }
 
-  let systemInstruction: Content | string | undefined = parsedSystemInstruction;
-  if (configSystemInstruction && !systemInstruction) {
-    // Make a copy
-    systemInstruction = clone(configSystemInstruction);
+  let systemInstruction: Content | undefined = parsedSystemInstruction;
 
-    // Load SI from file
-    if (typeof configSystemInstruction === 'string') {
-      systemInstruction = loadFile(configSystemInstruction, contextVars);
-    }
-
-    // Format SI if string was not a filepath above
-    if (typeof systemInstruction === 'string') {
-      systemInstruction = { parts: [{ text: systemInstruction }] };
-    }
-
-    if (contextVars && systemInstruction) {
-      const nunjucks = getNunjucksEngine();
-      for (const part of systemInstruction.parts) {
-        if (part.text) {
-          try {
-            part.text = nunjucks.renderString(part.text, contextVars);
-          } catch (err) {
-            throw new Error(`Unable to render nunjunks in systemInstruction: ${err}`);
-          }
-        }
-      }
-    }
-  } else if (configSystemInstruction && systemInstruction) {
-    throw new Error(`Template error: system instruction defined in prompt and config.`);
+  const parsedConfigInstruction = parseConfigSystemInstruction(configSystemInstruction, contextVars);
+  if (parsedConfigInstruction) {
+    systemInstruction = systemInstruction
+      ? { parts: [...parsedConfigInstruction.parts, ...systemInstruction.parts] }
+      : parsedConfigInstruction;
   }
 
   // Process images in contents
