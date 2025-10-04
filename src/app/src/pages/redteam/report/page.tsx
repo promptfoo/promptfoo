@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import PylonChat from '@app/components/PylonChat';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { useUserEmail } from '@app/hooks/useUser';
+import { useUser } from '@app/hooks/useUser';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +12,8 @@ import ReportIndex from './components/ReportIndex';
 
 export default function ReportPage() {
   const navigate = useNavigate();
-  const { data: email, isLoading } = useUserEmail();
+  const { data: user, isLoading } = useUser();
+  const email = user?.email ?? null;
   const searchParams = new URLSearchParams(window.location.search);
   const evalId = searchParams.get('evalId');
   usePageMeta({

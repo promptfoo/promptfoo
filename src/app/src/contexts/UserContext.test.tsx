@@ -18,7 +18,10 @@ let mockUserEmail: string | null = null;
 let mockIsLoading = false;
 
 vi.mock('@app/hooks/useUser', () => ({
-  useUserEmail: () => ({ data: mockUserEmail, isLoading: mockIsLoading }),
+  useUser: () => ({
+    data: { email: mockUserEmail, id: null },
+    isLoading: mockIsLoading,
+  }),
   useSetUserEmail: () => vi.fn(),
 }));
 

@@ -1,10 +1,11 @@
 import { type ReactNode } from 'react';
 
-import { useUserEmail, useSetUserEmail } from '@app/hooks/useUser';
+import { useUser, useSetUserEmail } from '@app/hooks/useUser';
 import { UserContext } from './UserContextDef';
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const { data: email, isLoading } = useUserEmail();
+  const { data: user, isLoading } = useUser();
+  const email = user?.email ?? null;
   const setEmail = useSetUserEmail();
 
   return (

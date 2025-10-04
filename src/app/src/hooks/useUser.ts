@@ -53,37 +53,6 @@ export function useUser() {
   });
 }
 
-/**
- * Hook to fetch the current user's email only.
- * Backwards compatible wrapper around useUser().
- *
- * @deprecated Use useUser() and destructure email instead for better performance.
- */
-export function useUserEmail() {
-  const { data, isLoading, error, ...rest } = useUser();
-  return {
-    data: data?.email ?? null,
-    isLoading,
-    error,
-    ...rest,
-  };
-}
-
-/**
- * Hook to fetch the current user's ID only.
- * Backwards compatible wrapper around useUser().
- *
- * @deprecated Use useUser() and destructure id instead for better performance.
- */
-export function useUserId() {
-  const { data, isLoading, error, ...rest } = useUser();
-  return {
-    data: data?.id ?? null,
-    isLoading,
-    error,
-    ...rest,
-  };
-}
 
 /**
  * Hook to logout the current user.

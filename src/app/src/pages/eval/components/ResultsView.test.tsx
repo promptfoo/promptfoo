@@ -10,7 +10,10 @@ import ResultsView from './ResultsView';
 let mockUserEmail: string | null = null;
 
 vi.mock('@app/hooks/useUser', () => ({
-  useUserEmail: () => ({ data: mockUserEmail, isLoading: false }),
+  useUser: () => ({
+    data: { email: mockUserEmail, id: null },
+    isLoading: false,
+  }),
 }));
 
 vi.mock('@app/stores/evalConfig', () => ({
@@ -80,7 +83,7 @@ describe('ResultsView', () => {
     mockUserEmail = null;
   });
 
-  it('should call useUserEmail on mount and pass email to AuthorChip', async () => {
+  it('should call useUser on mount and pass email to AuthorChip', async () => {
     mockUserEmail = 'test@example.com';
 
     const queryClient = createTestQueryClient();
