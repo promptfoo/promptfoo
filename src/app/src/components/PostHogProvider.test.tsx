@@ -7,8 +7,10 @@ let mockUserEmail: string | null = null;
 let mockUserId: string | null = null;
 
 vi.mock('@app/hooks/useUser', () => ({
-  useUserEmail: () => ({ data: mockUserEmail, isLoading: false }),
-  useUserId: () => ({ data: mockUserId, isLoading: false }),
+  useUser: () => ({
+    data: { email: mockUserEmail, id: mockUserId },
+    isLoading: false,
+  }),
 }));
 
 describe('PostHogProvider', () => {

@@ -2,24 +2,51 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { callApi, fetchUserId } from '@app/utils/api';
 
 /**
- * Hook to fetch the current user's email.
- * Uses React Query to automatically deduplicate requests and cache results.
+ * User data type returned by the unified user hook.
+ */
+export interface User {
+  email: string | null;
+  id: string | null;
+}
+
+/**
+ * Unified hook to fetch current user's email and ID.
+ * Makes parallel requests and caches results together for atomic updates.
+ * Uses React Query to automatically deduplicate requests.
  * Fail-fast: Does not retry on error.
  */
-export function useUserEmail() {
+export function useUser() {
   return useQuery({
-    queryKey: ['user', 'email'],
-    queryFn: async () => {
-      const response = await callApi('/user/email');
-      if (response.ok) {
-        const data = await response.json();
-        return data.email as string | null;
+    queryKey: ['user'],
+    queryFn: async (): Promise<User> => {
+      // Fetch both email and ID in parallel
+      const [emailResponse, idResult] = await Promise.all([
+        callApi('/user/email').catch((err) => {
+          console.error('Failed to fetch user email:', err);
+          return { ok: false, status: 500 } as Response;
+        }),
+        fetchUserId().catch((err) => {
+          console.error('Failed to fetch user ID:', err);
+          return null;
+        }),
+      ]);
+
+      let email: string | null = null;
+      if (emailResponse.ok) {
+        try {
+          const data = await emailResponse.json();
+          email = data.email as string | null;
+        } catch (err) {
+          console.error('Failed to parse email response:', err);
+        }
+      } else if (emailResponse.status !== 404) {
+        console.error('Failed to fetch user email:', emailResponse.status);
       }
-      // Handle 404 and other errors uniformly
-      if (response.status !== 404) {
-        console.error('Failed to fetch user email:', response.status);
-      }
-      return null;
+
+      return {
+        email,
+        id: idResult,
+      };
     },
     staleTime: Infinity, // Cache forever until invalidated
     retry: false, // Fail-fast, don't retry
@@ -27,25 +54,35 @@ export function useUserEmail() {
 }
 
 /**
- * Hook to fetch the current user's ID.
- * Uses React Query to automatically deduplicate requests and cache results.
- * Fail-fast: Does not retry on error.
+ * Hook to fetch the current user's email only.
+ * Backwards compatible wrapper around useUser().
+ *
+ * @deprecated Use useUser() and destructure email instead for better performance.
+ */
+export function useUserEmail() {
+  const { data, isLoading, error, ...rest } = useUser();
+  return {
+    data: data?.email ?? null,
+    isLoading,
+    error,
+    ...rest,
+  };
+}
+
+/**
+ * Hook to fetch the current user's ID only.
+ * Backwards compatible wrapper around useUser().
+ *
+ * @deprecated Use useUser() and destructure id instead for better performance.
  */
 export function useUserId() {
-  return useQuery({
-    queryKey: ['user', 'id'],
-    queryFn: async () => {
-      try {
-        const userId = await fetchUserId();
-        return userId || null;
-      } catch (error) {
-        console.error('Error fetching user ID:', error);
-        return null;
-      }
-    },
-    staleTime: Infinity, // Cache forever until invalidated
-    retry: false, // Fail-fast, don't retry
-  });
+  const { data, isLoading, error, ...rest } = useUser();
+  return {
+    data: data?.id ?? null,
+    isLoading,
+    error,
+    ...rest,
+  };
 }
 
 /**
@@ -83,11 +120,17 @@ export function useLogout() {
 /**
  * Hook to update the user's email in the cache.
  * Useful for optimistic updates without refetching.
+ * Updates the unified user object while preserving the ID.
  */
 export function useSetUserEmail() {
   const queryClient = useQueryClient();
 
   return (email: string) => {
-    queryClient.setQueryData(['user', 'email'], email);
+    queryClient.setQueryData(['user'], (oldData: User | undefined): User => {
+      return {
+        email,
+        id: oldData?.id ?? null,
+      };
+    });
   };
 }

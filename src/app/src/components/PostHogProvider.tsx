@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
-import { useUserEmail, useUserId } from '@app/hooks/useUser';
+import { useUser } from '@app/hooks/useUser';
 import posthog from 'posthog-js';
 import { PostHogContext, type PostHogContextType } from './PostHogContext';
 
@@ -15,8 +15,9 @@ interface PostHogProviderProps {
 
 export const PostHogProvider = ({ children }: PostHogProviderProps) => {
   const [isInitialized, setIsInitialized] = useState(false);
-  const { data: email } = useUserEmail();
-  const { data: userId } = useUserId();
+  const { data: user } = useUser();
+  const email = user?.email;
+  const userId = user?.id;
 
   // Identify user when PostHog is initialized and we have user info
   const identifyUser = () => {
