@@ -17,11 +17,11 @@ export { useMetadataKeys } from './useMetadataKeys';
 // Re-export settings store (no changes needed)
 export { useResultsViewSettingsStore } from '../components/store';
 
-// Re-export types
+// Re-export types from centralized types file
 export type {
   ResultsFilter,
   ResultsFilterType,
   ResultsFilterOperator,
   PaginationState,
   ColumnState,
-} from '../components/store';
+} from '../types';

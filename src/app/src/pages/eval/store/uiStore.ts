@@ -1,21 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import type { EvalResultsFilterMode } from '@promptfoo/types';
-import type { ResultsFilter, ResultsFilterType } from '../components/store';
-
-// Helper function to determine if a filter is applied
-const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolean => {
-  if (filter.type === 'metadata') {
-    // For metadata filters with exists operator, only field is required
-    if (filter.operator === 'exists') {
-      return Boolean(filter.field);
-    }
-    // For other metadata operators, both field and value are required
-    return Boolean(filter.value && filter.field);
-  }
-  // For non-metadata filters, value is required
-  return Boolean(filter.value);
-};
+import type { ResultsFilter, ResultsFilterType } from '../types';
+import { isFilterApplied } from '../utils/tableUtils';
 
 /**
  * Client-side UI state for the eval results view.

@@ -5,6 +5,12 @@ import { useEvalTable } from './useEvalTable';
 import { useMetadataKeys } from './useMetadataKeys';
 import { useResultsViewSettingsStore } from '../components/store';
 import type { EvalTableDTO, EvaluateTable, UnifiedConfig } from '@promptfoo/types';
+import {
+  computeHighlightCount,
+  computeAvailableMetrics,
+  buildRedteamFilterOptions,
+  extractPolicyIdToNameMap,
+} from '../utils/tableUtils';
 
 /**
  * Compatibility hook that provides the old useTableStore API using new React Query hooks.
@@ -30,7 +36,7 @@ export function useTableStoreCompat() {
   );
 
   // Server state from React Query
-  const { data: evalData, isLoading: isFetching } = useEvalTable(uiStore.evalId, {
+  const { data: evalData, isLoading: isFetching, refetch } = useEvalTable(uiStore.evalId, {
     pageIndex: 0,
     pageSize: 50,
     filterMode: uiStore.filterMode,
@@ -175,79 +181,4 @@ export function useTableStoreCompat() {
       return metadataKeys;
     },
   };
-}
-
-// Helper functions (copied from store.ts)
-interface RedteamFilterOptions {
-  plugin: string[];
-  strategy: string[];
-  severity: string[];
-  policy: string[];
-}
-
-function computeHighlightCount(table: EvaluateTable | null): number {
-  if (!table) {
-    return 0;
-  }
-  return table.body.reduce((count: number, row) => {
-    return (
-      count +
-      row.outputs.filter((o) => o?.gradingResult?.comment?.trim().startsWith('!highlight')).length
-    );
-  }, 0);
-}
-
-function computeAvailableMetrics(table: EvaluateTable): string[] {
-  if (!table.head?.prompts) {
-    return [];
-  }
-
-  const metrics = new Set<string>();
-  table.head.prompts.forEach((prompt) => {
-    if (prompt.metrics?.namedScores) {
-      Object.keys(prompt.metrics.namedScores).forEach((metric) => {
-        metrics.add(metric);
-      });
-    }
-  });
-
-  return Array.from(metrics).sort();
-}
-
-function buildRedteamFilterOptions(
-  config: UnifiedConfig,
-  table: EvaluateTable | null,
-): Partial<RedteamFilterOptions> {
-  const isRedteam = Boolean(config?.redteam);
-  if (!isRedteam) {
-    return {};
-  }
-
-  return {
-    plugin: Array.from(
-      new Set(
-        config?.redteam?.plugins?.map((plugin) =>
-          typeof plugin === 'string' ? plugin : plugin.id,
-        ) ?? [],
-      ),
-    ),
-    strategy: [],
-    severity: [],
-    policy: [],
-  };
-}
-
-type RedteamPlugin = string | { id: string; config?: { policy?: { id: string; name: string } } };
-
-function extractPolicyIdToNameMap(plugins: RedteamPlugin[]): Record<string, string> {
-  const policyMap: Record<string, string> = {};
-  plugins.forEach((plugin) => {
-    if (typeof plugin !== 'string' && plugin.id === 'policy') {
-      const policy = plugin?.config?.policy;
-      if (policy?.id && policy?.name) {
-        policyMap[policy.id] = policy.name;
-      }
-    }
-  });
-  return policyMap;
 }

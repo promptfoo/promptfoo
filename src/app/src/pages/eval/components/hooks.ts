@@ -6,7 +6,7 @@
 
 import { useMemo } from 'react';
 
-import { useTableStore } from './store';
+import { useTableStore } from '../hooks';
 
 /**
  * Returns the number of passing tests for each prompt.

@@ -3,9 +3,9 @@ import type { EvaluateTable } from '@promptfoo/types';
 import { describe, expect, it, vi } from 'vitest';
 
 import { usePassingTestCounts, useTestCounts, usePassRates } from './hooks';
-import { useTableStore } from './store';
+import { useTableStore } from '../hooks';
 
-vi.mock('./store', () => ({
+vi.mock('../hooks', () => ({
   useTableStore: vi.fn(),
 }));
 
