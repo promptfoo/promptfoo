@@ -40,6 +40,7 @@ interface PromptEditorProps {
   onMouseLeave: () => void;
   CodeDisplay: CodeDisplayComponent;
   subtitleTypographySx: object;
+  readOnly?: boolean;
 }
 
 export function PromptEditor({
@@ -59,6 +60,7 @@ export function PromptEditor({
   onMouseLeave,
   CodeDisplay,
   subtitleTypographySx,
+  readOnly = false,
 }: PromptEditorProps) {
   return (
     <Box mb={2}>
@@ -67,7 +69,7 @@ export function PromptEditor({
           Prompt
         </Typography>
         <Box display="flex" gap={1}>
-          {!editMode && (
+          {!readOnly && !editMode && (
             <Tooltip title="Edit & Replay">
               <IconButton
                 size="small"
@@ -83,7 +85,7 @@ export function PromptEditor({
               </IconButton>
             </Tooltip>
           )}
-          {editMode && (
+          {!readOnly && editMode && (
             <>
               <Button
                 size="small"

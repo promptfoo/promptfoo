@@ -21,9 +21,9 @@ import {
   checkCloudPermissions,
   getCloudDatabaseId,
   getConfigFromCloud,
-  getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
+  resolveTeamId,
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
@@ -320,7 +320,7 @@ export async function doGenerateRedteam(
     const teamId =
       resolvedConfigMetadata?.teamId ??
       (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
-      (await getDefaultTeam()).id;
+      (await resolveTeamId()).id;
 
     const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
 

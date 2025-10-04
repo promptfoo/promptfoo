@@ -34,6 +34,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const {
     table,
+    setTable,
     setTableFromResultsFile,
     config,
     setConfig,
@@ -195,10 +196,10 @@ export default function Eval({ fetchId }: EvalOptions) {
       const run = async () => {
         const success = await loadEvalById(fetchId);
         if (success) {
-          setLoaded(true);
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
           fetchRecentFileEvals();
+          // Note: setLoaded(true) is handled by the useEffect that watches for table updates
         }
       };
       run();
@@ -210,16 +211,21 @@ export default function Eval({ fetchId }: EvalOptions) {
       /**
        * Populates the table store with the most recent eval result.
        */
-      const handleResultsFile = async (data: ResultsFile, isInit: boolean = false) => {
+      const handleResultsFile = async (data: ResultsFile | null, isInit: boolean = false) => {
+        // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
+        if (!data) {
+          console.log('No eval data available');
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
+          setLoaded(true);
+          return;
+        }
+
         // Set streaming state when we start receiving data
         setIsStreaming(true);
 
-        // Populate values which do not change while the eval results are being streamed.
-        if (isInit) {
-          setTableFromResultsFile(data);
-          setConfig(data.config);
-          setAuthor(data.author ?? null);
-        }
         const newRecentEvals = await fetchRecentFileEvals();
         if (newRecentEvals && newRecentEvals.length > 0) {
           const newId = newRecentEvals[0].evalId;
@@ -259,15 +265,16 @@ export default function Eval({ fetchId }: EvalOptions) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
           if (success) {
-            setLoaded(true);
             setDefaultEvalId(defaultEvalId);
+            // Note: setLoaded(true) is handled by the useEffect that watches for table updates
           }
         } else {
-          return (
-            <div className="notice">
-              No evals yet. Share some evals to this server and they will appear here.
-            </div>
-          );
+          // No evals exist - clear stale state and show empty state
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
+          setLoaded(true);
         }
       };
       run();
@@ -316,7 +323,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     return <div className="notice">404 Eval not found</div>;
   }
 
-  if (!loaded || !table) {
+  if (!loaded) {
     return (
       <div className="notice">
         <div>
@@ -327,7 +334,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     );
   }
 
-  if (loaded && !table) {
+  if (!table) {
     return <EmptyState />;
   }
 

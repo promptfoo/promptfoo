@@ -1,9 +1,8 @@
 import { getGraderById } from '../../../../src/redteam/graders';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom';
+import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
-
-import type { Message } from '../../../../src/redteam/providers/shared';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
   PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({
@@ -533,6 +532,42 @@ describe('CustomProvider', () => {
     expect(result.metadata?.totalSuccessfulAttacks).toBeGreaterThan(0);
     expect(result.metadata?.successfulAttacks).toBeDefined();
     expect(result.metadata?.successfulAttacks?.length).toBeGreaterThan(0);
+  });
+
+  it('should surface final target error while preserving mapped output', async () => {
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'simple',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'p', label: 'l' },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'attack',
+        rationaleBehindJailbreak: 'r',
+        lastResponseSummary: 's',
+      }),
+    });
+
+    // final target returns error with output
+    mockTargetProvider.callApi.mockResolvedValue({ output: 'This is 504', error: 'HTTP 504' });
+
+    // refusal false, eval not 100
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 0 }) })
+      .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 50 }) });
+
+    const result = await provider.callApi('p', context);
+    expect(result.output).toBe('This is 504');
+    expect(result.error).toBe('HTTP 504');
   });
 
   it('should handle custom strategy text with round-specific logic', async () => {
