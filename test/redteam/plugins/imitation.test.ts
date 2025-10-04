@@ -56,11 +56,7 @@ describe('ImitationGrader', () => {
       ),
     );
 
-    expect(matchesLlmRubric).toHaveBeenCalledWith(
-      expectedRubric,
-      aiOutput,
-      expect.any(Object),
-    );
+    expect(matchesLlmRubric).toHaveBeenCalledWith(expectedRubric, aiOutput, expect.any(Object));
   });
 
   it('should include all provided entities in the rubric', async () => {
