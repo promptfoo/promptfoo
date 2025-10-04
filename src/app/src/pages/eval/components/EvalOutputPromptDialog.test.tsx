@@ -18,9 +18,9 @@ vi.mock('./Citations', () => ({
 vi.mock('./DebuggingPanel', () => {
   const MockDebuggingPanel = vi.fn((props) => {
     if (props.onTraceSectionVisibilityChange) {
-      setTimeout(() => {
+      queueMicrotask(() => {
         props.onTraceSectionVisibilityChange(false);
-      }, 0);
+      });
     }
     return (
       <div data-testid="mock-debugging-panel" data-prompt-index={props.promptIndex}>
