@@ -1034,7 +1034,7 @@ describe('util', () => {
     it('should merge system messages from both prompt and config with string config', () => {
       const prompt = [
         { role: 'system', content: 'prompt system instruction' },
-        { role: 'user', content: 'user message' }
+        { role: 'user', content: 'user message' },
       ];
       const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
@@ -1043,17 +1043,14 @@ describe('util', () => {
       );
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
       expect(systemInstruction).toEqual({
-        parts: [
-          { text: 'config system instruction' },
-          { text: 'prompt system instruction' }
-        ]
+        parts: [{ text: 'config system instruction' }, { text: 'prompt system instruction' }],
       });
     });
 
     it('should merge system messages from both prompt and config with object config', () => {
       const prompt = [
         { role: 'system', content: 'prompt system instruction' },
-        { role: 'user', content: 'user message' }
+        { role: 'user', content: 'user message' },
       ];
       const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
@@ -1062,26 +1059,20 @@ describe('util', () => {
       );
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
       expect(systemInstruction).toEqual({
-        parts: [
-          { text: 'config system instruction' },
-          { text: 'prompt system instruction' }
-        ]
+        parts: [{ text: 'config system instruction' }, { text: 'prompt system instruction' }],
       });
     });
 
     it('should merge multiple parts from config systemInstruction', () => {
       const prompt = [
         { role: 'system', content: 'prompt system instruction' },
-        { role: 'user', content: 'user message' }
+        { role: 'user', content: 'user message' },
       ];
       const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         {},
         {
-          parts: [
-            { text: 'config system instruction 1' },
-            { text: 'config system instruction 2' }
-          ]
+          parts: [{ text: 'config system instruction 1' }, { text: 'config system instruction 2' }],
         },
       );
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
@@ -1089,8 +1080,8 @@ describe('util', () => {
         parts: [
           { text: 'config system instruction 1' },
           { text: 'config system instruction 2' },
-          { text: 'prompt system instruction' }
-        ]
+          { text: 'prompt system instruction' },
+        ],
       });
     });
 
@@ -1098,7 +1089,7 @@ describe('util', () => {
       const prompt = [
         { role: 'system', content: 'prompt system instruction 1' },
         { role: 'system', content: 'prompt system instruction 2' },
-        { role: 'user', content: 'user message' }
+        { role: 'user', content: 'user message' },
       ];
       const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
@@ -1110,15 +1101,13 @@ describe('util', () => {
         parts: [
           { text: 'config system instruction' },
           { text: 'prompt system instruction 1' },
-          { text: 'prompt system instruction 2' }
-        ]
+          { text: 'prompt system instruction 2' },
+        ],
       });
     });
 
     it('should render Nunjucks templates in config systemInstruction', () => {
-      const prompt = [
-        { role: 'user', content: 'user message' }
-      ];
+      const prompt = [{ role: 'user', content: 'user message' }];
       const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         { role: 'a helpful assistant', language: 'Japanese' },
@@ -1126,16 +1115,14 @@ describe('util', () => {
       );
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
       expect(systemInstruction).toEqual({
-        parts: [
-          { text: 'You are a helpful assistant. Respond in Japanese.' }
-        ]
+        parts: [{ text: 'You are a helpful assistant. Respond in Japanese.' }],
       });
     });
 
     it('should skip empty string config systemInstruction', () => {
       const prompt = [
         { role: 'system', content: 'prompt system instruction' },
-        { role: 'user', content: 'user message' }
+        { role: 'user', content: 'user message' },
       ];
       const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
@@ -1145,9 +1132,7 @@ describe('util', () => {
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
       // Empty string is falsy, so config systemInstruction is not processed
       expect(systemInstruction).toEqual({
-        parts: [
-          { text: 'prompt system instruction' }
-        ]
+        parts: [{ text: 'prompt system instruction' }],
       });
     });
 

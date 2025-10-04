@@ -752,7 +752,10 @@ export function geminiFormatAndSystemInstructions(
 
   let systemInstruction: Content | undefined = parsedSystemInstruction;
 
-  const parsedConfigInstruction = parseConfigSystemInstruction(configSystemInstruction, contextVars);
+  const parsedConfigInstruction = parseConfigSystemInstruction(
+    configSystemInstruction,
+    contextVars,
+  );
   if (parsedConfigInstruction) {
     systemInstruction = systemInstruction
       ? { parts: [...parsedConfigInstruction.parts, ...systemInstruction.parts] }
