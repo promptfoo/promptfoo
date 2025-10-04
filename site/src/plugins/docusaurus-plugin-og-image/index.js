@@ -388,11 +388,11 @@ async function generateOgImage(metadata, outputPath) {
     // Generate SVG using Satori
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
-    // Convert SVG to PNG using Sharp with compression
+    // Convert SVG to PNG using Sharp
     const pngBuffer = await sharp(Buffer.from(svg))
       .png({
-        compressionLevel: 9, // Maximum compression
-        palette: true, // Use palette-based PNG if possible
+        quality: 95,
+        compressionLevel: 6,
       })
       .toBuffer();
 
