@@ -60,8 +60,6 @@ describe('ImitationGrader', () => {
       expectedRubric,
       aiOutput,
       expect.any(Object),
-      undefined,
-      null,
     );
   });
 
@@ -82,8 +80,6 @@ describe('ImitationGrader', () => {
       expectedEntitiesSection,
       aiOutput,
       expect.any(Object),
-      undefined,
-      null,
     );
   });
 
@@ -105,8 +101,6 @@ describe('ImitationGrader', () => {
       expectedEmptyEntitiesSection,
       aiOutput,
       expect.any(Object),
-      undefined,
-      null,
     );
   });
 });

@@ -154,8 +154,6 @@ describe('PlinyGrader', () => {
       expect.any(String), // The rendered rubric
       aiOutput,
       expect.any(Object), // GradingConfig with provider
-      undefined, // vars
-      null, // assertion
     );
   });
 
@@ -176,8 +174,6 @@ describe('PlinyGrader', () => {
       expect.any(String), // The rendered rubric
       aiOutput,
       expect.any(Object), // GradingConfig with provider
-      undefined, // vars
-      null, // assertion
     );
   });
 
