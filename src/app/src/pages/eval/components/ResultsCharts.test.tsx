@@ -254,6 +254,44 @@ describe('ResultsCharts', () => {
     }).not.toThrow();
   });
 
+  it('should render without errors when scores array has a single data point', () => {
+    const mockTable = {
+      head: {
+        prompts: [
+          { provider: 'test-provider-1', metrics: { namedScores: {} } },
+          { provider: 'test-provider-2', metrics: { namedScores: {} } },
+        ],
+        vars: [],
+      },
+      body: [
+        {
+          outputs: [
+            { score: 0.8, pass: true, text: 'valid output' },
+            { score: 0.8, pass: true, text: 'valid output' },
+          ],
+          vars: [],
+        },
+      ],
+    };
+
+    const scores = calculateScores(mockTable);
+
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTable,
+      evalId: 'test-eval',
+      config: { description: 'test config' },
+      setTable: vi.fn(),
+      fetchEvalData: vi.fn(),
+    });
+
+    const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
+
+    expect(() => render(<ResultsCharts {...defaultProps} scores={scores} />)).not.toThrow();
+
+    const canvasElements = container.querySelectorAll('canvas');
+    expect(canvasElements.length).toBeGreaterThan(0);
+  });
+
   it('handles table data where some prompts are missing the provider property', () => {
     const mockTable = {
       head: {
