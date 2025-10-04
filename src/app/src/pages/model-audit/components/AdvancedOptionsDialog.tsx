@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -119,18 +120,25 @@ export default function AdvancedOptionsDialog({
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
               Scan Timeout
             </Typography>
-            <TextField
+            <BaseNumberInput
               fullWidth
-              type="number"
               value={localOptions.timeout}
-              onChange={(e) =>
+              onChange={(v) =>
                 setLocalOptions({
                   ...localOptions,
-                  timeout: Number.parseInt(e.target.value) || 3600,
+                  // @ts-expect-error - undefined will be clamped to 3600 onBlur.  This approach resolves issue where user cannot clear the field.  This would be better addressed using a more robust form approach and setting default on submit.
+                  timeout: v,
                 })
               }
-              InputProps={{
-                endAdornment: <InputAdornment position="end">seconds</InputAdornment>,
+              min={0}
+              onBlur={() => {
+                setLocalOptions(({ timeout, ...options }) => ({
+                  ...options,
+                  timeout: timeout !== undefined ? timeout : 3600,
+                }));
+              }}
+              slotProps={{
+                input: { endAdornment: <InputAdornment position="end">seconds</InputAdornment> },
               }}
             />
           </Box>

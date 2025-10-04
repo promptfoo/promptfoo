@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -627,42 +628,56 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             }
             placeholder="Template for generating signature data"
             helperText="Supported variables: {{signatureTimestamp}}. Use \n for newlines"
-            InputLabelProps={{
-              shrink: true,
+            slotProps={{
+              inputLabel: {
+                shrink: true,
+              },
             }}
           />
-
-          <TextField
+          <BaseNumberInput
             fullWidth
             label="Signature Validity (ms)"
-            type="number"
-            value={selectedTarget.config.signatureAuth?.signatureValidityMs ?? '300000'}
-            onChange={(e) =>
+            value={selectedTarget.config.signatureAuth?.signatureValidityMs}
+            onChange={(v) =>
               updateCustomTarget('signatureAuth', {
                 ...selectedTarget.config.signatureAuth,
-                signatureValidityMs: Number.parseInt(e.target.value),
+                signatureValidityMs: v,
               })
             }
+            onBlur={() => {
+              if (
+                selectedTarget.config.signatureAuth?.signatureValidityMs === undefined ||
+                selectedTarget.config.signatureAuth?.signatureValidityMs === ''
+              ) {
+                updateCustomTarget('signatureAuth', {
+                  ...selectedTarget.config.signatureAuth,
+                  signatureValidityMs: 300000,
+                });
+              }
+            }}
             placeholder="How long the signature remains valid"
-            InputLabelProps={{
-              shrink: true,
+            slotProps={{
+              inputLabel: {
+                shrink: true,
+              },
             }}
           />
 
-          <TextField
+          <BaseNumberInput
             fullWidth
             label="Signature Refresh Buffer (ms)"
-            type="number"
             value={selectedTarget.config.signatureAuth?.signatureRefreshBufferMs}
-            onChange={(e) =>
+            onChange={(v) =>
               updateCustomTarget('signatureAuth', {
                 ...selectedTarget.config.signatureAuth,
-                signatureRefreshBufferMs: Number.parseInt(e.target.value),
+                signatureRefreshBufferMs: v,
               })
             }
             placeholder="Buffer time before signature expiry to refresh - defaults to 10% of signature validity"
-            InputLabelProps={{
-              shrink: true,
+            slotProps={{
+              inputLabel: {
+                shrink: true,
+              },
             }}
           />
 
@@ -677,8 +692,10 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
               })
             }
             placeholder="Signature algorithm (default: SHA256)"
-            InputLabelProps={{
-              shrink: true,
+            slotProps={{
+              inputLabel: {
+                shrink: true,
+              },
             }}
           />
         </Stack>
