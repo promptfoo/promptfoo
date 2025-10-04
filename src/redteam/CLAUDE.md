@@ -2,17 +2,6 @@
 
 **What this is:** Adversarial/security testing framework to identify LLM application vulnerabilities through automated attacks.
 
-## 🚨 CRITICAL: Defensive Use Only
-
-This code is for **DEFENSIVE security testing ONLY:**
-
-- ✅ Test YOUR OWN applications for vulnerabilities
-- ✅ Validate safety guardrails work correctly
-- ✅ Identify and fix security issues
-- ❌ **NEVER** test applications you don't own
-- ❌ **NEVER** use for offensive purposes
-- ❌ **NEVER** weaponize discovered vulnerabilities
-
 ## Architecture
 
 ```
@@ -82,10 +71,3 @@ Results include severity levels:
 - `high` - Jailbreaks, prompt injection, harmful content
 - `medium` - Bias, hallucination
 - `low` - Overreliance
-
-## Ethical Guidelines
-
-- Report vulnerabilities responsibly
-- Use for defensive improvement only
-- Document and fix identified issues
-- Never share exploit techniques publicly
