@@ -46,6 +46,7 @@ find site/docs -name "*jailbreak*"
 ## Critical Terminology
 
 **Use "eval" not "evaluation":**
+
 ```bash
 # ✅ Correct
 npx promptfoo eval
@@ -55,6 +56,7 @@ npx promptfoo evaluation
 ```
 
 **Capitalization:**
+
 - "Promptfoo" (capital) - Start of sentences, headings
 - "promptfoo" (lowercase) - Code, commands, package names
 
@@ -86,6 +88,7 @@ SKIP_OG_GENERATION=true npm run build
 ## Comprehensive Guidelines
 
 See `.cursor/rules/docusaurus.mdc` for complete documentation standards including:
+
 - Front matter requirements
 - Code block formatting rules
 - Admonition syntax

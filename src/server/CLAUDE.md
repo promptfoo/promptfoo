@@ -26,7 +26,7 @@ src/server/
 ```typescript
 // ✅ CORRECT - Second param auto-sanitized
 logger.debug('[API] Request received', {
-  body: req.body,      // API keys auto-redacted
+  body: req.body, // API keys auto-redacted
   headers: req.headers, // Auth headers auto-redacted
 });
 
@@ -68,7 +68,7 @@ router.post('/api/eval', async (req, res) => {
     const status = error instanceof ValidationError ? 400 : 500;
     res.status(status).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -98,10 +98,7 @@ import { db } from '../database';
 import { evaluations } from '../database/schema';
 import { eq } from 'drizzle-orm';
 
-const results = await db
-  .select()
-  .from(evaluations)
-  .where(eq(evaluations.id, id));
+const results = await db.select().from(evaluations).where(eq(evaluations.id, id));
 ```
 
 ## Development

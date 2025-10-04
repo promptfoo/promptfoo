@@ -42,12 +42,12 @@ src/redteam/
 
 ```yaml
 plugins:
-  - pii           # Generate PII leakage tests
-  - harmful       # Generate harmful content tests
+  - pii # Generate PII leakage tests
+  - harmful # Generate harmful content tests
 
 strategies:
-  - jailbreak     # Apply jailbreak techniques to ALL tests
-  - base64        # Obfuscate with base64 encoding
+  - jailbreak # Apply jailbreak techniques to ALL tests
+  - base64 # Obfuscate with base64 encoding
 ```
 
 One plugin can be tested with multiple strategies for comprehensive coverage.
@@ -58,8 +58,8 @@ One plugin can be tested with multiple strategies for comprehensive coverage.
 
 ```typescript
 logger.debug('[RedTeam] Test result', {
-  prompt: testCase.prompt,    // May contain exploits
-  output: response.output,    // May contain harmful content
+  prompt: testCase.prompt, // May contain exploits
+  output: response.output, // May contain harmful content
 });
 ```
 
@@ -77,6 +77,7 @@ See `src/redteam/plugins/pii.ts` for reference pattern.
 ## Risk Scoring
 
 Results include severity levels:
+
 - `critical` - PII leaks, SQL injection
 - `high` - Jailbreaks, prompt injection, harmful content
 - `medium` - Bias, hallucination

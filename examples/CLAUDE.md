@@ -24,11 +24,13 @@ npx promptfoo@latest eval
 ## Key Requirements
 
 Every example needs:
+
 1. **README.md** starting with `# folder-name (Human Readable Name)`
 2. **promptfooconfig.yaml** with schema reference and specific field order
 3. Instructions showing `npx promptfoo@latest init --example <name>`
 
 **Field order in config (STRICT):**
+
 1. `description` (SHORT - 3-10 words)
 2. `env` (optional, rarely needed)
 3. `prompts`

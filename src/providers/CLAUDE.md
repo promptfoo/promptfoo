@@ -5,12 +5,14 @@
 ## Architecture Context
 
 Each provider:
+
 - Implements `ApiProvider` interface (see `src/types/providers.ts`)
 - Transforms promptfoo prompts → provider-specific API format
 - Returns normalized `ProviderResponse` for evaluation
 - Handles auth, rate limits, retries, streaming
 
 **Key reference implementations:**
+
 - `openai.ts` - Most comprehensive, handles chat/completions/embeddings
 - `anthropic/index.ts` - Complex provider with subdirectory structure
 - `http.ts` - Generic HTTP provider pattern
@@ -22,7 +24,7 @@ Each provider:
 ```typescript
 // ✅ CORRECT - Second param auto-sanitized
 logger.debug('[Provider] API call', {
-  headers: requestHeaders,  // apiKey/authorization auto-redacted
+  headers: requestHeaders, // apiKey/authorization auto-redacted
   config: providerConfig,
 });
 
@@ -35,17 +37,19 @@ See root `CLAUDE.md` for complete sanitization field list.
 ## Common Patterns
 
 **OpenAI-compatible providers** - Many providers inherit from `OpenAiChatCompletionProvider`:
+
 ```typescript
 export class MyProvider extends OpenAiChatCompletionProvider {
   constructor(options: any) {
     super('model-name', {
-      config: { apiBaseUrl: 'https://api.myprovider.com/v1', ...options.config }
+      config: { apiBaseUrl: 'https://api.myprovider.com/v1', ...options.config },
     });
   }
 }
 ```
 
 **Configuration priority:**
+
 1. Explicit config options
 2. Environment variables (`PROVIDER_API_KEY`)
 3. Provider defaults
@@ -53,6 +57,7 @@ export class MyProvider extends OpenAiChatCompletionProvider {
 ## Testing Requirements
 
 Every provider MUST have tests in `test/providers/`:
+
 - Mock API responses (don't call real APIs)
 - Test success AND error cases
 - Test rate limits, timeouts, invalid configs

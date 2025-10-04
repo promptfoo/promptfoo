@@ -5,6 +5,7 @@
 ## Critical Test Requirements
 
 **ALWAYS use both flags:**
+
 ```bash
 npm test -- --coverage --randomize
 ```
@@ -13,6 +14,7 @@ npm test -- --coverage --randomize
 - `--randomize` - **Critical** - Ensures tests don't depend on execution order
 
 **NEVER:**
+
 - Increase test timeouts - fix the slow test instead
 - Use `.only()` or `.skip()` in committed code
 - Run watch mode in CI
@@ -20,13 +22,15 @@ npm test -- --coverage --randomize
 ## Project-Specific Testing Rules
 
 **Mock cleanup is mandatory:**
+
 ```typescript
 afterEach(() => {
-  jest.resetAllMocks();  // Prevents test pollution
+  jest.resetAllMocks(); // Prevents test pollution
 });
 ```
 
 **Test entire objects, not individual fields:**
+
 ```typescript
 // ✅ Good
 expect(result).toEqual({ id: 1, name: 'test', active: true });
@@ -41,6 +45,7 @@ expect(result.name).toEqual('test');
 ## Directory Structure
 
 Tests mirror `src/` structure:
+
 - `test/providers/` → `src/providers/`
 - `test/redteam/` → `src/redteam/`
 - etc.
@@ -48,6 +53,7 @@ Tests mirror `src/` structure:
 ## Provider Testing Pattern
 
 Every provider needs:
+
 1. Success case (normal API response)
 2. Error cases (4xx, 5xx, rate limits)
 3. Configuration validation
