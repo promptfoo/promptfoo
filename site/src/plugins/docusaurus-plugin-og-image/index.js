@@ -331,6 +331,8 @@ async function generateSatoriTemplate(metadata = {}) {
                         height: 390,
                         borderRadius: 12,
                         opacity: 0.9,
+                        objectFit: 'cover',
+                        objectPosition: 'center',
                       },
                     },
                   }
