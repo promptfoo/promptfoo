@@ -390,9 +390,11 @@ async function generateOgImage(metadata, outputPath) {
 
     // Convert SVG to PNG using Sharp
     const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
       .png({
-        quality: 95,
+        quality: 100,
         compressionLevel: 6,
+        palette: false,
       })
       .toBuffer();
 
