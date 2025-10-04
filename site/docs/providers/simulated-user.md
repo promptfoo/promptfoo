@@ -208,6 +208,21 @@ The conversation will automatically stop when:
 
 The `###STOP###` marker is useful for agents that can determine when a conversation has reached a natural conclusion (e.g., task completed, user satisfied).
 
+## Remote Generation
+
+By default, SimulatedUser uses Promptfoo's hosted conversation models for realistic responses. Your target model always runs locally - only simulated user responses are generated remotely.
+
+**Data sent:** Conversation history, custom instructions, user email (if logged into Cloud). See [Privacy Policy](/privacy#remote-generation).
+
+### Disabling Remote Generation
+
+- `PROMPTFOO_DISABLE_REMOTE_GENERATION=1` - Disables all remote generation
+- `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1` - Disables only red team; regular SimulatedUser continues remotely
+
+:::warning
+Local models may provide lower quality conversational interactions than the hosted models optimized for user simulation.
+:::
+
 ## Limitations
 
 The simulated user provider assumes that the target endpoint accepts messages in OpenAI chat format:

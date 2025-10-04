@@ -4,6 +4,8 @@ import logger from '../logger';
 import {
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
+  neverGenerateRemote,
+  neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
 import { fetchWithRetries } from '../util/fetch/index';
 import { REQUEST_TIMEOUT_MS } from './shared';
@@ -25,6 +27,10 @@ interface PromptfooHarmfulCompletionOptions {
   config?: PluginConfig;
 }
 
+/**
+ * Provider for generating harmful/adversarial content using Promptfoo's unaligned models.
+ * Used by red team plugins to generate test cases for harmful content categories.
+ */
 export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   harmCategory: string;
   n: number;
@@ -51,6 +57,19 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse & { output?: string[] }> {
+    // Check if remote generation is disabled
+    if (neverGenerateRemote()) {
+      return {
+        error: `Remote generation is disabled. Harmful content generation requires Promptfoo's unaligned models.
+
+To enable:
+- Remove PROMPTFOO_DISABLE_REMOTE_GENERATION (or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)
+- Or configure an alternative unaligned model provider
+
+Learn more: https://www.promptfoo.dev/docs/red-team/configuration#remote-generation`,
+      };
+    }
+
     const body = {
       email: getUserEmail(),
       harmCategory: this.harmCategory,
@@ -118,6 +137,10 @@ interface PromptfooChatCompletionOptions {
     | 'blocking-question-analysis';
 }
 
+/**
+ * Provider for red team adversarial strategies using Promptfoo's task-specific models.
+ * Supports multi-turn attack strategies like crescendo, goat, and iterative attacks.
+ */
 export class PromptfooChatCompletionProvider implements ApiProvider {
   private options: PromptfooChatCompletionOptions;
 
@@ -138,6 +161,19 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Check if remote generation is disabled
+    if (neverGenerateRemote()) {
+      return {
+        error: `Remote generation is disabled. This red team strategy requires Promptfoo's task-specific models.
+
+To enable:
+- Remove PROMPTFOO_DISABLE_REMOTE_GENERATION (or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)
+- Or provide OPENAI_API_KEY for local generation (may have lower quality)
+
+Learn more: https://www.promptfoo.dev/docs/red-team/configuration#remote-generation`,
+      };
+    }
+
     const body = {
       jsonOnly: this.options.jsonOnly,
       preferSmallModel: this.options.preferSmallModel,
@@ -189,6 +225,10 @@ interface PromptfooAgentOptions {
   instructions?: string;
 }
 
+/**
+ * Provider for simulating realistic user conversations using Promptfoo's conversation models.
+ * Supports both regular simulated users and adversarial red team users.
+ */
 export class PromptfooSimulatedUserProvider implements ApiProvider {
   private options: PromptfooAgentOptions;
   private taskId: string;
@@ -211,6 +251,34 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Check if this is a redteam task
+    const isRedteamTask = this.taskId === 'mischievous-user-redteam';
+
+    // For redteam tasks, check the redteam-specific flag
+    // For regular tasks, only check the general flag
+    const shouldDisable = isRedteamTask
+      ? neverGenerateRemote() // Checks both flags
+      : neverGenerateRemoteForRegularEvals(); // Only checks general flag
+
+    if (shouldDisable) {
+      const taskType = isRedteamTask ? 'red team' : 'regular evaluation';
+      const relevantFlag = isRedteamTask
+        ? 'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'
+        : 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
+
+      return {
+        error: `Remote generation is disabled for ${taskType} simulated users.
+
+SimulatedUser requires Promptfoo's conversation simulation models.
+
+To enable:
+- Remove ${relevantFlag}
+- Or configure an alternative provider (not recommended, lower quality)
+
+Learn more: https://www.promptfoo.dev/docs/providers/simulated-user`,
+      };
+    }
+
     const messages = JSON.parse(prompt);
     const body = {
       task: this.taskId,
