@@ -16,7 +16,7 @@ import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { getEvalSummaries } from '../models/eval';
+import Eval, { getEvalSummaries, getPaginatedEvalSummaries } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
@@ -42,7 +42,7 @@ import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary } from '../types/index';
+import type { EvalQueryParams, EvalSummary, PaginatedEvalResponse } from '../types';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -112,24 +112,70 @@ export function createApp() {
 
   /**
    * Fetches summaries of all evals, optionally for a given dataset.
+   * Supports pagination with query parameters: limit, offset, search, sort, order
    */
   app.get(
     '/api/results',
     async (
-      req: Request<
-        {},
-        {},
-        {},
-        { datasetId?: string; type?: 'redteam' | 'eval'; includeProviders?: boolean }
-      >,
-      res: Response<{ data: EvalSummary[] }>,
+      req: Request<{}, {}, {}, EvalQueryParams>,
+      res: Response<PaginatedEvalResponse | { data: EvalSummary[] }>,
     ): Promise<void> => {
-      const previousResults = await getEvalSummaries(
-        req.query.datasetId,
-        req.query.type,
-        req.query.includeProviders,
+      const { limit, offset, search, sort, order, datasetId, focusedEvalId } = req.query;
+
+      // Validate and sanitize query params
+      const allowedSorts = ['createdAt', 'description'] as const;
+      const allowedOrders = ['asc', 'desc'] as const;
+      const safeSort =
+        typeof sort === 'string' && allowedSorts.includes(sort as any)
+          ? (sort as 'createdAt' | 'description')
+          : undefined;
+      const safeOrder =
+        typeof order === 'string' && allowedOrders.includes(order as any)
+          ? (order as 'asc' | 'desc')
+          : undefined;
+      const safeLimit = Number.isFinite(Number(limit))
+        ? Math.max(1, Math.min(100, Number(limit)))
+        : undefined;
+      const safeOffset = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : undefined;
+
+      // Check if any pagination/filtering parameters are provided
+      // This approach is more robust as it automatically includes any new pagination-related parameters
+      const paginationParams = [
+        'limit',
+        'offset',
+        'search',
+        'sort',
+        'order',
+        'datasetId',
+        'focusedEvalId',
+      ];
+      const isPaginationRequest = paginationParams.some(
+        (param) => req.query[param as keyof EvalQueryParams] !== undefined,
       );
-      res.json({ data: previousResults });
+
+      if (isPaginationRequest) {
+        // Use new pagination API
+        const result = await getPaginatedEvalSummaries({
+          limit: safeLimit,
+          offset: safeOffset,
+          search,
+          sort: safeSort,
+          order: safeOrder,
+          datasetId,
+          focusedEvalId,
+        });
+
+        res.json({
+          data: result.data,
+          total: result.total,
+          limit: safeLimit ?? 50,
+          offset: safeOffset ?? 0,
+        });
+      } else {
+        // Legacy API - maintain backward compatibility
+        const previousResults = await getEvalSummaries(datasetId);
+        res.json({ data: previousResults });
+      }
     },
   );
 

@@ -22,6 +22,7 @@ import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import {
   type CompletedPrompt,
+  type EvalQueryParams,
   type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
@@ -1031,4 +1032,187 @@ export async function getEvalSummaries(
       providers: deserializedProviders,
     };
   });
+}
+
+/**
+ * Get a paginated list of eval summaries with server-side filtering, sorting, and search.
+ *
+ * @param params - Query parameters for pagination, filtering, and search.
+ * @returns Paginated eval results with total count.
+ */
+export async function getPaginatedEvalSummaries(
+  params: EvalQueryParams,
+): Promise<{ data: EvalSummary[]; total: number }> {
+  const db = getDb();
+
+  const {
+    limit: rawLimit = 50,
+    offset: rawOffset = 0,
+    search = '',
+    sort = 'createdAt',
+    order = 'desc',
+    datasetId,
+    focusedEvalId,
+  } = params;
+
+  // Validate and sanitize pagination params
+  const limit = Math.max(
+    1,
+    Math.min(100, Number.isFinite(rawLimit as number) ? (rawLimit as number) : 50),
+  );
+  const offset = Math.max(0, Number.isFinite(rawOffset as number) ? (rawOffset as number) : 0);
+
+  // Build base query with joins
+  const baseQuery = db
+    .select({
+      evalId: evalsTable.id,
+      createdAt: evalsTable.createdAt,
+      description: evalsTable.description,
+      datasetId: evalsToDatasetsTable.datasetId,
+      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
+      prompts: evalsTable.prompts,
+      config: evalsTable.config,
+    })
+    .from(evalsTable)
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId));
+
+  // Resolve datasetId from focusedEvalId if provided
+  let effectiveDatasetId = datasetId;
+  if (focusedEvalId && !datasetId) {
+    // Look up the focused eval's datasetId
+    const focusedEvalDataset = db
+      .select({ datasetId: evalsToDatasetsTable.datasetId })
+      .from(evalsTable)
+      .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
+      .where(eq(evalsTable.id, focusedEvalId))
+      .get();
+
+    effectiveDatasetId = focusedEvalDataset?.datasetId || undefined;
+  }
+
+  // Build where conditions
+  const whereConditions = [];
+
+  if (effectiveDatasetId) {
+    whereConditions.push(eq(evalsToDatasetsTable.datasetId, effectiveDatasetId));
+  }
+
+  if (search) {
+    whereConditions.push(
+      sql`(
+        ${evalsTable.description} LIKE ${`%${search}%`} OR
+        ${evalsTable.id} LIKE ${`%${search}%`}
+      )`,
+    );
+  }
+
+  const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+  // Get total count
+  const countQuery = db
+    .select({ count: sql<number>`count(DISTINCT ${evalsTable.id})` })
+    .from(evalsTable)
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
+    .where(whereClause);
+
+  const [countResult] = countQuery.all();
+  const total = countResult?.count || 0;
+
+  // Get paginated results
+  let results: any[];
+
+  // Apply sorting - we'll do most sorting in memory for complex calculated fields
+  if (sort === 'createdAt') {
+    results = baseQuery
+      .where(whereClause)
+      .orderBy(order === 'asc' ? evalsTable.createdAt : desc(evalsTable.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all();
+  } else if (sort === 'description') {
+    results = baseQuery
+      .where(whereClause)
+      .orderBy(
+        order === 'asc'
+          ? sql`${evalsTable.description} COLLATE NOCASE`
+          : sql`${evalsTable.description} COLLATE NOCASE DESC`,
+      )
+      .limit(limit)
+      .offset(offset)
+      .all();
+  } else {
+    // Default fallback to createdAt desc for any unhandled sort fields
+    results = baseQuery
+      .where(whereClause)
+      .orderBy(desc(evalsTable.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all();
+  }
+
+  // Transform to EvalSummary format
+  const summaries: EvalSummary[] = results.map((result) => {
+    const passCount =
+      result.prompts?.reduce((memo: number, prompt: any) => {
+        return memo + (prompt.metrics?.testPassCount ?? 0);
+      }, 0) ?? 0;
+
+    const testCounts = result.prompts?.map((p: any) => {
+      return (
+        (p.metrics?.testPassCount ?? 0) +
+        (p.metrics?.testFailCount ?? 0) +
+        (p.metrics?.testErrorCount ?? 0)
+      );
+    }) ?? [0];
+
+    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
+    const testRunCount = testCount * (result.prompts?.length ?? 0);
+
+    // Construct an array of providers (simplified for pagination)
+    const deserializedProviders = [];
+    const providers = result.config?.providers;
+    if (providers) {
+      if (typeof providers === 'string') {
+        deserializedProviders.push({
+          id: providers,
+          label: null,
+        });
+      } else if (Array.isArray(providers)) {
+        providers.forEach((p) => {
+          if (typeof p === 'string') {
+            deserializedProviders.push({
+              id: p,
+              label: null,
+            });
+          } else if (typeof p === 'object' && p !== null) {
+            deserializedProviders.push({
+              id: (p as any).id ?? 'unknown',
+              label: (p as any).label ?? null,
+            });
+          }
+        });
+      }
+    }
+
+    return {
+      evalId: result.evalId,
+      createdAt: result.createdAt,
+      description: result.description,
+      numTests: testCount,
+      datasetId: result.datasetId,
+      isRedteam: result.isRedteam,
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
+      label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+      providers: deserializedProviders,
+    };
+  });
+
+  // Note: Only database-supported sorting (createdAt, description) is implemented.
+  // Complex calculated fields like passRate and numTests would require fetching
+  // all records for proper global sorting, which is inefficient for large datasets.
+
+  return {
+    data: summaries,
+    total,
+  };
 }
