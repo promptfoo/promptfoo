@@ -20,6 +20,9 @@ vi.mock('@app/stores/evalConfig', () => ({
 }));
 
 vi.mock('../hooks', () => ({
+  useTestCounts: vi.fn(() => [10]),
+  usePassingTestCounts: vi.fn(() => [10]),
+  usePassRates: vi.fn(() => [100]),
   useTableStore: vi.fn(() => ({
     author: 'test-author',
     table: {

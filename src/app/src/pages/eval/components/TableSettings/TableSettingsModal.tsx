@@ -15,8 +15,8 @@ import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import SettingsPanel from './components/SettingsPanel';
-import { useSettingsState } from './hooks/useSettingsState';
-import { tokens } from './tokens';
+import { useSettingsState } from '../../hooks/useSettingsState';
+import { tokens } from '../../constants/tokens';
 
 interface SettingsModalProps {
   open: boolean;

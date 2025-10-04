@@ -50,7 +50,7 @@ import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
-import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { usePassingTestCounts, usePassRates, useTestCounts } from '../hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;

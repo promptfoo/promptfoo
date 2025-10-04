@@ -11,7 +11,7 @@ import Switch from '@mui/material/Switch';
 import { alpha, useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { tokens } from '../tokens';
+import { tokens } from '../../../constants/tokens';
 
 interface SettingItemProps {
   label: string;

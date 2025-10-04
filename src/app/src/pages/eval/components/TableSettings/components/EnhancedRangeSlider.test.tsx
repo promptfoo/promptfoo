@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import EnhancedRangeSlider from './EnhancedRangeSlider';
-import { tokens } from '../tokens';
+import { tokens } from '../../../constants/tokens';
 
 const theme = createTheme();
 

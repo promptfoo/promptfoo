@@ -14,8 +14,14 @@ export { useTableStoreCompat as useTableStore } from './useTableStoreCompat';
 export { useEvalTable, usePrefetchEvalTable } from './useEvalTable';
 export { useMetadataKeys } from './useMetadataKeys';
 
-// Re-export settings store (no changes needed)
-export { useResultsViewSettingsStore } from '../components/store';
+// Table metrics hooks
+export { usePassingTestCounts, useTestCounts, usePassRates } from './useTableMetrics';
+
+// Settings hooks
+export { useSettingsState } from './useSettingsState';
+
+// Re-export settings store
+export { useResultsViewSettingsStore } from '../store/settingsStore';
 
 // Re-export types from centralized types file
 export type {

@@ -42,6 +42,7 @@ vi.mock('@mui/material/styles', () => ({
 // Mock the store
 vi.mock('../hooks', () => ({
   useTableStore: vi.fn(),
+  usePassRates: vi.fn(() => []),
 }));
 
 // Mock API calls

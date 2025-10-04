@@ -26,7 +26,7 @@ import {
   type TooltipItem,
 } from 'chart.js';
 import { ErrorBoundary } from 'react-error-boundary';
-import { usePassRates } from './hooks';
+import { usePassRates } from '../hooks';
 import { useTableStore } from '../hooks';
 import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 

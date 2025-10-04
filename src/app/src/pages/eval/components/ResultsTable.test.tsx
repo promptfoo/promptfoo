@@ -26,18 +26,15 @@ vi.mock('../hooks', () => ({
     inComparisonMode: false,
     renderMarkdown: true,
   })),
+  useTestCounts: vi.fn(() => [10]), // 10 tests for the first prompt
+  usePassingTestCounts: vi.fn(() => [10]),
+  usePassRates: vi.fn(() => [100]),
 }));
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: vi.fn(() => ({
     showToast: vi.fn(),
   })),
-}));
-
-vi.mock('./hooks', () => ({
-  useTestCounts: vi.fn(() => [10]), // 10 tests for the first prompt
-  usePassingTestCounts: vi.fn(() => [10]),
-  usePassRates: vi.fn(() => [100]),
 }));
 
 vi.mock('@app/hooks/useShiftKey', () => {

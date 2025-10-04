@@ -12,7 +12,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
 import { useResultsViewSettingsStore } from '../../../hooks';
-import { tokens } from '../tokens';
+import { tokens } from '../../../constants/tokens';
 import EnhancedRangeSlider from './EnhancedRangeSlider';
 import SettingItem from './SettingItem';
 import SettingsSection from './SettingsSection';

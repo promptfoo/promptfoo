@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEvalUIStore } from '../store/uiStore';
 import { useEvalTable } from './useEvalTable';
 import { useMetadataKeys } from './useMetadataKeys';
-import { useResultsViewSettingsStore } from '../components/store';
+import { useResultsViewSettingsStore } from '../store/settingsStore';
 import type { EvalTableDTO, EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 import {
   computeHighlightCount,

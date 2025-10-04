@@ -25,11 +25,12 @@ const mockStore = {
   setMaxImageHeight: vi.fn(),
 };
 
+vi.mock('../store/settingsStore', () => ({
+  useResultsViewSettingsStore: () => mockStore,
+}));
+
 describe('useSettingsState', () => {
   beforeEach(() => {
-    vi.mock('../../store', () => ({
-      useResultsViewSettingsStore: () => mockStore,
-    }));
     vi.clearAllMocks();
   });
 

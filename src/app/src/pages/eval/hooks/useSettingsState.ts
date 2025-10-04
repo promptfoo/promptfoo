@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useResultsViewSettingsStore } from '../../store';
+import { useResultsViewSettingsStore } from '../store/settingsStore';
 
 interface SettingsState {
   maxTextLength: number;
