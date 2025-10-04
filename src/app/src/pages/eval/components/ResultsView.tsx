@@ -2,7 +2,7 @@ import React from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
-import { useUser } from '@app/hooks/useUser';
+import { useUserEmail } from '@app/hooks/useUser';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, updateEvalAuthor } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
@@ -441,8 +441,7 @@ export default function ResultsView({
     }
   };
 
-  const { data: user } = useUser();
-  const currentUserEmail = user?.email ?? null;
+  const { email: currentUserEmail } = useUserEmail();
 
   const handleEditAuthor = async (newAuthor: string) => {
     if (evalId) {

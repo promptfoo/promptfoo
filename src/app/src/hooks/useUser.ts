@@ -87,6 +87,24 @@ export function useLogout() {
 }
 
 /**
+ * Convenience hook to get just the user's email.
+ * Returns null if user is not loaded or has no email.
+ */
+export function useUserEmail() {
+  const { data: user, isLoading } = useUser();
+  return { email: user?.email ?? null, isLoading };
+}
+
+/**
+ * Convenience hook to get just the user's ID.
+ * Returns null if user is not loaded or has no ID.
+ */
+export function useUserId() {
+  const { data: user, isLoading } = useUser();
+  return { id: user?.id ?? null, isLoading };
+}
+
+/**
  * Hook to update the user's email in the cache.
  * Useful for optimistic updates without refetching.
  * Updates the unified user object while preserving the ID.

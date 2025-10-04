@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { useUser, useSetUserEmail } from '@app/hooks/useUser';
+import { useUserEmail, useSetUserEmail } from '@app/hooks/useUser';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -31,8 +31,7 @@ export default function LoginPage() {
   const [customUrl, setCustomUrl] = useState('https://www.promptfoo.app');
   const navigate = useNavigate();
   const location = useLocation();
-  const { data: user, isLoading } = useUser();
-  const email = user?.email ?? null;
+  const { email, isLoading } = useUserEmail();
   const setEmail = useSetUserEmail();
   usePageMeta({
     title: 'Login to Promptfoo',
