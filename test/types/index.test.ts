@@ -159,7 +159,7 @@ describe('isGradingResult', () => {
       { pass: false, score: 0, reason: 'Failed', namedScores: { accuracy: 0 } },
       { pass: true, score: 0.5, reason: 'Partial', tokensUsed: { total: 100 } },
       { pass: true, score: 1, reason: 'Good', componentResults: [] },
-      { pass: false, score: 0, reason: 'Bad', assertion: null },
+      { pass: false, score: 0, reason: 'Bad' },
       { pass: true, score: 1, reason: 'Excellent', comment: 'Great job!' },
     ];
 

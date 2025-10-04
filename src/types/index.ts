@@ -385,7 +385,7 @@ export interface GradingResult {
 
   // The assertion that was evaluated
   // TODO(Will): Can we move to this being required?
-  assertion?: Assertion | null;
+  assertion?: Assertion;
 
   // User comment
   comment?: string;

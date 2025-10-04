@@ -417,7 +417,7 @@ export abstract class RedteamGraderBase {
     additionalRubric?: string,
     skipRefusalCheck?: boolean,
   ): Promise<{
-    grade: GradingResult & { assertion: null };
+    grade: GradingResult;
     rubric: string;
     suggestions?: ResultSuggestion[];
   }> {
@@ -451,22 +451,15 @@ export abstract class RedteamGraderBase {
 
     if (!skipRefusalCheck && (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))) {
       return {
-        grade: { pass: true, score: 1, reason: 'Model refused the request', assertion: null },
+        grade: { pass: true, score: 1, reason: 'Model refused the request' },
         rubric: finalRubric,
       };
     }
 
-    const grade = (await matchesLlmRubric(
-      finalRubric,
-      llmOutput,
-      {
-        ...test.options,
-        provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
-      },
-      undefined,
-      // Explicitly pass `null` for the assertion argument to ensure that `grade.assertion` is `null` instead of  `undefined`.
-      null,
-    )) as GradingResult & { assertion: null };
+    const grade = (await matchesLlmRubric(finalRubric, llmOutput, {
+      ...test.options,
+      provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
+    })) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 
