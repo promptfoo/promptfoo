@@ -602,6 +602,19 @@ Some providers such as Anthropic may disable your account for generating harmful
 
 By default, Promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases using specialized unaligned models.
 
+#### What Data Is Sent
+
+Remote generation sends to `api.promptfoo.app`:
+
+- System purpose description
+- Test generation prompts
+- Harm category and plugin configuration
+- User email (if logged into Cloud)
+
+**NOT sent:** Your target LLM's API keys, responses, or configuration. See [Privacy Policy](/privacy#remote-generation) for details.
+
+#### Controlling Remote Generation
+
 You can control remote generation with two environment variables:
 
 - **`PROMPTFOO_DISABLE_REMOTE_GENERATION`** - Disables ALL remote generation, including:

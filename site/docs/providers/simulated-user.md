@@ -210,24 +210,18 @@ The `###STOP###` marker is useful for agents that can determine when a conversat
 
 ## Remote Generation
 
-By default, the SimulatedUser provider uses Promptfoo's hosted conversation simulation models to generate realistic user responses. This ensures high-quality, natural conversational flow during testing.
+By default, SimulatedUser uses Promptfoo's hosted conversation models for realistic responses. Your target model always runs locally - only simulated user responses are generated remotely.
 
-Your target model (the AI agent being tested) always runs locally or at your configured endpoint - only the simulated user's responses are generated remotely.
+**Data sent:** Conversation history, custom instructions, user email (if logged into Cloud). See [Privacy Policy](/privacy#remote-generation).
 
 ### Disabling Remote Generation
 
-You can disable remote generation using environment variables:
-
-- **`PROMPTFOO_DISABLE_REMOTE_GENERATION=1`** - Disables all remote generation, including SimulatedUser
-- **`PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1`** - Disables only red team features; regular SimulatedUser continues to use remote generation
-
-When remote generation is disabled, you'll receive an error message with guidance on how to configure an alternative provider.
+- `PROMPTFOO_DISABLE_REMOTE_GENERATION=1` - Disables all remote generation
+- `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1` - Disables only red team; regular SimulatedUser continues remotely
 
 :::warning
-Disabling remote generation for SimulatedUser may result in lower quality conversational interactions. The hosted models are specifically optimized for realistic user simulation. Alternative local models may not provide the same quality of responses.
+Local models may provide lower quality conversational interactions than the hosted models optimized for user simulation.
 :::
-
-For completely offline operation or air-gapped environments, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=1` and configure your own conversation provider. See the [Privacy Policy](/privacy) for more information about remote generation.
 
 ## Limitations
 

@@ -27,6 +27,10 @@ interface PromptfooHarmfulCompletionOptions {
   config?: PluginConfig;
 }
 
+/**
+ * Provider for generating harmful/adversarial content using Promptfoo's unaligned models.
+ * Used by red team plugins to generate test cases for harmful content categories.
+ */
 export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   harmCategory: string;
   n: number;
@@ -133,6 +137,10 @@ interface PromptfooChatCompletionOptions {
     | 'blocking-question-analysis';
 }
 
+/**
+ * Provider for red team adversarial strategies using Promptfoo's task-specific models.
+ * Supports multi-turn attack strategies like crescendo, goat, and iterative attacks.
+ */
 export class PromptfooChatCompletionProvider implements ApiProvider {
   private options: PromptfooChatCompletionOptions;
 
@@ -217,6 +225,10 @@ interface PromptfooAgentOptions {
   instructions?: string;
 }
 
+/**
+ * Provider for simulating realistic user conversations using Promptfoo's conversation models.
+ * Supports both regular simulated users and adversarial red team users.
+ */
 export class PromptfooSimulatedUserProvider implements ApiProvider {
   private options: PromptfooAgentOptions;
   private taskId: string;

@@ -3,6 +3,11 @@ import { getEnvBool, getEnvString } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { CloudConfig } from '../globalConfig/cloud';
 
+/**
+ * Gets the remote generation API endpoint URL.
+ * Prioritizes: env var > cloud config > default endpoint.
+ * @returns The remote generation URL
+ */
 export function getRemoteGenerationUrl(): string {
   // Check env var first
   const envUrl = getEnvString('PROMPTFOO_REMOTE_GENERATION_URL');
@@ -86,6 +91,10 @@ export function getRemoteVersionUrl(): string | null {
   return buildRemoteUrl('/version', 'https://api.promptfoo.app/version');
 }
 
+/**
+ * Determines if remote generation should be used based on configuration.
+ * @returns true if remote generation should be used
+ */
 export function shouldGenerateRemote(): boolean {
   // If remote generation is explicitly disabled, respect that even for cloud users
   if (neverGenerateRemote()) {
@@ -101,6 +110,11 @@ export function shouldGenerateRemote(): boolean {
   return !getEnvString('OPENAI_API_KEY') || (cliState.remote ?? false);
 }
 
+/**
+ * Gets the URL for unaligned model inference (harmful content generation).
+ * Prioritizes: env var > cloud config > default endpoint.
+ * @returns The unaligned inference URL
+ */
 export function getRemoteGenerationUrlForUnaligned(): string {
   // Check env var first
   const envUrl = getEnvString('PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT');
