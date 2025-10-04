@@ -1,18 +1,27 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 
-import * as api from '@app/utils/api';
+import { useUserStore } from '@app/stores/userStore';
+import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { UserProvider } from './UserContext';
 import { UserContext } from './UserContextDef';
 
-vi.mock('@app/utils/api');
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
+  fetchUserEmail: vi.fn(),
+  fetchUserId: vi.fn(),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
 
 describe('UserProvider', () => {
-  const mockedFetchUserEmail = vi.mocked(api.fetchUserEmail);
+  const mockedCallApi = callApi as Mock;
+  const initialState = useUserStore.getState();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset store to initial state
+    useUserStore.setState(initialState, true);
   });
 
   const TestConsumer = () => {
@@ -36,8 +45,18 @@ describe('UserProvider', () => {
     );
   };
 
-  const mockFetchUserEmail = (returnValue: string | null) => {
-    mockedFetchUserEmail.mockResolvedValue(returnValue);
+  const mockCallApi = (email: string | null, logoutSuccess: boolean = true) => {
+    if (email === null) {
+      mockedCallApi.mockResolvedValue({
+        ok: false,
+        status: 404,
+      } as Response);
+    } else {
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ email }),
+      } as unknown as Response);
+    }
   };
 
   const assertLoadingCompletedWithEmail = async (expectedEmail: string | null) => {
@@ -51,12 +70,12 @@ describe('UserProvider', () => {
     expect(emailElement).toBeInTheDocument();
     expect(emailElement).toHaveTextContent(expectedEmail || '');
 
-    expect(mockedFetchUserEmail).toHaveBeenCalledTimes(1);
+    expect(mockedCallApi).toHaveBeenCalledWith('/user/email');
   };
 
   it('should provide email as null and isLoading as true to its children before fetchUserEmail resolves', async () => {
     const testEmail = 'test.user@example.com';
-    mockFetchUserEmail(testEmail);
+    mockCallApi(testEmail);
 
     const TestConsumer = () => {
       const context = useContext(UserContext);
@@ -90,7 +109,7 @@ describe('UserProvider', () => {
     { scenario: 'valid email', email: 'test.user@example.com' },
     { scenario: 'null email', email: null },
   ])('should handle $scenario case after mounting', async ({ email }) => {
-    mockFetchUserEmail(email);
+    mockCallApi(email);
 
     render(
       <UserProvider>
@@ -104,7 +123,7 @@ describe('UserProvider', () => {
   it('should not update state after unmounting', async () => {
     const testEmail = 'test.user@example.com';
     const setEmailMock = vi.fn();
-    mockFetchUserEmail(testEmail);
+    mockCallApi(testEmail);
 
     const originalContext = React.createContext<any>({});
     const UserContextSpy = vi
@@ -130,5 +149,116 @@ describe('UserProvider', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     expect(setEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('should handle error when fetchEmail fails', async () => {
+    mockedCallApi.mockRejectedValue(new Error('Failed to fetch user email'));
+
+    render(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user-email')).toBeInTheDocument();
+    });
+
+    const emailElement = screen.getByTestId('user-email');
+    expect(emailElement).toHaveTextContent('');
+    const { email, isLoading } = useUserStore.getState();
+    expect(email).toBeNull();
+    expect(isLoading).toBe(false);
+  });
+
+  it('should not trigger multiple fetchEmail calls when it re-renders', async () => {
+    const fetchEmailMock = vi.fn();
+    useUserStore.setState({ fetchEmail: fetchEmailMock } as any);
+
+    const TestComponent = () => {
+      const [count, setCount] = useState(0);
+
+      return (
+        <UserProvider>
+          <TestConsumer />
+          <button onClick={() => setCount(count + 1)}>Increment</button>
+        </UserProvider>
+      );
+    };
+
+    render(<TestComponent />);
+
+    expect(fetchEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not trigger multiple API calls when multiple UserProviders are mounted', async () => {
+    const testEmail = 'test.user@example.com';
+    mockCallApi(testEmail);
+
+    render(
+      <>
+        <UserProvider>
+          <TestConsumer />
+        </UserProvider>
+        <UserProvider>
+          <TestConsumer />
+        </UserProvider>
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText('User Info').length).toBe(2);
+    });
+
+    expect(mockedCallApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not trigger a new API call when remounted if the email has already been fetched', async () => {
+    const testEmail = 'test.user@example.com';
+    mockCallApi(testEmail);
+
+    const { unmount } = render(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user-email')).toHaveTextContent(testEmail);
+    });
+
+    unmount();
+
+    render(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(mockedCallApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should clear email on logout', async () => {
+    const testEmail = 'test.user@example.com';
+    mockCallApi(testEmail);
+
+    render(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
+
+    await assertLoadingCompletedWithEmail(testEmail);
+
+    const logout = useUserStore.getState().logout;
+    await logout();
+
+    await waitFor(() => {
+      const emailElement = screen.getByTestId('user-email');
+      expect(emailElement).toBeInTheDocument();
+      expect(emailElement).toHaveTextContent('');
+    });
   });
 });
