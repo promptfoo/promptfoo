@@ -4,6 +4,7 @@ import {
   PromptfooChatCompletionProvider,
   PromptfooHarmfulCompletionProvider,
   PromptfooSimulatedUserProvider,
+  REDTEAM_SIMULATED_USER_TASK_ID,
 } from '../../src/providers/promptfoo';
 import { fetchWithRetries } from '../../src/util/fetch/index';
 
@@ -339,7 +340,7 @@ describe('PromptfooSimulatedUserProvider', () => {
   });
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set for redteam task', async () => {
-    const redteamProvider = new PromptfooSimulatedUserProvider({}, 'mischievous-user-redteam');
+    const redteamProvider = new PromptfooSimulatedUserProvider({}, REDTEAM_SIMULATED_USER_TASK_ID);
     jest
       .mocked(getEnvBool)
       .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
@@ -356,7 +357,7 @@ describe('PromptfooSimulatedUserProvider', () => {
   });
 
   it('should return error when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set for redteam task', async () => {
-    const redteamProvider = new PromptfooSimulatedUserProvider({}, 'mischievous-user-redteam');
+    const redteamProvider = new PromptfooSimulatedUserProvider({}, REDTEAM_SIMULATED_USER_TASK_ID);
     jest
       .mocked(getEnvBool)
       .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
@@ -369,6 +370,48 @@ describe('PromptfooSimulatedUserProvider', () => {
     expect(result.error).toContain(
       'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
     );
+    expect(fetchWithRetries).not.toHaveBeenCalled();
+  });
+
+  it('should show integration: regular SimulatedUser works while redteam is disabled', async () => {
+    // This is the key feature: PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION should
+    // NOT affect regular (non-redteam) SimulatedUser tasks
+    const regularProvider = new PromptfooSimulatedUserProvider({}, 'tau');
+    const redteamProvider = new PromptfooSimulatedUserProvider({}, REDTEAM_SIMULATED_USER_TASK_ID);
+
+    // Set only the redteam-specific flag
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+
+    const mockResponse = new Response(
+      JSON.stringify({
+        result: 'regular user response',
+        tokenUsage: { total: 50 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    // Regular task should work
+    const regularResult = await regularProvider.callApi(
+      JSON.stringify([{ role: 'user', content: 'hello' }]),
+    );
+    expect(regularResult.error).toBeUndefined();
+    expect(regularResult.output).toBe('regular user response');
+    expect(fetchWithRetries).toHaveBeenCalled();
+
+    // Reset fetch mock
+    jest.mocked(fetchWithRetries).mockClear();
+
+    // Redteam task should be blocked
+    const redteamResult = await redteamProvider.callApi(
+      JSON.stringify([{ role: 'user', content: 'hello' }]),
+    );
+    expect(redteamResult.error).toContain('Remote generation is disabled for red team');
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 });

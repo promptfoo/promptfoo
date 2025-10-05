@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -60,13 +61,15 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
     // Check if remote generation is disabled
     if (neverGenerateRemote()) {
       return {
-        error: `Remote generation is disabled. Harmful content generation requires Promptfoo's unaligned models.
+        error: dedent`
+          Remote generation is disabled. Harmful content generation requires Promptfoo's unaligned models.
 
-To enable:
-- Remove PROMPTFOO_DISABLE_REMOTE_GENERATION (or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)
-- Or configure an alternative unaligned model provider
+          To enable:
+          - Remove PROMPTFOO_DISABLE_REMOTE_GENERATION (or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)
+          - Or configure an alternative unaligned model provider
 
-Learn more: https://www.promptfoo.dev/docs/red-team/configuration#remote-generation`,
+          Learn more: https://www.promptfoo.dev/docs/red-team/configuration#remote-generation
+        `,
       };
     }
 
@@ -164,13 +167,15 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     // Check if remote generation is disabled
     if (neverGenerateRemote()) {
       return {
-        error: `Remote generation is disabled. This red team strategy requires Promptfoo's task-specific models.
+        error: dedent`
+          Remote generation is disabled. This red team strategy requires Promptfoo's task-specific models.
 
-To enable:
-- Remove PROMPTFOO_DISABLE_REMOTE_GENERATION (or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)
-- Or provide OPENAI_API_KEY for local generation (may have lower quality)
+          To enable:
+          - Remove PROMPTFOO_DISABLE_REMOTE_GENERATION (or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)
+          - Or provide OPENAI_API_KEY for local generation (may have lower quality)
 
-Learn more: https://www.promptfoo.dev/docs/red-team/configuration#remote-generation`,
+          Learn more: https://www.promptfoo.dev/docs/red-team/configuration#remote-generation
+        `,
       };
     }
 
@@ -225,6 +230,9 @@ interface PromptfooAgentOptions {
   instructions?: string;
 }
 
+// Task ID constants for simulated user provider
+export const REDTEAM_SIMULATED_USER_TASK_ID = 'mischievous-user-redteam';
+
 /**
  * Provider for simulating realistic user conversations using Promptfoo's conversation models.
  * Supports both regular simulated users and adversarial red team users.
@@ -252,7 +260,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Check if this is a redteam task
-    const isRedteamTask = this.taskId === 'mischievous-user-redteam';
+    const isRedteamTask = this.taskId === REDTEAM_SIMULATED_USER_TASK_ID;
 
     // For redteam tasks, check the redteam-specific flag
     // For regular tasks, only check the general flag
@@ -265,17 +273,22 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       const relevantFlag = isRedteamTask
         ? 'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'
         : 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
+      const docsUrl = isRedteamTask
+        ? 'https://www.promptfoo.dev/docs/red-team/configuration#remote-generation'
+        : 'https://www.promptfoo.dev/docs/providers/simulated-user#remote-generation';
 
       return {
-        error: `Remote generation is disabled for ${taskType} simulated users.
+        error: dedent`
+          Remote generation is disabled for ${taskType} simulated users.
 
-SimulatedUser requires Promptfoo's conversation simulation models.
+          SimulatedUser requires Promptfoo's conversation simulation models.
 
-To enable:
-- Remove ${relevantFlag}
-- Or configure an alternative provider (not recommended, lower quality)
+          To enable:
+          - Remove ${relevantFlag}
+          - Or configure an alternative provider (not recommended, lower quality)
 
-Learn more: https://www.promptfoo.dev/docs/providers/simulated-user`,
+          Learn more: ${docsUrl}
+        `,
       };
     }
 

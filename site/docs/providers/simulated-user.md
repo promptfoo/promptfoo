@@ -210,18 +210,9 @@ The `###STOP###` marker is useful for agents that can determine when a conversat
 
 ## Remote Generation
 
-By default, SimulatedUser uses Promptfoo's hosted conversation models for realistic responses. Your target model always runs locally - only simulated user responses are generated remotely.
+By default, SimulatedUser uses Promptfoo's hosted conversation models. Your target model always runs locally - only simulated user responses are generated remotely.
 
-**Data sent:** Conversation history, custom instructions, user email (if logged into Cloud). See [Privacy Policy](/privacy#remote-generation).
-
-### Disabling Remote Generation
-
-- `PROMPTFOO_DISABLE_REMOTE_GENERATION=1` - Disables all remote generation
-- `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1` - Disables only red team; regular SimulatedUser continues remotely
-
-:::warning
-Local models may provide lower quality conversational interactions than the hosted models optimized for user simulation.
-:::
+To disable remote generation, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=1`. See the [Privacy Policy](/privacy#remote-generation) for details on what data is sent.
 
 ## Limitations
 

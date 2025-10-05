@@ -55,7 +55,7 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 ## Why Promptfoo?
 
 - 🚀 **Developer-first**: Fast, with features like live reload and caching
-- 🔒 **Private**: Runs locally by default. Some features (simulated user conversations, red team testing) use remote generation for specialized models. [Learn more](https://www.promptfoo.dev/docs/privacy)
+- 🔒 **Private**: LLM evals run 100% locally - your prompts never leave your machine
 - 🔧 **Flexible**: Works with any LLM API or programming language
 - 💪 **Battle-tested**: Powers LLM apps serving 10M+ users in production
 - 📊 **Data-driven**: Make decisions based on metrics, not gut feel

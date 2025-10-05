@@ -615,25 +615,7 @@ Remote generation sends to `api.promptfoo.app`:
 
 #### Controlling Remote Generation
 
-You can control remote generation with two environment variables:
-
-- **`PROMPTFOO_DISABLE_REMOTE_GENERATION`** - Disables ALL remote generation, including:
-  - Red team harmful content generation
-  - Red team adversarial strategies
-  - Red team simulated users
-  - Regular SimulatedUser provider (for non-redteam evaluations)
-
-- **`PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION`** - Disables remote generation for red team features only:
-  - Red team harmful content generation
-  - Red team adversarial strategies
-  - Red team simulated users
-  - Does NOT affect regular (non-redteam) SimulatedUser usage
-
-**Relationship:** `PROMPTFOO_DISABLE_REMOTE_GENERATION` is a superset of `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION`. Setting the former disables everything; setting only the latter allows you to keep regular SimulatedUser evaluations while disabling red team features.
-
-:::info Cloud Users
-If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REMOTE_GENERATION=1` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1`.
-:::
+To disable remote generation for red team features, set `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1`. To disable all remote generation (including SimulatedUser), set `PROMPTFOO_DISABLE_REMOTE_GENERATION=1`.
 
 :::warning
 Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.
