@@ -48,8 +48,8 @@ const AboutPageContent = () => {
                 when we were on the front lines.
               </Typography>
               <Typography variant="body1" paragraph>
-                Based in San Mateo, California, we're backed by Andreessen Horowitz and top leaders
-                in the technology and security industries.
+                Based in San Mateo, California, we're backed by Insight Partners, Andreessen
+                Horowitz, and top leaders in the technology and security industries.
               </Typography>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
@@ -201,6 +201,11 @@ const AboutPageContent = () => {
           </Typography>
           <Grid container spacing={4} justifyContent="center">
             {[
+              {
+                name: 'Ganesh Bell',
+                image: '/img/team/ganesh.jpeg',
+                description: 'Managing Director, Insight Partners',
+              },
               {
                 name: 'Zane Lackey',
                 image: '/img/team/zane.jpeg',
