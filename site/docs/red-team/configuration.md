@@ -562,7 +562,7 @@ Your choice of attack provider is extremely important for the quality of your re
 
 By default, Promptfoo uses your local OpenAI key for redteam attack generation. If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
 
-You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REMOTE_GENERATION` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models. See the [Remote Generation](#remote-generation) section below for details on the difference between these variables.
+You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
 
 :::note
 Custom plugins and strategies require an OpenAI key or your own provider configuration.
@@ -821,9 +821,7 @@ Configuration values can be set in multiple ways, with the following precedence 
 3. **Environment variables** - System-level settings
 
    ```bash
-   export PROMPTFOO_DISABLE_REMOTE_GENERATION=1  # Disables ALL remote generation
-   # OR
-   export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1  # Disables only red team remote generation
+   export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1
    export OPENAI_API_KEY=your-key-here
    ```
 
