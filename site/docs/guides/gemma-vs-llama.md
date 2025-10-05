@@ -1,5 +1,6 @@
 ---
 sidebar_label: Gemma vs Llama
+description: Compare Google Gemma vs Meta Llama performance on custom datasets using automated benchmarks and side-by-side evaluations to select the best model for your use case
 ---
 
 # Gemma vs Llama: benchmark on your own data

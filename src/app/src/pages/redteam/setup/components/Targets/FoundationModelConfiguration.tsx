@@ -17,11 +17,11 @@ interface FoundationModelConfigurationProps {
   providerType: string;
 }
 
-const FoundationModelConfiguration: React.FC<FoundationModelConfigurationProps> = ({
+const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   providerType,
-}) => {
+}: FoundationModelConfigurationProps) => {
   const [modelId, setModelId] = useState(selectedTarget.id || '');
 
   useEffect(() => {
@@ -53,15 +53,15 @@ const FoundationModelConfiguration: React.FC<FoundationModelConfigurationProps> 
       },
       google: {
         name: 'Google AI Studio',
-        defaultModel: 'google:gemini-1.5-pro',
-        placeholder: 'google:gemini-1.5-pro, google:gemini-1.5-flash',
+        defaultModel: 'google:gemini-2.5-pro',
+        placeholder: 'google:gemini-2.5-pro, google:gemini-2.5-flash',
         docUrl: 'https://www.promptfoo.dev/docs/providers/google',
-        envVar: 'GOOGLE_API_KEY',
+        envVar: 'GOOGLE_API_KEY | GEMINI_API_KEY | PALM_API_KEY',
       },
       vertex: {
         name: 'Google Vertex AI',
-        defaultModel: 'vertex:gemini-1.5-pro',
-        placeholder: 'vertex:gemini-1.5-pro, vertex:gemini-1.5-flash',
+        defaultModel: 'vertex:gemini-2.5-pro',
+        placeholder: 'vertex:gemini-2.5-pro, vertex:gemini-2.5-flash',
         docUrl: 'https://www.promptfoo.dev/docs/providers/vertex',
         envVar: 'GOOGLE_APPLICATION_CREDENTIALS',
       },

@@ -124,6 +124,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [icontains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                  | output contains all list of substrings, case insensitive          |
 | [is-json](/docs/configuration/expected-outputs/deterministic/#is-json)                                             | output is valid json (optional json schema validation)            |
 | [contains-json](/docs/configuration/expected-outputs/deterministic/#contains-json)                                 | output contains valid json (optional json schema validation)      |
+| [contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)                                 | output contains HTML content                                      |
+| [is-html](/docs/configuration/expected-outputs/deterministic/#is-html)                                             | output is valid HTML                                              |
 | [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is valid sql                                               |
 | [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output contains valid sql                                         |
 | [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is valid xml                                               |

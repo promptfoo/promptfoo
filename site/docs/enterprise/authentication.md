@@ -2,7 +2,7 @@
 sidebar_label: Authentication
 sidebar_position: 10
 title: Authenticating into Promptfoo Enterprise
-description: Learn how to authenticate into Promptfoo Enterprise using SSO, basic authentication, and CLI methods
+description: Configure enterprise authentication with SSO providers, API keys, service accounts, and CLI access for secure team collaboration
 keywords: [authentication, login, logout, promptfoo enterprise, promptfoo app, sso, saml, oidc]
 ---
 
@@ -39,3 +39,34 @@ All of your evals are stored locally until you share them. If you were previousl
 :::
 
 Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#enterprise-sharing), ensuring your evaluation results are only visible to members of your organization rather than being publicly accessible.
+
+## Working with Multiple Teams
+
+If your organization has multiple teams, you can manage which team context you're operating in:
+
+### Viewing Your Teams
+
+```sh
+# List all teams you have access to
+promptfoo auth teams list
+```
+
+This shows all available teams with a marker (●) next to your current team.
+
+### Switching Teams
+
+```sh
+# Switch to a different team
+promptfoo auth teams set "Data Science"
+```
+
+You can use the team name, slug, or ID. Your selection persists across CLI sessions.
+
+### Checking Current Team
+
+```sh
+# View your active team
+promptfoo auth teams current
+```
+
+All operations (evaluations, red team scans, etc.) will use this team context until you switch to a different team.

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 2
 sidebar_label: Quickstart
+description: Start red teaming LLMs in minutes by scanning 50+ vulnerabilities including jailbreaks, prompt injection, and data exfiltration
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -27,7 +28,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 ## Prerequisites
 
-- Install [Node 18 or later](https://nodejs.org/en/download/package-manager/)
+- Install [Node 20 or later](https://nodejs.org/en/download/package-manager/)
 - Optional: Set your `OPENAI_API_KEY` environment variable
 
 ## Initialize the project

@@ -1,6 +1,6 @@
 ---
 title: Best Practices for Configuring AI Red Teaming
-description: Improve attack success, coverage, and grading accuracy by enriching application context, combining strategies, enabling multi-turn attacks, adding custom prompts, and calibrating graders.
+description: Improve red team success by enriching context, combining strategies, enabling multi-turn attacks and calibrating graders
 sidebar_label: Best Practices
 ---
 

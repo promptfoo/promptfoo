@@ -216,9 +216,8 @@ describe('AIStudioChatProvider', () => {
       });
 
       const response = await provider.callGemini('test prompt');
-      expect(response.error).toContain(
-        'Error: Expected at least one candidate in AI Studio API response.',
-      );
+      expect(response.error).toContain('No candidates returned in API response');
+      expect(response.error).toContain('Got response:');
     });
 
     it('should handle malformed API responses', async () => {
@@ -257,6 +256,85 @@ describe('AIStudioChatProvider', () => {
       expect(response).toEqual({
         error: 'Error: No output found in response: {"content":{"parts":null}}',
       });
+    });
+
+    it('should handle responses blocked with promptFeedback', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [],
+          promptFeedback: {
+            blockReason: 'PROHIBITED_CONTENT',
+            safetyRatings: [
+              { category: 'HARM_CATEGORY_HATE_SPEECH', probability: 'HIGH' },
+              { category: 'HARM_CATEGORY_HARASSMENT', probability: 'NEGLIGIBLE' },
+            ],
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+      expect(response.error).toContain('Response blocked: PROHIBITED_CONTENT');
+      expect(response.error).toContain('HARM_CATEGORY_HATE_SPEECH: HIGH');
+      // NEGLIGIBLE should be filtered out from the safety ratings summary
+      expect(response.error).toMatch(/Safety ratings: HARM_CATEGORY_HATE_SPEECH: HIGH\)/);
+      expect(response.error).not.toMatch(/Safety ratings:.*HARM_CATEGORY_HARASSMENT.*HIGH/); // Only check it's not in the summary with HIGH
+    });
+
+    it('should handle candidates blocked with finish reason', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: { parts: [{ text: '' }] },
+              finishReason: 'RECITATION',
+              safetyRatings: [
+                {
+                  category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+                  probability: 'MEDIUM',
+                  blocked: false,
+                },
+              ],
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+      expect(response.error).toContain('Response was blocked with finish reason: RECITATION');
+      expect(response.error).toContain("too similar to content from the model's training data");
+      expect(response.error).toContain('HARM_CATEGORY_DANGEROUS_CONTENT: MEDIUM');
     });
   });
 

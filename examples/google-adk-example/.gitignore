@@ -1,0 +1,16 @@
+# Promptfoo result files
+*-results.json
+*.json
+
+# ADK session data
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Environment variables
+.env

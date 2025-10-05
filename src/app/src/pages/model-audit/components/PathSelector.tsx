@@ -74,7 +74,8 @@ export default function PathSelector({
   const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const { recentScans, clearRecentScans } = useModelAuditStore();
+  const { recentScans, clearRecentScans, removeRecentPath } = useModelAuditStore();
+  const [hoveredChipIndex, setHoveredChipIndex] = useState<number | null>(null);
 
   // Removed file input refs - using only drag-drop and manual input
 
@@ -410,16 +411,14 @@ export default function PathSelector({
                 <Typography variant="subtitle2" color="text.secondary">
                   Recent Paths
                 </Typography>
-                {recentScans.length > 3 && (
-                  <Button
-                    size="small"
-                    startIcon={<ClearIcon />}
-                    onClick={clearRecentScans}
-                    sx={{ color: 'text.secondary' }}
-                  >
-                    Clear
-                  </Button>
-                )}
+                <Button
+                  size="small"
+                  startIcon={<ClearIcon />}
+                  onClick={clearRecentScans}
+                  sx={{ color: 'text.secondary' }}
+                >
+                  Clear All
+                </Button>
               </Stack>
 
               <Paper
@@ -434,7 +433,7 @@ export default function PathSelector({
               >
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   {recentScans
-                    .flatMap((scan) => scan.paths)
+                    .flatMap((scan) => scan.paths.map((path) => ({ ...path, scanId: scan.id })))
                     .filter(
                       (path, index, self) => index === self.findIndex((p) => p.path === path.path),
                     )
@@ -444,16 +443,34 @@ export default function PathSelector({
                         key={`${path.path}-${index}`}
                         label={path.name || path.path}
                         size="medium"
+                        onMouseEnter={() => setHoveredChipIndex(index)}
+                        onMouseLeave={() => setHoveredChipIndex(null)}
                         onClick={() => {
                           if (!paths.some((p) => p.path === path.path)) {
                             handleAddPath(path.path);
                           }
                         }}
+                        onDelete={
+                          hoveredChipIndex === index
+                            ? () => {
+                                removeRecentPath(path.scanId, path.path);
+                              }
+                            : undefined
+                        }
+                        deleteIcon={<ClearIcon fontSize="small" />}
                         icon={path.type === 'directory' ? <FolderIcon /> : <FileIcon />}
                         variant="outlined"
                         sx={{
                           cursor: 'pointer',
                           transition: 'all 0.2s',
+                          '& .MuiChip-deleteIcon': {
+                            display: hoveredChipIndex === index ? 'flex' : 'none',
+                            fontSize: '16px',
+                            color: theme.palette.text.secondary,
+                            '&:hover': {
+                              color: theme.palette.error.main,
+                            },
+                          },
                           '&:hover': {
                             backgroundColor: theme.palette.action.hover,
                             transform: 'translateY(-1px)',
@@ -483,7 +500,7 @@ export default function PathSelector({
           </Box>
 
           <Grid container spacing={3}>
-            <Grid item xs={12} md={4}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Paper
                 sx={{
                   p: 3,
@@ -506,7 +523,7 @@ export default function PathSelector({
                 </Typography>
               </Paper>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Paper
                 sx={{
                   p: 3,
@@ -529,7 +546,7 @@ export default function PathSelector({
                 </Typography>
               </Paper>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Paper
                 sx={{
                   p: 3,

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 10
 sidebar_label: Command line
+description: Explore promptfoo CLI commands for LLM testing - run evaluations, generate datasets, scan models for vulnerabilities, and automate testing workflows via command line
 ---
 
 # Command line
@@ -34,7 +35,9 @@ The `promptfoo` command line utility supports the following subcommands:
 - `validate` - Validate a promptfoo configuration file.
 - `feedback <message>` - Send feedback to the Promptfoo developers.
 - `import <filepath>` - Import an eval file from JSON format.
-- `export <evalId>` - Export an eval record to JSON format.
+- `export` - Export eval records or logs.
+  - `export eval <evalId>`
+  - `export logs`
 - `redteam` - Red team LLM applications.
   - `redteam init`
   - `redteam setup`
@@ -60,44 +63,66 @@ Most commands support the following common options:
 
 By default the `eval` command will read the `promptfooconfig.yaml` configuration file in your current directory. But, if you're looking to override certain parameters you can supply optional arguments:
 
-| Option                              | Description                                                                 |
-| ----------------------------------- | --------------------------------------------------------------------------- |
-| `-a, --assertions <path>`           | Path to assertions file                                                     |
-| `-c, --config <paths...>`           | Path to configuration file(s). Automatically loads promptfooconfig.yaml     |
-| `--delay <number>`                  | Delay between each test (in milliseconds)                                   |
-| `--description <description>`       | Description of the eval run                                                 |
-| `--filter-failing <path or id>`     | Filter tests that failed in a previous evaluation (by file path or eval ID) |
-| `--filter-errors-only <path or id>` | Filter tests that resulted in errors in a previous evaluation               |
-| `-n, --filter-first-n <number>`     | Only run the first N tests                                                  |
-| `--filter-sample <number>`          | Only run a random sample of N tests                                         |
-| `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair                    |
-| `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                  |
-| `--filter-providers <providers>`    | Only run tests with these providers (regex match)                           |
-| `--filter-targets <targets>`        | Only run tests with these targets (alias for --filter-providers)            |
-| `--grader <provider>`               | Model that will grade outputs                                               |
-| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                      |
-| `--model-outputs <path>`            | Path to JSON containing list of LLM output strings                          |
-| `--no-cache`                        | Do not read or write results to disk cache                                  |
-| `--no-progress-bar`                 | Do not show progress bar                                                    |
-| `--no-table`                        | Do not output table in CLI                                                  |
-| `--no-write`                        | Do not write results to promptfoo directory                                 |
-| `-o, --output <paths...>`           | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml)        |
-| `-p, --prompts <paths...>`          | Paths to prompt files (.txt)                                                |
-| `--prompt-prefix <path>`            | Prefix prepended to every prompt                                            |
-| `--prompt-suffix <path>`            | Suffix appended to every prompt                                             |
-| `-r, --providers <name or path...>` | Provider names or paths to custom API caller modules                        |
-| `--remote`                          | Force remote inference wherever possible (used for red teams)               |
-| `--repeat <number>`                 | Number of times to run each test                                            |
-| `--share`                           | Create a shareable URL                                                      |
-| `--suggest-prompts <number>`        | Generate N new prompts and append them to the prompt list                   |
-| `--table`                           | Output table in CLI                                                         |
-| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                 |
-| `-t, --tests <path>`                | Path to CSV with test cases                                                 |
-| `--var <key=value>`                 | Set a variable in key=value format                                          |
-| `-v, --vars <path>`                 | Path to CSV with test cases (alias for --tests)                             |
-| `-w, --watch`                       | Watch for changes in config and re-run                                      |
+| Option                              | Description                                                                   |
+| ----------------------------------- | ----------------------------------------------------------------------------- |
+| `-a, --assertions <path>`           | Path to assertions file                                                       |
+| `-c, --config <paths...>`           | Path to configuration file(s). Automatically loads promptfooconfig.yaml       |
+| `--delay <number>`                  | Delay between each test (in milliseconds)                                     |
+| `--description <description>`       | Description of the eval run                                                   |
+| `--filter-failing <path or id>`     | Filter tests that failed in a previous evaluation (by file path or eval ID)   |
+| `--filter-errors-only <path or id>` | Filter tests that resulted in errors in a previous evaluation                 |
+| `-n, --filter-first-n <number>`     | Only run the first N tests                                                    |
+| `--filter-sample <number>`          | Only run a random sample of N tests                                           |
+| `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair                      |
+| `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                    |
+| `--filter-providers <providers>`    | Only run tests with these providers (regex match)                             |
+| `--filter-targets <targets>`        | Only run tests with these targets (alias for --filter-providers)              |
+| `--grader <provider>`               | Model that will grade outputs                                                 |
+| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                        |
+| `--model-outputs <path>`            | Path to JSON containing list of LLM output strings                            |
+| `--no-cache`                        | Do not read or write results to disk cache                                    |
+| `--no-progress-bar`                 | Do not show progress bar                                                      |
+| `--no-table`                        | Do not output table in CLI                                                    |
+| `--no-write`                        | Do not write results to promptfoo directory                                   |
+| `--resume [evalId]`                 | Resume a paused/incomplete evaluation. If `evalId` is omitted, resumes latest |
+| `--retry-errors`                    | Retry all ERROR results from the latest evaluation                            |
+| `-o, --output <paths...>`           | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml)          |
+| `-p, --prompts <paths...>`          | Paths to prompt files (.txt)                                                  |
+| `--prompt-prefix <path>`            | Prefix prepended to every prompt                                              |
+| `--prompt-suffix <path>`            | Suffix appended to every prompt                                               |
+| `-r, --providers <name or path...>` | Provider names or paths to custom API caller modules                          |
+| `--remote`                          | Force remote inference wherever possible (used for red teams)                 |
+| `--repeat <number>`                 | Number of times to run each test                                              |
+| `--share`                           | Create a shareable URL                                                        |
+| `--no-share`                        | Do not create a shareable URL, this overrides the config file                 |
+| `--suggest-prompts <number>`        | Generate N new prompts and append them to the prompt list                     |
+| `--table`                           | Output table in CLI                                                           |
+| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                   |
+| `-t, --tests <path>`                | Path to CSV with test cases                                                   |
+| `--var <key=value>`                 | Set a variable in key=value format                                            |
+| `-v, --vars <path>`                 | Path to CSV with test cases (alias for --tests)                               |
+| `-w, --watch`                       | Watch for changes in config and re-run                                        |
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
+
+### Pause and Resume
+
+```sh
+promptfoo eval --resume            # resumes the latest evaluation
+promptfoo eval --resume <evalId>   # resumes a specific evaluation
+```
+
+- On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
+
+### Retry Errors
+
+```sh
+promptfoo eval --retry-errors      # retries all ERROR results from the latest evaluation
+```
+
+- The retry errors feature automatically finds ERROR results from the latest evaluation, removes them from the database, and re-runs only those test cases. This is useful when evaluations fail due to temporary network issues, rate limits, or API errors.
+- Cannot be used together with `--resume` or `--no-write` flags.
+- Uses the original evaluation's configuration and runtime options to ensure consistency.
 
 ## `promptfoo init [directory]`
 
@@ -232,13 +257,28 @@ Deletes a specific resource.
 
 Import an eval file from JSON format.
 
-## `promptfoo export <evalId>`
+## `promptfoo export`
+
+Export eval records or logs.
+
+### `promptfoo export eval <evalId>`
 
 Export an eval record to JSON format. To export the most recent, use evalId `latest`.
 
 | Option                    | Description                                 |
 | ------------------------- | ------------------------------------------- |
 | `-o, --output <filepath>` | File to write. Writes to stdout by default. |
+
+### `promptfoo export logs`
+
+Collect and zip log files for debugging purposes.
+
+| Option                    | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| `-n, --count <number>`    | Number of recent log files to include (default: all) |
+| `-o, --output <filepath>` | Output path for the compressed log file              |
+
+This command creates a compressed tar.gz archive containing your promptfoo log files, making it easy to share them for debugging purposes. If no output path is specified, it will generate a timestamped filename automatically.
 
 ## `promptfoo validate`
 
@@ -291,13 +331,99 @@ Login to the promptfoo cloud.
 | `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
 | `-k, --api-key <key>` | Login using an API key                                                     |
 
+After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
+
 ### `promptfoo auth logout`
 
 Logout from the promptfoo cloud.
 
 ### `promptfoo auth whoami`
 
-Show current user information.
+Display current authentication status including user, organization, and active team.
+
+**Output includes:**
+
+- User email
+- Organization name
+- Current team (if logged in to a multi-team organization)
+- App URL
+
+Example:
+
+```sh
+promptfoo auth whoami
+```
+
+Output:
+
+```
+Currently logged in as:
+User: user@company.com
+Organization: Acme Corp
+Current Team: Engineering Team
+App URL: https://www.promptfoo.app
+```
+
+### `promptfoo auth teams`
+
+Manage team switching for organizations with multiple teams.
+
+#### `promptfoo auth teams list`
+
+List all teams you have access to in the current organization.
+
+#### `promptfoo auth teams current`
+
+Show the currently active team.
+
+#### `promptfoo auth teams set <teamIdentifier>`
+
+Switch to a specific team. The team identifier can be:
+
+- Team name (e.g., "Engineering")
+- Team slug (e.g., "engineering")
+- Team ID (e.g., "team_12345")
+
+Examples:
+
+```sh
+# Switch to team by name
+promptfoo auth teams set "Engineering Team"
+
+# Switch to team by slug
+promptfoo auth teams set engineering
+
+# Switch to team by ID
+promptfoo auth teams set team_12345
+```
+
+Your team selection is remembered across CLI sessions and applies to all promptfoo operations including evaluations and red team testing.
+
+#### Team Selection Across Organizations
+
+If you have access to multiple organizations, team selections are **isolated per organization**. This means:
+
+- Each organization remembers its own team selection
+- Switching between organizations preserves your team choice in each org
+- When you log into an organization, your previously selected team is automatically restored
+
+Example workflow:
+
+```sh
+# Login to Organization A
+promptfoo auth login --api-key <org-a-key>
+promptfoo auth teams set "Engineering"     # Set team in Org A
+
+# Login to Organization B
+promptfoo auth login --api-key <org-b-key>
+promptfoo auth teams set "Marketing"       # Set team in Org B
+
+# Login back to Organization A
+promptfoo auth login --api-key <org-a-key>
+promptfoo auth teams current              # Shows "Engineering" (preserved!)
+```
+
+Your team selection persists across login sessions within the same organization.
 
 ## `promptfoo config`
 

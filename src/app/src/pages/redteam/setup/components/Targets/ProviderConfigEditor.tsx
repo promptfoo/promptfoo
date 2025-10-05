@@ -1,9 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
+import { AGENT_FRAMEWORKS } from './consts';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
@@ -28,6 +30,8 @@ interface ProviderConfigEditorProps {
   validateAll?: boolean;
   onValidate?: (isValid: boolean) => void;
   providerType?: string;
+  onTargetTested?: (success: boolean) => void;
+  onSessionTested?: (success: boolean) => void;
 }
 
 const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigEditorProps>(
@@ -42,10 +46,12 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
       validateAll = false,
       onValidate,
       providerType,
+      onTargetTested,
+      onSessionTested,
     },
     ref,
   ) => {
-    const [bodyError, setBodyError] = useState<string | null>(null);
+    const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
     const [urlError, setUrlError] = useState<string | null>(null);
     const [rawConfigJson, setRawConfigJson] = useState<string>(
       JSON.stringify(provider.config, null, 2),
@@ -86,7 +92,21 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         if (bodyStr.includes('{{prompt}}')) {
           setBodyError(null);
         } else if (!updatedTarget.config.request) {
-          setBodyError('Request body must contain {{prompt}}');
+          setBodyError(
+            <>
+              Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will
+              inject the attack payload. Replace the user input value with{' '}
+              <code>{'{{prompt}}'}</code>. Promptfoo uses Nunjucks templating to replace{' '}
+              <code>{'{{prompt}}'}</code> with the actual test content.{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Learn more
+              </a>
+            </>,
+          );
         }
       } else if (field === 'request') {
         updatedTarget.config.request = value;
@@ -121,12 +141,14 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         }
       } else if (field in updatedTarget.config) {
         (updatedTarget.config as any)[field] = value;
+      } else if (field === 'label') {
+        updatedTarget.label = value;
       }
       setProvider(updatedTarget);
     };
 
     const validate = (): boolean => {
-      const errors: string[] = [];
+      const errors: (string | React.ReactNode)[] = [];
 
       if (providerType === 'http') {
         // Check if we're in raw mode (using request field) or structured mode (using url field)
@@ -187,7 +209,16 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         ) {
           errors.push('Top P must be between 0 and 1');
         }
-      } else if (['javascript', 'python', 'custom', 'mcp', 'exec'].includes(providerType || '')) {
+      } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
+        // Agent frameworks validation
+        if (!provider.id || provider.id.trim() === '') {
+          errors.push('Python file path is required');
+        } else if (!provider.id.startsWith('file://')) {
+          errors.push('Provider ID must start with file:// for Python agent files');
+        }
+      } else if (
+        ['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
+      ) {
         // Custom providers validation
         if (!provider.id || provider.id.trim() === '') {
           errors.push('Provider ID is required');
@@ -200,7 +231,8 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
 
       const hasErrors = errors.length > 0;
       if (setError) {
-        setError(hasErrors ? errors.join(', ') : null);
+        const stringErrors = errors.filter((e): e is string => typeof e === 'string');
+        setError(hasErrors ? stringErrors.join(', ') || 'Validation failed' : null);
       }
       if (onValidate) {
         onValidate(!hasErrors);
@@ -239,6 +271,8 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
             urlError={urlError}
             setUrlError={setUrlError}
             updateFullTarget={setProvider}
+            onTargetTested={onTargetTested}
+            onSessionTested={onSessionTested}
           />
         )}
 
@@ -300,7 +334,7 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         )}
 
         {/* Specialized providers - use custom config for now */}
-        {['github', 'xai', 'ai21', 'aimlapi', 'hyperbolic', 'lambdalabs', 'fal', 'voyage'].includes(
+        {['github', 'xai', 'ai21', 'aimlapi', 'hyperbolic', 'fal', 'voyage'].includes(
           providerType || '',
         ) && (
           <CustomTargetConfiguration
@@ -325,8 +359,17 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
           />
         )}
 
+        {/* Agent frameworks */}
+        {AGENT_FRAMEWORKS.includes(providerType || '') && (
+          <AgentFrameworkConfiguration
+            selectedTarget={provider}
+            updateCustomTarget={updateCustomTarget}
+            agentType={providerType || ''}
+          />
+        )}
+
         {/* Custom providers */}
-        {['javascript', 'python', 'mcp', 'exec'].includes(providerType || '') && (
+        {['javascript', 'python', 'go', 'mcp', 'exec'].includes(providerType || '') && (
           <CustomTargetConfiguration
             selectedTarget={provider}
             updateCustomTarget={updateCustomTarget}

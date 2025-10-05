@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { runAssertion } from '../../src/assertions';
-import { fetchWithRetries } from '../../src/fetch';
+import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
+import { fetchWithRetries } from '../../src/util/fetch/index';
 import { TestGrader } from '../util/utils';
 
 import type {
@@ -13,7 +13,7 @@ import type {
   AtomicTestCase,
   GradingResult,
   ProviderResponse,
-} from '../../src/types';
+} from '../../src/types/index';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
@@ -40,8 +40,8 @@ jest.mock('node:module', () => {
   };
 });
 
-jest.mock('../../src/fetch', () => {
-  const actual = jest.requireActual('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts', () => {
+  const actual = jest.requireActual('../../src/util/fetch/index.ts');
   return {
     ...actual,
     fetchWithRetries: jest.fn(actual.fetchWithRetries),
@@ -2015,6 +2015,50 @@ describe('runAssertion', () => {
         reason: 'Assertion passed',
       });
     });
+
+    it('should NOT throw error when threshold is 0', async () => {
+      const output = 'Expected output';
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'latency',
+          threshold: 0,
+        },
+        latencyMs: 0,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should fail when latency exceeds threshold=0', async () => {
+      const output = 'Expected output';
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'latency',
+          threshold: 0,
+        },
+        latencyMs: 1,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Latency 1ms is greater than threshold 0ms',
+      });
+    });
   });
 
   describe('perplexity assertion', () => {
@@ -2060,6 +2104,48 @@ describe('runAssertion', () => {
         pass: false,
         reason: 'Perplexity 1.28 is greater than threshold 0.2',
       });
+    });
+
+    it('should PASS when no threshold is specified (default behavior)', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true); // No threshold = always pass
+    });
+
+    it('should respect threshold=0 as a valid threshold', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      // Perplexity will be > 0, so with threshold=0, should fail
+      expect(result.pass).toBe(false);
     });
   });
 
@@ -2107,6 +2193,48 @@ describe('runAssertion', () => {
         reason: 'Perplexity score 0.44 is less than threshold 0.5',
       });
     });
+
+    it('should PASS when no threshold is specified for perplexity-score', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity-score',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true); // No threshold = always pass
+    });
+
+    it('should respect threshold=0 as valid for perplexity-score', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity-score',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      // Perplexity score will be > 0, so should pass with threshold=0
+      expect(result.pass).toBe(true);
+    });
   });
 
   describe('cost assertion', () => {
@@ -2151,6 +2279,50 @@ describe('runAssertion', () => {
       expect(result).toMatchObject({
         pass: false,
         reason: 'Cost 0.0020 is greater than threshold 0.001',
+      });
+    });
+
+    it('should NOT throw error when threshold is 0', async () => {
+      const cost = 0;
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'cost',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should fail when cost exceeds threshold=0', async () => {
+      const cost = 0.01;
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'cost',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Cost 0.010 is greater than threshold 0',
       });
     });
   });
@@ -2721,7 +2893,7 @@ describe('runAssertion', () => {
           providerResponse: { output: 'Some output' },
         }),
       ).rejects.toThrow(
-        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
       );
     });
   });
@@ -2812,7 +2984,7 @@ describe('runAssertion', () => {
           providerResponse: { output: 'Some output' },
         }),
       ).rejects.toThrow(
-        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
       );
     });
 
@@ -2835,6 +3007,129 @@ describe('runAssertion', () => {
           providerResponse: { output: { some: 'object' } },
         }),
       ).rejects.toThrow('context-faithfulness assertion requires string output from the provider');
+    });
+  });
+
+  describe('assertion transform with metadata', () => {
+    it('should pass metadata to assertion transform when available', async () => {
+      const output = 'Test output';
+      const metadata = { key: 'value', nested: { data: 123 } };
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'Metadata: {"key":"value","nested":{"data":123}}',
+        transform: 'context.metadata ? `Metadata: ${JSON.stringify(context.metadata)}` : output',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output, metadata },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle transform when metadata is undefined', async () => {
+      const output = 'Test output';
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'No metadata',
+        transform: 'context.metadata ? "Has metadata" : "No metadata"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle transform when providerResponse has no metadata', async () => {
+      const output = 'Test output';
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'No metadata',
+        transform: 'context.metadata ? "Has metadata" : "No metadata"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output }, // No metadata property
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle empty metadata object', async () => {
+      const output = 'Test output';
+      const metadata = {};
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'Empty metadata',
+        transform:
+          '(context.metadata && Object.keys(context.metadata).length === 0) ? "Empty metadata" : output',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output, metadata },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should preserve existing context properties when adding metadata', async () => {
+      const output = 'Test output';
+      const metadata = { responseTime: 100 };
+      const testVars = { userInput: 'test input' };
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'All context properties present',
+        transform:
+          '(context.vars && context.prompt && context.metadata) ? "All context properties present" : "Missing context properties"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'test prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: testVars } as AtomicTestCase,
+        providerResponse: { output, metadata },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
   });
 

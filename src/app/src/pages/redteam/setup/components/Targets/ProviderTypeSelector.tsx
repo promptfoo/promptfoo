@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EditIcon from '@mui/icons-material/Edit';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -18,260 +19,353 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { getProviderType } from './helpers';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
 import type { ProviderOptions } from '../../types';
 
-// Flattened provider options with category information
+// Flattened provider options with tag information
 const allProviderOptions = [
-  // API Endpoints
+  // Agentic Frameworks
   {
-    value: 'http',
-    label: 'HTTP/HTTPS Endpoint',
-    description: 'Connect to REST APIs and HTTP endpoints',
-    category: 'endpoint',
+    value: 'langchain',
+    label: 'LangChain',
+    description: 'Framework for developing applications powered by language models',
+    tag: 'agents',
   },
   {
-    value: 'websocket',
-    label: 'WebSocket Endpoint',
-    description: 'Real-time communication with WebSocket APIs',
-    category: 'endpoint',
-  },
-  // Code-based Providers
-  {
-    value: 'javascript',
-    label: 'JavaScript Provider',
-    description: 'Custom JS provider for specialized integrations',
-    category: 'custom',
+    value: 'autogen',
+    label: 'AutoGen',
+    description: 'Multi-agent collaborative framework from Microsoft',
+    tag: 'agents',
   },
   {
-    value: 'python',
-    label: 'Python Provider',
-    description: 'Custom Python provider for specialized integrations',
-    category: 'custom',
+    value: 'crewai',
+    label: 'CrewAI',
+    description: 'Framework for orchestrating role-playing autonomous AI agents',
+    tag: 'agents',
   },
   {
-    value: 'go',
-    label: 'Go Provider',
-    description: 'Custom Go provider for specialized integrations',
-    category: 'custom',
+    value: 'llamaindex',
+    label: 'LlamaIndex',
+    description: 'Data framework for LLM applications with RAG capabilities',
+    tag: 'agents',
   },
   {
-    value: 'custom',
-    label: 'Custom Provider',
-    description: 'Other custom providers and implementations',
-    category: 'custom',
+    value: 'langgraph',
+    label: 'LangGraph',
+    description: 'Build stateful, multi-actor applications with LLMs',
+    tag: 'agents',
   },
   {
-    value: 'mcp',
-    label: 'MCP Server',
-    description: 'Connect to Model Context Protocol (MCP) servers for direct tool red teaming',
-    category: 'custom',
+    value: 'openai-agents-sdk',
+    label: 'OpenAI Agents SDK',
+    description: 'Official OpenAI SDK for building AI agents',
+    tag: 'agents',
   },
   {
-    value: 'browser',
-    label: 'Web Browser',
-    description: 'Automate web browser interactions for testing',
-    category: 'custom',
+    value: 'pydantic-ai',
+    label: 'PydanticAI',
+    description: 'Type-safe AI agents with structured outputs using Pydantic',
+    tag: 'agents',
   },
   {
-    value: 'exec',
-    label: 'Shell Command',
-    description: 'Execute custom scripts and commands',
-    category: 'custom',
-  },
-  // Foundation Models
-  {
-    value: 'openai',
-    label: 'OpenAI',
-    description: 'GPT models including GPT-4.1 and reasoning models',
-    category: 'model',
+    value: 'google-adk',
+    label: 'Google ADK',
+    description: 'Google AI Development Kit for building agents',
+    tag: 'agents',
   },
   {
-    value: 'anthropic',
-    label: 'Anthropic',
-    description: 'Claude models including Claude Sonnet 4',
-    category: 'model',
+    value: 'generic-agent',
+    label: 'Other Agent',
+    description:
+      'Any agent framework - Promptfoo is fully customizable and supports all agent frameworks',
+    tag: 'agents',
+    last: true,
   },
-  {
-    value: 'google',
-    label: 'Google AI Studio',
-    description: 'Gemini models and Live API',
-    category: 'model',
-  },
-  {
-    value: 'vertex',
-    label: 'Google Vertex AI',
-    description: "Google Cloud's AI platform with Gemini models",
-    category: 'model',
-  },
-  {
-    value: 'azure',
-    label: 'Azure OpenAI',
-    description: 'Azure-hosted OpenAI models',
-    category: 'model',
-  },
-  {
-    value: 'mistral',
-    label: 'Mistral AI',
-    description: "Mistral's language models including Magistral",
-    category: 'model',
-  },
-  {
-    value: 'groq',
-    label: 'Groq',
-    description: 'High-performance inference API',
-    category: 'model',
-  },
-  {
-    value: 'perplexity',
-    label: 'Perplexity AI',
-    description: 'Search-augmented chat with citations',
-    category: 'model',
-  },
-  {
-    value: 'deepseek',
-    label: 'DeepSeek',
-    description: "DeepSeek's language models including R1",
-    category: 'model',
-  },
-  {
-    value: 'xai',
-    label: 'X.AI (Grok)',
-    description: "X.AI's Grok models",
-    category: 'model',
-  },
-  // Cloud & Enterprise
-  {
-    value: 'bedrock',
-    label: 'AWS Bedrock',
-    description: 'AWS-hosted models from various providers',
-    category: 'cloud',
-  },
-  {
-    value: 'sagemaker',
-    label: 'Amazon SageMaker',
-    description: 'Models deployed on SageMaker endpoints',
-    category: 'cloud',
-  },
-  {
-    value: 'databricks',
-    label: 'Databricks',
-    description: 'Databricks Foundation Model APIs',
-    category: 'cloud',
-  },
-  {
-    value: 'cloudflare-ai',
-    label: 'Cloudflare AI',
-    description: "Cloudflare's OpenAI-compatible AI platform",
-    category: 'cloud',
-  },
-  {
-    value: 'huggingface',
-    label: 'Hugging Face',
-    description: 'Access thousands of models',
-    category: 'cloud',
-  },
-  {
-    value: 'helicone',
-    label: 'Helicone AI Gateway',
-    description: 'Self-hosted AI gateway for unified provider access',
-    category: 'cloud',
-  },
-  {
-    value: 'jfrog',
-    label: 'JFrog ML',
-    description: "JFrog's LLM Model Library",
-    category: 'cloud',
-  },
-  // Third-Party Providers
-  {
-    value: 'openrouter',
-    label: 'OpenRouter',
-    description: 'Access hundreds of top AI models through a single API',
-    category: 'specialized',
-  },
-  {
-    value: 'github',
-    label: 'GitHub Models',
-    description: "GitHub's hosted models from multiple providers",
-    category: 'specialized',
-  },
-  {
-    value: 'ai21',
-    label: 'AI21 Labs',
-    description: 'Jurassic and Jamba models',
-    category: 'specialized',
-  },
+
+  // AI/ML API
   {
     value: 'aimlapi',
     label: 'AI/ML API',
     description: 'Access 300+ AI models with a single API',
-    category: 'specialized',
+    tag: 'specialized',
   },
+  // AI21 Labs
   {
-    value: 'hyperbolic',
-    label: 'Hyperbolic',
-    description: 'OpenAI-compatible Llama 3 provider',
-    category: 'specialized',
+    value: 'ai21',
+    label: 'AI21 Labs',
+    description: 'Jurassic and Jamba models',
+    tag: 'specialized',
   },
+  // Amazon SageMaker
   {
-    value: 'lambdalabs',
-    label: 'Lambda Labs',
-    description: 'Lambda Labs models via Inference API',
-    category: 'specialized',
+    value: 'sagemaker',
+    label: 'Amazon SageMaker',
+    description: 'Models deployed on SageMaker endpoints',
+    tag: 'cloud',
   },
+  // Anthropic
+  {
+    value: 'anthropic',
+    label: 'Anthropic',
+    description: 'Claude models including Claude Sonnet 4',
+    tag: 'model',
+  },
+  // AWS Bedrock
+  {
+    value: 'bedrock',
+    label: 'AWS Bedrock',
+    description: 'AWS-hosted models from various providers',
+    tag: 'cloud',
+  },
+  // AWS Bedrock Agents
+  {
+    value: 'bedrock-agent',
+    label: 'AWS Bedrock Agents',
+    description: 'Amazon Bedrock Agents for orchestrating AI workflows',
+    tag: 'agents',
+  },
+  // Azure OpenAI
+  {
+    value: 'azure',
+    label: 'Azure OpenAI',
+    description: 'Azure-hosted OpenAI models',
+    tag: 'model',
+  },
+  // Cloudflare AI
+  {
+    value: 'cloudflare-ai',
+    label: 'Cloudflare AI',
+    description: "Cloudflare's OpenAI-compatible AI platform",
+    tag: 'cloud',
+  },
+  // Custom Provider
+  {
+    value: 'custom',
+    label: 'Custom Provider',
+    description: 'Other custom providers and implementations',
+    tag: 'custom',
+  },
+  // Databricks
+  {
+    value: 'databricks',
+    label: 'Databricks',
+    description: 'Databricks Foundation Model APIs',
+    tag: 'cloud',
+  },
+  // DeepSeek
+  {
+    value: 'deepseek',
+    label: 'DeepSeek',
+    description: "DeepSeek's language models including R1",
+    tag: 'model',
+  },
+  // fal.ai
   {
     value: 'fal',
     label: 'fal.ai',
     description: 'Image generation and specialized AI models',
-    category: 'specialized',
+    tag: 'specialized',
   },
+  // GitHub Models
   {
-    value: 'voyage',
-    label: 'Voyage AI',
-    description: 'Specialized embedding models',
-    category: 'specialized',
+    value: 'github',
+    label: 'GitHub Models',
+    description: "GitHub's hosted models from multiple providers",
+    tag: 'specialized',
   },
-  // Local Models
+  // Go Provider
   {
-    value: 'ollama',
-    label: 'Ollama',
-    description: 'Local model runner with easy setup',
-    category: 'local',
+    value: 'go',
+    label: 'Go Provider',
+    description: 'Custom Go provider for specialized integrations',
+    tag: 'custom',
   },
+  // Google AI Studio
   {
-    value: 'vllm',
-    label: 'vLLM',
-    description: 'High-performance local inference server',
-    category: 'local',
+    value: 'google',
+    label: 'Google AI Studio',
+    description: 'Gemini models and Live API',
+    tag: 'model',
   },
+  // Google Vertex AI
   {
-    value: 'localai',
-    label: 'LocalAI',
-    description: 'Local OpenAI-compatible API',
-    category: 'local',
+    value: 'vertex',
+    label: 'Google Vertex AI',
+    description: "Google Cloud's AI platform with Gemini models",
+    tag: 'model',
   },
+  // Groq
   {
-    value: 'llamafile',
-    label: 'Llamafile',
-    description: 'Single-file local model server',
-    category: 'local',
+    value: 'groq',
+    label: 'Groq',
+    description: 'High-performance inference API',
+    tag: 'model',
   },
+  // Helicone AI Gateway
+  {
+    value: 'helicone',
+    label: 'Helicone AI Gateway',
+    description: 'Self-hosted AI gateway for unified provider access',
+    tag: 'cloud',
+  },
+  // HTTP/HTTPS Endpoint
+  {
+    value: 'http',
+    label: 'HTTP/HTTPS Endpoint',
+    description: 'Connect to REST APIs and HTTP endpoints',
+    tag: 'endpoint',
+  },
+  // Hugging Face
+  {
+    value: 'huggingface',
+    label: 'Hugging Face',
+    description: 'Access thousands of models',
+    tag: 'cloud',
+  },
+  // Hyperbolic
+  {
+    value: 'hyperbolic',
+    label: 'Hyperbolic',
+    description: 'OpenAI-compatible Llama 3 provider',
+    tag: 'specialized',
+  },
+  // JavaScript Provider
+  {
+    value: 'javascript',
+    label: 'JavaScript Provider',
+    description: 'Custom JS provider for specialized integrations',
+    tag: 'custom',
+  },
+  // JFrog ML
+  {
+    value: 'jfrog',
+    label: 'JFrog ML',
+    description: "JFrog's LLM Model Library",
+    tag: 'cloud',
+  },
+  // llama.cpp
   {
     value: 'llama.cpp',
     label: 'llama.cpp',
     description: 'Lightweight local model inference',
-    category: 'local',
+    tag: 'local',
   },
+  // Llamafile
+  {
+    value: 'llamafile',
+    label: 'Llamafile',
+    description: 'Single-file local model server',
+    tag: 'local',
+  },
+  // LocalAI
+  {
+    value: 'localai',
+    label: 'LocalAI',
+    description: 'Local OpenAI-compatible API',
+    tag: 'local',
+  },
+  // MCP Server
+  {
+    value: 'mcp',
+    label: 'MCP Server',
+    description: 'Connect to Model Context Protocol (MCP) servers for direct tool red teaming',
+    tag: 'custom',
+  },
+  // Mistral AI
+  {
+    value: 'mistral',
+    label: 'Mistral AI',
+    description: "Mistral's language models including Magistral",
+    tag: 'model',
+  },
+  // Ollama
+  {
+    value: 'ollama',
+    label: 'Ollama',
+    description: 'Local model runner with easy setup',
+    tag: 'local',
+  },
+  // OpenAI
+  {
+    value: 'openai',
+    label: 'OpenAI',
+    description: 'GPT models including GPT-4.1 and reasoning models',
+    tag: 'model',
+  },
+  // OpenRouter
+  {
+    value: 'openrouter',
+    label: 'OpenRouter',
+    description: 'Access hundreds of top AI models through a single API',
+    tag: 'specialized',
+  },
+  // Perplexity AI
+  {
+    value: 'perplexity',
+    label: 'Perplexity AI',
+    description: 'Search-augmented chat with citations',
+    tag: 'model',
+  },
+  // Python Provider
+  {
+    value: 'python',
+    label: 'Python Provider',
+    description: 'Custom Python provider for specialized integrations',
+    tag: 'custom',
+  },
+  // Shell Command
+  {
+    value: 'exec',
+    label: 'Shell Command',
+    description: 'Execute custom scripts and commands',
+    tag: 'custom',
+  },
+  // Text Generation WebUI
   {
     value: 'text-generation-webui',
     label: 'Text Generation WebUI',
     description: 'Gradio-based local model interface',
-    category: 'local',
+    tag: 'local',
   },
-];
+  // vLLM
+  {
+    value: 'vllm',
+    label: 'vLLM',
+    description: 'High-performance local inference server',
+    tag: 'local',
+  },
+  // Voyage AI
+  {
+    value: 'voyage',
+    label: 'Voyage AI',
+    description: 'Specialized embedding models',
+    tag: 'specialized',
+  },
+  // Web Browser
+  {
+    value: 'browser',
+    label: 'Web Browser',
+    description: 'Automate web browser interactions for testing',
+    tag: 'custom',
+  },
+  // WebSocket Endpoint
+  {
+    value: 'websocket',
+    label: 'WebSocket Endpoint',
+    description: 'Real-time communication with WebSocket APIs',
+    tag: 'endpoint',
+  },
+  // X.AI (Grok)
+  {
+    value: 'xai',
+    label: 'X.AI (Grok)',
+    description: "X.AI's Grok models",
+    tag: 'model',
+  },
+].sort((a, b) => {
+  return a.last ? 1 : b.last ? -1 : a.label.localeCompare(b.label);
+});
 
 interface ProviderTypeSelectorProps {
   provider: ProviderOptions | undefined;
@@ -288,16 +382,18 @@ export default function ProviderTypeSelector({
   availableProviderIds,
 }: ProviderTypeSelectorProps) {
   const theme = useTheme();
+  const { recordEvent } = useTelemetry();
 
   const [selectedProviderType, setSelectedProviderType] = useState<string | undefined>(
-    providerType ?? getProviderType(provider?.id),
+    providerType,
   );
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
+  const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [isExpanded, setIsExpanded] = useState<boolean>(!selectedProviderType);
 
-  // Category filter options
-  const categoryFilters = [
+  // Tag filter options
+  const tagFilters = [
+    { key: 'agents', label: 'Agents' },
     { key: 'endpoint', label: 'API Endpoints' },
     { key: 'custom', label: 'Custom' },
     { key: 'model', label: 'Foundation Models' },
@@ -306,14 +402,19 @@ export default function ProviderTypeSelector({
     { key: 'local', label: 'Local Models' },
   ];
 
-  // Handle category filter toggle
-  const handleCategoryToggle = (category: string) => {
-    setSelectedCategory(category);
+  // Handle tag filter toggle
+  const handleTagToggle = (tag: string) => {
+    setSelectedTag(tag);
+
+    // Track tag filter usage
+    recordEvent('feature_used', {
+      feature: 'redteam_provider_tag_filtered',
+      tag: tag,
+    });
   };
 
   useEffect(() => {
     if (!provider?.id) {
-      setSelectedProviderType('http');
       setProvider(
         {
           id: 'http',
@@ -337,6 +438,17 @@ export default function ProviderTypeSelector({
     setIsExpanded(false); // Collapse after selection
 
     const currentLabel = provider?.label;
+
+    // Find the selected option to get its details
+    const selectedOption = allProviderOptions.find((option) => option.value === value);
+
+    // Track provider type selection
+    recordEvent('feature_used', {
+      feature: 'redteam_provider_type_selected',
+      provider_type: value,
+      provider_label: selectedOption?.label,
+      provider_tag: selectedOption?.tag,
+    });
 
     if (value === 'custom') {
       setProvider(
@@ -532,6 +644,20 @@ export default function ProviderTypeSelector({
         },
         'bedrock',
       );
+    } else if (value === 'bedrock-agent') {
+      setProvider(
+        {
+          id: 'bedrock-agent:YOUR_AGENT_ID',
+          config: {
+            agentId: 'YOUR_AGENT_ID',
+            agentAliasId: 'YOUR_ALIAS_ID',
+            region: 'us-east-1',
+            enableTrace: false,
+          },
+          label: currentLabel,
+        },
+        'bedrock-agent',
+      );
     } else if (value === 'ollama') {
       setProvider(
         {
@@ -634,7 +760,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'watsonx') {
       setProvider(
         {
-          id: 'watsonx:ibm/granite-13b-chat-v2',
+          id: 'watsonx:ibm/granite-3-3-8b-instruct',
           config: {},
           label: currentLabel,
         },
@@ -696,6 +822,87 @@ export default function ProviderTypeSelector({
         },
         'simulated-user',
       );
+    } else if (value === 'langchain') {
+      setProvider(
+        {
+          id: 'file:///path/to/langchain_agent.py',
+          config: {},
+          label: currentLabel,
+        },
+        'langchain',
+      );
+    } else if (value === 'autogen') {
+      setProvider(
+        {
+          id: 'file:///path/to/autogen_agent.py',
+          config: {},
+          label: currentLabel,
+        },
+        'autogen',
+      );
+    } else if (value === 'crewai') {
+      setProvider(
+        {
+          id: 'file:///path/to/crewai_agent.py',
+          config: {},
+          label: currentLabel,
+        },
+        'crewai',
+      );
+    } else if (value === 'llamaindex') {
+      setProvider(
+        {
+          id: 'file:///path/to/llamaindex_agent.py',
+          config: {},
+          label: currentLabel,
+        },
+        'llamaindex',
+      );
+    } else if (value === 'langgraph') {
+      setProvider(
+        {
+          id: 'file:///path/to/langgraph_agent.py',
+          config: {},
+          label: currentLabel,
+        },
+        'langgraph',
+      );
+    } else if (value === 'openai-agents-sdk') {
+      setProvider(
+        {
+          id: 'file:///path/to/openai_agents.py',
+          config: {},
+          label: currentLabel,
+        },
+        'openai-agents-sdk',
+      );
+    } else if (value === 'pydantic-ai') {
+      setProvider(
+        {
+          id: 'file:///path/to/pydantic_ai_agent.py',
+          config: {},
+          label: currentLabel,
+        },
+        'pydantic-ai',
+      );
+    } else if (value === 'google-adk') {
+      setProvider(
+        {
+          id: 'file:///path/to/google_adk_agent.py',
+          config: {},
+          label: currentLabel,
+        },
+        'google-adk',
+      );
+    } else if (value === 'generic-agent') {
+      setProvider(
+        {
+          id: 'file:///path/to/custom_agent.py',
+          config: {},
+          label: currentLabel,
+        },
+        'generic-agent',
+      );
     } else {
       setProvider(
         {
@@ -712,10 +919,16 @@ export default function ProviderTypeSelector({
   const handleEditSelection = () => {
     setIsExpanded(true);
     setSearchTerm(''); // Clear search when expanding
-    setSelectedCategory(undefined); // Clear category filter when expanding
+    setSelectedTag(undefined); // Clear tag filter when expanding
+
+    // Track when user changes their provider selection
+    recordEvent('feature_used', {
+      feature: 'redteam_provider_selection_changed',
+      previous_provider_type: selectedProviderType,
+    });
   };
 
-  // Filter available options if availableProviderIds is provided, by search term, and by category
+  // Filter available options if availableProviderIds is provided, by search term, and by tag
   const filteredProviderOptions = allProviderOptions.filter((option) => {
     // Filter by availableProviderIds if provided
     const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
@@ -726,10 +939,10 @@ export default function ProviderTypeSelector({
       option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
       option.description.toLowerCase().includes(searchTerm.toLowerCase());
 
-    // Filter by selected category if provided
-    const matchesCategory = !selectedCategory || option.category === selectedCategory;
+    // Filter by selected tag if provided
+    const matchesTag = !selectedTag || option.tag === selectedTag;
 
-    return isAvailable && matchesSearch && matchesCategory;
+    return isAvailable && matchesSearch && matchesTag;
   });
 
   // Get the selected provider option for collapsed view
@@ -833,28 +1046,28 @@ export default function ProviderTypeSelector({
         <Box sx={{ flex: 1 }}>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
             <Chip
-              label="All Categories"
-              variant={selectedCategory === undefined ? 'filled' : 'outlined'}
-              color={selectedCategory === undefined ? 'primary' : 'default'}
-              onClick={() => setSelectedCategory(undefined)}
+              label="All Tags"
+              variant={selectedTag === undefined ? 'filled' : 'outlined'}
+              color={selectedTag === undefined ? 'primary' : 'default'}
+              onClick={() => setSelectedTag(undefined)}
               sx={{
                 cursor: 'pointer',
                 '&:hover': {
-                  bgcolor: selectedCategory === undefined ? 'primary.dark' : 'action.hover',
+                  bgcolor: selectedTag === undefined ? 'primary.dark' : 'action.hover',
                 },
               }}
             />
-            {categoryFilters.map((filter) => (
+            {tagFilters.map((filter) => (
               <Chip
                 key={filter.key}
                 label={filter.label}
-                variant={selectedCategory === filter.key ? 'filled' : 'outlined'}
-                color={selectedCategory === filter.key ? 'primary' : 'default'}
-                onClick={() => handleCategoryToggle(filter.key)}
+                variant={selectedTag === filter.key ? 'filled' : 'outlined'}
+                color={selectedTag === filter.key ? 'primary' : 'default'}
+                onClick={() => handleTagToggle(filter.key)}
                 sx={{
                   cursor: 'pointer',
                   '&:hover': {
-                    bgcolor: selectedCategory === filter.key ? 'primary.dark' : 'action.hover',
+                    bgcolor: selectedTag === filter.key ? 'primary.dark' : 'action.hover',
                   },
                 }}
               />

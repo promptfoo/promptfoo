@@ -2,7 +2,7 @@ import { matchesContextRelevance } from '../matchers';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Handles context-relevance assertions by evaluating whether the provided context
@@ -36,16 +36,19 @@ export const handleContextRelevance = async ({
     providerResponse,
   );
 
+  const result = await matchesContextRelevance(
+    test.vars.query,
+    context,
+    assertion.threshold ?? 0,
+    test.options,
+  );
+
   return {
     assertion,
-    ...(await matchesContextRelevance(
-      test.vars.query,
-      context,
-      assertion.threshold ?? 0,
-      test.options,
-    )),
+    ...result,
     metadata: {
       context,
+      ...(result.metadata || {}),
     },
   };
 };

@@ -1,13 +1,11 @@
-import { randomUUID } from 'crypto';
-
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
-import { VERSION } from './constants';
-import { getEnvBool, isCI } from './envars';
-import { fetchWithTimeout } from './fetch';
-import { POSTHOG_KEY } from './generated-constants';
+import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
+import { POSTHOG_KEY } from './constants/build';
+import { getEnvBool, getEnvString, isCI } from './envars';
 import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
+import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
 
 export const TelemetryEventSchema = z.object({
   event: z.enum([
@@ -27,11 +25,6 @@ type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
-const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
-const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
-const KA_ENDPOINT = 'https://ka.promptfoo.app/';
-const R_ENDPOINT = 'https://r.promptfoo.app/';
-
 let posthogClient: PostHog | null = null;
 
 function getPostHogClient(): PostHog | null {
@@ -43,6 +36,7 @@ function getPostHogClient(): PostHog | null {
     try {
       posthogClient = new PostHog(POSTHOG_KEY, {
         host: EVENTS_ENDPOINT,
+        fetch: fetchWithProxy,
       });
     } catch {
       posthogClient = null;
@@ -61,10 +55,12 @@ export class Telemetry {
   constructor() {
     this.id = getUserId();
     this.email = getUserEmail();
-    this.identify();
+    this.identify().then(() => {
+      // pass
+    });
   }
 
-  identify() {
+  async identify() {
     if (this.disabled || getEnvBool('IS_TESTING')) {
       return;
     }
@@ -77,6 +73,7 @@ export class Telemetry {
           properties: {
             email: this.email,
             isLoggedIntoCloud: isLoggedIntoCloud(),
+            isRunningInCi: isCI(),
           },
         });
         client.flush().catch(() => {
@@ -88,20 +85,6 @@ export class Telemetry {
         );
       }
     }
-
-    fetchWithTimeout(
-      KA_ENDPOINT,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ profile_id: this.id, email: this.email }),
-      },
-      TELEMETRY_TIMEOUT_MS,
-    ).catch(() => {
-      // pass
-    });
   }
 
   get disabled() {
@@ -146,39 +129,14 @@ export class Telemetry {
       }
     }
 
-    const kaBody = {
-      profile_id: this.id,
-      email: this.email,
-      events: [
-        {
-          message_id: randomUUID(),
-          type: 'track',
-          event: eventName,
-          properties: propertiesWithMetadata,
-          sent_at: new Date().toISOString(),
-        },
-      ],
-    };
-
-    fetch(KA_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': `promptfoo/${VERSION}`,
-      },
-      body: JSON.stringify(kaBody),
-    }).catch(() => {
-      // pass
-    });
-
-    fetch(R_ENDPOINT, {
+    fetchWithProxy(R_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         event: eventName,
-        environment: process.env.NODE_ENV ?? 'development',
+        environment: getEnvString('NODE_ENV', 'development'),
         email: this.email,
         meta: {
           user_id: this.id,
@@ -188,6 +146,17 @@ export class Telemetry {
     }).catch(() => {
       // pass
     });
+  }
+
+  async shutdown(): Promise<void> {
+    const client = getPostHogClient();
+    if (client) {
+      try {
+        await client.shutdown();
+      } catch (error) {
+        logger.debug(`PostHog shutdown error: ${error}`);
+      }
+    }
   }
 
   /**

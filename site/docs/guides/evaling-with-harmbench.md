@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating LLM safety with HarmBench
+description: Assess LLM vulnerabilities against 400+ adversarial attacks using HarmBench benchmarks to identify and prevent harmful outputs across 6 risk categories
 ---
 
 # Evaluating LLM safety with HarmBench

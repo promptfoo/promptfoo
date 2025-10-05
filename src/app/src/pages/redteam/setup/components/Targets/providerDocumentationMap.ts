@@ -50,7 +50,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   ai21: `${BASE_DOCS_URL}/ai21`,
   aimlapi: `${BASE_DOCS_URL}/aimlapi`,
   hyperbolic: `${BASE_DOCS_URL}/hyperbolic`,
-  lambdalabs: `${BASE_DOCS_URL}/lambdalabs`,
   fal: `${BASE_DOCS_URL}/fal`,
   voyage: `${BASE_DOCS_URL}/voyage`,
 
@@ -110,8 +109,7 @@ export function hasSpecificDocumentation(providerType?: string): boolean {
     return false;
   }
 
-  const normalizedType = providerType.includes(':') ? providerType.split(':')[0] : providerType;
-  return normalizedType in PROVIDER_DOCUMENTATION_MAP;
+  return providerType in PROVIDER_DOCUMENTATION_MAP;
 }
 
 /**

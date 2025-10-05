@@ -7,7 +7,7 @@ import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import { createShareableUrl } from '../share';
-import { isRunningUnderNpx } from '../util';
+import { promptfooCommand } from '../util/promptfooCommand';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
@@ -113,7 +113,6 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   );
 
   logger.info(chalk.green('\nRed team scan complete!'));
-  const command = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
   if (options.loadedFromCloud) {
     const url = await createShareableUrl(evalResult, false);
     logger.info(`View results: ${chalk.greenBright.bold(url)}`);
@@ -121,12 +120,12 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     if (options.liveRedteamConfig) {
       logger.info(
         chalk.blue(
-          `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(`${command} redteam report`)} on the command line.`,
+          `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(promptfooCommand('redteam report'))} on the command line.`,
         ),
       );
     } else {
       logger.info(
-        chalk.blue(`To view the results, run ${chalk.bold(`${command} redteam report`)}`),
+        chalk.blue(`To view the results, run ${chalk.bold(promptfooCommand('redteam report'))}`),
       );
     }
   }
@@ -134,4 +133,15 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   // Clear the callback when done
   setLogCallback(null);
   return evalResult;
+}
+
+/**
+ * Custom error class for target permission-related failures.
+ * Thrown when users lack necessary permissions to access or create targets.
+ */
+export class TargetPermissionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TargetPermissionError';
+  }
 }

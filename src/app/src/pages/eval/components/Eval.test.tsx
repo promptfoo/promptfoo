@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
+import React from 'react';
 
 vi.mock('@app/hooks/usePageMeta');
 vi.mock('@app/utils/api');
@@ -15,7 +16,9 @@ vi.mock('./store', () => ({
   useResultsViewSettingsStore: vi.fn(),
 }));
 vi.mock('./ResultsView', () => ({
-  default: () => <div data-testid="results-view" />,
+  default: ({ defaultEvalId }: { defaultEvalId: string }) => (
+    <div data-testid="results-view" data-default-eval-id={defaultEvalId} />
+  ),
 }));
 vi.mock('@app/components/EnterpriseBanner', () => ({
   default: () => null,
@@ -54,6 +57,8 @@ const baseMockTableStore = {
   totalResultsCount: 0,
   highlightedResultsCount: 0,
   isFetching: false,
+  filters: { values: {} },
+  filterMode: undefined,
   setEvalId: vi.fn(),
   setAuthor: vi.fn(),
   setVersion: vi.fn(),
@@ -66,7 +71,17 @@ const baseMockTableStore = {
     .fn()
     .mockResolvedValue({ table: mockTable, config: {}, totalCount: 0, filteredCount: 0 }),
   resetFilters: vi.fn(),
+  setIsStreaming: vi.fn(),
+  setFilterMode: vi.fn(),
+  resetFilterMode: vi.fn(),
+  addFilter: vi.fn(),
 };
+
+// Mock getState for the store
+(useTableStore as any).getState = vi.fn(() => ({
+  filters: { values: {} },
+  filterMode: undefined,
+}));
 
 describe('Eval Page Metadata', () => {
   beforeEach(() => {
@@ -322,5 +337,136 @@ describe('Eval', () => {
     });
 
     expect(fetchEvalDataMock).not.toHaveBeenCalled();
+  });
+
+  it('should not show empty state while waiting for table construction', async () => {
+    // Simulate a successful loadEvalById but table not yet constructed
+    const fetchEvalDataMock = vi
+      .fn()
+      .mockResolvedValue({ table: mockTable, config: {}, totalCount: 0, filteredCount: 0 });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      table: null, // Table not yet available
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'test-eval' }] }),
+    } as Response);
+
+    const { queryByText } = render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // Should show loading state, NOT empty state
+    expect(queryByText('Waiting for eval data')).toBeInTheDocument();
+    expect(queryByText('Welcome to Promptfoo')).not.toBeInTheDocument();
+  });
+
+  it('should show results when table is available', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      table: mockTable, // Table is available
+    });
+
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'test-eval' }] }),
+    } as Response);
+
+    const { queryByTestId } = render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    // Should show results view when table exists
+    expect(queryByTestId('results-view')).toBeInTheDocument();
+  });
+
+  it('should show error state when loadEvalById fails', async () => {
+    const fetchEvalDataMock = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    const { queryByText } = render(
+      <MemoryRouter>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(queryByText('404 Eval not found')).toBeInTheDocument();
+    expect(queryByText('Waiting for eval data')).not.toBeInTheDocument();
+  });
+
+  it('should correctly display the most recent eval data when rapidly switching between fetchIds', async () => {
+    const fetchEvalDataMock = vi.fn();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    const evalData1 = {
+      table: { ...mockTable, id: 'table1' },
+      config: {},
+      totalCount: 0,
+      filteredCount: 0,
+    };
+    const evalData2 = {
+      table: { ...mockTable, id: 'table2' },
+      config: {},
+      totalCount: 0,
+      filteredCount: 0,
+    };
+
+    fetchEvalDataMock.mockImplementation((id: string) => {
+      if (id === 'eval-1') {
+        return Promise.resolve(evalData1);
+      } else if (id === 'eval-2') {
+        return Promise.resolve(evalData2);
+      }
+      return Promise.resolve(null);
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <Eval fetchId="eval-1" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId="eval-2" />
+        </MemoryRouter>,
+        { container },
+      );
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const resultsView = container.querySelector('[data-testid="results-view"]');
+    expect(resultsView).toBeInTheDocument();
+    expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
   });
 });

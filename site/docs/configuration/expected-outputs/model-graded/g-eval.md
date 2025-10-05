@@ -1,5 +1,6 @@
 ---
 sidebar_position: 8
+description: "Apply Google's G-Eval framework for sophisticated multi-criteria LLM evaluation using chain-of-thought and probability scoring"
 ---
 
 # G-Eval
@@ -16,6 +17,8 @@ assert:
     value: 'Ensure the response is factually accurate and well-structured'
     threshold: 0.7 # Optional, defaults to 0.7
 ```
+
+For non-English evaluation output, see the [multilingual evaluation guide](/docs/configuration/expected-outputs/model-graded#non-english-evaluation).
 
 You can also provide multiple evaluation criteria as an array:
 

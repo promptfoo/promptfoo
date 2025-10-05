@@ -97,6 +97,14 @@ export interface CompletionOptions {
   apiVersion?: string; // For Live API: 'v1alpha' or 'v1' (default: v1alpha)
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format
+  /**
+   * Google service account credentials.
+   * Can be:
+   * 1. JSON string containing service account key
+   * 2. File path prefixed with 'file://' to load from external file
+   * 3. Undefined to use default authentication (Application Default Credentials)
+   */
+  credentials?: string;
 
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
@@ -211,6 +219,13 @@ export interface CompletionOptions {
   };
 
   mcp?: MCPConfig;
+
+  /**
+   * Controls role mapping when converting from OpenAI format to Gemini format.
+   * If true, uses 'assistant' role (for older Gemini versions).
+   * If false (default), maps 'assistant' to 'model' (for newer Gemini versions).
+   */
+  useAssistantRole?: boolean;
 }
 
 // Claude API interfaces

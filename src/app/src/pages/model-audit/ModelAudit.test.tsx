@@ -23,7 +23,7 @@ vi.mock('./components/ResultsTab', () => ({
     onShowFilesDialog?: () => void;
   }) => (
     <div data-testid="results-tab">
-      <span>Issues found: {scanResults.issues.length}</span>
+      <span>Issues found: {scanResults?.issues?.length || 0}</span>
       {onShowFilesDialog && (
         <button data-testid="show-files-button" onClick={onShowFilesDialog}>
           Show Files
@@ -40,6 +40,7 @@ describe('ModelAudit', () => {
   const mockUseModelAuditStore = vi.mocked(useModelAuditStore);
   const mockAddRecentScan = vi.fn();
   const mockCheckInstallation = vi.fn();
+  const mockFetchHistoricalScans = vi.fn();
 
   const getDefaultStoreState = () => ({
     // State
@@ -64,6 +65,9 @@ describe('ModelAudit', () => {
     showFilesDialog: false,
     showInstallationDialog: false,
     showOptionsDialog: false,
+    historicalScans: [],
+    isLoadingHistory: false,
+    historyError: null,
 
     // Actions
     addRecentScan: mockAddRecentScan,
@@ -83,6 +87,9 @@ describe('ModelAudit', () => {
     setShowInstallationDialog: vi.fn(),
     setShowOptionsDialog: vi.fn(),
     getRecentScans: vi.fn().mockReturnValue([]),
+    fetchHistoricalScans: mockFetchHistoricalScans,
+    deleteHistoricalScan: vi.fn(),
+    viewHistoricalScan: vi.fn(),
 
     // Persist
     persist: {
@@ -462,5 +469,167 @@ describe('ModelAudit', () => {
       return element?.tagName === 'P' && content.includes('model.safetensors');
     });
     expect(pathElement).toBeInTheDocument();
+  });
+
+  it('should refresh scan history and display the new scan in the History tab after a successful scan with persisted: true in the response', async () => {
+    const mockFetchHistoricalScans = vi.fn();
+    const mockSetScanResults = vi.fn();
+    const mockSetActiveTab = vi.fn();
+    const mockSetIsScanning = vi.fn();
+    const mockSetError = vi.fn();
+
+    mockUseModelAuditStore.mockReturnValue({
+      ...getDefaultStoreState(),
+      fetchHistoricalScans: mockFetchHistoricalScans,
+      setScanResults: mockSetScanResults,
+      setActiveTab: mockSetActiveTab,
+      setIsScanning: mockSetIsScanning,
+      setError: mockSetError,
+      paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
+    });
+
+    mockCallApi.mockImplementation(async (path: string) => {
+      if (path.includes('/model-audit/scan')) {
+        return {
+          ok: true,
+          json: () => Promise.resolve({ ...mockScanResults, persisted: true }),
+        } as Response;
+      }
+      if (path.includes('/model-audit/check-path')) {
+        return {
+          ok: true,
+          json: () => Promise.resolve({ exists: true, type: 'file', name: 'model.safetensors' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: () => Promise.resolve({}),
+      } as Response;
+    });
+
+    render(
+      <MemoryRouter>
+        <ThemeProvider theme={theme}>
+          <ModelAudit />
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const pathInput = screen.getByPlaceholderText('Type a path or drag & drop above');
+    fireEvent.change(pathInput, { target: { value: '/test/model.safetensors' } });
+    fireEvent.click(screen.getByText('Add'));
+
+    const scanButton = screen.getByText('Start Security Scan');
+    fireEvent.click(scanButton);
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/model-audit/scan',
+        expect.objectContaining({
+          method: 'POST',
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockFetchHistoricalScans).toHaveBeenCalled();
+    });
+  });
+
+  it('should not call fetchHistoricalScans when the scan response does not include the persisted field', async () => {
+    mockUseModelAuditStore.mockReturnValue({
+      ...getDefaultStoreState(),
+      fetchHistoricalScans: mockFetchHistoricalScans,
+      paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
+    });
+
+    mockCallApi.mockImplementation(async (path: string) => {
+      if (path.includes('/model-audit/scan')) {
+        const scanResultsWithoutPersisted: ScanResult = {
+          path: '/test/path',
+          issues: [],
+          success: true,
+        };
+        return {
+          ok: true,
+          json: () => Promise.resolve(scanResultsWithoutPersisted),
+        } as Response;
+      }
+      if (path.includes('/model-audit/check-path')) {
+        return {
+          ok: true,
+          json: () => Promise.resolve({ exists: true, type: 'file', name: 'model.safetensors' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: () => Promise.resolve({}),
+      } as Response;
+    });
+
+    render(
+      <MemoryRouter>
+        <ThemeProvider theme={theme}>
+          <ModelAudit />
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const scanButton = screen.getByText('Start Security Scan');
+    fireEvent.click(scanButton);
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/model-audit/scan',
+        expect.objectContaining({
+          method: 'POST',
+        }),
+      );
+    });
+
+    expect(mockFetchHistoricalScans).not.toHaveBeenCalled();
+  });
+
+  it('should gracefully handle viewing a historical scan record with incomplete data', async () => {
+    const mockViewHistoricalScan = vi.fn();
+    type HistoricalScan = {
+      id: string;
+      createdAt: number;
+      modelPath: string;
+      name: string;
+      hasErrors: boolean;
+      results: any;
+    };
+    const incompleteScan: HistoricalScan = {
+      id: '123',
+      createdAt: Date.now(),
+      modelPath: '/test/model.safetensors',
+      name: 'Test Scan',
+      hasErrors: true,
+      results: {
+        path: '/test/path',
+        issues: [],
+        success: true,
+      },
+    };
+
+    mockUseModelAuditStore.mockReturnValue({
+      ...getDefaultStoreState(),
+      historicalScans: [incompleteScan],
+      activeTab: 1,
+      scanResults: incompleteScan.results,
+      viewHistoricalScan: mockViewHistoricalScan,
+    });
+
+    render(
+      <MemoryRouter>
+        <ThemeProvider theme={theme}>
+          <ModelAudit />
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('results-tab')).toBeInTheDocument();
+    expect(screen.getByText('Issues found: 0')).toBeInTheDocument();
   });
 });

@@ -11,7 +11,18 @@ describe('handleContextRelevance', () => {
   });
 
   it('should pass when context relevance is above threshold', async () => {
-    const mockResult = { pass: true, score: 0.9, reason: 'Context is highly relevant' };
+    const mockResult = {
+      pass: true,
+      score: 0.9,
+      reason: 'Context is highly relevant',
+      metadata: {
+        extractedSentences: ['Paris is the capital.'],
+        totalContextSentences: 2,
+        relevantSentenceCount: 1,
+        insufficientInformation: false,
+        score: 0.5,
+      },
+    };
     jest.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
     jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
@@ -57,6 +68,11 @@ describe('handleContextRelevance', () => {
     expect(result.reason).toBe('Context is highly relevant');
     expect(result.metadata).toEqual({
       context: 'test context',
+      extractedSentences: ['Paris is the capital.'],
+      totalContextSentences: 2,
+      relevantSentenceCount: 1,
+      insufficientInformation: false,
+      score: 0.5,
     });
     expect(matchesContextRelevance).toHaveBeenCalledWith(
       'What is the capital of France?',
@@ -67,7 +83,18 @@ describe('handleContextRelevance', () => {
   });
 
   it('should fail when context relevance is below threshold', async () => {
-    const mockResult = { pass: false, score: 0.3, reason: 'Context not relevant to query' };
+    const mockResult = {
+      pass: false,
+      score: 0.3,
+      reason: 'Context not relevant to query',
+      metadata: {
+        extractedSentences: [],
+        totalContextSentences: 1,
+        relevantSentenceCount: 0,
+        insufficientInformation: true,
+        score: 0,
+      },
+    };
     jest.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
     jest.mocked(contextUtils.resolveContext).mockResolvedValue('irrelevant context');
 
@@ -113,6 +140,11 @@ describe('handleContextRelevance', () => {
     expect(result.reason).toBe('Context not relevant to query');
     expect(result.metadata).toEqual({
       context: 'irrelevant context',
+      extractedSentences: [],
+      totalContextSentences: 1,
+      relevantSentenceCount: 0,
+      insufficientInformation: true,
+      score: 0,
     });
     expect(matchesContextRelevance).toHaveBeenCalledWith(
       'What is the capital of France?',

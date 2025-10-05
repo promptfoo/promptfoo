@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Example configuration for testing conversation relevance
 # This metric evaluates whether chatbot responses remain relevant throughout a conversation
 

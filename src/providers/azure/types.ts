@@ -89,6 +89,12 @@ export interface AzureCompletionOptions {
   seed?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
 
+  /**
+   * If set, automatically call these functions when the model calls them.
+   * Keys are function names, values are either functions or strings (JavaScript code).
+   */
+  functionToolCallbacks?: Record<string, AssistantFunctionCallback | string>;
+
   passthrough?: object;
   mcp?: MCPConfig;
 }

@@ -1,10 +1,11 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../shared';
-import { getGoogleClient } from './util';
 import { sleep } from '../../util/time';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types';
+import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
+
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 
@@ -59,6 +60,19 @@ export class GoogleImageProvider implements ApiProvider {
     return `[Google Image Generation Provider ${this.modelName}]`;
   }
 
+  /**
+   * Helper method to get Google client with credentials support
+   */
+  private async getClientWithCredentials() {
+    const credentials = loadCredentials(this.config.credentials);
+    const { client } = await getGoogleClient({ credentials });
+    return client;
+  }
+
+  private async getProjectId(): Promise<string> {
+    return await resolveProjectId(this.config, this.env);
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!prompt) {
       return {
@@ -98,7 +112,8 @@ export class GoogleImageProvider implements ApiProvider {
       'us-central1';
 
     try {
-      const { client, projectId } = await getGoogleClient();
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
       if (!projectId) {
         return {
           error:

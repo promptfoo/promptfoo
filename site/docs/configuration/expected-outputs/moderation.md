@@ -1,6 +1,7 @@
 ---
 sidebar_position: 100
 sidebar_label: Moderation
+description: Implement comprehensive content moderation using multiple APIs to detect and filter harmful, toxic, or policy-violating outputs
 ---
 
 # Moderation

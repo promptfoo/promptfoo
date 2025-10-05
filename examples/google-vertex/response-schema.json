@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "tweet": {
+      "description": "The tweet content",
+      "type": "string"
+    }
+  },
+  "required": ["tweet"]
+}

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 25
+description: 'Evaluate conversation coherence by checking if LLM responses maintain context relevance across multi-turn dialogues'
 ---
 
 # Conversation Relevance

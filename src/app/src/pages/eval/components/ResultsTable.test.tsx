@@ -1,6 +1,7 @@
-import { act } from 'react-dom/test-utils';
+import { act } from 'react';
 
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -55,7 +56,9 @@ vi.mock('./EvalOutputCell', () => {
     ({ onRating, searchText }: { onRating: any; searchText?: string }) => {
       return (
         <div data-testid="eval-output-cell" data-searchtext={searchText}>
-          <button onClick={() => onRating(true, 0.75, 'test comment')}>Rate</button>
+          <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
+            Rate
+          </button>
         </div>
       );
     },
@@ -86,6 +89,7 @@ describe('ResultsTable Metrics Display', () => {
             cost: 1.23456,
             namedScores: {},
             testPassCount: 10,
+            testFailCount: 0,
             tokenUsage: {
               completion: 500,
               total: 1000,
@@ -216,6 +220,25 @@ describe('ResultsTable Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Tokens/Sec:')).toBeInTheDocument();
     expect(screen.getByText('250')).toBeInTheDocument();
+  });
+
+  describe('Keyboard Navigation', () => {
+    it('should handle keyboard navigation with Tab between cells and actions within cell', async () => {
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      const tableContainer = document.getElementById('results-table-container');
+      const table = tableContainer?.querySelector('table') as HTMLTableElement;
+      expect(table).toBeInTheDocument();
+      const firstBodyCell = table.querySelector('tbody td') as HTMLElement;
+      expect(firstBodyCell).toBeInTheDocument();
+      firstBodyCell.focus();
+      expect(document.activeElement?.tagName).toBe('TD');
+      expect(document.activeElement).toHaveClass('first-prompt-col');
+      await userEvent.tab();
+      expect(document.activeElement?.tagName).toBe('BUTTON');
+      expect(document.activeElement).toHaveClass('action');
+      await userEvent.tab();
+      expect(document.activeElement?.tagName).toBe('TD');
+    });
   });
 
   describe('Variable rendering', () => {
@@ -355,6 +378,86 @@ describe('ResultsTable Metrics Display', () => {
 
       const element = screen.getByText('null');
       expect(element).toBeInTheDocument();
+    });
+  });
+
+  describe('ResultsTable Media Rendering', () => {
+    const mockTableWithMedia = {
+      body: [
+        {
+          outputs: [
+            {
+              pass: true,
+              score: 1,
+              text: 'test output',
+              metadata: {
+                file: {
+                  imageVar: {
+                    path: '/path/to/image.jpg',
+                    type: 'image',
+                    format: 'jpeg',
+                  },
+                },
+                [Symbol.for('promptfoo:file')]: {
+                  imageVar: {
+                    path: '/path/to/image.jpg',
+                    type: 'image',
+                    format: 'jpeg',
+                  },
+                },
+              },
+            },
+          ],
+          test: {},
+          vars: ['data:image/jpeg;base64,encodedImage'],
+        },
+      ],
+      head: {
+        prompts: [{}],
+        vars: ['imageVar'],
+      },
+    };
+
+    const defaultProps = {
+      columnVisibility: {},
+      failureFilter: {},
+      filterMode: 'all' as const,
+      maxTextLength: 100,
+      onFailureFilterToggle: vi.fn(),
+      onSearchTextChange: vi.fn(),
+      searchText: '',
+      showStats: true,
+      wordBreak: 'break-word' as const,
+      setFilterMode: vi.fn(),
+      zoom: 1,
+      onResultsContainerScroll: vi.fn(),
+      atInitialVerticalScrollPosition: true,
+    };
+
+    beforeEach(() => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: mockTableWithMedia,
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+    });
+
+    it('should render media elements in variable cells without truncation', () => {
+      render(<ResultsTable {...defaultProps} />);
+
+      const imageElement = screen.getByRole('img', { name: 'Base64 encoded image' });
+      expect(imageElement).toBeInTheDocument();
+      expect(imageElement.closest('div')).not.toHaveTextContent('TruncatedText');
     });
   });
 });
@@ -724,7 +827,6 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       score: 1,
       reason: 'Manual result (overrides all other grading results)',
       comment: 'Test comment',
-      assertion: null,
       componentResults,
     };
 
@@ -866,7 +968,6 @@ describe('ResultsTable handleRating', () => {
       setTable: mockSetTable,
       table: createMockTable(),
       version: 4,
-      renderMarkdown: true,
       fetchEvalData: vi.fn(),
       filters: {
         values: {},
@@ -1440,6 +1541,81 @@ describe('ResultsTable Regex Handling', () => {
     const evalOutputCell = screen.getByTestId('eval-output-cell');
     expect(evalOutputCell).toBeInTheDocument();
     expect(evalOutputCell).toHaveAttribute('data-searchtext', specialRegexChars);
+  });
+});
+
+describe('ResultsTable Malformed Markdown Handling', () => {
+  const malformedMarkdown = 'This is a test with some \n unclosed <tag>';
+
+  const mockTable = {
+    body: [
+      {
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [malformedMarkdown],
+      },
+    ],
+    head: {
+      prompts: [
+        {
+          provider: 'test-provider',
+        },
+      ],
+      vars: ['testVar'],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  it('should render variable cells containing malformed markdown without breaking the UI', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    const elementsWithMalformedMarkdown = screen.getAllByText((content, element) => {
+      if (!element) {
+        return false;
+      }
+      return (
+        element?.textContent?.includes('This is a test with some') &&
+        element?.textContent?.includes('unclosed <tag>')
+      );
+    });
+    expect(elementsWithMalformedMarkdown.length).toBeGreaterThan(0);
   });
 });
 

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Mocha/Chai
+description: Integrate Promptfoo LLM testing with Mocha and Chai to automate prompt quality checks using semantic similarity, factuality, and custom assertions in your test suite.
 ---
 
 import Tabs from '@theme/Tabs';

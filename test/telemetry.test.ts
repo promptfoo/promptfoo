@@ -1,8 +1,9 @@
-import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
+import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+  fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 jest.mock('crypto', () => ({
@@ -17,6 +18,7 @@ jest.mock('../src/globalConfig/globalConfig', () => ({
 }));
 
 jest.mock('../src/constants', () => ({
+  ...jest.requireActual('../src/constants'),
   VERSION: '1.0.0',
 }));
 
@@ -66,9 +68,13 @@ jest.mock('../src/globalConfig/accounts', () => ({
   getUserId: jest.fn().mockReturnValue('test-user-id'),
 }));
 
+jest.mock('../src/constants/build', () => ({
+  POSTHOG_KEY: 'test-posthog-key',
+}));
+
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
-  let fetchSpy: jest.SpyInstance;
+  let fetchWithProxySpy: jest.MockedFunction<typeof fetchWithProxy>;
   let sendEventSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -76,9 +82,10 @@ describe('Telemetry', () => {
     process.env = { ...originalEnv };
     process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
 
-    fetchSpy = jest
-      .spyOn(global, 'fetch')
-      .mockImplementation(() => Promise.resolve({ ok: true } as Response));
+    // Get the mocked fetchWithProxy function
+    fetchWithProxySpy = fetchWithProxy as jest.MockedFunction<typeof fetchWithProxy>;
+    fetchWithProxySpy.mockClear();
+    fetchWithProxySpy.mockResolvedValue({ ok: true } as any);
 
     sendEventSpy = jest.spyOn(Telemetry.prototype, 'sendEvent' as any);
 
@@ -105,14 +112,14 @@ describe('Telemetry', () => {
     _telemetry.record('eval_ran', { foo: 'bar' });
 
     expect(sendEventSpy).toHaveBeenCalledWith('eval_ran', { foo: 'bar' });
-    expect(fetchSpy).toHaveBeenCalledWith(
+    expect(fetchWithProxySpy).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         method: 'POST',
       }),
     );
 
-    const fetchCalls = fetchSpy.mock.calls;
+    const fetchCalls = fetchWithProxySpy.mock.calls;
     let foundVersion = false;
 
     for (const call of fetchCalls) {
@@ -134,18 +141,18 @@ describe('Telemetry', () => {
     jest.useRealTimers(); // Temporarily use real timers for this test
 
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-    process.env.IS_TESTING = ''; // Clear IS_TESTING to allow fetch calls
+    delete process.env.IS_TESTING; // Clear IS_TESTING to allow fetch calls
 
     const isCI = jest.requireMock('../src/envars').isCI;
     isCI.mockReturnValue(true);
-    fetchSpy.mockClear();
+    fetchWithProxySpy.mockClear();
 
     const _telemetry = new Telemetry();
     _telemetry.record('feature_used', { test: 'value' });
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const fetchCalls = fetchSpy.mock.calls;
+    const fetchCalls = fetchWithProxySpy.mock.calls;
     expect(fetchCalls.length).toBeGreaterThan(0);
 
     let foundExpectedProperties = false;
@@ -155,14 +162,12 @@ describe('Telemetry', () => {
         try {
           const data = JSON.parse(call[1].body);
 
-          if (data.events && data.events.length > 0) {
-            const properties = data.events[0].properties;
-
+          // Check for the structure sent to R_ENDPOINT
+          if (data.meta) {
             if (
-              properties &&
-              properties.test === 'value' &&
-              properties.packageVersion === '1.0.0' &&
-              properties.isRunningInCi === true
+              data.meta.test === 'value' &&
+              data.meta.packageVersion === '1.0.0' &&
+              data.meta.isRunningInCi === true
             ) {
               foundExpectedProperties = true;
               break;
@@ -234,7 +239,7 @@ describe('Telemetry', () => {
   describe('PostHog client initialization', () => {
     it('should initialize PostHog client when telemetry is enabled and POSTHOG_KEY is present', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       const mockPostHog = jest.fn().mockImplementation(() => ({
@@ -255,12 +260,13 @@ describe('Telemetry', () => {
 
       expect(mockPostHog).toHaveBeenCalledWith('test-posthog-key', {
         host: 'https://a.promptfoo.app',
+        fetch: expect.any(Function),
       });
     });
 
     it('should handle PostHog initialization errors gracefully', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       const mockPostHog = jest.fn().mockImplementation(() => {
@@ -288,10 +294,14 @@ describe('Telemetry', () => {
         identify: jest.fn(),
         capture: jest.fn(),
         flush: jest.fn().mockResolvedValue(undefined),
+        on: jest.fn(), // Add the 'on' method for error handling
       };
       mockPostHog = jest.fn().mockImplementation(() => mockPostHogInstance);
 
+      // Clear all modules and re-mock
       jest.resetModules();
+      jest.clearAllMocks();
+
       jest.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
       }));
@@ -299,7 +309,7 @@ describe('Telemetry', () => {
 
     it('should call PostHog identify when telemetry is enabled', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       const telemetryModule = await import('../src/telemetry');
@@ -309,14 +319,14 @@ describe('Telemetry', () => {
 
       expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
         distinctId: 'test-user-id',
-        properties: { email: 'test@example.com', isLoggedIntoCloud: false },
+        properties: { email: 'test@example.com', isLoggedIntoCloud: false, isRunningInCi: false },
       });
       expect(mockPostHogInstance.flush).toHaveBeenCalledWith();
     });
 
     it('should handle PostHog identify errors gracefully', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       mockPostHogInstance.identify.mockImplementation(() => {
@@ -334,7 +344,7 @@ describe('Telemetry', () => {
 
     it('should call PostHog capture when sending events', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       const telemetryModule = await import('../src/telemetry');
@@ -356,7 +366,7 @@ describe('Telemetry', () => {
 
     it('should handle PostHog capture errors gracefully', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       mockPostHogInstance.capture.mockImplementation(() => {
@@ -374,7 +384,7 @@ describe('Telemetry', () => {
 
     it('should handle PostHog flush errors silently', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       mockPostHogInstance.flush.mockRejectedValue(new Error('Flush failed'));
@@ -383,6 +393,46 @@ describe('Telemetry', () => {
       const _telemetry = new telemetryModule.Telemetry();
 
       expect(() => _telemetry.identify()).not.toThrow();
+    });
+
+    it('should call PostHog shutdown when telemetry shutdown is called', async () => {
+      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
+      delete process.env.IS_TESTING;
+      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+
+      mockPostHogInstance.shutdown = jest.fn().mockResolvedValue(undefined);
+
+      const telemetryModule = await import('../src/telemetry');
+      const _telemetry = new telemetryModule.Telemetry();
+
+      await _telemetry.shutdown();
+
+      expect(mockPostHogInstance.shutdown).toHaveBeenCalled();
+    });
+
+    it('should handle PostHog shutdown errors gracefully', async () => {
+      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
+      delete process.env.IS_TESTING;
+      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+
+      mockPostHogInstance.shutdown = jest.fn().mockRejectedValue(new Error('Shutdown failed'));
+
+      const { default: logger } = await import('../src/logger');
+      const loggerSpy = jest.spyOn(logger, 'debug');
+      const telemetryModule = await import('../src/telemetry');
+      const _telemetry = new telemetryModule.Telemetry();
+
+      await expect(_telemetry.shutdown()).resolves.not.toThrow();
+      expect(loggerSpy).toHaveBeenCalledWith('PostHog shutdown error: Error: Shutdown failed');
+    });
+
+    it('should handle shutdown when PostHog client is not initialized', async () => {
+      process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
+
+      const telemetryModule = await import('../src/telemetry');
+      const _telemetry = new telemetryModule.Telemetry();
+
+      await expect(_telemetry.shutdown()).resolves.not.toThrow();
     });
   });
 
@@ -409,7 +459,7 @@ describe('Telemetry', () => {
       jest.resetModules();
 
       // Re-mock fetchWithTimeout
-      jest.doMock('../src/fetch', () => ({
+      jest.doMock('../src/util/fetch', () => ({
         fetchWithTimeout: jest.fn().mockRejectedValue(mockError),
       }));
 
@@ -447,58 +497,6 @@ describe('Telemetry', () => {
         },
         1000,
       );
-    });
-  });
-
-  describe('KA endpoint calls', () => {
-    beforeEach(() => {
-      jest.useRealTimers(); // Use real timers for these tests
-    });
-
-    afterEach(() => {
-      jest.useFakeTimers(); // Restore fake timers
-    });
-
-    it('should send identify data to KA endpoint', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = ''; // Clear IS_TESTING to allow telemetry
-
-      // Need to reset modules to pick up the env change
-      jest.resetModules();
-
-      // Re-mock fetchWithTimeout
-      jest.doMock('../src/fetch', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-      }));
-
-      const { fetchWithTimeout } = await import('../src/fetch');
-      const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
-
-      // Wait for constructor identify to complete
-      await new Promise((resolve) => setTimeout(resolve, 20));
-
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://ka.promptfoo.app/',
-        expect.objectContaining({
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ profile_id: 'test-user-id', email: 'test@example.com' }),
-        }),
-        1000,
-      );
-    });
-
-    it('should handle KA endpoint errors silently', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      fetchSpy.mockRejectedValue(new Error('KA endpoint error'));
-
-      const _telemetry = new Telemetry();
-
-      // Should not throw error
-      expect(() => _telemetry.identify()).not.toThrow();
     });
   });
 });

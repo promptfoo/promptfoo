@@ -9,13 +9,14 @@ import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
-import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Grid from '@mui/material/Grid';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -28,29 +29,34 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { isFoundationModelProvider } from '@promptfoo/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
+import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
+import { RunOptionsContent } from './RunOptions';
+import type { RedteamRunOptions } from '@promptfoo/types';
+import { getEstimatedDuration } from './strategies/utils';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 
 interface ReviewProps {
   onBack?: () => void;
+  navigateToPlugins: () => void;
+  navigateToStrategies: () => void;
+  navigateToPurpose: () => void;
 }
 
 interface PolicyPlugin {
@@ -65,7 +71,12 @@ interface JobStatusResponse {
   jobId?: string;
 }
 
-export default function Review({ onBack }: ReviewProps) {
+export default function Review({
+  onBack,
+  navigateToPlugins,
+  navigateToStrategies,
+  navigateToPurpose,
+}: ReviewProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
@@ -77,25 +88,91 @@ export default function Review({ onBack }: ReviewProps) {
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
-  const [debugMode, setDebugMode] = React.useState(false);
   const [maxConcurrency, setMaxConcurrency] = React.useState(
     String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
   );
-  const [delayMs, setDelayMs] = React.useState('0');
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
-  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
-  const [isRunSettingsDialogOpen, setIsRunSettingsDialogOpen] = useState(false);
+  const [pollInterval, setPollInterval] = useState<number | null>(null);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
   const { checkEmailStatus } = useEmailVerification();
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
   const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
+  const [isRunOptionsExpanded, setIsRunOptionsExpanded] = useState(true);
 
   // Auto-expand advanced config if there are existing test variables
   const hasTestVariables =
     config.defaultTest?.vars && Object.keys(config.defaultTest.vars).length > 0;
   const [isAdvancedConfigExpanded, setIsAdvancedConfigExpanded] = useState(hasTestVariables);
+
+  // Parse purpose text into sections
+  const parsedPurposeSections = useMemo(() => {
+    if (!config.purpose) {
+      return [];
+    }
+
+    const sections: { title: string; content: string }[] = [];
+    const lines = config.purpose.split('\n');
+    let currentSection: { title: string; content: string } | null = null;
+    let inCodeBlock = false;
+    let contentLines: string[] = [];
+
+    for (const line of lines) {
+      // Check if we're entering or exiting a code block
+      if (line === '```') {
+        inCodeBlock = !inCodeBlock;
+        continue;
+      }
+
+      // Check if this is a section header (ends with colon and not in code block)
+      if (!inCodeBlock && line.endsWith(':') && !line.startsWith(' ') && !line.startsWith('\t')) {
+        // Save previous section if exists
+        if (currentSection) {
+          currentSection.content = contentLines.join('\n').trim();
+          if (currentSection.content) {
+            sections.push(currentSection);
+          }
+        }
+        // Start new section
+        currentSection = { title: line.slice(0, -1), content: '' };
+        contentLines = [];
+      } else if (currentSection) {
+        // Add to current section content
+        contentLines.push(line);
+      }
+    }
+
+    // Save last section
+    if (currentSection) {
+      currentSection.content = contentLines.join('\n').trim();
+      if (currentSection.content) {
+        sections.push(currentSection);
+      }
+    }
+
+    // If no sections were found, treat the entire text as a single section
+    if (sections.length === 0 && config.purpose.trim()) {
+      sections.push({ title: 'Application Details', content: config.purpose.trim() });
+    }
+
+    return sections;
+  }, [config.purpose]);
+
+  // State to track which purpose sections are expanded (auto-expand first section)
+  const [expandedPurposeSections, setExpandedPurposeSections] = useState<Set<string>>(new Set());
+
+  const togglePurposeSection = (sectionTitle: string) => {
+    setExpandedPurposeSections((prev: Set<string>) => {
+      const newSet = new Set(prev);
+      if (newSet.has(sectionTitle)) {
+        newSet.delete(sectionTitle);
+      } else {
+        newSet.add(sectionTitle);
+      }
+      return newSet;
+    });
+  };
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -204,8 +281,6 @@ export default function Review({ onBack }: ReviewProps) {
   };
 
   const handleRunWithSettings = async () => {
-    setIsRunSettingsDialogOpen(false);
-
     // Check email verification first
     const emailResult = await checkEmailStatus();
 
@@ -237,7 +312,7 @@ export default function Review({ onBack }: ReviewProps) {
     }
 
     if (pollInterval) {
-      clearInterval(pollInterval);
+      window.clearInterval(pollInterval);
       setPollInterval(null);
     }
 
@@ -277,15 +352,15 @@ export default function Review({ onBack }: ReviewProps) {
         body: JSON.stringify({
           config: getUnifiedConfig(config),
           force: forceRegeneration,
-          verbose: debugMode,
+          verbose: config.target.config.verbose,
           maxConcurrency,
-          delayMs,
+          delay: config.target.config.delay,
         }),
       });
 
       const { id } = await response.json();
 
-      const interval = setInterval(async () => {
+      const interval = window.setInterval(async () => {
         const statusResponse = await callApi(`/eval/job/${id}`);
         const status = (await statusResponse.json()) as Job;
 
@@ -294,7 +369,7 @@ export default function Review({ onBack }: ReviewProps) {
         }
 
         if (status.status === 'complete' || status.status === 'error') {
-          clearInterval(interval);
+          window.clearInterval(interval);
           setPollInterval(null);
           setIsRunning(false);
 
@@ -342,7 +417,7 @@ export default function Review({ onBack }: ReviewProps) {
       });
 
       if (pollInterval) {
-        clearInterval(pollInterval);
+        window.clearInterval(pollInterval);
         setPollInterval(null);
       }
 
@@ -370,21 +445,17 @@ export default function Review({ onBack }: ReviewProps) {
   useEffect(() => {
     return () => {
       if (pollInterval) {
-        clearInterval(pollInterval);
+        window.clearInterval(pollInterval);
       }
     };
   }, [pollInterval]);
 
   return (
-    <PageWrapper
-      title="Review & Run"
-      description="Review your configuration and run the red-team evaluation to identify potential vulnerabilities."
-      onBack={onBack}
-    >
+    <PageWrapper title="Review & Run" onBack={onBack}>
       <Box>
         <TextField
           fullWidth
-          label="Configuration Description"
+          label="Description"
           placeholder="My Red Team Configuration"
           value={config.description}
           onChange={handleDescriptionChange}
@@ -398,7 +469,7 @@ export default function Review({ onBack }: ReviewProps) {
         </Typography>
 
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 6 }}>
             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Plugins ({pluginSummary.length})
@@ -425,10 +496,21 @@ export default function Review({ onBack }: ReviewProps) {
                   />
                 ))}
               </Box>
+              {pluginSummary.length === 0 && (
+                <>
+                  <Alert severity="warning" sx={{ mt: 2 }}>
+                    You haven't selected any plugins. Plugins are the vulnerabilities that the red
+                    team will search for.
+                  </Alert>
+                  <Button onClick={navigateToPlugins} sx={{ mt: 2 }} variant="contained">
+                    Add a plugin
+                  </Button>
+                </>
+              )}
             </Paper>
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 6 }}>
             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Strategies ({strategySummary.length})
@@ -455,11 +537,23 @@ export default function Review({ onBack }: ReviewProps) {
                   />
                 ))}
               </Box>
+              {(strategySummary.length === 0 ||
+                (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
+                <>
+                  <Alert severity="warning" sx={{ mt: 2 }}>
+                    The basic strategy is great for an end-to-end setup test, but don't expect any
+                    findings. Once you've verified that the setup is working, add another strategy.
+                  </Alert>
+                  <Button onClick={navigateToStrategies} sx={{ mt: 2 }} variant="contained">
+                    Add more strategies
+                  </Button>
+                </>
+              )}
             </Paper>
           </Grid>
 
           {customPolicies.length > 0 && (
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 6 }}>
               <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
                   Custom Policies ({customPolicies.length})
@@ -518,7 +612,7 @@ export default function Review({ onBack }: ReviewProps) {
           )}
 
           {intents.length > 0 && (
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 6 }}>
               <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
                   Intents ({intents.length})
@@ -594,74 +688,188 @@ export default function Review({ onBack }: ReviewProps) {
             </Grid>
           )}
 
-          <Grid item xs={12}>
-            <Paper elevation={2} sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Additional Details
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={12}>
-                  <Typography variant="subtitle2">Purpose</Typography>
-                  <Typography
-                    variant="body2"
-                    onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                    sx={{
-                      whiteSpace: 'pre-wrap',
-                      padding: 1,
-                      borderRadius: 1,
-                      backgroundColor: 'background.paper',
-                      cursor: 'pointer',
-                      display: '-webkit-box',
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
-                      '&:hover': {
-                        backgroundColor: 'action.hover',
-                      },
-                    }}
-                  >
-                    {config.purpose || 'Not specified'}
-                  </Typography>
-                  {config.purpose && config.purpose.split('\n').length > 6 && (
-                    <Typography
-                      variant="caption"
+          <Grid size={{ xs: 12 }}>
+            <Box sx={{ boxShadow: theme.shadows[1], borderRadius: 1, overflow: 'hidden' }}>
+              <Accordion
+                expanded={isPurposeExpanded}
+                onChange={(e, expanded) => {
+                  setIsPurposeExpanded(expanded);
+                }}
+                sx={{
+                  '&:before': { display: 'none' },
+                  boxShadow: 'none',
+                  borderRadius: 0,
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    '& .MuiAccordionSummary-content': {
+                      alignItems: 'center',
+                      gap: 2,
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <InfoOutlinedIcon fontSize="small" color="action" />
+                    <Typography variant="h6">Application Details</Typography>
+                    {config.purpose && (
+                      <Chip
+                        label={config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
+                        size="small"
+                        variant="outlined"
+                        color={config.purpose.length < 100 ? 'warning' : 'success'}
+                        sx={{ height: 20, fontSize: '0.75rem' }}
+                      />
+                    )}
+                    {!config.purpose && (
+                      <Chip
+                        label="Not configured"
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        sx={{ height: 20, fontSize: '0.75rem' }}
+                      />
+                    )}
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 0 }}>
+                  <Grid size={{ xs: 12 }}>
+                    <Box
                       sx={{
-                        color: 'primary.main',
-                        cursor: 'pointer',
-                        mt: 0.5,
-                        display: 'block',
-                      }}
-                      onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                    >
-                      {isPurposeExpanded ? 'Show less' : 'Show more'}
-                    </Typography>
-                  )}
-                </Grid>
-                {config.testGenerationInstructions && (
-                  <Grid item xs={12} sm={12}>
-                    <Typography variant="subtitle2">Test Generation Instructions</Typography>
-                    <Typography
-                      variant="body2"
-                      onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
-                      sx={{
-                        whiteSpace: 'pre-wrap',
-                        padding: 1,
-                        borderRadius: 1,
-                        backgroundColor: 'background.paper',
-                        cursor: 'pointer',
-                        display: '-webkit-box',
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
-                        '&:hover': {
-                          backgroundColor: 'action.hover',
-                        },
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        mb: 1,
                       }}
                     >
-                      {config.testGenerationInstructions}
-                    </Typography>
-                    {config.testGenerationInstructions &&
-                      config.testGenerationInstructions.split('\n').length > 6 && (
+                      {parsedPurposeSections.length > 1 && (
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            if (expandedPurposeSections.size === parsedPurposeSections.length) {
+                              setExpandedPurposeSections(new Set());
+                            } else {
+                              setExpandedPurposeSections(
+                                new Set(parsedPurposeSections.map((s) => s.title)),
+                              );
+                            }
+                          }}
+                          sx={{ textTransform: 'none' }}
+                        >
+                          {expandedPurposeSections.size === parsedPurposeSections.length
+                            ? 'Collapse All'
+                            : 'Expand All'}
+                        </Button>
+                      )}
+                    </Box>
+
+                    {(!config.purpose?.trim() || config.purpose.length < 100) &&
+                    !isFoundationModelProvider(config.target.id) ? (
+                      <Box sx={{ mb: 2 }}>
+                        <Alert severity="warning">
+                          Application details are required to generate a high quality red team. Go
+                          to the Application Details section and add a purpose.{' '}
+                          <Link
+                            style={{ textDecoration: 'underline' }}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
+                          >
+                            Learn more about red team best practices.
+                          </Link>
+                        </Alert>
+                        <Button onClick={navigateToPurpose} sx={{ mt: 2 }} variant="contained">
+                          Add application details
+                        </Button>
+                      </Box>
+                    ) : null}
+
+                    {parsedPurposeSections.length > 0 ? (
+                      <Stack spacing={2} sx={{ mt: 1 }}>
+                        {parsedPurposeSections.map((section, index) => (
+                          <Box
+                            key={index}
+                            sx={{
+                              border: `1px solid ${theme.palette.divider}`,
+                              borderRadius: 1,
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <Box
+                              onClick={() => togglePurposeSection(section.title)}
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                p: 1.5,
+                                backgroundColor: theme.palette.action.hover,
+                                cursor: 'pointer',
+                                '&:hover': {
+                                  backgroundColor: theme.palette.action.selected,
+                                },
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="body2" fontWeight="medium">
+                                  {section.title}
+                                </Typography>
+                              </Box>
+                              <ExpandMoreIcon
+                                sx={{
+                                  transform: expandedPurposeSections.has(section.title)
+                                    ? 'rotate(180deg)'
+                                    : 'rotate(0deg)',
+                                  transition: 'transform 0.2s',
+                                }}
+                              />
+                            </Box>
+                            {expandedPurposeSections.has(section.title) && (
+                              <Box sx={{ p: 2, backgroundColor: 'background.paper' }}>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    whiteSpace: 'pre-wrap',
+                                    color: 'text.secondary',
+                                  }}
+                                >
+                                  {section.content}
+                                </Typography>
+                              </Box>
+                            )}
+                          </Box>
+                        ))}
+                      </Stack>
+                    ) : config.purpose ? (
+                      <Typography
+                        variant="body2"
+                        onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                        sx={{
+                          whiteSpace: 'pre-wrap',
+                          padding: 1,
+                          borderRadius: 1,
+                          backgroundColor: 'background.paper',
+                          cursor: 'pointer',
+                          display: '-webkit-box',
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
+                          '&:hover': {
+                            backgroundColor: 'action.hover',
+                          },
+                        }}
+                      >
+                        {config.purpose}
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        Not specified
+                      </Typography>
+                    )}
+                    {config.purpose &&
+                      parsedPurposeSections.length === 0 &&
+                      config.purpose.split('\n').length > 6 && (
                         <Typography
                           variant="caption"
                           sx={{
@@ -670,58 +878,179 @@ export default function Review({ onBack }: ReviewProps) {
                             mt: 0.5,
                             display: 'block',
                           }}
-                          onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                          onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
                         >
-                          {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
+                          {isPurposeExpanded ? 'Show less' : 'Show more'}
                         </Typography>
                       )}
+
+                    {config.testGenerationInstructions && (
+                      <Grid size={{ xs: 12 }}>
+                        <Typography variant="subtitle2">Test Generation Instructions</Typography>
+                        <Typography
+                          variant="body2"
+                          onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                          sx={{
+                            whiteSpace: 'pre-wrap',
+                            padding: 1,
+                            borderRadius: 1,
+                            backgroundColor: 'background.paper',
+                            cursor: 'pointer',
+                            display: '-webkit-box',
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
+                            '&:hover': {
+                              backgroundColor: 'action.hover',
+                            },
+                          }}
+                        >
+                          {config.testGenerationInstructions}
+                        </Typography>
+                        {config.testGenerationInstructions &&
+                          config.testGenerationInstructions.split('\n').length > 6 && (
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: 'primary.main',
+                                cursor: 'pointer',
+                                mt: 0.5,
+                                display: 'block',
+                              }}
+                              onClick={() =>
+                                setIsTestInstructionsExpanded(!isTestInstructionsExpanded)
+                              }
+                            >
+                              {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
+                            </Typography>
+                          )}
+                      </Grid>
+                    )}
                   </Grid>
-                )}
-              </Grid>
-            </Paper>
+                </AccordionDetails>
+              </Accordion>
+
+              <Accordion
+                expanded={isAdvancedConfigExpanded}
+                onChange={(e, expanded) => {
+                  setIsAdvancedConfigExpanded(expanded);
+                }}
+                sx={{
+                  '&:before': { display: 'none' },
+                  boxShadow: 'none',
+                  borderRadius: 0,
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    '& .MuiAccordionSummary-content': {
+                      alignItems: 'center',
+                      gap: 2,
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TuneIcon fontSize="small" color="action" />
+                    <Typography variant="h6">Advanced Configuration</Typography>
+                    <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1 }} />
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 0 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    Configure advanced options that apply to all test cases. These settings are for
+                    power users who need fine-grained control over their red team evaluation.
+                  </Typography>
+                  <DefaultTestVariables />
+                </AccordionDetails>
+              </Accordion>
+
+              <Accordion
+                expanded={isRunOptionsExpanded}
+                onChange={(e, expanded) => {
+                  setIsRunOptionsExpanded(expanded);
+                }}
+                sx={{
+                  '&:before': { display: 'none' },
+                  boxShadow: 'none',
+                  borderRadius: 0,
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    '& .MuiAccordionSummary-content': {
+                      alignItems: 'center',
+                      gap: 2,
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PlayArrowIcon fontSize="small" color="action" />
+                    <Typography variant="h6">Run Options</Typography>
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 0 }}>
+                  <RunOptionsContent
+                    numTests={config.numTests}
+                    runOptions={{
+                      maxConcurrency: config.maxConcurrency,
+                      delay: config.target.config.delay,
+                    }}
+                    updateConfig={updateConfig}
+                    updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
+                      if (key === 'delay') {
+                        updateConfig('target', {
+                          ...config.target,
+                          config: { ...config.target.config, delay: value },
+                        });
+                      } else if (key === 'maxConcurrency') {
+                        updateConfig('maxConcurrency', value);
+                      } else if (key === 'verbose') {
+                        updateConfig('target', {
+                          ...config.target,
+                          config: { ...config.target.config, verbose: value },
+                        });
+                      }
+                    }}
+                  />
+                </AccordionDetails>
+              </Accordion>
+            </Box>
           </Grid>
         </Grid>
 
         <Divider sx={{ my: 4 }} />
 
-        <Accordion
-          expanded={isAdvancedConfigExpanded}
-          onChange={(e, expanded) => {
-            setIsAdvancedConfigExpanded(expanded);
-          }}
+        <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
+          Run Your Scan
+        </Typography>
+
+        <Box
           sx={{
-            mb: 4,
-            '&:before': { display: 'none' },
-            boxShadow: theme.shadows[1],
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            mb: 3,
+            p: 2,
+            borderRadius: 1,
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
           }}
         >
-          <AccordionSummary
-            expandIcon={<ExpandMoreIcon />}
-            sx={{
-              '& .MuiAccordionSummary-content': {
-                alignItems: 'center',
-                gap: 2,
-              },
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <TuneIcon fontSize="small" color="action" />
-              <Typography variant="h6">Advanced Configuration</Typography>
-              <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1 }} />
-            </Box>
-          </AccordionSummary>
-          <AccordionDetails sx={{ pt: 0 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Configure advanced options that apply to all test cases. These settings are for power
-              users who need fine-grained control over their red team evaluation.
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography variant="body1" color="text.secondary">
+              Estimated Duration:
             </Typography>
-            <DefaultTestVariables />
-          </AccordionDetails>
-        </Accordion>
-
-        <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-          Running Your Configuration
-        </Typography>
+          </Box>
+          <Typography variant="body1" fontWeight="bold" color="primary.main">
+            {getEstimatedDuration(config)}
+          </Typography>
+          <Tooltip title="Estimated time includes test generation and probe execution. Actual time may vary based on target response times and network conditions.">
+            <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
+          </Tooltip>
+        </Box>
 
         <Paper elevation={2} sx={{ p: 3 }}>
           <Box sx={{ mb: 4 }}>
@@ -794,7 +1123,7 @@ export default function Review({ onBack }: ReviewProps) {
                     <Button
                       variant="contained"
                       color="success"
-                      href={`/report?evalId=${evalId}`}
+                      href={`/reports?evalId=${evalId}`}
                       startIcon={<AssessmentIcon />}
                     >
                       View Report
@@ -809,15 +1138,6 @@ export default function Review({ onBack }: ReviewProps) {
                     </Button>
                   </>
                 )}
-                <Tooltip title="Run Settings">
-                  <IconButton
-                    onClick={() => setIsRunSettingsDialogOpen(true)}
-                    disabled={isRunning}
-                    size="small"
-                  >
-                    <SettingsIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
               </Box>
             </Box>
             {logs.length > 0 && <LogViewer logs={logs} />}
@@ -846,139 +1166,6 @@ export default function Review({ onBack }: ReviewProps) {
                 Cancel Existing & Run New
               </Button>
             </Box>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isRunSettingsDialogOpen} onClose={() => setIsRunSettingsDialogOpen(false)}>
-          <DialogTitle>Run Settings</DialogTitle>
-          <DialogContent>
-            <Stack spacing={4} sx={{ mt: 1, minWidth: 300 }}>
-              {/*
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={forceRegeneration}
-                  onChange={(e) => setForceRegeneration(e.target.checked)}
-                  disabled={isRunning}
-                />
-              }
-              label={
-                <Box>
-                  <Typography variant="body1">Force regeneration</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Generate new test cases even if no changes are detected
-                  </Typography>
-                </Box>
-              }
-            />
-            */}
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={debugMode}
-                    onChange={(e) => setDebugMode(e.target.checked)}
-                    disabled={isRunning}
-                  />
-                }
-                label={
-                  <Box>
-                    <Typography variant="body1">Debug mode</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Show additional debug information in logs
-                    </Typography>
-                  </Box>
-                }
-              />
-              <Box>
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="Number of test cases"
-                  value={config.numTests}
-                  onChange={(e) => {
-                    const value = Number(e.target.value);
-                    if (!Number.isNaN(value) && value > 0 && Number.isInteger(value)) {
-                      updateConfig('numTests', value);
-                    }
-                  }}
-                  disabled={isRunning}
-                  helperText="Number of test cases to generate for each plugin"
-                />
-              </Box>
-              <Box>
-                <Tooltip
-                  title={
-                    Number(maxConcurrency) > 1
-                      ? 'Disabled because max concurrency is greater than 1'
-                      : ''
-                  }
-                  placement="top"
-                >
-                  <span>
-                    <TextField
-                      fullWidth
-                      type="number"
-                      label="Delay between API calls (ms)"
-                      value={delayMs}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Ensure non-negative numbers only
-                        if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
-                          setDelayMs(value);
-                          // If delay is set, disable concurrency by setting it to 1
-                          if (Number(value) > 0) {
-                            setMaxConcurrency('1');
-                          }
-                        }
-                      }}
-                      disabled={isRunning || Number(maxConcurrency) > 1}
-                      inputProps={{ min: 0, step: 1 }}
-                      InputProps={{
-                        endAdornment: <Typography variant="caption">ms</Typography>,
-                      }}
-                      helperText="Add a delay between API calls to avoid rate limits"
-                    />
-                  </span>
-                </Tooltip>
-              </Box>
-              <Box>
-                <Tooltip
-                  title={Number(delayMs) > 0 ? 'Disabled because delay is set' : ''}
-                  placement="top"
-                >
-                  <span>
-                    <TextField
-                      fullWidth
-                      type="number"
-                      label="Max concurrency"
-                      value={maxConcurrency}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Ensure non-negative numbers only
-                        if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
-                          setMaxConcurrency(value);
-                          updateConfig('maxConcurrency', Number(value));
-                          // If concurrency > 1, disable delay by setting it to 0
-                          if (Number(value) > 1) {
-                            setDelayMs('0');
-                          }
-                        }
-                      }}
-                      disabled={isRunning || Number(delayMs) > 0}
-                      inputProps={{ min: 1, step: 1 }}
-                      InputProps={{
-                        endAdornment: <Typography variant="caption">instances</Typography>,
-                      }}
-                      helperText="Maximum number of concurrent evaluations"
-                    />
-                  </span>
-                </Tooltip>
-              </Box>
-
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-                <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
-              </Box>
-            </Stack>
           </DialogContent>
         </Dialog>
 

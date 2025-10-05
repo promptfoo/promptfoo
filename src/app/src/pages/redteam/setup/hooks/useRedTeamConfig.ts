@@ -1,6 +1,7 @@
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { getProviderType } from '../components/Targets/helpers';
 import type { Plugin } from '@promptfoo/redteam/constants';
 
 import type { ApplicationDefinition, Config, ProviderOptions } from '../types';
@@ -307,10 +308,13 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
             },
           };
         }),
-      setFullConfig: (config) => set({ config }),
+      setFullConfig: (config) => {
+        const providerType = getProviderType(config.target?.id);
+        set({ config, providerType });
+      },
       resetConfig: () => {
-        set({ config: defaultConfig });
-        // There's a bunch of state that's not persisted that we want to reset
+        set({ config: defaultConfig, providerType: undefined });
+        // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
         window.location.reload();
       },
       updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) =>

@@ -1,5 +1,6 @@
 ---
 sidebar_label: DBRX benchmarks
+description: Compare DBRX vs Mixtral vs GPT-3.5 performance with custom benchmarks to evaluate real-world task accuracy and identify the optimal model for your use case
 ---
 
 # DBRX vs Mixtral vs GPT: create your own benchmark
@@ -18,7 +19,7 @@ The end result will be a custom benchmark that looks similar to this:
 
 - OpenRouter API key for DBRX and Mixtral.
 - OpenAI API key for gpt-4.1-mini
-- Node 18+
+- Node 20+
 
 ## Step 1: Initial Setup
 

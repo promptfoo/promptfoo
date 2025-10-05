@@ -38,6 +38,7 @@ import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
 import { PolicyPlugin } from './policy';
+import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
@@ -46,9 +47,11 @@ import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
+import { UnverifiableClaimsPlugin } from './unverifiableClaims';
+import { VLGuardPlugin } from './vlguard';
 import { XSTestPlugin } from './xstest';
 
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
 import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
@@ -182,8 +185,12 @@ const pluginFactories: PluginFactory[] = [
   ),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
   createPluginFactory(PlinyPlugin, 'pliny'),
-  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
-    invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
+  createPluginFactory<{ policy: any }>(PolicyPlugin, 'policy', (config: { policy: any }) =>
+    // Validate the policy plugin config and provide a meaningful error message to the user.
+    invariant(
+      config.policy && (typeof config.policy === 'string' || isValidPolicyObject(config.policy)),
+      `One of the policy plugins is invalid. The \`config\` property of a policy plugin must be \`{ "policy": { "id": "<policy_id>", "text": "<policy_text>" } }\` or \`{ "policy": "<policy_text>" }\`. Received: ${JSON.stringify(config)}`,
+    ),
   ),
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
@@ -191,11 +198,14 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
+  createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
+  createPluginFactory(VLGuardPlugin, 'vlguard'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {
       if (neverGenerateRemote()) {
-        throw new Error(`${category} plugin requires remote generation to be enabled`);
+        logger.error(`${category} plugin requires remote generation to be enabled`);
+        return [];
       }
 
       const testCases = await getHarmfulTests(params, category);
@@ -245,7 +255,8 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
   key: category,
   action: async (params: PluginActionParams) => {
     if (neverGenerateRemote()) {
-      throw new Error(`${category} plugin requires remote generation to be enabled`);
+      logger.error(`${category} plugin requires remote generation to be enabled`);
+      return [];
     }
 
     const testCases = await fetchRemoteTestCases(
@@ -274,7 +285,8 @@ function createRemotePlugin<T extends PluginConfig>(
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ purpose, injectVar, n, config }: PluginActionParams) => {
       if (neverGenerateRemote()) {
-        throw new Error(`${key} plugin requires remote generation to be enabled`);
+        logger.error(`${key} plugin requires remote generation to be enabled`);
+        return [];
       }
       const testCases: TestCase[] = await fetchRemoteTestCases(
         key,
@@ -315,18 +327,25 @@ const remotePlugins: PluginFactory[] = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
+  'medical:off-label-use',
   'medical:prioritization-error',
   'medical:sycophancy',
   'financial:calculation-error',
   'financial:compliance-violation',
+  'financial:confidential-disclosure',
+  'financial:counterfactual',
   'financial:data-leakage',
+  'financial:defamation',
   'financial:hallucination',
+  'financial:impartiality',
+  'financial:misconduct',
   'financial:sycophancy',
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
   'reasoning-dos',
   'religion',
+  'special-token-injection',
   'ssrf',
   'system-prompt-override',
 ].map((key) => createRemotePlugin(key));

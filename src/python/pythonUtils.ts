@@ -6,7 +6,10 @@ import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
-import { execAsync } from './execAsync';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import type { Options as PythonShellOptions } from 'python-shell';
 
 export const state: {
@@ -16,6 +19,136 @@ export const state: {
   cachedPythonPath: null,
   validationPromise: null,
 };
+
+/**
+ * Try to find Python using Windows 'where' command, filtering out Microsoft Store stubs.
+ */
+async function tryWindowsWhere(): Promise<string | null> {
+  try {
+    const result = await execFileAsync('where', ['python']);
+    const output = result.stdout.trim();
+
+    // Handle empty output
+    if (!output) {
+      logger.debug("Windows 'where python' returned empty output");
+      return null;
+    }
+
+    const paths = output.split('\n').filter((path) => path.trim());
+
+    for (const pythonPath of paths) {
+      const trimmedPath = pythonPath.trim();
+
+      // Skip Microsoft Store stubs and non-executables
+      if (trimmedPath.includes('WindowsApps') || !trimmedPath.endsWith('.exe')) {
+        continue;
+      }
+
+      const validated = await tryPath(trimmedPath);
+      if (validated) {
+        return validated;
+      }
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    logger.debug(`Windows 'where python' failed: ${errorMsg}`);
+
+    // Log permission/access errors differently
+    if (errorMsg.includes('Access is denied') || errorMsg.includes('EACCES')) {
+      logger.warn(`Permission denied when searching for Python: ${errorMsg}`);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Try Python commands to get sys.executable path.
+ */
+async function tryPythonCommands(commands: string[]): Promise<string | null> {
+  for (const cmd of commands) {
+    try {
+      const result = await execFileAsync(cmd, ['-c', 'import sys; print(sys.executable)']);
+      const executablePath = result.stdout.trim();
+      if (executablePath && executablePath !== 'None') {
+        // On Windows, ensure .exe suffix if missing (but only for Windows-style paths)
+        if (process.platform === 'win32' && !executablePath.toLowerCase().endsWith('.exe')) {
+          // Only add .exe for Windows-style paths (drive letter or UNC paths)
+          if (executablePath.includes('\\') || /^[A-Za-z]:/.test(executablePath)) {
+            return executablePath + '.exe';
+          }
+        }
+        return executablePath;
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.debug(`Python command "${cmd}" failed: ${errorMsg}`);
+
+      // Log permission/access errors differently
+      if (
+        errorMsg.includes('Access is denied') ||
+        errorMsg.includes('EACCES') ||
+        errorMsg.includes('EPERM')
+      ) {
+        logger.warn(`Permission denied when trying Python command "${cmd}": ${errorMsg}`);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Try direct command validation as final fallback.
+ */
+async function tryDirectCommands(commands: string[]): Promise<string | null> {
+  for (const cmd of commands) {
+    try {
+      const validated = await tryPath(cmd);
+      if (validated) {
+        return validated;
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.debug(`Direct command "${cmd}" failed: ${errorMsg}`);
+
+      // Log permission/access errors differently
+      if (
+        errorMsg.includes('Access is denied') ||
+        errorMsg.includes('EACCES') ||
+        errorMsg.includes('EPERM')
+      ) {
+        logger.warn(`Permission denied when trying Python command "${cmd}": ${errorMsg}`);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Attempts to get the Python executable path using platform-appropriate strategies.
+ * @returns The Python executable path if successful, or null if failed.
+ */
+export async function getSysExecutable(): Promise<string | null> {
+  if (process.platform === 'win32') {
+    // Windows: Try 'where python' first to avoid Microsoft Store stubs
+    const whereResult = await tryWindowsWhere();
+    if (whereResult) {
+      return whereResult;
+    }
+
+    // Then try py launcher commands (removing python3 as it's uncommon on Windows)
+    const sysResult = await tryPythonCommands(['py', 'py -3']);
+    if (sysResult) {
+      return sysResult;
+    }
+
+    // Final fallback to direct python command
+    return await tryDirectCommands(['python']);
+  } else {
+    // Unix: Standard python3/python detection
+    return await tryPythonCommands(['python3', 'python']);
+  }
+}
 
 /**
  * Attempts to validate a Python executable path.
@@ -30,9 +163,8 @@ export async function tryPath(path: string): Promise<string | null> {
       timeoutId = setTimeout(() => reject(new Error('Command timed out')), 2500);
     });
 
-    const result = await Promise.race([execAsync(path + ' --version'), timeoutPromise]);
+    const result = await Promise.race([execFileAsync(path, ['--version']), timeoutPromise]);
 
-    // Clear the timeout to prevent open handle
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
@@ -43,7 +175,6 @@ export async function tryPath(path: string): Promise<string | null> {
     }
     return null;
   } catch {
-    // Clear the timeout to prevent open handle
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
@@ -87,15 +218,15 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
         );
       }
 
-      const alternativePath = process.platform === 'win32' ? 'py -3' : 'python3';
-      const secondaryPath = await tryPath(alternativePath);
-      if (secondaryPath) {
-        state.cachedPythonPath = secondaryPath;
-        return secondaryPath;
+      // Try to get Python executable using comprehensive detection
+      const detectedPath = await getSysExecutable();
+      if (detectedPath) {
+        state.cachedPythonPath = detectedPath;
+        return detectedPath;
       }
 
       throw new Error(
-        `Python 3 not found. Tried "${pythonPath}" and "${alternativePath}". ` +
+        `Python 3 not found. Tried "${pythonPath}", sys.executable detection, and fallback commands. ` +
           `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
           `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
       );
@@ -151,7 +282,7 @@ export async function runPython(
   };
 
   try {
-    await fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
+    fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
 
     await new Promise<void>((resolve, reject) => {
@@ -178,7 +309,7 @@ export async function runPython(
       }
     });
 
-    const output = await fs.readFileSync(outputPath, 'utf-8');
+    const output = fs.readFileSync(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
 
     let result: { type: 'final_result'; data: any } | undefined;
@@ -213,14 +344,12 @@ export async function runPython(
       }`,
     );
   } finally {
-    await Promise.all(
-      [tempJsonPath, outputPath].map((file) => {
-        try {
-          fs.unlinkSync(file);
-        } catch (error) {
-          logger.error(`Error removing ${file}: ${error}`);
-        }
-      }),
-    );
+    [tempJsonPath, outputPath].forEach((file) => {
+      try {
+        fs.unlinkSync(file);
+      } catch (error) {
+        logger.error(`Error removing ${file}: ${error}`);
+      }
+    });
   }
 }

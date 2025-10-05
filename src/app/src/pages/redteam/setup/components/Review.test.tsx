@@ -23,6 +23,9 @@ vi.mock('@app/hooks/useToast', () => ({
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 vi.mock('@app/pages/eval-creator/components/YamlEditor', () => ({
@@ -79,24 +82,42 @@ describe('Review Component', () => {
 
   describe('Component Integration', () => {
     it('renders all main sections including DefaultTestVariables component', () => {
-      render(<Review />);
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
 
       expect(screen.getByText('Review & Run')).toBeInTheDocument();
       expect(screen.getByText('Configuration Summary')).toBeInTheDocument();
       expect(screen.getByTestId('default-test-variables')).toBeInTheDocument();
-      expect(screen.getByText('Running Your Configuration')).toBeInTheDocument();
+      expect(screen.getByText('Run Options')).toBeInTheDocument();
     });
 
     it('renders configuration description field', () => {
-      render(<Review />);
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
 
-      const descriptionField = screen.getByLabelText('Configuration Description');
+      const descriptionField = screen.getByLabelText('Description');
       expect(descriptionField).toBeInTheDocument();
       expect(descriptionField).toHaveValue('Test Configuration');
     });
 
     it('renders DefaultTestVariables component inside AccordionDetails', () => {
-      render(<Review />);
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
 
       const defaultTestVariables = screen.getByTestId('default-test-variables');
       const accordionDetails = defaultTestVariables.closest(
@@ -109,7 +130,13 @@ describe('Review Component', () => {
 
   describe('Advanced Configuration Accordion', () => {
     it('should render the accordion collapsed by default when there are no test variables', () => {
-      render(<Review />);
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
 
       const accordionSummary = screen
         .getByText('Advanced Configuration')
@@ -130,7 +157,13 @@ describe('Review Component', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      render(<Review />);
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
 
       const accordionSummary = screen.getByRole('button', {
         name: 'Advanced Configuration Optional',
@@ -139,7 +172,13 @@ describe('Review Component', () => {
     });
 
     it('displays the advanced configuration description text when the accordion is expanded', async () => {
-      render(<Review />);
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
 
       const accordionSummary = screen.getByText('Advanced Configuration').closest('button');
 
@@ -156,7 +195,13 @@ describe('Review Component', () => {
   });
 
   it('renders DefaultTestVariables without Paper wrapper and title when Advanced Configuration is expanded', async () => {
-    render(<Review />);
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
 
     const accordionSummary = screen.getByText('Advanced Configuration');
     fireEvent.click(accordionSummary);
@@ -166,5 +211,62 @@ describe('Review Component', () => {
     expect(defaultTestVariables).toBeInTheDocument();
 
     expect(defaultTestVariables.closest('paper')).toBeNull();
+  });
+
+  it('should not treat indented lines ending with colons as section headers', () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: `
+Application Details:
+  This is a test application.
+  It has some indented lines:
+    - line 1:
+    - line 2:
+`,
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    const sectionTitles = screen.getAllByRole('heading', { name: 'Application Details' });
+    expect(sectionTitles.length).toBe(1);
+  });
+
+  it('handles extremely long section headers and content without breaking layout', () => {
+    const longHeader = 'This is an extremely long section header that should wrap appropriately:';
+    const longContent =
+      'This is an extremely long section content that should wrap appropriately. '.repeat(50);
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: `${longHeader}\n${longContent}`,
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    const sectionHeaderElement = screen.getByText(longHeader.slice(0, -1));
+    fireEvent.click(sectionHeaderElement);
+
+    expect(
+      screen.getByText((content) => {
+        return content.includes(longContent.substring(0, 50));
+      }),
+    ).toBeInTheDocument();
   });
 });

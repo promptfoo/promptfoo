@@ -1,5 +1,6 @@
 ---
 sidebar_label: OpenRouter
+description: "Access 100+ LLM providers through OpenRouter's unified API gateway with automatic routing and cost optimization features"
 ---
 
 # OpenRouter
@@ -28,6 +29,7 @@ Latest releases:
 | [deepseek/deepseek-r1](https://openrouter.ai/deepseek/deepseek-r1)                                         | 64,000               |
 | [deepseek/deepseek-r1-distill-llama-70b](https://openrouter.ai/deepseek/deepseek-r1-distill-llama-70b)     | 131,072              |
 | [deepseek/deepseek-v3-base:free](https://openrouter.ai/deepseek/deepseek-v3-base)                          | 131,072              |
+| [deepseek/deepseek-v3.2-exp](https://openrouter.ai/deepseek/deepseek-v3.2-exp)                             | 128,000              |
 | [google/gemini-2.0-flash-exp:free](https://openrouter.ai/google/gemini-2.0-flash-exp:free)                 | 1,048,576            |
 | [google/gemini-2.5-pro-preview](https://openrouter.ai/google/gemini-2.5-pro-preview)                       | 1,000,000            |
 | [google/gemini-flash-1.5](https://openrouter.ai/google/gemini-flash-1.5)                                   | 1,000,000            |

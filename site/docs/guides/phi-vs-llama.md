@@ -1,5 +1,6 @@
 ---
 sidebar_label: Phi vs Llama
+description: Compare Phi 3 vs Llama 3.1 performance on your custom datasets using automated benchmarks and side-by-side evaluations to select the optimal model for your use case
 ---
 
 # Phi vs Llama: Benchmark on your own data
