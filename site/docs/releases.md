@@ -19,9 +19,9 @@ This month we shipped **reusable custom policies**, **risk scoring**, **8 new AI
 #### New Model Support
 
 - **[Claude 4.5 Sonnet](/docs/providers/anthropic/)** - Anthropic's latest model
-- **[Claude web tools](/docs/providers/anthropic/#web-tools)** - `web_fetch_20250910` and `web_search_20250305` tool support
+- **[Claude web tools](/docs/providers/anthropic/)** - `web_fetch_20250910` and `web_search_20250305` tool support
 - **[GPT-5](/docs/providers/openai/)** - GPT-5, GPT-5 Codex, and GPT-5 Mini
-- **[OpenAI Realtime API](/docs/providers/openai/#realtime-api)** - Full audio input/output support for GPT Realtime models
+- **[OpenAI Realtime API](/docs/providers/openai/)** - Full audio input/output support for GPT Realtime models
 - **[Gemini 2.5 Flash](/docs/providers/google/)** - Flash and Flash-Lite model support
 
 #### New Providers
@@ -77,7 +77,7 @@ Use risk scores to prioritize remediation and set CI/CD deployment gates.
 
 - **[VLGuard](/docs/red-team/plugins/vlguard/)** - Multi-modal vision-language model safety testing
 - **[Special Token Injection](/docs/red-team/plugins/special-token-injection/)** - ChatML tag vulnerability testing (`<|im_start|>`, `<|im_end|>`)
-- **Financial plugins** - [Confidential Disclosure](/docs/red-team/plugins/financial/#financial-confidential-disclosure), [Counterfactual](/docs/red-team/plugins/financial/#financial-counterfactual), [Defamation](/docs/red-team/plugins/financial/#financial-defamation), [Impartiality](/docs/red-team/plugins/financial/#financial-impartiality), [Misconduct](/docs/red-team/plugins/financial/#financial-misconduct)
+- **Financial plugins** - [Confidential Disclosure](/docs/red-team/plugins/financial/), [Counterfactual](/docs/red-team/plugins/financial/), [Defamation](/docs/red-team/plugins/financial/), [Impartiality](/docs/red-team/plugins/financial/), [Misconduct](/docs/red-team/plugins/financial/)
 
 #### Strategies & Compliance
 
