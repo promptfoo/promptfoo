@@ -1,12 +1,13 @@
 ---
+title: AWS Bedrock
 sidebar_label: AWS Bedrock
 sidebar_position: 3
-description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
+description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
 ---
 
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, Alibaba's Qwen, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -29,7 +30,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+     - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -38,7 +39,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
        config:
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
@@ -84,6 +85,7 @@ The `inferenceModelType` config option supports the following values:
 - `titan` - For Amazon Titan models
 - `deepseek` - For DeepSeek models
 - `openai` - For OpenAI models
+- `qwen` - For Alibaba Qwen models
 
 ### Example: Multi-Region Inference Profile
 
@@ -132,38 +134,50 @@ Amazon Bedrock supports multiple authentication methods, including the new API k
 
 ### Credential Resolution Order
 
-When authenticating with AWS Bedrock, credentials are resolved in this sequence:
+Credentials are resolved in the following priority order:
 
-1. **Config file credentials**: Explicitly provided `accessKeyId` and `secretAccessKey` in your promptfoo configuration (highest priority)
-2. **API Key authentication**: Bedrock API keys via config or environment variable
-3. **SSO profile**: When a `profile` is specified in your config
-4. **AWS default credential chain**:
-   - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
-   - Shared credentials file (`~/.aws/credentials`)
-   - EC2 instance profile or ECS task role
-   - SSO credentials from AWS CLI
+1. **Explicit credentials in config** (`accessKeyId`, `secretAccessKey`)
+2. **Bedrock API Key authentication** (`apiKey`)
+3. **SSO profile authentication** (`profile`)
+4. **AWS default credential chain** (environment variables, `~/.aws/credentials`)
+
+The first available credential method is used automatically.
 
 ### Authentication Options
 
 #### 1. Explicit credentials (highest priority)
 
-Specify direct access keys in your config:
+Specify AWS access keys directly in your configuration. **For security, use environment variables instead of hardcoding credentials:**
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
-      accessKeyId: 'YOUR_ACCESS_KEY_ID'
-      secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
-      sessionToken: 'YOUR_SESSION_TOKEN' # Optional
+      accessKeyId: '{{env.AWS_ACCESS_KEY_ID}}'
+      secretAccessKey: '{{env.AWS_SECRET_ACCESS_KEY}}'
+      sessionToken: '{{env.AWS_SESSION_TOKEN}}' # Optional, for temporary credentials
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
-This method overrides all other credential sources, including EC2 instance roles.
+**Environment variables:**
+
+```bash
+export AWS_ACCESS_KEY_ID="your_access_key_id"
+export AWS_SECRET_ACCESS_KEY="your_secret_access_key"
+export AWS_SESSION_TOKEN="your_session_token"  # Optional
+```
+
+:::warning Security Best Practice
+
+**Do not commit credentials to version control.** Use environment variables or a dedicated secrets management system to handle sensitive keys.
+
+:::
+
+This method overrides all other credential sources, including EC2 instance roles and SSO profiles.
 
 #### 2. API Key authentication
 
-Amazon Bedrock API keys provide a simplified authentication method that doesn't require managing AWS IAM credentials. This is especially useful for developers who want quick access to Bedrock models.
+Amazon Bedrock API keys provide simplified authentication without managing AWS IAM credentials.
 
 **Using environment variables:**
 
@@ -206,28 +220,84 @@ For these advanced features, use traditional AWS IAM credentials instead.
 
 #### 3. SSO profile authentication
 
-Use a profile from your AWS configuration:
+Use a named profile from your AWS configuration for AWS SSO setups or managing multiple AWS accounts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       profile: 'YOUR_SSO_PROFILE'
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
+**Prerequisites for SSO profiles:**
+
+1. **Install AWS CLI v2**: Ensure AWS CLI v2 is installed and on your PATH.
+
+2. **Configure AWS SSO**: Set up AWS SSO using the AWS CLI:
+
+   ```bash
+   aws configure sso
+   ```
+
+3. **Profile configuration**: Your `~/.aws/config` should contain the profile:
+
+   ```ini
+   [profile YOUR_SSO_PROFILE]
+   sso_start_url = https://your-sso-portal.awsapps.com/start
+   sso_region = us-east-1
+   sso_account_id = 123456789012
+   sso_role_name = YourRoleName
+   region = us-east-1
+   ```
+
+4. **Active SSO session**: Ensure you have an active SSO session:
+   ```bash
+   aws sso login --profile YOUR_SSO_PROFILE
+   ```
+
+**Use SSO profiles when:**
+
+- Managing multi-account AWS environments
+- Working in organizations with centralized AWS SSO
+- Your team needs different role-based permissions
+- You need to switch between different AWS contexts
+
 #### 4. Default credentials (lowest priority)
 
-Rely on the AWS default credential chain:
+Use the AWS SDK's standard credential chain:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1' # Only region specified
 ```
 
-This method is ideal when running on EC2 instances with IAM roles, as it automatically uses the instance's credentials.
+**The AWS SDK checks these sources in order:**
+
+1. **Environment variables**: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
+2. **Shared credentials file**: `~/.aws/credentials` (from `aws configure`)
+3. **AWS IAM roles**: EC2 instance profiles, ECS task roles, Lambda execution roles
+4. **Shared AWS CLI credentials**: Including cached SSO credentials
+
+**Use default credentials when:**
+
+- Running on AWS infrastructure (EC2, ECS, Lambda) with IAM roles
+- Developing locally with AWS CLI configured (`aws configure`)
+- Working in CI/CD environments with IAM roles or environment variables
+
+**Quick setup for local development:**
+
+```bash
+# Option 1: Using AWS CLI
+aws configure
+
+# Option 2: Using environment variables
+export AWS_ACCESS_KEY_ID="your_access_key"
+export AWS_SECRET_ACCESS_KEY="your_secret_key"
+export AWS_DEFAULT_REGION="us-east-1"
+```
 
 ## Example
 
@@ -268,22 +338,27 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
+  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
   - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
-    config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
-    config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
   - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+  - id: bedrock:us.anthropic.claude-3-opus-20240229-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -300,6 +375,17 @@ providers:
       temperature: 0.7
       max_completion_tokens: 256
       reasoning_effort: 'low'
+  - id: bedrock:qwen.qwen3-coder-480b-a35b-v1:0
+    config:
+      region: 'us-west-2'
+      temperature: 0.7
+      max_tokens: 256
+      showThinking: true
+  - id: bedrock:qwen.qwen3-32b-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
 
 tests:
   - vars:
@@ -316,7 +402,7 @@ Different models may support different configuration options. Here are some mode
 
 ### General Configuration Options
 
-- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
 
 ### Amazon Nova Models
 
@@ -407,7 +493,7 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
 ```yaml
 config:
@@ -565,6 +651,90 @@ providers:
 OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bedrock models. This aligns with OpenAI's API specification and allows for more precise control over response length.
 
 :::
+
+### Qwen Models
+
+Alibaba's Qwen models (e.g., `qwen.qwen3-coder-480b-a35b-v1:0`, `qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-235b-a22b-2507-v1:0`, `qwen.qwen3-32b-v1:0`) support advanced features including hybrid thinking modes, tool calling, and extended context understanding.
+
+**Regional Availability**: Check the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/home) or use `aws bedrock list-foundation-models` to verify which Qwen models are available in your target region, as availability varies by model and region.
+
+You can configure them with the following options:
+
+```yaml
+config:
+  max_tokens: 2048 # Maximum number of tokens to generate
+  temperature: 0.7 # Controls randomness (0.0 to 1.0)
+  top_p: 0.9 # Nucleus sampling parameter
+  frequency_penalty: 0.1 # Reduces repetition of frequent tokens
+  presence_penalty: 0.1 # Reduces repetition of any tokens
+  stop: ['END', 'STOP'] # Stop sequences
+  showThinking: true # Control whether thinking content is included in output
+  tools: [...] # Tool calling configuration (optional)
+  tool_choice: 'auto' # Tool selection strategy (optional)
+```
+
+#### Hybrid Thinking Modes
+
+Qwen models support hybrid thinking modes where the model can apply step-by-step reasoning before delivering the final answer. The `showThinking` parameter controls whether thinking content is included in the response output:
+
+- When set to `true` (default), thinking content will be included in the output
+- When set to `false`, thinking content will be excluded from the output
+
+This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
+
+#### Tool Calling Support
+
+Qwen models support tool calling with OpenAI-compatible function definitions:
+
+```yaml
+config:
+  tools:
+    - type: function
+      function:
+        name: calculate
+        description: Perform arithmetic calculations
+        parameters:
+          type: object
+          properties:
+            expression:
+              type: string
+              description: The mathematical expression to evaluate
+          required: ['expression']
+  tool_choice: auto # 'auto', 'none', or specific function name
+```
+
+#### Model Variants
+
+- **Qwen3-Coder-480B-A35B**: Mixture-of-experts model optimized for coding and agentic tasks with 480B total parameters and 35B active parameters
+- **Qwen3-Coder-30B-A3B**: Smaller MoE model with 30B total parameters and 3B active parameters, optimized for coding tasks
+- **Qwen3-235B-A22B**: General-purpose MoE model with 235B total parameters and 22B active parameters for reasoning and coding
+- **Qwen3-32B**: Dense model with 32B parameters for consistent performance in resource-constrained environments
+
+#### Usage Example
+
+```yaml
+providers:
+  - id: bedrock:qwen.qwen3-coder-480b-a35b-v1:0
+    config:
+      region: us-west-2
+      max_tokens: 2048
+      temperature: 0.7
+      top_p: 0.9
+      showThinking: true
+      tools:
+        - type: function
+          function:
+            name: code_analyzer
+            description: Analyze code for potential issues
+            parameters:
+              type: object
+              properties:
+                code:
+                  type: string
+                  description: The code to analyze
+              required: ['code']
+      tool_choice: auto
+```
 
 ## Model-graded tests
 
@@ -752,12 +922,61 @@ These environment variables can be overridden by the configuration specified in 
 
 ## Troubleshooting
 
-### Inference profile requires inferenceModelType
+### Authentication Issues
+
+#### "Unable to locate credentials" Error
+
+```text
+Error: Unable to locate credentials. You can configure credentials by running "aws configure".
+```
+
+**Solutions:**
+
+1. **Check credential priority**: Ensure credentials are available in the expected priority order
+2. **Verify AWS CLI setup**: Run `aws configure list` to see active credentials
+3. **SSO session expired**: Run `aws sso login --profile YOUR_PROFILE`
+4. **Environment variables**: Verify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set
+
+#### "AccessDenied" or "UnauthorizedOperation" Errors
+
+**Solutions:**
+
+1. **Check IAM permissions**: Ensure your credentials have `bedrock:InvokeModel` permission
+2. **Model access**: Enable model access in the AWS Bedrock console
+3. **Region mismatch**: Verify the region in your config matches where you enabled model access
+
+#### SSO-Specific Issues
+
+**"SSO session has expired":**
+
+```bash
+aws sso login --profile YOUR_PROFILE
+```
+
+**"Profile not found":**
+
+- Check `~/.aws/config` contains the profile
+- Verify profile name matches exactly (case-sensitive)
+
+#### Debugging Authentication
+
+Enable debug logging to see which credentials are being used:
+
+```bash
+export AWS_SDK_JS_LOG=1
+npx promptfoo eval
+```
+
+This will show detailed AWS SDK logs including credential resolution.
+
+### Model Configuration Issues
+
+#### Inference profile requires inferenceModelType
 
 If you see this error when using an inference profile ARN:
 
 ```text
-Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai
+Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen
 ```
 
 This means you're using an application inference profile ARN but haven't specified which model family it's configured for. Add the `inferenceModelType` to your configuration:
@@ -773,7 +992,7 @@ providers:
       inferenceModelType: 'claude' # Specify the model family
 ```
 
-### ValidationException: On-demand throughput isn't supported
+#### ValidationException: On-demand throughput isn't supported
 
 If you see this error:
 
@@ -786,13 +1005,13 @@ This usually means you need to use the region-specific model ID. Update your pro
 ```yaml
 providers:
   # Instead of this:
-  - id: bedrock:anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:anthropic.claude-sonnet-4-5-20250929-v1:0
   # Use this:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0 # US region
+  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0 # US region
   # or
-  - id: bedrock:eu.anthropic.claude-sonnet-4-20250514-v1:0 # EU region
+  - id: bedrock:eu.anthropic.claude-sonnet-4-5-20250929-v1:0 # EU region
   # or
-  - id: bedrock:apac.anthropic.claude-sonnet-4-20250514-v1:0 # APAC region
+  - id: bedrock:apac.anthropic.claude-sonnet-4-5-20250929-v1:0 # APAC region
 ```
 
 Make sure to:
@@ -939,20 +1158,19 @@ This approach allows you to:
 
 See the [Knowledge Base contextTransform example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for complete configuration examples.
 
-## AgentCore
+## Bedrock Agents
 
-AWS Bedrock AgentCore provides a managed service for deploying and operating AI agents at scale. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock AgentCore Provider](./bedrock-agentcore.md) documentation.
+Amazon Bedrock Agents uses the reasoning of foundation models (FMs), APIs, and data to break down user requests, gathers relevant information, and efficiently completes tasks—freeing teams to focus on high-value work. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock Agents Provider](./bedrock-agents.md) documentation.
 
 Quick example:
 
 ```yaml
 providers:
-  - bedrock:agentcore:YOUR_AGENT_ID
+  - bedrock-agent:YOUR_AGENT_ID
     config:
+      agentAliasId: PROD_ALIAS
+      region: us-east-1
       enableTrace: true
-      memoryConfig:
-        type: short-term
-        enabled: true
 ```
 
 ## See Also

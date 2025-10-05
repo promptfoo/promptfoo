@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.118.6",
+  "version": "0.118.11",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -78,6 +78,7 @@
     "chokidar": "4.0.3",
     "whatwg-url": "14.2.0",
     "esbuild": "0.25.9",
+    "react-is": "^18.3.1",
     "*": {
       "whatwg-url": "14.2.0",
       "chokidar": "4.0.3",
@@ -193,7 +194,6 @@
     "ts-dedent": "^2.2.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2",
-    "undici-types": "^7.16.0",
     "winston-transport": "^4.9.0",
     "zod-to-json-schema": "^3.24.6"
   },
@@ -211,7 +211,7 @@
     "@swc/core-win32-x64-msvc": "^1.13.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.62.0",
+    "@anthropic-ai/sdk": "^0.65.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.2",
     "@googleapis/sheets": "^9.8.0",
     "@inquirer/checkbox": "^4.2.4",
@@ -227,7 +227,7 @@
     "async": "^3.2.6",
     "better-sqlite3": "11.10.0",
     "cache-manager": "^4.1.0",
-    "cache-manager-fs-hash": "^1.1.0",
+    "cache-manager-fs-hash": "^3.0.0",
     "chalk": "^4.1.2",
     "chokidar": "4.0.3",
     "cli-progress": "^3.12.0",
@@ -243,6 +243,7 @@
     "drizzle-orm": "^0.44.5",
     "express": "^5.1.0",
     "fast-deep-equal": "^3.1.3",
+    "fast-safe-stringify": "^2.1.1",
     "fast-xml-parser": "^5.2.5",
     "fastest-levenshtein": "^1.0.16",
     "glob": "^11.0.3",
@@ -255,7 +256,7 @@
     "mathjs": "^14.7.0",
     "node-cache": "^5.1.2",
     "nunjucks": "^3.2.4",
-    "openai": "^5.21.0",
+    "openai": "^6.0.0",
     "opener": "^1.5.2",
     "pem": "^1.15.1",
     "posthog-node": "^5.8.4",

@@ -21,7 +21,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Link from '@mui/material/Link';
@@ -42,6 +42,7 @@ import {
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   HUGGINGFACE_GATED_PLUGINS,
+  ISO_42001_MAPPING,
   MCP_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
@@ -397,6 +398,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'EU AI Act',
       plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
+    },
+    {
+      name: 'ISO 42001',
+      plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
     },
   ];
 

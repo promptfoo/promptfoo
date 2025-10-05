@@ -5,7 +5,7 @@ import { useColorMode } from '@docusaurus/theme-common';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
@@ -51,8 +51,8 @@ const PressContent = () => {
           <Typography variant="body1" paragraph>
             Promptfoo is a leading provider of AI security solutions, helping developers and
             enterprises build secure, reliable AI applications. Based in San Francisco, California,
-            Promptfoo is backed by Andreessen Horowitz and top leaders in the technology and
-            security industries.
+            Promptfoo is backed by Insight Partners, Andreessen Horowitz, and top leaders in the
+            technology and security industries.
           </Typography>
           <Typography variant="body1" paragraph>
             Our core product is an open-source pentesting and evaluation framework used by{' '}
@@ -510,7 +510,7 @@ const PressContent = () => {
                 Investors
               </Typography>
               <Typography variant="body1" paragraph>
-                Andreessen Horowitz and industry leaders
+                Insight Partners, Andreessen Horowitz, and industry leaders
               </Typography>
             </Grid>
           </Grid>

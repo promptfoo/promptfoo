@@ -3,10 +3,9 @@ import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   addMultilingual,
-  translateBatch,
   getConcurrencyLimit,
+  translateBatch,
 } from '../../../src/redteam/strategies/multilingual';
-
 import type { TestCase } from '../../../src/types';
 
 jest.mock('cli-progress', () => ({
@@ -43,6 +42,7 @@ jest.mock('../../../src/cache', () => ({
 
 jest.mock('../../../src/redteam/providers/shared', () => ({
   redteamProviderManager: {
+    getMultilingualProvider: jest.fn().mockResolvedValue(undefined),
     getProvider: jest.fn().mockResolvedValue({
       callApi: jest.fn().mockResolvedValue({
         output: '{"de": "Hallo Welt"}',
@@ -59,6 +59,39 @@ describe('Multilingual Strategy', () => {
   });
 
   describe('translateBatch', () => {
+    it('prefers multilingual provider when available', async () => {
+      const multilingualProvider = {
+        callApi: jest.fn().mockResolvedValue({
+          output: '{"es": "Hola"}',
+        }),
+      };
+      jest
+        .mocked(redteamProviderManager.getMultilingualProvider)
+        .mockResolvedValueOnce(multilingualProvider as any);
+
+      const result = await translateBatch('Hello', ['es']);
+
+      expect(result).toEqual({ es: 'Hola' });
+      expect(jest.mocked(redteamProviderManager.getProvider)).not.toHaveBeenCalled();
+      expect(multilingualProvider.callApi).toHaveBeenCalled();
+    });
+
+    it('falls back to regular provider when multilingual provider is unavailable', async () => {
+      jest
+        .mocked(redteamProviderManager.getMultilingualProvider)
+        .mockResolvedValueOnce(undefined as any);
+
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ output: '{"fr": "Bonjour"}' }),
+      };
+      jest.mocked(redteamProviderManager.getProvider).mockResolvedValueOnce(provider as any);
+
+      const result = await translateBatch('Hello', ['fr']);
+
+      expect(result).toEqual({ fr: 'Bonjour' });
+      expect(jest.mocked(redteamProviderManager.getProvider)).toHaveBeenCalled();
+      expect(provider.callApi).toHaveBeenCalled();
+    });
     it('should handle JSON response format', async () => {
       const mockProvider = {
         callApi: jest.fn().mockResolvedValue({

@@ -2653,6 +2653,229 @@ describe('AwsBedrockCompletionProvider', () => {
   });
 });
 
+describe('BEDROCK_MODEL.QWEN', () => {
+  const qwenHandler = BEDROCK_MODEL.QWEN;
+
+  describe('params', () => {
+    it('should format prompt and parameters correctly', () => {
+      const config = {
+        max_tokens: 2048,
+        temperature: 0.7,
+        top_p: 0.9,
+        showThinking: true,
+      };
+      const prompt = 'Write a Python function';
+      const stop = ['</code>'];
+
+      const result = qwenHandler.params(config, prompt, stop, 'qwen.qwen3-coder-480b-a35b-v1:0');
+
+      expect(result.messages).toEqual([{ role: 'user', content: 'Write a Python function' }]);
+      expect(result.max_tokens).toBe(2048);
+      expect(result.temperature).toBe(0.7);
+      expect(result.top_p).toBe(0.9);
+      expect(result.stop).toEqual(['</code>']);
+    });
+
+    it('should handle tool configuration', () => {
+      const config = {
+        max_tokens: 1024,
+        tools: [
+          {
+            type: 'function' as const,
+            function: {
+              name: 'calculate',
+              description: 'Perform calculations',
+              parameters: {
+                type: 'object',
+                properties: {
+                  expression: { type: 'string' },
+                },
+                required: ['expression'],
+              },
+            },
+          },
+        ],
+        tool_choice: 'auto' as const,
+      };
+      const prompt = 'Calculate 5 + 3';
+
+      const result = qwenHandler.params(config, prompt);
+
+      expect(result.tools).toEqual(config.tools);
+      expect(result.tool_choice).toBe('auto');
+    });
+
+    it('should use environment variables for defaults', () => {
+      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
+      process.env.AWS_BEDROCK_TOP_P = '0.8';
+
+      const config = {};
+      const prompt = 'Test prompt';
+
+      const result = qwenHandler.params(config, prompt);
+
+      expect(result.temperature).toBe(0.5);
+      expect(result.top_p).toBe(0.8);
+
+      delete process.env.AWS_BEDROCK_TEMPERATURE;
+      delete process.env.AWS_BEDROCK_TOP_P;
+    });
+  });
+
+  describe('output', () => {
+    it('should handle normal text response', () => {
+      const config = {};
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content:
+                'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)',
+            },
+          },
+        ],
+      };
+
+      const result = qwenHandler.output(config, responseJson);
+
+      expect(result).toBe(
+        'Here is a Python function:\n\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)',
+      );
+    });
+
+    it('should handle tool call response', () => {
+      const config = {};
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'calculate',
+                    arguments: '{"expression": "15 * 8 + 42"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      const result = qwenHandler.output(config, responseJson);
+
+      expect(result).toContain('Called function calculate');
+      expect(result).toContain('15 * 8 + 42');
+    });
+
+    it('should handle thinking mode response', () => {
+      const config = { showThinking: true };
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: '<think>Let me think about this step by step...</think>The answer is 42',
+            },
+          },
+        ],
+      };
+
+      const result = qwenHandler.output(config, responseJson);
+
+      expect(result).toBe('<think>Let me think about this step by step...</think>The answer is 42');
+    });
+
+    it('should hide thinking when showThinking is false', () => {
+      const config = { showThinking: false };
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: '<think>Let me think about this step by step...</think>The answer is 42',
+            },
+          },
+        ],
+      };
+
+      const result = qwenHandler.output(config, responseJson);
+
+      expect(result).toBe('The answer is 42');
+      expect(result).not.toContain('think>');
+    });
+
+    it('should handle error response', () => {
+      const config = {};
+      const responseJson = {
+        error: {
+          message: 'Model not found',
+          code: 'ModelNotFoundException',
+        },
+      };
+
+      expect(() => qwenHandler.output(config, responseJson)).toThrow(
+        'Qwen API error: [object Object]',
+      );
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from response', () => {
+      const responseJson = {
+        usage: {
+          prompt_tokens: 50,
+          completion_tokens: 100,
+          total_tokens: 150,
+        },
+      };
+
+      const result = qwenHandler.tokenUsage(responseJson, '');
+
+      expect(result).toEqual({
+        total: 150,
+        prompt: 50,
+        completion: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle missing usage data', () => {
+      const responseJson = {};
+
+      const result = qwenHandler.tokenUsage(responseJson, '');
+
+      expect(result).toEqual({
+        total: undefined,
+        prompt: undefined,
+        completion: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
+describe('Qwen model mapping', () => {
+  it('should include all Qwen models in AWS_BEDROCK_MODELS', () => {
+    const qwenModels = [
+      'qwen.qwen3-coder-480b-a35b-v1:0',
+      'qwen.qwen3-coder-30b-a3b-v1:0',
+      'qwen.qwen3-235b-a22b-2507-v1:0',
+      'qwen.qwen3-32b-v1:0',
+    ];
+
+    qwenModels.forEach((modelId) => {
+      expect(AWS_BEDROCK_MODELS[modelId]).toBeDefined();
+      expect(AWS_BEDROCK_MODELS[modelId]).toBe(BEDROCK_MODEL.QWEN);
+    });
+  });
+
+  it('should recognize qwen models by prefix', () => {
+    const provider = new AwsBedrockCompletionProvider('qwen.qwen3-coder-480b-a35b-v1:0');
+    expect(provider.modelName).toBe('qwen.qwen3-coder-480b-a35b-v1:0');
+  });
+});
+
 describe('coerceStrToNum', () => {
   it('should convert string numbers to numeric values', () => {
     expect(coerceStrToNum('42')).toBe(42);

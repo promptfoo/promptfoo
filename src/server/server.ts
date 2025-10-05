@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
 dotenv.config({ quiet: true });
 
 import http from 'node:http';
@@ -115,10 +116,19 @@ export function createApp() {
   app.get(
     '/api/results',
     async (
-      req: Request<{}, {}, {}, { datasetId?: string }>,
+      req: Request<
+        {},
+        {},
+        {},
+        { datasetId?: string; type?: 'redteam' | 'eval'; includeProviders?: boolean }
+      >,
       res: Response<{ data: EvalSummary[] }>,
     ): Promise<void> => {
-      const previousResults = await getEvalSummaries(req.query.datasetId);
+      const previousResults = await getEvalSummaries(
+        req.query.datasetId,
+        req.query.type,
+        req.query.includeProviders,
+      );
       res.json({ data: previousResults });
     },
   );

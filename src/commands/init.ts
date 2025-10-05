@@ -9,8 +9,8 @@ import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
-import { fetchWithProxy } from '../util/fetch';
-import { isRunningUnderNpx } from '../util/index';
+import { fetchWithProxy } from '../util/fetch/index';
+import { promptfooCommand } from '../util/promptfooCommand';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
@@ -147,7 +147,6 @@ async function handleExampleDownload(
     }
   }
 
-  const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
   if (!exampleName) {
     return;
   }
@@ -164,6 +163,7 @@ async function handleExampleDownload(
       `,
     );
   } else {
+    const runCommand = promptfooCommand('eval');
     logger.info(
       dedent`
 

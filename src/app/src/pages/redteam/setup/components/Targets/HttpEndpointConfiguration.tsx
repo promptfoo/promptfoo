@@ -1,4 +1,6 @@
 import './syntax-highlighting.css';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-javascript';
 
 import { useCallback, useState } from 'react';
 
@@ -8,6 +10,7 @@ import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
+import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -16,7 +19,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
@@ -26,20 +29,26 @@ import Switch from '@mui/material/Switch';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import dedent from 'dedent';
 import yaml from 'js-yaml';
+import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
+import TestSection from './TestSection';
 
 import type { ProviderOptions } from '../../types';
+import type { TestResult } from './TestSection';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: any) => void;
-  bodyError: string | null;
-  setBodyError: (error: string | null) => void;
+  bodyError: string | React.ReactNode | null;
+  setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
   setUrlError: (error: string | null) => void;
   updateFullTarget: (target: ProviderOptions) => void;
+  onTargetTested?: (success: boolean) => void;
+  onSessionTested?: (success: boolean) => void;
 }
 
 interface GeneratedConfig {
@@ -56,6 +65,18 @@ interface GeneratedConfig {
   };
 }
 
+const highlightJS = (code: string): string => {
+  try {
+    const grammar = Prism?.languages?.javascript;
+    if (!grammar) {
+      return code;
+    }
+    return Prism.highlight(code, grammar, 'javascript');
+  } catch {
+    return code;
+  }
+};
+
 const HttpEndpointConfiguration = ({
   selectedTarget,
   updateCustomTarget,
@@ -64,6 +85,8 @@ const HttpEndpointConfiguration = ({
   urlError,
   setUrlError,
   updateFullTarget,
+  onTargetTested,
+  onSessionTested,
 }: HttpEndpointConfigurationProps): JSX.Element => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
@@ -108,6 +131,76 @@ Content-Type: application/json
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Test Target state
+  const [isTestRunning, setIsTestRunning] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+
+  // Handle test target
+  const handleTestTarget = useCallback(async () => {
+    setIsTestRunning(true);
+    setTestResult(null);
+
+    try {
+      const response = await callApi('/providers/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selectedTarget),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Check for changes_needed field (configuration issues) or success field
+        const hasConfigIssues = data.testResult?.changes_needed === true;
+        const isSuccess = hasConfigIssues ? false : (data.testResult?.success ?? true);
+
+        // Build the message based on the response
+        let message = data.testResult?.message ?? 'Target configuration is valid!';
+        if (hasConfigIssues) {
+          message = data.testResult?.changes_needed_reason || 'Configuration changes are needed';
+        }
+
+        setTestResult({
+          success: isSuccess,
+          message: message,
+          providerResponse: data.providerResponse || {},
+          transformedRequest: data.transformedRequest,
+          // Include the suggestions if available
+          changes_needed: hasConfigIssues,
+          changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
+        });
+
+        if (onTargetTested) {
+          onTargetTested(isSuccess);
+        }
+      } else {
+        const errorData = await response.json();
+        setTestResult({
+          success: false,
+          message: errorData.error || 'Failed to test target configuration',
+          providerResponse: errorData.providerResponse || {},
+          transformedRequest: errorData.transformedRequest,
+        });
+
+        if (onTargetTested) {
+          onTargetTested(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error testing target:', error);
+      setTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to test target configuration',
+      });
+
+      if (onTargetTested) {
+        onTargetTested(false);
+      }
+    } finally {
+      setIsTestRunning(false);
+    }
+  }, [selectedTarget, onTargetTested]);
 
   // Auto-size the raw request textarea between 10rem and 40rem based on line count
   const computeRawTextareaHeight = useCallback((text: string) => {
@@ -231,7 +324,34 @@ Content-Type: application/json
 
   const handleRequestBodyChange = (content: string) => {
     setRequestBody(content);
+
+    // Validate JSON if content is not empty
+    if (content.trim()) {
+      try {
+        JSON.parse(content);
+        setBodyError(null); // Clear error if JSON is valid
+      } catch {
+        setBodyError('Invalid JSON format');
+      }
+    } else {
+      setBodyError(null); // Clear error for empty content
+    }
+
     updateCustomTarget('body', content);
+  };
+
+  const handleFormatJson = () => {
+    if (requestBody.trim()) {
+      try {
+        const parsed = JSON.parse(requestBody);
+        const formatted = JSON.stringify(parsed, null, 2);
+        setRequestBody(formatted);
+        updateCustomTarget('body', formatted);
+        setBodyError(null);
+      } catch {
+        setBodyError('Cannot format: Invalid JSON');
+      }
+    }
   };
 
   const handleRawRequestChange = (value: string) => {
@@ -365,155 +485,243 @@ ${exampleRequest}`;
           Auto-fill from Example
         </Button>
       </Box>
-      {selectedTarget.config.request ? (
+
+      {/* Main configuration box containing everything */}
+      <Box
+        mt={2}
+        p={2}
+        sx={{
+          border: 1,
+          borderColor: theme.palette.divider,
+          borderRadius: 1,
+          backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
+          '& .token': {
+            background: 'transparent !important',
+          },
+        }}
+      >
+        {selectedTarget.config.request ? (
+          <>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedTarget.config.useHttps}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    updateCustomTarget('useHttps', enabled);
+                  }}
+                />
+              }
+              label="Use HTTPS"
+              sx={{ mb: 2, display: 'block' }}
+            />
+            <textarea
+              value={selectedTarget.config.request || ''}
+              onChange={(e) => handleRawRequestChange(e.target.value)}
+              placeholder={placeholderText}
+              style={{
+                width: '100%',
+                height: computeRawTextareaHeight(selectedTarget.config.request || ''),
+                minHeight: '10rem',
+                maxHeight: '40rem',
+                maxWidth: '100%',
+                padding: '10px',
+                border: '1px solid',
+                borderColor: theme.palette.divider,
+                outline: 'none',
+                resize: 'vertical',
+                fontFamily: '"Fira code", "Fira Mono", monospace',
+                fontSize: 14,
+                backgroundColor: 'transparent',
+                color: theme.palette.text.primary,
+                whiteSpace: 'pre',
+                overflowX: 'auto',
+                overflowY: 'auto',
+              }}
+            />
+            {bodyError && (
+              <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+                {bodyError}
+              </Typography>
+            )}
+          </>
+        ) : (
+          <>
+            <TextField
+              fullWidth
+              label="URL"
+              value={selectedTarget.config.url}
+              onChange={(e) => updateCustomTarget('url', e.target.value)}
+              margin="normal"
+              error={!!urlError}
+              helperText={urlError}
+              placeholder="https://example.com/api/chat"
+              required
+            />
+            <FormControl fullWidth margin="normal">
+              <InputLabel id="method-label">Method</InputLabel>
+              <Select
+                labelId="method-label"
+                value={selectedTarget.config.method}
+                onChange={(e) => updateCustomTarget('method', e.target.value)}
+                label="Method"
+              >
+                {['GET', 'POST'].map((method) => (
+                  <MenuItem key={method} value={method}>
+                    {method}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+              Headers
+            </Typography>
+            {headers.map(({ key, value }, index) => (
+              <Box key={index} display="flex" alignItems="center" mb={1}>
+                <TextField
+                  label="Name"
+                  value={key}
+                  onChange={(e) => updateHeaderKey(index, e.target.value)}
+                  sx={{ mr: 1, flex: 1 }}
+                />
+                <TextField
+                  label="Value"
+                  value={value}
+                  onChange={(e) => updateHeaderValue(index, e.target.value)}
+                  sx={{ mr: 1, flex: 1 }}
+                />
+                <IconButton onClick={() => removeHeader(index)}>
+                  <DeleteIcon />
+                </IconButton>
+              </Box>
+            ))}
+
+            <Button startIcon={<AddIcon />} onClick={addHeader} variant="outlined" sx={{ mt: 1 }}>
+              Add Header
+            </Button>
+
+            <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+              Request Body
+            </Typography>
+            <Box
+              sx={{
+                border: 1,
+                borderColor: bodyError ? 'error.main' : theme.palette.divider,
+                borderRadius: 1,
+                mt: 1,
+                position: 'relative',
+                backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
+              }}
+            >
+              <IconButton
+                size="small"
+                onClick={handleFormatJson}
+                disabled={!requestBody.trim() || !!bodyError}
+                title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
+                sx={{
+                  position: 'absolute',
+                  top: 4,
+                  right: 4,
+                  zIndex: 1,
+                  backgroundColor:
+                    theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.05)'
+                      : 'rgba(0, 0, 0, 0.03)',
+                  '&:hover': {
+                    backgroundColor:
+                      theme.palette.mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.1)'
+                        : 'rgba(0, 0, 0, 0.06)',
+                  },
+                }}
+              >
+                <FormatAlignLeftIcon fontSize="small" />
+              </IconButton>
+              <Editor
+                value={
+                  typeof requestBody === 'object'
+                    ? JSON.stringify(requestBody, null, 2)
+                    : requestBody || ''
+                }
+                onValueChange={handleRequestBodyChange}
+                highlight={(code) => code}
+                padding={10}
+                style={{
+                  fontFamily: '"Fira code", "Fira Mono", monospace',
+                  fontSize: 14,
+                  minHeight: '100px',
+                  paddingRight: '40px', // Add space for the format button
+                }}
+              />
+            </Box>
+            {bodyError && (
+              <Typography color="error" variant="caption" sx={{ mt: 0.5 }}>
+                {bodyError}
+              </Typography>
+            )}
+          </>
+        )}
+
+        {/* Response Transform Section - Common for both modes */}
+        <Typography variant="subtitle1" gutterBottom sx={{ mt: 3 }}>
+          Response Parser
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          This tells promptfoo how to extract the AI's response from your API. Most APIs return JSON
+          with the actual response nested inside - this parser helps find the right part. Leave
+          empty if your API returns plain text. See{' '}
+          <a
+            href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            docs
+          </a>{' '}
+          for examples.
+        </Typography>
         <Box
-          mt={2}
-          p={2}
           sx={{
             border: 1,
             borderColor: theme.palette.divider,
             borderRadius: 1,
+            position: 'relative',
             backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
-            '& .token': {
-              background: 'transparent !important',
-            },
           }}
         >
-          <FormControlLabel
-            control={
-              <Switch
-                checked={selectedTarget.config.useHttps}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  updateCustomTarget('useHttps', enabled);
-                }}
-              />
-            }
-            label="Use HTTPS"
-            sx={{ mb: 2, display: 'block' }}
-          />
-          <textarea
-            value={selectedTarget.config.request || ''}
-            onChange={(e) => handleRawRequestChange(e.target.value)}
-            placeholder={placeholderText}
+          <Editor
+            value={selectedTarget.config.transformResponse || ''}
+            onValueChange={(code) => updateCustomTarget('transformResponse', code)}
+            highlight={highlightJS}
+            padding={10}
+            placeholder={dedent`Optional: Transform the API response before using it. Format as either:
+
+                        1. A JavaScript object path: \`json.choices[0].message.content\`
+                        2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
+
+                        With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
             style={{
-              width: '100%',
-              height: computeRawTextareaHeight(selectedTarget.config.request || ''),
-              minHeight: '10rem',
-              maxHeight: '40rem',
-              maxWidth: '100%',
-              padding: '10px',
-              border: '1px solid',
-              borderColor: theme.palette.divider,
-              outline: 'none',
-              resize: 'vertical',
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
-              backgroundColor: 'transparent',
-              color: theme.palette.text.primary,
-              whiteSpace: 'pre',
-              overflowX: 'auto',
-              overflowY: 'auto',
+              minHeight: '150px',
             }}
           />
-          {bodyError && (
-            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
-              {bodyError}
-            </Typography>
-          )}
         </Box>
-      ) : (
-        <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-          <TextField
-            fullWidth
-            label="URL"
-            value={selectedTarget.config.url}
-            onChange={(e) => updateCustomTarget('url', e.target.value)}
-            margin="normal"
-            error={!!urlError}
-            helperText={urlError}
-            placeholder="https://example.com/api/chat"
-            required
-          />
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="method-label">Method</InputLabel>
-            <Select
-              labelId="method-label"
-              value={selectedTarget.config.method}
-              onChange={(e) => updateCustomTarget('method', e.target.value)}
-              label="Method"
-            >
-              {['GET', 'POST'].map((method) => (
-                <MenuItem key={method} value={method}>
-                  {method}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
 
-          <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-            Headers
-          </Typography>
-          {headers.map(({ key, value }, index) => (
-            <Box key={index} display="flex" alignItems="center" mb={1}>
-              <TextField
-                label="Name"
-                value={key}
-                onChange={(e) => updateHeaderKey(index, e.target.value)}
-                sx={{ mr: 1, flex: 1 }}
-              />
-              <TextField
-                label="Value"
-                value={value}
-                onChange={(e) => updateHeaderValue(index, e.target.value)}
-                sx={{ mr: 1, flex: 1 }}
-              />
-              <IconButton onClick={() => removeHeader(index)}>
-                <DeleteIcon />
-              </IconButton>
-            </Box>
-          ))}
+        {/* Test Target Section - Common for both modes */}
+        <TestSection
+          selectedTarget={selectedTarget}
+          isTestRunning={isTestRunning}
+          testResult={testResult}
+          handleTestTarget={handleTestTarget}
+          disabled={
+            selectedTarget.config.request
+              ? !selectedTarget.config.request
+              : !selectedTarget.config.url
+          }
+        />
+      </Box>
 
-          <Button startIcon={<AddIcon />} onClick={addHeader} variant="outlined" sx={{ mt: 1 }}>
-            Add Header
-          </Button>
-
-          <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-            Request Body
-          </Typography>
-          <Box
-            sx={{
-              border: 1,
-              borderColor: bodyError ? 'error.main' : 'grey.300',
-              borderRadius: 1,
-              mt: 1,
-              position: 'relative',
-              backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-            }}
-          >
-            <Editor
-              value={
-                typeof requestBody === 'object'
-                  ? JSON.stringify(requestBody, null, 2)
-                  : requestBody || ''
-              }
-              onValueChange={handleRequestBodyChange}
-              highlight={(code) => code}
-              padding={10}
-              style={{
-                fontFamily: '"Fira code", "Fira Mono", monospace',
-                fontSize: 14,
-                minHeight: '100px',
-              }}
-            />
-          </Box>
-          {bodyError && (
-            <Typography color="error" variant="caption" sx={{ mt: 0.5 }}>
-              {bodyError}
-            </Typography>
-          )}
-        </Box>
-      )}
       <Dialog
         open={configDialogOpen}
         onClose={() => setConfigDialogOpen(false)}
@@ -620,6 +828,8 @@ ${exampleRequest}`;
         selectedTarget={selectedTarget}
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
+        onTargetTested={onTargetTested}
+        onSessionTested={onSessionTested}
       />
     </Box>
   );

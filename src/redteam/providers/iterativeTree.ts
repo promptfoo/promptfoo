@@ -14,31 +14,12 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
+import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../remoteGeneration';
-import {
-  ATTACKER_SYSTEM_PROMPT,
-  CLOUD_ATTACKER_SYSTEM_PROMPT,
-  JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
-} from './prompts';
-import {
-  checkPenalizedPhrases,
-  createIterationContext,
-  getTargetResponse,
-  redteamProviderManager,
-} from './shared';
-import type { Environment } from 'nunjucks';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -51,7 +32,26 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+} from './prompts';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -121,14 +121,12 @@ export function renderSystemPrompts(
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
 ): {
   redteamSystemPrompt: string;
-  onTopicSystemPrompt: string;
   judgeSystemPrompt: string;
 } {
   return {
     redteamSystemPrompt: excludeTargetOutputFromAgenticAttackGeneration
       ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal, purpose })
       : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose }),
-    onTopicSystemPrompt: nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal }),
     judgeSystemPrompt: nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal }),
   };
 }
@@ -177,7 +175,7 @@ export async function evaluateResponse(
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
   }
-  logger.debug(`[IterativeTree] Judge response: ${JSON.stringify(judgeResp)}`);
+  logger.debug('[IterativeTree] Judge response', { response: judgeResp });
   if (judgeResp.error) {
     throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
   }
@@ -234,70 +232,46 @@ export async function getNewPrompt(
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);
   }
-  logger.debug(`[IterativeTree] Redteam response: ${JSON.stringify(redteamResp)}`);
+  logger.debug('[IterativeTree] Redteam response', { response: redteamResp });
   if (redteamResp.error) {
     throw new Error(`Error from redteam provider: ${redteamResp.error}`);
   }
   TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
 
-  const retObj =
-    typeof redteamResp.output === 'string'
-      ? extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output)
-      : redteamResp.output;
+  let retObj: { improvement: string; prompt: string };
+  if (typeof redteamResp.output === 'string') {
+    try {
+      // Primary path: extract first JSON object from possibly fenced/prose output
+      retObj = extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output);
+    } catch (primaryErr) {
+      // Fallback: sometimes models return a JSON-encoded string; try one decode then extract
+      try {
+        const decoded = JSON.parse(redteamResp.output);
+        if (typeof decoded === 'string') {
+          retObj = extractFirstJsonObject<{ improvement: string; prompt: string }>(decoded);
+        } else {
+          retObj = decoded as { improvement: string; prompt: string };
+        }
+      } catch (fallbackErr) {
+        logger.info(
+          `[IterativeTree] Failed to parse attacker response as JSON (primary and fallback). Skipping this turn. primary=${String(
+            primaryErr,
+          )} fallback=${String(fallbackErr)} outputPreview="${redteamResp.output.slice(0, 200)}"`,
+        );
+        // Gracefully skip this turn to keep the conversation going
+        return {
+          improvement: 'parse failure – skipping turn',
+          prompt: '',
+          tokenUsage: redteamResp.tokenUsage,
+        };
+      }
+    }
+  } else {
+    retObj = redteamResp.output as { improvement: string; prompt: string };
+  }
   return {
     ...retObj,
     tokenUsage: redteamResp.tokenUsage,
-  };
-}
-
-/**
- * Checks if the target prompt is on-topic.
- * @param provider - The provider used for evaluation.
- * @param onTopicSystemPrompt - The system prompt for the on-topic check.
- * @param targetPrompt - The prompt to be checked.
- * @returns A promise that resolves to a boolean indicating if the prompt is on-topic.
- */
-export async function checkIfOnTopic(
-  provider: ApiProvider,
-  onTopicSystemPrompt: string,
-  targetPrompt: string,
-): Promise<{ isOnTopic: boolean; tokenUsage?: TokenUsage }> {
-  const isOnTopicBody = JSON.stringify([
-    {
-      role: 'system',
-      content: onTopicSystemPrompt,
-    },
-    {
-      role: 'user',
-      content: targetPrompt,
-    },
-  ]);
-  const isOnTopicResp = await provider.callApi(isOnTopicBody, {
-    prompt: {
-      raw: isOnTopicBody,
-      label: 'on-topic',
-    },
-    vars: {},
-  });
-  TokenUsageTracker.getInstance().trackUsage(provider.id(), isOnTopicResp.tokenUsage);
-  if (provider.delay) {
-    logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
-    await sleep(provider.delay);
-  }
-  logger.debug(`[IterativeTree] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
-  if (isOnTopicResp.error) {
-    throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
-  }
-
-  const { onTopic } =
-    typeof isOnTopicResp.output === 'string'
-      ? extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output)
-      : isOnTopicResp.output;
-  logger.debug(`[IterativeTree] Parsed onTopic value: ${JSON.stringify(onTopic)}`);
-  invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
-  return {
-    isOnTopic: onTopic,
-    tokenUsage: isOnTopicResp.tokenUsage,
   };
 }
 
@@ -306,7 +280,6 @@ export async function checkIfOnTopic(
  * @param targetResponse - The response from the target provider.
  * @param goal - The current goal or objective.
  * @param score - The evaluation score for the response.
- * @param isOnTopic - Whether the prompt was on-topic.
  * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
  * @param excludeTargetOutputFromAgenticAttackGeneration - Whether to exclude target output from the attack generation process.
  * @param explanation - The explanation from the judge.
@@ -315,7 +288,6 @@ export function updateRedteamHistory(
   targetResponse: string,
   goal: string,
   score: number,
-  isOnTopic: boolean,
   containsPenalizedPhrase: boolean,
   excludeTargetOutputFromAgenticAttackGeneration: boolean,
   explanation?: string,
@@ -326,9 +298,7 @@ export function updateRedteamHistory(
       ? dedent`
           OBJECTIVE: ${goal}
 
-          SCORE: ${score} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
-            containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
-          }
+          SCORE: ${score}${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}
           ${explanation ? `EXPLANATION: ${explanation}` : ''}
         `
       : dedent`
@@ -336,9 +306,7 @@ export function updateRedteamHistory(
 
           OBJECTIVE: ${goal}
 
-          SCORE: ${score} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
-            containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
-          }
+          SCORE: ${score}${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}
           ${explanation ? `EXPLANATION: ${explanation}` : ''}
         `,
   };
@@ -379,31 +347,7 @@ export function createTreeNode(
 }
 
 /**
- * Phase 1 pruning: Off-topic check
- * @param nodes - The list of nodes to prune.
- * @param redteamProvider - The OpenAI provider for the red team.
- * @param onTopicSystemPrompt - The system prompt for the on-topic check.
- * @param goal - The goal or objective for the red team.
- * @returns A promise that resolves to the pruned list of nodes.
- */
-async function pruneOffTopicNodes(
-  nodes: TreeNode[],
-  redteamProvider: ApiProvider,
-  onTopicSystemPrompt: string,
-  goal: string,
-): Promise<TreeNode[]> {
-  const remainingNodes: TreeNode[] = [];
-
-  for (const node of nodes) {
-    const { isOnTopic } = await checkIfOnTopic(redteamProvider, onTopicSystemPrompt, node.prompt);
-
-    if (isOnTopic) {
-      remainingNodes.push(node);
-    }
-  }
-
-  return remainingNodes;
-}
+ * Phase 1 pruning removed: assume on-topic due to goal alignment
 
 /**
  * Phase 2 pruning: Keep top w nodes by score
@@ -423,17 +367,9 @@ function pruneToWidth(nodes: TreeNode[], width: number): TreeNode[] {
  * @param goal - The goal or objective for the red team.
  * @returns The selected diverse nodes.
  */
-export async function selectNodes(
-  nodes: TreeNode[],
-  redteamProvider: ApiProvider,
-  onTopicSystemPrompt: string,
-  goal: string,
-): Promise<TreeNode[]> {
-  // First do Phase 1 pruning (off-topic check)
-  const onTopicNodes = await pruneOffTopicNodes(nodes, redteamProvider, onTopicSystemPrompt, goal);
-
-  // Then do Phase 2 pruning (keep top w scoring nodes)
-  return pruneToWidth(onTopicNodes, MAX_WIDTH);
+export async function selectNodes(nodes: TreeNode[]): Promise<TreeNode[]> {
+  // Keep top w scoring nodes
+  return pruneToWidth(nodes, MAX_WIDTH);
 }
 
 /**
@@ -444,7 +380,6 @@ export interface TreeSearchOutput {
   prompt: string;
   output: string;
   score: number;
-  isOnTopic: boolean;
   depth: number;
   parentId?: string; // UUID
   improvement?: string;
@@ -519,7 +454,7 @@ async function runRedteamConversation({
     `Starting red team conversation. Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHING_FACTOR=${BRANCHING_FACTOR}, MAX_ATTEMPTS=${MAX_ATTEMPTS}, TARGET_SCORE=${TARGET_SCORE} Goal: "${goal.substring(0, 50)}...".`,
   );
 
-  const { redteamSystemPrompt, onTopicSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
+  const { redteamSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
     nunjucks,
     goal,
     test?.metadata?.purpose,
@@ -554,6 +489,7 @@ async function runRedteamConversation({
     | 'GRADER_FAILED' = 'MAX_DEPTH';
 
   const treeOutputs: TreeSearchOutput[] = [];
+  let lastResponse: TargetResponse | undefined = undefined;
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -597,20 +533,38 @@ async function runRedteamConversation({
           targetProvider,
         );
 
-        const { isOnTopic } = await checkIfOnTopic(
-          gradingProvider,
-          onTopicSystemPrompt,
-          targetPrompt,
-        );
-
         const targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
           iterationContext,
           options,
         );
+        lastResponse = targetResponse;
+        // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
         if (targetResponse.error) {
-          throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
+          logger.info(
+            `[IterativeTree] Target error at depth ${depth}, attempt ${attempts}: ${targetResponse.error}`,
+            { targetResponse },
+          );
+          // Push a node to history with the output we have, then skip scoring for this branch
+          treeOutputs.push({
+            depth,
+            graderPassed: undefined,
+            id: uuidv4(),
+            improvement,
+            output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
+            parentId: node.id,
+            prompt: targetPrompt,
+            score: 0,
+            wasSelected: false,
+            guardrails: targetResponse.guardrails,
+            sessionId:
+              targetResponse.sessionId ||
+              (typeof iterationContext?.vars?.sessionId === 'string'
+                ? iterationContext.vars.sessionId
+                : undefined),
+          });
+          continue;
         }
         invariant(
           Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
@@ -629,7 +583,7 @@ async function runRedteamConversation({
         );
 
         logger.debug(
-          `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, on-topic=${isOnTopic}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
+          `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
         );
 
         // Create new node for the next level
@@ -715,7 +669,6 @@ async function runRedteamConversation({
             depth,
             graderPassed,
             id: uuidv4(),
-            isOnTopic,
             output: targetResponse.output,
             parentId: node.id,
             prompt: targetPrompt,
@@ -755,7 +708,6 @@ async function runRedteamConversation({
             prompt: targetPrompt,
             output: bestResponse,
             score,
-            isOnTopic,
             depth,
             parentId: node.id,
             wasSelected: false,
@@ -792,7 +744,6 @@ async function runRedteamConversation({
             depth,
             graderPassed,
             id: uuidv4(),
-            isOnTopic,
             output: bestResponse,
             parentId: node.id,
             prompt: targetPrompt,
@@ -827,7 +778,6 @@ async function runRedteamConversation({
             targetResponse.output,
             goal,
             score,
-            isOnTopic,
             containsPenalizedPhrase,
             excludeTargetOutputFromAgenticAttackGeneration,
             explanation,
@@ -839,7 +789,6 @@ async function runRedteamConversation({
           graderPassed,
           id: uuidv4(),
           improvement,
-          isOnTopic,
           output: targetResponse.output,
           parentId: node.id,
           prompt: targetPrompt,
@@ -855,12 +804,7 @@ async function runRedteamConversation({
       }
     }
 
-    currentBestNodes = await selectNodes(
-      nextLevelNodes,
-      redteamProvider,
-      onTopicSystemPrompt,
-      goal,
-    );
+    currentBestNodes = await selectNodes(nextLevelNodes);
     logger.debug(
       `[Depth ${depth}] Exploration complete. Selected ${currentBestNodes.length} diverse nodes for next depth. Current best score: ${bestScore}. Max score: ${maxScore}`,
     );
@@ -882,6 +826,7 @@ async function runRedteamConversation({
     context,
     options,
   );
+  lastResponse = finalTargetResponse;
   if (finalTargetResponse.tokenUsage) {
     accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
   }
@@ -896,7 +841,6 @@ async function runRedteamConversation({
     prompt: finalTargetPrompt,
     output: bestResponse,
     score: maxScore,
-    isOnTopic: true,
     depth: MAX_DEPTH - 1,
     parentId: bestNode.id,
     wasSelected: false,
@@ -904,7 +848,7 @@ async function runRedteamConversation({
     sessionId: finalTargetResponse.sessionId,
   });
   return {
-    output: bestResponse,
+    output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),
     metadata: {
       highestScore: maxScore,
       redteamFinalPrompt: bestNode.prompt,
@@ -917,6 +861,7 @@ async function runRedteamConversation({
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse.guardrails,
+    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
   };
 }
 
@@ -933,7 +878,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
    * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
   constructor(readonly config: Record<string, string | object>) {
-    logger.debug(`[IterativeTree] Constructor config: ${JSON.stringify(config)}`);
+    logger.debug('[IterativeTree] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
@@ -961,7 +906,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<RedteamTreeResponse> {
-    logger.debug(`[IterativeTree] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[IterativeTree] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
