@@ -121,7 +121,7 @@ export default class ModelAudit {
       metadata: params.metadata || null,
     };
     const db = getDb();
-    await db.insert(modelAuditsTable).values(data).run();
+    await db.insert(modelAuditsTable).values(data);
 
     logger.debug(`Created model audit ${id} for ${params.modelPath}`);
 
@@ -130,11 +130,12 @@ export default class ModelAudit {
 
   static async findById(id: string): Promise<ModelAudit | null> {
     const db = getDb();
-    const result = await db
+    const results = await db
       .select()
       .from(modelAuditsTable)
-      .where(eq(modelAuditsTable.id, id))
-      .get();
+      .where(eq(modelAuditsTable.id, id));
+
+    const result = results[0];
 
     if (!result) {
       return null;
@@ -149,8 +150,7 @@ export default class ModelAudit {
       .select()
       .from(modelAuditsTable)
       .where(eq(modelAuditsTable.modelPath, modelPath))
-      .orderBy(modelAuditsTable.createdAt)
-      .all();
+      .orderBy(modelAuditsTable.createdAt);
 
     return results.map((r) => new ModelAudit({ ...r, persisted: true }));
   }
@@ -161,8 +161,7 @@ export default class ModelAudit {
       .select()
       .from(modelAuditsTable)
       .orderBy(desc(modelAuditsTable.createdAt))
-      .limit(limit)
-      .all();
+      .limit(limit);
 
     return results.map((r) => new ModelAudit({ ...r, persisted: true }));
   }
@@ -173,8 +172,7 @@ export default class ModelAudit {
       .select()
       .from(modelAuditsTable)
       .orderBy(desc(modelAuditsTable.createdAt))
-      .limit(limit)
-      .all();
+      .limit(limit);
 
     return results.map((r) => new ModelAudit({ ...r, persisted: true }));
   }
@@ -209,8 +207,7 @@ export default class ModelAudit {
           metadata: this.metadata,
           updatedAt: now,
         })
-        .where(eq(modelAuditsTable.id, this.id))
-        .run();
+        .where(eq(modelAuditsTable.id, this.id));
     } else {
       await db
         .insert(modelAuditsTable)
@@ -230,8 +227,7 @@ export default class ModelAudit {
           metadata: this.metadata,
           createdAt: this.createdAt || now,
           updatedAt: now,
-        })
-        .run();
+        });
       this.persisted = true;
     }
   }
@@ -242,7 +238,7 @@ export default class ModelAudit {
     }
 
     const db = getDb();
-    await db.delete(modelAuditsTable).where(eq(modelAuditsTable.id, this.id)).run();
+    await db.delete(modelAuditsTable).where(eq(modelAuditsTable.id, this.id));
 
     this.persisted = false;
   }

@@ -39,8 +39,7 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
         eq(evalResultsTable.evalId, evalId),
         eq(evalResultsTable.failureReason, ResultFailureReason.ERROR),
       ),
-    )
-    .all();
+    );
 
   return errorResults.map((r) => r.id);
 }

@@ -447,14 +447,14 @@ export async function deleteEval(evalId: string) {
  * Deletes evals by their IDs.
  * @param ids - The IDs of the evals to delete.
  */
-export function deleteEvals(ids: string[]) {
+export async function deleteEvals(ids: string[]): Promise<void> {
   const db = getDb();
-  db.transaction(() => {
-    db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
-    db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
-    db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
-    db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
-    db.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
+  await db.transaction(async (tx) => {
+    await tx.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids));
+    await tx.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids));
+    await tx.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids));
+    await tx.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids));
+    await tx.delete(evalsTable).where(inArray(evalsTable.id, ids));
   });
 }
 

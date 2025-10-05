@@ -30,8 +30,7 @@ export async function getCachedResultsCount(evalId: string): Promise<number> {
   const result = await db
     .select({ count: sql<number>`COUNT(DISTINCT test_idx)` })
     .from(evalResultsTable)
-    .where(sql`eval_id = ${evalId}`)
-    .all();
+    .where(sql`eval_id = ${evalId}`);
 
   const count = Number(result[0]?.count ?? 0);
   const duration = Date.now() - start;

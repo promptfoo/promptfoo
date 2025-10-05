@@ -554,7 +554,7 @@ evalRouter.delete('/', (req: Request, res: Response) => {
   }
 
   try {
-    deleteEvals(ids);
+    await deleteEvals(ids);
     res.status(204).send();
   } catch {
     res.status(500).json({ error: 'Failed to delete evals' });
