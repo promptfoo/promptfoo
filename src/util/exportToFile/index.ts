@@ -10,13 +10,17 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
   const outputTextDisplay = (
     typeof result.response?.output === 'object'
       ? JSON.stringify(result.response.output)
-      : result.response?.output || result.error || ''
+      : result.response?.output || ''
   ) as string;
   if (result.testCase.assert) {
     if (result.success) {
       resultText = `${outputTextDisplay || result.error || ''}`;
     } else {
-      resultText = `${result.error || failReasons}\n---\n${outputTextDisplay}`;
+      // If there's output, show error/failReasons above it with separator
+      // If there's no output, just show error/failReasons without duplicate
+      resultText = outputTextDisplay
+        ? `${result.error || failReasons}\n---\n${outputTextDisplay}`
+        : `${result.error || failReasons}`;
     }
   } else if (result.error) {
     resultText = `${result.error}`;
