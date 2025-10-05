@@ -306,7 +306,7 @@ describe('PromptfooSimulatedUserProvider', () => {
       JSON.stringify([{ role: 'user', content: 'hello' }]),
     );
 
-    expect(result.error).toContain('Remote generation is disabled for regular evaluation');
+    expect(result.error).toContain('Remote generation is disabled');
     expect(result.error).toContain('SimulatedUser requires');
     expect(result.error).toContain('PROMPTFOO_DISABLE_REMOTE_GENERATION');
     expect(fetchWithRetries).not.toHaveBeenCalled();
@@ -349,7 +349,7 @@ describe('PromptfooSimulatedUserProvider', () => {
       JSON.stringify([{ role: 'user', content: 'hello' }]),
     );
 
-    expect(result.error).toContain('Remote generation is disabled for red team');
+    expect(result.error).toContain('Remote generation is disabled');
     expect(result.error).toContain(
       'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
     );
@@ -366,7 +366,7 @@ describe('PromptfooSimulatedUserProvider', () => {
       JSON.stringify([{ role: 'user', content: 'hello' }]),
     );
 
-    expect(result.error).toContain('Remote generation is disabled for red team');
+    expect(result.error).toContain('Remote generation is disabled');
     expect(result.error).toContain(
       'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
     );
@@ -411,7 +411,7 @@ describe('PromptfooSimulatedUserProvider', () => {
     const redteamResult = await redteamProvider.callApi(
       JSON.stringify([{ role: 'user', content: 'hello' }]),
     );
-    expect(redteamResult.error).toContain('Remote generation is disabled for red team');
+    expect(redteamResult.error).toContain('Remote generation is disabled');
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 });
