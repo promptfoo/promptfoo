@@ -141,7 +141,6 @@ export class SimulatedUser implements ApiProvider {
       // Check for errors from remote generation disable
       if (userResult.error) {
         return {
-          output: '',
           error: userResult.error,
           tokenUsage,
         };
