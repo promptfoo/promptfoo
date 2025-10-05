@@ -33,7 +33,7 @@ describe('error handling', () => {
     process.env.PROMPTFOO_RETRY_5XX = undefined;
   });
 
-  it('throws an error without validateStatus check being set due to rety code', async () => {
+  it('throws an error without validateStatus check being set due to retry code', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'POST',
@@ -50,7 +50,7 @@ describe('error handling', () => {
     );
   });
 
-  it('throws not throw an error when validateStatus is not set nor retry configued', async () => {
+  it('throws an error when validateStatus is not set nor retry configured', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'POST',
@@ -65,7 +65,7 @@ describe('error handling', () => {
     );
   });
 
-  it('throws an error when validateStatus is set nor retry configued', async () => {
+  it('throws an error when validateStatus is set nor retry configured', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'POST',

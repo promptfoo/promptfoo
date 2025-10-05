@@ -2115,7 +2115,7 @@ describe('error handling', () => {
 
 describe('validateStatus', () => {
   describe('default behavior', () => {
-    it('should only accept 200 - 300 validateStatus is not provided', async () => {
+    it('should only accept 200-299 status codes when validateStatus is not provided', async () => {
       const provider = new HttpProvider('http://test.com', {
         config: {
           method: 'POST',
@@ -2123,34 +2123,44 @@ describe('validateStatus', () => {
         },
       });
 
-      // Test various status codes
-      const testCases = [
+      // Test 2xx success cases
+      const successCases = [
         { status: 200, statusText: 'OK' },
-        { status: 400, statusText: 'Bad Request' },
-        { status: 500, statusText: 'Server Error' },
+        { status: 201, statusText: 'Created' },
+        { status: 299, statusText: 'Custom' },
       ];
 
-      for (const { status, statusText } of testCases) {
-        const mockResponse = {
+      for (const { status, statusText } of successCases) {
+        jest.mocked(fetchWithCache).mockResolvedValueOnce({
           data: JSON.stringify({ result: 'success' }),
           status,
           statusText,
           cached: false,
-        };
-        jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+        });
 
-        if (status === 200) {
-          const result = await provider.callApi('test');
-          expect(result.output).toEqual({ result: 'success' });
-        } else if (status === 400) {
-          await expect(provider.callApi('test')).rejects.toThrow(
-            'HTTP call failed with status 400 Bad Request: {\"result\":\"success\"}',
-          );
-        } else {
-          await expect(provider.callApi('test')).rejects.toThrow(
-            'HTTP call failed with status 500 Server Error: {\"result\":\"success\"}',
-          );
-        }
+        const result = await provider.callApi('test');
+        expect(result.output).toEqual({ result: 'success' });
+      }
+
+      // Test boundary failure cases
+      const failureCases = [
+        { status: 199, statusText: 'Custom' }, // Below 2xx range
+        { status: 300, statusText: 'Multiple Choices' }, // At 3xx boundary
+        { status: 400, statusText: 'Bad Request' },
+        { status: 500, statusText: 'Server Error' },
+      ];
+
+      for (const { status, statusText } of failureCases) {
+        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: JSON.stringify({ result: 'success' }),
+          status,
+          statusText,
+          cached: false,
+        });
+
+        await expect(provider.callApi('test')).rejects.toThrow(
+          `HTTP call failed with status ${status} ${statusText}`,
+        );
       }
     });
   });

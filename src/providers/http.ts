@@ -581,7 +581,7 @@ export class HttpProvider implements ApiProvider {
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
     this.validateStatus = createValidateStatus(
-      this.config.validateStatus || 'status >= 200 && status < 300',
+      this.config.validateStatus ?? 'status >= 200 && status < 300',
     );
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
