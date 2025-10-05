@@ -600,28 +600,17 @@ Some providers such as Anthropic may disable your account for generating harmful
 
 ### Remote Generation
 
-By default, Promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases using specialized unaligned models.
+By default, promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
 
-#### What Data Is Sent
-
-Remote generation sends to `api.promptfoo.app`:
-
-- System purpose description
-- Test generation prompts
-- Harm category and plugin configuration
-- User email (if logged into Cloud)
-
-**NOT sent:** Your target LLM's API keys, responses, or configuration. See [Privacy Policy](/privacy#remote-generation) for details.
-
-#### Controlling Remote Generation
-
-To disable remote generation for red team features, set `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1`. To disable all remote generation (including SimulatedUser), set `PROMPTFOO_DISABLE_REMOTE_GENERATION=1`.
+:::info Cloud Users
+If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
+:::
 
 :::warning
 Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.
 :::
 
-If you need to use a custom provider for generation, you can still benefit from our remote service by leaving these variables unset (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
+If you need to use a custom provider for generation, you can still benefit from our remote service by leaving `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` set to `false` (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
 
 ### Custom Providers/Targets
 
