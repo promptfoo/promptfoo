@@ -546,7 +546,7 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
 /**
  * Bulk delete evals.
  */
-evalRouter.delete('/', (req: Request, res: Response) => {
+evalRouter.delete('/', async (req: Request, res: Response) => {
   const ids = req.body.ids;
   if (!Array.isArray(ids)) {
     res.status(400).json({ error: 'Ids must be an array' });

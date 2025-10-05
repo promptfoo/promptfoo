@@ -17,7 +17,7 @@ export async function setupTestDatabase(testSuiteName: string) {
   process.env.TEST_DB_ID = `${testSuiteName}-${timestamp}-${random}`;
 
   // Close any existing connection to ensure we get a fresh database
-  closeDb();
+  await closeDb();
 
   // Get the database instance first to ensure it's created
   const db = getDb();
@@ -26,13 +26,15 @@ export async function setupTestDatabase(testSuiteName: string) {
   await runDbMigrations();
 
   // Verify migrations worked by checking for tables
-  const tables = await db.all(sql`SELECT name FROM sqlite_master WHERE type='table'`);
+  const tables = await db.all<{ name: string }>(
+    sql`SELECT name FROM sqlite_master WHERE type='table'`,
+  );
   if (tables.length === 0) {
     throw new Error('Migrations failed - no tables created');
   }
 
   // Specifically check for evals table
-  const evalsTableExists = await db.all(
+  const evalsTableExists = await db.all<{ name: string }>(
     sql`SELECT name FROM sqlite_master WHERE type='table' AND name='evals'`,
   );
   if (evalsTableExists.length === 0) {
@@ -41,7 +43,7 @@ export async function setupTestDatabase(testSuiteName: string) {
 
   console.log(
     `Database setup complete for ${testSuiteName}, tables:`,
-    tables.map((t: any) => t.name),
+    tables.map((t) => t.name),
   );
 }
 
@@ -51,7 +53,7 @@ export async function setupTestDatabase(testSuiteName: string) {
 export async function cleanupTestDatabase() {
   // Clean up test database files for all platforms
   if (process.env.TEST_DB_ID) {
-    closeDb();
+    await closeDb();
 
     const fs = await import('fs/promises');
     const path = await import('path');

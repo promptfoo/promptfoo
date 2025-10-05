@@ -3,6 +3,14 @@ import { ResultFailureReason } from '../../src/types';
 import { runDbMigrations } from '../../src/migrate';
 import { queryTestIndicesOptimized } from '../../src/models/evalPerformance';
 import EvalFactory from '../factories/evalFactory';
+import { sql } from 'drizzle-orm';
+import {
+  evalsTable,
+  evalResultsTable,
+  evalsToDatasetsTable,
+  evalsToPromptsTable,
+  evalsToTagsTable,
+} from '../../src/database/tables';
 
 import type { EvaluateResult } from '../../src/types/index';
 
@@ -14,11 +22,13 @@ describe('Highlights Filter Feature', () => {
   beforeEach(async () => {
     // Clear all tables before each test
     const db = getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
+    // Delete related tables first
+    await db.delete(evalResultsTable);
+    await db.delete(evalsToDatasetsTable);
+    await db.delete(evalsToPromptsTable);
+    await db.delete(evalsToTagsTable);
+    // Then delete from main table
+    await db.delete(evalsTable);
   });
 
   describe('Eval.queryTestIndices highlights filter', () => {
@@ -213,32 +223,32 @@ describe('Highlights Filter Feature', () => {
       const db = getDb();
 
       // Insert a result with null grading_result
-      await db.run(`
+      await db.run(sql`
         INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
           success, score, grading_result
         ) VALUES (
-          'test1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, NULL
+          'test1', ${eval_.id}, 0, 0, '{}', '{}', '{}', 1, 1.0, NULL
         )
       `);
 
       // Insert a result with invalid JSON in grading_result
-      await db.run(`
+      await db.run(sql`
         INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
           success, score, grading_result
         ) VALUES (
-          'test2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{}'
+          'test2', ${eval_.id}, 0, 1, '{}', '{}', '{}', 1, 1.0, '{}'
         )
       `);
 
       // Insert a valid highlighted result
-      await db.run(`
+      await db.run(sql`
         INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
           success, score, grading_result
         ) VALUES (
-          'test3', '${eval_.id}', 0, 2, '{}', '{}', '{}', 1, 1.0,
+          'test3', ${eval_.id}, 0, 2, '{}', '{}', '{}', 1, 1.0,
           '{"comment": "!highlight Valid highlight", "pass": true, "score": 1}'
         )
       `);
@@ -699,12 +709,12 @@ describe('Highlights Filter Feature', () => {
       const db = getDb();
 
       // Insert result with grading_result but no comment field
-      await db.run(`
+      await db.run(sql`
         INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
           success, score, grading_result
         ) VALUES (
-          'test1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
+          'test1', ${eval_.id}, 0, 0, '{}', '{}', '{}', 1, 1.0,
           '{"pass": true, "score": 1, "reason": "Test"}'
         )
       `);

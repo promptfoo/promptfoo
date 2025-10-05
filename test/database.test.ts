@@ -21,7 +21,7 @@ describe('database WAL mode', () => {
     // Close the database connection if it exists
     try {
       const database = await import('../src/database');
-      database.closeDb();
+      await database.closeDb();
     } catch (err) {
       console.error('Error closing database:', err);
     }
@@ -57,7 +57,7 @@ describe('database WAL mode', () => {
     // Verify we can query the database
     expect(db).toBeDefined();
 
-    database.closeDb();
+    await database.closeDb();
   });
 
   it('skips WAL mode when PROMPTFOO_DISABLE_WAL_MODE is set', async () => {
@@ -69,7 +69,7 @@ describe('database WAL mode', () => {
     // With libSQL, we just verify it initializes without error
     expect(db).toBeDefined();
 
-    database.closeDb();
+    await database.closeDb();
   });
 
   it('does not enable WAL mode for in-memory databases', async () => {
@@ -91,6 +91,6 @@ describe('database WAL mode', () => {
     // We just verify the database is functional
     expect(db).toBeDefined();
 
-    database.closeDb();
+    await database.closeDb();
   });
 });

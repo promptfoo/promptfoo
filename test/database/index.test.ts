@@ -17,9 +17,9 @@ jest.mock('../../src/logger');
 jest.mock('../../src/util/config/manage');
 
 describe('database', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
-    closeDb();
+    await closeDb();
     jest.mocked(getConfigDirectoryPath).mockReturnValue('/test/config/path');
     jest.mocked(getEnvBool).mockImplementation((key) => {
       if (key === 'IS_TESTING') {
@@ -29,8 +29,8 @@ describe('database', () => {
     });
   });
 
-  afterEach(() => {
-    closeDb();
+  afterEach(async () => {
+    await closeDb();
   });
 
   describe('getDbPath', () => {
@@ -100,35 +100,35 @@ describe('database', () => {
   });
 
   describe('closeDb', () => {
-    it('should close database connection and reset instances', () => {
+    it('should close database connection and reset instances', async () => {
       const _db = getDb();
       expect(isDbOpen()).toBe(true);
-      closeDb();
+      await closeDb();
       expect(isDbOpen()).toBe(false);
       const newDb = getDb();
       expect(newDb).toBeDefined();
       expect(isDbOpen()).toBe(true);
     });
 
-    it('should handle errors when closing database', () => {
+    it('should handle errors when closing database', async () => {
       const _db = getDb();
-      closeDb();
-      closeDb(); // Second close should be handled gracefully
+      await closeDb();
+      await closeDb(); // Second close should be handled gracefully
       expect(logger.error).not.toHaveBeenCalled();
     });
 
-    it('should handle close errors gracefully', () => {
+    it('should handle close errors gracefully', async () => {
       const _db = getDb();
       // Force an error by closing twice
-      closeDb();
-      closeDb();
+      await closeDb();
+      await closeDb();
       expect(logger.error).not.toHaveBeenCalled();
     });
   });
 
   describe('isDbOpen', () => {
-    it('should return false when database is not initialized', () => {
-      closeDb(); // Ensure clean state
+    it('should return false when database is not initialized', async () => {
+      await closeDb(); // Ensure clean state
       expect(isDbOpen()).toBe(false);
     });
 
@@ -137,10 +137,10 @@ describe('database', () => {
       expect(isDbOpen()).toBe(true);
     });
 
-    it('should return false after closing database', () => {
+    it('should return false after closing database', async () => {
       const _db = getDb();
       expect(isDbOpen()).toBe(true);
-      closeDb();
+      await closeDb();
       expect(isDbOpen()).toBe(false);
     });
   });

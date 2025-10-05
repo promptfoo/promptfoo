@@ -66,12 +66,12 @@ export function getDb() {
   return dbInstance;
 }
 
-export function closeDb() {
+export async function closeDb(): Promise<void> {
   if (sqliteInstance) {
     try {
-      // libSQL client doesn't have a close method like better-sqlite3
-      // The connection is managed automatically
-      logger.debug('Database connection cleanup completed');
+      // Close the libSQL client connection
+      await sqliteInstance.close();
+      logger.debug('Database connection closed successfully');
     } catch (err) {
       logger.error(`Error during database cleanup: ${err}`);
     } finally {

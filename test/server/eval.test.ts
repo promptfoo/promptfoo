@@ -5,6 +5,7 @@ import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
+import { sql } from 'drizzle-orm';
 
 describe('eval routes', () => {
   let app: ReturnType<typeof createApp>;
@@ -221,14 +222,12 @@ describe('eval routes', () => {
       // Add eval results with metadata using direct database insert
       const { getDb } = await import('../../src/database');
       const db = getDb();
-      await db.run(
-        `INSERT INTO eval_results (
+      await db.run(sql`INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
           success, score, metadata
         ) VALUES
-        ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{"key1": "value1", "key2": "value2"}'),
-        ('result2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}')`,
-      );
+        ('result1', ${eval_.id}, 0, 0, '{}', '{}', '{}', 1, 1.0, '{"key1": "value1", "key2": "value2"}'),
+        ('result2', ${eval_.id}, 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}')`);
 
       const res = await request(app).get(`/api/eval/${eval_.id}/metadata-keys`);
 
