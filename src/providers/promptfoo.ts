@@ -269,7 +269,6 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       : neverGenerateRemoteForRegularEvals(); // Only checks general flag
 
     if (shouldDisable) {
-      const taskType = isRedteamTask ? 'red team' : 'regular evaluation';
       const relevantFlag = isRedteamTask
         ? 'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'
         : 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
@@ -279,13 +278,11 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
       return {
         error: dedent`
-          Remote generation is disabled for ${taskType} simulated users.
+          Remote generation is disabled.
 
           SimulatedUser requires Promptfoo's conversation simulation models.
 
-          To enable:
-          - Remove ${relevantFlag}
-          - Or configure an alternative provider (not recommended, lower quality)
+          To enable, remove ${relevantFlag}
 
           Learn more: ${docsUrl}
         `,
