@@ -28,7 +28,7 @@ To disable telemetry, set the following environment variable: `PROMPTFOO_DISABLE
 
 SimulatedUser and red team features use Promptfoo's hosted inference endpoints by default. Your target model always runs locally.
 
-To disable remote generation, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=1`.
+To disable remote generation, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`.
 
 The CLI checks NPM's package registry for updates. If there is a newer version available, it will notify the user. To disable, set: `PROMPTFOO_DISABLE_UPDATE=1`.
 

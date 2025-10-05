@@ -821,7 +821,7 @@ Configuration values can be set in multiple ways, with the following precedence 
 3. **Environment variables** - System-level settings
 
    ```bash
-   export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=1
+   export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
    export OPENAI_API_KEY=your-key-here
    ```
 
