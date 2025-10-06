@@ -456,82 +456,71 @@ export async function runEval({
       TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
     }
 
-    // Always create a copy of response for potential processing
-    const processedResponse = { ...response };
-    let providerTransformedOutput = processedResponse.output;
-
-    // Apply provider transform first (if exists) and output is available
-    if (provider.transform && processedResponse.output != null) {
-      processedResponse.output = await transform(provider.transform, processedResponse.output, {
-        vars,
-        prompt,
-      });
-      providerTransformedOutput = processedResponse.output;
-    }
-
-    // Apply test transform (if exists) and output is available
-    const testTransform = test.options?.transform || test.options?.postprocess;
-    if (testTransform && processedResponse.output != null) {
-      processedResponse.output = await transform(testTransform, processedResponse.output, {
-        vars,
-        prompt,
-        ...(response && response.metadata && { metadata: response.metadata }),
-      });
-    }
-
-    // Extract traceId from traceparent if available
-    let traceId: string | undefined;
-    if (traceContext?.traceparent) {
-      // traceparent format: version-traceId-spanId-flags
-      const parts = traceContext.traceparent.split('-');
-      if (parts.length >= 3) {
-        traceId = parts[1];
-      }
-    }
-
-    // Always run assertions, even if there's an error
-    // This allows assertions like is-refusal to check error messages
-    const checkResult = await runAssertions({
-      prompt: renderedPrompt,
-      provider,
-      providerResponse: {
-        ...processedResponse,
-        // Add provider-transformed output for contextTransform
-        providerTransformedOutput,
-      },
-      test,
-      latencyMs: response.cached ? undefined : latencyMs,
-      assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-      traceId,
-    });
-
-    // Determine if there were any assertions to run
-    const hasAssertions = test.assert && test.assert.length > 0;
-
-    // If there was an error and either no assertions or assertions failed, treat as error
-    if (response.error && (!hasAssertions || !checkResult.pass)) {
+    if (response.error) {
       ret.error = response.error;
       ret.failureReason = ResultFailureReason.ERROR;
       ret.success = false;
     } else if (response.output === null || response.output === undefined) {
-      // If there are assertions and they pass, use assertion results
-      // Otherwise, treat as no output error
-      if (hasAssertions && checkResult.pass) {
-        ret.success = checkResult.pass;
-        ret.score = checkResult.score;
-        ret.namedScores = checkResult.namedScores || {};
+      // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
+      if (isRedteam) {
+        ret.success = true;
       } else {
-        // NOTE: empty output often indicative of guardrails, so behavior differs for red teams.
-        if (isRedteam) {
-          ret.success = true;
-        } else {
-          ret.success = false;
-          ret.score = 0;
-          ret.error = 'No output';
-        }
+        ret.success = false;
+        ret.score = 0;
+        ret.error = 'No output';
       }
     } else {
-      // Use assertion results (including when error exists but assertions passed)
+      // Create a copy of response so we can potentially mutate it.
+      const processedResponse = { ...response };
+
+      // Apply provider transform first (if exists)
+      if (provider.transform) {
+        processedResponse.output = await transform(provider.transform, processedResponse.output, {
+          vars,
+          prompt,
+        });
+      }
+
+      // Store the provider-transformed output for assertions (contextTransform)
+      const providerTransformedOutput = processedResponse.output;
+
+      // Apply test transform (if exists)
+      const testTransform = test.options?.transform || test.options?.postprocess;
+      if (testTransform) {
+        processedResponse.output = await transform(testTransform, processedResponse.output, {
+          vars,
+          prompt,
+          ...(response && response.metadata && { metadata: response.metadata }),
+        });
+      }
+
+      invariant(processedResponse.output != null, 'Response output should not be null');
+
+      // Extract traceId from traceparent if available
+      let traceId: string | undefined;
+      if (traceContext?.traceparent) {
+        // traceparent format: version-traceId-spanId-flags
+        const parts = traceContext.traceparent.split('-');
+        if (parts.length >= 3) {
+          traceId = parts[1];
+        }
+      }
+
+      // Pass providerTransformedOutput for contextTransform to use
+      const checkResult = await runAssertions({
+        prompt: renderedPrompt,
+        provider,
+        providerResponse: {
+          ...processedResponse,
+          // Add provider-transformed output for contextTransform
+          providerTransformedOutput,
+        },
+        test,
+        latencyMs: response.cached ? undefined : latencyMs,
+        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+        traceId,
+      });
+
       if (!checkResult.pass) {
         ret.error = checkResult.reason;
         ret.failureReason = ResultFailureReason.ASSERT;
@@ -539,20 +528,19 @@ export async function runEval({
       ret.success = checkResult.pass;
       ret.score = checkResult.score;
       ret.namedScores = checkResult.namedScores || {};
-    }
+      // Track assertion request count
+      if (!ret.tokenUsage.assertions) {
+        ret.tokenUsage.assertions = createEmptyAssertions();
+      }
+      ret.tokenUsage.assertions.numRequests = (ret.tokenUsage.assertions.numRequests ?? 0) + 1;
 
-    // Track assertion request count
-    if (!ret.tokenUsage.assertions) {
-      ret.tokenUsage.assertions = createEmptyAssertions();
+      // Track assertion token usage if provided
+      if (checkResult.tokensUsed) {
+        accumulateAssertionTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
+      }
+      ret.response = processedResponse;
+      ret.gradingResult = checkResult;
     }
-    ret.tokenUsage.assertions.numRequests = (ret.tokenUsage.assertions.numRequests ?? 0) + 1;
-
-    // Track assertion token usage if provided
-    if (checkResult.tokensUsed) {
-      accumulateAssertionTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
-    }
-    ret.response = processedResponse;
-    ret.gradingResult = checkResult;
 
     // Update token usage stats
     if (response.tokenUsage) {
