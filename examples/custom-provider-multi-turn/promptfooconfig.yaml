@@ -1,0 +1,30 @@
+description: Red Team Starter
+
+prompts:
+  - '{{prompt}}'
+
+targets:
+  - file://multi-turn.py
+
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+
+redteam:
+  purpose: You are a helpful assistant.
+  plugins:
+    - id: harmful:hate
+  strategies:
+    - id: goat
+      config:
+        stateful: true
+        maxTurns: 5
+    - id: crescendo
+      config:
+        stateful: true
+        maxTurns: 5
+    - id: mischievous-user
+      config:
+        stateful: true
+        maxTurns: 5
+  numTests: 1
