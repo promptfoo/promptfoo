@@ -1,10 +1,12 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+
+import { createAppTheme } from '@app/components/PageShell';
+import { ThemeProvider } from '@mui/material/styles';
 import { Severity } from '@promptfoo/redteam/constants';
-import FrameworkCard from './FrameworkCard';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import FrameworkCard from './FrameworkCard';
 
 // Mock react-router-dom
 vi.mock('react-router-dom', () => ({
@@ -82,9 +84,9 @@ describe('FrameworkCard', () => {
     }),
     idx: 0,
   };
+  const theme = createAppTheme(false);
 
   const renderFrameworkCard = (props: Partial<FrameworkCardProps> = {}) => {
-    const theme = createTheme();
     return render(
       <ThemeProvider theme={theme}>
         <FrameworkCard {...defaultProps} {...props} />
@@ -122,7 +124,7 @@ describe('FrameworkCard', () => {
     expect(summaryChip).toBeInTheDocument();
 
     const chipContainer = summaryChip.parentElement;
-    expect(chipContainer).toHaveStyle('background-color: #4caf50');
+    expect(chipContainer).toHaveStyle(`background-color: ${theme.palette.success.main}`);
   });
 
   it('should display the non-compliant state, including the severity chip and a list of failed plugins, when isCompliant is false and nonCompliantPlugins contains plugin names', () => {

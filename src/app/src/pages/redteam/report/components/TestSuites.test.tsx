@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TestSuites from './TestSuites';
@@ -45,7 +46,7 @@ describe('TestSuites Component', () => {
   });
 
   it('should render an empty DataGrid when categoryStats is empty', () => {
-    render(<TestSuites {...defaultProps} categoryStats={{}} />);
+    renderWithProviders(<TestSuites {...defaultProps} categoryStats={{}} />);
     // Check for the DataGrid container
     const dataGrid = screen.getByRole('grid');
     expect(dataGrid).toBeInTheDocument();
@@ -56,7 +57,7 @@ describe('TestSuites Component', () => {
   });
 
   it('should render the DataGrid with correct data', () => {
-    render(<TestSuites {...defaultProps} />);
+    renderWithProviders(<TestSuites {...defaultProps} />);
 
     // Check that the DataGrid is rendered
     const dataGrid = screen.getByRole('grid');
@@ -77,7 +78,7 @@ describe('TestSuites Component', () => {
   });
 
   it('should render DataGrid with categoryStats data even when plugins prop is empty', () => {
-    render(<TestSuites {...defaultProps} />);
+    renderWithProviders(<TestSuites {...defaultProps} />);
 
     const dataGrid = screen.getByRole('grid');
     expect(dataGrid).toBeInTheDocument();
@@ -105,7 +106,7 @@ describe('TestSuites Component', () => {
       },
     };
 
-    render(<TestSuites {...propsWithUnknownSeverity} />);
+    renderWithProviders(<TestSuites {...propsWithUnknownSeverity} />);
 
     const dataGrid = screen.getByRole('grid');
     expect(dataGrid).toBeInTheDocument();
@@ -161,7 +162,7 @@ describe('TestSuites Component Navigation', () => {
   });
 
   it('should navigate to eval page with correct search params when clicking View logs', () => {
-    render(<TestSuites {...defaultProps} />);
+    renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[0];
@@ -174,7 +175,7 @@ describe('TestSuites Component Navigation', () => {
   });
 
   it('should not navigate again when browser back button is used', () => {
-    render(<TestSuites {...defaultProps} />);
+    renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[0];
@@ -187,7 +188,7 @@ describe('TestSuites Component Navigation', () => {
   });
 
   it('should navigate to eval page with correctly encoded search params when pluginId contains special characters', () => {
-    render(<TestSuites {...defaultProps} />);
+    renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[1];
@@ -204,7 +205,7 @@ describe('TestSuites Component Navigation', () => {
     const originalOpen = window.open;
     window.open = mockOpen;
 
-    render(<TestSuites {...defaultProps} />);
+    renderWithProviders(<TestSuites {...defaultProps} />);
 
     const applyMitigationButtons = screen.getAllByText('Apply mitigation');
     const applyMitigationButton = applyMitigationButtons[0];
@@ -253,7 +254,7 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
   });
 
   it('should navigate to eval page without evalId when evalId is missing from URL parameters', () => {
-    render(<TestSuites {...defaultProps} />);
+    renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[0];
@@ -303,7 +304,7 @@ describe('TestSuites Component Filtering', () => {
   });
 
   it('should filter out subcategories with zero total tests', () => {
-    render(<TestSuites {...defaultProps} />);
+    renderWithProviders(<TestSuites {...defaultProps} />);
     // DataGrid has header row + data rows
     // With filtering, we should only have 'harmful:hate' row
     expect(screen.getByText('Hate Speech')).toBeInTheDocument();
@@ -345,7 +346,7 @@ describe('TestSuites Component CSV Export', () => {
   });
 
   it('should render export CSV button', () => {
-    render(<TestSuites {...defaultProps} />);
+    renderWithProviders(<TestSuites {...defaultProps} />);
 
     const exportButton = screen.getByText('Export vulnerabilities to CSV');
     expect(exportButton).toBeInTheDocument();
@@ -390,7 +391,7 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
   });
 
   it('should correctly display 0.00% attack success rate', () => {
-    render(<TestSuites {...defaultProps} />);
+    renderWithProviders(<TestSuites {...defaultProps} />);
 
     // The text "0.00%" appears multiple times in DataGrid cells
     // Using getAllByText to handle multiple matches
@@ -435,7 +436,7 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
     const mockFilterModel = { items: [] } as any;
     const mockSetFilterModel = vi.fn();
 
-    render(
+    renderWithProviders(
       <TestSuites
         evalId={evalId}
         categoryStats={categoryStatsWithSpecialChars}

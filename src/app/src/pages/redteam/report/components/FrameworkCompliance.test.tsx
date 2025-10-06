@@ -1,10 +1,10 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-import FrameworkCompliance from './FrameworkCompliance';
-import { useReportStore } from './store';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
+import FrameworkCompliance from './FrameworkCompliance';
 import CSVExporter from './FrameworkCsvExporter';
+import { useReportStore } from './store';
 
 vi.mock('./store');
 vi.mock('./FrameworkCard');
@@ -70,7 +70,7 @@ describe('FrameworkCompliance', () => {
       setPluginPassRateThreshold: vi.fn(),
     });
 
-    return render(
+    return renderWithProviders(
       <FrameworkCompliance
         evalId="test-eval-id"
         categoryStats={categoryStats}

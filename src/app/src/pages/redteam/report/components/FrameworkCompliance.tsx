@@ -12,12 +12,9 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
+import { getProgressColor } from '../utils/color';
 import FrameworkCard from './FrameworkCard';
-import {
-  categorizePlugins,
-  expandPluginCollections,
-  getProgressColor,
-} from './FrameworkComplianceUtils';
+import { categorizePlugins, expandPluginCollections } from './FrameworkComplianceUtils';
 import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
 import './FrameworkCompliance.css';
@@ -216,7 +213,8 @@ const FrameworkCompliance = ({
               backgroundColor: 'rgba(0, 0, 0, 0.1)',
               '& .MuiLinearProgress-bar': {
                 borderRadius: 4,
-                backgroundColor: getProgressColor(pluginComplianceStats.attackSuccessRate, true), // Invert color scale
+                backgroundColor: (theme) =>
+                  getProgressColor(pluginComplianceStats.attackSuccessRate, theme, true), // Invert color scale
               },
             }}
           />
