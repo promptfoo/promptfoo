@@ -295,48 +295,6 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy && MULTI_TURN_STRATEGIES.includes(strategy as MultiTurnStrategy)) {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the multi-turn strategy parameters.
-          </Typography>
-
-          <TextField
-            fullWidth
-            label="Max Turns"
-            type="number"
-            value={localConfig.maxTurns || 5}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 5;
-              setLocalConfig({ ...localConfig, maxTurns: value });
-            }}
-            placeholder="Maximum number of conversation turns (default: 5)"
-            InputProps={{ inputProps: { min: 1, max: 20 } }}
-            helperText="Maximum number of back-and-forth exchanges with the model"
-          />
-
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localConfig.stateful !== false}
-                onChange={(e) => setLocalConfig({ ...localConfig, stateful: e.target.checked })}
-                color="primary"
-              />
-            }
-            label={
-              <Box component="span">
-                <Typography variant="body2" component="span">
-                  Stateful
-                </Typography>
-                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                  - Enable to maintain conversation history (recommended)
-                </Typography>
-              </Box>
-            }
-          />
-        </Box>
-      );
     } else if (strategy === 'custom') {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -372,6 +330,48 @@ export default function StrategyConfigDialog({
               setLocalConfig({ ...localConfig, maxTurns: value });
             }}
             placeholder="Maximum number of conversation turns (default: 10)"
+            InputProps={{ inputProps: { min: 1, max: 20 } }}
+            helperText="Maximum number of back-and-forth exchanges with the model"
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={localConfig.stateful !== false}
+                onChange={(e) => setLocalConfig({ ...localConfig, stateful: e.target.checked })}
+                color="primary"
+              />
+            }
+            label={
+              <Box component="span">
+                <Typography variant="body2" component="span">
+                  Stateful
+                </Typography>
+                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
+                  - Enable to maintain conversation history (recommended)
+                </Typography>
+              </Box>
+            }
+          />
+        </Box>
+      );
+    } else if (strategy && MULTI_TURN_STRATEGIES.includes(strategy as MultiTurnStrategy)) {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Configure the multi-turn strategy parameters.
+          </Typography>
+
+          <TextField
+            fullWidth
+            label="Max Turns"
+            type="number"
+            value={localConfig.maxTurns || 5}
+            onChange={(e) => {
+              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 5;
+              setLocalConfig({ ...localConfig, maxTurns: value });
+            }}
+            placeholder="Maximum number of conversation turns (default: 5)"
             InputProps={{ inputProps: { min: 1, max: 20 } }}
             helperText="Maximum number of back-and-forth exchanges with the model"
           />
