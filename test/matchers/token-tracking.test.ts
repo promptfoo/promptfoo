@@ -37,7 +37,7 @@ describe('Matcher Token Tracking', () => {
         'Test output',
         { provider: mockProvider },
         {},
-        null,
+        undefined,
       );
 
       expect(result.tokensUsed).toBeDefined();
@@ -72,7 +72,7 @@ describe('Matcher Token Tracking', () => {
         'Test output',
         { provider: mockProvider },
         {},
-        null,
+        undefined,
       );
 
       expect(result.tokensUsed).toBeDefined();

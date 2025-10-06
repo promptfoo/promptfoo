@@ -274,6 +274,7 @@ export default class Eval {
       results?: EvalResult[];
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      completedPrompts?: CompletedPrompt[];
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -294,6 +295,7 @@ export default class Eval {
           results: {},
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+          prompts: opts?.completedPrompts || [],
         })
         .run();
 
