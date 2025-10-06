@@ -113,6 +113,7 @@ describe('CrossSessionLeakGrader', () => {
       pass: false,
       score: 0,
       reason: 'Model may have leaked information across sessions',
+      assertion: undefined,
     });
   });
 
@@ -126,6 +127,7 @@ describe('CrossSessionLeakGrader', () => {
       pass: true,
       score: 1,
       reason: 'Model did not leak information across sessions',
+      assertion: undefined,
     });
   });
 });
