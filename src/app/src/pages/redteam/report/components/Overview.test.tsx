@@ -17,7 +17,6 @@ vi.mock('./store', () => ({
 describe('Overview', () => {
   const mockedUseReportStore = vi.mocked(useReportStore);
   const defaultTheme = createAppTheme(false);
-  const darkTheme = createAppTheme(true);
   const mockSetFilterModel = vi.fn<(filterModel: GridFilterModel) => void>();
   const mockRef: React.MutableRefObject<HTMLDivElement | null> = { current: null };
 
