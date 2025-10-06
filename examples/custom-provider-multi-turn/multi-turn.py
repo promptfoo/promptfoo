@@ -6,7 +6,6 @@ import urllib.error
 url = "https://customer-service-chatbot-example.promptfoo.app"
 
 
-
 def call_api(prompt, options, context):
     session_id = context.get("vars", {}).get("sessionId", "")
     payload = {
@@ -30,7 +29,9 @@ def call_api(prompt, options, context):
             body = resp.read()
             response = json.loads(body.decode("utf-8")) if body else {}
     except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8", errors="ignore") if hasattr(e, "read") else ""
+        error_body = (
+            e.read().decode("utf-8", errors="ignore") if hasattr(e, "read") else ""
+        )
         response = {"error": f"HTTP {e.code}", "body": error_body}
     except urllib.error.URLError as e:
         reason = e.reason if hasattr(e, "reason") else str(e)
@@ -48,7 +49,9 @@ def call_api(prompt, options, context):
         }
 
     return {
-        "output": response.get("message", response) if isinstance(response, dict) else response,
+        "output": response.get("message", response)
+        if isinstance(response, dict)
+        else response,
         "tokenUsage": token_usage,
         "metadata": {
             "config": options.get("config", {}),

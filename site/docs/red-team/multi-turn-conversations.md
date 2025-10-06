@@ -5,7 +5,7 @@ description: Guide for using custom providers with multi-turn attacks
 
 # Multi-Turn Conversations With Custom Provider
 
-When using HTTP or custom providers with multi-turn attacks like GOAT and/or Crescendo, you may need to maintain session IDs between rounds.  You can refer to the [session management guide](/docs/providers/http/#session-management) for more details on how session management can be configured for different providers.  In the example below, we use client-side session management to create a unique session or conversation ID for each test, and add it in the for each turn in the conversation.  
+When using HTTP or custom providers with multi-turn attacks like GOAT and/or Crescendo, you may need to maintain session IDs between rounds. You can refer to the [session management guide](/docs/providers/http/#session-management) for more details on how session management can be configured for different providers. In the example below, we use client-side session management to create a unique session or conversation ID for each test, and add it in the for each turn in the conversation.
 
 1.  Configure your target using a local python script:
 
