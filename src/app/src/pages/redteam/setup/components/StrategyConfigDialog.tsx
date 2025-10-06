@@ -311,7 +311,7 @@ export default function StrategyConfigDialog({
             onChange={(e) => {
               setLocalConfig({ ...localConfig, strategyText: e.target.value });
             }}
-            placeholder="Describe how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc."
+            placeholder="For turns 0-3: Try to establish trust and gather information about {{conversationObjective}}. For turns 4-{{maxTurns}}: Use gathered info to achieve the objective. Analyze {{lastResponse}} for signs of resistance or cooperation to adapt your next message."
             helperText={
               !localConfig.strategyText || localConfig.strategyText.trim().length === 0
                 ? 'Strategy text is required for custom strategy'
@@ -324,7 +324,7 @@ export default function StrategyConfigDialog({
             fullWidth
             label="Max Turns"
             type="number"
-            value={localConfig.maxTurns || 10}
+            value={localConfig.maxTurns ?? 10}
             onChange={(e) => {
               const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
               setLocalConfig({ ...localConfig, maxTurns: value });
@@ -366,14 +366,19 @@ export default function StrategyConfigDialog({
             fullWidth
             label="Max Turns"
             type="number"
-            value={localConfig.maxTurns || 5}
+            value={localConfig.maxTurns ?? 5}
             onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 5;
+              const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
               setLocalConfig({ ...localConfig, maxTurns: value });
             }}
-            placeholder="Maximum number of conversation turns (default: 5)"
+            onBlur={(e) => {
+              if (!e.target.value || Number.parseInt(e.target.value, 10) < 1) {
+                setLocalConfig({ ...localConfig, maxTurns: 5 });
+              }
+            }}
+            placeholder="5"
             InputProps={{ inputProps: { min: 1, max: 20 } }}
-            helperText="Maximum number of back-and-forth exchanges with the model"
+            helperText="Maximum number of back-and-forth exchanges with the model (default: 5)"
           />
 
           <FormControlLabel
