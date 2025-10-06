@@ -168,6 +168,12 @@ const AboutPageContent = () => {
                 image: '/img/team/yash.png',
                 bio: 'Yash specializes in securing ML infrastructure, distributed systems, and multi-tenant platforms. His work spans threat modeling, purple teaming, and building proactive defenses against supply chain risks and privacy attacks in AI systems.',
               },
+              {
+                name: 'Dane Schneider',
+                title: 'Staff Engineer',
+                image: '/img/team/dane.jpeg',
+                bio: 'Dane is a full stack engineer and former founder. He brings deep experience in coding agents, security, devops, and user interface design for complex technical domains.'
+              }
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">
