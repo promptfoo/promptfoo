@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -10,12 +9,7 @@ import { neverGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { ResultFailureReason } from '../../src/types';
 import { fetchWithProxy } from '../../src/util/fetch';
 
-import type {
-  EvaluateOptions,
-  EvaluateResult,
-  EvaluateSummaryV3,
-  TestSuite,
-} from '../../src/types';
+import type { EvaluateResult, EvaluateSummaryV3 } from '../../src/types';
 import type { ApiProvider } from '../../src/types/providers';
 
 // Mock dependencies

@@ -295,21 +295,24 @@ export async function testProviderSession(
     // Generate initial session ID for client sessions
     const initialSessionId = uuidv4();
 
-    // Build TestSuite with TWO sequential prompts
+    // Build TestSuite with ONE prompt template and TWO test cases
     const testSuite: TestSuite = {
       providers: [provider],
-      prompts: [
-        { raw: firstPrompt, label: 'First Request' },
-        { raw: secondPrompt, label: 'Second Request' },
-      ],
+      prompts: [{ raw: '{{input}}', label: 'Session Test' }],
       tests: [
         // Test 1: First request (establishes session)
         {
-          vars: { sessionId: initialSessionId },
+          vars: {
+            sessionId: initialSessionId,
+            input: firstPrompt,
+          },
         },
         // Test 2: Second request (tests session memory)
         {
-          vars: { sessionId: initialSessionId }, // Will be updated if server-generated
+          vars: {
+            sessionId: initialSessionId,
+            input: secondPrompt,
+          },
           assert: neverGenerateRemote()
             ? []
             : [
@@ -428,11 +431,97 @@ export async function testProviderSession(
       providerId: provider.id,
     });
 
+    // Build helpful advice if session isn't working
+    let troubleshootingAdvice = '';
+    if (!sessionWorking) {
+      if (effectiveSessionSource === 'server') {
+        // For server-side sessions, show what was parsed
+        const firstSessionId = firstResult.response?.sessionId ?? firstResult.metadata?.sessionId;
+        const secondSessionId =
+          secondResult.response?.sessionId ?? secondResult.metadata?.sessionId;
+
+        troubleshootingAdvice = dedent`
+
+          Troubleshooting tips for server-side sessions:
+          - SessionParser: ${sessionConfig?.sessionParser || provider.config?.sessionParser || 'Not configured'}
+          - First request parsed session ID: ${firstSessionId || 'None extracted'}
+          - Second request parsed session ID: ${secondSessionId || 'None extracted'}
+          
+          Common issues:
+          1. Verify your sessionParser expression correctly extracts the session ID from the response
+          2. Check that your server is actually returning a session ID in the expected location
+          3. Confirm the session ID format matches what your sessionParser expects
+          4. Ensure the same session ID is being extracted from both responses
+        `;
+      } else {
+        // For client-side sessions, show configuration and session IDs
+        const providerConfig = provider.config;
+
+        // Format headers nicely
+        let configuredHeaders = 'None configured';
+        if (providerConfig?.headers) {
+          const headerLines = Object.entries(providerConfig.headers)
+            .map(([key, value]) => `    ${key}: ${value}`)
+            .join('\n');
+          configuredHeaders = `\n${headerLines}`;
+        }
+
+        // Format body nicely
+        let configuredBody = 'None configured';
+        if (providerConfig?.body) {
+          if (typeof providerConfig.body === 'string') {
+            // Try to parse and pretty-print JSON strings
+            try {
+              const parsed = JSON.parse(providerConfig.body);
+              configuredBody =
+                '\n' +
+                JSON.stringify(parsed, null, 2)
+                  .split('\n')
+                  .map((line) => `    ${line}`)
+                  .join('\n');
+            } catch {
+              // If not JSON, just indent it
+              configuredBody = '\n    ' + providerConfig.body;
+            }
+          } else {
+            // If it's already an object, stringify it
+            configuredBody =
+              '\n' +
+              JSON.stringify(providerConfig.body, null, 2)
+                .split('\n')
+                .map((line) => `    ${line}`)
+                .join('\n');
+          }
+        }
+
+        // Check if {{sessionId}} is actually used in the config
+        const configStr = JSON.stringify(providerConfig || {});
+        const usesSessionId = configStr.includes('{{sessionId}}');
+
+        troubleshootingAdvice = dedent`
+
+          Troubleshooting tips for client-side sessions:
+          - Session ID sent: ${initialSessionId}
+          - {{sessionId}} variable used in config: ${usesSessionId ? 'Yes' : 'No ⚠️'}
+          
+          Your configured headers:${configuredHeaders}
+          
+          Your configured body:${configuredBody}
+          
+          Common issues:
+          1. Ensure {{sessionId}} is in the correct location for your API
+          2. Verify your server accepts and maintains sessions using the session ID you send
+          3. Check that your server's session management is configured correctly
+          4. Confirm the session ID is being passed in the format your server expects
+        `;
+      }
+    }
+
     return {
       success: sessionWorking,
       message: sessionWorking
         ? 'Session management is working correctly! The provider remembered information across requests.'
-        : 'Session is NOT working. The provider did not remember information from the first request.',
+        : `Session is NOT working. The provider did not remember information from the first request.${troubleshootingAdvice}`,
       reason: judgeReason,
       details: {
         sessionId: sessionId || 'Not extracted',

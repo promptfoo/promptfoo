@@ -15,7 +15,7 @@ import type { ApiProvider } from '../../src/types/providers';
 jest.mock('../../src/logger');
 jest.mock('../../src/util/config/load');
 jest.mock('../../src/providers/index');
-jest.mock('../../src/providers/test');
+jest.mock('../../src/providers/testProvider');
 jest.mock('../../src/util/cloud');
 jest.mock('../../src/telemetry', () => ({
   record: jest.fn(),
