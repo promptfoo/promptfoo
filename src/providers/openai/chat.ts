@@ -5,7 +5,6 @@ import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { isBasicRefusal } from '../../redteam/util';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
@@ -356,12 +355,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
 
-        // Check if the error message contains refusal patterns
-        // If so, treat it as a refusal output instead of an error
-        if (isBasicRefusal(errorMessage)) {
+        // Check if this is an invalid_prompt error code (indicates refusal)
+        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
           return {
             output: errorMessage,
             tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            isRefusal: true,
           };
         }
 

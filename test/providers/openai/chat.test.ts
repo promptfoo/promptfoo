@@ -218,8 +218,8 @@ describe('OpenAI Provider', () => {
       expect(result.isRefusal).toBe(true);
     });
 
-    it('should detect refusals in 400 API error messages', async () => {
-      // Mock a 400 error response with refusal message in error body
+    it('should detect refusals in 400 API error with invalid_prompt code', async () => {
+      // Mock a 400 error response with invalid_prompt error code
       const mockErrorResponse = {
         data: {
           error: {
@@ -252,6 +252,7 @@ describe('OpenAI Provider', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toContain('limited access to this content for safety reasons');
       expect(result.output).toContain('400 Bad Request');
+      expect(result.isRefusal).toBe(true);
     });
 
     it('should still treat non-refusal 400 errors as errors', async () => {
@@ -276,7 +277,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
 
-      // Should still be treated as an error since it doesn't contain refusal patterns
+      // Should still be treated as an error since error code is not invalid_prompt
       expect(result.error).toBeDefined();
       expect(result.error).toContain("'messages' field is required");
       expect(result.error).toContain('400 Bad Request');
