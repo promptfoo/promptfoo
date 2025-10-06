@@ -48,26 +48,6 @@ export const createAppTheme = (darkMode: boolean) => {
   const theme = createTheme({
     palette: {
       mode: darkMode ? 'dark' : 'light',
-      primary: {
-        main: darkMode ? '#3b82f6' : '#2563eb', // Lighter blue for dark mode
-        light: darkMode ? '#60a5fa' : '#3b82f6',
-        dark: darkMode ? '#2563eb' : '#1d4ed8',
-        contrastText: '#ffffff',
-      },
-      secondary: {
-        main: '#8b5cf6', // Modern purple
-        light: '#a78bfa',
-        dark: '#7c3aed',
-        contrastText: '#ffffff',
-      },
-      background: {
-        default: darkMode ? '#121212' : '#f8fafc',
-        paper: darkMode ? '#1e1e1e' : '#ffffff',
-      },
-      text: {
-        primary: darkMode ? '#ffffff' : '#0f172a',
-        secondary: darkMode ? '#a0a0a0' : '#475569',
-      },
       // Custom colors for specific use cases
       custom: {
         darkOverlay: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
