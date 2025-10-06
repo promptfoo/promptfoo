@@ -19,6 +19,7 @@ import {
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
+  severityDisplayNames,
   Severity,
 } from '@promptfoo/redteam/constants';
 import {
@@ -98,7 +99,7 @@ const FrameworkCard = ({
                 arrow
               >
                 <Chip
-                  label={frameworkSeverity}
+                  label={severityDisplayNames[frameworkSeverity]}
                   size="small"
                   sx={{
                     backgroundColor: getSeverityColor(frameworkSeverity, theme),
