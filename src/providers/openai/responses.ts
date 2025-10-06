@@ -68,6 +68,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3-mini-2025-01-31',
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
     'codex-mini-latest',
+    'gpt-5-codex',
     // Deep research models
     'o3-deep-research',
     'o3-deep-research-2025-06-26',

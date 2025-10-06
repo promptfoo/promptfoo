@@ -43,6 +43,7 @@ jest.mock('fs', () => ({
 
 jest.mock('zlib', () => ({
   createGzip: jest.fn(),
+  gzip: jest.fn(),
 }));
 
 jest.mock('../../src/database', () => ({
@@ -157,7 +158,7 @@ describe('exportCommand', () => {
 
   describe('logs export', () => {
     const mockConfigDir = '/test/config';
-    const mockLogDir = '/test/config/logs';
+    const _mockLogDir = '/test/config/logs';
 
     beforeEach(() => {
       mockGetConfigDirectoryPath.mockReturnValue(mockConfigDir);

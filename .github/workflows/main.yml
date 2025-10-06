@@ -36,13 +36,13 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
           cache: 'npm'
 
       - name: Use Python 3.13
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.13
 
@@ -68,7 +68,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
           cache: 'npm'
@@ -105,7 +105,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -161,7 +161,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -194,7 +194,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Use Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -221,7 +221,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -247,7 +247,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -267,13 +267,13 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Use Python 3.13
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.13
 
@@ -333,7 +333,7 @@ jobs:
           node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
 
   redteam:
-    name: Redteam
+    name: Redteam (Production API)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -342,12 +342,12 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Redteam
+      - name: Run Redteam (Production API)
         run: |
           npm run test:redteam:integration
 
-  redteam-custom-enterprise-server:
-    name: Redteam Custom Enterprise Server
+  redteam-staging:
+    name: Redteam (Staging API)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
@@ -371,7 +371,7 @@ jobs:
         run: |
           npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
 
-      - name: Run Redteam
+      - name: Run Redteam with Staging API
         run: |
           npm run test:redteam:integration
 
@@ -398,7 +398,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.23.6'
           check-latest: true

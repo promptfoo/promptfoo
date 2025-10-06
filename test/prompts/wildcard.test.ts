@@ -1,4 +1,4 @@
-import { processPrompts } from '../../src/prompts';
+import { processPrompts } from '../../src/prompts/index';
 
 // Mock the python execution
 jest.mock('../../src/python/pythonUtils', () => ({
@@ -57,6 +57,10 @@ jest.mock('glob', () => ({
       return ['test/prompts/ui/button.js', 'test/prompts/ui/form.js'];
     }
     return [];
+  }),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
   }),
 }));
 

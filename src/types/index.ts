@@ -70,6 +70,7 @@ export const CommandLineOptionsSchema = z.object({
   generateSuggestions: z.boolean().optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
+  retryErrors: z.boolean().optional(),
 
   envPath: z.string().optional(),
 });
@@ -383,7 +384,8 @@ export interface GradingResult {
   componentResults?: GradingResult[];
 
   // The assertion that was evaluated
-  assertion?: Assertion | null;
+  // TODO(Will): Can we move to this being required?
+  assertion?: Assertion;
 
   // User comment
   comment?: string;
@@ -1144,7 +1146,15 @@ export interface ResultLightweight {
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
-export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
+export type EvalSummary = ResultLightweightWithLabel & {
+  isRedteam: boolean;
+  passRate: number;
+  label: string;
+  providers: {
+    id: string;
+    label: string | null;
+  }[];
+};
 
 export interface OutputMetadata {
   promptfooVersion: string;

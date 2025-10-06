@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import CheckIcon from '@mui/icons-material/Check';
@@ -12,6 +12,8 @@ import Paper from '@mui/material/Paper';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
+import type { GradingResult } from '@promptfoo/types';
+
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
@@ -19,7 +21,6 @@ import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
 import { useTableStore } from './store';
-import type { GradingResult } from '@promptfoo/types';
 
 // Common style object for copy buttons
 const copyButtonSx = {
@@ -155,6 +156,7 @@ interface EvalOutputPromptDialogProps {
   evaluationId?: string;
   testCaseId?: string;
   testIndex?: number;
+  promptIndex?: number;
   variables?: Record<string, any>;
 }
 
@@ -169,6 +171,7 @@ export default function EvalOutputPromptDialog({
   evaluationId,
   testCaseId,
   testIndex,
+  promptIndex,
   variables,
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
@@ -181,8 +184,6 @@ export default function EvalOutputPromptDialog({
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
-  const [showTraceSection, setShowTraceSection] = useState(true);
-  const [hasTraces, setHasTraces] = useState(false);
   const { addFilter, resetFilters } = useTableStore();
 
   useEffect(() => {
@@ -194,12 +195,6 @@ export default function EvalOutputPromptDialog({
     setReplayError(null);
     setActiveTab(0); // Reset to first tab when dialog opens
   }, [prompt]);
-
-  useEffect(() => {
-    setShowTraceSection(true);
-    // Don't assume traces exist - let DebuggingPanel determine this
-    setHasTraces(false);
-  }, [evaluationId]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -315,17 +310,16 @@ export default function EvalOutputPromptDialog({
   // Get citations from metadata if they exist
   const citationsData = metadata?.citations;
 
+  // Determine if there's output content to show
+  const hasOutputContent = Boolean(
+    output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
+  );
+
   // Check if red team history has actual content
   const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
     .filter((entry: any) => entry?.prompt && entry?.output)
     .flatMap(
-      (entry: {
-        prompt: string;
-        output: string;
-        score?: number;
-        isOnTopic?: boolean;
-        graderPassed?: boolean;
-      }) => [
+      (entry: { prompt: string; output: string; score?: number; graderPassed?: boolean }) => [
         {
           role: 'user' as const,
           content: entry.prompt,
@@ -355,8 +349,9 @@ export default function EvalOutputPromptDialog({
     visibleTabs.push('metadata');
   }
 
-  // Only show traces tab if we have actual traces to display
-  const hasTracesData = Boolean(hasTraces && evaluationId);
+  // Always show traces tab when evaluationId exists - TraceView will handle empty state messaging
+  // This prevents tab indices from shifting when TraceView reports no content
+  const hasTracesData = Boolean(evaluationId);
 
   // Put Traces tab last if it should be shown
   if (hasTracesData) {
@@ -422,7 +417,7 @@ export default function EvalOutputPromptDialog({
             flexShrink: 0,
           }}
         >
-          <Tab label="Prompt & Output" />
+          <Tab label={hasOutputContent ? 'Prompt & Output' : 'Prompt'} />
           {hasEvaluationData && <Tab label="Evaluation" />}
           {hasMessagesData && <Tab label="Messages" />}
           {hasMetadata && <Tab label="Metadata" />}
@@ -451,19 +446,22 @@ export default function EvalOutputPromptDialog({
                 onMouseLeave={() => setHoveredElement(null)}
                 CodeDisplay={CodeDisplay}
                 subtitleTypographySx={subtitleTypographySx}
+                readOnly={!evaluationId}
               />
-              <OutputsPanel
-                output={output}
-                replayOutput={replayOutput}
-                redteamFinalPrompt={metadata?.redteamFinalPrompt}
-                copiedFields={copiedFields}
-                hoveredElement={hoveredElement}
-                onCopy={copyFieldToClipboard}
-                onMouseEnter={setHoveredElement}
-                onMouseLeave={() => setHoveredElement(null)}
-                CodeDisplay={CodeDisplay}
-                citations={citationsData}
-              />
+              {hasOutputContent && (
+                <OutputsPanel
+                  output={output}
+                  replayOutput={replayOutput}
+                  redteamFinalPrompt={metadata?.redteamFinalPrompt}
+                  copiedFields={copiedFields}
+                  hoveredElement={hoveredElement}
+                  onCopy={copyFieldToClipboard}
+                  onMouseEnter={setHoveredElement}
+                  onMouseLeave={() => setHoveredElement(null)}
+                  CodeDisplay={CodeDisplay}
+                  citations={citationsData}
+                />
+              )}
             </Box>
           )}
 
@@ -506,12 +504,8 @@ export default function EvalOutputPromptDialog({
               <DebuggingPanel
                 evaluationId={evaluationId}
                 testCaseId={testCaseId}
-                showTraceSection={showTraceSection}
-                onTraceSectionVisibilityChange={(hasContent) => {
-                  setShowTraceSection(hasContent);
-                  // Update whether we have traces based on the TraceView callback
-                  setHasTraces(hasContent);
-                }}
+                testIndex={testIndex}
+                promptIndex={promptIndex}
               />
             </Box>
           )}

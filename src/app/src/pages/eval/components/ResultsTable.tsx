@@ -49,8 +49,8 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
-import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
+import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -132,8 +132,6 @@ interface ResultsTableProps {
   debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
-  onSearchTextChange: (text: string) => void;
-  setFilterMode: (mode: EvalResultsFilterMode) => void;
   zoom: number;
 }
 
@@ -233,8 +231,6 @@ function ResultsTable({
   debouncedSearchText,
   showStats,
   onFailureFilterToggle,
-  onSearchTextChange,
-  setFilterMode,
   zoom,
 }: ResultsTableProps) {
   const {
@@ -247,7 +243,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
-    addFilter,
+    setFilterMode,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -362,7 +358,9 @@ function ResultsTable({
         gradingResult.pass = finalPass;
         gradingResult.score = finalScore;
         gradingResult.reason = 'Manual result (overrides all other grading results)';
-        gradingResult.assertion = existingOutput.gradingResult?.assertion || null;
+        if (existingOutput.gradingResult?.assertion) {
+          gradingResult.assertion = existingOutput.gradingResult.assertion;
+        }
       }
 
       // Only include componentResults if we modified them, or if we didn't modify them but they exist and are not empty
@@ -436,9 +434,18 @@ function ResultsTable({
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
-      .filter((filter) =>
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
-      )
+      .filter((filter) => {
+        // For metadata filters with exists operator, only field is required
+        if (filter.type === 'metadata' && filter.operator === 'exists') {
+          return Boolean(filter.field);
+        }
+        // For other metadata operators, both field and value are required
+        if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        // For non-metadata filters, value is required
+        return Boolean(filter.value);
+      })
       .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
     // Create a stable string representation of applied filters
     return JSON.stringify(
@@ -460,11 +467,11 @@ function ResultsTable({
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
 
-  // Reset pagination when evalId changes
+  // Reset pagination when evalId changes. Do not mark previousEvalIdRef here to
+  // allow the fetch effect to skip the first fetch after an eval switch.
   React.useEffect(() => {
     if (evalId !== previousEvalIdRef.current) {
       setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
-      previousEvalIdRef.current = evalId;
 
       // Don't fetch here - the parent component (Eval.tsx) is responsible
       // for the initial data load when changing evalId
@@ -484,18 +491,24 @@ function ResultsTable({
       return;
     }
 
-    console.log('Fetching data for filtering/pagination', evalId);
-
     fetchEvalData(evalId, {
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
-      // Only pass the filters that have been applied (have a value).
-      // For metadata filters, both field and value must be present.
-      filters: Object.values(filters.values).filter((filter) =>
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
-      ),
+      // Only pass the filters that have been applied.
+      // For metadata filters with exists operator, only field is required.
+      // For other metadata operators, both field and value are required.
+      // For non-metadata filters, value is required.
+      filters: Object.values(filters.values).filter((filter) => {
+        if (filter.type === 'metadata' && filter.operator === 'exists') {
+          return Boolean(filter.field);
+        }
+        if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        return Boolean(filter.value);
+      }),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -627,14 +640,12 @@ function ResultsTable({
                     value = `\`\`\`json\n${value}\n\`\`\``;
                   }
                 }
-                const truncatedValue =
-                  value.length > maxTextLength
-                    ? `${value.substring(0, maxTextLength - 3).trim()}...`
-                    : value;
-
                 const cellContent = renderMarkdown ? (
                   <MarkdownErrorBoundary fallback={value}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                    <TruncatedText
+                      text={<ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>}
+                      maxLength={maxTextLength}
+                    />
                   </MarkdownErrorBoundary>
                 ) : (
                   <TruncatedText text={value} maxLength={maxTextLength} />
@@ -733,37 +744,6 @@ function ResultsTable({
     return totals;
   }, [table?.head?.prompts, table?.body]);
 
-  const handleMetricFilterClick = React.useCallback(
-    (metric: string | null) => {
-      if (!metric) {
-        return;
-      }
-
-      const filter = {
-        type: 'metric' as const,
-        operator: 'equals' as const,
-        value: metric,
-        logicOperator: 'or' as const,
-      };
-
-      // If this filter is already applied, do not re-apply it.
-      if (
-        Object.values(filters.values).find(
-          (f) =>
-            f.type === filter.type &&
-            f.value === filter.value &&
-            f.operator === filter.operator &&
-            f.logicOperator === filter.logicOperator,
-        )
-      ) {
-        return;
-      }
-
-      addFilter(filter);
-    },
-    [addFilter, filters.values],
-  );
-
   const promptColumns = React.useMemo(() => {
     return [
       columnHelper.group({
@@ -796,8 +776,11 @@ function ResultsTable({
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
-                          maximumFractionDigits: prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
-                        }).format(prompt.metrics.cost / testCounts[idx])} per test`}
+                          maximumFractionDigits:
+                            testCounts[idx] && prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
+                        }).format(
+                          testCounts[idx] ? prompt.metrics.cost / testCounts[idx] : 0,
+                        )} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
@@ -823,7 +806,9 @@ function ResultsTable({
                       <strong>Avg Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / testCounts[idx])}
+                      }).format(
+                        testCounts[idx] ? prompt.metrics.tokenUsage.total / testCounts[idx] : 0,
+                      )}
                     </div>
                   ) : null}
                   {prompt.metrics?.totalLatencyMs ? (
@@ -831,7 +816,9 @@ function ResultsTable({
                       <strong>Avg Latency:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / testCounts[idx])}{' '}
+                      }).format(
+                        testCounts[idx] ? prompt.metrics.totalLatencyMs / testCounts[idx] : 0,
+                      )}{' '}
                       ms
                     </div>
                   ) : null}
@@ -912,8 +899,6 @@ function ResultsTable({
                           lookup={prompt.metrics.namedScores}
                           counts={prompt.metrics.namedScoresCount}
                           metricTotals={metricTotals}
-                          onSearchTextChange={onSearchTextChange}
-                          onMetricFilter={handleMetricFilterClick}
                           onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
                       </Box>
@@ -977,7 +962,6 @@ function ResultsTable({
                     showStats={showStats}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
-                    onMetricFilter={handleMetricFilterClick}
                     isRedteam={isRedteam}
                   />
                 </ErrorBoundary>
@@ -1008,7 +992,6 @@ function ResultsTable({
     debouncedSearchText,
     showStats,
     filters.appliedCount,
-    handleMetricFilterClick,
     passRates,
     passingTestCounts,
     testCounts,
@@ -1217,9 +1200,7 @@ function ResultsTable({
             <Typography variant="body1">No results found for the current filters.</Typography>
           </Box>
         )}
-
       <Box sx={{ height: '1rem' }} />
-
       <ResultsTableHeader
         reactTable={reactTable}
         tableWidth={tableWidth}
@@ -1230,7 +1211,6 @@ function ResultsTable({
         setStickyHeader={setStickyHeader}
         zoom={zoom}
       />
-
       <div
         id="results-table-container"
         style={{
@@ -1382,7 +1362,6 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-
       <Box
         className="pagination"
         px={2}
@@ -1508,7 +1487,7 @@ function ResultsTable({
               slotProps={{
                 htmlInput: {
                   min: 1,
-                  max: pageCount,
+                  max: pageCount || 1,
                 },
               }}
               disabled={pageCount === 1}

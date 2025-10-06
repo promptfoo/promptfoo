@@ -1,4 +1,8 @@
 import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
+import {
+  deserializePolicyIdFromMetric,
+  isPolicyMetric,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
@@ -31,7 +35,11 @@ export function getStrategyIdFromTest(test: {
 }
 
 export function getPluginIdFromResult(result: EvaluateResult): string | null {
-  if (result.metadata?.pluginId) {
+  if (
+    result.metadata?.pluginId &&
+    // Policy plugins are handled separately
+    result.metadata.pluginId !== 'policy'
+  ) {
     return result.metadata.pluginId as string;
   }
 
@@ -46,6 +54,11 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
   for (const metric of metricNames) {
     if (!metric) {
       continue;
+    }
+
+    // Parse and return the policy ID from the policy metric
+    if (isPolicyMetric(metric)) {
+      return deserializePolicyIdFromMetric(metric);
     }
 
     const metricParts = metric.split('/');
