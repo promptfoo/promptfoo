@@ -25,7 +25,10 @@ import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 
 interface FrameworkComplianceProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number, failCount: number }>;
+  categoryStats: Record<
+    string,
+    { pass: number; total: number; passWithFilter: number; failCount: number }
+  >;
   strategyStats: Record<string, { pass: number; total: number }>;
 }
 
@@ -61,13 +64,18 @@ const FrameworkCompliance = ({
     [categoryStats, pluginPassRateThreshold],
   );
 
-  const getPluginPassRate = React.useCallback(
-    (plugin: string): { pass: number; total: number; rate: number } => {
-      const stats = categoryStats[plugin] || { pass: 0, total: 0 };
+  /**
+   * Gets the Attack Success Rate (ASR) for a given plugin.
+   * @param plugin - The plugin to get the ASR for.
+   * @returns The ASR for the given plugin.
+   */
+  const getPluginASR = React.useCallback(
+    (plugin: string): { asr: number; total: number; failCount: number } => {
+      const stats = categoryStats[plugin];
       return {
-        pass: stats.pass,
-        total: stats.total,
-        rate: stats.total > 0 ? (stats.pass / stats.total) * 100 : 0,
+        asr: stats ? calculateAttackSuccessRate(stats.total, stats.failCount) : 0,
+        total: stats ? stats.total : 0,
+        failCount: stats ? stats.failCount : 0,
       };
     },
     [categoryStats],
@@ -146,8 +154,6 @@ const FrameworkCompliance = ({
       return stats.pass / stats.total >= pluginPassRateThreshold;
     }).length;
 
- 
-
     return {
       total: pluginsWithData.length,
       compliant: compliantPlugins,
@@ -159,30 +165,20 @@ const FrameworkCompliance = ({
     };
   }, [categoryStats, pluginPassRateThreshold]);
 
-  const sortedNonCompliantPlugins = React.useCallback(
+  /**
+   * Given a list of plugins, returns the plugins sorted by ASR (highest first).
+   * @param plugins - The list of plugins to sort.
+   * @returns The sorted list of plugins.
+   */
+  const getPluginsSortedByASR = React.useCallback(
     (plugins: string[]): string[] => {
       return [...plugins].sort((a, b) => {
-        // Sort by pass rate (highest first)
-        const passRateA = getPluginPassRate(a).rate;
-        const passRateB = getPluginPassRate(b).rate;
-
-        return passRateB - passRateA;
+        const asrA = getPluginASR(a).asr;
+        const asrB = getPluginASR(b).asr;
+        return asrB - asrA;
       });
     },
-    [getPluginPassRate],
-  );
-
-  const sortedCompliantPlugins = React.useCallback(
-    (plugins: string[]): string[] => {
-      return [...plugins].sort((a, b) => {
-        // Sort by pass rate (highest first)
-        const passRateA = getPluginPassRate(a).rate;
-        const passRateB = getPluginPassRate(b).rate;
-
-        return passRateB - passRateA;
-      });
-    },
-    [getPluginPassRate],
+    [getPluginASR],
   );
 
   return (
@@ -201,7 +197,7 @@ const FrameworkCompliance = ({
         <CardContent>
           <Box display="flex" alignItems="center" sx={{ mb: 1 }}>
             <Typography variant="subtitle1" color="textSecondary">
-              {pluginComplianceStats.attackSuccessRate.toFixed(1)}% Attack Success Rate (
+              {pluginComplianceStats.attackSuccessRate.toFixed(2)}% Attack Success Rate (
               {pluginComplianceStats.failedTests}/{pluginComplianceStats.totalTests} tests failed
               across {pluginComplianceStats.total} plugins)
             </Typography>
@@ -243,9 +239,8 @@ const FrameworkCompliance = ({
                     categoryStats={categoryStats}
                     pluginPassRateThreshold={pluginPassRateThreshold}
                     nonCompliantPlugins={nonCompliantPlugins}
-                    sortedNonCompliantPlugins={sortedNonCompliantPlugins}
-                    sortedCompliantPlugins={sortedCompliantPlugins}
-                    getPluginPassRate={getPluginPassRate}
+                    getPluginsSortedByASR={getPluginsSortedByASR}
+                    getPluginASR={getPluginASR}
                     idx={idx}
                   />
                 </Grid>
