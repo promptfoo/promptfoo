@@ -2,12 +2,12 @@ import { Command } from 'commander';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
+import { getProviderFromCloud } from '../../src/util/cloud';
+import { resolveConfigs } from '../../src/util/config/load';
 import {
   testHTTPProviderConnectivity,
   testProviderSession,
-} from '../../src/providers/testProvider';
-import { getProviderFromCloud } from '../../src/util/cloud';
-import { resolveConfigs } from '../../src/util/config/load';
+} from '../../src/validators/testProvider';
 
 import type { UnifiedConfig } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
@@ -15,7 +15,7 @@ import type { ApiProvider } from '../../src/types/providers';
 jest.mock('../../src/logger');
 jest.mock('../../src/util/config/load');
 jest.mock('../../src/providers/index');
-jest.mock('../../src/providers/testProvider');
+jest.mock('../../src/validators/testProvider');
 jest.mock('../../src/util/cloud');
 jest.mock('../../src/telemetry', () => ({
   record: jest.fn(),

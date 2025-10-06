@@ -4,7 +4,6 @@ import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { loadApiProvider } from '../../providers/index';
-import { testHTTPProviderConnectivity, testProviderSession } from '../../providers/testProvider';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
@@ -13,6 +12,7 @@ import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
+import { testHTTPProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
 

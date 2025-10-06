@@ -3,12 +3,12 @@ import dedent from 'dedent';
 import { fromError } from 'zod-validation-error';
 import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
-import { testHTTPProviderConnectivity, testProviderSession } from '../providers/testProvider';
 import telemetry from '../telemetry';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
 import { setupEnv } from '../util/index';
+import { testHTTPProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
 
 import type { UnifiedConfig } from '../types/index';

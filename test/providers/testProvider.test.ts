@@ -1,13 +1,13 @@
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import {
-  testHTTPProviderConnectivity,
-  testProviderSession,
-} from '../../src/providers/testProvider';
 import { neverGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { ResultFailureReason } from '../../src/types';
 import { fetchWithProxy } from '../../src/util/fetch';
+import {
+  testHTTPProviderConnectivity,
+  testProviderSession,
+} from '../../src/validators/testProvider';
 
 import type { EvaluateResult, EvaluateSummaryV3 } from '../../src/types';
 import type { ApiProvider } from '../../src/types/providers';
@@ -698,7 +698,6 @@ describe('Provider Test Functions', () => {
             score: 1,
             reason: 'The system correctly remembered the previous question',
             componentResults: [],
-            assertion: null,
           },
           namedScores: {},
         };
@@ -814,7 +813,6 @@ describe('Provider Test Functions', () => {
             score: 1,
             reason: 'Session memory working correctly',
             componentResults: [],
-            assertion: null,
           },
           namedScores: {},
         };
@@ -985,7 +983,6 @@ describe('Provider Test Functions', () => {
             score: 0,
             reason: 'The system did not remember the previous question',
             componentResults: [],
-            assertion: null,
           },
           namedScores: {},
         };
@@ -1087,7 +1084,6 @@ describe('Provider Test Functions', () => {
             score: 1,
             reason: 'Test passed',
             componentResults: [],
-            assertion: null,
           },
           namedScores: {},
         };
@@ -1269,7 +1265,6 @@ describe('Provider Test Functions', () => {
             score: 1,
             reason: 'Test passed',
             componentResults: [],
-            assertion: null,
           },
           namedScores: {},
         };
@@ -1331,7 +1326,6 @@ describe('Provider Test Functions', () => {
             score: 1,
             reason: 'Session working',
             componentResults: [],
-            assertion: null,
           },
           namedScores: {},
         };
@@ -1395,7 +1389,6 @@ describe('Provider Test Functions', () => {
             score: 0,
             reason: 'Empty response received',
             componentResults: [],
-            assertion: null,
           },
           namedScores: {},
         };
@@ -1470,7 +1463,6 @@ describe('Provider Test Functions', () => {
             score: 1,
             reason: 'Test passed',
             componentResults: [],
-            assertion: null,
           },
           namedScores: {},
         };
