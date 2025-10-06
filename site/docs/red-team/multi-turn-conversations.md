@@ -24,7 +24,7 @@ defaultTest:
 
 3.  Retrieve the sessionId from the context in your script, and use it in either a header or payload.
 
-```yaml
+```python
 def call_api(prompt, options, context):
     session_id = context.get("vars", {}).get("sessionId", "")
 ```
