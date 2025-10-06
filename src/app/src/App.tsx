@@ -19,7 +19,6 @@ import EvalsIndexPage from './pages/evals/page';
 import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
 import LoginPage from './pages/login';
-import ModelAuditPage from './pages/model-audit/page';
 import ModelAuditHistoryPage from './pages/model-audit-history/page';
 import ModelAuditResultPage from './pages/model-audit-result/page';
 import ModelAuditSetupPage from './pages/model-audit-setup/page';

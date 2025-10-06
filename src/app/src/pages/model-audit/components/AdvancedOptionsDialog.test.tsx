@@ -1,11 +1,7 @@
-import { useState } from 'react';
-
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import AdvancedOptionsDialog from './AdvancedOptionsDialog';
-
-import type { ScanOptions } from '../ModelAudit.types';
 
 const theme = createTheme();
 describe('AdvancedOptionsDialog', () => {
