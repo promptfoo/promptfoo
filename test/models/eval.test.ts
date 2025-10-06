@@ -1,4 +1,4 @@
-import { getDb } from '../../src/database';
+import { getDb } from '../../src/database/index';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, { EvalQueries, getEvalSummaries } from '../../src/models/eval';

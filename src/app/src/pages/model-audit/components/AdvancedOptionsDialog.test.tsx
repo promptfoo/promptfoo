@@ -1,7 +1,13 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useState } from 'react';
+
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import AdvancedOptionsDialog from './AdvancedOptionsDialog';
 
+import type { ScanOptions } from '../ModelAudit.types';
+
+const theme = createTheme();
 describe('AdvancedOptionsDialog', () => {
   const mockOnClose = vi.fn();
   const mockOnOptionsChange = vi.fn();
@@ -168,5 +174,67 @@ describe('AdvancedOptionsDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(mockOnClose).toHaveBeenCalledTimes(1);
     expect(mockOnOptionsChange).not.toHaveBeenCalled();
+  });
+
+  it('allows user to clear timeout, blur, and clamps to 3600', async () => {
+    const onOptionsChange = vi.fn();
+    const user = (await import('@testing-library/user-event')).default.setup();
+
+    render(
+      <ThemeProvider theme={theme}>
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 120 }}
+          onOptionsChange={onOptionsChange}
+        />
+      </ThemeProvider>,
+    );
+
+    const timeoutInput = screen.getByRole('spinbutton');
+
+    await user.type(timeoutInput, '{backspace}{backspace}{backspace}');
+    expect(timeoutInput).toHaveValue(null);
+
+    // Blur the input to trigger the onBlur clamp
+    timeoutInput.blur();
+
+    // After blur, the component state should clamp timeout to 3600
+    await waitFor(() => {
+      expect(timeoutInput).toHaveValue(3600);
+    });
+
+    // Save and ensure onOptionsChange receives the clamped value
+    const save = screen.getByRole('button', { name: /save options/i });
+    await user.click(save);
+    expect(onOptionsChange).toHaveBeenCalledWith(expect.objectContaining({ timeout: 3600 }));
+  });
+
+  it('allows user to clear timeout, type a number, and uses that number', async () => {
+    const onOptionsChange = vi.fn();
+    const user = (await import('@testing-library/user-event')).default.setup();
+
+    render(
+      <ThemeProvider theme={theme}>
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 120 }}
+          onOptionsChange={onOptionsChange}
+        />
+      </ThemeProvider>,
+    );
+
+    const timeoutInput = screen.getByRole('spinbutton');
+
+    await user.type(timeoutInput, '{backspace}{backspace}{backspace}');
+    await user.type(timeoutInput, '45');
+
+    expect(timeoutInput).toHaveValue(45);
+
+    const save = screen.getByRole('button', { name: /save options/i });
+    await user.click(save);
+
+    expect(onOptionsChange).toHaveBeenCalledWith(expect.objectContaining({ timeout: 45 }));
   });
 });

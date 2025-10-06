@@ -58,7 +58,7 @@ import {
   LocalAiEmbeddingProvider,
 } from './localai';
 import { ManualInputProvider } from './manualInput';
-import { MCPProvider } from './mcp';
+import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
