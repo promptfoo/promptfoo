@@ -172,8 +172,8 @@ const AboutPageContent = () => {
                 name: 'Dane Schneider',
                 title: 'Staff Engineer',
                 image: '/img/team/dane.jpeg',
-                bio: 'Dane is a full stack engineer and former founder. He brings deep experience in coding agents, security, devops, and user interface design for complex technical domains.'
-              }
+                bio: 'Dane is a full stack engineer and former founder. He brings deep experience in coding agents, security, devops, and user interface design for complex technical domains.',
+              },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">
