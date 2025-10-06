@@ -14,7 +14,7 @@ The `redteam` section in your `promptfooconfig.yaml` file is used when generatin
 
 The most important components of your red team configuration are:
 
-- **Targets**: The endpoints or models you want to test (also known as "providers").
+- **Targets**: The endpoints or models you want to test. Although these are referred to as "providers" in other parts of the application, in red teaming we differentiate between the target being tested and the red team provider, which configures the model used to generate tests and grade results.
 - **Plugins**: Adversarial input generators that produce potentially malicious payloads.
 - **Strategies**: Techniques used to deliver these payloads to the target (e.g. adding a prompt injection, or by applying a specific attack algorithm).
 - **Purpose**: A description of the system's purpose, used to guide adversarial input generation.
@@ -56,7 +56,7 @@ redteam:
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
-| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1`                |
+| `provider`                   | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1`                |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
 | `language`                   | `string`                  | Language for generated tests                                             | English                         |
