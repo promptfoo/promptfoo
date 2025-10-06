@@ -62,7 +62,7 @@ const FrameworkCard = ({
   const navigate = useNavigate();
 
   const handlePluginClick = (pluginId: string) => {
-    navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
+    navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}&mode=failures`);
   };
 
   const sortedPlugins = sortedNonCompliantPlugins(nonCompliantPlugins);
