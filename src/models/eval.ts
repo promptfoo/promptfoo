@@ -1035,7 +1035,8 @@ export async function getEvalSummaries(
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,
-      attackSuccessRate: type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
+      attackSuccessRate:
+        type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
     };
   });
 }

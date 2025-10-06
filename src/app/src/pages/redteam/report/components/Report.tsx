@@ -254,13 +254,16 @@ const App = () => {
         }
 
         // Increment for grader-originated failures
-        if(row.failureReason === ResultFailureReason.ASSERT) {
+        if (row.failureReason === ResultFailureReason.ASSERT) {
           acc[pluginId].failCount++;
         }
 
         return acc;
       },
-      {} as Record<string, { pass: number; total: number; passWithFilter: number; failCount: number }>,
+      {} as Record<
+        string,
+        { pass: number; total: number; passWithFilter: number; failCount: number }
+      >,
     );
   }, [evalData]);
 
@@ -401,7 +404,10 @@ const App = () => {
 
   // TODO(Will): Verify working w/ filters
   const filteredCategoryStats = React.useMemo(() => {
-    const stats: Record<string, { pass: number; total: number; passWithFilter: number; failCount: number }> = {};
+    const stats: Record<
+      string,
+      { pass: number; total: number; passWithFilter: number; failCount: number }
+    > = {};
 
     Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
       stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };

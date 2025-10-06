@@ -48,7 +48,10 @@ import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number, failCount: number }>;
+  categoryStats: Record<
+    string,
+    { pass: number; total: number; passWithFilter: number; failCount: number }
+  >;
   plugins: RedteamPluginObject[];
   failuresByPlugin?: Record<string, any[]>;
   passesByPlugin?: Record<string, any[]>;

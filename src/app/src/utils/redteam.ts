@@ -1,4 +1,3 @@
-
 // TODO(Will): Should ASR and Pass Rate use the same color scale? Probably...
 const COLOR_MAP = {
   darkRed: '#d32f2f',
