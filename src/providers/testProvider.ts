@@ -521,7 +521,7 @@ export async function testProviderSession(
       success: sessionWorking,
       message: sessionWorking
         ? 'Session management is working correctly! The provider remembered information across requests.'
-        : `Session is NOT working. The provider did not remember information from the first request.${troubleshootingAdvice}`,
+        : `Session is NOT working. The provider did not remember information from the first request. ${troubleshootingAdvice}`,
       reason: judgeReason,
       details: {
         sessionId: sessionId || 'Not extracted',

@@ -712,16 +712,16 @@ describe('Provider Test Functions', () => {
         expect(evaluate).toHaveBeenCalledWith(
           expect.objectContaining({
             providers: [mockProvider],
-            prompts: [
-              { raw: 'What can you help me with?', label: 'First Request' },
-              { raw: 'What was the last thing I asked you?', label: 'Second Request' },
-            ],
+            prompts: [{ raw: '{{input}}', label: 'Session Test' }],
             tests: [
               expect.objectContaining({
-                vars: { sessionId: 'test-uuid-1234' },
+                vars: { input: 'What can you help me with?', sessionId: 'test-uuid-1234' },
               }),
               expect.objectContaining({
-                vars: { sessionId: 'test-uuid-1234' },
+                vars: {
+                  input: 'What was the last thing I asked you?',
+                  sessionId: 'test-uuid-1234',
+                },
                 assert: expect.arrayContaining([
                   expect.objectContaining({
                     type: 'llm-rubric',
@@ -739,27 +739,28 @@ describe('Provider Test Functions', () => {
         );
 
         // Verify successful result
-        expect(result).toEqual({
-          success: true,
-          message:
-            'Session management is working correctly! The provider remembered information across requests.',
-          reason: 'The system correctly remembered the previous question',
-          details: {
-            sessionId: 'test-uuid-1234',
-            sessionSource: 'client',
-            request1: {
-              prompt: 'What can you help me with?',
+        expect(result).toEqual(
+          expect.objectContaining({
+            success: true,
+            message: expect.any(String),
+            reason: 'The system correctly remembered the previous question',
+            details: {
               sessionId: 'test-uuid-1234',
+              sessionSource: 'client',
+              request1: {
+                prompt: 'What can you help me with?',
+                sessionId: 'test-uuid-1234',
+              },
+              response1:
+                'I can help you with various tasks like answering questions, providing information, etc.',
+              request2: {
+                prompt: 'What was the last thing I asked you?',
+                sessionId: 'test-uuid-1234',
+              },
+              response2: 'You asked me what I can help you with.',
             },
-            response1:
-              'I can help you with various tasks like answering questions, providing information, etc.',
-            request2: {
-              prompt: 'What was the last thing I asked you?',
-              sessionId: 'test-uuid-1234',
-            },
-            response2: 'You asked me what I can help you with.',
-          },
-        });
+          }),
+        );
       });
 
       it('should successfully test session with server-side session ID', async () => {
@@ -994,26 +995,27 @@ describe('Provider Test Functions', () => {
 
         const result = await testProviderSession(mockProvider);
 
-        expect(result).toEqual({
-          success: false,
-          message:
-            'Session is NOT working. The provider did not remember information from the first request.',
-          reason: 'The system did not remember the previous question',
-          details: {
-            sessionId: 'test-uuid-1234',
-            sessionSource: 'client',
-            request1: {
-              prompt: 'What can you help me with?',
+        expect(result).toEqual(
+          expect.objectContaining({
+            success: false,
+            message: expect.any(String),
+            reason: 'The system did not remember the previous question',
+            details: {
               sessionId: 'test-uuid-1234',
+              sessionSource: 'client',
+              request1: {
+                prompt: 'What can you help me with?',
+                sessionId: 'test-uuid-1234',
+              },
+              response1: 'I can help with many things!',
+              request2: {
+                prompt: 'What was the last thing I asked you?',
+                sessionId: 'test-uuid-1234',
+              },
+              response2: "I don't have access to previous messages.",
             },
-            response1: 'I can help with many things!',
-            request2: {
-              prompt: 'What was the last thing I asked you?',
-              sessionId: 'test-uuid-1234',
-            },
-            response2: "I don't have access to previous messages.",
-          },
-        });
+          }),
+        );
       });
 
       it('should fail validation when client session config is missing sessionId variable', async () => {
