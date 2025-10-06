@@ -1,6 +1,7 @@
 ---
+title: Building trust in AI with Portkey and Promptfoo
 sidebar_label: Building trust in AI with Portkey and Promptfoo
-description: "Supercharge Promptfoo evaluations with Portkey's AI gateway. Run tests across 1600+ models, manage prompts collaboratively, and gain detailed analytics for production-ready AI trust."
+description: Integrate Portkey AI gateway with Promptfoo for multi-model testing, collaborative prompt management, and production-ready observability.
 keywords:
   [
     portkey,
@@ -18,8 +19,8 @@ keywords:
 
 # Building trust in AI with Portkey and Promptfoo
 
-:::info Author
-This guide was written by **Drishti Shah** from [Portkey](https://portkey.ai/), a guest author contributing to the Promptfoo community.
+:::info Guest Post
+This guide is a guest post by **Drishti Shah** from [Portkey](https://portkey.ai/).
 :::
 
 ## Supercharge Promptfoo runs with Portkey
@@ -50,30 +51,26 @@ When evaluation suites include adversarial test cases (like prompt injection att
 
 Portkey's AI gateway for Promptfoo allows you to run the same evaluation suite across 1,600+ models from OpenAI and Anthropic to AWS Bedrock, Vertex AI, and even private or self-hosted deployments.
 
-![Portkey Model Catalog](/img/blog/building-trust-in-ai-with-portkey-and-promptfoo/portkey_model_catalog.png)
+![Portkey Model Catalog](/img/blog/building-trust-in-ai-with-portkey-and-promptfoo/portkey-model-catalog.png)
 
 ```yaml
 providers:
-  - id: gpt4o-via-portkey
-    label: GPT-4o (via Portkey)
+  - id: portkey:gpt-5
+    label: GPT-5 (via Portkey)
     config:
-      apiKey: ${PORTKEY_API_KEY}
-      apiBaseUrl: https://api.portkey.ai/v1
-      model: gpt-4o
+      portkeyProvider: openai
 
-  - id: llama3-via-portkey
-    label: Llama 3 (private, via Portkey)
+  - id: portkey:llama-4-scout-17b-16e-instruct
+    label: Llama 4 Scout (via Portkey)
     config:
-      apiKey: ${PORTKEY_API_KEY}
-      apiBaseUrl: https://api.portkey.ai/v1
-      model: llama-3-70b
+      portkeyProvider: openai
 ```
 
 With this setup, you can run one test suite across multiple providers, no rewiring or custom adapters needed.
 
 This makes it simple to compare model quality, latency, and cost side-by-side, whether the model is commercial, open source, or running in your own environment.
 
-Promptfoo evaluations often fire thousands of requests at once. Without safeguards, that can quickly run into provider rate limits, retries, and inconsistent results.
+Promptfoo evals often fire thousands of requests at once. Without safeguards, that can quickly run into provider rate limits, retries, and inconsistent results.
 
 Portkey helps keep runs stable and predictable:
 
@@ -81,7 +78,7 @@ Portkey helps keep runs stable and predictable:
 - **Automatic retries**: recover gracefully from transient provider errors.
 - **Response caching**: return cached outputs for identical inputs, so repeat runs are faster and cheaper.
 
-This ensures your CI/CD pipelines and large-scale evaluation runs are reliable, no more flakiness from bursty test cases.
+This ensures your CI/CD pipelines and large-scale eval runs are reliable, no more flakiness from bursty test cases.
 
 ## Elevate security testing with Promptfoo red-teaming + Portkey
 
@@ -97,13 +94,13 @@ Together, Promptfoo and Portkey turn red-teaming from a one-off exercise into a 
 
 ## Gain detailed logs and analytics for every run
 
-Every evaluation in Promptfoo produces valuable signals, but without proper logging, those signals get lost. Portkey automatically captures full-fidelity logs for each Promptfoo request:
+Every eval in Promptfoo produces valuable signals, but without proper logging, those signals get lost. Portkey automatically captures full-fidelity logs for each Promptfoo request:
 
 - **Request & response bodies**: see exactly what was sent and returned
 - **Tokens & cost**: track usage and spend across runs
 - **Latency & errors**: measure performance and diagnose issues
 
-![Portkey Prompt Details](/img/blog/building-trust-in-ai-with-portkey-and-promptfoo/portkey_prompt_details.png)
+![Portkey Prompt Details](/img/blog/building-trust-in-ai-with-portkey-and-promptfoo/portkey-prompt-details.png)
 
 You can also send **custom metadata** with each request — for example, tagging by test suite, commit SHA, or scenario. That makes it easy to slice results later by branch, experiment, or release cycle.
 
@@ -111,7 +108,7 @@ You can also send **custom metadata** with each request — for example, tagging
 
 Getting started is straightforward:
 
-1. Point your Promptfoo providers to Portkey (`apiBaseUrl` + API key).
+1. Use the `portkey:` provider prefix with your model name (e.g., `portkey:gpt-5`).
 2. Reference production prompts stored in Portkey using the `portkey://` syntax.
 3. (Optional) Add metadata, caching, or rate limits for more stable runs.
 
