@@ -10,7 +10,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog, {
-  type DialogDependencies,
   type ReplayEvaluationParams,
   type ReplayEvaluationResult,
 } from './EvalOutputPromptDialog';
@@ -130,18 +129,12 @@ function EvalOutputCell({
 
         const data = await response.json();
 
-        // Handle the response, checking for output in various locations
-        if (data.output) {
-          return { output: data.output };
-        } else if (data.response?.output) {
-          return { output: data.response.output };
-        } else if (data.response?.raw) {
-          return { output: data.response.raw };
-        } else if (data.error) {
+        // API returns { output, error, response } - output is already extracted to top level
+        if (data.error) {
           return { error: `Provider error: ${data.error}` };
-        } else {
-          return { output: undefined };
         }
+
+        return { output: data.output || undefined };
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'An error occurred' };
       }
@@ -163,22 +156,6 @@ function EvalOutputCell({
       return Array.isArray(data.traces) ? data.traces : [];
     },
     [],
-  );
-
-  // Group all dependencies for the dialog
-  const dialogDependencies = React.useMemo<DialogDependencies>(
-    () => ({
-      filters: {
-        add: addFilter,
-        reset: resetFilters,
-      },
-      api: {
-        replay: handleReplayEvaluation,
-        fetchTraces: handleFetchTraces,
-      },
-      cloudConfig,
-    }),
-    [addFilter, resetFilters, handleReplayEvaluation, handleFetchTraces, cloudConfig],
   );
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
@@ -710,7 +687,11 @@ function EvalOutputCell({
               testIndex={rowIndex}
               promptIndex={promptIndex}
               variables={output.testCase?.vars}
-              dependencies={dialogDependencies}
+              onAddFilter={addFilter}
+              onResetFilters={resetFilters}
+              onReplay={handleReplayEvaluation}
+              fetchTraces={handleFetchTraces}
+              cloudConfig={cloudConfig}
             />
           )}
         </>

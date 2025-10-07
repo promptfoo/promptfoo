@@ -13,6 +13,7 @@ import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import type { GradingResult } from '@promptfoo/types';
 
+import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
@@ -167,14 +168,6 @@ export interface ReplayEvaluationResult {
 }
 
 /**
- * Configuration for cloud-specific features.
- */
-export interface CloudConfig {
-  appUrl: string;
-  isEnabled: boolean;
-}
-
-/**
  * Filter configuration for table filtering.
  */
 export interface FilterConfig {
@@ -185,53 +178,17 @@ export interface FilterConfig {
 }
 
 /**
- * Dependency injection configuration for external services.
- *
- * This groups all external dependencies to make it clear what capabilities
- * need to be injected and to simplify the component's interface.
- */
-export interface DialogDependencies {
-  /**
-   * Filter operations for table state management.
-   */
-  filters?: {
-    /** Add a filter to the current filter set */
-    add?: (filter: FilterConfig) => void;
-    /** Clear all active filters */
-    reset?: () => void;
-  };
-
-  /**
-   * API operations for evaluation and debugging.
-   */
-  api?: {
-    /** Replay an evaluation with modified parameters */
-    replay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
-    /** Fetch trace data for debugging */
-    fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
-  };
-
-  /**
-   * Cloud platform configuration (null if running in OSS mode).
-   */
-  cloudConfig?: CloudConfig | null;
-}
-
-/**
  * Props for the EvalOutputPromptDialog component.
  *
  * This dialog displays detailed information about an evaluation result,
  * including the prompt, output, grading results, metadata, and traces.
  *
- * ## Dependency Injection Pattern
- *
- * All external dependencies (store access, API calls, cloud config) are injected
- * via the `dependencies` prop to enable complete isolation and testing. The component
- * gracefully handles missing dependencies by disabling features when they're undefined.
+ * The component gracefully handles missing optional props by disabling
+ * features when they're undefined (e.g., replay, filters, traces).
  *
  * @example
  * ```tsx
- * // Basic usage without dependencies (view-only mode)
+ * // Basic usage (view-only mode)
  * <EvalOutputPromptDialog
  *   open={true}
  *   onClose={handleClose}
@@ -239,23 +196,17 @@ export interface DialogDependencies {
  *   output="4"
  * />
  *
- * // Full-featured usage with all dependencies
+ * // Full-featured usage with all capabilities
  * <EvalOutputPromptDialog
  *   open={true}
  *   onClose={handleClose}
  *   prompt="What is 2+2?"
  *   output="4"
- *   dependencies={{
- *     filters: {
- *       add: addFilter,
- *       reset: resetFilters,
- *     },
- *     api: {
- *       replay: handleReplay,
- *       fetchTraces: handleFetchTraces,
- *     },
- *     cloudConfig: { appUrl: 'https://cloud.example.com', isEnabled: true },
- *   }}
+ *   onAddFilter={addFilter}
+ *   onResetFilters={resetFilters}
+ *   onReplay={handleReplay}
+ *   fetchTraces={handleFetchTraces}
+ *   cloudConfig={{ appUrl: 'https://cloud.example.com', isEnabled: true }}
  * />
  * ```
  */
@@ -284,11 +235,16 @@ interface EvalOutputPromptDialogProps {
   promptIndex?: number;
   /** Variables used in the prompt template */
   variables?: Record<string, any>;
-  /**
-   * External dependencies for filters, API calls, and cloud config.
-   * All dependencies are optional - features gracefully degrade when missing.
-   */
-  dependencies?: DialogDependencies;
+  /** Function to add a filter to the table */
+  onAddFilter?: (filter: FilterConfig) => void;
+  /** Function to reset all table filters */
+  onResetFilters?: () => void;
+  /** Function to replay an evaluation with modified parameters */
+  onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
+  /** Function to fetch trace data for debugging */
+  fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
+  /** Cloud platform configuration (null if running in OSS mode) */
+  cloudConfig?: CloudConfigData | null;
 }
 
 export default function EvalOutputPromptDialog({
@@ -304,7 +260,11 @@ export default function EvalOutputPromptDialog({
   testIndex,
   promptIndex,
   variables,
-  dependencies,
+  onAddFilter,
+  onResetFilters,
+  onReplay,
+  fetchTraces,
+  cloudConfig,
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -352,7 +312,7 @@ export default function EvalOutputPromptDialog({
       return;
     }
 
-    if (!dependencies?.api?.replay) {
+    if (!onReplay) {
       setReplayError('Replay functionality is not available');
       return;
     }
@@ -362,7 +322,7 @@ export default function EvalOutputPromptDialog({
     setReplayOutput(null);
 
     try {
-      const result = await dependencies.api.replay({
+      const result = await onReplay({
         evaluationId,
         testIndex,
         prompt: editedPrompt,
@@ -403,9 +363,9 @@ export default function EvalOutputPromptDialog({
     operator: 'equals' | 'contains' = 'equals',
   ) => {
     // Reset all filters first
-    dependencies?.filters?.reset?.();
+    onResetFilters?.();
     // Then apply only this filter
-    dependencies?.filters?.add?.({
+    onAddFilter?.({
       type: 'metadata',
       operator,
       value: typeof value === 'string' ? value : JSON.stringify(value),
@@ -613,7 +573,7 @@ export default function EvalOutputPromptDialog({
                 onMetadataClick={handleMetadataClick}
                 onCopy={copyFieldToClipboard}
                 onApplyFilter={handleApplyFilter}
-                cloudConfig={dependencies?.cloudConfig}
+                cloudConfig={cloudConfig}
               />
             </Box>
           )}
@@ -626,7 +586,7 @@ export default function EvalOutputPromptDialog({
                 testCaseId={testCaseId}
                 testIndex={testIndex}
                 promptIndex={promptIndex}
-                onFetchTraces={dependencies?.api?.fetchTraces}
+                fetchTraces={fetchTraces}
               />
             </Box>
           )}

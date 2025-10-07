@@ -18,7 +18,7 @@ interface TraceViewProps {
   testIndex?: number;
   promptIndex?: number;
   onVisibilityChange?: (shouldShow: boolean) => void;
-  onFetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
+  fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
 }
 
 export default function TraceView({
@@ -27,7 +27,7 @@ export default function TraceView({
   testIndex,
   promptIndex,
   onVisibilityChange,
-  onFetchTraces,
+  fetchTraces,
 }: TraceViewProps) {
   const [traces, setTraces] = useState<Trace[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,13 +37,13 @@ export default function TraceView({
     let isActive = true;
     const controller = new AbortController();
 
-    const fetchTraces = async () => {
+    const loadTraces = async () => {
       if (!evaluationId) {
         setLoading(false);
         return;
       }
 
-      if (!onFetchTraces) {
+      if (!fetchTraces) {
         setLoading(false);
         setError('Trace fetching is not available');
         return;
@@ -52,7 +52,7 @@ export default function TraceView({
       try {
         setLoading(true);
         setError(null);
-        const fetchedTraces = await onFetchTraces(evaluationId, controller.signal);
+        const fetchedTraces = await fetchTraces(evaluationId, controller.signal);
         if (!isActive) {
           return;
         }
@@ -74,13 +74,13 @@ export default function TraceView({
       }
     };
 
-    fetchTraces();
+    loadTraces();
 
     return () => {
       isActive = false;
       controller.abort();
     };
-  }, [evaluationId, onFetchTraces]);
+  }, [evaluationId, fetchTraces]);
 
   useEffect(() => {
     if (onVisibilityChange) {

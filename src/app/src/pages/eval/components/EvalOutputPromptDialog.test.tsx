@@ -38,19 +38,9 @@ const mockResetFilters = vi.fn();
 const mockReplayEvaluation = vi.fn();
 const mockFetchTraces = vi.fn();
 
-const mockDependencies = {
-  filters: {
-    add: mockAddFilter,
-    reset: mockResetFilters,
-  },
-  api: {
-    replay: mockReplayEvaluation,
-    fetchTraces: mockFetchTraces,
-  },
-  cloudConfig: {
-    appUrl: 'https://cloud.example.com',
-    isEnabled: true,
-  },
+const mockCloudConfig = {
+  appUrl: 'https://cloud.example.com',
+  isEnabled: true,
 };
 
 const defaultProps = {
@@ -59,6 +49,11 @@ const defaultProps = {
   prompt: 'Test prompt',
   provider: 'test-provider',
   output: 'Test output',
+  onAddFilter: mockAddFilter,
+  onResetFilters: mockResetFilters,
+  onReplay: mockReplayEvaluation,
+  fetchTraces: mockFetchTraces,
+  cloudConfig: mockCloudConfig,
   gradingResults: [
     {
       pass: true,
@@ -76,7 +71,6 @@ const defaultProps = {
   },
   evaluationId: 'test-eval-id',
   testCaseId: 'test-case-id',
-  dependencies: mockDependencies,
 };
 
 describe('EvalOutputPromptDialog', () => {
@@ -579,12 +573,8 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
     const localMockAddFilter = vi.fn();
     const propsWithMocks = {
       ...defaultProps,
-      dependencies: {
-        filters: {
-          add: localMockAddFilter,
-          reset: localMockResetFilters,
-        },
-      },
+      onAddFilter: localMockAddFilter,
+      onResetFilters: localMockResetFilters,
     };
 
     render(<EvalOutputPromptDialog {...propsWithMocks} />);
@@ -648,12 +638,8 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     const customResetFilters = vi.fn();
     const propsWithCustomFilters = {
       ...defaultProps,
-      dependencies: {
-        filters: {
-          add: customAddFilter,
-          reset: customResetFilters,
-        },
-      },
+      onAddFilter: customAddFilter,
+      onResetFilters: customResetFilters,
       metadata: {
         customField: 'customValue',
       },
@@ -684,12 +670,8 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     const objectValue = { nested: 'data', count: 42 };
     const propsWithObjectMetadata = {
       ...defaultProps,
-      dependencies: {
-        filters: {
-          add: customAddFilter,
-          reset: customResetFilters,
-        },
-      },
+      onAddFilter: customAddFilter,
+      onResetFilters: customResetFilters,
       metadata: {
         objectField: objectValue,
       },
@@ -713,7 +695,7 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     });
   });
 
-  it('should work without filter functions in dependencies', async () => {
+  it('should work without filter functions', async () => {
     const propsWithoutFilterFunctions = {
       open: true,
       onClose: mockOnClose,
@@ -721,9 +703,7 @@ describe('EvalOutputPromptDialog dependency injection', () => {
       metadata: {
         key: 'value',
       },
-      dependencies: {
-        // No filters property
-      },
+      // No filter props
     };
 
     render(<EvalOutputPromptDialog {...propsWithoutFilterFunctions} />);
@@ -754,11 +734,7 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
     const customReplay = vi.fn().mockResolvedValue({ output: 'Replayed output' });
     const propsWithReplay = {
       ...defaultProps,
-      dependencies: {
-        api: {
-          replay: customReplay,
-        },
-      },
+      onReplay: customReplay,
     };
 
     render(<EvalOutputPromptDialog {...propsWithReplay} />);
@@ -786,11 +762,7 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
     const customReplay = vi.fn().mockResolvedValue({ output: 'Replayed output text' });
     const propsWithReplay = {
       ...defaultProps,
-      dependencies: {
-        api: {
-          replay: customReplay,
-        },
-      },
+      onReplay: customReplay,
     };
 
     render(<EvalOutputPromptDialog {...propsWithReplay} />);
@@ -812,11 +784,7 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
     const customReplay = vi.fn().mockResolvedValue({ error: 'Replay failed' });
     const propsWithReplay = {
       ...defaultProps,
-      dependencies: {
-        api: {
-          replay: customReplay,
-        },
-      },
+      onReplay: customReplay,
     };
 
     render(<EvalOutputPromptDialog {...propsWithReplay} />);
@@ -836,9 +804,7 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
   it('should show error if replay function is not provided', async () => {
     const propsWithoutReplay = {
       ...defaultProps,
-      dependencies: {
-        // No api property
-      },
+      onReplay: undefined,
     };
 
     render(<EvalOutputPromptDialog {...propsWithoutReplay} />);
@@ -864,9 +830,7 @@ describe('EvalOutputPromptDialog cloud config', () => {
     };
     const propsWithCustomConfig = {
       ...defaultProps,
-      dependencies: {
-        cloudConfig: customCloudConfig,
-      },
+      cloudConfig: customCloudConfig,
       metadata: {
         policyName: 'Test Policy',
         policyId: 'policy-123',
@@ -885,9 +849,7 @@ describe('EvalOutputPromptDialog cloud config', () => {
   it('should work without cloudConfig', async () => {
     const propsWithoutConfig = {
       ...defaultProps,
-      dependencies: {
-        cloudConfig: null,
-      },
+      cloudConfig: null,
       metadata: {
         policyName: 'Test Policy',
       },
