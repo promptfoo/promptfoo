@@ -34,7 +34,7 @@ export default function FrameworkPluginResult({
   };
 
   const { asr, total, failCount } = getPluginASR(plugin);
-  
+
   const pluginSeverity =
     riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
 
