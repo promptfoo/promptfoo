@@ -1286,7 +1286,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath === 'slack',
+    test: (providerPath: string) => providerPath === 'slack' || providerPath.startsWith('slack:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
@@ -1294,26 +1294,13 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       try {
         const { SlackProvider } = await import('./slack');
-        return new SlackProvider(providerOptions);
-      } catch (error: any) {
-        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@slack/web-api')) {
-          throw new Error(
-            'The Slack provider requires the @slack/web-api package. Please install it with: npm install @slack/web-api',
-          );
+
+        // Handle plain 'slack' format
+        if (providerPath === 'slack') {
+          return new SlackProvider(providerOptions);
         }
-        throw error;
-      }
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('slack:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      try {
-        const { SlackProvider } = await import('./slack');
+
+        // Handle slack:* formats
         const splits = providerPath.split(':');
 
         if (splits.length < 2) {

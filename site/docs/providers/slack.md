@@ -1,6 +1,7 @@
 ---
 title: Slack Provider
 sidebar_label: Slack
+description: Enable human-in-the-loop evaluations with the Slack provider for collecting expert feedback, comparing human vs AI responses, and building golden datasets through Slack channels or direct messages
 ---
 
 # Slack Provider
@@ -187,7 +188,7 @@ providers:
 description: Collect human feedback on AI responses
 
 providers:
-  - id: gpt-4
+  - id: openai:gpt-5
   - id: slack:C0123456789
     config:
       timeout: 300000 # 5 minutes
@@ -515,11 +516,11 @@ async function findBotId() {
 description: Compare AI and human customer service responses
 
 providers:
-  - id: gpt-4
+  - id: openai:gpt-5
     config:
       temperature: 0.7
 
-  - id: claude-3-sonnet
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
 
   - id: slack:C0123456789
     config:
