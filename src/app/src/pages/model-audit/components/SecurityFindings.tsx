@@ -110,13 +110,15 @@ export default function SecurityFindings({
   };
 
   const handleDownloadResults = () => {
-    const csvHeaders = ['Severity', 'Message', 'Location', 'Details'];
+    const csvHeaders = ['Severity', 'Message', 'Why', 'Location', 'Details'];
     const csvRows = scanResults.issues.map((issue) => {
       const details = issue.details ? JSON.stringify(issue.details).replace(/"/g, '""') : '';
       const location = getIssueFilePath(issue);
+      const why = issue.why ? issue.why.replace(/"/g, '""') : '';
       return [
         getSeverityLabel(issue.severity),
         `"${issue.message.replace(/"/g, '""')}"`,
+        `"${why}"`,
         `"${location.replace(/"/g, '""')}"`,
         `"${details}"`,
       ].join(',');
@@ -402,6 +404,11 @@ export default function SecurityFindings({
                                   {getSeverityLabel(issue.severity)}
                                 </SeverityBadge>
                               </Stack>
+                              {issue.why && (
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                  {issue.why}
+                                </Typography>
+                              )}
                               {issue.details && (
                                 <Alert severity="info" sx={{ mt: 2 }}>
                                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
@@ -458,6 +465,11 @@ export default function SecurityFindings({
                   {getIssueFilePath(issue) !== 'Unknown' && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       Location: {getIssueFilePath(issue)}
+                    </Typography>
+                  )}
+                  {issue.why && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                      {issue.why}
                     </Typography>
                   )}
                   {issue.details && (

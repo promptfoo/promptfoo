@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import ResultsView from './ResultsView';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
+import { useTableStore, useResultsViewSettingsStore } from './store';
 
 // Mock all the required modules
 vi.mock('@app/hooks/useToast', () => ({
@@ -27,55 +28,15 @@ vi.mock('@app/utils/api', () => ({
   updateEvalAuthor: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('./store', () => ({
-  useResultsViewSettingsStore: () => ({
-    setInComparisonMode: vi.fn(),
-    columnStates: {},
-    setColumnState: vi.fn(),
-    maxTextLength: 100,
-    wordBreak: 'break-word',
-    showInferenceDetails: true,
-    comparisonEvalIds: [],
-    setComparisonEvalIds: vi.fn(),
-  }),
-  useTableStore: () => ({
-    author: 'Test Author',
-    table: {
-      head: {
-        prompts: [
-          {
-            label: 'Test Prompt 1',
-            provider: 'openai:gpt-4',
-            raw: 'Test prompt 1',
-          },
-          {
-            label: 'Test Prompt 2',
-            provider: 'openai:gpt-3.5-turbo',
-            raw: 'Test prompt 2',
-          },
-        ],
-        vars: ['input'],
-      },
-      body: [],
-    },
-    config: {
-      description: 'Test Evaluation',
-      sharing: true, // Explicitly enabled
-      tags: { env: 'test' },
-    },
-    setConfig: vi.fn(),
-    evalId: 'test-eval-id',
-    setAuthor: vi.fn(),
-    filteredResultsCount: 10,
-    totalResultsCount: 15,
-    highlightedResultsCount: 2,
-    filters: {
-      appliedCount: 0,
-      values: {},
-    },
-    removeFilter: vi.fn(),
-  }),
-}));
+vi.mock('./store', () => {
+  const mockUseTableStore = vi.fn();
+  const mockUseResultsViewSettingsStore = vi.fn();
+
+  return {
+    useResultsViewSettingsStore: mockUseResultsViewSettingsStore,
+    useTableStore: mockUseTableStore,
+  };
+});
 
 vi.mock('./ShareModal', () => ({
   default: vi.fn(({ open, onClose }) =>
@@ -160,6 +121,57 @@ describe('ResultsView Share Button', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
   });
 
   it('always shows share button regardless of config.sharing value', async () => {
@@ -221,5 +233,568 @@ describe('ResultsView Share Button', () => {
       expect(screen.getByText('View YAML')).toBeInTheDocument();
       expect(screen.getByText('Delete')).toBeInTheDocument();
     });
+  });
+});
+
+describe('ResultsView', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          {
+            description: 'Test Description',
+            outputs: [
+              {
+                score: 0.8,
+              },
+              {
+                score: 0.6,
+              },
+            ],
+          },
+          {
+            description: 'Test Description',
+            outputs: [
+              {
+                score: 0.7,
+              },
+              {
+                score: 0.9,
+              },
+            ],
+          },
+        ],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+  });
+  it('renders ResultsCharts when conditions are met and charts are shown by default', async () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
+
+    const hideChartsButton = screen.getByText('Hide Charts');
+    expect(hideChartsButton).toBeInTheDocument();
+  });
+
+  it('renders charts when there are multiple prompts and at least two different valid scores, even when some scores are NaN', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          {
+            outputs: [{ score: 0.5 }, { score: NaN }],
+            description: 'Test row 1',
+          },
+          {
+            outputs: [{ score: NaN }, { score: 0.7 }],
+            description: 'Test row 2',
+          },
+        ],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
+  });
+
+  it('does not render ResultsCharts when table data is in a loading state', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [],
+          vars: [],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+  });
+
+  it('should not render charts when there are multiple prompts and valid scores, but all scores are the same, even after clicking show charts', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          {
+            id: '1',
+            description: 'Test Description',
+            vars: ['test input'],
+            outputs: [{ score: 1 }, { score: 1 }],
+            latency: 100,
+            tokens: 50,
+          },
+          {
+            id: '2',
+            description: 'Test Description',
+            vars: ['test input'],
+            outputs: [{ score: 1 }, { score: 1 }],
+            latency: 100,
+            tokens: 50,
+          },
+        ],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.queryByText('Show Charts')).toBeNull();
+
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+  });
+});
+
+describe('ResultsView Chart Rendering', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [],
+          vars: [],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+  });
+  it('should not render ResultsCharts if there is only one prompt', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 0.8 }] }],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    const showChartsButton = screen.queryByText('Show Charts');
+    expect(showChartsButton).toBeNull();
+
+    const resultsCharts = screen.queryByTestId('results-charts');
+    expect(resultsCharts).toBeNull();
+  });
+
+  it('should not render ResultsCharts if all scores are the same', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 0.8 }, { score: 0.8 }] }],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    const showChartsButton = screen.queryByText('Show Charts');
+    expect(showChartsButton).toBeNull();
+
+    const resultsCharts = screen.queryByTestId('results-charts');
+    expect(resultsCharts).toBeNull();
+  });
+
+  it('should not render ResultsCharts if there are no valid scores', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: NaN }, { score: NaN }] }],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    const showChartsButton = screen.queryByText('Show Charts');
+    expect(showChartsButton).toBeNull();
+
+    const resultsCharts = screen.queryByTestId('results-charts');
+    expect(resultsCharts).toBeNull();
+  });
+});
+
+describe('ResultsView with extreme score values', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          {
+            description: 'Test row 1',
+            outputs: [{ score: 1e10 }, { score: 1e11 }],
+          },
+          {
+            description: 'Test row 2',
+            outputs: [{ score: 1e10 }, { score: 1e11 }],
+          },
+        ],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+  });
+
+  it('renders ResultsCharts when there are multiple prompts and extreme score values with variance', () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    const resultsCharts = screen.getByTestId('results-charts');
+    expect(resultsCharts).toBeInTheDocument();
   });
 });

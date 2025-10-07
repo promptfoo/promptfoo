@@ -81,6 +81,33 @@ npm run local -- eval -c path/to/config.yaml
 
 This ensures you're testing with your current changes instead of the installed version.
 
+**Important:** Always use `--` before additional flags when using `npm run local`:
+
+```bash
+# Correct - use -- to separate npm script from CLI flags
+npm run local -- eval --max-concurrency 1 --filter-first-n 1
+
+# Incorrect - flags will be passed to npm instead of promptfoo
+npm run local eval --max-concurrency 1
+```
+
+### Using Environment Variables
+
+The repository includes a `.env` file at `~/projects/promptfoo/.env` with API keys for testing. To use it with the local build:
+
+```bash
+# Use --env-file flag to load environment variables
+npm run local -- eval -c examples/tau-simulated-user/promptfooconfig.yaml --env-file ~/projects/promptfoo/.env
+
+# Or set specific variables inline
+OPENAI_API_KEY=sk-... npm run local -- eval -c path/to/config.yaml
+
+# For testing with remote generation disabled
+PROMPTFOO_DISABLE_REMOTE_GENERATION=true npm run local -- eval -c path/to/config.yaml
+```
+
+**Never commit the `.env` file or expose API keys in code or commit messages.**
+
 ## Documentation Testing
 
 When testing documentation changes that require building the site, you can speed up the process by skipping OG (Open Graph) image generation:

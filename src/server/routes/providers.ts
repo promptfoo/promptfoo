@@ -11,7 +11,7 @@ import {
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
 import type { Request, Response } from 'express';

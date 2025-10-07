@@ -827,7 +827,6 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       score: 1,
       reason: 'Manual result (overrides all other grading results)',
       comment: 'Test comment',
-      assertion: null,
       componentResults,
     };
 
