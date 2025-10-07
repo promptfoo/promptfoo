@@ -218,7 +218,7 @@ const config: Config = {
         {
           type: 'custom-githubStars',
           position: 'right',
-        } as any,
+        },
         {
           href: 'https://discord.gg/promptfoo',
           position: 'right',

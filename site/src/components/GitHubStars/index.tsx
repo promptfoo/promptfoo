@@ -1,45 +1,79 @@
 import React, { useState, useEffect } from 'react';
 import styles from './styles.module.css';
 
-interface GitHubStarsProps {
-  repo: string; // format: "owner/repo"
+const CACHE_KEY = 'github_stars_cache_promptfoo';
+const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+const FETCH_TIMEOUT = 5000; // 5 seconds
+
+interface CachedData {
+  stars: string;
+  timestamp: number;
 }
 
-export default function GitHubStars({ repo }: GitHubStarsProps): JSX.Element {
-  const [stars, setStars] = useState<string>('8k+');
+function formatStarCount(count: number): string {
+  return count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count.toString();
+}
+
+function getCachedStars(): string | null {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const data: CachedData = JSON.parse(cached);
+      if (Date.now() - data.timestamp < CACHE_DURATION) {
+        return data.stars;
+      }
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+  return null;
+}
+
+function setCachedStars(stars: string): void {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ stars, timestamp: Date.now() }));
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+export default function GitHubStars(): JSX.Element {
+  const [stars, setStars] = useState<string>(() => getCachedStars() || '8k+');
 
   useEffect(() => {
-    const fetchStars = async () => {
-      try {
-        const response = await fetch(`https://api.github.com/repos/${repo}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch stars');
-        }
-        const data = await response.json();
-        const starCount = data.stargazers_count;
+    // Skip fetch if we have cached data
+    if (getCachedStars()) return;
 
-        // Format the number
-        let formatted: string;
-        if (starCount >= 1000) {
-          const thousands = starCount / 1000;
-          formatted = `${thousands.toFixed(1)}k`;
-        } else {
-          formatted = starCount.toString();
-        }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-        setStars(formatted);
-      } catch (error) {
-        console.error('Error fetching GitHub stars:', error);
-        // Keep the default '8k+' value on error
-      }
+    fetch('https://api.github.com/repos/promptfoo/promptfoo', {
+      signal: controller.signal,
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.stargazers_count === 'number') {
+          const formatted = formatStarCount(data.stargazers_count);
+          setStars(formatted);
+          setCachedStars(formatted);
+        }
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching GitHub stars:', error);
+        }
+      })
+      .finally(() => clearTimeout(timeoutId));
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
     };
-
-    fetchStars();
-  }, [repo]);
+  }, []);
 
   return (
     <a
-      href={`https://github.com/${repo}`}
+      href="https://github.com/promptfoo/promptfoo"
       target="_blank"
       rel="noopener noreferrer"
       className={styles.githubStars}
