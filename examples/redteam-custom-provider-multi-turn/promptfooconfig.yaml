@@ -1,4 +1,4 @@
-description: Red Team Starter
+description: Custom application with multi-turn conversations
 
 prompts:
   - '{{prompt}}'

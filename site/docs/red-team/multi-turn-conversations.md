@@ -29,4 +29,4 @@ def call_api(prompt, options, context):
     session_id = context.get("vars", {}).get("sessionId", "")
 ```
 
-A complete example can be found [in our github](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-pr)
+A complete example can be found [in our github](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-custom-provider-multi-turn)
