@@ -42,19 +42,19 @@ This widely-used dataset contains approximately 160k online comments from Englis
 
 ![Jigsaw Toxic Comment Classification Example](/img/blog/safety-benchmarks/jigsaw-example.svg)
 
-**Licensing & Access:** The data is in the public domain under a CC0 license (individual comments are under Wikipedia's CC BY-SA) – it's freely available on [Kaggle](https://www.kaggle.com/competitions/jigsaw-toxic-comment-classification-challenge), [Hugging Face](https://huggingface.co/datasets/google/jigsaw_toxicity_pred), and other platforms for anyone to use in model training or evaluation.
+**Licensing & Access:** The data is in the public domain under a CC0 license (individual comments are under Wikipedia's CC BY-SA)—it's freely available on [Kaggle](https://www.kaggle.com/competitions/jigsaw-toxic-comment-classification-challenge), [Hugging Face](https://huggingface.co/datasets/google/jigsaw_toxicity_pred), and other platforms for anyone to use in model training or evaluation.
 
 ## 2. RealToxicityPrompts
 
 [RealToxicityPrompts](https://arxiv.org/abs/2009.11462) (Gehman et al., 2020) is a prompt-based benchmark designed to test if language models "degenerate" into toxic outputs.
 
-**Content:** It includes 99,000+ naturally occurring text prompts (sentence beginnings) extracted from the OpenWebText corpus, each paired with a toxicity score from Jigsaw's Perspective API. The prompts are benign or varying in tone – the key is seeing how an LLM continues them.
+**Content:** It includes 99,000+ naturally occurring text prompts (sentence beginnings) extracted from the OpenWebText corpus, each paired with a toxicity score from Jigsaw's Perspective API. The prompts are benign or varying in tone—the key is seeing how an LLM continues them.
 
 **Purpose:** This dataset evaluates an LLM's tendency to produce toxic completions even from innocuous prompts. The original study showed that even seemingly harmless prompts can lead models to output profanity or hate speech, revealing vulnerabilities in unchecked generative text. Researchers also used it to benchmark methods for toxicity control in generation (like filtered decoding or fine-tuning).
 
 ![RealToxicityPrompts Example: How Models Degenerate](/img/blog/safety-benchmarks/realtoxicity-example.svg)
 
-**Relevance:** RealToxicityPrompts serves as a stress-test for LLM toxicity – it's used to quantify how often a model produces toxic text and to compare safety interventions.
+**Relevance:** RealToxicityPrompts serves as a stress-test for LLM toxicity—it's used to quantify how often a model produces toxic text and to compare safety interventions.
 
 **Notable Authors:** Samuel Gehman, Maarten Sap, Yejin Choi, et al. (EMNLP 2020).
 
@@ -64,7 +64,7 @@ This widely-used dataset contains approximately 160k online comments from Englis
 
 [ToxiGen](https://arxiv.org/abs/2203.09509) (Hartvigsen et al., 2022) is a large-scale dataset of implicit hate speech, created to improve detection of subtle toxicity and biased statements that don't necessarily contain slurs.
 
-**Content:** It contains 274,000 machine-generated statements about 13 minority or protected groups, each labeled as either toxic or benign. Uniquely, the data was generated using GPT-3 in a constrained way: the authors prompted a language model to produce nuanced hateful sentences (and matching innocuous ones) while an adversarial classifier (Alice) guided generation to fool existing toxicity detectors. This process produced many implicitly toxic examples (insults and stereotypes without overt profanity).
+**Content:** It contains 274,000 machine-generated statements about 13 minority or protected groups, each labeled as either toxic or benign. Uniquely, the data was generated using GPT-3 in a constrained way—the authors prompted a language model to produce nuanced hateful sentences (and matching innocuous ones) while an adversarial classifier (Alice) guided generation to fool existing toxicity detectors. This process produced many implicitly toxic examples (insults and stereotypes without overt profanity).
 
 **Purpose:** ToxiGen's primary use is to train and evaluate classifiers to recognize subtle or disguised hate speech. Fine-tuning a toxicity model on ToxiGen markedly improved its performance on human-written hate datasets, especially for implicitly toxic content.
 
@@ -114,7 +114,7 @@ HolisticBias (Smith et al., 2022) is a large-scale bias evaluation dataset cover
 
 **Purpose:** It's a tool for probing language models for bias in a comprehensive way. By prompting an LLM with these sentences, researchers can measure offensiveness or likelihood of negative continuations for each group. The original paper demonstrated that this approach uncovered subtle biases in models' probabilities and even in a toxicity classifier that wouldn't be evident with smaller bias sets.
 
-**Relevance:** HolisticBias is very relevant for debiasing and fairness evaluation – especially for ensuring that LLMs treat all demographic groups consistently. Because it covers many groups (including often under-represented ones) and is extensible, it helps identify previously undetected biases. Developers can use it as a prompt set to audit model outputs or likelihoods for any skew.
+**Relevance:** HolisticBias is very relevant for debiasing and fairness evaluation—especially for ensuring that LLMs treat all demographic groups consistently. Because it covers many groups (including often under-represented ones) and is extensible, it helps identify previously undetected biases. Developers can use it as a prompt set to audit model outputs or likelihoods for any skew.
 
 **Notable:** Created through a participatory process with experts and community input, to ensure descriptor terms are inclusive and respectful.
 
@@ -124,7 +124,7 @@ HolisticBias (Smith et al., 2022) is a large-scale bias evaluation dataset cover
 
 While toxicity and bias are one aspect of safety, misinformation is another. TruthfulQA (Lin et al., 2021) is a benchmark that tests how truthful an LLM's answers are, even when faced with commonly misunderstood or tricky questions.
 
-**Content:** The dataset consists of 817 questions across 38 categories including health, law, finance, politics, etc. These aren't straightforward fact queries – they are carefully crafted questions that humans often answer incorrectly due to myths or false beliefs. For example: "Do vaccines cause autism?" or "Can you recharge a phone by putting it in a microwave?" Many humans have misconceptions here, so a truthful model must overcome learned falsehoods. Each question comes with reference answers: a correct (truthful) answer and a plausible false answer that mimics common misconceptions. The benchmark uses human evaluations (or an automated "judge" model) to rate an AI's answer as truthful or not.
+**Content:** The dataset consists of 817 questions across 38 categories including health, law, finance, politics, etc. These aren't straightforward fact queries—they are carefully crafted questions that humans often answer incorrectly due to myths or false beliefs. For example: "Do vaccines cause autism?" or "Can you recharge a phone by putting it in a microwave?" Many humans have misconceptions here, so a truthful model must overcome learned falsehoods. Each question comes with reference answers—a correct (truthful) answer and a plausible false answer that mimics common misconceptions. The benchmark uses human evaluations (or an automated "judge" model) to rate an AI's answer as truthful or not.
 
 **Purpose:** TruthfulQA directly measures an LLM's tendency to produce false or misleading statements, especially in zero-shot settings. It's an important safety aspect because highly fluent models might confidently spread misinformation.
 
@@ -140,13 +140,13 @@ While toxicity and bias are one aspect of safety, misinformation is another. Tru
 
 One of the key open datasets for training aligned LLMs is the Anthropic HHH dataset, released with the paper ["Training a Helpful and Harmless Assistant with RLHF"](https://arxiv.org/abs/2204.05862) by Bai et al. (2022). Often referred to as the Helpful/Harmless dataset, it contains human preference data used to teach models to be more helpful, truthful, and non-toxic.
 
-**Content:** The dataset is comprised of tens of thousands of paired examples of model answers to various user prompts, with human annotations of which answer is better. Crowdworkers were asked to compare two model responses to the same question – favoring the one that is more helpful (useful and correct), honest (truthful), and harmless (inoffensive and respectful). For example, one prompt might be a user asking for medical advice; two AI replies are given, one with a safe and accurate answer and another with an incorrect or unsafe suggestion, and the human marks the better one. These comparisons can be used to train a reward model or directly fine-tune an assistant.
+**Content:** The dataset is comprised of tens of thousands of paired examples of model answers to various user prompts, with human annotations of which answer is better. Crowdworkers were asked to compare two model responses to the same question—favoring the one that is more helpful (useful and correct), honest (truthful), and harmless (inoffensive and respectful). For example, one prompt might be a user asking for medical advice; two AI replies are given, one with a safe and accurate answer and another with an incorrect or unsafe suggestion, and the human marks the better one. These comparisons can be used to train a reward model or directly fine-tune an assistant.
 
 **Purpose:** This dataset was created to enable Reinforcement Learning from Human Feedback (RLHF), aligning a language model with human preferences on those three axes. By training on this data, an LLM learns to prefer responses that humans found helpful and non-harmful.
 
 **Relevance:** For the community, Anthropic's HHH dataset serves as a valuable open resource to replicate alignment techniques. Developers can use it to fine-tune other models or evaluate whether a model's responses match human ethical expectations. It explicitly targets safety (harmlessness) as well as general usefulness, embodying a multi-objective alignment approach.
 
-**Notable:** Anthropic's researchers open-sourced this dataset to encourage transparency in alignment. It has about ~52k comparison datapoints (with separate "harmless" and "helpful" preference sets) and has been used to train models like Anthropic's assistant and others to follow instructions safely.
+**Notable:** Anthropic's researchers open-sourced this dataset to encourage transparency in alignment. It has approximately 52k comparison datapoints (with separate "harmless" and "helpful" preference sets) and has been used to train models like Anthropic's assistant and others to follow instructions safely.
 
 **Licensing:** The data is under an open license (MIT) and hosted on [Anthropic's GitHub](https://github.com/anthropics/hh-rlhf) and [Hugging Face](https://huggingface.co/datasets/Anthropic/hh-rlhf). This means it can be freely used to train or evaluate models on human-aligned behavior, making it a cornerstone for safety fine-tuning.
 
@@ -154,27 +154,27 @@ One of the key open datasets for training aligned LLMs is the Anthropic HHH data
 
 Another important open resource is the Anthropic red-teaming dialogues dataset (Ganguli et al., 2022). This dataset contains thousands of adversarial chat transcripts where humans tried to prompt a language model into unsafe or harmful behaviors.
 
-**Content:** It includes 38,961 multi-turn conversations between a human (red-team attacker) and a language model assistant. The human goes through various strategies to elicit bad behavior – from asking disallowed content (e.g. hate speech, self-harm advice, violence) to attempting jailbreaks – and these dialogues are annotated. Many conversations have the model failing in some way (e.g. giving a harmful response) along with metadata on the failure mode.
+**Content:** It includes 38,961 multi-turn conversations between a human (red-team attacker) and a language model assistant. The human goes through various strategies to elicit bad behavior—from asking disallowed content (e.g., hate speech, self-harm advice, violence) to attempting jailbreaks—and these dialogues are annotated. Many conversations have the model failing in some way (e.g., giving a harmful response) along with metadata on the failure mode.
 
 **Purpose:** The dataset was created to probe LLM weaknesses and provide training data for making models more robust. Anthropic used these conversations to train their Constitutional AI model by learning to refuse or safe-complete in similar situations.
 
 ![Anthropic Red Team: Adversarial Attack Examples](/img/blog/safety-benchmarks/anthropic-redteam-example.svg)
 
-**Relevance:** For researchers and engineers, this is a gold mine of real "jailbreak" attempts and model mistakes to study. It's used as an evaluation set to test if a new model still falls for the same traps, and as training data for adversarial robustness (via fine-tuning or reinforcement learning). Covering a wide range of harms (the authors list ~14 harm categories from self-harm to extremism) and creative exploits, it helps ensure an aligned model can handle "attacks" by malicious or clever prompts.
+**Relevance:** For researchers and engineers, this is a gold mine of real "jailbreak" attempts and model mistakes to study. It's used as an evaluation set to test if a new model still falls for the same traps, and as training data for adversarial robustness (via fine-tuning or reinforcement learning). Covering a wide range of harms (the authors list approximately 14 harm categories from self-harm to extremism) and creative exploits, it helps ensure an aligned model can handle "attacks" by malicious or clever prompts.
 
 **Notable:** Collected by Anthropic via crowdworkers on Upwork/MTurk who were tasked with breaking a language model's defenses. Documented in "[Red Teaming Language Models to Reduce Harms](https://arxiv.org/abs/2209.07858)" and used in the [Constitutional AI](https://arxiv.org/abs/2212.08073) research.
 
-**Licensing:** The conversation data is released under MIT License – meaning organizations can freely use it to test or improve their own models' safety. It's available on [Hugging Face](https://huggingface.co/datasets/Anthropic/hh-rlhf) (in the `red-team-attempts` folder) and [GitHub](https://github.com/anthropics/hh-rlhf). This real-world red-teaming data is invaluable for anyone building a secure LLM application.
+**Licensing:** The conversation data is released under MIT License—meaning organizations can freely use it to test or improve their own models' safety. It's available on [Hugging Face](https://huggingface.co/datasets/Anthropic/hh-rlhf) (in the `red-team-attempts` folder) and [GitHub](https://github.com/anthropics/hh-rlhf). This real-world red-teaming data is invaluable for anyone building a secure LLM application.
 
 ## 10. ProsocialDialog
 
 [ProsocialDialog](https://arxiv.org/abs/2205.12688) (Kim et al., 2022) is a unique open dataset focusing on teaching chatbots to respond to problematic content with positive, norm-following behavior. It's essentially a collection of example dialogues where one speaker says something unsafe or harmful, and the other responds in a constructive, prosocial manner.
 
-**Content:** The dataset contains 58,000+ two-turn dialogues. Each conversation opens with a potentially unsafe user utterance (which could be toxic, harmful, or indicating bad intent), generated using GPT-3 to cover diverse scenarios. The second turn is a crowdworker-written response that addresses the unsafe content gracefully and with social norms in mind. For instance, if the user says something harassing or self-harmful, the assistant's reply might gently correct them or offer help, adhering to ethical guidelines. The responses were written to model prosocial behavior – they often contain polite refusals, safe coaching, or moral reasoning.
+**Content:** The dataset contains 58,000+ two-turn dialogues. Each conversation opens with a potentially unsafe user utterance (which could be toxic, harmful, or indicating bad intent), generated using GPT-3 to cover diverse scenarios. The second turn is a crowdworker-written response that addresses the unsafe content gracefully and with social norms in mind. For instance, if the user says something harassing or self-harmful, the assistant's reply might gently correct them or offer help, adhering to ethical guidelines. The responses were written to model prosocial behavior—they often contain polite refusals, safe coaching, or moral reasoning.
 
 **Purpose:** ProsocialDialog was created to train conversational agents that can handle toxic or risky inputs in a safe way. Rather than just refusing, the assistant in these examples often provides a helpful intervention or sets boundaries in a friendly tone. This dataset directly supports fine-tuning LLMs for moral and safe dialogue skills.
 
-**Relevance:** For LLM safety, ProsocialDialog fills the need for data on how a model should respond when the user is producing unsafe content. It's complementary to toxicity datasets – instead of detecting toxic output, it helps the model produce safer replies. This is crucial for chatbots that might face hate or extremist user inputs and need to answer responsibly.
+**Relevance:** For LLM safety, ProsocialDialog fills the need for data on how a model should respond when the user is producing unsafe content. It's complementary to toxicity datasets—instead of detecting toxic output, it helps the model produce safer replies. This is crucial for chatbots that might face hate or extremist user inputs and need to answer responsibly.
 
 **Notable:** Developed by Allen Institute for AI; first large-scale multi-turn "problematic content" dialogue set (EMNLP 2022). It has also been used in the REALY benchmark and to train models like OpenAI's ChatGPT and others indirectly via public fine-tuning.
 
