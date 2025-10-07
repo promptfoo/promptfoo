@@ -325,9 +325,9 @@ const FrameworkCard = ({
                             </Typography>
                           </ListItem>
                         )}
-                        {sortedNonCompliantItems.map((plugin) => (
+                        {sortedNonCompliantItems.map((plugin, index) => (
                           <PluginListItem
-                            key={`${plugin}-${framework}-${categoryId}`}
+                            key={`${plugin}-${framework}-${categoryId}-${index}`}
                             evalId={evalId}
                             plugin={plugin}
                             getPluginASR={getPluginASR}
@@ -350,9 +350,9 @@ const FrameworkCard = ({
                             </Typography>
                           </ListItem>
                         )}
-                        {sortedCompliantItems.map((plugin) => (
+                        {sortedCompliantItems.map((plugin, index) => (
                           <PluginListItem
-                            key={`${plugin}-${framework}-${categoryId}`}
+                            key={`${plugin}-${framework}-${categoryId}-${index}`}
                             evalId={evalId}
                             plugin={plugin}
                             getPluginASR={getPluginASR}
@@ -379,9 +379,9 @@ const FrameworkCard = ({
                                 Not Tested:
                               </Typography>
                             </ListItem>
-                            {sortedUntestedItems.map((plugin) => (
+                            {sortedUntestedItems.map((plugin, index) => (
                               <PluginListItem
-                                key={`${plugin}-${framework}-${categoryId}`}
+                                key={`${plugin}-${framework}-${categoryId}-${index}`}
                                 evalId={evalId}
                                 plugin={plugin}
                                 getPluginASR={getPluginASR}
@@ -437,9 +437,9 @@ const FrameworkCard = ({
                     </Typography>
                   </ListItem>
                 )}
-                {sortedPlugins.map((plugin) => (
+                {sortedPlugins.map((plugin, index) => (
                   <PluginListItem
-                    key={`${plugin}-${framework}`}
+                    key={`${plugin}-${framework}-${index}`}
                     evalId={evalId}
                     plugin={plugin}
                     getPluginASR={getPluginASR}
@@ -471,9 +471,9 @@ const FrameworkCard = ({
                         pluginPassRateThreshold,
                   );
                   return getPluginsSortedByASR(compliantPlugins);
-                })().map((plugin) => (
+                })().map((plugin, index) => (
                   <PluginListItem
-                    key={`${plugin}-${framework}`}
+                    key={`${plugin}-${framework}-${index}`}
                     evalId={evalId}
                     plugin={plugin}
                     getPluginASR={getPluginASR}
@@ -509,9 +509,9 @@ const FrameworkCard = ({
 
                     return severityOrder[severityA] - severityOrder[severityB];
                   })
-                  .map((plugin) => (
+                  .map((plugin, index) => (
                     <PluginListItem
-                      key={`${plugin}-${framework}`}
+                      key={`${plugin}-${framework}-${index}`}
                       evalId={evalId}
                       plugin={plugin}
                       getPluginASR={getPluginASR}
