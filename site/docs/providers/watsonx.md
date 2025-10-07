@@ -24,7 +24,7 @@ curl "https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=202
 
 ### Currently Available Models
 
-Based on IBM's API (as of October 2025), the following models are available for text generation and chat:
+The following models are available for text generation and chat:
 
 #### IBM Granite
 
