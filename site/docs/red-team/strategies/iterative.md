@@ -1,7 +1,7 @@
 ---
 sidebar_label: Iterative Jailbreaks
 title: Iterative Jailbreaks Strategy
-description: Systematically probe and bypass AI system constraints by repeatedly refining prompts through multiple iterations
+description: Apply iterative refinement techniques to systematically evolve prompts that probe and bypass AI safety constraints effectively
 ---
 
 # Iterative Jailbreaks Strategy

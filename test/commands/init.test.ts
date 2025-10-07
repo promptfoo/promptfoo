@@ -3,6 +3,8 @@ import fs from 'fs/promises';
 import { Command } from 'commander';
 import * as init from '../../src/commands/init';
 import logger from '../../src/logger';
+import { fetchWithProxy } from '../../src/util/fetch/index';
+import { createMockResponse } from '../util/utils';
 
 jest.mock('../../src/redteam/commands/init', () => ({
   redteamInit: jest.fn(),
@@ -19,15 +21,9 @@ jest.mock('../../src/server/server', () => ({
   },
 }));
 
-jest.mock('../../src/commands/init', () => {
-  const actual = jest.requireActual('../../src/commands/init');
-  return {
-    ...actual,
-    downloadDirectory: jest.fn(actual.downloadDirectory),
-    downloadExample: jest.fn(actual.downloadExample),
-    getExamplesList: jest.fn(actual.getExamplesList),
-  };
-});
+jest.mock('../../src/util/fetch/index', () => ({
+  fetchWithProxy: jest.fn(),
+}));
 
 jest.mock('fs/promises');
 jest.mock('path', () => ({
@@ -41,12 +37,12 @@ jest.mock('@inquirer/confirm');
 jest.mock('@inquirer/input');
 jest.mock('@inquirer/select');
 
-const mockFetch = jest.mocked(jest.fn());
-global.fetch = mockFetch;
+const mockFetchWithProxy = jest.mocked(fetchWithProxy);
 
 describe('init command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFetchWithProxy.mockClear();
   });
 
   afterEach(() => {
@@ -55,26 +51,26 @@ describe('init command', () => {
 
   describe('downloadFile', () => {
     it('should download a file successfully', async () => {
-      const mockResponse = {
+      const mockResponse = createMockResponse({
         ok: true,
         status: 200,
-        text: jest.fn().mockResolvedValue('file content'),
-      };
-      mockFetch.mockResolvedValue(mockResponse);
+        text: () => Promise.resolve('file content'),
+      });
+      mockFetchWithProxy.mockResolvedValue(mockResponse);
 
       await init.downloadFile('https://example.com/file.txt', '/path/to/file.txt');
 
-      expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.txt');
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://example.com/file.txt');
       expect(fs.writeFile).toHaveBeenCalledWith('/path/to/file.txt', 'file content');
     });
 
     it('should throw an error if download fails', async () => {
-      const mockResponse = {
+      const mockResponse = createMockResponse({
         ok: false,
         status: 404,
         statusText: 'Not Found',
-      };
-      mockFetch.mockResolvedValue(mockResponse);
+      });
+      mockFetchWithProxy.mockResolvedValue(mockResponse);
 
       await expect(
         init.downloadFile('https://example.com/file.txt', '/path/to/file.txt'),
@@ -82,7 +78,7 @@ describe('init command', () => {
     });
 
     it('should handle network errors', async () => {
-      mockFetch.mockRejectedValue(new Error('Network error'));
+      mockFetchWithProxy.mockRejectedValue(new Error('Network error'));
 
       await expect(
         init.downloadFile('https://example.com/file.txt', '/path/to/file.txt'),
@@ -92,45 +88,45 @@ describe('init command', () => {
 
   describe('downloadDirectory', () => {
     it('should throw an error if fetching directory contents fails on both VERSION and main', async () => {
-      const mockResponse = {
+      const mockResponse = createMockResponse({
         ok: false,
         statusText: 'Not Found',
-      };
-      mockFetch.mockResolvedValueOnce(mockResponse).mockResolvedValueOnce(mockResponse);
+      });
+      mockFetchWithProxy.mockResolvedValueOnce(mockResponse).mockResolvedValueOnce(mockResponse);
 
       await expect(init.downloadDirectory('example', '/path/to/target')).rejects.toThrow(
         'Failed to fetch directory contents: Not Found',
       );
 
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      expect(mockFetch.mock.calls[0][0]).toContain('?ref=');
-      expect(mockFetch.mock.calls[1][0]).toContain('?ref=main');
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithProxy.mock.calls[0][0]).toContain('?ref=');
+      expect(mockFetchWithProxy.mock.calls[1][0]).toContain('?ref=main');
     });
 
     it('should succeed if VERSION fails but main succeeds', async () => {
-      const mockFailedResponse = {
+      const mockFailedResponse = createMockResponse({
         ok: false,
         statusText: 'Not Found',
-      };
+      });
 
-      const mockSuccessResponse = {
+      const mockSuccessResponse = createMockResponse({
         ok: true,
-        json: jest.fn().mockResolvedValue([]),
-      };
+        json: () => Promise.resolve([]),
+      });
 
-      mockFetch
+      mockFetchWithProxy
         .mockResolvedValueOnce(mockFailedResponse)
         .mockResolvedValueOnce(mockSuccessResponse);
 
       await init.downloadDirectory('example', '/path/to/target');
 
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      expect(mockFetch.mock.calls[0][0]).toContain('?ref=');
-      expect(mockFetch.mock.calls[1][0]).toContain('?ref=main');
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithProxy.mock.calls[0][0]).toContain('?ref=');
+      expect(mockFetchWithProxy.mock.calls[1][0]).toContain('?ref=main');
     });
 
     it('should handle network errors', async () => {
-      mockFetch.mockRejectedValue(new Error('Network error'));
+      mockFetchWithProxy.mockRejectedValue(new Error('Network error'));
 
       await expect(init.downloadDirectory('example', '/path/to/target')).rejects.toThrow(
         'Network error',
@@ -151,7 +147,7 @@ describe('init command', () => {
       jest.spyOn(fs, 'mkdir').mockResolvedValue(undefined);
 
       // Mock fetch to simulate downloadDirectory failure
-      mockFetch.mockRejectedValue(new Error('Network error'));
+      mockFetchWithProxy.mockRejectedValue(new Error('Network error'));
 
       await expect(init.downloadExample('example', '/path/to/target')).rejects.toThrow(
         'Failed to download example: Network error',
@@ -161,16 +157,17 @@ describe('init command', () => {
 
   describe('getExamplesList', () => {
     it('should return a list of examples', async () => {
-      const mockResponse = {
+      const mockResponse = createMockResponse({
         ok: true,
         status: 200,
-        json: jest.fn().mockResolvedValue([
-          { name: 'example1', type: 'dir' },
-          { name: 'example2', type: 'dir' },
-          { name: 'not-an-example', type: 'file' },
-        ]),
-      };
-      mockFetch.mockResolvedValue(mockResponse);
+        json: () =>
+          Promise.resolve([
+            { name: 'example1', type: 'dir' },
+            { name: 'example2', type: 'dir' },
+            { name: 'not-an-example', type: 'file' },
+          ]),
+      });
+      mockFetchWithProxy.mockResolvedValue(mockResponse);
 
       const examples = await init.getExamplesList();
 
@@ -178,12 +175,12 @@ describe('init command', () => {
     });
 
     it('should return an empty array if fetching fails', async () => {
-      const mockResponse = {
+      const mockResponse = createMockResponse({
         ok: false,
         status: 404,
         statusText: 'Not Found',
-      };
-      mockFetch.mockResolvedValue(mockResponse);
+      });
+      mockFetchWithProxy.mockResolvedValue(mockResponse);
 
       const examples = await init.getExamplesList();
 
@@ -192,7 +189,7 @@ describe('init command', () => {
     });
 
     it('should handle network errors', async () => {
-      mockFetch.mockRejectedValue(new Error('Network error'));
+      mockFetchWithProxy.mockRejectedValue(new Error('Network error'));
 
       const examples = await init.getExamplesList();
 

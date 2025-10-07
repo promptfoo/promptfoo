@@ -5,21 +5,37 @@ import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
+import logger from '../src/logger';
+import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
   fetchWithProxy,
   fetchWithRetries,
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
-  sanitizeUrl,
-} from '../src/fetch';
-import logger from '../src/logger';
-import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
+} from '../src/util/fetch/index';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 
 jest.mock('../src/util/time', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  },
+  logRequestResponse: jest.fn(),
+}));
+
+jest.mock('../src/globalConfig/cloud', () => ({
+  CLOUD_API_HOST: 'https://api.promptfoo.dev',
+  cloudConfig: {
+    getApiKey: jest.fn(),
+  },
 }));
 
 jest.mock('undici', () => {
@@ -909,23 +925,6 @@ describe('fetchWithRetries', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
     expect(sleep).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('sanitizeUrl', () => {
-  it('should mask credentials in URLs', () => {
-    const url = 'https://username:password@example.com/api';
-    expect(sanitizeUrl(url)).toBe('https://***:***@example.com/api');
-  });
-
-  it('should handle URLs without credentials', () => {
-    const url = 'https://example.com/api';
-    expect(sanitizeUrl(url)).toBe(url);
-  });
-
-  it('should return original string for invalid URLs', () => {
-    const invalidUrl = 'not-a-url';
-    expect(sanitizeUrl(invalidUrl)).toBe(invalidUrl);
   });
 });
 

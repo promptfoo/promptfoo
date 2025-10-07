@@ -1,5 +1,6 @@
 ---
 sidebar_label: CyberSecEval
+description: Red team LLM systems against prompt injection attacks using Meta's CyberSecEval dataset to detect multilingual vulnerabilities and prevent unauthorized system prompt access
 ---
 
 # CyberSecEval Dataset for LLM Security Testing

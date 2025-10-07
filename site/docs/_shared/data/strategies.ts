@@ -311,6 +311,17 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/other-encodings/#emoji-encoding',
   },
   {
+    category: 'Custom',
+    strategy: 'layer',
+    displayName: 'Layer',
+    description: 'Compose multiple strategies',
+    longDescription:
+      'Compose multiple red team strategies sequentially (e.g., multilingual → rot13) to create sophisticated attack chains',
+    cost: 'Variable',
+    asrIncrease: 'Cumulative',
+    link: '/docs/red-team/strategies/layer/',
+  },
+  {
     category: 'Regression',
     strategy: 'retry',
     displayName: 'Retry',
@@ -321,16 +332,5 @@ export const strategies: Strategy[] = [
     asrIncrease: '50-70%',
     link: '/docs/red-team/strategies/retry/',
     recommended: false,
-  },
-  {
-    category: 'Multi-turn',
-    strategy: 'pandamonium',
-    displayName: 'Pandamonium',
-    description: 'Dynamic attack generation',
-    longDescription:
-      'Advanced automated red teaming technique that dynamically generates single or multi-turn conversations aimed at bypassing safety measures',
-    cost: 'High',
-    asrIncrease: '70-90%',
-    link: '/docs/red-team/strategies/pandamonium/',
   },
 ];

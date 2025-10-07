@@ -1,14 +1,14 @@
 ---
 title: Contributing to promptfoo
 sidebar_label: Contributing
-description: Learn how to contribute code, documentation, and providers to the promptfoo
+description: Contribute to promptfoo by submitting code, documentation, providers, and features following our development guidelines
 ---
 
 We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/promptfoo) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
 
 ## Project Overview
 
-promptfoo is an MIT licensed tool for testing and evaluating LLM apps.
+Promptfoo is an MIT-licensed tool for testing and evaluating LLM apps.
 
 ### How to Contribute
 
@@ -42,7 +42,7 @@ We particularly welcome contributions in the following areas:
    3.1. Setup locally
 
    ```bash
-   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 18)
+   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 20)
    nvm use
    npm install
    ```
@@ -224,7 +224,7 @@ Here's a simple example:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:gpt-5
 prompts:
   - Translate "{{input}}" to {{language}}
 tests:
@@ -408,28 +408,28 @@ This will generate static content in the `build` directory that can be served us
 
 ### Database
 
-Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database.ts` and migrations are stored in `drizzle`. Note that the migrations are all generated and you should not access these files directly.
+Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `~/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database/schema.ts` and migrations are stored in `drizzle/`. Note that the migrations are all generated and you should not access these files directly.
 
 #### Main Tables
 
-- `evals`: Stores evaluation details including results and configuration.
+- `evals`: Stores eval details including results and configuration.
 - `prompts`: Stores information about different prompts.
 - `datasets`: Stores dataset information and test configurations.
-- `evalsToPrompts`: Manages the relationship between evaluations and prompts.
-- `evalsToDatasets`: Manages the relationship between evaluations and datasets.
+- `evalsToPrompts`: Manages the relationship between evals and prompts.
+- `evalsToDatasets`: Manages the relationship between evals and datasets.
 
 You can view the contents of each of these tables by running `npx drizzle-kit studio`, which will start a web server.
 
 #### Adding a Migration
 
-1. **Modify Schema**: Make changes to your schema in `src/database.ts`.
+1. **Modify Schema**: Make changes to your schema in `src/database/schema.ts`.
 2. **Generate Migration**: Run the command to create a new migration:
 
    ```bash
    npm run db:generate
    ```
 
-   This command will create a new SQL file in the `drizzle` directory.
+   This command will create a new SQL file in the `drizzle/` directory.
 
 3. **Review Migration**: Inspect the generated migration file to ensure it captures your intended changes.
 4. **Apply Migration**: Apply the migration with:

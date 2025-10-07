@@ -28,11 +28,11 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
 import { useTableStore } from './store';
-
-import type { EvaluateTable, UnifiedConfig } from './types';
+import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 interface ResultsChartsProps {
   handleHideCharts: () => void;
+  scores: number[];
 }
 
 interface ChartProps {
@@ -635,7 +635,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
+function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [
@@ -680,22 +680,9 @@ function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
   //   );
   // }
 
-  const scores = table!.body
-    .flatMap((row) => row.outputs.map((output) => output?.score))
-    .filter((score) => typeof score === 'number' && !Number.isNaN(score));
-
-  if (scores.length === 0) {
-    // No valid scores available
-    return null;
-  }
+  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 
   const scoreSet = new Set(scores);
-  if (scoreSet.size === 1) {
-    // All scores are the same, charts not useful.
-    return null;
-  }
-
-  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 
   return (
     <ErrorBoundary fallback={null}>

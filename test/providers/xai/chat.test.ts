@@ -315,6 +315,12 @@ describe('xAI Chat Provider', () => {
       expect(GROK_3_MINI_MODELS).toContain('grok-3-mini-fast-beta');
       expect(GROK_3_MINI_MODELS).not.toContain('grok-2-1212');
     });
+
+    it('identifies Grok Code Fast as reasoning models', () => {
+      expect(GROK_REASONING_MODELS).toContain('grok-code-fast-1');
+      expect(GROK_REASONING_MODELS).toContain('grok-code-fast');
+      expect(GROK_REASONING_MODELS).toContain('grok-code-fast-1-0825');
+    });
   });
 
   describe('Reasoning models configuration', () => {
@@ -509,6 +515,17 @@ describe('xAI Chat Provider', () => {
 
       const grok2VisionCost = calculateXAICost('grok-2-vision-latest', {}, 1000, 500);
       expect(grok2VisionCost).toBeCloseTo(0.007);
+
+      // Grok Code Fast models
+      const codefast1Cost = calculateXAICost('grok-code-fast-1', {}, 1000, 500);
+      expect(codefast1Cost).toBeCloseTo(0.00095);
+      expect(codefast1Cost).toBe(1000 * (0.2 / 1e6) + 500 * (1.5 / 1e6));
+
+      const codefastAliasCost = calculateXAICost('grok-code-fast', {}, 1000, 500);
+      expect(codefastAliasCost).toBeCloseTo(0.00095);
+
+      const codefast0825Cost = calculateXAICost('grok-code-fast-1-0825', {}, 1000, 500);
+      expect(codefast0825Cost).toBeCloseTo(0.00095);
 
       // Verify cost relationships
       expect(Number(fastCost)).toBeGreaterThan(Number(betaCost));

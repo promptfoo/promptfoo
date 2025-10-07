@@ -1,29 +1,35 @@
 ---
 sidebar_position: 7
+description: 'Comprehensive overview of model-graded evaluation techniques leveraging AI models to assess quality, safety, and accuracy'
 ---
 
 # Model-graded metrics
 
-promptfoo supports several types of model-graded assertions:
+Promptfoo supports several types of model-graded assertions:
 
-Output-based:
+## Output-based
 
-- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - checks if the LLM output matches given requirements, using a language model to grade the output based on the rubric.
-- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - similar to the above, a "criteria-checking" eval that ensures the answer meets a specific requirement. Uses an OpenAI-authored prompt from their public evals.
-- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but that the difference doesn't matter from the perspective of factuality. It uses the prompt from OpenAI's public evals.
-- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - evaluates outputs using chain-of-thought prompting based on custom criteria, following the G-Eval framework.
-- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - ensure that LLM output is related to original query
-- [`similar`](/docs/configuration/expected-outputs/similar) - checks that the output is semantically similar to the expected value (uses embedding model)
-- [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - an alternative scoring approach that uses a dedicated model for evaluating inputs/outputs against criteria.
-- [`classifier`](/docs/configuration/expected-outputs/classifier) - see classifier grading docs.
-- [`moderation`](/docs/configuration/expected-outputs/moderation) - see moderation grading docs.
-- [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - compare outputs from multiple test cases and choose a winner
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - Promptfoo's general-purpose grader; uses an LLM to evaluate outputs against custom criteria or rubrics.
+- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Checks if LLM answers meet specific requirements using OpenAI's public evals prompts.
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Evaluates factual consistency between LLM output and a reference statement. Uses OpenAI's public evals prompt to determine if the output is factually consistent with the reference.
+- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Uses chain-of-thought prompting to evaluate outputs against custom criteria following the G-Eval framework.
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Evaluates whether LLM output is directly related to the original query.
+- [`similar`](/docs/configuration/expected-outputs/similar) - Checks semantic similarity between output and expected value using embedding models.
+- [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - Alternative scoring approach using a dedicated evaluation model to score inputs/outputs against criteria.
+- [`classifier`](/docs/configuration/expected-outputs/classifier) - Runs LLM output through HuggingFace text classifiers for detection of tone, bias, toxicity, and other properties. See [classifier grading docs](/docs/configuration/expected-outputs/classifier).
+- [`moderation`](/docs/configuration/expected-outputs/moderation) - Uses OpenAI's moderation API to ensure LLM outputs are safe and comply with usage policies. See [moderation grading docs](/docs/configuration/expected-outputs/moderation).
+- [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - Compares multiple outputs from different prompts/providers and selects the best one based on custom criteria.
+- [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - Selects the output with the highest aggregate score based on other assertion results.
 
-Context-based:
+## Context-based
 
-- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
-- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - Evaluates whether retrieved context contains the information needed to answer a given question or support a ground truth fact.
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - Evaluates whether retrieved context is relevant and useful for answering the original query.
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - Evaluates whether the LLM output is factually supported by and consistent with the provided context.
+
+## Conversational
+
+- [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - Evaluates whether responses remain relevant and contextually appropriate throughout multi-turn conversations.
 
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
@@ -58,6 +64,47 @@ assert:
 ```
 
 For more information on factuality, see the [guide on LLM factuality](/docs/guides/factuality-eval).
+
+## Non-English Evaluation
+
+For multilingual evaluation output with compatible assertion types, use a custom `rubricPrompt`:
+
+```yaml
+defaultTest:
+  options:
+    rubricPrompt: |
+      [
+        {
+          "role": "system",
+          // German: "You evaluate outputs based on criteria. Respond with JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALL responses in German."
+          "content": "Du bewertest Ausgaben nach Kriterien. Antworte mit JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALLE Antworten auf Deutsch."
+        },
+        {
+          "role": "user", 
+          // German: "Output: {{ output }}\nCriterion: {{ rubric }}"
+          "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}"
+        }
+      ]
+
+assert:
+  - type: llm-rubric
+    # German: "Responds helpfully"
+    value: 'Antwortet hilfreich'
+  - type: g-eval
+    # German: "Clear and precise"
+    value: 'Klar und präzise'
+  - type: model-graded-closedqa
+    # German: "Gives direct answer"
+    value: 'Gibt direkte Antwort'
+```
+
+This produces German reasoning: `{"reason": "Die Antwort ist hilfreich und klar.", "pass": true, "score": 1.0}`
+
+<!-- German reasoning: "The answer is helpful and clear." -->
+
+**Note:** This approach works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. Other assertions like `factuality` and `context-recall` require specific output formats and need assertion-specific prompts.
+
+For more language options and alternative approaches, see the [llm-rubric language guide](/docs/configuration/expected-outputs/model-graded/llm-rubric#non-english-evaluation).
 
 Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading)):
 
@@ -112,13 +159,40 @@ tests:
         value: choose the tweet that contains the most facts
 ```
 
+The `max-score` assertion type is used to objectively select the output with the highest score from other assertions:
+
+```yaml
+prompts:
+  - 'Write a summary of {{article}}'
+  - 'Write a detailed summary of {{article}}'
+  - 'Write a comprehensive summary of {{article}} with key points'
+
+providers:
+  - openai:gpt-4
+
+tests:
+  - vars:
+      article: 'AI safety research is accelerating...'
+    assert:
+      - type: contains
+        value: 'AI safety'
+      - type: contains
+        value: 'research'
+      - type: llm-rubric
+        value: 'Summary captures the main points accurately'
+      - type: max-score
+        value:
+          method: average # Use average of all assertion scores
+          threshold: 0.7 # Require at least 70% score to pass
+```
+
 ## Overriding the LLM grader
 
 By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do not have access to `gpt-4.1-2025-04-14` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
-   ```
+   ```bash
    promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
@@ -250,19 +324,11 @@ Classifiers can be used to detect tone, bias, toxicity, helpfulness, and much mo
 
 ---
 
-## Context-based
-
-Context-based assertions are a special class of model-graded assertions that evaluate whether the LLM's output is supported by context provided at inference time. They are particularly useful for evaluating RAG systems.
-
-- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
-- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
-
-### Defining context
+## Defining context for context-based assertions
 
 Context can be defined in one of two ways: statically using test case variables or dynamically from the provider's response.
 
-#### Statically via test variables
+### Statically via test variables
 
 Set `context` as a variable in your test case:
 
@@ -276,7 +342,7 @@ tests:
         threshold: 0.8
 ```
 
-#### Dynamically via Context Transform
+### Dynamically via Context Transform
 
 Defining `contextTransform` allows you to construct context from provider responses. This is particularly useful for RAG systems.
 
@@ -433,6 +499,134 @@ tests:
         contextTransform: 'output.context'
         threshold: 0.9
 ```
+
+## Transforming outputs for context assertions
+
+### Transform: Extract answer before context grading
+
+```yaml
+providers:
+  - echo
+
+tests:
+  - vars:
+      prompt: '{"answer": "Paris is the capital of France", "confidence": 0.95}'
+      context: 'France is a country in Europe. Paris is the capital of France. Paris has over 2 million residents.'
+      query: 'What is the capital of France?'
+    assert:
+      - type: context-faithfulness
+        transform: 'JSON.parse(output).answer' # Grade only the answer field
+        threshold: 0.9
+
+      - type: context-recall
+        transform: 'JSON.parse(output).answer' # Check if answer appears in context
+        value: 'Paris is the capital of France'
+        threshold: 0.1
+```
+
+### Context transform: Extract context from provider response
+
+```yaml
+providers:
+  - echo
+
+tests:
+  - vars:
+      prompt: '{"answer": "Returns accepted within 30 days", "sources": ["Returns are accepted for 30 days from purchase", "30-day money-back guarantee"]}'
+      query: 'What is the return policy?'
+    assert:
+      - type: context-faithfulness
+        transform: 'JSON.parse(output).answer'
+        contextTransform: 'JSON.parse(context.vars.prompt).sources.join(". ")' # Extract sources as context
+        threshold: 0.9
+
+      - type: context-relevance
+        contextTransform: 'JSON.parse(context.vars.prompt).sources.join(". ")' # Check if context is relevant to query
+        threshold: 0.8
+```
+
+### Transform response: Normalize RAG system output
+
+```yaml
+providers:
+  - id: http://rag-api.example.com/search
+    config:
+      transformResponse: 'json.data' # Extract data field from API response
+
+tests:
+  - vars:
+      query: 'What are the office hours?'
+    assert:
+      - type: context-faithfulness
+        transform: 'output.answer' # After transformResponse, extract answer
+        contextTransform: 'output.documents.map(d => d.text).join(" ")' # Extract documents as context
+        threshold: 0.85
+```
+
+## Common patterns and troubleshooting
+
+### Understanding pass vs. score behavior
+
+Model-graded assertions like `llm-rubric` determine PASS/FAIL using two mechanisms:
+
+1. **Without threshold**: PASS depends only on the grader's `pass` field (defaults to `true` if omitted)
+2. **With threshold**: PASS requires both `pass === true` AND `score >= threshold`
+
+This means a result like `{"pass": true, "score": 0}` will pass without a threshold, but fail with `threshold: 1`.
+
+**Common issue**: Tests show PASS even when scores are low
+
+```yaml
+# ❌ Problem: All tests pass regardless of score
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    # No threshold set - always passes if grader doesn't return explicit pass: false
+```
+
+**Solutions**:
+
+```yaml
+# ✅ Option A: Add threshold to make score drive PASS/FAIL
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    threshold: 1  # Only pass when score >= 1
+
+# ✅ Option B: Have grader control pass explicitly
+assert:
+  - type: llm-rubric
+    value: |
+      Return {"pass": true, "score": 1} if the response is correct
+      Return {"pass": false, "score": 0} if the response is incorrect
+```
+
+### Threshold usage across assertion types
+
+Different assertion types use thresholds differently:
+
+```yaml
+assert:
+  # Similarity-based (0-1 range)
+  - type: context-faithfulness
+    threshold: 0.8 # Requires 80%+ faithfulness
+
+  # Binary scoring (0 or 1)
+  - type: llm-rubric
+    value: 'Is helpful and accurate'
+    threshold: 1 # Requires perfect score
+
+  # Custom scoring (any range)
+  - type: pi
+    value: 'Quality of response'
+    threshold: 0.7
+```
+
+For more details on pass/score semantics, see the [llm-rubric documentation](/docs/configuration/expected-outputs/model-graded/llm-rubric#pass-vs-score-semantics).
 
 ## Other assertion types
 

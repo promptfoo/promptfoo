@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Advanced Imagen configuration showing platform-specific settings
+
+prompts:
+  - 'Create a {{quality}} image of {{subject}} with {{style}} aesthetic'
+
+providers:
+  # Google AI Studio configuration (API key authentication)
+  - id: google:image:imagen-4.0-generate-preview-06-06
+    label: Imagen 4.0 (Google AI Studio)
+    config:
+      aspectRatio: '16:9'
+      safetyFilterLevel: 'block_low_and_above' # Only value supported by Google AI Studio
+      # Note: seed and addWatermark are not supported in Google AI Studio
+
+  # Vertex AI configuration (OAuth authentication)
+  - id: google:image:imagen-4.0-generate-preview-06-06
+    label: Imagen 4.0 (Vertex AI)
+    config:
+      projectId: 'your-project-id' # Forces Vertex AI usage
+      aspectRatio: '16:9'
+      safetyFilterLevel: 'block_some' # Vertex AI supports all safety levels
+      seed: 42 # Deterministic generation
+      addWatermark: false # Disable watermark (incompatible with seed)
+
+  # Imagen 3.0 - Only available through Vertex AI
+  - id: google:image:imagen-3.0-generate-002
+    label: Imagen 3.0 (Vertex AI only)
+    config:
+      projectId: 'your-project-id'
+      aspectRatio: '1:1'
+      safetyFilterLevel: 'block_fewest'
+      personGeneration: 'allow_adult'
+
+tests:
+  - vars:
+      quality: 'photorealistic'
+      subject: 'a serene mountain landscape'
+      style: 'golden hour photography'
+    assert:
+      - type: javascript
+        value: |
+          // Check if the output contains a valid image data URL
+          return output.includes('![Generated Image](data:image/')

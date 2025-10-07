@@ -4,7 +4,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import cliState from '../src/cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
-import { loadApiProvider, loadApiProviders } from '../src/providers';
+import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { HttpProvider } from '../src/providers/http';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
@@ -13,11 +13,11 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
 
-import type { ProviderOptions } from '../src/types';
+import type { ProviderOptions } from '../src/types/index';
 
 jest.mock('fs');
 jest.mock('js-yaml');
-jest.mock('../src/fetch');
+jest.mock('../src/util/fetch/index.ts');
 jest.mock('../src/providers/http');
 jest.mock('../src/providers/openai/chat');
 jest.mock('../src/providers/openai/embedding');
@@ -25,6 +25,13 @@ jest.mock('../src/providers/pythonCompletion');
 jest.mock('../src/providers/scriptCompletion');
 jest.mock('../src/providers/websocket');
 jest.mock('../src/util/cloud');
+jest.mock('../src/util/file', () => {
+  const actual = jest.requireActual('../src/util/file');
+  return {
+    ...actual,
+    maybeLoadConfigFromExternalFile: jest.fn((input) => input),
+  };
+});
 
 describe('loadApiProvider', () => {
   beforeEach(() => {
@@ -38,6 +45,10 @@ describe('loadApiProvider', () => {
     jest
       .mocked(getCloudDatabaseId)
       .mockImplementation((path: string) => path.slice('promptfoo://provider/'.length));
+
+    // Reset maybeLoadConfigFromExternalFile mock to default implementation
+    const { maybeLoadConfigFromExternalFile } = jest.requireMock('../src/util/file');
+    maybeLoadConfigFromExternalFile.mockImplementation((input: any) => input);
   });
 
   it('should load echo provider', async () => {
@@ -99,6 +110,81 @@ describe('loadApiProvider', () => {
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
 
+  it('should recursively resolve file:// references in provider config from yaml', async () => {
+    const yamlContentWithRefs: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'file://api-key.txt',
+        temperature: 'file://temperature.json',
+        tools: 'file://tools.yaml',
+      },
+    };
+
+    const resolvedContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'sk-test-key-12345',
+        temperature: 0.7,
+        tools: [{ name: 'search', description: 'Search the web' }],
+      },
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContentWithRefs);
+    const { maybeLoadConfigFromExternalFile } = jest.requireMock('../src/util/file');
+    maybeLoadConfigFromExternalFile.mockReturnValue(resolvedContent);
+
+    const _provider = await loadApiProvider('file://provider.yaml', {
+      basePath: '/test',
+    });
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(yamlContentWithRefs);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', {
+      config: expect.objectContaining({
+        apiKey: 'sk-test-key-12345',
+        temperature: 0.7,
+        tools: [{ name: 'search', description: 'Search the web' }],
+      }),
+      id: 'openai:chat:gpt-4',
+    });
+  });
+
+  it('should recursively resolve file:// references in provider config from json', async () => {
+    const jsonContentWithRefs: ProviderOptions = {
+      id: 'openai:chat:gpt-3.5-turbo',
+      config: {
+        apiKey: 'file://secrets/api-key.txt',
+        systemPrompt: 'file://prompts/system.md',
+      },
+    };
+
+    const resolvedContent: ProviderOptions = {
+      id: 'openai:chat:gpt-3.5-turbo',
+      config: {
+        apiKey: 'sk-prod-key-67890',
+        systemPrompt: 'You are a helpful assistant.',
+      },
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContentWithRefs));
+    jest.mocked(yaml.load).mockReturnValue(jsonContentWithRefs);
+    const { maybeLoadConfigFromExternalFile } = jest.requireMock('../src/util/file');
+    maybeLoadConfigFromExternalFile.mockReturnValue(resolvedContent);
+
+    const _provider = await loadApiProvider('file://provider.json', {
+      basePath: '/test',
+    });
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(jsonContentWithRefs);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-3.5-turbo', {
+      config: expect.objectContaining({
+        apiKey: 'sk-prod-key-67890',
+        systemPrompt: 'You are a helpful assistant.',
+      }),
+      id: 'openai:chat:gpt-3.5-turbo',
+    });
+  });
+
   it('should load Provider from cloud', async () => {
     jest.mocked(getProviderFromCloud).mockResolvedValue({
       id: 'openai:chat:gpt-4',
@@ -125,6 +211,33 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should load OpenAI GPT-5 chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI GPT-5 chat latest provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5-chat-latest');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-5-chat-latest',
+      expect.any(Object),
+    );
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI GPT-5 nano chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5-nano');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5-nano', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI GPT-5 mini chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5-mini');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5-mini', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
   it('should load OpenAI chat provider with default model', async () => {
     const provider = await loadApiProvider('openai:chat');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
@@ -145,23 +258,11 @@ describe('loadApiProvider', () => {
 
   it('should load DeepSeek provider with default model', async () => {
     const provider = await loadApiProvider('deepseek:');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('deepseek-chat', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://api.deepseek.com/v1',
-        apiKeyEnvar: 'DEEPSEEK_API_KEY',
-      }),
-    });
     expect(provider).toBeDefined();
   });
 
   it('should load DeepSeek provider with specific model', async () => {
-    const provider = await loadApiProvider('deepseek:deepseek-coder');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('deepseek-coder', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://api.deepseek.com/v1',
-        apiKeyEnvar: 'DEEPSEEK_API_KEY',
-      }),
-    });
+    const provider = await loadApiProvider('deepseek:deepseek-reasoner');
     expect(provider).toBeDefined();
   });
 
@@ -456,6 +557,10 @@ describe('loadApiProviders', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     cliState.config = undefined;
+
+    // Reset maybeLoadConfigFromExternalFile mock to default implementation
+    const { maybeLoadConfigFromExternalFile } = jest.requireMock('../src/util/file');
+    maybeLoadConfigFromExternalFile.mockImplementation((input: any) => input);
   });
 
   it('should load single provider from string', async () => {

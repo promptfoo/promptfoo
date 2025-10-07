@@ -4,10 +4,12 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
@@ -21,11 +23,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
-import {
-  createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
-} from '../../util/tokenUsageUtils';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 
@@ -99,14 +96,12 @@ export default class GoatProvider implements ApiProvider {
       continueAfterSuccess: options.continueAfterSuccess ?? false,
     };
     this.nunjucks = getNunjucksEngine();
-    logger.debug(
-      `[GOAT] Constructor options: ${JSON.stringify({
-        injectVar: options.injectVar,
-        maxTurns: options.maxTurns,
-        stateful: options.stateful,
-        continueAfterSuccess: options.continueAfterSuccess,
-      })}`,
-    );
+    logger.debug('[GOAT] Constructor options', {
+      injectVar: options.injectVar,
+      maxTurns: options.maxTurns,
+      stateful: options.stateful,
+      continueAfterSuccess: options.continueAfterSuccess,
+    });
   }
 
   async callApi(
@@ -118,7 +113,7 @@ export default class GoatProvider implements ApiProvider {
     this.successfulAttacks = [];
 
     let response: Response | undefined = undefined;
-    logger.debug(`[GOAT] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[GOAT] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -165,8 +160,6 @@ export default class GoatProvider implements ApiProvider {
             goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
             purpose: context?.test?.metadata?.purpose,
           });
-
-          accumulateResponseTokenUsage(totalTokenUsage, unblockingResult);
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             logger.debug(
@@ -216,9 +209,10 @@ export default class GoatProvider implements ApiProvider {
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
+            modifiers: context?.test?.metadata?.modifiers,
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-          response = await fetch(getRemoteGenerationUrl(), {
+          response = await fetchWithProxy(getRemoteGenerationUrl(), {
             body,
             headers: {
               'Content-Type': 'application/json',
@@ -228,7 +222,7 @@ export default class GoatProvider implements ApiProvider {
           const data = (await response.json()) as ExtractAttackFailureResponse;
 
           if (!data.message) {
-            logger.info(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
+            logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
             continue;
           }
           failureReason = data.message;
@@ -249,10 +243,11 @@ export default class GoatProvider implements ApiProvider {
             this.config.excludeTargetOutputFromAgenticAttackGeneration,
           failureReason,
           purpose: context?.test?.metadata?.purpose,
+          modifiers: context?.test?.metadata?.modifiers,
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
-        response = await fetch(getRemoteGenerationUrl(), {
+        response = await fetchWithProxy(getRemoteGenerationUrl(), {
           body,
           headers: {
             'Content-Type': 'application/json',
@@ -261,7 +256,7 @@ export default class GoatProvider implements ApiProvider {
         });
         const data = await response.json();
         if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
-          logger.info(`[GOAT] Invalid message from GOAT, skipping turn: ${JSON.stringify(data)}`);
+          logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
           continue;
         }
         const attackerMessage = data.message;
@@ -285,7 +280,6 @@ export default class GoatProvider implements ApiProvider {
           content: renderedAttackerPrompt,
         });
 
-        accumulateResponseTokenUsage(totalTokenUsage, data);
         logger.debug(
           dedent`
           ${chalk.bold.green(`GOAT turn ${turn} history:`)}
@@ -303,8 +297,9 @@ export default class GoatProvider implements ApiProvider {
           logger.debug(`Sleeping for ${targetProvider.delay}ms`);
           await sleep(targetProvider.delay);
         }
+        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
-        logger.debug(`GOAT turn ${turn} target response: ${safeJsonStringify(targetResponse)}`);
+        logger.debug(`GOAT turn ${turn} target response`, { response: targetResponse });
 
         if (targetResponse.sessionId) {
           context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
@@ -326,9 +321,9 @@ export default class GoatProvider implements ApiProvider {
         const finalResponse = targetResponse;
 
         if (!stringifiedOutput) {
-          logger.debug(
-            `[GOAT] Target response output is not a string or JSON: ${safeJsonStringify(targetResponse)}`,
-          );
+          logger.debug('[GOAT] Target response output is not a string or JSON', {
+            response: targetResponse,
+          });
           continue;
         }
 
@@ -339,8 +334,6 @@ export default class GoatProvider implements ApiProvider {
 
         // Store the attack response for potential unblocking in next turn
         previousTargetOutput = stringifiedOutput;
-
-        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         lastTargetResponse = finalResponse;
 
@@ -356,7 +349,6 @@ export default class GoatProvider implements ApiProvider {
           );
           graderPassed = grade.pass;
           storedGraderResult = grade;
-          accumulateGraderTokenUsage(totalTokenUsage, grade);
         }
 
         if (graderPassed === false) {

@@ -48,7 +48,7 @@ As these architectures hit production, we're seeing real-world incidents of prom
 The adoption has been incredible:
 
 - **125,000+ developers** have downloaded our open source tools
-- **30+ Fortune 500 companies** run Promptfoo in production CI/CD pipelines
+- **40+ Fortune 500 companies** run Promptfoo in production CI/CD pipelines
 - **Foundation model labs** test their models with Promptfoo before release
 
 ## Welcome to Ganesh Bell

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 20
+description: Red team LLM apps against OWASP Top 10 vulnerabilities to protect AI systems from injection, data leakage, and supply chain attacks
 ---
 
 # OWASP LLM Top 10

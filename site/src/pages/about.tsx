@@ -1,13 +1,14 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
-import Grid from '@mui/material/Grid2';
-import Typography from '@mui/material/Typography';
+import Grid from '@mui/material/Grid';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 
 const AboutPageContent = () => {
@@ -47,8 +48,8 @@ const AboutPageContent = () => {
                 when we were on the front lines.
               </Typography>
               <Typography variant="body1" paragraph>
-                Based in San Mateo, California, we're backed by Andreessen Horowitz and top leaders
-                in the technology and security industries.
+                Based in San Mateo, California, we're backed by Insight Partners, Andreessen
+                Horowitz, and top leaders in the technology and security industries.
               </Typography>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
@@ -84,6 +85,12 @@ const AboutPageContent = () => {
                 bio: 'Michael brings extensive experience in AI and engineering leadership. As the former VP of Engineering and Head of AI at Smile Identity, he has a track record of scaling ML solutions to serve over 100 million people across hundreds of enterprises.',
               },
               {
+                name: 'Lily Liu',
+                title: 'Business Operations Lead',
+                image: '/img/team/lily.jpeg',
+                bio: 'Lily brings investment and operational expertise from CVC Capital Partners and Evercore. At Promptfoo, she designs the systems and processes that power rapid growth and long-term scalability.',
+              },
+              {
                 name: 'Steve Klein',
                 title: 'Staff Engineer',
                 image: '/img/team/steve.jpeg',
@@ -100,6 +107,12 @@ const AboutPageContent = () => {
                 title: 'Enterprise GTM Lead',
                 image: '/img/team/ben.jpeg',
                 bio: 'Ben brings go-to-market expertise as an early GTM hire at multiple high-growth startups including Windsurf, Applied Intuition, and Amplitude. He specializes in building strategic relationships and helping enterprises implement and secure their AI solutions.',
+              },
+              {
+                name: 'Travis Willhite',
+                title: 'Enterprise GTM Lead',
+                image: '/img/team/travis.png',
+                bio: 'Travis has spent the past decade driving revenue at high-growth, venture-backed AI companies. He has extensive experience helping Fortune 500 companies develop and launch cutting-edge AI applications.',
               },
               {
                 name: 'Vanessa Sauter',
@@ -122,7 +135,7 @@ const AboutPageContent = () => {
               {
                 name: 'Will Holley',
                 title: 'Senior Engineer',
-                image: '/img/team/will.jpg',
+                image: '/img/team/will.jpeg',
                 bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
               },
               {
@@ -136,6 +149,30 @@ const AboutPageContent = () => {
                 title: 'Founding Developer Advocate',
                 image: '/img/team/tabs.jpeg',
                 bio: 'Tabs fronts developer education, community management, and technical writing backed by a wealth of experience in design and software development. Learn more at your <a href="https://ladyofcode.com" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">own peril</a>.',
+              },
+              {
+                name: 'Alan DeLong',
+                title: 'Software Engineer',
+                image: '/img/team/alan.jpeg',
+                bio: 'Alan brings almost two decades of experience building and shipping software at scale. He has led and contributed on teams at companies like Ceros, Thoughtworks, and Parature.',
+              },
+              {
+                name: 'James Hiester',
+                title: 'Deployment Engineer',
+                image: '/img/team/james.jpeg',
+                bio: 'James brings years of experience in professional services helping leading financial institutions and energy sector clients.  James specializes in managing transformation initiatives and deploying enterprise solutions.',
+              },
+              {
+                name: 'Yash Chhabria',
+                title: 'Software Engineer',
+                image: '/img/team/yash.png',
+                bio: 'Yash specializes in securing ML infrastructure, distributed systems, and multi-tenant platforms. His work spans threat modeling, purple teaming, and building proactive defenses against supply chain risks and privacy attacks in AI systems.',
+              },
+              {
+                name: 'Dane Schneider',
+                title: 'Staff Engineer',
+                image: '/img/team/dane.jpeg',
+                bio: 'Dane is a full stack engineer and former founder. He brings deep experience in coding agents, security, devops, and user interface design for complex technical domains.',
               },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
@@ -170,6 +207,11 @@ const AboutPageContent = () => {
           </Typography>
           <Grid container spacing={4} justifyContent="center">
             {[
+              {
+                name: 'Ganesh Bell',
+                image: '/img/team/ganesh.jpeg',
+                description: 'Managing Director, Insight Partners',
+              },
               {
                 name: 'Zane Lackey',
                 image: '/img/team/zane.jpeg',

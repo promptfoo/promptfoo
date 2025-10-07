@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 
-import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
 import select from '@inquirer/select';
@@ -11,7 +10,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
-import { isRunningUnderNpx } from './util';
+import { promptfooCommand } from './util/promptfooCommand';
 import { getNunjucksEngine } from './util/templates';
 
 import type { EnvOverrides } from './types/env';
@@ -292,10 +291,6 @@ async function askForPermissionToOverwrite({
     default: false,
   });
 
-  if (required && !hasPermissionToWrite) {
-    throw new Error(`User did not grant permission to overwrite ${relativePath}`);
-  }
-
   return hasPermissionToWrite;
 }
 
@@ -324,7 +319,11 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       });
 
       if (!hasPermissionToWrite) {
-        logger.info(`⏩ Skipping ${relativePath}`);
+        if (required) {
+          logger.warn(`⚠️ Skipping required file ${relativePath} - configuration may be incomplete`);
+        } else {
+          logger.info(`⏩ Skipping ${relativePath}`);
+        }
         return;
       }
     }
@@ -388,14 +387,14 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-4.1-mini', 'openai:gpt-4.1'] },
+      { name: `I'll choose later`, value: ['openai:gpt-5-mini', 'openai:gpt-5'] },
       {
-        name: '[OpenAI] o3, o4, GPT 4.1, ...',
+        name: '[OpenAI] GPT 5, GPT 4.1, ...',
         value:
           action === 'agent'
             ? [
                 {
-                  id: 'openai:gpt-4.1',
+                  id: 'openai:gpt-5',
                   config: {
                     tools: [
                       {
@@ -419,16 +418,18 @@ export async function createDummyFiles(directory: string | null, interactive: bo
                   },
                 },
               ]
-            : ['openai:gpt-4.1-mini', 'openai:gpt-4.1'],
+            : ['openai:gpt-5-mini', 'openai:gpt-5'],
       },
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-sonnet-4-20250514',
+          'anthropic:messages:claude-sonnet-4-5-20250929',
+          'anthropic:messages:claude-opus-4-1-20250805',
           'anthropic:messages:claude-opus-4-20250514',
           'anthropic:messages:claude-3-7-sonnet-20250219',
         ],
       },
+      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro'] },
       {
         name: '[HuggingFace] Llama, Phi, Gemma, ...',
         value: [
@@ -454,14 +455,24 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         value: ['https://example.com/api/generate'],
       },
       {
+        name: '[Azure] OpenAI, DeepSeek, Llama, ...',
+        value: [
+          {
+            id: 'azure:chat:deploymentNameHere',
+            config: {
+              apiHost: 'xxxxxxxx.openai.azure.com',
+            },
+          },
+        ],
+      },
+      {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: ['bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0'],
+        value: ['bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0'],
       },
       {
         name: '[Cohere] Command R, Command R+, ...',
         value: ['cohere:command-r', 'cohere:command-r-plus'],
       },
-      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro'] },
       {
         name: '[Ollama] Llama, Qwen, Phi, ...',
         value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],
@@ -470,7 +481,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[WatsonX] Llama, IBM Granite, ...',
         value: [
           'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
-          'watsonx:ibm/granite-13b-chat-v2',
+          'watsonx:ibm/granite-3-3-8b-instruct',
         ],
       },
     ];
@@ -479,14 +490,15 @@ export async function createDummyFiles(directory: string | null, interactive: bo
      * The potential of the object type here is given by the agent action conditional
      * for openai as a value choice
      */
-    const providerChoices: (string | object)[] = (
-      await checkbox({
-        message: 'Which model providers would you like to use?',
-        choices,
-        loop: false,
-        pageSize: process.stdout.rows - 6,
-      })
-    ).flat();
+    const providerChoice = await select({
+      message: 'Which model provider would you like to use?',
+      choices,
+      loop: false,
+      pageSize: process.stdout.rows - 6,
+    });
+    const providerChoices: (string | object)[] = Array.isArray(providerChoice)
+      ? providerChoice
+      : [providerChoice];
 
     recordOnboardingStep('choose providers', {
       value: providerChoices.map((choice) =>
@@ -544,8 +556,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         });
       }
     } else {
-      providers.push('openai:gpt-4o-mini');
-      providers.push('openai:gpt-4o');
+      providers.push('openai:gpt-5-mini');
+      providers.push('openai:gpt-5');
     }
 
     if (action === 'compare') {
@@ -583,8 +595,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-4o-mini');
-    providers.push('openai:gpt-4o');
+    providers.push('openai:gpt-5-mini');
+    providers.push('openai:gpt-5');
   }
 
   const nunjucks = getNunjucksEngine();
@@ -621,7 +633,7 @@ export async function initializeProject(directory: string | null, interactive: b
     const result = await createDummyFiles(directory, interactive);
     const { outDirectory, ...telemetryDetails } = result;
 
-    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+    const runCommand = promptfooCommand('eval');
 
     if (outDirectory === '.') {
       logger.info(chalk.green(`✅ Run \`${chalk.bold(runCommand)}\` to get started!`));
@@ -639,7 +651,7 @@ export async function initializeProject(directory: string | null, interactive: b
     return telemetryDetails;
   } catch (err) {
     if (err instanceof ExitPromptError) {
-      const runCommand = isRunningUnderNpx() ? 'npx promptfoo@latest init' : 'promptfoo init';
+      const runCommand = promptfooCommand('init');
       logger.info(
         '\n' +
           chalk.blue('Initialization paused. To continue setup later, use the command: ') +

@@ -10,6 +10,7 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'owasp:llm': 'OWASP LLM Top 10',
   'owasp:agentic': 'OWASP Agentic v1.0',
   'eu:ai-act': 'EU AI Act',
+  'iso:42001': 'ISO/IEC 42001',
 };
 
 export const OWASP_LLM_TOP_10_NAMES = [
@@ -279,7 +280,6 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'crescendo',
       'goat',
       'multilingual',
-      'pandamonium',
       'gcg',
     ],
   },
@@ -504,6 +504,61 @@ export const EU_AI_ACT_MAPPING: Record<string, { plugins: Plugin[]; strategies: 
   },
 };
 
+/**
+ * ISO/IEC 42001 – AI Management System (AIMS) framework risk areas
+ * Covers key risk domains: human oversight, fairness, privacy, robustness, security, ethics, transparency.
+ */
+export const ISO_42001_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'iso:42001:accountability': {
+    // Human oversight & accountability – prevent over-autonomy and misuse
+    plugins: ['excessive-agency', 'overreliance', 'hijacking'],
+    strategies: [],
+  },
+  'iso:42001:fairness': {
+    // Fairness & bias – prevent discrimination or hate in AI outcomes
+    plugins: ['bias:age', 'bias:disability', 'bias:gender', 'bias:race', 'harmful:hate'],
+    strategies: [],
+  },
+  'iso:42001:privacy': {
+    // Data privacy & protection – prevent personal data leaks
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
+    strategies: [],
+  },
+  'iso:42001:robustness': {
+    // Robustness – resilience against prompt injection and adversarial input
+    plugins: ['ascii-smuggling', 'prompt-extraction'],
+    strategies: ['jailbreak', 'jailbreak:composite', 'jailbreak:tree'],
+  },
+  'iso:42001:security': {
+    // Technical security – resistance to code injection and exploitation
+    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
+    strategies: ['jailbreak', 'jailbreak:composite', 'base64', 'rot13'],
+  },
+  'iso:42001:safety': {
+    // Safety & ethical use – prevent harmful, illegal, or unethical outputs
+    plugins: [
+      'harmful:chemical-biological-weapons',
+      'harmful:child-exploitation',
+      'harmful:violent-crime',
+      'harmful:cybercrime',
+      'harmful:cybercrime:malicious-code',
+    ],
+    strategies: ['jailbreak', 'jailbreak:composite', 'jailbreak:tree'],
+  },
+  'iso:42001:transparency': {
+    // Transparency & trust – avoid misinformation, deception, or unsupported claims
+    plugins: [
+      'harmful:misinformation-disinformation',
+      'hallucination',
+      'imitation',
+      'unverifiable-claims',
+      'politics',
+      'religion',
+    ],
+    strategies: [],
+  },
+};
+
 // Aliased plugins are like collections, except they are hidden from the standard plugin list.
 export const ALIASED_PLUGINS = [
   'mitre:atlas',
@@ -522,12 +577,14 @@ export const ALIASED_PLUGINS = [
   'personal-safety',
   'tool-discovery:multi-turn',
   'eu:ai-act',
+  'iso:42001',
   ...Object.keys(MITRE_ATLAS_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
   ...Object.keys(OWASP_AGENTIC_REDTEAM_MAPPING),
   ...Object.keys(EU_AI_ACT_MAPPING),
+  ...Object.keys(ISO_42001_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
@@ -541,6 +598,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
   'owasp:agentic:redteam': OWASP_AGENTIC_REDTEAM_MAPPING,
   'eu:ai-act': EU_AI_ACT_MAPPING,
+  'iso:42001': ISO_42001_MAPPING,
   'tool-discovery:multi-turn': {
     'tool-discovery:multi-turn': {
       plugins: ['tool-discovery'],

@@ -3,7 +3,7 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 // Helper function to escape XML special characters for SVG
 function escapeXml(unsafe: string): string {

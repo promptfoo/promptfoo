@@ -3,8 +3,9 @@ import path from 'path';
 
 import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
+import * as pythonUtils from '../../src/python/pythonUtils';
 import { runPython } from '../../src/python/pythonUtils';
-import { parsePathOrGlob } from '../../src/util';
+import { parsePathOrGlob } from '../../src/util/index';
 import { processConfigFileReferences } from '../../src/util/fileReference';
 import type { Logger } from 'winston';
 
@@ -24,6 +25,9 @@ jest.mock('../../src/util/fileReference', () => ({
 describe('PythonProvider with file references', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    // Reset Python state to avoid test interference
+    pythonUtils.state.cachedPythonPath = null;
+    pythonUtils.state.validationPromise = null;
 
     jest.mocked(logger.debug).mockImplementation(
       () =>

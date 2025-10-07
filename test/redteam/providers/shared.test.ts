@@ -1,5 +1,5 @@
 import cliState from '../../../src/cliState';
-import { loadApiProviders } from '../../../src/providers';
+import { loadApiProviders } from '../../../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import {
   ATTACKER_MODEL,
@@ -11,9 +11,8 @@ import {
   type Message,
   messagesToRedteamHistory,
   redteamProviderManager,
+  tryUnblocking,
 } from '../../../src/redteam/providers/shared';
-import { sleep } from '../../../src/util/time';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -21,6 +20,7 @@ import type {
   Prompt,
   ProviderResponse,
 } from '../../../src/types';
+import { sleep } from '../../../src/util/time';
 
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/cliState', () => ({
@@ -283,6 +283,50 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Once for regular, once for jsonOnly
     });
 
+    describe('getGradingProvider', () => {
+      it('returns cached grading provider set via setGradingProvider', async () => {
+        redteamProviderManager.clearProvider();
+        const gradingInstance: ApiProvider = {
+          id: () => 'grading-cached',
+          callApi: jest.fn(),
+        } as any;
+
+        // Set concrete instance and retrieve it (jsonOnly false)
+        await redteamProviderManager.setGradingProvider(gradingInstance as any);
+        const got = await redteamProviderManager.getGradingProvider();
+        expect(got.id()).toBe('grading-cached');
+      });
+
+      it('uses defaultTest chain when no cached grading provider', async () => {
+        redteamProviderManager.clearProvider();
+        const mockProvider: ApiProvider = {
+          id: () => 'from-defaultTest-provider',
+          callApi: jest.fn(),
+        } as any;
+        mockedLoadApiProviders.mockResolvedValue([mockProvider]);
+
+        // Inject defaultTest provider config
+        (cliState as any).config = {
+          defaultTest: {
+            provider: 'from-defaultTest-provider',
+          },
+        };
+
+        const got = await redteamProviderManager.getGradingProvider();
+        expect(got).toBe(mockProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['from-defaultTest-provider']);
+      });
+
+      it('falls back to redteam provider when grading not set', async () => {
+        redteamProviderManager.clearProvider();
+        (cliState as any).config = {}; // no defaultTest
+
+        // Expect fallback to default OpenAI redteam provider
+        const got = await redteamProviderManager.getGradingProvider({ jsonOnly: true });
+        expect(got.id()).toContain('openai:');
+      });
+    });
+
     it('handles thrown errors in getTargetResponse', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
@@ -297,6 +341,63 @@ describe('shared redteam provider utilities', () => {
         output: '',
         error: 'Network error',
         tokenUsage: { numRequests: 1 },
+      });
+    });
+
+    describe('Multilingual provider', () => {
+      it('getMultilingualProvider returns undefined when not set', async () => {
+        // Ensure clean state
+        redteamProviderManager.clearProvider();
+        const result = await redteamProviderManager.getMultilingualProvider();
+        expect(result).toBeUndefined();
+      });
+
+      it('setMultilingualProvider caches provider and getMultilingualProvider returns it', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-multilingual-provider',
+          callApi: jest.fn<
+            Promise<ProviderResponse>,
+            [string, CallApiContextParams | undefined, any]
+          >(),
+        };
+
+        mockedLoadApiProviders.mockResolvedValueOnce([mockProvider]);
+
+        await redteamProviderManager.setMultilingualProvider('test-multilingual-provider');
+        const result = await redteamProviderManager.getMultilingualProvider();
+
+        expect(result).toBe(mockProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['test-multilingual-provider']);
+      });
+
+      it('setMultilingualProvider uses jsonOnly response_format when defaulting to OpenAI', async () => {
+        const mockOpenAiInstance = {
+          id: () => `openai:${ATTACKER_MODEL}`,
+          callApi: jest.fn(),
+          toString: () => `OpenAI(${ATTACKER_MODEL})`,
+          config: { temperature: TEMPERATURE, response_format: { type: 'json_object' } },
+          getApiKey: jest.fn(),
+          getApiUrl: jest.fn(),
+          getApiUrlDefault: jest.fn(),
+          getOrganization: jest.fn(),
+          requiresApiKey: jest.fn(),
+          initializationPromise: null,
+          loadedFunctionCallbacks: {},
+          mcpClient: null,
+        };
+
+        mockedOpenAiProvider.mockClear();
+        mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
+
+        // Pass undefined to trigger default provider creation
+        await redteamProviderManager.setMultilingualProvider(undefined as any);
+
+        expect(mockedOpenAiProvider).toHaveBeenCalledWith(ATTACKER_MODEL, {
+          config: {
+            temperature: TEMPERATURE,
+            response_format: { type: 'json_object' },
+          },
+        });
       });
     });
   });
@@ -436,7 +537,7 @@ describe('shared redteam provider utilities', () => {
       };
 
       await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
-        /Target returned malformed response: expected either `output` or `error` to be set./,
+        /Target returned malformed response: expected either `output` or `error` property to be set/,
       );
     });
 
@@ -455,6 +556,115 @@ describe('shared redteam provider utilities', () => {
       expect(result).toEqual({
         output: 'test response',
         tokenUsage: { numRequests: 1 },
+      });
+    });
+
+    describe('edge cases for empty and falsy responses', () => {
+      it('handles empty string output correctly', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              output: '', // Empty string
+              tokenUsage: { numRequests: 1 },
+            }),
+        };
+
+        const result = await getTargetResponse(mockProvider, 'test prompt');
+
+        expect(result).toEqual({
+          output: '',
+          tokenUsage: { numRequests: 1 },
+        });
+      });
+
+      it('handles zero output correctly', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              output: 0, // Zero value
+              tokenUsage: { numRequests: 1 },
+            }),
+        };
+
+        const result = await getTargetResponse(mockProvider, 'test prompt');
+
+        expect(result).toEqual({
+          output: '0', // Should be stringified
+          tokenUsage: { numRequests: 1 },
+        });
+      });
+
+      it('handles false output correctly', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              output: false, // Boolean false
+              tokenUsage: { numRequests: 1 },
+            }),
+        };
+
+        const result = await getTargetResponse(mockProvider, 'test prompt');
+
+        expect(result).toEqual({
+          output: 'false', // Should be stringified
+          tokenUsage: { numRequests: 1 },
+        });
+      });
+
+      it('handles null output correctly', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              output: null, // Null value
+              tokenUsage: { numRequests: 1 },
+            }),
+        };
+
+        const result = await getTargetResponse(mockProvider, 'test prompt');
+
+        expect(result).toEqual({
+          output: 'null', // Should be stringified
+          tokenUsage: { numRequests: 1 },
+        });
+      });
+
+      it('still fails when output property is missing', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              // No output property at all
+              tokenUsage: { numRequests: 1 },
+            }),
+        };
+
+        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
+          /Target returned malformed response: expected either `output` or `error` property to be set/,
+        );
+      });
+
+      it('still fails when both output and error are missing', async () => {
+        const mockProvider: ApiProvider = {
+          id: () => 'test-provider',
+          callApi: jest
+            .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+            .mockResolvedValue({
+              someOtherField: 'value',
+            } as any),
+        };
+
+        await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
+          /Target returned malformed response/,
+        );
       });
     });
   });
@@ -528,6 +738,33 @@ describe('shared redteam provider utilities', () => {
       const result = messagesToRedteamHistory(messages);
 
       expect(result).toEqual([{ prompt: 'user message 2', output: 'assistant response 2' }]);
+    });
+  });
+
+  // New tests for tryUnblocking env flag
+  describe('tryUnblocking environment flag', () => {
+    const originalEnv = process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        delete process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+      } else {
+        process.env.PROMPTFOO_DISABLE_UNBLOCKING = originalEnv;
+      }
+    });
+
+    it('short-circuits when PROMPTFOO_DISABLE_UNBLOCKING=true', async () => {
+      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'irrelevant',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.unblockingPrompt).toBeUndefined();
     });
   });
 });

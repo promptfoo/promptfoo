@@ -1,5 +1,6 @@
 ---
 sidebar_label: Simulated User
+description: 'Simulate realistic user interactions and behaviors for comprehensive testing of conversational AI systems and chatbots'
 ---
 
 # Simulated User
@@ -206,6 +207,12 @@ The conversation will automatically stop when:
 - An error occurs during the conversation
 
 The `###STOP###` marker is useful for agents that can determine when a conversation has reached a natural conclusion (e.g., task completed, user satisfied).
+
+## Remote Generation
+
+By default, SimulatedUser uses Promptfoo's hosted conversation models. Your target model always runs locally - only simulated user responses are generated remotely.
+
+To disable remote generation, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`. See the [Privacy Policy](/privacy#remote-generation) for details on what data is sent.
 
 ## Limitations
 

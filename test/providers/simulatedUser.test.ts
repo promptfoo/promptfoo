@@ -1,13 +1,13 @@
 import { SimulatedUser } from '../../src/providers/simulatedUser';
 import * as timeUtils from '../../src/util/time';
 
-import type { ApiProvider } from '../../src/types';
+import type { ApiProvider } from '../../src/types/index';
 
 jest.mock('../../src/util/time', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts');
 
 // Mock PromptfooSimulatedUserProvider
 const mockUserProviderCallApi = jest.fn().mockResolvedValue({ output: 'user response' });

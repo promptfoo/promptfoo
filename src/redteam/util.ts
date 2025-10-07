@@ -170,7 +170,13 @@ const REFUSAL_SUBSTRINGS = [
 ].map((s) => s.toLowerCase());
 
 export function isEmptyResponse(response: string): boolean {
-  return !response || response.trim() === '' || response.trim() === '{}';
+  return (
+    !response ||
+    response.trim() === '' ||
+    response.trim() === '{}' ||
+    response.trim().toLowerCase() === 'undefined' ||
+    response.trim().toLowerCase() === 'null'
+  );
 }
 
 export function isBasicRefusal(response: string): boolean {
@@ -244,8 +250,6 @@ export async function extractGoalFromPrompt(
     ...(pluginDescription && { pluginContext: pluginDescription }),
   };
 
-  logger.debug(`Extracting goal from prompt. Request URL: ${getRemoteGenerationUrl()}`);
-  logger.debug(`Request body: ${JSON.stringify(requestBody, null, 2)}`);
   try {
     const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),

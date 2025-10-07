@@ -8,7 +8,7 @@ import dedent from 'dedent';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
-import { loadApiProvider, loadApiProviders } from '../../src/providers';
+import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
@@ -43,12 +43,17 @@ import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 
-import type { ProviderFunction, ProviderOptionsMap } from '../../src/types';
+import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
 jest.mock('fs');
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('proxy-agent', () => ({
@@ -68,6 +73,11 @@ jest.mock('fs', () => ({
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('../../src/database', () => ({
@@ -523,32 +533,32 @@ describe('loadApiProvider', () => {
     expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
   });
 
-  it('loadApiProvider with ollama:modelName', async () => {
-    const provider = await loadApiProvider('ollama:llama2:13b');
+  it('should load Ollama completion provider', async () => {
+    const provider = await loadApiProvider('ollama:llama3.3:8b');
     expect(provider).toBeInstanceOf(OllamaCompletionProvider);
-    expect(provider.id()).toBe('ollama:completion:llama2:13b');
+    expect(provider.id()).toBe('ollama:completion:llama3.3:8b');
   });
 
-  it('loadApiProvider with ollama:completion:modelName', async () => {
-    const provider = await loadApiProvider('ollama:completion:llama2:13b');
+  it('should load Ollama completion provider with explicit type', async () => {
+    const provider = await loadApiProvider('ollama:completion:llama3.3:8b');
     expect(provider).toBeInstanceOf(OllamaCompletionProvider);
-    expect(provider.id()).toBe('ollama:completion:llama2:13b');
+    expect(provider.id()).toBe('ollama:completion:llama3.3:8b');
   });
 
-  it('loadApiProvider with ollama:embedding:modelName', async () => {
-    const provider = await loadApiProvider('ollama:embedding:llama2:13b');
+  it('should load Ollama embedding provider', async () => {
+    const provider = await loadApiProvider('ollama:embedding:llama3.3:8b');
     expect(provider).toBeInstanceOf(OllamaEmbeddingProvider);
   });
 
-  it('loadApiProvider with ollama:embeddings:modelName', async () => {
-    const provider = await loadApiProvider('ollama:embeddings:llama2:13b');
+  it('should load Ollama embeddings provider (alias)', async () => {
+    const provider = await loadApiProvider('ollama:embeddings:llama3.3:8b');
     expect(provider).toBeInstanceOf(OllamaEmbeddingProvider);
   });
 
-  it('loadApiProvider with ollama:chat:modelName', async () => {
-    const provider = await loadApiProvider('ollama:chat:llama2:13b');
+  it('should load Ollama chat provider', async () => {
+    const provider = await loadApiProvider('ollama:chat:llama3.3:8b');
     expect(provider).toBeInstanceOf(OllamaChatProvider);
-    expect(provider.id()).toBe('ollama:chat:llama2:13b');
+    expect(provider.id()).toBe('ollama:chat:llama3.3:8b');
   });
 
   it('loadApiProvider with llama:modelName', async () => {
@@ -589,8 +599,8 @@ describe('loadApiProvider', () => {
   it('loadApiProvider with openrouter', async () => {
     const provider = await loadApiProvider('openrouter:mistralai/mistral-medium');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    // Intentionally openai, because it's just a wrapper around openai
-    expect(provider.id()).toBe('mistralai/mistral-medium');
+    // OpenRouter provider now returns id with prefix
+    expect(provider.id()).toBe('openrouter:mistralai/mistral-medium');
   });
 
   it('loadApiProvider with github', async () => {

@@ -134,6 +134,11 @@ export interface ProviderResponse {
   };
   raw?: string | any;
   output?: string | any;
+  /**
+   * Output after provider-level transform. Used by contextTransform to ensure
+   * it operates on provider-normalized output, independent of test transforms.
+   */
+  providerTransformedOutput?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   sessionId?: string;
@@ -210,6 +215,7 @@ export interface ProviderTestResponse {
   providerResponse: ProviderResponse;
   unalignedProviderResult?: ProviderResponse;
   redteamProviderResult?: ProviderResponse;
+  transformedRequest?: any;
 }
 
 /**

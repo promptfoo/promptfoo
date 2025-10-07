@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 
 import JsonTextField from '@app/components/JsonTextField';
 import {
@@ -40,13 +40,13 @@ interface ProviderConfigDialogProps {
   onSave: (providerId: string, config: Record<string, any>) => void;
 }
 
-const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
+const ProviderConfigDialog = ({
   open,
   providerId,
   config = {},
   onClose,
   onSave,
-}) => {
+}: ProviderConfigDialogProps) => {
   const [localConfig, setLocalConfig] = useState<Record<string, any>>({});
   const [tabValue, setTabValue] = useState(0);
   const [showSensitive, setShowSensitive] = useState<Record<string, boolean>>({});

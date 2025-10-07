@@ -5,6 +5,8 @@ import async from 'async';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
+import { handleConversationRelevance } from '../external/assertions/deepeval';
+import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import {
   matchesAnswerRelevance,
@@ -27,7 +29,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type GradingResult,
-} from '../types';
+} from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -55,6 +57,7 @@ import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
+import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
@@ -86,7 +89,7 @@ import type {
   BaseAssertionTypes,
   ProviderResponse,
   ScoringFunction,
-} from '../types';
+} from '../types/index';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -101,7 +104,102 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-factuality',
 ]);
 
+const ASSERTION_HANDLERS: Record<
+  BaseAssertionTypes,
+  (params: AssertionParams) => GradingResult | Promise<GradingResult>
+> = {
+  'answer-relevance': handleAnswerRelevance,
+  bleu: handleBleuScore,
+  classifier: handleClassifier,
+  contains: handleContains,
+  'contains-all': handleContainsAll,
+  'contains-any': handleContainsAny,
+  'contains-html': handleContainsHtml,
+  'contains-json': handleContainsJson,
+  'contains-sql': handleContainsSql,
+  'contains-xml': handleIsXml,
+  'context-faithfulness': handleContextFaithfulness,
+  'context-recall': handleContextRecall,
+  'context-relevance': handleContextRelevance,
+  'conversation-relevance': handleConversationRelevance,
+  cost: handleCost,
+  equals: handleEquals,
+  factuality: handleFactuality,
+  'finish-reason': handleFinishReason,
+  'g-eval': handleGEval,
+  gleu: handleGleuScore,
+  guardrails: handleGuardrails,
+  icontains: handleIContains,
+  'icontains-all': handleIContainsAll,
+  'icontains-any': handleIContainsAny,
+  'is-html': handleIsHtml,
+  'is-json': handleIsJson,
+  'is-refusal': handleIsRefusal,
+  'is-sql': handleIsSql,
+  'is-valid-function-call': handleIsValidFunctionCall,
+  'is-valid-openai-function-call': handleIsValidFunctionCall,
+  'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
+  'is-xml': handleIsXml,
+  javascript: handleJavascript,
+  latency: handleLatency,
+  levenshtein: handleLevenshtein,
+  'llm-rubric': handleLlmRubric,
+  meteor: async (params: AssertionParams) => {
+    try {
+      const { handleMeteorAssertion } = await import('./meteor');
+      return handleMeteorAssertion(params);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Cannot find module')) {
+        return {
+          pass: false,
+          score: 0,
+          reason:
+            'METEOR assertion requires the natural package. Please install it using: npm install natural',
+          assertion: params.assertion,
+        };
+      }
+      throw error;
+    }
+  },
+  'model-graded-closedqa': handleModelGradedClosedQa,
+  'model-graded-factuality': handleFactuality,
+  moderation: handleModeration,
+  perplexity: handlePerplexity,
+  'perplexity-score': handlePerplexityScore,
+  pi: handlePiScorer,
+  python: handlePython,
+  regex: handleRegex,
+  'rouge-n': handleRougeScore,
+  similar: handleSimilar,
+  'starts-with': handleStartsWith,
+  'trace-error-spans': handleTraceErrorSpans,
+  'trace-span-count': handleTraceSpanCount,
+  'trace-span-duration': handleTraceSpanDuration,
+  webhook: handleWebhook,
+};
+
 const nunjucks = getNunjucksEngine();
+
+/**
+ * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
+ * or "not-contains" is inverse of "contains".
+ * @param assertion - The assertion to test
+ * @returns true if the assertion is inverse, false otherwise
+ */
+export function isAssertionInverse(assertion: Assertion): boolean {
+  return assertion.type.startsWith('not-');
+}
+
+/**
+ * Returns the base type of an assertion i.e. "not-equals" returns "equals"
+ * and "equals" returns "equals".
+ * @param assertion - The assertion to get the base type.
+ * @returns The base type of the assertion.
+ */
+export function getAssertionBaseType(assertion: Assertion): AssertionType {
+  const inverse = isAssertionInverse(assertion);
+  return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
+}
 
 export async function runAssertion({
   prompt,
@@ -127,15 +225,11 @@ export async function runAssertion({
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
-  const inverse = assertion.type.startsWith('not-');
-  const baseType = inverse
-    ? (assertion.type.slice(4) as AssertionType)
-    : (assertion.type as AssertionType);
-
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
       vars: test.vars,
       prompt: { label: prompt },
+      ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
     });
   }
 
@@ -235,10 +329,10 @@ export async function runAssertion({
 
   const assertionParams: AssertionParams = {
     assertion,
-    baseType,
+    baseType: getAssertionBaseType(assertion),
     context,
     cost,
-    inverse,
+    inverse: isAssertionInverse(assertion),
     latencyMs,
     logProbs,
     output,
@@ -251,78 +345,12 @@ export async function runAssertion({
     valueFromScript,
   };
 
-  const assertionHandlers: Record<
-    BaseAssertionTypes,
-    (params: AssertionParams) => GradingResult | Promise<GradingResult>
-  > = {
-    'answer-relevance': handleAnswerRelevance,
-    bleu: handleBleuScore,
-    classifier: handleClassifier,
-    contains: handleContains,
-    'contains-all': handleContainsAll,
-    'contains-any': handleContainsAny,
-    'contains-json': handleContainsJson,
-    'contains-sql': handleContainsSql,
-    'contains-xml': handleIsXml,
-    'context-faithfulness': handleContextFaithfulness,
-    'context-recall': handleContextRecall,
-    'context-relevance': handleContextRelevance,
-    cost: handleCost,
-    equals: handleEquals,
-    factuality: handleFactuality,
-    'finish-reason': handleFinishReason,
-    gleu: handleGleuScore,
-    guardrails: handleGuardrails,
-    'g-eval': handleGEval,
-    icontains: handleIContains,
-    'icontains-all': handleIContainsAll,
-    'icontains-any': handleIContainsAny,
-    'is-json': handleIsJson,
-    'is-refusal': handleIsRefusal,
-    'is-sql': handleIsSql,
-    'is-valid-function-call': handleIsValidFunctionCall,
-    'is-valid-openai-function-call': handleIsValidFunctionCall,
-    'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
-    'is-xml': handleIsXml,
-    javascript: handleJavascript,
-    latency: handleLatency,
-    levenshtein: handleLevenshtein,
-    'llm-rubric': handleLlmRubric,
-    meteor: async (params: AssertionParams) => {
-      try {
-        const { handleMeteorAssertion } = await import('./meteor');
-        return handleMeteorAssertion(params);
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('Cannot find module')) {
-          return {
-            pass: false,
-            score: 0,
-            reason:
-              'METEOR assertion requires the natural package. Please install it using: npm install natural',
-            assertion: params.assertion,
-          };
-        }
-        throw error;
-      }
-    },
-    'model-graded-closedqa': handleModelGradedClosedQa,
-    'model-graded-factuality': handleFactuality,
-    moderation: handleModeration,
-    perplexity: handlePerplexity,
-    'perplexity-score': handlePerplexityScore,
-    python: handlePython,
-    regex: handleRegex,
-    'rouge-n': handleRougeScore,
-    similar: handleSimilar,
-    'starts-with': handleStartsWith,
-    'trace-error-spans': handleTraceErrorSpans,
-    'trace-span-count': handleTraceSpanCount,
-    'trace-span-duration': handleTraceSpanDuration,
-    webhook: handleWebhook,
-    pi: handlePiScorer,
-  };
+  // Check for redteam assertions first
+  if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
+    return handleRedteam(assertionParams);
+  }
 
-  const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
+  const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
     const result = await handler(assertionParams);
 
@@ -337,9 +365,6 @@ export async function runAssertion({
     return result;
   }
 
-  if (baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
-  }
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
@@ -402,8 +427,8 @@ export async function runAssertions({
     asserts,
     ASSERTIONS_MAX_CONCURRENCY,
     async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-')) {
-        // Select-type assertions are handled separately because they depend on multiple outputs.
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
         return;
       }
 
@@ -491,4 +516,5 @@ export default {
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
   matchesModeration,
+  matchesConversationRelevance,
 };

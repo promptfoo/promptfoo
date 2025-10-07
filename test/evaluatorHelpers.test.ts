@@ -11,7 +11,7 @@ import {
 } from '../src/evaluatorHelpers';
 import { transform } from '../src/util/transform';
 
-import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types';
+import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types/index';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

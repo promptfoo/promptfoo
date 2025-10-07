@@ -151,4 +151,4 @@ You can customize the scoring weights for each category in the `promptfooconfig.
 - [Evaluating Factuality Guide](/docs/guides/factuality-eval)
 - [Factuality Assertion Reference](/docs/configuration/expected-outputs/model-graded/factuality)
 - [HuggingFace Dataset Integration](/docs/integrations/huggingface)
-- [JavaScript/TypeScript Test Import Reference](/docs/configuration/parameters#import-from-javascript-or-typescript)
+- [JavaScript/TypeScript Test Import Reference](/docs/configuration/prompts#import-from-javascript-or-typescript)

@@ -1,4 +1,4 @@
-import type { ApiProvider, ProviderResponse } from '../../src/types';
+import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
 export class TestGrader implements ApiProvider {
   async callApi(): Promise<ProviderResponse> {

@@ -20,9 +20,14 @@ jest.mock('../../../src/telemetry', () => ({
   send: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../../src/util', () => ({
-  isRunningUnderNpx: jest.fn().mockReturnValue(false),
   printBorder: jest.fn(),
   setupEnv: jest.fn(),
+}));
+
+jest.mock('../../../src/util/promptfooCommand', () => ({
+  promptfooCommand: jest.fn().mockReturnValue('promptfoo eval'),
+  detectInstaller: jest.fn().mockReturnValue('unknown'),
+  isRunningUnderNpx: jest.fn().mockReturnValue(false),
 }));
 
 describe('assertion generation', () => {

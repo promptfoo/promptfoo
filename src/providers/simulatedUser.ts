@@ -2,6 +2,7 @@ import logger from '../logger';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 import type {
@@ -11,8 +12,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
-} from '../types';
-import { createEmptyTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
+} from '../types/index';
 
 export type Message = {
   role: 'user' | 'assistant' | 'system';
@@ -58,7 +58,7 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
-  ): Promise<Message[]> {
+  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
     const flippedMessages = messages.map((message) => {
@@ -69,8 +69,20 @@ export class SimulatedUser implements ApiProvider {
     });
 
     const response = await userProvider.callApi(JSON.stringify(flippedMessages));
+
+    // Propagate error from remote generation disable check
+    if (response.error) {
+      return {
+        messages,
+        error: response.error,
+      };
+    }
+
     logger.debug(`User: ${response.output}`);
-    return [...messages, { role: 'user', content: String(response.output || '') }];
+    return {
+      messages: [...messages, { role: 'user', content: String(response.output || '') }],
+      tokenUsage: response.tokenUsage,
+    };
   }
 
   private async sendMessageToAgent(
@@ -124,7 +136,17 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
-      const messagesToUser = await this.sendMessageToUser(messages, userProvider);
+      const userResult = await this.sendMessageToUser(messages, userProvider);
+
+      // Check for errors from remote generation disable
+      if (userResult.error) {
+        return {
+          error: userResult.error,
+          tokenUsage,
+        };
+      }
+
+      const { messages: messagesToUser } = userResult;
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 
       // Check whether the judge has determined that the instruction goal is satisfied.
@@ -146,7 +168,6 @@ export class SimulatedUser implements ApiProvider {
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
 
-      // Track token usage
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 

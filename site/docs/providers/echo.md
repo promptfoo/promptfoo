@@ -1,5 +1,6 @@
 ---
 sidebar_label: Echo
+description: Configure Echo Provider for testing and debugging LLM integrations with zero-cost pass-through responses, perfect for validating pre-generated outputs locally
 ---
 
 # Echo Provider
