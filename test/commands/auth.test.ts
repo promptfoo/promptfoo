@@ -42,6 +42,8 @@ jest.mock('../../src/util/cloud');
 jest.mock('../../src/util/fetch/index.ts');
 jest.mock('../../src/util/server');
 
+const stripAnsi = (value: string): string => value.replace(/\u001b\[[0-9;]*m/g, '');
+
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
@@ -121,13 +123,22 @@ describe('auth command', () => {
       );
       // Check that both info calls were made
       const infoCalls = jest.mocked(logger.info).mock.calls;
+      const infoMessages = infoCalls.map((call) => stripAnsi(String(call[0])));
       expect(infoCalls.length).toBeGreaterThanOrEqual(2);
+
+      console.log('[DEBUG] - infoCalls', infoCalls);
       expect(
-        infoCalls.some((call) => call[0].includes('Manual login URL: https://www.promptfoo.app/')),
+        infoMessages.some((message) =>
+          // split up checks to tolerate color codes
+          message.includes('Manual login URL:') && 
+          message.includes('https://www.promptfoo.app/')
+        ),
       ).toBe(true);
       expect(
-        infoCalls.some((call) =>
-          call[0].includes('After login, get your API token at: https://www.promptfoo.app/welcome'),
+        infoMessages.some((message) =>
+          // split up checks to tolerate color codes
+          message.includes('After login, get your API token at:') &&
+          message.includes('https://www.promptfoo.app/welcome')
         ),
       ).toBe(true);
       expect(process.exitCode).toBe(1);
