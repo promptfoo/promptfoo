@@ -216,10 +216,8 @@ const config: Config = {
           label: 'Log in',
         },
         {
-          href: 'https://github.com/promptfoo/promptfoo',
+          type: 'custom-githubStars',
           position: 'right',
-          className: 'header-github-link',
-          'aria-label': 'GitHub repository',
         },
         {
           href: 'https://discord.gg/promptfoo',
