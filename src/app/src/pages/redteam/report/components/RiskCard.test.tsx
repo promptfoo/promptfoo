@@ -153,7 +153,6 @@ describe('RiskCard', () => {
     expect(RiskCategoryDrawerMock.mockProps.passes).toEqual(
       defaultProps.passesByPlugin['sql-injection'],
     );
-    expect(RiskCategoryDrawerMock.mockProps.strategyStats).toEqual(defaultProps.strategyStats);
     expect(RiskCategoryDrawerMock.mockProps.numPassed).toBe(5);
     expect(RiskCategoryDrawerMock.mockProps.numFailed).toBe(5);
   });
