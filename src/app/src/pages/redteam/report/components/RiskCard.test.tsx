@@ -66,7 +66,6 @@ describe('RiskCard', () => {
       'sql-injection': [{ prompt: 'prompt3', output: 'output3' }],
       xss: [{ prompt: 'prompt4', output: 'output4' }],
     },
-    strategyStats: { strategy1: { pass: 2, total: 3 } },
   };
 
   const createTestProps = (overrides = {}) => ({
