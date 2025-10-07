@@ -2,7 +2,7 @@ import './syntax-highlighting.css';
 import 'prismjs/components/prism-clike';
 import 'prismjs/components/prism-javascript';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
@@ -40,8 +40,8 @@ import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
+import ResponseParserTestModal from './ResponseParserTestModal';
 import TestSection from './TestSection';
-import TransformTestDialog from './TransformTestDialog';
 
 import type { ProviderOptions } from '../../types';
 import type { TestResult } from './TestSection';
@@ -147,25 +147,6 @@ Content-Type: application/json
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
-  const [responseTestInput, setResponseTestInput] = useState(
-    JSON.stringify(
-      {
-        choices: [
-          {
-            message: {
-              content: 'The capital of France is Paris.',
-            },
-          },
-        ],
-        usage: {
-          total_tokens: 42,
-        },
-      },
-      null,
-      2,
-    ),
-  );
-  const [editableResponseTransform, setEditableResponseTransform] = useState('');
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
@@ -232,45 +213,6 @@ Content-Type: application/json
       setIsTestRunning(false);
     }
   }, [selectedTarget, onTargetTested]);
-
-  // Initialize editable response transform when opening modal
-  useEffect(() => {
-    if (responseTestOpen) {
-      setEditableResponseTransform(selectedTarget.config.transformResponse || '');
-    }
-  }, [responseTestOpen, selectedTarget.config.transformResponse]);
-
-  // Test handler function for response transform
-  const handleResponseTest = async (transformCode: string, testInput: string) => {
-    const response = await callApi('/providers/test-response-transform', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        transformCode,
-        response: testInput,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ error: `Server error: ${response.status} ${response.statusText}` }));
-
-      return {
-        success: false,
-        error: errorData.error || 'Failed to test transform',
-      };
-    }
-
-    const data = await response.json();
-    return {
-      success: data.success,
-      result: data.result.output ?? data.result,
-      error: data.error,
-    };
-  };
 
   // Auto-size the raw request textarea between 10rem and 40rem based on line count
   const computeRawTextareaHeight = useCallback((text: string) => {
@@ -984,35 +926,11 @@ ${exampleRequest}`;
       />
 
       {/* Response Transform Test Dialog */}
-      <TransformTestDialog
+      <ResponseParserTestModal
         open={responseTestOpen}
         onClose={() => setResponseTestOpen(false)}
-        title="Test Response Parser"
-        transformCode={editableResponseTransform}
-        onTransformCodeChange={setEditableResponseTransform}
-        testInput={responseTestInput}
-        onTestInputChange={setResponseTestInput}
-        testInputLabel="Test Response (JSON)"
-        testInputPlaceholder="Enter a test API response..."
-        testInputRows={8}
-        onTest={handleResponseTest}
+        currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
-        functionDocumentation={{
-          signature: '(json, text, context) => ProviderResponse | string',
-          description: (
-            <>
-              • <strong>json</strong>: any - Parsed JSON response (or null if not JSON)
-              <br />• <strong>text</strong>: string - Raw response text
-              <br />• <strong>context</strong>: {'{ response: FetchResult }'} - HTTP response
-              metadata (optional)
-              <br />
-              <br />
-              <strong>Returns:</strong> String output or {'{ output, tokenUsage?, error? }'}
-            </>
-          ),
-          successMessage: 'Parser executed successfully!',
-          outputLabel: 'Parsed Output:',
-        }}
       />
     </Box>
   );
