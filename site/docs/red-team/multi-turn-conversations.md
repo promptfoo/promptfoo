@@ -199,4 +199,4 @@ def call_api(prompt, options, context):
     }
 ```
 
-This code for this example can be found [in our github](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-custom-provider-multi-turn).
+Complete code for this example can be found [in our github](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-custom-provider-multi-turn).
