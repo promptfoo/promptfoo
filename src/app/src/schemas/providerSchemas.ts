@@ -3,6 +3,12 @@
  * Defines the configuration fields for each provider type
  */
 
+// FIX #15: Better TypeScript types - structured error objects
+export interface ValidationError {
+  field: string;
+  message: string;
+}
+
 export interface FieldSchema {
   name: string;
   type: 'string' | 'number' | 'boolean' | 'object' | 'array';
@@ -173,21 +179,21 @@ export function getProviderSchema(providerId: string): ProviderSchema | null {
 export function validateProviderConfig(
   providerId: string,
   config: Record<string, any>,
-): { valid: boolean; errors: string[] } {
+): { valid: boolean; errors: ValidationError[] } {
   const schema = getProviderSchema(providerId);
   if (!schema) {
     return { valid: true, errors: [] }; // No schema = no validation
   }
 
-  const errors: string[] = [];
+  const errors: ValidationError[] = [];
 
   // Check required fields
   schema.fields.forEach((field) => {
     const value = config[field.name];
 
-    // Required field check
-    if (field.required && (value === undefined || value === null || value === '')) {
-      errors.push(`${field.label} is required`);
+    // Required field check (FIX #7: null is treated as empty, but empty string is valid)
+    if (field.required && (value === undefined || value === null)) {
+      errors.push({ field: field.name, message: `${field.label} is required` });
       return;
     }
 
@@ -195,7 +201,7 @@ export function validateProviderConfig(
     if (value !== undefined && value !== null && value !== '') {
       const actualType = Array.isArray(value) ? 'array' : typeof value;
       if (actualType !== field.type && !(field.type === 'number' && !isNaN(Number(value)))) {
-        errors.push(`${field.label} must be a ${field.type}`);
+        errors.push({ field: field.name, message: `${field.label} must be a ${field.type}` });
       }
 
       // Additional validation rules
@@ -203,20 +209,29 @@ export function validateProviderConfig(
         if (field.type === 'number') {
           const numValue = Number(value);
           if (field.validation.min !== undefined && numValue < field.validation.min) {
-            errors.push(`${field.label} must be at least ${field.validation.min}`);
+            errors.push({
+              field: field.name,
+              message: `${field.label} must be at least ${field.validation.min}`,
+            });
           }
           if (field.validation.max !== undefined && numValue > field.validation.max) {
-            errors.push(`${field.label} must be at most ${field.validation.max}`);
+            errors.push({
+              field: field.name,
+              message: `${field.label} must be at most ${field.validation.max}`,
+            });
           }
         }
         if (field.type === 'string' && field.validation.pattern) {
           const regex = new RegExp(field.validation.pattern);
           if (!regex.test(value)) {
-            errors.push(`${field.label} has invalid format`);
+            errors.push({ field: field.name, message: `${field.label} has invalid format` });
           }
         }
         if (field.validation.enum && !field.validation.enum.includes(value)) {
-          errors.push(`${field.label} must be one of: ${field.validation.enum.join(', ')}`);
+          errors.push({
+            field: field.name,
+            message: `${field.label} must be one of: ${field.validation.enum.join(', ')}`,
+          });
         }
       }
     }
@@ -226,7 +241,7 @@ export function validateProviderConfig(
   if (schema.validate) {
     const customError = schema.validate(config);
     if (customError) {
-      errors.push(customError);
+      errors.push({ field: '__custom__', message: customError });
     }
   }
 

@@ -11,6 +11,11 @@ const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, defaultValue, .
   const [value, setValue] = React.useState(defaultValue || '');
   const [error, setError] = React.useState(false);
 
+  // CRITICAL FIX #1: Sync state when defaultValue changes
+  React.useEffect(() => {
+    setValue(defaultValue || '');
+  }, [defaultValue]);
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = event.target.value;
     setValue(newValue);

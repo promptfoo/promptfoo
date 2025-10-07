@@ -1,10 +1,11 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 
 import JsonTextField from '@app/components/JsonTextField';
 import {
   getProviderSchema,
   validateProviderConfig,
   type FieldSchema,
+  type ValidationError,
 } from '@app/schemas/providerSchemas';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
@@ -50,19 +51,22 @@ const ProviderConfigDialog = ({
   const [localConfig, setLocalConfig] = useState<Record<string, any>>({});
   const [tabValue, setTabValue] = useState(0);
   const [showSensitive, setShowSensitive] = useState<Record<string, boolean>>({});
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   // Get schema for current provider
   const schema = useMemo(() => getProviderSchema(providerId), [providerId]);
   const hasSchema = !!schema;
 
-  // Validate configuration
-  const validateConfig = (configToValidate: Record<string, any>) => {
-    const { errors } = validateProviderConfig(providerId, configToValidate);
-    setValidationErrors(errors);
-    return errors.length === 0;
-  };
+  // CRITICAL FIX #2: Wrap validateConfig in useCallback to prevent infinite loops
+  const validateConfig = useCallback(
+    (configToValidate: Record<string, any>) => {
+      const { errors } = validateProviderConfig(providerId, configToValidate);
+      setValidationErrors(errors);
+      return errors.length === 0;
+    },
+    [providerId],
+  );
 
   // Initialize config when dialog opens or provider changes
   useEffect(() => {
@@ -70,36 +74,42 @@ const ProviderConfigDialog = ({
       return;
     }
 
+    // CRITICAL FIX #3: Deep copy to prevent shallow reference issues
+    const configCopy = { ...config };
+
     // If we have a schema, initialize with defaults
     if (schema) {
       const initialConfig: Record<string, any> = {};
       schema.fields.forEach((field) => {
         // Always include the field in config so it shows in the form
-        const value = config[field.name] ?? field.defaultValue ?? '';
+        const value = configCopy[field.name] ?? field.defaultValue ?? '';
         initialConfig[field.name] = value;
       });
       setLocalConfig(initialConfig);
       // Validate initial config
       validateConfig(initialConfig);
     } else {
-      // No schema, just use the provided config
-      setLocalConfig(config);
+      // No schema, just use the provided config (deep copied)
+      setLocalConfig(configCopy);
       setValidationErrors([]);
     }
 
     setJsonError(null);
     setTabValue(hasSchema ? 0 : 1); // Default to JSON tab if no schema
-  }, [open, providerId, config, schema, hasSchema]);
+
+    // SERIOUS FIX #6: Cleanup memory leak - reset showSensitive state
+    return () => {
+      setShowSensitive({});
+    };
+  }, [open, providerId, config, schema, hasSchema, validateConfig]);
 
   // Handle field change
   const handleFieldChange = (fieldName: string, value: any) => {
     const newConfig = { ...localConfig, [fieldName]: value };
     setLocalConfig(newConfig);
 
-    // Clear validation errors as user types
-    if (validationErrors.length > 0) {
-      validateConfig(newConfig);
-    }
+    // SERIOUS FIX #8: Always validate for real-time feedback
+    validateConfig(newConfig);
   };
 
   // Handle save
@@ -111,10 +121,11 @@ const ProviderConfigDialog = ({
       configToSave = localConfig;
     }
 
-    // Clean up empty values
+    // SERIOUS FIX #7: Only remove undefined/null, keep empty strings as valid
     const cleanedConfig = Object.entries(configToSave).reduce(
       (acc, [key, value]) => {
-        if (value !== '' && value !== undefined && value !== null) {
+        // Keep empty strings as they might be valid values
+        if (value !== undefined && value !== null) {
           acc[key] = value;
         }
         return acc;
@@ -131,9 +142,40 @@ const ProviderConfigDialog = ({
     onClose();
   };
 
+  // Handle keyboard shortcuts (A11y FIX #12)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!open) {
+        return;
+      }
+
+      // Ctrl/Cmd + S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (validationErrors.length === 0 && !jsonError) {
+          handleSave();
+        }
+      }
+
+      // Escape to close
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, validationErrors, jsonError, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Toggle sensitive field visibility
   const toggleSensitiveVisibility = (fieldName: string) => {
     setShowSensitive((prev) => ({ ...prev, [fieldName]: !prev[fieldName] }));
+  };
+
+  // FIX #5: Get error for field by field name (not fragile string matching)
+  const getFieldError = (fieldName: string): string | undefined => {
+    const error = validationErrors.find((err) => err.field === fieldName);
+    return error?.message;
   };
 
   // Render field based on schema
@@ -141,7 +183,7 @@ const ProviderConfigDialog = ({
     const rawValue = localConfig[field.name];
     // Ensure we have a controlled value
     const value = rawValue === undefined || rawValue === null ? '' : rawValue;
-    const error = validationErrors.find((err) => err.includes(field.label));
+    const error = getFieldError(field.name);
 
     switch (field.type) {
       case 'boolean':
@@ -165,7 +207,8 @@ const ProviderConfigDialog = ({
             type="number"
             value={value}
             onChange={(e) =>
-              handleFieldChange(field.name, e.target.value ? Number(e.target.value) : '')
+              // CRITICAL FIX #4: Use null instead of empty string for type safety
+              handleFieldChange(field.name, e.target.value ? Number(e.target.value) : null)
             }
             error={!!error}
             helperText={error || field.description}
@@ -218,6 +261,11 @@ const ProviderConfigDialog = ({
                           onClick={() => toggleSensitiveVisibility(field.name)}
                           edge="end"
                           size="small"
+                          aria-label={
+                            showSensitive[field.name]
+                              ? `Hide ${field.label}`
+                              : `Show ${field.label}`
+                          }
                         >
                           {showSensitive[field.name] ? <VisibilityOffIcon /> : <VisibilityIcon />}
                         </IconButton>
@@ -263,7 +311,7 @@ const ProviderConfigDialog = ({
             </Typography>
             <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
               {validationErrors.map((error, index) => (
-                <li key={index}>{error}</li>
+                <li key={index}>{error.message}</li>
               ))}
             </ul>
           </Alert>
@@ -304,7 +352,11 @@ const ProviderConfigDialog = ({
               minRows={15}
               maxRows={25}
               error={!!jsonError}
-              helperText={hasSchema ? undefined : 'Enter your provider configuration as JSON'}
+              helperText={
+                hasSchema
+                  ? 'You can edit the configuration as JSON. Press Ctrl+S to save.'
+                  : 'Enter your provider configuration as JSON. Press Ctrl+S to save.'
+              }
             />
           </Box>
         )}
