@@ -158,4 +158,45 @@ describe('BaseNumberInput', () => {
     expect(handleChange).toHaveBeenCalledTimes(1);
     expect(handleChange).toHaveBeenCalledWith(3.14);
   });
+
+  it('should pass min and max attributes to the input element', () => {
+    const handleChange = vi.fn();
+    const min = 5;
+    const max = 10;
+
+    renderWithTheme(
+      <BaseNumberInput label="Range" min={min} max={max} onChange={handleChange} value={7} />,
+    );
+
+    const input = screen.getByLabelText('Range');
+    expect(input).toHaveAttribute('min', '5');
+    expect(input).toHaveAttribute('max', '10');
+  });
+
+  it('calls onChange with a value above the specified max prop', () => {
+    const handleChange = vi.fn();
+
+    renderWithTheme(<BaseNumberInput label="Quantity" onChange={handleChange} max={100} />);
+
+    const input = screen.getByLabelText('Quantity');
+
+    fireEvent.change(input, { target: { value: '200' } });
+
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    expect(handleChange).toHaveBeenCalledWith(200);
+  });
+
+  it('calls onChange with a number exceeding Number.MAX_SAFE_INTEGER', () => {
+    const handleChange = vi.fn();
+    const largeNumber = Number.MAX_SAFE_INTEGER + 1;
+
+    renderWithTheme(<BaseNumberInput label="Large Number" onChange={handleChange} />);
+
+    const input = screen.getByLabelText('Large Number');
+
+    fireEvent.change(input, { target: { value: String(largeNumber) } });
+
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    expect(handleChange).toHaveBeenCalledWith(largeNumber);
+  });
 });
