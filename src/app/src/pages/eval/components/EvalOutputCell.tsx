@@ -139,7 +139,7 @@ function EvalOutputCell({
     setCommentText(newCommentText);
   };
 
-  let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
@@ -151,18 +151,9 @@ function EvalOutputCell({
       .filter((reason) => reason); // Filter out empty/undefined reasons
   }
 
-  // Handle failure messages by splitting the text at '---' if present
-  if (text && text.includes('---')) {
-    text = text.split('---').slice(1).join('---');
-  }
-
   if (showDiffs && firstOutput) {
-    let firstOutputText =
+    const firstOutputText =
       typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
-
-    if (firstOutputText.includes('---')) {
-      firstOutputText = firstOutputText.split('---').slice(1).join('---');
-    }
 
     let diffResult;
     try {

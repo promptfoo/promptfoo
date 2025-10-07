@@ -1,0 +1,65 @@
+<svg width="800" height="280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .card { fill: #ffffff; stroke: #e2e8f0; stroke-width: 2; }
+      .title { font: bold 16px system-ui, sans-serif; fill: #1e293b; }
+      .comment { font: 14px system-ui, sans-serif; fill: #334155; }
+      .label { font: 12px system-ui, sans-serif; fill: #64748b; }
+      .score { font: bold 20px system-ui, sans-serif; }
+      .high { fill: #dc2626; }
+      .medium { fill: #f59e0b; }
+      .low { fill: #10b981; }
+    </style>
+  </defs>
+
+  <!-- Card Background -->
+  <rect class="card" x="10" y="10" width="780" height="260" rx="8"/>
+
+  <!-- Title -->
+  <text x="30" y="40" class="title">Jigsaw Dataset Example: Multi-label Toxicity Detection</text>
+
+  <!-- Comment Box -->
+  <rect x="30" y="60" width="740" height="80" rx="4" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="45" y="85" class="comment">💬 Comment:</text>
+  <text x="45" y="110" class="comment" font-style="italic">
+    "You are an idiot and clearly have no idea what you're talking about."
+  </text>
+
+  <!-- Labels Section -->
+  <text x="30" y="175" class="title">Toxicity Labels:</text>
+
+  <!-- Toxic -->
+  <g transform="translate(30, 190)">
+    <rect x="0" y="0" width="150" height="50" rx="4" fill="#fee2e2" stroke="#fca5a5"/>
+    <text x="10" y="20" class="label">TOXIC</text>
+    <text x="10" y="40" class="score high">92%</text>
+  </g>
+
+  <!-- Insult -->
+  <g transform="translate(195, 190)">
+    <rect x="0" y="0" width="150" height="50" rx="4" fill="#fed7aa" stroke="#fdba74"/>
+    <text x="10" y="20" class="label">INSULT</text>
+    <text x="10" y="40" class="score medium">85%</text>
+  </g>
+
+  <!-- Obscene -->
+  <g transform="translate(360, 190)">
+    <rect x="0" y="0" width="150" height="50" rx="4" fill="#d1fae5" stroke="#6ee7b7"/>
+    <text x="10" y="20" class="label">OBSCENE</text>
+    <text x="10" y="40" class="score low">12%</text>
+  </g>
+
+  <!-- Threat -->
+  <g transform="translate(525, 190)">
+    <rect x="0" y="0" width="120" height="50" rx="4" fill="#d1fae5" stroke="#6ee7b7"/>
+    <text x="10" y="20" class="label">THREAT</text>
+    <text x="10" y="40" class="score low">3%</text>
+  </g>
+
+  <!-- Identity Hate -->
+  <g transform="translate(660, 190)">
+    <rect x="0" y="0" width="110" height="50" rx="4" fill="#d1fae5" stroke="#6ee7b7"/>
+    <text x="10" y="20" class="label">HATE</text>
+    <text x="10" y="40" class="score low">8%</text>
+  </g>
+</svg>

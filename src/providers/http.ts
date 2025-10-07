@@ -35,7 +35,7 @@ import type {
  * Escapes string values in variables for safe JSON template substitution.
  * Converts { key: "value\nwith\nnewlines" } to { key: "value\\nwith\\nnewlines" }
  */
-function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
+export function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
   return Object.fromEntries(
     Object.entries(vars).map(([key, value]) => [
       key,
@@ -1075,54 +1075,87 @@ export async function createTransformRequest(
     };
   }
 
-  if (typeof transform === 'string') {
-    if (transform.startsWith('file://')) {
-      let filename = transform.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
+  if (typeof transform === 'string' && transform.startsWith('file://')) {
+    let filename = transform.slice('file://'.length);
+    let functionName: string | undefined;
+    if (filename.includes(':')) {
+      const splits = filename.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filename, functionName] = splits;
       }
-      const requiredModule = await importModule(
-        path.resolve(cliState.basePath || '', filename),
-        functionName,
-      );
-      if (typeof requiredModule === 'function') {
-        return async (prompt, vars, context) => {
-          try {
-            return await requiredModule(prompt, vars, context);
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            const wrappedError = new Error(
-              `Error in request transform function from ${filename}: ${errorMessage}`,
-            );
-            logger.error(wrappedError.message);
-            throw wrappedError;
-          }
-        };
-      }
-      throw new Error(
-        `Request transform malformed: ${filename} must export a function or have a default export as a function`,
-      );
     }
-    // Handle string template
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
+    if (typeof requiredModule === 'function') {
+      return async (prompt, vars, context) => {
+        try {
+          return await requiredModule(prompt, vars, context);
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          const wrappedError = new Error(
+            `Error in request transform function from ${filename}: ${errorMessage}`,
+          );
+          logger.error(wrappedError.message);
+          throw wrappedError;
+        }
+      };
+    }
+    throw new Error(
+      `Request transform malformed: ${filename} must export a function or have a default export as a function`,
+    );
+  } else if (typeof transform === 'string') {
     return async (prompt, vars, context) => {
       try {
-        const rendered = getNunjucksEngine().renderString(transform, { prompt, vars, context });
-        return await new Function('prompt', 'vars', 'context', `${rendered}`)(
-          prompt,
-          vars,
-          context,
-        );
+        const trimmedTransform = transform.trim();
+        // Check if it's a function expression (either arrow or regular)
+        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
+
+        let transformFn: Function;
+        if (isFunctionExpression) {
+          // For function expressions, call them with the arguments
+          transformFn = new Function(
+            'prompt',
+            'vars',
+            'context',
+            `try { return (${trimmedTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`,
+          );
+        } else {
+          // Check if it contains a return statement
+          const hasReturn = /\breturn\b/.test(trimmedTransform);
+
+          if (hasReturn) {
+            // Use as function body if it has return statements
+            transformFn = new Function(
+              'prompt',
+              'vars',
+              'context',
+              `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+            );
+          } else {
+            // Wrap simple expressions with return
+            transformFn = new Function(
+              'prompt',
+              'vars',
+              'context',
+              `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+            );
+          }
+        }
+
+        let result: any;
+        if (context) {
+          result = await transformFn(prompt, vars, context);
+        } else {
+          result = await transformFn(prompt, vars);
+        }
+        return result;
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(
-          `Error in request transform string template: ${errorMessage}`,
+        logger.error(
+          `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(sanitizeObject(context, { context: 'request transform' }))}.`,
         );
-        logger.error(wrappedError.message);
-        throw wrappedError;
+        throw new Error(`Failed to transform request: ${String(err)}`);
       }
     };
   }
@@ -1789,10 +1822,14 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
-    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, {
+    // JSON-escape all string variables for safe substitution in raw request body
+    // This prevents control characters and quotes from breaking JSON strings
+    const escapedVars = escapeJsonVariables({
       ...vars,
       prompt: transformedPrompt,
     });
+
+    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';

@@ -1,4 +1,5 @@
 import { type Message, SimulatedUser } from '../../providers/simulatedUser';
+import { REDTEAM_SIMULATED_USER_TASK_ID } from '../../providers/promptfoo';
 import invariant from '../../util/invariant';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 
@@ -14,7 +15,7 @@ type Config = {
 
 export default class RedteamMischievousUserProvider extends SimulatedUser {
   // Cloud task:
-  readonly taskId: string = 'mischievous-user-redteam';
+  readonly taskId: string = REDTEAM_SIMULATED_USER_TASK_ID;
 
   constructor(config: Config) {
     invariant(config.injectVar, 'Expected injectVar to be set');
