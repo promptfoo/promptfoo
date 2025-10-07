@@ -160,6 +160,8 @@ const App = () => {
       }
 
       // Exclude results with errors from being counted as failures
+      // TODO: Errors which arise while grading may be mis-classified as ResultFailureReason.ASSERT
+      // and leak past this check. Check `result.gradingResult.reason` for errors e.g. "API call error: *".
       if (result.error && result.failureReason === ResultFailureReason.ERROR) {
         return;
       }
@@ -402,19 +404,32 @@ const App = () => {
     return filtered;
   }, [passesByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
 
-  // TODO(Will): Verify working w/ filters
+  /**
+   * Recalculates category (plugin) stats given the filtered failures and passes.
+   */
   const filteredCategoryStats = React.useMemo(() => {
     const stats: Record<
       string,
-      { pass: number; total: number; passWithFilter: number; failCount: number }
+      {
+        // Passing count + failing count
+        total: number;
+        // Number of failing tests
+        failCount: number;
+        // Number of passing tests
+        pass: number;
+        passWithFilter: number;
+      }
     > = {};
 
     Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
+      // Initialize the stats for the plugin
       stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
       stats[pluginId].total += tests.length;
+      stats[pluginId].failCount += tests.length;
     });
 
     Object.entries(filteredPassesByPlugin).forEach(([pluginId, tests]) => {
+      // Initialize the stats for the plugin if it doesn't already exist
       stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
       stats[pluginId].pass += tests.length;
       stats[pluginId].passWithFilter += tests.length;
