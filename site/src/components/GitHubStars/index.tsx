@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import styles from './styles.module.css';
 
 const CACHE_KEY = 'github_stars_cache_promptfoo';
@@ -42,11 +42,14 @@ export default function GitHubStars(): JSX.Element {
 
   useEffect(() => {
     // Skip fetch if we have cached data
-    if (getCachedStars()) return;
+    if (getCachedStars()) {
+      return;
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
+    // biome-ignore lint/style/noRestrictedGlobals: Browser fetch is appropriate for client-side component
     fetch('https://api.github.com/repos/promptfoo/promptfoo', {
       signal: controller.signal,
     })
