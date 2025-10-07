@@ -314,6 +314,9 @@ type EnvVars = {
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
 
+  // Slack
+  SLACK_BOT_TOKEN?: string;
+
   // Together AI
   TOGETHER_API_KEY?: string;
 
