@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styles from './styles.module.css';
 
 const CACHE_KEY = 'github_stars_cache_promptfoo';
-const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+const CACHE_DURATION = 1000 * 60 * 60 * 24; // 1 day
 const FETCH_TIMEOUT = 5000; // 5 seconds
 
 interface CachedData {
@@ -38,7 +38,7 @@ function setCachedStars(stars: string): void {
 }
 
 export default function GitHubStars(): JSX.Element {
-  const [stars, setStars] = useState<string>(() => getCachedStars() || '8k+');
+  const [stars, setStars] = useState<string>(() => getCachedStars() || '8.6k');
 
   useEffect(() => {
     // Skip fetch if we have cached data
