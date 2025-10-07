@@ -1,17 +1,24 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
+import httpZ from 'http-z';
 import https from 'https';
 import path from 'path';
-
-import httpZ from 'http-z';
 import { Agent } from 'undici';
 import { z } from 'zod';
-import { type FetchWithCacheResult, fetchWithCache } from '../cache';
+
+import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { renderVarsInObject } from '../util/index';
@@ -23,19 +30,11 @@ import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderOptions,
-  ProviderResponse,
-  TokenUsage,
-} from '../types/index';
-
 /**
  * Escapes string values in variables for safe JSON template substitution.
  * Converts { key: "value\nwith\nnewlines" } to { key: "value\\nwith\\nnewlines" }
  */
-function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
+export function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
   return Object.fromEntries(
     Object.entries(vars).map(([key, value]) => [
       key,
@@ -1789,10 +1788,14 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
-    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, {
+    // JSON-escape all string variables for safe substitution in raw request body
+    // This prevents control characters and quotes from breaking JSON strings
+    const escapedVars = escapeJsonVariables({
       ...vars,
       prompt: transformedPrompt,
     });
+
+    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
