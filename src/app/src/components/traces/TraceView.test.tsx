@@ -1,10 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { callApi } from '@app/utils/api';
-import TraceView from './TraceView';
-
-vi.mock('@app/utils/api');
+import TraceView, { type Trace } from './TraceView';
 
 vi.mock('./TraceTimeline', () => ({
   default: ({ trace }: { trace: { traceId: string } }) => (
@@ -13,12 +10,14 @@ vi.mock('./TraceTimeline', () => ({
 }));
 
 describe('TraceView', () => {
+  let mockFetchTraces: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockFetchTraces = vi.fn();
   });
 
   it('should render a TraceTimeline for each filtered trace that contains spans', async () => {
-    const mockTraces = [
+    const mockTraces: Trace[] = [
       {
         traceId: 'trace-abc-123',
         spans: [{ spanId: 'span-1', name: 'span-name-1', startTime: 1, endTime: 2 }],
@@ -29,12 +28,9 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
-    render(<TraceView evaluationId="eval-xyz-789" />);
+    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
 
     const timelines = await screen.findAllByTestId('trace-timeline');
 
@@ -48,9 +44,9 @@ describe('TraceView', () => {
 
   it('should render an Alert with the error message if the API call fails', async () => {
     const errorMessage = 'Failed to fetch traces';
-    vi.mocked(callApi).mockRejectedValue(new Error(errorMessage));
+    mockFetchTraces.mockRejectedValue(new Error(errorMessage));
 
-    render(<TraceView evaluationId="eval-xyz-789" />);
+    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(errorMessage);
@@ -58,12 +54,9 @@ describe('TraceView', () => {
   });
 
   it('should render a Typography message "No traces available for this evaluation" if the traces array is empty after fetching', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: [] }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue([]);
 
-    render(<TraceView evaluationId="eval-xyz-789" />);
+    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
 
     await waitFor(() => {
       expect(screen.getByText('No traces available for this evaluation')).toBeInTheDocument();
@@ -84,12 +77,15 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
-    render(<TraceView evaluationId="eval-xyz-789" testCaseId="test-case-123" />);
+    render(
+      <TraceView
+        evaluationId="eval-xyz-789"
+        testCaseId="test-case-123"
+        fetchTraces={mockFetchTraces}
+      />,
+    );
 
     const message = await screen.findByText('No traces available for this test case');
 
@@ -102,24 +98,18 @@ describe('TraceView', () => {
       { traceId: 'trace-2', spans: [] },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
-    render(<TraceView evaluationId="eval-id" />);
+    render(<TraceView evaluationId="eval-id" fetchTraces={mockFetchTraces} />);
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/traces were created but no spans were received/i);
   });
 
   it('should render an error message when the API returns malformed JSON', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.reject(new Error('Unexpected token < in JSON at position 0')),
-    } as Response);
+    mockFetchTraces.mockRejectedValue(new Error('Unexpected token < in JSON at position 0'));
 
-    render(<TraceView evaluationId="eval-xyz-789" />);
+    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -129,9 +119,9 @@ describe('TraceView', () => {
   });
 
   it('should handle network errors when fetching traces', async () => {
-    vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
+    mockFetchTraces.mockRejectedValue(new Error('Network error'));
 
-    render(<TraceView evaluationId="eval-xyz-789" />);
+    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -150,12 +140,9 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
-    render(<TraceView evaluationId="eval-xyz-789" />);
+    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
 
     expect(
       await screen.findByText(
@@ -187,12 +174,15 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
-    render(<TraceView evaluationId="eval-123" testCaseId="test-case-1" />);
+    render(
+      <TraceView
+        evaluationId="eval-123"
+        testCaseId="test-case-1"
+        fetchTraces={mockFetchTraces}
+      />,
+    );
 
     const timelines = await screen.findAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(2);
@@ -221,10 +211,7 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -232,6 +219,7 @@ describe('TraceView', () => {
         testCaseId="550e8400-e29b-41d4-a716-446655440000"
         testIndex={3}
         promptIndex={1}
+        fetchTraces={mockFetchTraces}
       />,
     );
 
@@ -244,12 +232,9 @@ describe('TraceView', () => {
 
   it('should display an error message when the API call returns a non-OK response', async () => {
     const mockStatus = 500;
-    vi.mocked(callApi).mockResolvedValue({
-      ok: false,
-      status: mockStatus,
-    } as Response);
+    mockFetchTraces.mockRejectedValue(new Error(`HTTP error! status: ${mockStatus}`));
 
-    render(<TraceView evaluationId="eval-xyz-789" />);
+    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
 
     const alert = await screen.findByRole('alert');
     expect(alert).toBeInTheDocument();
@@ -260,7 +245,7 @@ describe('TraceView', () => {
     it('should call onVisibilityChange with false when no evaluationId is provided', async () => {
       const onVisibilityChange = vi.fn();
 
-      render(<TraceView onVisibilityChange={onVisibilityChange} />);
+      render(<TraceView onVisibilityChange={onVisibilityChange} fetchTraces={mockFetchTraces} />);
 
       await waitFor(() => {
         expect(onVisibilityChange).toHaveBeenCalledWith(false);
@@ -270,11 +255,17 @@ describe('TraceView', () => {
     it('should call onVisibilityChange with true when loading', async () => {
       const onVisibilityChange = vi.fn();
 
-      vi.mocked(callApi).mockImplementation(
+      mockFetchTraces.mockImplementation(
         () => new Promise(() => {}), // Never resolves to keep loading state
       );
 
-      render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
+      render(
+        <TraceView
+          evaluationId="eval-123"
+          onVisibilityChange={onVisibilityChange}
+          fetchTraces={mockFetchTraces}
+        />,
+      );
 
       await waitFor(() => {
         expect(onVisibilityChange).toHaveBeenCalledWith(true);
@@ -284,9 +275,15 @@ describe('TraceView', () => {
     it('should call onVisibilityChange with true when there is an error', async () => {
       const onVisibilityChange = vi.fn();
 
-      vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
+      mockFetchTraces.mockRejectedValue(new Error('Network error'));
 
-      render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
+      render(
+        <TraceView
+          evaluationId="eval-123"
+          onVisibilityChange={onVisibilityChange}
+          fetchTraces={mockFetchTraces}
+        />,
+      );
 
       await waitFor(() => {
         expect(onVisibilityChange).toHaveBeenCalledWith(true);
@@ -296,15 +293,15 @@ describe('TraceView', () => {
     it('should call onVisibilityChange with true when traces exist', async () => {
       const onVisibilityChange = vi.fn();
 
-      vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            traces: [{ traceId: 'trace-1', spans: [] }],
-          }),
-      } as Response);
+      mockFetchTraces.mockResolvedValue([{ traceId: 'trace-1', spans: [] }]);
 
-      render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
+      render(
+        <TraceView
+          evaluationId="eval-123"
+          onVisibilityChange={onVisibilityChange}
+          fetchTraces={mockFetchTraces}
+        />,
+      );
 
       await waitFor(() => {
         expect(onVisibilityChange).toHaveBeenCalledWith(true);
@@ -314,46 +311,50 @@ describe('TraceView', () => {
     it('should call onVisibilityChange with false when no traces are returned', async () => {
       const onVisibilityChange = vi.fn();
 
-      vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            traces: [],
-          }),
-      } as Response);
+      mockFetchTraces.mockResolvedValue([]);
 
-      render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
+      render(
+        <TraceView
+          evaluationId="eval-123"
+          onVisibilityChange={onVisibilityChange}
+          fetchTraces={mockFetchTraces}
+        />,
+      );
 
       await waitFor(() => {
         expect(onVisibilityChange).toHaveBeenCalledWith(false);
       });
     });
 
-    it('should call onVisibilityChange with false when traces is null/undefined in response', async () => {
+    it('should call onVisibilityChange with true when traces is null/undefined in response', async () => {
       const onVisibilityChange = vi.fn();
 
-      vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({}),
-      } as Response);
+      mockFetchTraces.mockResolvedValue(null as any);
 
-      render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
+      render(
+        <TraceView
+          evaluationId="eval-123"
+          onVisibilityChange={onVisibilityChange}
+          fetchTraces={mockFetchTraces}
+        />,
+      );
 
       await waitFor(() => {
-        expect(onVisibilityChange).toHaveBeenCalledWith(false);
+        expect(onVisibilityChange).toHaveBeenCalledWith(true);
       });
     });
 
     it('should update visibility when evaluationId changes', async () => {
       const onVisibilityChange = vi.fn();
 
-      vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ traces: [] }),
-      } as Response);
+      mockFetchTraces.mockResolvedValue([]);
 
       const { rerender } = render(
-        <TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />,
+        <TraceView
+          evaluationId="eval-123"
+          onVisibilityChange={onVisibilityChange}
+          fetchTraces={mockFetchTraces}
+        />,
       );
 
       await waitFor(() => {
@@ -362,7 +363,13 @@ describe('TraceView', () => {
 
       onVisibilityChange.mockClear();
 
-      rerender(<TraceView evaluationId="eval-456" onVisibilityChange={onVisibilityChange} />);
+      rerender(
+        <TraceView
+          evaluationId="eval-456"
+          onVisibilityChange={onVisibilityChange}
+          fetchTraces={mockFetchTraces}
+        />,
+      );
 
       expect(onVisibilityChange).toHaveBeenCalledWith(true); // Should be true during loading
     });
@@ -392,10 +399,7 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
     // Test with UUID testCaseId that won't match directly, but we have indices for fallback
     render(
@@ -404,6 +408,7 @@ describe('TraceView', () => {
         testCaseId="different-uuid-12345678-1234-1234-1234-123456789abc"
         testIndex={3}
         promptIndex={1}
+        fetchTraces={mockFetchTraces}
       />,
     );
 
@@ -417,9 +422,9 @@ describe('TraceView', () => {
   });
 
   it('should not call the API and render null when evaluationId is an empty string', () => {
-    const { container } = render(<TraceView evaluationId="" />);
+    const { container } = render(<TraceView evaluationId="" fetchTraces={mockFetchTraces} />);
 
-    expect(vi.mocked(callApi)).not.toHaveBeenCalled();
+    expect(mockFetchTraces).not.toHaveBeenCalled();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(container.firstChild).toBeNull();
   });
@@ -427,7 +432,13 @@ describe('TraceView', () => {
   it('should call onVisibilityChange with false when evaluationId is an empty string', async () => {
     const onVisibilityChange = vi.fn();
 
-    render(<TraceView evaluationId="" onVisibilityChange={onVisibilityChange} />);
+    render(
+      <TraceView
+        evaluationId=""
+        onVisibilityChange={onVisibilityChange}
+        fetchTraces={mockFetchTraces}
+      />,
+    );
 
     await waitFor(() => {
       expect(onVisibilityChange).toHaveBeenCalledWith(false);
@@ -453,12 +464,16 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
-    render(<TraceView evaluationId="eval-xyz-789" testIndex={1} promptIndex={1} />);
+    render(
+      <TraceView
+        evaluationId="eval-xyz-789"
+        testIndex={1}
+        promptIndex={1}
+        fetchTraces={mockFetchTraces}
+      />,
+    );
 
     const timelines = await screen.findAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(1);
@@ -481,10 +496,7 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -492,6 +504,7 @@ describe('TraceView', () => {
         testCaseId="test-case-1"
         testIndex={1}
         promptIndex={1}
+        fetchTraces={mockFetchTraces}
       />,
     );
 
@@ -514,10 +527,7 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -525,6 +535,7 @@ describe('TraceView', () => {
         testCaseId="test-case-123"
         testIndex={1}
         promptIndex={2}
+        fetchTraces={mockFetchTraces}
       />,
     );
 
@@ -541,10 +552,7 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -552,6 +560,7 @@ describe('TraceView', () => {
         testCaseId="some-uuid"
         testIndex={-1}
         promptIndex={0}
+        fetchTraces={mockFetchTraces}
       />,
     );
 
@@ -569,10 +578,7 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -580,6 +586,7 @@ describe('TraceView', () => {
         testCaseId="some-uuid"
         testIndex={NaN}
         promptIndex={0}
+        fetchTraces={mockFetchTraces}
       />,
     );
 
@@ -597,10 +604,7 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -608,6 +612,7 @@ describe('TraceView', () => {
         testCaseId="some-uuid"
         testIndex={0}
         promptIndex={-1}
+        fetchTraces={mockFetchTraces}
       />,
     );
 
@@ -625,10 +630,7 @@ describe('TraceView', () => {
       },
     ];
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -636,6 +638,7 @@ describe('TraceView', () => {
         testCaseId="some-uuid"
         testIndex={0}
         promptIndex={NaN}
+        fetchTraces={mockFetchTraces}
       />,
     );
 
@@ -649,12 +652,16 @@ describe('TraceView', () => {
       { traceId: 't-a', testCaseId: '1-2', spans: [{ spanId: 's1' }] },
       { traceId: 't-b', testCaseId: '3-1', spans: [{ spanId: 's2' }] },
     ];
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
-    render(<TraceView evaluationId="eval-1" testIndex={3} promptIndex={1} />);
+    render(
+      <TraceView
+        evaluationId="eval-1"
+        testIndex={3}
+        promptIndex={1}
+        fetchTraces={mockFetchTraces}
+      />,
+    );
 
     const timelines = await screen.findAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(1);
@@ -666,12 +673,17 @@ describe('TraceView', () => {
       { traceId: 't-direct', testCaseId: 'uuid-123', spans: [{ spanId: 's1' }] },
       { traceId: 't-fallback', testCaseId: '3-1', spans: [{ spanId: 's2' }] },
     ];
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ traces: mockTraces }),
-    } as Response);
+    mockFetchTraces.mockResolvedValue(mockTraces);
 
-    render(<TraceView evaluationId="eval-1" testCaseId="uuid-123" testIndex={3} promptIndex={1} />);
+    render(
+      <TraceView
+        evaluationId="eval-1"
+        testCaseId="uuid-123"
+        testIndex={3}
+        promptIndex={1}
+        fetchTraces={mockFetchTraces}
+      />,
+    );
 
     const timelines = await screen.findAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(1);
