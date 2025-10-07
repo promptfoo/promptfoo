@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: TrueFoundry with MCP Servers Example
+
+prompts:
+  - |
+    You are a helpful research assistant with access to web search and code execution tools.
+    Answer the following question using the available tools when necessary:
+    {{question}}
+
+providers:
+  - id: truefoundry:openai-main/gpt-5
+    label: 'GPT-5 with MCP Tools'
+    config:
+      temperature: 0.7
+      max_completion_tokens: 1000
+      # MCP Server configuration for enhanced capabilities
+      mcp_servers:
+        - integration_fqn: 'common-tools'
+          enable_all_tools: false
+          tools:
+            - name: 'web_search'
+            - name: 'code_executor'
+      # Maximum iterations for tool calling
+      iteration_limit: 20
+      # Metadata for tracking
+      metadata:
+        user_id: 'mcp-example-user'
+        environment: 'development'
+        use_case: 'research'
+      # Enable logging for observability
+      loggingConfig:
+        enabled: true
+
+tests:
+  - description: 'Web search integration test'
+    vars:
+      question: 'Search for the latest developments in quantum computing and summarize the key findings'
+    assert:
+      - type: llm-rubric
+        value: 'Successfully uses web search to find and summarize recent quantum computing developments'
+      - type: not-contains
+        value: 'I cannot search'
+
+  - description: 'Code execution test'
+    vars:
+      question: 'Calculate the factorial of 10 using code and show your work'
+    assert:
+      - type: llm-rubric
+        value: 'Correctly calculates factorial of 10 (3628800) and shows the calculation'
+
+  - description: 'Multi-step reasoning with tools'
+    vars:
+      question: 'Find the current price of Bitcoin and calculate what 5 BTC would be worth in USD'
+    assert:
+      - type: llm-rubric
+        value: 'Uses web search to find current Bitcoin price and performs correct calculation'
+
+defaultTest:
+  options:
+    provider:
+      config:
+        temperature: 0.7
