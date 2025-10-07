@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-import { getEnvString } from '../envars';
 import { evaluate } from '../evaluator';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
@@ -114,7 +114,7 @@ export async function testHTTPProviderConnectivity(
     }
 
     // Call the agent helper endpoint to evaluate the results (even if there's an error)
-    const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
+    const HOST = cloudConfig.getApiHost();
 
     try {
       logger.debug('[testProviderConnectivity] Calling agent helper', {
