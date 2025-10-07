@@ -3,10 +3,6 @@ import fs from 'fs';
 import path from 'path';
 
 import dedent from 'dedent';
-
-// Mock console.warn to prevent test noise
-const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -17,6 +13,7 @@ import {
   createTransformResponse,
   createValidateStatus,
   determineRequestBody,
+  escapeJsonVariables,
   estimateTokenCount,
   HttpProvider,
   processJsonBody,
@@ -26,6 +23,9 @@ import {
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../src/util/file';
 import { sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
+
+// Mock console.warn to prevent test noise
+const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
@@ -1097,6 +1097,114 @@ describe('HttpProvider', () => {
     });
   });
 
+  describe('escapeJsonVariables', () => {
+    it('should escape newlines in string values', () => {
+      const vars = { prompt: 'Line 1\nLine 2' };
+      const result = escapeJsonVariables(vars);
+      expect(result.prompt).toBe('Line 1\\nLine 2');
+    });
+
+    it('should escape carriage returns in string values', () => {
+      const vars = { text: 'Before\rAfter' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('Before\\rAfter');
+    });
+
+    it('should escape tabs in string values', () => {
+      const vars = { text: 'Before\tAfter' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('Before\\tAfter');
+    });
+
+    it('should escape quotes in string values', () => {
+      const vars = { text: 'He said "hello"' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('He said \\"hello\\"');
+    });
+
+    it('should escape backslashes in string values', () => {
+      const vars = { path: 'C:\\Users\\test' };
+      const result = escapeJsonVariables(vars);
+      expect(result.path).toBe('C:\\\\Users\\\\test');
+    });
+
+    it('should handle mixed special characters', () => {
+      const vars = {
+        prompt: 'Line 1\nLine 2\tTabbed\r\nWindows line',
+      };
+      const result = escapeJsonVariables(vars);
+      expect(result.prompt).toBe('Line 1\\nLine 2\\tTabbed\\r\\nWindows line');
+    });
+
+    it('should not escape non-string values', () => {
+      const vars = {
+        count: 42,
+        active: true,
+        items: null,
+        ratio: 3.14,
+      };
+      const result = escapeJsonVariables(vars);
+      expect(result.count).toBe(42);
+      expect(result.active).toBe(true);
+      expect(result.items).toBe(null);
+      expect(result.ratio).toBe(3.14);
+    });
+
+    it('should handle objects with mixed types', () => {
+      const vars = {
+        text: 'Hello\nWorld',
+        number: 123,
+        bool: false,
+        nested: 'Quote: "test"',
+      };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('Hello\\nWorld');
+      expect(result.number).toBe(123);
+      expect(result.bool).toBe(false);
+      expect(result.nested).toBe('Quote: \\"test\\"');
+    });
+
+    it('should escape unicode control characters', () => {
+      const vars = { text: 'Before\u0001After' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('Before\\u0001After');
+    });
+
+    it('should handle empty strings', () => {
+      const vars = { text: '' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('');
+    });
+
+    it('should handle strings with only special characters', () => {
+      const vars = { text: '\n\r\t' };
+      const result = escapeJsonVariables(vars);
+      expect(result.text).toBe('\\n\\r\\t');
+    });
+
+    it('should produce valid JSON when used in raw request templates', () => {
+      // Simulate the actual use case: escaping variables before inserting into JSON template
+      const vars = {
+        prompt: 'Please write:\n"Hello"\nThank you',
+        guid: '12345',
+        count: 42,
+      };
+      const escaped = escapeJsonVariables(vars);
+
+      // Construct a JSON string using the escaped values
+      const jsonString = `{"user_input":"${escaped.prompt}","guid":"${escaped.guid}","count":${escaped.count}}`;
+
+      // Should be valid JSON
+      expect(() => JSON.parse(jsonString)).not.toThrow();
+
+      // Should parse back to correct values
+      const parsed = JSON.parse(jsonString);
+      expect(parsed.user_input).toBe('Please write:\n"Hello"\nThank you');
+      expect(parsed.guid).toBe('12345');
+      expect(parsed.count).toBe(42);
+    });
+  });
+
   describe('processTextBody', () => {
     it('should render templates in text bodies', () => {
       const body = 'Hello {{name}}!';
@@ -2144,7 +2252,7 @@ describe('createTransformRequest', () => {
     const transform = await createTransformRequest('return badVariable.nonexistent');
     await expect(async () => {
       await transform('test', {} as any);
-    }).rejects.toThrow('Error in request transform string template: badVariable is not defined');
+    }).rejects.toThrow('Failed to transform request:');
   });
 
   it('should handle function-based request transform', async () => {
@@ -2201,13 +2309,47 @@ describe('createTransformRequest', () => {
     }).rejects.toThrow('Error in request transform function from specific-file.js: File error');
   });
 
-  it('should handle errors in string template rendering', async () => {
-    const transform = await createTransformRequest('{{ nonexistent | invalid }}');
+  it('should handle errors in JavaScript expression transform', async () => {
+    const transform = await createTransformRequest('throw new Error("Expression error")');
     await expect(async () => {
       await transform('test', {} as any);
-    }).rejects.toThrow(
-      'Error in request transform string template: (unknown path)\n  Error: filter not found: invalid',
+    }).rejects.toThrow('Failed to transform request:');
+  });
+
+  it('should handle arrow function with explicit body', async () => {
+    const transform = await createTransformRequest(
+      '(prompt, vars) => { return { text: prompt.toUpperCase() } }',
     );
+    const result = await transform('hello', {} as any);
+    expect(result).toEqual({ text: 'HELLO' });
+  });
+
+  it('should handle arrow function with implicit return', async () => {
+    const transform = await createTransformRequest('(prompt) => prompt.toUpperCase()');
+    const result = await transform('hello', {} as any);
+    expect(result).toBe('HELLO');
+  });
+
+  it('should handle regular function with explicit body', async () => {
+    const transform = await createTransformRequest(
+      'function(prompt, vars) { return { text: prompt.toUpperCase() } }',
+    );
+    const result = await transform('hello', {} as any);
+    expect(result).toEqual({ text: 'HELLO' });
+  });
+
+  it('should handle simple expression without return', async () => {
+    const transform = await createTransformRequest('prompt.toUpperCase()');
+    const result = await transform('hello', {} as any);
+    expect(result).toBe('HELLO');
+  });
+
+  it('should handle arrow function with context parameter', async () => {
+    const transform = await createTransformRequest(
+      '(prompt, vars, context) => ({ prompt, contextVars: context?.vars })',
+    );
+    const result = await transform('hello', { foo: 'bar' }, { vars: { test: 'value' } } as any);
+    expect(result).toEqual({ prompt: 'hello', contextVars: { test: 'value' } });
   });
 });
 
