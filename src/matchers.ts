@@ -462,7 +462,7 @@ export async function matchesLlmRubric(
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-  assertion?: Assertion | null,
+  assertion?: Assertion,
   options?: {
     throwOnError?: boolean;
   },
@@ -601,7 +601,7 @@ export async function matchesPiScore(
   renderedValue: string,
   llmInput: string,
   llmOutput: string,
-  assertion?: Assertion | null,
+  assertion?: Assertion,
 ): Promise<GradingResult> {
   return {
     ...(await doRemoteScoringWithPi(

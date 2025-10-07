@@ -2,6 +2,7 @@ import * as path from 'path';
 
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import * as pythonUtils from '../../src/python/pythonUtils';
 import { runPython } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 
@@ -32,6 +33,12 @@ jest.mock('path', () => ({
 describe('Python file references', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset mocked implementations to avoid test interference
+    jest.mocked(runPythonCode).mockReset();
+    jest.mocked(runPython).mockReset();
+    // Reset Python state to avoid test interference
+    pythonUtils.state.cachedPythonPath = null;
+    pythonUtils.state.validationPromise = null;
   });
 
   it('should handle Python file reference with function name', async () => {
@@ -487,6 +494,12 @@ describe('Python file references', () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
+      // Reset mocked implementations to avoid test interference
+      jest.mocked(runPythonCode).mockReset();
+      jest.mocked(runPython).mockReset();
+      // Reset Python state to avoid test interference
+      pythonUtils.state.cachedPythonPath = null;
+      pythonUtils.state.validationPromise = null;
     });
 
     it('should FAIL when score=0 and no threshold', async () => {

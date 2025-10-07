@@ -1,6 +1,12 @@
 import fs from 'fs';
 
-import { runPython, state, validatePythonPath } from '../../src/python/pythonUtils';
+import {
+  getSysExecutable,
+  runPython,
+  state,
+  tryPath,
+  validatePythonPath,
+} from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 
 jest.mock('../../src/esm');
@@ -16,6 +22,8 @@ jest.mock('../../src/python/pythonUtils', () => {
     ...originalModule,
     validatePythonPath: jest.fn(),
     runPython: jest.fn(originalModule.runPython),
+    tryPath: jest.fn(),
+    getSysExecutable: jest.fn(),
     state: {
       cachedPythonPath: '/usr/bin/python3',
     },
@@ -80,16 +88,25 @@ describe('wrapper', () => {
     });
   });
   describe('validatePythonPath race conditions', () => {
-    // Unmock validatePythonPath for this test suite to test the real implementation
+    let actualPythonUtils: any;
+
+    beforeAll(() => {
+      // Get the actual module - we'll use the real validatePythonPath implementation
+      // but mock the low-level Python detection functions to avoid actual system calls
+      // that can hang on Windows.
+      actualPythonUtils = jest.requireActual('../../src/python/pythonUtils');
+    });
+
     beforeEach(() => {
-      jest.restoreAllMocks();
       // Reset the cached path and validation promise before each test
-      const actualPythonUtils = jest.requireActual('../../src/python/pythonUtils');
       actualPythonUtils.state.cachedPythonPath = null;
       actualPythonUtils.state.validationPromise = null;
+
+      // Configure the module-level mocks to return a valid Python path
+      jest.mocked(tryPath).mockResolvedValue('/usr/bin/python3');
+      jest.mocked(getSysExecutable).mockResolvedValue('/usr/bin/python3');
     });
     it('should handle concurrent validatePythonPath calls without race conditions', async () => {
-      const actualPythonUtils = jest.requireActual('../../src/python/pythonUtils');
       const { validatePythonPath: realValidatePythonPath, state: realState } = actualPythonUtils;
       // Force cache miss
       realState.cachedPythonPath = null;
@@ -114,7 +131,6 @@ describe('wrapper', () => {
       expect(realState.cachedPythonPath).toBeTruthy();
     }, 10000); // Increase timeout for this test
     it('should handle mixed explicit/implicit validation calls consistently', async () => {
-      const actualPythonUtils = jest.requireActual('../../src/python/pythonUtils');
       const { validatePythonPath: realValidatePythonPath, state: realState } = actualPythonUtils;
       // Force cache miss
       realState.cachedPythonPath = null;
@@ -152,7 +168,6 @@ describe('wrapper', () => {
       expect(explicitResults[0]).toBe(implicitResults[0]);
     }, 10000);
     it('should handle rapid successive calls without race conditions', async () => {
-      const actualPythonUtils = jest.requireActual('../../src/python/pythonUtils');
       const { validatePythonPath: realValidatePythonPath, state: realState } = actualPythonUtils;
       // Force cache miss
       realState.cachedPythonPath = null;

@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
 import Avatar from '@mui/material/Avatar';
@@ -6,8 +7,8 @@ import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
-import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 
 const AboutPageContent = () => {
@@ -47,8 +48,8 @@ const AboutPageContent = () => {
                 when we were on the front lines.
               </Typography>
               <Typography variant="body1" paragraph>
-                Based in San Mateo, California, we're backed by Andreessen Horowitz and top leaders
-                in the technology and security industries.
+                Based in San Mateo, California, we're backed by Insight Partners, Andreessen
+                Horowitz, and top leaders in the technology and security industries.
               </Typography>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
@@ -106,7 +107,8 @@ const AboutPageContent = () => {
                 title: 'Enterprise GTM Lead',
                 image: '/img/team/ben.jpeg',
                 bio: 'Ben brings go-to-market expertise as an early GTM hire at multiple high-growth startups including Windsurf, Applied Intuition, and Amplitude. He specializes in building strategic relationships and helping enterprises implement and secure their AI solutions.',
-              },{
+              },
+              {
                 name: 'Travis Willhite',
                 title: 'Enterprise GTM Lead',
                 image: '/img/team/travis.png',
@@ -166,6 +168,12 @@ const AboutPageContent = () => {
                 image: '/img/team/yash.png',
                 bio: 'Yash specializes in securing ML infrastructure, distributed systems, and multi-tenant platforms. His work spans threat modeling, purple teaming, and building proactive defenses against supply chain risks and privacy attacks in AI systems.',
               },
+              {
+                name: 'Dane Schneider',
+                title: 'Staff Engineer',
+                image: '/img/team/dane.jpeg',
+                bio: 'Dane is a full stack engineer and former founder. He brings deep experience in coding agents, security, devops, and user interface design for complex technical domains.',
+              },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">
@@ -199,6 +207,11 @@ const AboutPageContent = () => {
           </Typography>
           <Grid container spacing={4} justifyContent="center">
             {[
+              {
+                name: 'Ganesh Bell',
+                image: '/img/team/ganesh.jpeg',
+                description: 'Managing Director, Insight Partners',
+              },
               {
                 name: 'Zane Lackey',
                 image: '/img/team/zane.jpeg',
