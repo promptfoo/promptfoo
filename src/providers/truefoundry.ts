@@ -183,13 +183,13 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
     const originalHeaders = this.config.headers;
     this.config.headers = headers;
 
-    // Call parent implementation
-    const response = await super.callEmbeddingApi(text);
-
-    // Restore original headers
-    this.config.headers = originalHeaders;
-
-    return response;
+    try {
+      // Call parent implementation
+      return await super.callEmbeddingApi(text);
+    } finally {
+      // Restore original headers
+      this.config.headers = originalHeaders;
+    }
   }
 
   id(): string {
@@ -233,9 +233,14 @@ export function createTrueFoundryProvider(
   // Determine if this is an embedding model based on model name
   const isEmbeddingModel = modelName.toLowerCase().includes('embedding');
 
+  const providerOptions: TrueFoundryProviderOptions = {
+    ...options.config,
+    env: options.env,
+  };
+
   if (isEmbeddingModel) {
-    return new TrueFoundryEmbeddingProvider(modelName, options.config || {});
+    return new TrueFoundryEmbeddingProvider(modelName, providerOptions);
   }
 
-  return new TrueFoundryProvider(modelName, options.config || {});
+  return new TrueFoundryProvider(modelName, providerOptions);
 }

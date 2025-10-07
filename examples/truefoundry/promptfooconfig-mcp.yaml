@@ -2,6 +2,12 @@
 
 description: TrueFoundry with MCP Servers Example
 
+prompts:
+  - |
+    You are a helpful research assistant with access to web search and code execution tools.
+    Answer the following question using the available tools when necessary:
+    {{question}}
+
 providers:
   - id: truefoundry:openai-main/gpt-5
     label: 'GPT-5 with MCP Tools'
@@ -25,12 +31,6 @@ providers:
       # Enable logging for observability
       loggingConfig:
         enabled: true
-
-prompts:
-  - |
-    You are a helpful research assistant with access to web search and code execution tools.
-    Answer the following question using the available tools when necessary:
-    {{question}}
 
 tests:
   - description: 'Web search integration test'

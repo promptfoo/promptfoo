@@ -1,4 +1,4 @@
-# TrueFoundry Examples
+# truefoundry (TrueFoundry Examples)
 
 This directory contains example configurations for using [TrueFoundry's LLM Gateway](https://www.truefoundry.com/ai-gateway) with promptfoo.
 
@@ -11,6 +11,14 @@ This directory contains example configurations for using [TrueFoundry's LLM Gate
    ```bash
    export TRUEFOUNDRY_API_KEY=your_api_key_here
    ```
+
+## Quick Start
+
+To quickly set up this example:
+
+```bash
+npx promptfoo@latest init --example truefoundry
+```
 
 ## Examples
 
