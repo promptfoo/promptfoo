@@ -177,9 +177,11 @@ describe('Provider Test Functions', () => {
         expect(result).toEqual({
           success: true,
           message: 'Provider is working correctly',
+          error: undefined,
           providerResponse: mockResult.response,
           transformedRequest: { body: { message: 'Hello, world!' } },
           sessionId: 'session-123',
+          analysis: undefined,
         });
 
         expect(logger.debug).toHaveBeenCalledWith('[testProviderConnectivity] Running evaluation', {
@@ -398,10 +400,31 @@ describe('Provider Test Functions', () => {
         mockSummary.results = [mockResult];
         mockSummary.stats.failures = 1;
 
+        // Mock agent endpoint response for error case
+        (fetchWithProxy as jest.Mock).mockResolvedValue({
+          ok: true,
+          json: jest.fn().mockResolvedValue({
+            message: 'Provider call failed: Connection timeout',
+            error: 'Connection timeout',
+          }),
+        });
+
         const result = await testHTTPProviderConnectivity(mockProvider);
 
-        // Should not call agent endpoint when there's an error
-        expect(fetchWithProxy).not.toHaveBeenCalled();
+        // Should call agent endpoint even when there's an error for analysis
+        expect(fetchWithProxy).toHaveBeenCalledWith(
+          expect.stringContaining('/api/v1/providers/test'),
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({
+              config: mockProvider.config,
+              providerResponse: undefined,
+              parsedResponse: undefined,
+              error: 'Connection timeout',
+              headers: undefined,
+            }),
+          }),
+        );
 
         expect(result).toEqual({
           success: false,
@@ -410,6 +433,7 @@ describe('Provider Test Functions', () => {
           providerResponse: mockResult.response,
           transformedRequest: { url: 'http://example.com' },
           sessionId: 'test-uuid-1234',
+          analysis: undefined,
         });
       });
 
@@ -458,6 +482,7 @@ describe('Provider Test Functions', () => {
         expect(result).toEqual({
           success: false,
           message: 'Provider returned an error message instead of a valid response',
+          error: undefined,
           providerResponse: mockResult.response,
           transformedRequest: undefined,
           sessionId: 'test-uuid-1234',
@@ -621,6 +646,7 @@ describe('Provider Test Functions', () => {
           providerResponse: mockResult.response,
           transformedRequest: undefined,
           sessionId: 'test-uuid-1234',
+          analysis: undefined,
         });
       });
 

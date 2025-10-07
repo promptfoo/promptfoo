@@ -98,18 +98,6 @@ export async function testHTTPProviderConnectivity(
     // Extract session ID
     const sessionId = provider.getSessionId?.() ?? result.response?.sessionId ?? vars.sessionId;
 
-    // Convert to ProviderTestResult format
-    if (result.error) {
-      return {
-        success: false,
-        message: `Provider call failed: ${result.error}`,
-        error: result.error,
-        providerResponse: result.response,
-        transformedRequest: result.response?.metadata?.transformedRequest,
-        sessionId,
-      };
-    }
-
     // If remote grading is disabled, return basic success
     if (neverGenerateRemote()) {
       logger.debug('[testProviderConnectivity] Remote grading disabled, returning raw result');
@@ -125,7 +113,7 @@ export async function testHTTPProviderConnectivity(
       };
     }
 
-    // Call the agent helper endpoint to evaluate the results
+    // Call the agent helper endpoint to evaluate the results (even if there's an error)
     const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
 
     try {
@@ -165,11 +153,15 @@ export async function testHTTPProviderConnectivity(
 
       const testAnalyzerResponseObj = await testAnalyzerResponse.json();
 
+      const errorMsg = result.error ?? result.response?.error ?? testAnalyzerResponseObj.error;
+
       return {
         success: !testAnalyzerResponseObj.error && !testAnalyzerResponseObj.changes_needed,
         message:
           testAnalyzerResponseObj.message || testAnalyzerResponseObj.error || 'Test completed',
-        error: testAnalyzerResponseObj.error,
+        error: errorMsg
+          ? errorMsg.substring(0, 100) + (errorMsg.length > 100 ? '...' : '')
+          : undefined,
         providerResponse: result.response,
         transformedRequest: result.response?.metadata?.transformedRequest,
         sessionId,
@@ -342,19 +334,63 @@ function updateProviderConfigWithSession({
 }
 
 /**
+ * Validates and configures session settings for the provider
+ * Performs all validation checks and updates provider config if successful
+ */
+function validateAndConfigureSessions({
+  provider,
+  sessionConfig,
+  options,
+}: {
+  provider: ApiProvider;
+  sessionConfig?: { sessionSource?: string; sessionParser?: string };
+  options?: { skipConfigValidation?: boolean };
+}): ValidationResult {
+  const effectiveSessionSource = determineEffectiveSessionSource({ provider, sessionConfig });
+
+  // Skip validation checks if requested (e.g., for CLI usage).
+  // This is only for cloud targets, as that'll be validated on the UI.
+  if (!options?.skipConfigValidation) {
+    const clientValidation = validateClientSessionConfig({
+      provider,
+      sessionSource: effectiveSessionSource,
+    });
+    if (!clientValidation.success) {
+      return clientValidation;
+    }
+
+    const serverValidation = validateServerSessionConfig({
+      provider,
+      sessionSource: effectiveSessionSource,
+      sessionConfig,
+    });
+    if (!serverValidation.success) {
+      return serverValidation;
+    }
+  }
+
+  updateProviderConfigWithSession({
+    provider,
+    sessionSource: effectiveSessionSource,
+    sessionConfig,
+  });
+
+  return { success: true };
+}
+
+/**
  * Creates test suite for session testing with two sequential requests
  */
 function createSessionTestSuite({
   provider,
-  firstPrompt,
-  secondPrompt,
   initialSessionId,
 }: {
   provider: ApiProvider;
-  firstPrompt: string;
-  secondPrompt: string;
   initialSessionId: string;
 }): TestSuite {
+  const firstPrompt = 'What can you help me with?';
+  const secondPrompt = 'What was the last thing I asked you?';
+
   return {
     providers: [provider],
     prompts: [{ raw: '{{input}}', label: 'Session Test' }],
@@ -618,54 +654,34 @@ export async function testProviderSession(
   options?: { skipConfigValidation?: boolean },
 ): Promise<SessionTestResult> {
   try {
-    const effectiveSessionSource = determineEffectiveSessionSource({ provider, sessionConfig });
-
-    // Skip validation checks if requested (e.g., for CLI usage)
-    if (!options?.skipConfigValidation) {
-      const clientValidation = validateClientSessionConfig({
-        provider,
-        sessionSource: effectiveSessionSource,
-      });
-      if (!clientValidation.success) {
-        return clientValidation.result;
-      }
-
-      const serverValidation = validateServerSessionConfig({
-        provider,
-        sessionSource: effectiveSessionSource,
-        sessionConfig,
-      });
-      if (!serverValidation.success) {
-        return serverValidation.result;
-      }
+    // Validate sessions config
+    const sessionValidation = validateAndConfigureSessions({
+      provider,
+      sessionConfig,
+      options,
+    });
+    if (!sessionValidation.success) {
+      return sessionValidation.result;
     }
 
-    updateProviderConfigWithSession({
+    const effectiveSessionSource = determineEffectiveSessionSource({
       provider,
-      sessionSource: effectiveSessionSource,
       sessionConfig,
     });
 
-    const firstPrompt = 'What can you help me with?';
-    const secondPrompt = 'What was the last thing I asked you?';
     const initialSessionId = uuidv4();
 
     // Creates a promptfooconfig test suite for the session test
     const testSuite = createSessionTestSuite({
       provider,
-      firstPrompt,
-      secondPrompt,
       initialSessionId,
     });
 
+    const firstPrompt = testSuite.tests![0].vars!.input as string;
+    const secondPrompt = testSuite.tests![1].vars!.input as string;
+
     // Create evaluation record
     const evalRecord = new Eval({});
-
-    // Run evaluation
-    logger.debug('[testProviderSession] Running evaluation', {
-      providerId: provider.id,
-      sessionSource: effectiveSessionSource,
-    });
 
     await evaluate(testSuite, evalRecord, {
       maxConcurrency: 1, // Must be 1 for sequential tests
@@ -696,6 +712,7 @@ export async function testProviderSession(
       firstPrompt,
       firstResult,
     });
+
     if (!serverExtraction.success) {
       return serverExtraction.result;
     }

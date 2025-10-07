@@ -1,18 +1,20 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
+import { validate as isUUID } from 'uuid';
 import { fromError } from 'zod-validation-error';
 import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
 import telemetry from '../telemetry';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
-import { getProviderFromCloud, isCloudProvider } from '../util/cloud';
+import { getProviderFromCloud } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
+import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
 import { testHTTPProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
 
 import type { UnifiedConfig } from '../types/index';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { ApiProvider } from '../types/providers';
 
 interface ValidateOptions {
   config?: string[];
@@ -56,33 +58,6 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<void> {
 }
 
 /**
- * Check if a provider is an HTTP provider
- */
-function isHttpProvider(provider: ApiProvider | ProviderOptions): boolean {
-  // Check if the provider has the HttpProvider class name or url property
-  const providerId = typeof provider.id === 'function' ? provider.id() : provider.id || '';
-  return providerId.startsWith('http:') || providerId.startsWith('https:');
-}
-
-/**
- * Patch HTTP provider config for validation.
- * We need to set maxRetries to 1 and add a silent header to avoid excessive logging of the request and response.
- */
-function patchHttpConfigForValidation(providerOptions: any): any {
-  return {
-    ...providerOptions,
-    config: {
-      ...providerOptions.config,
-      maxRetries: 1,
-      headers: {
-        ...providerOptions.config?.headers,
-        'x-promptfoo-silent': 'true',
-      },
-    },
-  };
-}
-
-/**
  * Display detailed test results with suggestions
  */
 function displayTestResult(result: any, testName: string): void {
@@ -100,7 +75,7 @@ function displayTestResult(result: any, testName: string): void {
       logger.warn(`  ${result.message}`);
     }
     if (result.error && result.error !== result.message) {
-      logger.warn(`  Error: ${result.error}`);
+      logger.warn(`  ${result.error}`);
     }
     if (result.reason) {
       logger.warn(`  Reason: ${result.reason}`);
@@ -165,71 +140,96 @@ async function testHttpProvider(provider: ApiProvider): Promise<void> {
 }
 
 /**
+ * Load provider(s) for testing - either a specific target or all providers from config
+ */
+async function loadProvidersForTesting(
+  target: string | undefined,
+  config: UnifiedConfig,
+): Promise<ApiProvider[]> {
+  if (target) {
+    // Load a specific target
+    let provider: ApiProvider;
+
+    // Cloud target
+    if (isUUID(target)) {
+      const providerOptions = await getProviderFromCloud(target);
+      const patchedOptions = isHttpProvider(providerOptions)
+        ? patchHttpConfigForValidation(providerOptions)
+        : providerOptions;
+      provider = await loadApiProvider(patchedOptions.id, {
+        options: patchedOptions,
+      });
+    } else {
+      // Check if it's an HTTP provider and patch config if needed
+      const isHttp = target.startsWith('http:') || target.startsWith('https:');
+      if (isHttp) {
+        provider = await loadApiProvider(target, {
+          options: {
+            config: {
+              maxRetries: 1,
+              headers: {
+                'x-promptfoo-silent': 'true',
+              },
+            },
+          },
+        });
+      } else {
+        provider = await loadApiProvider(target);
+      }
+    }
+    return [provider];
+  } else {
+    // Load all providers from config
+    if (!config.providers || (Array.isArray(config.providers) && config.providers.length === 0)) {
+      logger.info('No providers found in configuration to test.');
+      return [];
+    }
+
+    // Patch HTTP providers before loading (only if providers is an array)
+    const patchedProviders = Array.isArray(config.providers)
+      ? config.providers.map((providerOption: any) =>
+          isHttpProvider(providerOption)
+            ? patchHttpConfigForValidation(providerOption)
+            : providerOption,
+        )
+      : config.providers;
+
+    return loadApiProviders(patchedProviders, {
+      env: config.env,
+    });
+  }
+}
+
+/**
  * Run provider tests for a specific target or all providers in config
  */
 async function runProviderTests(target: string | undefined, config: UnifiedConfig): Promise<void> {
   logger.info('\nRunning provider tests...');
 
   try {
-    if (target) {
-      // Test a specific target
-      let provider: ApiProvider;
+    // Load provider(s)
+    const providers = await loadProvidersForTesting(target, config);
 
-      if (isCloudProvider(target)) {
-        const providerOptions = await getProviderFromCloud(target);
-        const patchedOptions = isHttpProvider(providerOptions)
-          ? patchHttpConfigForValidation(providerOptions)
-          : providerOptions;
-        provider = await loadApiProvider(patchedOptions.id, {
-          options: patchedOptions,
-        });
-      } else {
-        // Try to load directly as provider ID
-        provider = await loadApiProvider(target);
-      }
+    if (providers.length === 0) {
+      return;
+    }
 
-      // Use detailed HTTP tests for HTTP providers, basic connectivity for others
-      if (isHttpProvider(provider)) {
-        await testHttpProvider(provider);
-      } else {
-        await testBasicConnectivity(provider);
-      }
-    } else {
-      // Test all providers from config
-      if (!config.providers || (Array.isArray(config.providers) && config.providers.length === 0)) {
-        logger.info('No providers found in configuration to test.');
-        return;
-      }
-
-      // Patch HTTP providers before loading (only if providers is an array)
-      const patchedProviders = Array.isArray(config.providers)
-        ? config.providers.map((providerOption: any) =>
-            isHttpProvider(providerOption)
-              ? patchHttpConfigForValidation(providerOption)
-              : providerOption,
-          )
-        : config.providers;
-
-      const providers = await loadApiProviders(patchedProviders, {
-        env: config.env,
-      });
-
-      for (const provider of providers) {
-        try {
-          // Use detailed HTTP tests for HTTP providers, basic connectivity for others
-          if (isHttpProvider(provider)) {
-            await testHttpProvider(provider);
-          } else {
-            await testBasicConnectivity(provider);
-          }
-        } catch (err) {
-          const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
-          logger.warn(
-            chalk.yellow(
-              `Failed to test provider ${providerId}: ${err instanceof Error ? err.message : String(err)}`,
-            ),
-          );
+    // Run tests on all loaded providers
+    for (const provider of providers) {
+      try {
+        // Use detailed HTTP tests for HTTP providers, basic connectivity for others
+        if (isHttpProvider(provider)) {
+          await testHttpProvider(provider);
+        } else {
+          await testBasicConnectivity(provider);
         }
+      } catch (err) {
+        const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
+        logger.warn(
+          chalk.yellow(
+            `Failed to test provider ${providerId}: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
       }
     }
   } catch (err) {
@@ -287,24 +287,35 @@ export async function doValidateTarget(
   setupEnv(opts.envPath);
 
   if (!opts.target && !opts.config) {
-    logger.error('Please specify a target with -t <provider-id> or -c <path|uuid>');
+    logger.error('Please specify either -t <provider-id> or -c <config-path>');
     process.exitCode = 1;
     return;
   }
 
-  const target = opts.target || opts.config;
-  if (!target) {
-    logger.error('Target cannot be empty');
-    process.exitCode = 1;
-    return;
-  }
-
-  logger.info('Testing provider...');
-  try {
-    await runProviderTests(target, {} as UnifiedConfig);
-  } catch (err) {
-    logger.error(`Failed to test provider: ${err instanceof Error ? err.message : String(err)}`);
-    process.exitCode = 1;
+  // If -c is provided, load config and test all providers
+  if (opts.config) {
+    logger.info(`Loading configuration from ${opts.config}...`);
+    try {
+      const { config } = await resolveConfigs(
+        { config: [opts.config], envPath: opts.envPath },
+        defaultConfig,
+      );
+      await runProviderTests(undefined, config as UnifiedConfig);
+    } catch (err) {
+      logger.error(
+        `Failed to load or test providers from config: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exitCode = 1;
+    }
+  } else if (opts.target) {
+    // Test a specific provider ID or cloud UUID
+    logger.info('Testing provider...');
+    try {
+      await runProviderTests(opts.target, {} as UnifiedConfig);
+    } catch (err) {
+      logger.error(`Failed to test provider: ${err instanceof Error ? err.message : String(err)}`);
+      process.exitCode = 1;
+    }
   }
 }
 
@@ -315,6 +326,11 @@ export function validateCommand(
 ) {
   const validateCmd = program
     .command('validate')
+    .description('Validate configuration files and test providers');
+
+  // Add 'config' subcommand
+  validateCmd
+    .command('config', { isDefault: true })
     .description('Validate a promptfoo configuration file')
     .option(
       '-c, --config <paths...>',
@@ -328,9 +344,9 @@ export function validateCommand(
   // Add 'target' subcommand
   validateCmd
     .command('target')
-    .description('Test a specific provider target')
-    .option('-t, --target <id>', 'Provider ID to test')
-    .option('-c, --config <path|uuid>', 'Config path or cloud provider UUID to test')
+    .description('Test providers from a config file or a specific provider')
+    .option('-t, --target <id>', 'Provider ID or cloud UUID to test')
+    .option('-c, --config <path>', 'Path to configuration file to test all providers')
     .action(async (opts: ValidateTargetOptions) => {
       telemetry.record('command_used', { name: 'validate_target' });
       await doValidateTarget(opts, defaultConfig, defaultConfigPath);

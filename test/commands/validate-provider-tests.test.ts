@@ -21,6 +21,13 @@ jest.mock('../../src/telemetry', () => ({
   record: jest.fn(),
   send: jest.fn(),
 }));
+jest.mock('uuid', () => ({
+  validate: jest.fn((str: string) => {
+    // Check if the string looks like a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+}));
 
 describe('Validate Command Provider Tests', () => {
   let program: Command;
@@ -81,7 +88,16 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig, defaultConfigPath);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('http://example.com');
+      expect(loadApiProvider).toHaveBeenCalledWith('http://example.com', {
+        options: {
+          config: {
+            maxRetries: 1,
+            headers: {
+              'x-promptfoo-silent': 'true',
+            },
+          },
+        },
+      });
       expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
       expect(testProviderSession).toHaveBeenCalledWith(mockHttpProvider, undefined, {
         skipConfigValidation: true,
@@ -128,7 +144,7 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
 
-      jest.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions);
+      jest.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
       jest.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig, defaultConfigPath);
@@ -138,6 +154,7 @@ describe('Validate Command Provider Tests', () => {
         options: mockProviderOptions,
       });
       expect(logger.info).toHaveBeenCalledWith('Testing provider...');
+      expect(mockOpenAIProvider.callApi).toHaveBeenCalled();
     });
   });
 
@@ -296,7 +313,7 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
 
-      jest.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions);
+      jest.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
       jest.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig, undefined);
@@ -306,6 +323,7 @@ describe('Validate Command Provider Tests', () => {
         options: mockProviderOptions,
       });
       expect(logger.info).toHaveBeenCalledWith('Testing provider...');
+      expect(mockOpenAIProvider.callApi).toHaveBeenCalled();
       expect(process.exitCode).toBe(0);
     });
 
@@ -335,12 +353,12 @@ describe('Validate Command Provider Tests', () => {
       const targetOption = targetSubCmd?.options.find((opt) => opt.long === '--target');
       expect(targetOption).toBeDefined();
       expect(targetOption?.short).toBe('-t');
-      expect(targetOption?.description).toContain('Provider ID to test');
+      expect(targetOption?.description).toContain('Provider ID');
 
       const configOption = targetSubCmd?.options.find((opt) => opt.long === '--config');
       expect(configOption).toBeDefined();
       expect(configOption?.short).toBe('-c');
-      expect(configOption?.description).toContain('Config path or cloud provider UUID to test');
+      expect(configOption?.description).toContain('Path to configuration file');
     });
   });
 });
