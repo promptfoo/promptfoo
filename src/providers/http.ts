@@ -1,24 +1,17 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
-import httpZ from 'http-z';
 import https from 'https';
 import path from 'path';
+
+import httpZ from 'http-z';
 import { Agent } from 'undici';
 import { z } from 'zod';
-
-import { fetchWithCache, type FetchWithCacheResult } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderOptions,
-  ProviderResponse,
-  TokenUsage,
-} from '../types/index';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { renderVarsInObject } from '../util/index';
@@ -29,6 +22,14 @@ import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -1074,54 +1075,87 @@ export async function createTransformRequest(
     };
   }
 
-  if (typeof transform === 'string') {
-    if (transform.startsWith('file://')) {
-      let filename = transform.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
+  if (typeof transform === 'string' && transform.startsWith('file://')) {
+    let filename = transform.slice('file://'.length);
+    let functionName: string | undefined;
+    if (filename.includes(':')) {
+      const splits = filename.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filename, functionName] = splits;
       }
-      const requiredModule = await importModule(
-        path.resolve(cliState.basePath || '', filename),
-        functionName,
-      );
-      if (typeof requiredModule === 'function') {
-        return async (prompt, vars, context) => {
-          try {
-            return await requiredModule(prompt, vars, context);
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            const wrappedError = new Error(
-              `Error in request transform function from ${filename}: ${errorMessage}`,
-            );
-            logger.error(wrappedError.message);
-            throw wrappedError;
-          }
-        };
-      }
-      throw new Error(
-        `Request transform malformed: ${filename} must export a function or have a default export as a function`,
-      );
     }
-    // Handle string template
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
+    if (typeof requiredModule === 'function') {
+      return async (prompt, vars, context) => {
+        try {
+          return await requiredModule(prompt, vars, context);
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          const wrappedError = new Error(
+            `Error in request transform function from ${filename}: ${errorMessage}`,
+          );
+          logger.error(wrappedError.message);
+          throw wrappedError;
+        }
+      };
+    }
+    throw new Error(
+      `Request transform malformed: ${filename} must export a function or have a default export as a function`,
+    );
+  } else if (typeof transform === 'string') {
     return async (prompt, vars, context) => {
       try {
-        const rendered = getNunjucksEngine().renderString(transform, { prompt, vars, context });
-        return await new Function('prompt', 'vars', 'context', `${rendered}`)(
-          prompt,
-          vars,
-          context,
-        );
+        const trimmedTransform = transform.trim();
+        // Check if it's a function expression (either arrow or regular)
+        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
+
+        let transformFn: Function;
+        if (isFunctionExpression) {
+          // For function expressions, call them with the arguments
+          transformFn = new Function(
+            'prompt',
+            'vars',
+            'context',
+            `try { return (${trimmedTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : prompt=' + prompt + ' : vars=' + JSON.stringify(vars) + ' : context=' + JSON.stringify(context)); }`,
+          );
+        } else {
+          // Check if it contains a return statement
+          const hasReturn = /\breturn\b/.test(trimmedTransform);
+
+          if (hasReturn) {
+            // Use as function body if it has return statements
+            transformFn = new Function(
+              'prompt',
+              'vars',
+              'context',
+              `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message + ' : prompt=' + prompt + ' : vars=' + JSON.stringify(vars) + ' : context=' + JSON.stringify(context)); }`,
+            );
+          } else {
+            // Wrap simple expressions with return
+            transformFn = new Function(
+              'prompt',
+              'vars',
+              'context',
+              `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : prompt=' + prompt + ' : vars=' + JSON.stringify(vars) + ' : context=' + JSON.stringify(context)); }`,
+            );
+          }
+        }
+
+        let result: any;
+        if (context) {
+          result = await transformFn(prompt, vars, context);
+        } else {
+          result = await transformFn(prompt, vars);
+        }
+        return result;
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(
-          `Error in request transform string template: ${errorMessage}`,
+        logger.error(
+          `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(context)}.`,
         );
-        logger.error(wrappedError.message);
-        throw wrappedError;
+        throw new Error(`Failed to transform request: ${String(err)}`);
       }
     };
   }
