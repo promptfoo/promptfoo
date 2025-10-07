@@ -120,7 +120,7 @@ interface FrameworkCardProps {
   categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
   nonCompliantPlugins: string[];
-  getPluginsSortedByASR: (plugins: string[]) => string[];
+  sortPluginsByASR: (plugins: string[]) => string[];
   getPluginASR: (plugin: string) => { asr: number; total: number; failCount: number };
   idx: number;
 }
@@ -134,7 +134,7 @@ const FrameworkCard = ({
   pluginPassRateThreshold,
   nonCompliantPlugins,
   getPluginASR,
-  getPluginsSortedByASR,
+  sortPluginsByASR: getPluginsSortedByASR,
   idx,
 }: FrameworkCardProps) => {
   const theme = useTheme();

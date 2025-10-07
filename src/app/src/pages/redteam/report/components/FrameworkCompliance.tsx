@@ -170,7 +170,7 @@ const FrameworkCompliance = ({
    * @param plugins - The list of plugins to sort.
    * @returns The sorted list of plugins.
    */
-  const getPluginsSortedByASR = React.useCallback(
+  const sortPluginsByASR = React.useCallback(
     (plugins: string[]): string[] => {
       return [...plugins].sort((a, b) => {
         const asrA = getPluginASR(a).asr;
@@ -239,7 +239,7 @@ const FrameworkCompliance = ({
                     categoryStats={categoryStats}
                     pluginPassRateThreshold={pluginPassRateThreshold}
                     nonCompliantPlugins={nonCompliantPlugins}
-                    getPluginsSortedByASR={getPluginsSortedByASR}
+                    sortPluginsByASR={sortPluginsByASR}
                     getPluginASR={getPluginASR}
                     idx={idx}
                   />
