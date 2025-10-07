@@ -68,6 +68,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
+| [ttft](#ttft)                                                   | Time to first token is below threshold (milliseconds)              |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 
 :::tip
@@ -621,6 +622,10 @@ assert:
 - Measuring user-perceived responsiveness in chat applications
 - Comparing streaming performance across different models
 - Setting performance requirements for production deployments
+
+**See Also:**
+
+- [HTTP Provider Streaming Documentation](/docs/providers/http#streaming-responses)
 
 ### Levenshtein distance
 

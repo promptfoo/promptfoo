@@ -1,4 +1,5 @@
 ---
+title: HTTP/HTTPS API
 sidebar_label: HTTP API
 description: Configure HTTP/HTTPS endpoints for custom LLM integrations with dynamic request transforms, variable substitution, and multi-provider API compatibility
 ---

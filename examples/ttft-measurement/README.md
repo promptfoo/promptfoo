@@ -1,6 +1,14 @@
-# Time to First Token (TTFT) Measurement Example
+# ttft-measurement
 
-This example demonstrates how to measure Time to First Token (TTFT) using promptfoo's HTTP provider with OpenAI's Realtime API streaming responses.
+This example demonstrates how to measure Time to First Token (TTFT) using promptfoo's HTTP provider with OpenAI's Chat Completions API streaming responses.
+
+## Quick Start
+
+Initialize this example with:
+
+```bash
+npx promptfoo@latest init --example ttft-measurement
+```
 
 ## What is TTFT?
 
@@ -47,6 +55,11 @@ assert:
 ## Requirements
 
 1. **OpenAI API Key**: Set `OPENAI_API_KEY` environment variable
+   - Sign up at [OpenAI Platform](https://platform.openai.com/)
+   - Navigate to the API Keys section
+   - Create a new secret key
+   - Set it as an environment variable or in a `.env` file
+
 2. **Streaming Support**: The target API must support Server-Sent Events or similar streaming format
 3. **Response Transform**: Must parse the streaming format correctly
 
@@ -74,7 +87,7 @@ The evaluation will show:
 
 ## Notes
 
-- **Model Selection**: The example uses `gpt-5-nano` with the completions API endpoint
+- **Model Selection**: The example uses `gpt-4o-mini` with the chat completions API endpoint
 - **Threshold Tuning**: Adjust TTFT/latency thresholds based on your requirements
 - **Network Impact**: TTFT includes network latency, not just model processing time
 - **Token Counting**: Uses rough approximation (4 chars ≈ 1 token); inaccurate for non-English text or code

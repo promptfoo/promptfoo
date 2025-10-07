@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Real TTFT comparison between current OpenAI models (Sept 2025)
 
 prompts:

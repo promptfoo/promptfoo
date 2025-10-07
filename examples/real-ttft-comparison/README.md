@@ -1,20 +1,28 @@
-# Real TTFT Comparison Example
+# real-ttft-comparison
 
 This example demonstrates how to compare Time to First Token (TTFT) performance between different OpenAI models using real API calls.
+
+## Quick Start
+
+Initialize this example with:
+
+```bash
+npx promptfoo@latest init --example real-ttft-comparison
+```
 
 ## What This Example Shows
 
 - **TTFT Measurement**: Compare streaming response times between models
 - **Real-World Testing**: Uses actual OpenAI API endpoints with current models
 - **Performance Analysis**: Measures both TTFT and total latency across multiple test cases
-- **Model Comparison**: Side-by-side performance evaluation of GPT-5 nano vs GPT-5
+- **Model Comparison**: Side-by-side performance evaluation of gpt-5-nano vs gpt-5
 
 ## Configuration
 
 The example tests both models with:
 
-- **GPT-5 nano**: Fastest, most cost-efficient model
-- **GPT-5**: Flagship model with advanced capabilities
+- **gpt-5-nano**: Fastest, most cost-efficient model
+- **gpt-5**: Flagship model with advanced capabilities
 
 Each provider is configured with:
 
@@ -24,12 +32,25 @@ config:
   stream: true # Enable streaming from OpenAI API
 ```
 
+## Requirements
+
+- **OpenAI API Key**: Required to access OpenAI's API
+  - Sign up at [OpenAI Platform](https://platform.openai.com/)
+  - Navigate to the API Keys section
+  - Create a new secret key
+
 ## Running the Example
 
 1. **Set your OpenAI API key**:
 
    ```bash
    export OPENAI_API_KEY="your-api-key"
+   ```
+
+   Or create a `.env` file in the project root:
+
+   ```
+   OPENAI_API_KEY=your-api-key-here
    ```
 
 2. **Run the comparison**:
@@ -47,8 +68,8 @@ config:
 
 ### Performance Characteristics
 
-- **GPT-5 nano TTFT**: ~100-400ms (optimized for speed)
-- **GPT-5 TTFT**: ~200-600ms (balanced performance)
+- **gpt-5-nano TTFT**: ~200-800ms (optimized for speed)
+- **gpt-5 TTFT**: ~300-1000ms (balanced performance)
 - **Total Response Time**: 2-8 seconds depending on complexity
 
 ### Test Coverage

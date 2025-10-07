@@ -1469,12 +1469,14 @@ export class HttpProvider implements ApiProvider {
     url: string,
     fetchOptions: RequestInit,
     context?: CallApiContextParams,
+    isStreaming?: boolean,
   ): Promise<{ response: FetchWithCacheResult<string>; streamingMetrics?: StreamingMetrics }> {
-    // Auto-enable TTFT measurement when stream is explicitly enabled
+    // Use the explicitly passed streaming flag if available, otherwise check config
     const shouldMeasureTTFT =
-      this.config.body &&
-      typeof this.config.body === 'object' &&
-      (this.config.body as Record<string, any>).stream === true;
+      isStreaming ??
+      (this.config.body &&
+        typeof this.config.body === 'object' &&
+        (this.config.body as Record<string, any>).stream === true);
 
     if (shouldMeasureTTFT) {
       // Streaming path: Get raw response and process as stream
@@ -1776,7 +1778,18 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    const { response, streamingMetrics } = await this.fetchResponse(url, fetchOptions, context);
+    // Detect streaming from rendered body (supports dynamic/templated stream flags)
+    const isStreaming =
+      typeof renderedConfig.body === 'object' &&
+      renderedConfig.body !== null &&
+      (renderedConfig.body as Record<string, any>).stream === true;
+
+    const { response, streamingMetrics } = await this.fetchResponse(
+      url,
+      fetchOptions,
+      context,
+      isStreaming,
+    );
 
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(

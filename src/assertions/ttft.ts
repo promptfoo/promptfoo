@@ -1,8 +1,14 @@
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleTtft = ({ assertion, providerResponse }: AssertionParams): GradingResult => {
-  if (assertion.threshold === undefined) {
-    throw new Error('TTFT assertion must have a threshold in milliseconds');
+  // Validate threshold is a finite, non-negative number
+  if (
+    assertion.threshold === undefined ||
+    typeof assertion.threshold !== 'number' ||
+    !Number.isFinite(assertion.threshold) ||
+    assertion.threshold < 0
+  ) {
+    throw new Error('TTFT assertion must specify a non-negative number threshold in milliseconds');
   }
 
   const streamingMetrics = providerResponse?.streamingMetrics;
@@ -29,5 +35,6 @@ export const handleTtft = ({ assertion, providerResponse }: AssertionParams): Gr
       ? `TTFT assertion passed: ${ttft}ms <= ${assertion.threshold}ms`
       : `Time to first token ${ttft}ms exceeds threshold ${assertion.threshold}ms`,
     assertion,
+    namedScores: { ttft_ms: ttft },
   };
 };

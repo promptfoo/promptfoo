@@ -1,8 +1,10 @@
-# HTTP Provider Streaming with TTFT Measurement
+# http-provider-streaming
 
 This example demonstrates streaming response handling with **Time to First Token (TTFT)** measurement using promptfoo's HTTP provider.
 
-You can run this example with:
+## Quick Start
+
+Initialize this example with:
 
 ```bash
 npx promptfoo@latest init --example http-provider-streaming
@@ -71,7 +73,7 @@ The configuration includes three types of performance tests:
 
 ### Expected Results
 
-- **TTFT**: Typically 100-600ms for current OpenAI models (GPT-5 series)
+- **TTFT**: Typically 200-800ms for current OpenAI models
 - **Total Latency**: Usually 2-8 seconds depending on response length
 - **Streaming Benefits**: Real-time performance insights
 
