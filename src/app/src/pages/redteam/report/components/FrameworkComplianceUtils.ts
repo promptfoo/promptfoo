@@ -1,12 +1,19 @@
-import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
+import { categoryAliases, displayNameOverrides, Severity, Plugin } from '@promptfoo/redteam/constants';
 import type { Theme } from '@mui/material/styles';
 import { getASRColor, getPassRateColor } from '@promptfoo/app/src/utils/redteam';
 
 // Types for utility functions
 export type CategoryStats = Record<
   string,
-  { pass: number; total: number; passWithFilter?: number }
+  {
+    pass: number;
+    total: number;
+    passWithFilter?: number;
+    // The number of successful attacks
+    failCount: number;
+  }
 >;
+
 type PluginCategories = {
   compliant: string[];
   nonCompliant: string[];

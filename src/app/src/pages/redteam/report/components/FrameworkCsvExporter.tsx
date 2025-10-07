@@ -15,6 +15,7 @@ import {
   expandPluginCollections,
   getPluginDisplayName,
 } from './FrameworkComplianceUtils';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 
 interface CSVExporterProps {
   categoryStats: CategoryStats;
@@ -74,8 +75,8 @@ const CSVExporter = ({ categoryStats, pluginPassRateThreshold }: CSVExporterProp
                 riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
                 Severity.Low;
               const pluginName = getPluginDisplayName(plugin);
-              const attacksSuccessful = stats.total - stats.pass;
-              const asr = ((attacksSuccessful / stats.total) * 100).toFixed(2);
+              const attacksSuccessful = stats.failCount;
+              const asr = calculateAttackSuccessRate(stats.total, stats.failCount).toFixed(2);
               const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
 
               csvRows.push([
@@ -136,8 +137,8 @@ const CSVExporter = ({ categoryStats, pluginPassRateThreshold }: CSVExporterProp
           const pluginSeverity =
             riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
           const pluginName = getPluginDisplayName(plugin);
-          const attacksSuccessful = stats.total - stats.pass;
-          const asr = ((attacksSuccessful / stats.total) * 100).toFixed(2);
+          const attacksSuccessful = stats.failCount;
+          const asr = calculateAttackSuccessRate(stats.total, stats.failCount).toFixed(2);
           const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
 
           csvRows.push([
