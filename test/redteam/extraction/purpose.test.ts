@@ -102,4 +102,10 @@ describe('System Purpose Extractor', () => {
     const result = await extractSystemPurpose(provider, []);
     expect(result).toBe(DEFAULT_PURPOSE);
   });
+
+  it('should return default message for prompts array with only template variable', async () => {
+    const result = await extractSystemPurpose(provider, ['{{prompt}}']);
+    expect(result).toBe(DEFAULT_PURPOSE);
+  });
+
 });

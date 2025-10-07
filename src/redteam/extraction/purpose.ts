@@ -12,20 +12,19 @@ export async function extractSystemPurpose(
   provider: ApiProvider,
   prompts: string[],
 ): Promise<string> {
-  // Filter out prompts that are just template variables
-  const meaningfulPrompts = prompts.filter((p) => {
-    const stripped = p.replace(/\{\{\s*[\w.]+\s*\}\}/g, '').trim();
-    return stripped.length > 0;
-  });
+  const onlyTemplatePrompt =
+    prompts.length === 1 &&
+    prompts[0] &&
+    prompts[0].trim().replace(/\s+/g, '') === '{{prompt}}';
 
-  if (meaningfulPrompts.length === 0) {
-    logger.debug('[purpose] No prompts provided, returning default purpose');
+  if (prompts.length === 0 || onlyTemplatePrompt) {
+    logger.debug('[purpose] No meaningful prompts provided, returning default purpose');
     return DEFAULT_PURPOSE;
   }
 
   if (!neverGenerateRemote()) {
     try {
-      const result = await fetchRemoteGeneration('purpose' as RedTeamTask, meaningfulPrompts);
+      const result = await fetchRemoteGeneration('purpose' as RedTeamTask, prompts);
       return result as string;
     } catch (error) {
       logger.warn(`[purpose] Error using remote generation, returning empty string: ${error}`);
@@ -37,7 +36,7 @@ export async function extractSystemPurpose(
   const prompt = dedent`
     The following are prompts that are being used to test an LLM application:
 
-    ${formatPrompts(meaningfulPrompts)}
+    ${formatPrompts(prompts)}
 
     Given the above prompts, output the "system purpose" of the application in a single sentence, enclosed in <Purpose> tags.
 
