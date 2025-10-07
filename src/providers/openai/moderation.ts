@@ -179,7 +179,7 @@ export class OpenAiModerationProvider
   }
 
   async callModerationApi(
-    userPrompt: string,
+    _userPrompt: string,
     assistantResponse: string | (TextInput | ImageInput)[],
   ): Promise<ProviderModerationResponse> {
     const apiKey = this.getApiKey();

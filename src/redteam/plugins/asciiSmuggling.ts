@@ -8,7 +8,7 @@ export class AsciiSmugglingGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = '';
   async getResult(
-    prompt: string,
+    _prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
   ): Promise<{ grade: GradingResult; rubric: string }> {

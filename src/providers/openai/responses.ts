@@ -115,7 +115,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ) {
     const config = {
       ...this.config,

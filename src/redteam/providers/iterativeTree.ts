@@ -902,7 +902,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
    * @returns A promise that resolves to an object with the output and metadata.
    */
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<RedteamTreeResponse> {
