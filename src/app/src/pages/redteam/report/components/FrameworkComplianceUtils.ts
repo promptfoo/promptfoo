@@ -1,4 +1,4 @@
-import { categoryAliases, displayNameOverrides, Severity, Plugin } from '@promptfoo/redteam/constants';
+import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
 import type { Theme } from '@mui/material/styles';
 import { getASRColor, getPassRateColor } from '@promptfoo/app/src/utils/redteam';
 
