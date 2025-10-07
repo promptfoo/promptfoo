@@ -106,6 +106,11 @@ function DownloadMenu() {
     showToast(successMessage, 'success');
     // No longer closing the dialog after download
   };
+  const getFilename = (suffix: string): string => {
+    invariant(evalId, 'evalId is required for file downloads');
+
+    return `${evalId}-${suffix}`;
+  };
 
   const downloadConfig = () => {
     const fileName = getFilename('config.yaml');
