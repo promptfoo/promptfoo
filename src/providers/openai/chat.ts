@@ -353,8 +353,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ));
 
       if (status < 200 || status >= 300) {
+        const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
+
+        // Check if this is an invalid_prompt error code (indicates refusal)
+        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+          return {
+            output: errorMessage,
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            isRefusal: true,
+          };
+        }
+
         return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+          error: errorMessage,
         };
       }
     } catch (err) {

@@ -6,7 +6,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, formatOpenAiError } from './util';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 import { ResponsesProcessor } from '../responses';
 
 import type {
@@ -308,10 +308,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ));
 
       if (status < 200 || status >= 300) {
+        const errorMessage = `API error: ${status} ${statusText}\n${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`;
+
+        // Check if this is an invalid_prompt error code (indicates refusal)
+        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+          return {
+            output: errorMessage,
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            isRefusal: true,
+          };
+        }
+
         return {
-          error: `API error: ${status} ${statusText}\n${
-            typeof data === 'string' ? data : JSON.stringify(data)
-          }`,
+          error: errorMessage,
         };
       }
     } catch (err) {
