@@ -473,7 +473,23 @@ export default function ResultsView({
   );
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
-  const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
+  const resultsChartsScores = React.useMemo(() => {
+    if (!table?.body) {
+      return [];
+    }
+    return table?.body
+      .flatMap((row) => row.outputs.map((output) => output?.score))
+      .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+  }, [table]);
+
+  const canRenderResultsCharts =
+    table &&
+    config &&
+    table.head.prompts.length > 1 &&
+    // No valid scores available
+    resultsChartsScores.length > 0 &&
+    // All scores are the same, charts not useful.
+    new Set(resultsChartsScores).size > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
@@ -795,7 +811,10 @@ export default function ResultsView({
             </Box>
           </ResponsiveStack>
           {canRenderResultsCharts && renderResultsCharts && (
-            <ResultsCharts handleHideCharts={() => setRenderResultsCharts(false)} />
+            <ResultsCharts
+              handleHideCharts={() => setRenderResultsCharts(false)}
+              scores={resultsChartsScores}
+            />
           )}
         </Box>
         <ResultsTable
