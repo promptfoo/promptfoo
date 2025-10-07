@@ -29,14 +29,9 @@ interface FrameworkComplianceProps {
     string,
     { pass: number; total: number; passWithFilter: number; failCount: number }
   >;
-  strategyStats: Record<string, { pass: number; total: number }>;
 }
 
-const FrameworkCompliance = ({
-  evalId,
-  categoryStats,
-  strategyStats,
-}: FrameworkComplianceProps) => {
+const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const getNonCompliantPlugins = React.useCallback(
