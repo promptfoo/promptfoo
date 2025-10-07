@@ -1,0 +1,548 @@
+import { clearCache } from '../../src/cache';
+import {
+  TrueFoundryEmbeddingProvider,
+  TrueFoundryProvider,
+} from '../../src/providers/truefoundry';
+import * as fetchModule from '../../src/util/fetch/index';
+
+const TRUEFOUNDRY_API_BASE = 'https://llm-gateway.truefoundry.com';
+
+jest.mock('../../src/util', () => ({
+  maybeLoadFromExternalFile: jest.fn((x) => x),
+  renderVarsInObject: jest.fn((x) => x),
+}));
+
+jest.mock('../../src/util/fetch/index.ts');
+
+describe('TrueFoundry', () => {
+  const mockedFetchWithRetries = jest.mocked(fetchModule.fetchWithRetries);
+
+  afterEach(async () => {
+    await clearCache();
+    jest.clearAllMocks();
+  });
+
+  describe('TrueFoundryProvider', () => {
+    const provider = new TrueFoundryProvider('openai/gpt-4', {});
+
+    it('should initialize with correct model name', () => {
+      expect(provider.modelName).toBe('openai/gpt-4');
+    });
+
+    describe('isReasoningModel', () => {
+      it('should detect GPT-5 models with provider prefix', () => {
+        const provider = new TrueFoundryProvider('openai/gpt-5-nano', {});
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should detect GPT-5 models without provider prefix', () => {
+        const provider = new TrueFoundryProvider('gpt-5', {});
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should detect o1 models with provider prefix', () => {
+        const provider = new TrueFoundryProvider('openai/o1-preview', {});
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should detect o1 models without provider prefix', () => {
+        const provider = new TrueFoundryProvider('o1-mini', {});
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should not detect GPT-4 as reasoning model', () => {
+        const provider = new TrueFoundryProvider('openai/gpt-4', {});
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should not detect Claude as reasoning model', () => {
+        const provider = new TrueFoundryProvider('anthropic/claude-sonnet-4', {});
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should not detect Gemini as reasoning model', () => {
+        const provider = new TrueFoundryProvider('vertex-ai/gemini-2.5-pro', {});
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+    });
+
+    it('should return correct id', () => {
+      expect(provider.id()).toBe('truefoundry:openai/gpt-4');
+    });
+
+    it('should return correct string representation', () => {
+      expect(provider.toString()).toBe('[TrueFoundry Provider openai/gpt-4]');
+    });
+
+    it('should serialize to JSON correctly without API key', () => {
+      const provider = new TrueFoundryProvider('openai/gpt-4', {
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      });
+
+      expect(provider.toJSON()).toEqual({
+        provider: 'truefoundry',
+        model: 'openai/gpt-4',
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+          apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
+          apiBaseUrl: TRUEFOUNDRY_API_BASE,
+        },
+      });
+    });
+
+    it('should serialize to JSON correctly with API key redacted', () => {
+      const provider = new TrueFoundryProvider('openai/gpt-4', {
+        config: {
+          apiKey: 'secret-api-key',
+          temperature: 0.7,
+        },
+      });
+
+      const json = provider.toJSON();
+      expect(json).toEqual({
+        provider: 'truefoundry',
+        model: 'openai/gpt-4',
+        config: {
+          temperature: 0.7,
+          apiKey: undefined,
+          apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
+          apiBaseUrl: TRUEFOUNDRY_API_BASE,
+        },
+      });
+    });
+
+    it('should handle TrueFoundry-specific metadata configuration', () => {
+      const provider = new TrueFoundryProvider('openai/gpt-4', {
+        config: {
+          metadata: {
+            user_id: 'test-user',
+            custom_key: 'custom_value',
+          },
+        },
+      });
+
+      expect(provider.toJSON().config).toMatchObject({
+        metadata: {
+          user_id: 'test-user',
+          custom_key: 'custom_value',
+        },
+      });
+    });
+
+    it('should handle TrueFoundry-specific logging configuration', () => {
+      const provider = new TrueFoundryProvider('openai/gpt-4', {
+        config: {
+          loggingConfig: {
+            enabled: true,
+          },
+        },
+      });
+
+      expect(provider.toJSON().config).toMatchObject({
+        loggingConfig: {
+          enabled: true,
+        },
+      });
+    });
+
+    describe('callApi', () => {
+      beforeEach(() => {
+        process.env.TRUEFOUNDRY_API_KEY = 'test-key';
+      });
+
+      afterEach(() => {
+        delete process.env.TRUEFOUNDRY_API_KEY;
+      });
+
+      it('should call TrueFoundry API and return output with correct structure', async () => {
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+
+        const expectedBody = {
+          model: 'openai/gpt-4',
+          messages: [{ role: 'user', content: 'Test prompt' }],
+          max_tokens: 1024,
+        };
+
+        expect(mockedFetchWithRetries).toHaveBeenCalledWith(
+          `${TRUEFOUNDRY_API_BASE}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer test-key',
+            },
+            body: JSON.stringify(expectedBody),
+          },
+          300000,
+          undefined,
+        );
+
+        expect(result).toEqual({
+          output: 'Test output',
+          tokenUsage: {
+            total: 10,
+            prompt: 5,
+            completion: 5,
+          },
+          cached: false,
+          cost: undefined,
+          logProbs: undefined,
+        });
+      });
+
+      it('should add X-TFY-METADATA header when metadata is provided', async () => {
+        const providerWithMetadata = new TrueFoundryProvider('openai/gpt-4', {
+          config: {
+            metadata: {
+              user_id: 'test-user',
+              custom_field: 'test-value',
+            },
+          },
+        });
+
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await providerWithMetadata.callApi('Test prompt');
+
+        const lastCall = mockedFetchWithRetries.mock.calls[0];
+        if (!lastCall) {
+          throw new Error('Expected fetch to have been called');
+        }
+        const requestOptions = lastCall[1] as { headers: Record<string, string> };
+        expect(requestOptions.headers['X-TFY-METADATA']).toBe(
+          JSON.stringify({
+            user_id: 'test-user',
+            custom_field: 'test-value',
+          }),
+        );
+      });
+
+      it('should add X-TFY-LOGGING-CONFIG header when loggingConfig is provided', async () => {
+        const providerWithLogging = new TrueFoundryProvider('openai/gpt-4', {
+          config: {
+            loggingConfig: {
+              enabled: true,
+            },
+          },
+        });
+
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await providerWithLogging.callApi('Test prompt');
+
+        const lastCall = mockedFetchWithRetries.mock.calls[0];
+        if (!lastCall) {
+          throw new Error('Expected fetch to have been called');
+        }
+        const requestOptions = lastCall[1] as { headers: Record<string, string> };
+        expect(requestOptions.headers['X-TFY-LOGGING-CONFIG']).toBe(
+          JSON.stringify({
+            enabled: true,
+          }),
+        );
+      });
+
+      it('should add both TrueFoundry headers when both configs are provided', async () => {
+        const providerWithBoth = new TrueFoundryProvider('openai/gpt-4', {
+          config: {
+            metadata: { user_id: 'test-user' },
+            loggingConfig: { enabled: true },
+          },
+        });
+
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await providerWithBoth.callApi('Test prompt');
+
+        const lastCall = mockedFetchWithRetries.mock.calls[0];
+        if (!lastCall) {
+          throw new Error('Expected fetch to have been called');
+        }
+        const requestOptions = lastCall[1] as { headers: Record<string, string> };
+        expect(requestOptions.headers['X-TFY-METADATA']).toBe(
+          JSON.stringify({ user_id: 'test-user' }),
+        );
+        expect(requestOptions.headers['X-TFY-LOGGING-CONFIG']).toBe(
+          JSON.stringify({ enabled: true }),
+        );
+      });
+
+      it('should use cache by default', async () => {
+        const mockResponse = {
+          choices: [{ message: { content: 'Cached output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValue(response);
+
+        await provider.callApi('Test prompt');
+        const cachedResult = await provider.callApi('Test prompt');
+
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+        expect(cachedResult).toEqual({
+          output: 'Cached output',
+          cached: true,
+          cost: undefined,
+          logProbs: undefined,
+          tokenUsage: {
+            total: 10,
+            cached: 10,
+          },
+        });
+      });
+
+      it('should handle API errors', async () => {
+        const errorResponse = {
+          error: {
+            message: 'API Error',
+            type: 'invalid_request_error',
+          },
+        };
+
+        const response = new Response(JSON.stringify(errorResponse), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('400 Bad Request');
+      });
+
+      it('should handle network errors', async () => {
+        mockedFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Network error');
+      });
+
+      it('should handle rate limit errors', async () => {
+        const rateLimitResponse = new Response(
+          JSON.stringify({
+            error: {
+              message: 'Rate limit exceeded',
+              type: 'rate_limit_error',
+            },
+          }),
+          {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(rateLimitResponse);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('429');
+        expect(result.error).toContain('Rate limit exceeded');
+      });
+    });
+  });
+
+  describe('TrueFoundryEmbeddingProvider', () => {
+    const embeddingProvider = new TrueFoundryEmbeddingProvider('openai/text-embedding-3-large', {});
+
+    beforeEach(() => {
+      process.env.TRUEFOUNDRY_API_KEY = 'test-key';
+    });
+
+    afterEach(() => {
+      delete process.env.TRUEFOUNDRY_API_KEY;
+    });
+
+    it('should initialize with correct model name', () => {
+      expect(embeddingProvider.modelName).toBe('openai/text-embedding-3-large');
+    });
+
+    it('should return correct id', () => {
+      expect(embeddingProvider.id()).toBe('truefoundry:openai/text-embedding-3-large');
+    });
+
+    it('should return correct string representation', () => {
+      expect(embeddingProvider.toString()).toBe(
+        '[TrueFoundry Embedding Provider openai/text-embedding-3-large]',
+      );
+    });
+
+    it('should serialize to JSON correctly', () => {
+      const provider = new TrueFoundryEmbeddingProvider('openai/text-embedding-3-large', {
+        config: {
+          apiKey: 'secret-key',
+        },
+      });
+
+      expect(provider.toJSON()).toEqual({
+        provider: 'truefoundry',
+        model: 'openai/text-embedding-3-large',
+        config: {
+          apiKey: undefined,
+          apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
+          apiBaseUrl: TRUEFOUNDRY_API_BASE,
+        },
+      });
+    });
+
+    it('should call embedding API successfully', async () => {
+      const mockResponse = {
+        data: [
+          {
+            embedding: [0.1, 0.2, 0.3],
+            index: 0,
+          },
+        ],
+        usage: {
+          prompt_tokens: 5,
+          total_tokens: 5,
+        },
+      };
+
+      const response = new Response(JSON.stringify(mockResponse), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      });
+      mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+      const result = await embeddingProvider.callEmbeddingApi('Test text');
+
+      expect(mockedFetchWithRetries).toHaveBeenCalledWith(
+        `${TRUEFOUNDRY_API_BASE}/embeddings`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
+          }),
+        }),
+        300000,
+        undefined,
+      );
+
+      expect(result).toEqual({
+        embedding: [0.1, 0.2, 0.3],
+        tokenUsage: {
+          total: 5,
+          prompt: 5,
+          completion: 0,
+        },
+      });
+    });
+
+    it('should add TrueFoundry headers to embedding requests', async () => {
+      const providerWithHeaders = new TrueFoundryEmbeddingProvider(
+        'openai/text-embedding-3-large',
+        {
+          config: {
+            metadata: { user_id: 'test-user' },
+            loggingConfig: { enabled: true },
+          },
+        },
+      );
+
+      const mockResponse = {
+        data: [
+          {
+            embedding: [0.1, 0.2, 0.3],
+            index: 0,
+          },
+        ],
+        usage: {
+          prompt_tokens: 5,
+          total_tokens: 5,
+        },
+      };
+
+      const response = new Response(JSON.stringify(mockResponse), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      });
+      mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+      await providerWithHeaders.callEmbeddingApi('Test text');
+
+      const lastCall = mockedFetchWithRetries.mock.calls[0];
+      if (!lastCall) {
+        throw new Error('Expected fetch to have been called');
+      }
+      const requestOptions = lastCall[1] as { headers: Record<string, string> };
+      expect(requestOptions.headers['X-TFY-METADATA']).toBe(
+        JSON.stringify({ user_id: 'test-user' }),
+      );
+      expect(requestOptions.headers['X-TFY-LOGGING-CONFIG']).toBe(
+        JSON.stringify({ enabled: true }),
+      );
+    });
+
+    it('should handle embedding API errors', async () => {
+      const errorResponse = {
+        error: {
+          message: 'Invalid model',
+          type: 'invalid_request_error',
+        },
+      };
+
+      const response = new Response(JSON.stringify(errorResponse), {
+        status: 400,
+        statusText: 'Bad Request',
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      });
+      mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+      const result = await embeddingProvider.callEmbeddingApi('Test text');
+      expect(result.error).toBeDefined();
+    });
+  });
+});
