@@ -177,11 +177,7 @@ describe('TraceView', () => {
     mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
-      <TraceView
-        evaluationId="eval-123"
-        testCaseId="test-case-1"
-        fetchTraces={mockFetchTraces}
-      />,
+      <TraceView evaluationId="eval-123" testCaseId="test-case-1" fetchTraces={mockFetchTraces} />,
     );
 
     const timelines = await screen.findAllByTestId('trace-timeline');
