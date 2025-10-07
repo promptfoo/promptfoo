@@ -222,6 +222,7 @@
     "@inquirer/input": "^4.2.4",
     "@inquirer/select": "^4.3.4",
     "@modelcontextprotocol/sdk": "^1.18.1",
+    "@openai/codex-sdk": "^0.45.0",
     "@types/ws": "^8.18.1",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",

@@ -19,8 +19,9 @@ import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
-
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
+
 
 // ========================================================
 // Schemas
@@ -71,11 +72,12 @@ export const ArgsSchema = z
   .object({
     config: z.string().optional(),
     target: z.string().optional(),
+    srcDir: z.string().optional(),
   })
-  // Config and target are mutually exclusive:
-  .refine((data) => !(data.config && data.target), {
-    message: 'Cannot specify both config and target!',
-    path: ['config', 'target'],
+  // Config, target, and srcDir are mutually exclusive:
+  .refine((data) => !(data.config && data.target && data.srcDir), {
+    message: 'Can only specify one of config, target, or srcDir!',
+    path: ['config', 'target', 'srcDir'],
   });
 
 // ========================================================
@@ -297,14 +299,15 @@ export function discoverCommand(
     )
     .option('-c, --config <path>', 'Path to `promptfooconfig.yaml` configuration file.')
     .option('-t, --target <id>', 'UUID of a target defined in Promptfoo Cloud to scan.')
+    .option('--src-dir <path>', 'Path to the source directory to scan.')
     .action(async (rawArgs: Args) => {
-      // Check that remote generation is enabled:
-      if (neverGenerateRemote()) {
+      // Check that remote generation is enabled if we're not scanning a local directory
+      if (!rawArgs.srcDir && neverGenerateRemote()) {
         logger.error(dedent`
-          Target discovery relies on remote generation which is disabled.
+        Target discovery relies on remote generation which is disabled.
 
-          To enable remote generation, unset the PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION environment variable.
-        `);
+        To enable remote generation, unset the PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION environment variable.
+      `);
         process.exit(1);
       }
 
@@ -356,6 +359,60 @@ export function discoverCommand(
         // Let the internal error handling bubble up:
         const providerOptions = await getProviderFromCloud(args.target);
         target = await loadApiProvider(providerOptions.id, { options: providerOptions });
+      }
+      // If the src dir flag is provided, scan a local directory:
+      else if (args.srcDir) {
+         // TODO: v0: Validate that the user has an OPENAI_API_KEY set in their environment.
+         
+        // Dynamic import needed because @openai/codex-sdk is an ES module
+        // Using eval to bypass ts-node's module resolution issues
+        const { Codex } = await (eval('import("@openai/codex-sdk")') as Promise<typeof import('@openai/codex-sdk')>);
+        
+        const codex = new Codex();
+        const thread = codex.startThread({
+          workingDirectory: args.srcDir,
+          sandboxMode: "read-only",
+          skipGitRepoCheck: true,
+        });
+
+        const schema = z.object({
+          prompts: z.array(z.object({
+            rawText: z.string(),
+            variables: z.array(z.string()),
+          })),
+        });
+
+        const { events } = await thread.runStreamed(
+          dedent`
+            You are a security auditor tasked with discovering the following information about the system:
+
+            - Any system prompts which are passed to LLM inference requests. These should be returned exactly (with no additional formatting).
+            - Any variables which are injectable into the system prompts. These should be returned without templating syntax.
+          `, {
+            outputSchema: zodToJsonSchema(schema, { target: "openAi" })
+          }
+        );
+
+        for await (const event of events) {
+          switch (event.type) {
+            case "item.completed":
+              // if (event.item.type === "agent_message") {
+              //   logger.info
+              //   // const parsed = schema.parse(event.item.text);
+              //   // logger.info(JSON.stringify(parsed, null, 2));
+              // }else{
+              //   logger.info(JSON.stringify(event.item, null, 2));
+              // }
+              // break;  
+              logger.info(JSON.stringify(event.item, null, 2));
+              break;
+            case "turn.completed":
+              logger.info("usage", event.usage);
+              break;
+          }
+        }
+       
+        return 
       }
       // Check the current working directory for a promptfooconfig.yaml file:
       else if (defaultConfig) {
