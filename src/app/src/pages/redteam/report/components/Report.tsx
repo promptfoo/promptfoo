@@ -274,32 +274,31 @@ const App = () => {
       return {};
     }
 
-    const stats: Record<string, { pass: number; total: number }> = {};
+    const stats: Record<string, { pass: number; total: number; failCount: number }> = {};
 
-    // Process tests in failuresByPlugin (attack successes)
     Object.values(failuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const strategyId = getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
-        stats[strategyId].pass += 1;
         stats[strategyId].total += 1;
+        stats[strategyId].failCount += 1;
       });
     });
 
-    // Process tests in passesByPlugin (attack failures)
     Object.values(passesByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const strategyId = getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
         stats[strategyId].total += 1;
+        stats[strategyId].pass += 1;
       });
     });
 
@@ -440,7 +439,7 @@ const App = () => {
   }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
 
   const filteredStrategyStats = React.useMemo(() => {
-    const stats: Record<string, { pass: number; total: number }> = {};
+    const stats: Record<string, { pass: number; total: number; failCount: number }> = {};
 
     Object.values(filteredFailuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
@@ -448,10 +447,10 @@ const App = () => {
           test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
-        stats[strategyId].pass += 1;
+        stats[strategyId].failCount += 1;
         stats[strategyId].total += 1;
       });
     });
@@ -462,10 +461,11 @@ const App = () => {
           test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
         stats[strategyId].total += 1;
+        stats[strategyId].pass += 1;
       });
     });
 
@@ -886,7 +886,6 @@ const App = () => {
           />
           <RiskCategories
             categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
-            strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
             evalId={evalId}
             failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
             passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
@@ -904,7 +903,6 @@ const App = () => {
           <FrameworkCompliance
             evalId={evalId}
             categoryStats={categoryStatsForFrameworkCompliance}
-            strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
           />
         </Stack>
         <Modal
