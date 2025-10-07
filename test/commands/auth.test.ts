@@ -8,7 +8,7 @@ import telemetry from '../../src/telemetry';
 import { getDefaultTeam } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { openAuthBrowser } from '../../src/util/server';
-import { createMockResponse } from '../util/utils';
+import { createMockResponse, stripAnsi } from '../util/utils';
 
 const mockCloudUser = {
   id: '1',
@@ -41,8 +41,6 @@ jest.mock('../../src/telemetry');
 jest.mock('../../src/util/cloud');
 jest.mock('../../src/util/fetch/index.ts');
 jest.mock('../../src/util/server');
-
-const stripAnsi = (value: string): string => value.replace(/\u001b\[[0-9;]*m/g, '');
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -126,19 +124,14 @@ describe('auth command', () => {
       const infoMessages = infoCalls.map((call) => stripAnsi(String(call[0])));
       expect(infoCalls.length).toBeGreaterThanOrEqual(2);
 
-      console.log('[DEBUG] - infoCalls', infoCalls);
       expect(
         infoMessages.some((message) =>
-          // split up checks to tolerate color codes
-          message.includes('Manual login URL:') && 
-          message.includes('https://www.promptfoo.app/')
+          message.includes('Manual login URL: https://www.promptfoo.app/'),
         ),
       ).toBe(true);
       expect(
         infoMessages.some((message) =>
-          // split up checks to tolerate color codes
-          message.includes('After login, get your API token at:') &&
-          message.includes('https://www.promptfoo.app/welcome')
+          message.includes('After login, get your API token at: https://www.promptfoo.app/welcome'),
         ),
       ).toBe(true);
       expect(process.exitCode).toBe(1);
