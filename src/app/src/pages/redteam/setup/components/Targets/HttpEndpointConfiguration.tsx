@@ -14,7 +14,6 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
 import HttpIcon from '@mui/icons-material/Http';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -26,13 +25,11 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
-import LinearProgress from '@mui/material/LinearProgress';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
@@ -44,6 +41,7 @@ import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
 import TestSection from './TestSection';
+import TransformTestDialog from './TransformTestDialog';
 
 import type { ProviderOptions } from '../../types';
 import type { TestResult } from './TestSection';
@@ -80,18 +78,6 @@ const highlightJS = (code: string): string => {
       return code;
     }
     return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
-  }
-};
-
-const highlightJSON = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.json;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'json');
   } catch {
     return code;
   }
@@ -161,7 +147,6 @@ Content-Type: application/json
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
-  const [responseTestLoading, setResponseTestLoading] = useState(false);
   const [responseTestInput, setResponseTestInput] = useState(
     JSON.stringify(
       {
@@ -180,11 +165,6 @@ Content-Type: application/json
       2,
     ),
   );
-  const [responseTestResult, setResponseTestResult] = useState<{
-    success: boolean;
-    result?: any;
-    error?: string;
-  } | null>(null);
   const [editableResponseTransform, setEditableResponseTransform] = useState('');
 
   // Handle test target
@@ -260,84 +240,36 @@ Content-Type: application/json
     }
   }, [responseTestOpen, selectedTarget.config.transformResponse]);
 
-  // Test response transform function
-  const testResponseTransform = async () => {
-    const transformCode = editableResponseTransform;
-    if (!transformCode) {
-      setResponseTestResult({
+  // Test handler function for response transform
+  const handleResponseTest = async (transformCode: string, testInput: string) => {
+    const response = await callApi('/providers/test-response-transform', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        transformCode,
+        response: testInput,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ error: `Server error: ${response.status} ${response.statusText}` }));
+
+      return {
         success: false,
-        error: 'No transform function provided',
-      });
-      return;
+        error: errorData.error || 'Failed to test transform',
+      };
     }
 
-    if (!responseTestInput || !responseTestInput.trim()) {
-      setResponseTestResult({
-        success: false,
-        error: 'Please provide a test response',
-      });
-      return;
-    }
-
-    setResponseTestLoading(true);
-    try {
-      const response = await callApi('/providers/test-response-transform', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          transformCode,
-          response: responseTestInput,
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMessage = 'Failed to test transform';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          errorMessage = `Server error: ${response.status} ${response.statusText}`;
-        }
-        setResponseTestResult({
-          success: false,
-          error: errorMessage,
-        });
-        return;
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Handle the result which may be a ProviderResponse object
-        const result = data.result;
-        if (typeof result === 'object' && result !== null && 'output' in result) {
-          setResponseTestResult({
-            success: true,
-            result: result.output,
-          });
-        } else {
-          setResponseTestResult({
-            success: true,
-            result,
-          });
-        }
-      } else {
-        setResponseTestResult({
-          success: false,
-          error: data.error || 'Transform failed',
-        });
-      }
-    } catch (error) {
-      console.error('Error testing response transform:', error);
-      setResponseTestResult({
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to test transform',
-      });
-    } finally {
-      setResponseTestLoading(false);
-    }
+    const data = await response.json();
+    return {
+      success: data.success,
+      result: data.result.output ?? data.result,
+      error: data.error,
+    };
   };
 
   // Auto-size the raw request textarea between 10rem and 40rem based on line count
@@ -908,10 +840,7 @@ ${exampleRequest}`;
             variant="outlined"
             size="small"
             startIcon={<PlayArrowIcon />}
-            onClick={() => {
-              setResponseTestResult(null);
-              setResponseTestOpen(true);
-            }}
+            onClick={() => setResponseTestOpen(true)}
             sx={{
               position: 'absolute',
               top: 8,
@@ -1055,199 +984,36 @@ ${exampleRequest}`;
       />
 
       {/* Response Transform Test Dialog */}
-      <Dialog
+      <TransformTestDialog
         open={responseTestOpen}
         onClose={() => setResponseTestOpen(false)}
-        maxWidth="xl"
-        fullWidth
-        PaperProps={{
-          sx: {
-            height: '85vh',
-          },
+        title="Test Response Parser"
+        transformCode={editableResponseTransform}
+        onTransformCodeChange={setEditableResponseTransform}
+        testInput={responseTestInput}
+        onTestInputChange={setResponseTestInput}
+        testInputLabel="Test Response (JSON)"
+        testInputPlaceholder="Enter a test API response..."
+        testInputRows={8}
+        onTest={handleResponseTest}
+        onApply={(code) => updateCustomTarget('transformResponse', code)}
+        functionDocumentation={{
+          signature: '(json, text, context) => ProviderResponse | string',
+          description: (
+            <>
+              • <strong>json</strong>: any - Parsed JSON response (or null if not JSON)
+              <br />• <strong>text</strong>: string - Raw response text
+              <br />• <strong>context</strong>: {'{ response: FetchResult }'} - HTTP response
+              metadata (optional)
+              <br />
+              <br />
+              <strong>Returns:</strong> String output or {'{ output, tokenUsage?, error? }'}
+            </>
+          ),
+          successMessage: 'Parser executed successfully!',
+          outputLabel: 'Parsed Output:',
         }}
-      >
-        <DialogTitle>Test Response Parser</DialogTitle>
-        <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', height: 'calc(85vh - 64px)', p: 2 }}
-        >
-          <Box
-            sx={{ display: 'flex', gap: 2, flex: 1, flexDirection: { xs: 'column', md: 'row' } }}
-          >
-            {/* Left side - Input */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', flex: '0 0 58%' }}>
-              <Stack spacing={2} sx={{ flex: 1 }}>
-                {/* Transform Code Editor */}
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Parser Function
-                  </Typography>
-                  <Alert severity="info" sx={{ mb: 2 }}>
-                    <Typography variant="body2" sx={{ mb: 1 }}>
-                      <strong>Function signature:</strong>
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      component="pre"
-                      sx={{
-                        fontFamily: 'monospace',
-                        fontSize: '0.75rem',
-                        mb: 1,
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {'(json, text, context) => ProviderResponse | string'}
-                    </Typography>
-                    <Typography variant="body2">
-                      • <strong>json</strong>: any - Parsed JSON response (or null if not JSON)
-                      <br />• <strong>text</strong>: string - Raw response text
-                      <br />• <strong>context</strong>: {'{ response: FetchResult }'} - HTTP
-                      response metadata (optional)
-                      <br />
-                      <br />
-                      <strong>Returns:</strong> String output or {'{ output, tokenUsage?, error? }'}
-                    </Typography>
-                  </Alert>
-                  <Box
-                    sx={{
-                      border: 1,
-                      borderColor: 'grey.300',
-                      borderRadius: 1,
-                      backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-                    }}
-                  >
-                    <Editor
-                      value={editableResponseTransform}
-                      onValueChange={setEditableResponseTransform}
-                      highlight={highlightJS}
-                      padding={10}
-                      placeholder="Enter parser function..."
-                      style={{
-                        fontFamily: '"Fira code", "Fira Mono", monospace',
-                        fontSize: 14,
-                        minHeight: '150px',
-                      }}
-                    />
-                  </Box>
-                </Box>
-
-                {/* Test Input */}
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Test Response (JSON)
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={8}
-                    value={responseTestInput}
-                    onChange={(e) => setResponseTestInput(e.target.value)}
-                    placeholder="Enter a test API response..."
-                    variant="outlined"
-                    sx={{
-                      fontFamily: 'monospace',
-                      '& textarea': {
-                        fontFamily: '"Fira code", "Fira Mono", monospace',
-                        fontSize: '0.875rem',
-                      },
-                    }}
-                  />
-                </Box>
-
-                {/* Test Button */}
-                <Button
-                  variant="contained"
-                  onClick={testResponseTransform}
-                  disabled={responseTestLoading}
-                  startIcon={<PlayArrowIcon />}
-                  fullWidth
-                >
-                  Run Test
-                </Button>
-
-                {/* Loading */}
-                {responseTestLoading && <LinearProgress />}
-              </Stack>
-            </Box>
-
-            {/* Right side - Result */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Result
-                </Typography>
-                {responseTestResult ? (
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      p: 2,
-                      flex: 1,
-                      overflow: 'auto',
-                      display: 'flex',
-                      flexDirection: 'column',
-                    }}
-                  >
-                    {responseTestResult.success ? (
-                      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <Alert severity="success" sx={{ mb: 2 }}>
-                          Parser executed successfully!
-                        </Alert>
-                        <Typography variant="caption" color="text.secondary" gutterBottom>
-                          Parsed Output:
-                        </Typography>
-                        <Box
-                          sx={{
-                            mt: 1,
-                            p: 2,
-                            backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
-                            borderRadius: 1,
-                            fontFamily: 'monospace',
-                            fontSize: '0.875rem',
-                            overflow: 'auto',
-                            flex: 1,
-                          }}
-                        >
-                          <Editor
-                            value={
-                              typeof responseTestResult.result === 'string'
-                                ? responseTestResult.result
-                                : JSON.stringify(responseTestResult.result, null, 2)
-                            }
-                            onValueChange={() => {}}
-                            highlight={highlightJSON}
-                            padding={0}
-                            readOnly
-                            style={{
-                              fontFamily: '"Fira code", "Fira Mono", monospace',
-                              fontSize: 14,
-                            }}
-                          />
-                        </Box>
-                      </Box>
-                    ) : (
-                      <Alert severity="error">{responseTestResult.error}</Alert>
-                    )}
-                  </Paper>
-                ) : (
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      p: 2,
-                      flex: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Typography color="text.secondary" align="center">
-                      Run the test to see results here
-                    </Typography>
-                  </Paper>
-                )}
-              </Box>
-            </Box>
-          </Box>
-        </DialogContent>
-      </Dialog>
+      />
     </Box>
   );
 };
