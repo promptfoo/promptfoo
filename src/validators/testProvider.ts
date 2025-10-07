@@ -365,6 +365,9 @@ function createSessionTestSuite({
           sessionId: initialSessionId,
           input: firstPrompt,
         },
+        options: {
+          storeOutputAs: 'firstResponse',
+        },
       },
       // Test 2: Second request (tests session memory)
       {
@@ -384,7 +387,7 @@ function createSessionTestSuite({
               In the second message, the user asked what was the last thing they asked.
 
               First Message: "${firstPrompt}"
-              First Response: {{__outputs.0.output}}
+              First Response: {{firstResponse}}
 
               Second Message: "${secondPrompt}"
               Second Response: {{output}}

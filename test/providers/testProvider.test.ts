@@ -1472,16 +1472,21 @@ describe('Provider Test Functions', () => {
 
         await testProviderSession(mockProvider);
 
-        // Verify the llm-rubric assertion uses {{__outputs.0.output}} to reference first response
+        // Verify the llm-rubric assertion uses {{firstResponse}} to reference first response
+        // and that first test uses storeOutputAs
         expect(evaluate).toHaveBeenCalledWith(
           expect.objectContaining({
             tests: [
-              expect.any(Object),
+              expect.objectContaining({
+                options: expect.objectContaining({
+                  storeOutputAs: 'firstResponse',
+                }),
+              }),
               expect.objectContaining({
                 assert: expect.arrayContaining([
                   expect.objectContaining({
                     type: 'llm-rubric',
-                    value: expect.stringContaining('{{__outputs.0.output}}'),
+                    value: expect.stringContaining('{{firstResponse}}'),
                   }),
                 ]),
               }),

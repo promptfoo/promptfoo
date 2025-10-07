@@ -5,14 +5,14 @@ import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
 import telemetry from '../telemetry';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
-import { getProviderFromCloud } from '../util/cloud';
+import { getProviderFromCloud, isCloudProvider } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
 import { setupEnv } from '../util/index';
 import { testHTTPProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
 
 import type { UnifiedConfig } from '../types/index';
-import type { ApiProvider } from '../types/providers';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 interface ValidateOptions {
   config?: string[];
@@ -58,25 +58,10 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<void> {
 /**
  * Check if a provider is an HTTP provider
  */
-function isHttpProvider(provider: ApiProvider): boolean {
+function isHttpProvider(provider: ApiProvider | ProviderOptions): boolean {
   // Check if the provider has the HttpProvider class name or url property
   const providerId = typeof provider.id === 'function' ? provider.id() : provider.id || '';
-  return (
-    provider.constructor.name === 'HttpProvider' ||
-    'url' in provider ||
-    providerId.startsWith('http:') ||
-    providerId.startsWith('https:')
-  );
-}
-
-/**
- * Check if provider options represent an HTTP provider
- */
-function isHttpProviderOptions(providerOptions: any): boolean {
-  const providerId = providerOptions.id || '';
-  return (
-    providerId.startsWith('http:') || providerId.startsWith('https:') || providerOptions.config?.url
-  );
+  return providerId.startsWith('http:') || providerId.startsWith('https:');
 }
 
 /**
@@ -190,12 +175,9 @@ async function runProviderTests(target: string | undefined, config: UnifiedConfi
       // Test a specific target
       let provider: ApiProvider;
 
-      // Check if target is a UUID (cloud provider)
-      const UUID_REGEX =
-        /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
-      if (UUID_REGEX.test(target)) {
+      if (isCloudProvider(target)) {
         const providerOptions = await getProviderFromCloud(target);
-        const patchedOptions = isHttpProviderOptions(providerOptions)
+        const patchedOptions = isHttpProvider(providerOptions)
           ? patchHttpConfigForValidation(providerOptions)
           : providerOptions;
         provider = await loadApiProvider(patchedOptions.id, {
@@ -222,7 +204,7 @@ async function runProviderTests(target: string | undefined, config: UnifiedConfi
       // Patch HTTP providers before loading (only if providers is an array)
       const patchedProviders = Array.isArray(config.providers)
         ? config.providers.map((providerOption: any) =>
-            isHttpProviderOptions(providerOption)
+            isHttpProvider(providerOption)
               ? patchHttpConfigForValidation(providerOption)
               : providerOption,
           )
