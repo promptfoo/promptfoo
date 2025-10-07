@@ -220,6 +220,7 @@ export interface ProviderTestResponse {
   providerResponse: ProviderResponse;
   unalignedProviderResult?: ProviderResponse;
   redteamProviderResult?: ProviderResponse;
+  transformedRequest?: any;
 }
 
 /**

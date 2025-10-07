@@ -49,6 +49,8 @@ interface ProviderProps {
   };
   setError?: (error: string | null) => void;
   validateAll?: boolean; // Flag to force validation of all fields
+  onTargetTested?: (success: boolean) => void;
+  onSessionTested?: (success: boolean) => void;
 }
 
 export default function ProviderEditor({
@@ -61,6 +63,8 @@ export default function ProviderEditor({
   opts = {},
   setError,
   validateAll = false,
+  onTargetTested,
+  onSessionTested,
 }: ProviderProps) {
   const theme = useTheme();
   const {
@@ -168,6 +172,8 @@ export default function ProviderEditor({
           // Validation errors will be displayed through the handleError function
         }}
         providerType={providerType}
+        onTargetTested={onTargetTested}
+        onSessionTested={onSessionTested}
       />
 
       <Box

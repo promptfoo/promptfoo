@@ -22,5 +22,6 @@ def write_metrics(
     fn = f"{metrics['task_id']}_{provider}_{model}.json".replace("/", "_")
     path = os.path.join(out_dir, fn)
     with open(path, "w") as f:
-        json.dump(metrics, f, indent=2)
+        # <- this makes ExecutionError, Exception, etc. become strings
+        json.dump(metrics, f, indent=2, default=str)
     return path

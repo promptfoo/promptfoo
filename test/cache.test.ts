@@ -18,15 +18,23 @@ jest.mock('../src/util/fetch/index', () => ({
   fetchWithRetries: jest.fn(),
 }));
 
+// Mock cache-manager-fs-hash to prevent Windows lockfile errors
+jest.mock('cache-manager-fs-hash', () => ({
+  __esModule: true,
+  default: 'mocked-fs-store',
+}));
+
 const mockFetchWithRetries = jest.mocked(fetchWithRetries);
 
 // Mock cache-manager
 jest.mock('cache-manager', () => ({
   caching: jest.fn().mockImplementation(({ store }) => {
     const cache = new Map();
+    // Handle both string 'memory' and any other value (including modules) as fs-hash
+    const storeName = store === 'memory' ? 'memory' : 'fs-hash';
     return {
       store: {
-        name: store === 'memory' ? 'memory' : 'fs-hash',
+        name: storeName,
       },
       get: jest.fn().mockImplementation((key) => cache.get(key)),
       set: jest.fn().mockImplementation((key, value) => {
@@ -81,6 +89,8 @@ describe('cache configuration', () => {
   beforeEach(() => {
     jest.resetModules();
     process.env = { ...originalEnv };
+    // Clear cache type override from test setup
+    delete process.env.PROMPTFOO_CACHE_TYPE;
     mkdirSyncMock = jest.spyOn(fs, 'mkdirSync').mockImplementation();
     existsSyncMock = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
   });

@@ -29,6 +29,7 @@ import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bed
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
+import { createEnvoyProvider } from './envoy';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { EchoProvider } from './echo';
@@ -57,7 +58,7 @@ import {
   LocalAiEmbeddingProvider,
 } from './localai';
 import { ManualInputProvider } from './manualInput';
-import { MCPProvider } from './mcp';
+import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
@@ -91,6 +92,8 @@ import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
 import { createLlamaApiProvider } from './llamaApi';
+import { createNscaleProvider } from './nscale';
+import { createDeepSeekProvider } from './deepseek';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -293,10 +296,10 @@ export const providerMap: ProviderFactory[] = [
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
-      // Handle AgentCore
-      if (modelType === 'agentcore' || modelType === 'agent-core') {
-        const { AwsBedrockAgentCoreProvider } = await import('./bedrock/agentcore');
-        return new AwsBedrockAgentCoreProvider(modelName, providerOptions);
+      // Handle Bedrock Agents
+      if (modelType === 'agents') {
+        const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
+        return new AwsBedrockAgentsProvider(modelName, providerOptions);
       }
 
       if (modelType === 'completion') {
@@ -313,6 +316,18 @@ export const providerMap: ProviderFactory[] = [
       // Reconstruct the full model name preserving the original format
       const fullModelName = splits.slice(1).join(':');
       return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('bedrock-agent:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const agentId = providerPath.substring('bedrock-agent:'.length);
+      const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
+      return new AwsBedrockAgentsProvider(agentId, providerOptions);
     },
   },
   {
@@ -448,15 +463,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':') || 'deepseek-chat';
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://api.deepseek.com/v1',
-          apiKeyEnvar: 'DEEPSEEK_API_KEY',
-        },
+      return createDeepSeekProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
@@ -468,6 +477,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return new EchoProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('envoy:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createEnvoyProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -648,6 +670,19 @@ export const providerMap: ProviderFactory[] = [
         return new MistralEmbeddingProvider(providerOptions);
       }
       return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('nscale:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createNscaleProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -840,6 +875,20 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const { createAimlApiProvider } = await import('./aimlapi');
       return createAimlApiProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('cometapi:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createCometApiProvider } = await import('./cometapi');
+      return createCometApiProvider(providerPath, {
         ...providerOptions,
         env: context.env,
       });

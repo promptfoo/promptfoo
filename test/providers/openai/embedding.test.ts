@@ -53,7 +53,57 @@ describe('OpenAI Provider', () => {
     it('should handle API errors', async () => {
       jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
-      await expect(provider.callEmbeddingApi('test text')).rejects.toThrow('API error');
+      const result = await provider.callEmbeddingApi('test text');
+      expect(result.error).toBe('API call error: Error: API error');
+      expect(result.embedding).toBeUndefined();
+    });
+
+    it('should validate input type', async () => {
+      const result = await provider.callEmbeddingApi({ message: 'test' } as any);
+      expect(result.error).toBe(
+        'Invalid input type for embedding API. Expected string, got object. Input: {"message":"test"}',
+      );
+      expect(result.embedding).toBeUndefined();
+    });
+
+    it('should handle HTTP error status', async () => {
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: { error: { message: 'Unauthorized' } },
+        cached: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      });
+
+      const result = await provider.callEmbeddingApi('test text');
+      expect(result.error).toBe(
+        'API error: 401 Unauthorized\n{"error":{"message":"Unauthorized"}}',
+      );
+      expect(result.embedding).toBeUndefined();
+    });
+
+    it('should validate API key', async () => {
+      // Clear any environment variables that might provide an API key
+      const originalEnv = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+
+      try {
+        const providerNoKey = new OpenAiEmbeddingProvider('text-embedding-3-large', {
+          config: {},
+        });
+
+        const result = await providerNoKey.callEmbeddingApi('test text');
+        expect(result.error).toBe(
+          'API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+        );
+        expect(result.embedding).toBeUndefined();
+      } finally {
+        // Always restore original environment state
+        if (originalEnv !== undefined) {
+          process.env.OPENAI_API_KEY = originalEnv;
+        } else {
+          delete process.env.OPENAI_API_KEY;
+        }
+      }
     });
   });
 });

@@ -27,6 +27,12 @@ import yaml from 'js-yaml';
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
 
+/**
+ * Renders a "Download" menu item and a modal dialog that lets users export evaluation data
+ * (configuration files, table exports, and advanced formats), copy related CLI commands, and track downloaded files.
+ *
+ * @returns A React element containing the menu item and the download options dialog with controls for exporting files and copying commands.
+ */
 function DownloadMenu() {
   const { table, config, evalId } = useResultsViewStore();
   const [open, setOpen] = React.useState(false);
@@ -180,7 +186,12 @@ function DownloadMenu() {
     const headers = [
       ...(hasDescriptions ? ['Description'] : []),
       ...table.head.vars,
-      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+      ...table.head.prompts.flatMap((prompt) => [
+        `[${prompt.provider}] ${prompt.label}`,
+        'Grader Reason',
+        'Comment',
+        'Latency (ms)',
+      ]),
     ];
     csvRows.push(headers);
 
@@ -190,14 +201,20 @@ function DownloadMenu() {
         ...row.vars,
         ...row.outputs
           .filter((output): output is EvaluateTableOutput => output != null)
-          .map(
-            ({ pass, text, failureReason: failureType }) =>
-              (pass
-                ? '[PASS] '
-                : failureType === ResultFailureReason.ASSERT
-                  ? '[FAIL] '
-                  : '[ERROR] ') + text,
-          ),
+          .flatMap(({ pass, text, failureReason, gradingResult, metadata, latencyMs }) => [
+            // Add pass/fail/error prefix to text
+            (pass
+              ? '[PASS] '
+              : failureReason === ResultFailureReason.ASSERT
+                ? '[FAIL] '
+                : '[ERROR] ') + (text || ''),
+            // Add grader reason
+            gradingResult?.reason || '',
+            // Add comment
+            gradingResult?.comment || '',
+            // Add latency
+            latencyMs ?? '',
+          ]),
       ];
       csvRows.push(rowValues);
     });
@@ -450,12 +467,7 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid
-                    size={{
-                      xs: 12,
-                      sm: 6,
-                    }}
-                  >
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <Button
                       onClick={downloadCsv}
                       startIcon={<DownloadIcon />}
@@ -467,12 +479,7 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid
-                    size={{
-                      xs: 12,
-                      sm: 6,
-                    }}
-                  >
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <Button
                       onClick={downloadTable}
                       startIcon={<DownloadIcon />}
@@ -500,12 +507,7 @@ function DownloadMenu() {
                 </Typography>
 
                 <Grid container spacing={2}>
-                  <Grid
-                    size={{
-                      xs: 12,
-                      md: 4,
-                    }}
-                  >
+                  <Grid size={{ xs: 12, md: 4 }}>
                     <Button
                       onClick={downloadBurpPayloads}
                       startIcon={<DownloadIcon />}
@@ -517,12 +519,7 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid
-                    size={{
-                      xs: 12,
-                      md: 4,
-                    }}
-                  >
+                  <Grid size={{ xs: 12, md: 4 }}>
                     <Button
                       onClick={downloadDpoJson}
                       startIcon={<DownloadIcon />}
@@ -534,12 +531,7 @@ function DownloadMenu() {
                     </Button>
                   </Grid>
 
-                  <Grid
-                    size={{
-                      xs: 12,
-                      md: 4,
-                    }}
-                  >
+                  <Grid size={{ xs: 12, md: 4 }}>
                     <Button
                       onClick={downloadHumanEvalTestCases}
                       startIcon={<DownloadIcon />}
