@@ -13,9 +13,7 @@ export async function extractSystemPurpose(
   prompts: string[],
 ): Promise<string> {
   const onlyTemplatePrompt =
-    prompts.length === 1 &&
-    prompts[0] &&
-    prompts[0].trim().replace(/\s+/g, '') === '{{prompt}}';
+    prompts.length === 1 && prompts[0] && prompts[0].trim().replace(/\s+/g, '') === '{{prompt}}';
 
   if (prompts.length === 0 || onlyTemplatePrompt) {
     logger.debug('[purpose] No meaningful prompts provided, returning default purpose');

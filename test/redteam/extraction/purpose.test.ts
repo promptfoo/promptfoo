@@ -107,5 +107,4 @@ describe('System Purpose Extractor', () => {
     const result = await extractSystemPurpose(provider, ['{{prompt}}']);
     expect(result).toBe(DEFAULT_PURPOSE);
   });
-
 });
