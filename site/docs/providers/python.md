@@ -231,6 +231,7 @@ class ProviderResponse:
     cost: Optional[float]
     cached: Optional[bool]
     logProbs: Optional[List[float]]
+    metadata: Optional[Dict[str, Any]]
 
 class ProviderEmbeddingResponse:
     embedding: List[float]

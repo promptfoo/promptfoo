@@ -827,7 +827,6 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       score: 1,
       reason: 'Manual result (overrides all other grading results)',
       comment: 'Test comment',
-      assertion: null,
       componentResults,
     };
 
@@ -1864,101 +1863,135 @@ describe('ResultsTable Pagination', () => {
   });
 });
 
-// describe('ResultsTable Pagination Adjustment on Filter', () => {
-//   const mockTable = {
-//     body: Array(25).fill({
-//       outputs: [
-//         {
-//           pass: true,
-//           score: 1,
-//           text: 'test output',
-//         },
-//       ],
-//       test: {},
-//       vars: [],
-//     }),
-//     head: {
-//       prompts: [
-//         {
-//           metrics: {
-//             cost: 1.23456,
-//             namedScores: {},
-//             testPassCount: 25,
-//             tokenUsage: {
-//               completion: 500,
-//               total: 1000,
-//             },
-//             totalLatencyMs: 2000,
-//           },
-//           provider: 'test-provider',
-//         },
-//       ],
-//       vars: [],
-//     },
-//   };
+describe('ResultsTable BaseNumberInput onChange undefined', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+  };
 
-//   const defaultProps = {
-//     columnVisibility: {},
-//     failureFilter: {},
-//     filterMode: 'all' as const,
-//     maxTextLength: 100,
-//     onFailureFilterToggle: vi.fn(),
-//     onSearchTextChange: vi.fn(),
-//     searchText: '',
-//     showStats: true,
-//     wordBreak: 'break-word' as const,
-//     setFilterMode: vi.fn(),
-//   };
+  it('should not set page when BaseNumberInput onChange receives undefined', async () => {
+    const mockSetPagination = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      setPagination: mockSetPagination,
+      filteredResultsCount: 100,
+    }));
 
-//   const renderWithProviders = (ui: React.ReactElement) => {
-//     return render(ui);
-//   };
+    render(<ResultsTable {...defaultProps} />);
 
-//   it('should adjust current page to 0 when filter reduces results below current page start', async () => {
-//     const mockSetPagination = vi.fn();
-//     const mockAddFilter = vi.fn();
+    const input = screen.getByRole('spinbutton');
+    await act(async () => {
+      await userEvent.clear(input);
+      await userEvent.tab();
+    });
 
-//     vi.mocked(useTableStore).mockImplementation(() => ({
-//       config: {},
-//       evalId: '123',
-//       setTable: vi.fn(),
-//       table: mockTable,
-//       version: 4,
-//       fetchEvalData: vi.fn(),
-//       isFetching: false,
-//       filteredResultsCount: 5,
-//       totalResultsCount: 25,
-//       filters: {
-//         values: {},
-//         appliedCount: 0,
-//         options: {
-//           metric: [],
-//         },
-//       },
-//       addFilter: mockAddFilter,
-//       setFilteredResultsCount: vi.fn(),
-//       pagination: { pageIndex: 2, pageSize: 10 },
-//       setPagination: mockSetPagination,
-//     }));
+    expect(mockSetPagination).not.toHaveBeenCalled();
+  });
+});
 
-//     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
-//       inComparisonMode: false,
-//       renderMarkdown: true,
-//     }));
+describe('ResultsTable Non-Numeric Input Handling', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+  };
 
-//     renderWithProviders(<ResultsTable {...defaultProps} />);
+  it('should not update pagination when non-numeric input is entered in the page navigator', async () => {
+    const setPaginationMock = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      filteredResultsCount: 25,
+      totalResultsCount: 25,
+      setPagination: setPaginationMock,
+    }));
 
-//     const filter = {
-//       type: 'metric' as const,
-//       operator: 'equals' as const,
-//       value: 'someMetric',
-//       logicOperator: 'or' as const,
-//     };
+    render(<ResultsTable {...defaultProps} />);
 
-//     act(() => {
-//       mockAddFilter(filter);
-//     });
+    const inputElement = screen.getByRole('spinbutton');
+    await act(async () => {
+      await userEvent.type(inputElement, 'abc');
+    });
 
-//     expect(mockSetPagination).toHaveBeenCalledWith({ pageIndex: 0, pageSize: 10 });
-//   });
-// });
+    expect(setPaginationMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('ResultsTable Zoom and Scroll Position', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  it('should maintain scroll position and focused element when zoom changes', () => {
+    const { container } = render(<ResultsTable {...defaultProps} />);
+    const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
+    const initialScrollTop = 100;
+    tableContainer.scrollTop = initialScrollTop;
+
+    const cellToFocus = container.querySelector('td');
+    if (cellToFocus) {
+      cellToFocus.focus();
+    }
+
+    act(() => {
+      render(<ResultsTable {...defaultProps} zoom={1.5} />, { container });
+    });
+
+    expect(tableContainer.scrollTop).toBe(initialScrollTop);
+    if (cellToFocus) {
+      expect(document.activeElement).toBe(cellToFocus);
+    }
+  });
+});

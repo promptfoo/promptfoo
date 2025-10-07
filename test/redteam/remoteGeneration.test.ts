@@ -7,6 +7,7 @@ import {
   getRemoteGenerationUrlForUnaligned,
   getRemoteHealthUrl,
   neverGenerateRemote,
+  neverGenerateRemoteForRegularEvals,
   shouldGenerateRemote,
 } from '../../src/redteam/remoteGeneration';
 
@@ -94,14 +95,72 @@ describe('neverGenerateRemote', () => {
     jest.resetAllMocks();
   });
 
-  it('should return true when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set to true', () => {
+  it('should return true when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', () => {
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    expect(neverGenerateRemote()).toBe(true);
+  });
+
+  it('should return true when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set', () => {
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+    expect(neverGenerateRemote()).toBe(true);
+  });
+
+  it('should return true when both PROMPTFOO_DISABLE_REMOTE_GENERATION and PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION are set (superset wins)', () => {
     jest.mocked(getEnvBool).mockReturnValue(true);
     expect(neverGenerateRemote()).toBe(true);
   });
 
-  it('should return false when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set to false', () => {
+  it('should return false when neither flag is set', () => {
     jest.mocked(getEnvBool).mockReturnValue(false);
     expect(neverGenerateRemote()).toBe(false);
+  });
+
+  it('should prioritize PROMPTFOO_DISABLE_REMOTE_GENERATION over PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION', () => {
+    // First call checks PROMPTFOO_DISABLE_REMOTE_GENERATION (returns true)
+    // Second call would check PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION (not reached)
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    expect(neverGenerateRemote()).toBe(true);
+  });
+});
+
+describe('neverGenerateRemoteForRegularEvals', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('should return true when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', () => {
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    expect(neverGenerateRemoteForRegularEvals()).toBe(true);
+  });
+
+  it('should return false when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set (redteam-specific should not affect regular evals)', () => {
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+    expect(neverGenerateRemoteForRegularEvals()).toBe(false);
+  });
+
+  it('should return false when neither flag is set', () => {
+    jest.mocked(getEnvBool).mockReturnValue(false);
+    expect(neverGenerateRemoteForRegularEvals()).toBe(false);
+  });
+
+  it('should only check PROMPTFOO_DISABLE_REMOTE_GENERATION (not the redteam-specific flag)', () => {
+    jest
+      .mocked(getEnvBool)
+      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    expect(neverGenerateRemoteForRegularEvals()).toBe(true);
+    // Verify getEnvBool was called only once with the correct key
+    expect(getEnvBool).toHaveBeenCalledTimes(1);
+    expect(getEnvBool).toHaveBeenCalledWith('PROMPTFOO_DISABLE_REMOTE_GENERATION');
   });
 });
 
