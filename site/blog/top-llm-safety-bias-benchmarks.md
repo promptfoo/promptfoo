@@ -2,6 +2,27 @@
 title: 'Top 10 Open Datasets for LLM Safety, Toxicity & Bias Evaluation'
 description: 'A comprehensive guide to the most important open-source datasets for evaluating LLM safety, including toxicity detection, bias measurement, and truthfulness benchmarks.'
 image: /img/blog/safety-benchmarks/hero-image.png
+keywords:
+  [
+    LLM safety,
+    toxicity detection,
+    bias evaluation,
+    safety benchmarks,
+    AI safety datasets,
+    TruthfulQA,
+    RealToxicityPrompts,
+    CrowS-Pairs,
+    StereoSet,
+    Jigsaw,
+    ToxiGen,
+    HolisticBias,
+    Anthropic HHH,
+    red teaming,
+    AI alignment,
+  ]
+date: 2025-10-06
+authors: [ian]
+tags: [safety, benchmarks, best-practices, evaluation]
 ---
 
 # Top 10 Open Datasets for LLM Safety, Toxicity & Bias Evaluation
