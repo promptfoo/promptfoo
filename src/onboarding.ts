@@ -190,6 +190,17 @@ echo "This is the LLM output"
 php my_script.php
 `;
 
+const WINDOWS_PROVIDER = `@echo off
+REM Learn more about building any generic provider: https://promptfoo.dev/docs/providers/custom-script
+
+REM Anything printed to standard output will be captured as the output of the provider
+
+echo This is the LLM output
+
+REM You can also call external scripts or executables
+REM php my_script.php
+`;
+
 const PYTHON_VAR = `# Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/guide/#import-vars-from-separate-files
 def get_var(var_name, prompt, other_vars):
     # This is where you can fetch documents from a database, call an API, etc.
@@ -448,7 +459,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
       {
         name: 'Local executable',
-        value: ['exec:provider.sh'],
+        value: [process.platform === 'win32' ? 'exec:provider.bat' : 'exec:provider.sh'],
       },
       {
         name: 'HTTP endpoint',
@@ -535,9 +546,11 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       if (
         providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
       ) {
+        // Generate platform-appropriate executable provider script
+        const isWindows = process.platform === 'win32';
         await writeFile({
-          file: 'provider.sh',
-          contents: BASH_PROVIDER,
+          file: isWindows ? 'provider.bat' : 'provider.sh',
+          contents: isWindows ? WINDOWS_PROVIDER : BASH_PROVIDER,
           required: true,
         });
       }

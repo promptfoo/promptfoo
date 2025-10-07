@@ -479,12 +479,18 @@ export function parsePathOrGlob(
   let functionName: string | undefined;
 
   if (filename.includes(':')) {
-    const splits = filename.split(':');
-    if (
-      splits[0] &&
-      (isJavascriptFile(splits[0]) || splits[0].endsWith('.py') || splits[0].endsWith('.go'))
-    ) {
-      [filename, functionName] = splits;
+    // Windows-aware path parsing: check if colon is part of drive letter
+    const lastColonIndex = filename.lastIndexOf(':');
+    if (lastColonIndex > 1) {
+      const pathWithoutFunction = filename.slice(0, lastColonIndex);
+      if (
+        isJavascriptFile(pathWithoutFunction) ||
+        pathWithoutFunction.endsWith('.py') ||
+        pathWithoutFunction.endsWith('.go')
+      ) {
+        functionName = filename.slice(lastColonIndex + 1);
+        filename = pathWithoutFunction;
+      }
     }
   }
 
