@@ -1,8 +1,5 @@
 import { clearCache } from '../../src/cache';
-import {
-  TrueFoundryEmbeddingProvider,
-  TrueFoundryProvider,
-} from '../../src/providers/truefoundry';
+import { TrueFoundryEmbeddingProvider, TrueFoundryProvider } from '../../src/providers/truefoundry';
 import * as fetchModule from '../../src/util/fetch/index';
 
 const TRUEFOUNDRY_API_BASE = 'https://llm-gateway.truefoundry.com';

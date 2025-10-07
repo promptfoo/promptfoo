@@ -127,7 +127,7 @@ providers:
 providers:
   - truefoundry:groq-main/llama-3.3-70b-versatile
   - truefoundry:mistral-main/mistral-large-latest
-  - truefoundry:cohere-main/embed-english-v3.0  # Embeddings
+  - truefoundry:cohere-main/embed-english-v3.0 # Embeddings
 ```
 
 ## Embeddings
@@ -159,7 +159,7 @@ When using Cohere models, you must specify the `input_type` parameter:
 providers:
   - id: truefoundry:cohere-main/embed-english-v3.0
     config:
-      input_type: 'search_query'  # Options: search_query, search_document, classification, clustering
+      input_type: 'search_query' # Options: search_query, search_document, classification, clustering
       metadata:
         user_id: 'embedding-test'
 ```

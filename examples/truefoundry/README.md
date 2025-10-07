@@ -147,7 +147,7 @@ When using Cohere models, specify the `input_type`:
 providers:
   - id: truefoundry:cohere-main/embed-english-v3.0
     config:
-      input_type: 'search_query'  # Options: search_query, search_document, classification, clustering
+      input_type: 'search_query' # Options: search_query, search_document, classification, clustering
 ```
 
 ## Observability
