@@ -8,32 +8,35 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 url = "https://customer-service-chatbot-example.promptfoo.app"
 
+
 def call_api(prompt, options, context):
     """
     Custom API provider function for multi-turn conversations.
-    
+
     This function is called by promptfoo for each test case and handles
     communication with a multi-turn conversation API endpoint.
-    
+
     Args:
         prompt (str): The user's message/input for this turn of the conversation.  If stateful is set to false in your config, this can be a list of messages expressed as JSON.
         options (dict): Configuration options passed from the promptfoo config
             - config (dict): Custom configuration parameters
         context (dict): Context information including conversation state
             - vars (dict): Variables from the test case, including sessionId for conversation continuity
-    
+
     Returns:
         dict: Response object containing:
             - output (str): The API's response message (if successful)
             - error (str): Error message (if API call failed)
             - tokenUsage (dict): Token usage information (if exposed by the API)
             - metadata (dict): Additional metadata including config options
-    
+
     Example:
         >>> prompt = "What is the weather like?"
         >>> options = {"config": {"temperature": 0.7}}
@@ -57,15 +60,15 @@ def call_api(prompt, options, context):
                 # If it's an array, log the number of messages
                 if isinstance(parsed_prompt, list):
                     logger.info(f"Prompt includes {len(parsed_prompt)} messages")
-                    
+
             except json.JSONDecodeError:
                 # If it's not valid JSON, use as string
-                logger.info("Prompt looked like JSON but failed to parse, using as string")
+                logger.info(
+                    "Prompt looked like JSON but failed to parse, using as string"
+                )
         else:
             logger.info("Prompt is a single message")
 
-    
-    
     payload = {
         "message": prompt,
         # Add the session ID to the payload.  Could also be added to a header depending on your API.
@@ -81,13 +84,16 @@ def call_api(prompt, options, context):
                 "Accept": "application/json",
             },
             timeout=30,
-            verify=False  # Disable SSL verification (not recommended for production)
+            verify=False,  # Disable SSL verification (not recommended for production)
         )
         response.raise_for_status()  # Raise an exception for bad status codes
         response_data = response.json() if response.content else {}
     except requests.exceptions.HTTPError as e:
         logger.error(f"HTTP error {e.response.status_code}: {e.response.text}")
-        response_data = {"error": f"HTTP {e.response.status_code}", "body": e.response.text}
+        response_data = {
+            "error": f"HTTP {e.response.status_code}",
+            "body": e.response.text,
+        }
     except requests.exceptions.RequestException as e:
         logger.error(f"Request failed: {str(e)}")
         response_data = {"error": str(e)}
