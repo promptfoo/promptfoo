@@ -12,6 +12,8 @@ import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
+import { DataExportService } from '../services/dataExportService';
+import { setDownloadHeaders } from '../utils/downloadHelpers';
 import type { Request, Response } from 'express';
 
 import type {
@@ -168,9 +170,12 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
 
 evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
-  const limit = Number(req.query.limit) || 50;
-  const offset = Number(req.query.offset) || 0;
-  const filterMode = EvalResultsFilterMode.parse(req.query.filterMode) ?? 'all';
+  const format = req.query.format as string | undefined;
+  const limit = format ? Number.MAX_SAFE_INTEGER : Number(req.query.limit) || 50;
+  const offset = format ? 0 : Number(req.query.offset) || 0;
+  const filterMode = req.query.filterMode
+    ? EvalResultsFilterMode.parse(req.query.filterMode)
+    : 'all';
   const searchText = req.query.search ? String(req.query.search) : '';
   const filters = Array.isArray(req.query.filter)
     ? req.query.filter
@@ -266,6 +271,24 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     };
   }
 
+  // Handle export formats
+  if (format === 'csv') {
+    const csvData = DataExportService.generateCsvData(returnTable, {
+      isRedteam: Boolean(eval_.config.redteam),
+    });
+
+    setDownloadHeaders(res, `${id}.csv`, 'text/csv');
+    res.send(csvData);
+    return;
+  } else if (format === 'json') {
+    const jsonData = DataExportService.generateJsonData(returnTable);
+
+    setDownloadHeaders(res, `${id}json`, 'application/json');
+    res.json(jsonData);
+    return;
+  }
+
+  // Default response for table view
   res.json({
     table: returnTable,
     totalCount: table.totalCount,

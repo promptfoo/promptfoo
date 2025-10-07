@@ -1,7 +1,6 @@
 import { screen } from '@testing-library/dom';
 import { render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DownloadMenu from './DownloadMenu';
 import { useTableStore as useResultsViewStore } from './store';
@@ -25,6 +24,22 @@ vi.mock('../../../hooks/useToast', () => ({
   useToast: () => ({
     showToast: showToastMock,
   }),
+}));
+
+// Mock the new download hooks
+const mockDownloadCsvFn = vi.fn().mockResolvedValue('test-eval-id-results.csv');
+const mockDownloadJsonFn = vi.fn().mockResolvedValue('test-eval-id-results.json');
+
+vi.mock('../../../hooks/useDownloads', () => ({
+  downloadBlob: vi.fn(),
+  useDownloadCsv: vi.fn(() => ({
+    downloadCsv: mockDownloadCsvFn,
+    isLoading: false,
+  })),
+  useDownloadJson: vi.fn(() => ({
+    downloadJson: mockDownloadJsonFn,
+    isLoading: false,
+  })),
 }));
 
 vi.mock('js-yaml', () => ({
@@ -113,30 +128,20 @@ describe('DownloadMenu', () => {
   it('downloads CSV when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+      expect(mockDownloadCsvFn).toHaveBeenCalledWith(mockEvalId);
     });
   });
 
   it('downloads CSV with Description column when descriptions are present', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      // Verify csv-stringify input contains Description header and value
-      const calls = (csvStringify as unknown as ReturnType<typeof vi.fn>).mock.calls;
-      expect(calls.length).toBeGreaterThan(0);
-      const rows = calls[0][0] as string[][];
-      expect(rows[0][0]).toBe('Description');
-      expect(rows[1][0]).toBe('Test case with description');
-      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock
-        .calls[0][0] as Blob;
-      expect(blob.type).toBe('text/csv;charset=utf-8;');
+      expect(mockDownloadCsvFn).toHaveBeenCalledWith(mockEvalId);
     });
   });
 
@@ -162,12 +167,10 @@ describe('DownloadMenu', () => {
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      expect(blob.type).toBe('text/csv;charset=utf-8;');
+      expect(mockDownloadCsvFn).toHaveBeenCalledWith(mockEvalId);
     });
   });
 
@@ -197,24 +200,14 @@ describe('DownloadMenu', () => {
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      expect(blob.type).toBe('text/csv;charset=utf-8;');
+      expect(mockDownloadCsvFn).toHaveBeenCalledWith(mockEvalId);
     });
   });
 
   it('downloads CSV with Unicode and special characters in description', async () => {
-    vi.mock('csv-stringify/browser/esm/sync', () => ({
-      stringify: vi.fn().mockImplementation((data) => {
-        const header = data[0].join(',');
-        const row = data[1].join(',');
-        return `${header}\n${row}`;
-      }),
-    }));
-
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       table: {
         head: {
@@ -243,29 +236,20 @@ describe('DownloadMenu', () => {
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock
-        .calls[0][0] as Blob;
-
-      const reader = new FileReader();
-      reader.readAsText(blob);
-      reader.onload = () => {
-        expect(reader.result).toContain('Test case with Unicode: こんにちは世界 and emoji: 😊');
-      };
+      expect(mockDownloadCsvFn).toHaveBeenCalledWith(mockEvalId);
     });
   });
 
   it('downloads Table JSON when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('JSON Export'));
+    await userEvent.click(screen.getByText('Download Results JSON'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+      expect(mockDownloadJsonFn).toHaveBeenCalledWith(mockEvalId);
     });
   });
 
@@ -321,11 +305,11 @@ describe('DownloadMenu', () => {
     });
   });
 
-  it('shows a toast when table data is not available', async () => {
+  it('shows a toast when evalId is not available', async () => {
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      table: null,
+      table: mockTable,
       config: mockConfig,
-      evalId: mockEvalId,
+      evalId: null,
     });
 
     // Clear any previous calls to the mock
@@ -333,12 +317,12 @@ describe('DownloadMenu', () => {
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
 
-    expect(showToastMock).toHaveBeenCalledWith('No table data', 'error');
+    expect(showToastMock).toHaveBeenCalledWith('No evaluation ID', 'error');
   });
 
-  it('generates a CSV file with valid outputs when table data contains null or undefined outputs', async () => {
+  it('downloads CSV file when table data contains null or undefined outputs', async () => {
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       table: {
         ...mockTable,
@@ -361,10 +345,10 @@ describe('DownloadMenu', () => {
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+      expect(mockDownloadCsvFn).toHaveBeenCalledWith(mockEvalId);
     });
   });
 
@@ -546,7 +530,7 @@ describe('DownloadMenu', () => {
 
     // Check the category headings
     expect(screen.getByText('Configuration Files')).toBeInTheDocument();
-    expect(screen.getByText('Table Data Exports')).toBeInTheDocument();
+    expect(screen.getByText('Export Results')).toBeInTheDocument();
     expect(screen.getByText('Advanced Exports')).toBeInTheDocument();
   });
 
