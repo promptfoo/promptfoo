@@ -10,7 +10,7 @@ import ExtensionEditor from './ExtensionEditor';
 import type { ProviderOptions } from '@promptfoo/types';
 import 'prismjs/themes/prism.css';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { BaseNumberInput } from '@app/components/shared/form/input/BaseNumberInput';
 
 interface CommonConfigurationOptionsProps {
   selectedTarget: ProviderOptions;

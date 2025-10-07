@@ -47,7 +47,7 @@ import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-co
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { BaseNumberInput } from '@app/components/shared/form/input/BaseNumberInput';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';

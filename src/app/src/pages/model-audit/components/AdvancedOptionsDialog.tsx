@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { BaseNumberInput } from '@app/components/shared/form/input/BaseNumberInput';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';

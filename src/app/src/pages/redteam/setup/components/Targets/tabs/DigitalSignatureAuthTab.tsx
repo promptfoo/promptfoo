@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { BaseNumberInput } from '@app/components/shared/form/input/BaseNumberInput';
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
