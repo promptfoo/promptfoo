@@ -278,7 +278,7 @@ describe('SlackProvider', () => {
         config: {
           channel: 'C123',
           responseStrategy: 'timeout',
-          timeout: 2100, // Keep under Jest's 5 second limit
+          timeout: 3000, // Increase timeout to ensure reliable polling on all platforms
         },
       });
 
