@@ -1,0 +1,53 @@
+<svg width="900" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .card { fill: #ffffff; stroke: #e2e8f0; stroke-width: 2; }
+      .title { font: bold 18px system-ui, sans-serif; fill: #1e293b; }
+      .subtitle { font: 14px system-ui, sans-serif; fill: #64748b; }
+      .statement { font: 14px system-ui, sans-serif; fill: #334155; line-height: 1.5; }
+      .label { font: bold 12px system-ui, sans-serif; text-transform: uppercase; }
+      .explicit { fill: #dc2626; }
+      .implicit { fill: #f59e0b; }
+      .benign { fill: #10b981; }
+    </style>
+  </defs>
+
+  <!-- Card -->
+  <rect class="card" x="10" y="10" width="880" height="380" rx="8"/>
+
+  <!-- Title -->
+  <text x="30" y="40" class="title">ToxiGen: Detecting Implicit vs Explicit Hate Speech</text>
+  <text x="30" y="62" class="subtitle">The challenge: Implicit toxicity lacks obvious slurs but conveys harmful stereotypes</text>
+
+  <!-- Explicit Hate (Easy to Detect) -->
+  <g transform="translate(30, 90)">
+    <rect x="0" y="0" width="420" height="120" rx="6" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+    <text x="15" y="25" class="label explicit">Explicit Hate (Easy to Detect)</text>
+    <text x="15" y="50" class="statement">"Those [slur] are all criminals"</text>
+    <text x="15" y="75" class="statement">and shouldn't be allowed here."</text>
+    <text x="15" y="105" font-size="12" fill="#7f1d1d">✓ Contains slurs and overt hostility</text>
+  </g>
+
+  <!-- Implicit Hate (Hard to Detect) -->
+  <g transform="translate(470, 90)">
+    <rect x="0" y="0" width="400" height="120" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+    <text x="15" y="25" class="label implicit">Implicit Hate (Hard to Detect)</text>
+    <text x="15" y="50" class="statement">"People from that community"</text>
+    <text x="15" y="70" class="statement">tend to be less educated and more</text>
+    <text x="15" y="90" class="statement">prone to criminal behavior."</text>
+    <text x="15" y="115" font-size="12" fill="#78350f">⚠ No slurs, but harmful stereotype</text>
+  </g>
+
+  <!-- Benign Statement (Mentions Group Neutrally) -->
+  <g transform="translate(30, 230)">
+    <rect x="0" y="0" width="840" height="100" rx="6" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+    <text x="15" y="25" class="label benign">Benign Statement (Neutral Mention)</text>
+    <text x="15" y="50" class="statement">"The community center serves people from diverse backgrounds and provides"</text>
+    <text x="15" y="70" class="statement">educational resources to help everyone succeed."</text>
+    <text x="15" y="92" font-size="12" fill="#065f46">✓ Mentions group without stereotype or bias</text>
+  </g>
+
+  <!-- Stats Box -->
+  <rect x="30" y="350" width="840" height="30" rx="4" fill="#f1f5f9"/>
+  <text x="45" y="372" font-size="13" font-weight="600" fill="#475569">ToxiGen Dataset: 274K statements • 94.5% of toxic examples are implicit hate • 13 minority groups</text>
+</svg>

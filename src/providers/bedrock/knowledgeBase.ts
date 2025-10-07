@@ -207,7 +207,7 @@ export class AwsBedrockKnowledgeBaseProvider
       },
     };
 
-    logger.debug(`Calling Amazon Bedrock Knowledge Base API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Amazon Bedrock Knowledge Base API', { params });
 
     const cache = await getCache();
 
@@ -243,7 +243,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
       const response = await client.send(command);
 
-      logger.debug(`Amazon Bedrock Knowledge Base API response: ${JSON.stringify(response)}`);
+      logger.debug('Amazon Bedrock Knowledge Base API response', { response });
 
       let output = '';
       if (response && response.output && response.output.text) {

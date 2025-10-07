@@ -3,6 +3,7 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
+import * as pythonUtils from '../../src/python/pythonUtils';
 import { runPython } from '../../src/python/pythonUtils';
 
 jest.mock('../../src/python/pythonUtils');
@@ -41,6 +42,11 @@ describe('PythonProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset mocked implementations to avoid test interference
+    mockRunPython.mockReset();
+    // Reset Python state to avoid test interference
+    pythonUtils.state.cachedPythonPath = null;
+    pythonUtils.state.validationPromise = null;
     mockGetCache.mockResolvedValue({
       get: jest.fn(),
       set: jest.fn(),

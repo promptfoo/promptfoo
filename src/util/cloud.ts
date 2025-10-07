@@ -201,25 +201,176 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 }
 
 /**
- * Retrieves the default team for the current user from Promptfoo Cloud.
- * The default team is determined as the oldest team by creation date.
- * @returns Promise resolving to an object with team id and name
- * @throws Error if the request fails or no teams are found
+ * Retrieves all teams for the current user from Promptfoo Cloud.
+ * @returns Promise resolving to an array of team objects
+ * @throws Error if the request fails
  */
-export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
+export async function getUserTeams(): Promise<
+  Array<{
+    id: string;
+    name: string;
+    slug: string;
+    organizationId: string;
+    createdAt: string;
+    updatedAt: string;
+  }>
+> {
   const response = await makeRequest(`/users/me/teams`, 'GET');
   if (!response.ok) {
-    throw new Error(`Failed to get default team id: ${response.statusText}`);
+    throw new Error(`Failed to get user teams: ${response.statusText}`);
   }
 
   const body = await response.json();
+  return body;
+}
+
+/**
+ * Retrieves the default team for the current user from Promptfoo Cloud.
+ * The default team is determined as the oldest team by creation date.
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the request fails or no teams are found
+ */
+export async function getDefaultTeam(): Promise<{
+  id: string;
+  name: string;
+  organizationId: string;
+  createdAt: string;
+}> {
+  const teams = await getUserTeams();
+
+  if (teams.length === 0) {
+    throw new Error('No teams found for user');
+  }
 
   // get the oldest team -- this matches the logic of the enterprise app
-  const oldestTeam = body.sort((a: { createdAt: string }, b: { createdAt: string }) => {
+  const oldestTeam = teams.sort((a, b) => {
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   })[0];
 
-  return oldestTeam;
+  return {
+    id: oldestTeam.id,
+    name: oldestTeam.name,
+    organizationId: oldestTeam.organizationId,
+    createdAt: oldestTeam.createdAt,
+  };
+}
+
+/**
+ * Retrieves a team by its ID.
+ * @param teamId - The team ID to look up
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the team is not found or not accessible
+ */
+export async function getTeamById(
+  teamId: string,
+): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
+  const teams = await getUserTeams();
+  const team = teams.find((t) => t.id === teamId);
+
+  if (!team) {
+    throw new Error(`Team with ID '${teamId}' not found or not accessible`);
+  }
+
+  return {
+    id: team.id,
+    name: team.name,
+    organizationId: team.organizationId,
+    createdAt: team.createdAt,
+  };
+}
+
+/**
+ * Resolves a team identifier (name, slug, or ID) to a team object.
+ * @param identifier - The team name, slug, or ID
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the team is not found
+ */
+export async function resolveTeamFromIdentifier(
+  identifier: string,
+): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
+  const teams = await getUserTeams();
+
+  // Try exact ID match first
+  let team = teams.find((t) => t.id === identifier);
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  // Try name match (case-insensitive)
+  team = teams.find((t) => t.name.toLowerCase() === identifier.toLowerCase());
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  // Try slug match
+  team = teams.find((t) => t.slug === identifier);
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  const availableTeams = teams.map((t) => t.name).join(', ');
+  throw new Error(`Team '${identifier}' not found. Available teams: ${availableTeams}`);
+}
+
+/**
+ * Resolves the current team context, checking stored preferences first.
+ * @param teamIdentifier - Optional explicit team identifier to use
+ * @param fallbackToDefault - Whether to fall back to server default team
+ * @returns Promise resolving to an object with team id and name
+ * @throws Error if no team can be resolved
+ */
+export async function resolveTeamId(
+  teamIdentifier?: string,
+  fallbackToDefault = true,
+): Promise<{ id: string; name: string }> {
+  // 1. Use explicit team identifier if provided
+  if (teamIdentifier) {
+    logger.debug(`[Team Resolution] Using explicit team identifier: ${teamIdentifier}`);
+    return await resolveTeamFromIdentifier(teamIdentifier);
+  }
+
+  // 2. Use stored current team preference (scoped to current organization)
+  const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
+  const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
+  if (currentTeamId) {
+    try {
+      logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
+      return await getTeamById(currentTeamId);
+    } catch (_error) {
+      logger.warn(
+        `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
+      );
+    }
+  }
+
+  // 3. Fall back to server default (oldest team)
+  if (fallbackToDefault) {
+    logger.debug(`[Team Resolution] Using server default team`);
+    const defaultTeam = await getDefaultTeam();
+    // Store the default team for future use (scoped to organization)
+    cloudConfig.setCurrentTeamId(defaultTeam.id, defaultTeam.organizationId);
+    logger.info(
+      `Using team: ${defaultTeam.name} (use 'promptfoo auth teams set <name>' to change)`,
+    );
+    return defaultTeam;
+  }
+
+  throw new Error('No team specified and no default available');
 }
 
 /**
