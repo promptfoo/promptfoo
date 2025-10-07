@@ -47,6 +47,7 @@ export function evalTableToCsv(
         if (!output) {
           const emptyValues = ['', '', ''];
           if (isRedteam) {
+            // handle message, redteamHistory, redteamTreeHistory columns
             emptyValues.push('', '', '');
           }
           return emptyValues;

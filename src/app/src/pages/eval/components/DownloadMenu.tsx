@@ -55,12 +55,6 @@ function DownloadMenu() {
     },
   );
 
-  const getFilename = (suffix: string): string => {
-    invariant(evalId, 'evalId is required for file downloads');
-
-    return `${evalId}-${suffix}`;
-  };
-
   const openDownloadDialog = (blob: Blob, downloadName: string) => {
     downloadBlob(blob, downloadName);
     setDownloadedFiles((prev) => new Set([...prev, downloadName]));
@@ -70,13 +64,6 @@ function DownloadMenu() {
     setOpen(false);
     // Reset download states when dialog is closed
     setDownloadedFiles(new Set());
-  };
-
-  const getFilename = (suffix: string): string => {
-    if (evalId) {
-      return `${evalId}-${suffix}`;
-    }
-    invariant(false, 'evalId is required for file downloads');
   };
 
   const copyToClipboard = (text: string) => {
@@ -119,6 +106,7 @@ function DownloadMenu() {
     showToast(successMessage, 'success');
     // No longer closing the dialog after download
   };
+
   const getFilename = (suffix: string): string => {
     invariant(evalId, 'evalId is required for file downloads');
 
