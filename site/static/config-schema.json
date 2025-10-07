@@ -138,6 +138,9 @@
                             "CLOUDFLARE_API_KEY": {
                               "type": "string"
                             },
+                            "COMETAPI_KEY": {
+                              "type": "string"
+                            },
                             "COHERE_API_KEY": {
                               "type": "string"
                             },
@@ -229,6 +232,12 @@
                               "type": "string"
                             },
                             "MISTRAL_API_KEY": {
+                              "type": "string"
+                            },
+                            "NSCALE_SERVICE_TOKEN": {
+                              "type": "string"
+                            },
+                            "NSCALE_API_KEY": {
                               "type": "string"
                             },
                             "OLLAMA_API_KEY": {

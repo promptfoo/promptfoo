@@ -2,12 +2,11 @@ import fs from 'fs';
 import path from 'path';
 
 import cacheManager from 'cache-manager';
-import fsStore from 'cache-manager-fs-hash';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
-import { fetchWithRetries } from './util/fetch';
+import { fetchWithRetries } from './util/fetch/index';
 import type { Cache } from 'cache-manager';
 
 let cacheInstance: Cache | undefined;
@@ -20,6 +19,8 @@ const cacheType =
 export function getCache() {
   if (!cacheInstance) {
     let cachePath = '';
+    let store: any = 'memory';
+
     if (cacheType === 'disk' && enabled) {
       cachePath =
         getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
@@ -27,9 +28,25 @@ export function getCache() {
         logger.info(`Creating cache folder at ${cachePath}.`);
         fs.mkdirSync(cachePath, { recursive: true });
       }
+      // Lazy load fsStore only when disk cache is actually needed.
+      // This prevents module loading errors in tests and handles Windows compatibility issues.
+      // Note: cache-manager-fs-hash depends on lockfile@1.x which uses signal-exit@3.x,
+      // but other dependencies may pull in signal-exit@4.x which has breaking API changes.
+      // If loading fails (common on Windows), we gracefully fall back to memory cache.
+      try {
+        store = require('cache-manager-fs-hash');
+      } catch (err) {
+        logger.warn(
+          `Failed to load disk cache module (${(err as Error).message}). ` +
+            `Using memory cache instead. This is a known limitation on some systems ` +
+            `due to dependency compatibility issues and does not affect functionality.`,
+        );
+        store = 'memory';
+      }
     }
+
     cacheInstance = cacheManager.caching({
-      store: cacheType === 'disk' && enabled ? fsStore : 'memory',
+      store,
       options: {
         max: getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT', 10_000), // number of files
         path: cachePath,

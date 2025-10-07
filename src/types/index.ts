@@ -383,7 +383,8 @@ export interface GradingResult {
   componentResults?: GradingResult[];
 
   // The assertion that was evaluated
-  assertion?: Assertion | null;
+  // TODO(Will): Can we move to this being required?
+  assertion?: Assertion;
 
   // User comment
   comment?: string;

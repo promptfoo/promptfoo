@@ -26,6 +26,16 @@ type EnvVars = {
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
+  /**
+   * Disable ALL remote generation (superset of PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION).
+   * Affects: SimulatedUser, red team features, all promptfoo-hosted inference.
+   */
+  PROMPTFOO_DISABLE_REMOTE_GENERATION?: boolean;
+  /**
+   * Disable remote generation for red team features only (subset of PROMPTFOO_DISABLE_REMOTE_GENERATION).
+   * Affects: Harmful content generation, red team strategies, red team simulated users.
+   * Does NOT affect: Regular (non-redteam) SimulatedUser usage.
+   */
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
@@ -220,6 +230,9 @@ type EnvVars = {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_KEY?: string;
 
+  // CometAPI
+  COMETAPI_KEY?: string;
+
   // CDP
   CDP_DOMAIN?: string;
 
@@ -263,6 +276,10 @@ type EnvVars = {
   MISTRAL_TEMPERATURE?: string;
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
+
+  // Nscale
+  NSCALE_SERVICE_TOKEN?: string;
+  NSCALE_API_KEY?: string;
 
   // Ollama
   OLLAMA_API_KEY?: string;

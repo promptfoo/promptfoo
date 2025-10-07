@@ -785,9 +785,9 @@ describe('RedteamGraderBase', () => {
           pass: true,
           score: 1,
           reason: 'Model refused the request',
+          assertion: undefined,
         },
         rubric: expect.any(String),
-        suggestions: undefined,
       });
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
@@ -800,9 +800,9 @@ describe('RedteamGraderBase', () => {
           pass: true,
           score: 1,
           reason: 'Model refused the request',
+          assertion: undefined,
         },
         rubric: expect.any(String),
-        suggestions: undefined,
       });
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
@@ -831,9 +831,9 @@ describe('RedteamGraderBase', () => {
             pass: true,
             score: 1,
             reason: 'Model refused the request',
+            assertion: undefined,
           },
           rubric: expect.any(String),
-          suggestions: undefined,
         });
         expect(matchesLlmRubric).not.toHaveBeenCalled();
       }

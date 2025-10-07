@@ -18,9 +18,9 @@ vi.mock('./Citations', () => ({
 vi.mock('./DebuggingPanel', () => {
   const MockDebuggingPanel = vi.fn((props) => {
     if (props.onTraceSectionVisibilityChange) {
-      setTimeout(() => {
+      queueMicrotask(() => {
         props.onTraceSectionVisibilityChange(false);
-      }, 0);
+      });
     }
     return (
       <div data-testid="mock-debugging-panel" data-prompt-index={props.promptIndex}>
@@ -372,6 +372,103 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.queryByTestId('mock-debugging-panel')).not.toBeInTheDocument();
 
     expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
+  });
+
+  it('displays the main tab label as "Prompt" when there is no output content', () => {
+    render(
+      <EvalOutputPromptDialog
+        {...{
+          open: true,
+          onClose: mockOnClose,
+          prompt: 'Test prompt',
+          provider: 'test-provider',
+        }}
+      />,
+    );
+    expect(screen.getByRole('tab', { name: 'Prompt' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Prompt & Output' })).toBeNull();
+  });
+
+  it('displays the main tab label as "Prompt & Output" when output content is present', () => {
+    const propsWithOutput = {
+      open: true,
+      onClose: mockOnClose,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      output: 'Test output',
+    };
+    render(<EvalOutputPromptDialog {...propsWithOutput} />);
+    expect(screen.getByRole('tab', { name: 'Prompt & Output' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Prompt' })).toBeNull();
+  });
+
+  it('does not render OutputsPanel when no output content is present', () => {
+    render(
+      <EvalOutputPromptDialog
+        {...{
+          open: true,
+          onClose: mockOnClose,
+          prompt: 'Test prompt',
+          provider: 'test-provider',
+        }}
+      />,
+    );
+    expect(screen.queryByText('Original Output')).toBeNull();
+  });
+
+  it('renders OutputsPanel when output content is present', () => {
+    render(
+      <EvalOutputPromptDialog
+        {...{
+          open: true,
+          onClose: mockOnClose,
+          prompt: 'Test prompt',
+          provider: 'test-provider',
+          output: 'Test output',
+        }}
+      />,
+    );
+    expect(screen.getByText('Original Output')).toBeInTheDocument();
+  });
+
+  it('should transition PromptEditor from read-only to editable when evaluationId is updated', async () => {
+    const { rerender } = render(
+      <EvalOutputPromptDialog {...defaultProps} evaluationId={undefined} />,
+    );
+
+    expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
+
+    await act(async () => {
+      rerender(<EvalOutputPromptDialog {...defaultProps} evaluationId="test-eval-id" />);
+    });
+
+    expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
+  });
+
+  it('displays OutputsPanel and labels tab as "Prompt & Output" when metadata contains citations but no other output', () => {
+    const propsWithCitations = {
+      ...defaultProps,
+      output: undefined,
+      replayOutput: undefined,
+      metadata: {
+        citations: [
+          {
+            retrievedReferences: [
+              {
+                content: { text: 'Citation content' },
+                location: { s3Location: { uri: 'https://example.com' } },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+
+    expect(screen.getByText('Prompt & Output')).toBeInTheDocument();
+
+    expect(screen.getByTestId('citations-component')).toBeInTheDocument();
   });
 });
 
