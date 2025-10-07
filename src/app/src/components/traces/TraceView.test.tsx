@@ -322,7 +322,7 @@ describe('TraceView', () => {
       });
     });
 
-    it('should call onVisibilityChange with true when traces is null/undefined in response', async () => {
+    it('should call onVisibilityChange with false when traces is null/undefined in response', async () => {
       const onVisibilityChange = vi.fn();
 
       mockFetchTraces.mockResolvedValue(null as any);
@@ -336,7 +336,7 @@ describe('TraceView', () => {
       );
 
       await waitFor(() => {
-        expect(onVisibilityChange).toHaveBeenCalledWith(true);
+        expect(onVisibilityChange).toHaveBeenCalledWith(false);
       });
     });
 

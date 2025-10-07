@@ -56,7 +56,7 @@ export default function TraceView({
         if (!isActive) {
           return;
         }
-        setTraces(fetchedTraces);
+        setTraces(fetchedTraces || []);
       } catch (err) {
         console.error('Error fetching traces:', err);
         if (!isActive) {
