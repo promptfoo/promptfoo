@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+// biome-ignore lint/correctness/noUnusedImports: React is required for JSX
+import React, { useState, useEffect } from 'react';
 import styles from './styles.module.css';
 
 const CACHE_KEY = 'github_stars_cache_promptfoo';
