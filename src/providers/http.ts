@@ -1119,7 +1119,7 @@ export async function createTransformRequest(
             'prompt',
             'vars',
             'context',
-            `try { return (${trimmedTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : prompt=' + prompt + ' : vars=' + JSON.stringify(vars) + ' : context=' + JSON.stringify(context)); }`,
+            `try { return (${trimmedTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`,
           );
         } else {
           // Check if it contains a return statement
@@ -1131,7 +1131,7 @@ export async function createTransformRequest(
               'prompt',
               'vars',
               'context',
-              `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message + ' : prompt=' + prompt + ' : vars=' + JSON.stringify(vars) + ' : context=' + JSON.stringify(context)); }`,
+              `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
             );
           } else {
             // Wrap simple expressions with return
@@ -1139,7 +1139,7 @@ export async function createTransformRequest(
               'prompt',
               'vars',
               'context',
-              `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : prompt=' + prompt + ' : vars=' + JSON.stringify(vars) + ' : context=' + JSON.stringify(context)); }`,
+              `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
             );
           }
         }
@@ -1153,7 +1153,7 @@ export async function createTransformRequest(
         return result;
       } catch (err) {
         logger.error(
-          `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(context)}.`,
+          `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(sanitizeObject(context, { context: 'request transform' }))}.`,
         );
         throw new Error(`Failed to transform request: ${String(err)}`);
       }
