@@ -10,7 +10,6 @@ const RiskCategories = ({
   evalId,
   failuresByPlugin,
   passesByPlugin,
-  strategyStats,
 }: {
   categoryStats: Record<string, { pass: number; total: number }>;
   evalId: string;
@@ -22,7 +21,6 @@ const RiskCategories = ({
     string,
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
-  strategyStats: Record<string, { pass: number; total: number }>;
 }) => {
   const categories = Object.keys(riskCategories).map((category) => ({
     name: category,
@@ -71,7 +69,6 @@ const RiskCategories = ({
             evalId={evalId}
             failuresByPlugin={failuresByPlugin}
             passesByPlugin={passesByPlugin}
-            strategyStats={strategyStats}
           />
         );
       })}

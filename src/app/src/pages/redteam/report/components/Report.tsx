@@ -858,7 +858,6 @@ const App = () => {
           />
           <RiskCategories
             categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
-            strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
             evalId={evalId}
             failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
             passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
@@ -876,7 +875,6 @@ const App = () => {
           <FrameworkCompliance
             evalId={evalId}
             categoryStats={categoryStatsForFrameworkCompliance}
-            strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
           />
         </Stack>
         <Modal
