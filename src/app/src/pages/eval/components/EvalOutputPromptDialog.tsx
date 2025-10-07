@@ -23,10 +23,8 @@ import { PromptEditor } from './PromptEditor';
 import type { ResultsFilterType, ResultsFilterOperator } from './store';
 import type { Trace } from '../../../components/traces/TraceView';
 
-// Keys to hide from metadata display
 const HIDDEN_METADATA_KEYS = ['citations', '_promptfooFileMetadata'];
 
-// Common style object for copy buttons
 const copyButtonSx = {
   position: 'absolute',
   right: '8px',
@@ -39,7 +37,6 @@ const copyButtonSx = {
   },
 };
 
-// Common typography styles
 const subtitleTypographySx = {
   mb: 1,
   fontWeight: 500,
@@ -52,7 +49,6 @@ const textContentTypographySx = {
   wordBreak: 'break-word',
 };
 
-// Code display component
 interface CodeDisplayProps {
   content: string;
   title: string;
@@ -177,73 +173,23 @@ export interface FilterConfig {
   field?: string;
 }
 
-/**
- * Props for the EvalOutputPromptDialog component.
- *
- * This dialog displays detailed information about an evaluation result,
- * including the prompt, output, grading results, metadata, and traces.
- *
- * The component gracefully handles missing optional props by disabling
- * features when they're undefined (e.g., replay, filters, traces).
- *
- * @example
- * ```tsx
- * // Basic usage (view-only mode)
- * <EvalOutputPromptDialog
- *   open={true}
- *   onClose={handleClose}
- *   prompt="What is 2+2?"
- *   output="4"
- * />
- *
- * // Full-featured usage with all capabilities
- * <EvalOutputPromptDialog
- *   open={true}
- *   onClose={handleClose}
- *   prompt="What is 2+2?"
- *   output="4"
- *   onAddFilter={addFilter}
- *   onResetFilters={resetFilters}
- *   onReplay={handleReplay}
- *   fetchTraces={handleFetchTraces}
- *   cloudConfig={{ appUrl: 'https://cloud.example.com', isEnabled: true }}
- * />
- * ```
- */
 interface EvalOutputPromptDialogProps {
-  /** Controls dialog visibility */
   open: boolean;
-  /** Callback fired when dialog should close */
   onClose: () => void;
-  /** The prompt text that was evaluated */
   prompt: string;
-  /** Provider/model identifier (displayed in header) */
   provider?: string;
-  /** The output/response from the evaluation */
   output?: string;
-  /** Grading results for evaluation assertions */
   gradingResults?: GradingResult[];
-  /** Additional metadata about the evaluation */
   metadata?: Record<string, any>;
-  /** Evaluation ID for fetching traces and replays */
   evaluationId?: string;
-  /** Test case ID for trace correlation */
   testCaseId?: string;
-  /** Test case index in the evaluation */
   testIndex?: number;
-  /** Prompt index in the evaluation */
   promptIndex?: number;
-  /** Variables used in the prompt template */
   variables?: Record<string, any>;
-  /** Function to add a filter to the table */
   onAddFilter?: (filter: FilterConfig) => void;
-  /** Function to reset all table filters */
   onResetFilters?: () => void;
-  /** Function to replay an evaluation with modified parameters */
   onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
-  /** Function to fetch trace data for debugging */
   fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
-  /** Cloud platform configuration (null if running in OSS mode) */
   cloudConfig?: CloudConfigData | null;
 }
 
@@ -300,7 +246,6 @@ export default function EvalOutputPromptDialog({
     await navigator.clipboard.writeText(text);
     setCopiedFields((prev) => ({ ...prev, [key]: true }));
 
-    // Reset copied status after 2 seconds
     setTimeout(() => {
       setCopiedFields((prev) => ({ ...prev, [key]: false }));
     }, 2000);
@@ -362,9 +307,7 @@ export default function EvalOutputPromptDialog({
     value: string,
     operator: 'equals' | 'contains' = 'equals',
   ) => {
-    // Reset all filters first
     onResetFilters?.();
-    // Then apply only this filter
     onAddFilter?.({
       type: 'metadata',
       operator,
@@ -385,15 +328,12 @@ export default function EvalOutputPromptDialog({
     parsedMessages = JSON.parse(metadata?.messages || '[]');
   } catch {}
 
-  // Get citations from metadata if they exist
   const citationsData = metadata?.citations;
 
-  // Determine if there's output content to show
   const hasOutputContent = Boolean(
     output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
   );
 
-  // Check if red team history has actual content
   const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
     .filter((entry: any) => entry?.prompt && entry?.output)
     .flatMap(
@@ -409,14 +349,12 @@ export default function EvalOutputPromptDialog({
       ],
     );
 
-  // Determine which tabs have content
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
   const hasMetadata =
     metadata &&
     Object.keys(metadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
 
-  // Build visible tabs list to handle dynamic tab indices
   const visibleTabs: string[] = ['prompt-output'];
   if (hasEvaluationData) {
     visibleTabs.push('evaluation');
@@ -429,15 +367,12 @@ export default function EvalOutputPromptDialog({
   }
 
   // Always show traces tab when evaluationId exists - TraceView will handle empty state messaging
-  // This prevents tab indices from shifting when TraceView reports no content
   const hasTracesData = Boolean(evaluationId);
 
-  // Put Traces tab last if it should be shown
   if (hasTracesData) {
     visibleTabs.push('traces');
   }
 
-  // Get final tab name after all tabs are added
   const finalTabName = visibleTabs[activeTab] || 'prompt-output';
 
   const drawerTransitionDuration = useMemo(() => ({ enter: 320, exit: 250 }), []);
