@@ -183,13 +183,18 @@ providersRouter.post(
 
       // Use the actual HTTP provider's transform function
       const transformFn = await createTransformRequest(transformCode);
-      const result = await transformFn(prompt, {});
+      const result = await transformFn(
+        prompt,
+        {},
+        { prompt: { raw: prompt, label: prompt }, vars: {} },
+      );
 
       // Check if result is completely empty (no value at all)
       if (result === null || result === undefined) {
         res.json({
           success: false,
-          error: 'Transform returned null or undefined. Check your transform function.',
+          error:
+            'Transform returned null or undefined. Check your transform function. Did you forget to `return` the result?',
         });
         return;
       }
