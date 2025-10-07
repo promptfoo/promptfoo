@@ -196,48 +196,55 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
     return state.cachedPythonPath;
   }
 
-  // If validation is already in progress, wait for it to complete
-  if (state.validationPromise) {
-    return state.validationPromise;
-  }
+  // Create validation promise atomically if it doesn't exist
+  // This prevents race conditions where multiple calls create separate validations
+  if (!state.validationPromise) {
+    state.validationPromise = (async () => {
+      try {
+        const primaryPath = await tryPath(pythonPath);
+        if (primaryPath) {
+          state.cachedPythonPath = primaryPath;
+          state.validationPromise = null;
+          return primaryPath;
+        }
 
-  // Start new validation and store the promise to prevent concurrent validations
-  const validationPromise = (async () => {
-    try {
-      const primaryPath = await tryPath(pythonPath);
-      if (primaryPath) {
-        state.cachedPythonPath = primaryPath;
-        return primaryPath;
-      }
+        if (isExplicit) {
+          const error = new Error(
+            `Python 3 not found. Tried "${pythonPath}" ` +
+              `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
+              `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
+          );
+          // Clear promise on error to allow retry
+          state.validationPromise = null;
+          throw error;
+        }
 
-      if (isExplicit) {
-        throw new Error(
-          `Python 3 not found. Tried "${pythonPath}" ` +
+        // Try to get Python executable using comprehensive detection
+        const detectedPath = await getSysExecutable();
+        if (detectedPath) {
+          state.cachedPythonPath = detectedPath;
+          state.validationPromise = null;
+          return detectedPath;
+        }
+
+        const error = new Error(
+          `Python 3 not found. Tried "${pythonPath}", sys.executable detection, and fallback commands. ` +
             `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
             `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
         );
+        // Clear promise on error to allow retry
+        state.validationPromise = null;
+        throw error;
+      } catch (error) {
+        // Ensure promise is cleared on any error
+        state.validationPromise = null;
+        throw error;
       }
+    })();
+  }
 
-      // Try to get Python executable using comprehensive detection
-      const detectedPath = await getSysExecutable();
-      if (detectedPath) {
-        state.cachedPythonPath = detectedPath;
-        return detectedPath;
-      }
-
-      throw new Error(
-        `Python 3 not found. Tried "${pythonPath}", sys.executable detection, and fallback commands. ` +
-          `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
-          `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
-      );
-    } finally {
-      // Clear the promise when validation completes (success or failure)
-      state.validationPromise = null;
-    }
-  })();
-
-  state.validationPromise = validationPromise;
-  return validationPromise;
+  // Return the existing or newly-created promise
+  return state.validationPromise;
 }
 
 /**
