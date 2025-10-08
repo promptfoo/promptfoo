@@ -21,7 +21,6 @@ interface CustomTargetConfigurationProps {
 const CustomTargetConfiguration = ({
   selectedTarget,
   updateCustomTarget,
-  rawConfigJson,
   setRawConfigJson,
 }: CustomTargetConfigurationProps) => {
   const [targetId, setTargetId] = useState(selectedTarget.id?.replace('file://', '') || '');
