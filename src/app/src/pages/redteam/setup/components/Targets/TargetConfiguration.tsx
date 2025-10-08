@@ -18,18 +18,13 @@ import type { ProviderConfigEditorRef } from './ProviderConfigEditor';
 interface TargetConfigurationProps {
   onNext: () => void;
   onBack: () => void;
-  setupModalOpen: boolean;
 }
 
 const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-export default function TargetConfiguration({
-  onNext,
-  onBack,
-  setupModalOpen,
-}: TargetConfigurationProps) {
+export default function TargetConfiguration({ onNext, onBack }: TargetConfigurationProps) {
   const { config, updateConfig, providerType } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
@@ -143,13 +138,9 @@ export default function TargetConfiguration({
           setProvider={handleProviderChange}
           extensions={config.extensions}
           onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
-          opts={{
-            hideErrors: false,
-            disableModelSelection: false,
-          }}
           setError={handleError}
           validateAll={shouldValidate}
-          onValidate={(isValid) => {
+          onValidate={() => {
             // Validation errors will be displayed through the handleError function
           }}
           providerType={providerType}

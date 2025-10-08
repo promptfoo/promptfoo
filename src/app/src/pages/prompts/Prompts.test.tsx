@@ -194,37 +194,6 @@ describe('Prompts', () => {
   it('should not call handleClickOpen if the prompt ID is not found in the data array', () => {
     const handleClickOpenMock = vi.fn();
 
-    const _MockPrompts = ({
-      data,
-      isLoading,
-      error,
-    }: {
-      data: ServerPromptWithMetadata[];
-      isLoading: boolean;
-      error: string | null;
-    }) => {
-      const handleRowClick = (params: any) => {
-        const index = data.findIndex((p) => p.id === params.id);
-        if (index !== -1) {
-          handleClickOpenMock(index);
-        }
-      };
-
-      return (
-        <div>
-          {data.map((prompt) => (
-            <div
-              key={prompt.id}
-              data-rowid={prompt.id}
-              onClick={() => handleRowClick({ id: prompt.id })}
-            >
-              {prompt.prompt.label}
-            </div>
-          ))}
-        </div>
-      );
-    };
-
     renderWithProviders({ data: mockPrompts });
 
     const nonexistentId = 'prompt:nonexistent';

@@ -6,11 +6,13 @@ import { useCallback, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
+import HttpIcon from '@mui/icons-material/Http';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -22,6 +24,8 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
@@ -34,6 +38,7 @@ import yaml from 'js-yaml';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
+import PostmanImportDialog from './PostmanImportDialog';
 import TestSection from './TestSection';
 
 import type { ProviderOptions } from '../../types';
@@ -46,7 +51,6 @@ interface HttpEndpointConfigurationProps {
   setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
   setUrlError: (error: string | null) => void;
-  updateFullTarget: (target: ProviderOptions) => void;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
 }
@@ -84,7 +88,6 @@ const HttpEndpointConfiguration = ({
   setBodyError,
   urlError,
   setUrlError,
-  updateFullTarget,
   onTargetTested,
   onSessionTested,
 }: HttpEndpointConfigurationProps): JSX.Element => {
@@ -130,6 +133,10 @@ Content-Type: application/json
   const [generatedConfig, setGeneratedConfig] = useState<GeneratedConfig | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+
+  // Import menu state
+  const [importMenuAnchor, setImportMenuAnchor] = useState<null | HTMLElement>(null);
+  const [postmanDialogOpen, setPostmanDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Test Target state
@@ -452,6 +459,30 @@ ${exampleRequest}`;
     }
   };
 
+  const handlePostmanImport = (config: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body: string;
+  }) => {
+    // Apply the configuration
+    resetState(false);
+    updateCustomTarget('url', config.url);
+    updateCustomTarget('method', config.method);
+    updateCustomTarget('headers', config.headers);
+    setHeaders(
+      Object.entries(config.headers).map(([key, value]) => ({
+        key,
+        value: String(value),
+      })),
+    );
+
+    if (config.body) {
+      setRequestBody(config.body);
+      updateCustomTarget('body', config.body);
+    }
+  };
+
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -471,19 +502,55 @@ ${exampleRequest}`;
         />
         <Button
           variant="outlined"
-          startIcon={<AutoFixHighIcon />}
-          onClick={() => setConfigDialogOpen(true)}
-          sx={{
-            borderColor: 'primary.main',
-            color: 'primary.main',
-            '&:hover': {
-              borderColor: 'primary.dark',
-              backgroundColor: 'action.hover',
+          endIcon={<ArrowDropDownIcon />}
+          onClick={(e) => setImportMenuAnchor(e.currentTarget)}
+        >
+          Import
+        </Button>
+        <Menu
+          anchorEl={importMenuAnchor}
+          open={Boolean(importMenuAnchor)}
+          onClose={() => setImportMenuAnchor(null)}
+          anchorOrigin={{
+            vertical: 'bottom',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+          slotProps={{
+            paper: {
+              sx: {
+                mt: 0.5,
+                minWidth: 200,
+              },
             },
           }}
         >
-          Auto-fill from Example
-        </Button>
+          <MenuItem
+            onClick={() => {
+              setImportMenuAnchor(null);
+              setConfigDialogOpen(true);
+            }}
+          >
+            <ListItemIcon>
+              <AutoFixHighIcon fontSize="small" />
+            </ListItemIcon>
+            Auto-fill from Example
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              setImportMenuAnchor(null);
+              setPostmanDialogOpen(true);
+            }}
+          >
+            <ListItemIcon>
+              <HttpIcon fontSize="small" />
+            </ListItemIcon>
+            Postman
+          </MenuItem>
+        </Menu>
       </Box>
 
       {/* Main configuration box containing everything */}
@@ -824,11 +891,18 @@ ${exampleRequest}`;
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Postman Import Dialog */}
+      <PostmanImportDialog
+        open={postmanDialogOpen}
+        onClose={() => setPostmanDialogOpen(false)}
+        onImport={handlePostmanImport}
+      />
+
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
-        onTargetTested={onTargetTested}
         onSessionTested={onSessionTested}
       />
     </Box>

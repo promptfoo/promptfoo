@@ -6,8 +6,8 @@ import util from 'util';
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import { parsePathOrGlob } from '../util/index';
 import { sha256 } from '../util/createHash';
+import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 
 import type {
@@ -128,15 +128,15 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
+        fs.copyFileSync(path.join(__dirname, '..', 'golang', 'wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
 
         // Build from the script directory
-        const compileCommand = `cd ${scriptDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go ${path.basename(relativeScriptPath)}`;
+        const compileCommand = `${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go ${path.basename(relativeScriptPath)}`;
 
-        await execAsync(compileCommand);
+        await execAsync(compileCommand, { cwd: scriptDir });
 
         const jsonArgs = safeJsonStringify(args) || '[]';
         // Escape single quotes in the JSON string
