@@ -83,6 +83,7 @@ const ProviderConfigDialog = ({
   const handleUseTemplate = (templateKey: string) => {
     const template = CONFIG_TEMPLATES[templateKey];
     setLocalConfig({ ...localConfig, ...template });
+    setConfigKey((prev) => prev + 1);
   };
 
   // Keyboard shortcuts
