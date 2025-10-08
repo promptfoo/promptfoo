@@ -176,7 +176,7 @@ describe('monkeyPatchFetch', () => {
       error: true,
     });
 
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error in fetch:'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Error in fetch:'));
   });
 
   it('should handle connection errors with specific messaging', async () => {
@@ -192,7 +192,7 @@ describe('monkeyPatchFetch', () => {
 
     await expect(monkeyPatchFetch(url)).rejects.toThrow('fetch failed');
 
-    expect(logger.error).toHaveBeenCalledWith(
+    expect(logger.debug).toHaveBeenCalledWith(
       expect.stringContaining('Connection error, please check your network connectivity'),
     );
   });
@@ -206,7 +206,7 @@ describe('monkeyPatchFetch', () => {
     await expect(monkeyPatchFetch(url)).rejects.toThrow('Network error');
 
     expect(logRequestResponse).not.toHaveBeenCalled();
-    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.debug).not.toHaveBeenCalled();
   });
 
   it('should default to GET method when none provided', async () => {
