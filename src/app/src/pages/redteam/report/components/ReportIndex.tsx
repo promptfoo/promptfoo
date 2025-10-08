@@ -21,7 +21,7 @@ import {
 } from '@mui/x-data-grid';
 import { useNavigate } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
-import { getASRColor } from '@promptfoo/app/src/utils/redteam';
+import { getASRColor, formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 
 function CustomToolbar() {
   return (
@@ -99,11 +99,11 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
                 fontWeight: 500,
               }}
             >
-              {params.value.toFixed(2)}%
+              {formatASRForDisplay(params.value)}%
             </Typography>
           </>
         ),
-        valueFormatter: (value: number) => `${value.toFixed(2)}%`,
+        valueFormatter: (value: number) => `${formatASRForDisplay(value)}%`,
         cellClassName: 'dg-cursor-pointer',
       },
       {

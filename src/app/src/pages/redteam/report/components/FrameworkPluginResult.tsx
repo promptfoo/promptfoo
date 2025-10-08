@@ -12,6 +12,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
 import { getPluginDisplayName } from './FrameworkComplianceUtils';
+import { formatASRForDisplay } from '@app/utils/redteam';
 
 export interface FrameworkPluginResultProps {
   evalId: string;
@@ -87,7 +88,7 @@ export default function FrameworkPluginResult({
                           : 'inherit',
                 }}
               >
-                {type === 'untested' ? 'Not Tested' : `${asr.toFixed(2)}%`}
+                {type === 'untested' ? 'Not Tested' : `${formatASRForDisplay(asr)}%`}
               </Typography>
             </Tooltip>
           </Box>

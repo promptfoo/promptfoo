@@ -22,6 +22,7 @@ import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
 import './FrameworkCompliance.css';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { formatASRForDisplay } from '@app/utils/redteam';
 
 interface FrameworkComplianceProps {
   evalId: string;
@@ -192,7 +193,7 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
         <CardContent>
           <Box display="flex" alignItems="center" sx={{ mb: 1 }}>
             <Typography variant="subtitle1" color="textSecondary">
-              {pluginComplianceStats.attackSuccessRate.toFixed(2)}% Attack Success Rate (
+              {formatASRForDisplay(pluginComplianceStats.attackSuccessRate)}% Attack Success Rate (
               {pluginComplianceStats.failedTests}/{pluginComplianceStats.totalTests} tests failed
               across {pluginComplianceStats.total} plugins)
             </Typography>

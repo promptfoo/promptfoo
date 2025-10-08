@@ -45,6 +45,7 @@ import {
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { formatASRForDisplay } from '@app/utils/redteam';
 
 interface TestSuitesProps {
   evalId: string;
@@ -275,7 +276,7 @@ const TestSuites = ({
       subCategory.complexityScore.toFixed(1),
       subCategory.successfulAttacks,
       subCategory.total,
-      subCategory.attackSuccessRate.toFixed(2) + '%',
+      formatASRForDisplay(subCategory.attackSuccessRate) + '%',
       severityDisplayNames[subCategory.severity as Severity],
     ]);
 
@@ -348,7 +349,7 @@ const TestSuites = ({
                     • Base Severity: {params.row.severity}
                   </Typography>
                   <Typography variant="caption" component="div">
-                    • Attack Success Rate: {params.row.attackSuccessRate.toFixed(2)}%
+                    • Attack Success Rate: {formatASRForDisplay(params.row.attackSuccessRate)}%
                   </Typography>
                   <Typography
                     variant="caption"
@@ -437,10 +438,10 @@ const TestSuites = ({
         const passRate = params.row.passRate;
         return (
           <Box>
-            <strong>{value.toFixed(2)}%</strong>
+            <strong>{formatASRForDisplay(value)}%</strong>
             {passRateWithFilter !== passRate && (
               <>
-                <br />({(100 - passRateWithFilter).toFixed(1)}% with mitigation)
+                <br />({formatASRForDisplay(100 - passRateWithFilter)}% with mitigation)
               </>
             )}
           </Box>
