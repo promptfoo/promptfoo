@@ -253,6 +253,45 @@ describe('OpenAI Provider', () => {
       expect(result.output).toContain('limited access to this content for safety reasons');
       expect(result.output).toContain('400 Bad Request');
       expect(result.isRefusal).toBe(true);
+      // invalid_prompt specifically indicates input was rejected
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: true,
+      });
+    });
+
+    it('should detect content_filter finish_reason and set guardrails', async () => {
+      // Mock a response with content_filter finish reason
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: { content: null },
+              finish_reason: 'content_filter',
+            },
+          ],
+          usage: { total_tokens: 10, prompt_tokens: 10, completion_tokens: 0 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Generate inappropriate content' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Content filtered by provider');
+      expect(result.isRefusal).toBe(true);
+      expect(result.finishReason).toBe('content_filter');
+      // OpenAI doesn't specify if it's input or output filtering, so we only set flagged
+      expect(result.guardrails).toEqual({
+        flagged: true,
+      });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 10, completion: 0 });
     });
 
     it('should still treat non-refusal 400 errors as errors', async () => {
