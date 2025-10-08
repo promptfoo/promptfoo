@@ -116,6 +116,58 @@ When `continueAfterSuccess: true`:
 - The strategy only stops when `maxTurns` is reached
 - This can help discover multiple attack vectors or progressively stronger attacks, but it will take longer to complete and cost more.
 
+### Unblocking Feature
+
+Multi-turn strategies include an **unblocking feature** that helps handle situations where the target model asks clarifying questions that block conversation progress. By default, this feature is **disabled** to optimize for speed and cost.
+
+#### When to Enable
+
+Enable unblocking when testing:
+
+- **Conversational agents** that frequently ask clarifying questions
+- **Customer service bots** that require context before proceeding
+- **Domain-specific assistants** that need additional information
+- Systems where realistic multi-turn interactions are critical
+
+Keep disabled (default) when:
+
+- Testing simple question-answering systems
+- Optimizing for evaluation speed and lower costs
+- Measuring how well the target handles ambiguous queries
+
+#### Configuration
+
+Enable unblocking by setting an environment variable before running your red team:
+
+```bash
+export PROMPTFOO_ENABLE_UNBLOCKING=true
+promptfoo redteam run
+```
+
+**Example blocking scenarios:**
+
+- Target: "What industry are you in?" → Unblocking: "I work in healthcare"
+- Target: "Can you provide more details?" → Unblocking: "I need this for [specific use case]"
+- Target: "Which country are you located in?" → Unblocking: "United States"
+
+#### Tradeoffs
+
+**Benefits:**
+
+- More realistic adversarial conversations
+- Better coverage for conversational systems
+- Surfaces multi-turn vulnerabilities that require context
+
+**Costs:**
+
+- Additional API calls for each blocking detection
+- Increased evaluation time
+- Higher token usage and costs
+
+:::tip
+Start with unblocking disabled to establish a baseline, then enable it if you notice your target frequently asks clarifying questions during red team attacks.
+:::
+
 ## Importance in Gen AI Red Teaming
 
 Multi-turn jailbreaks like Crescendo identify vulnerabilities that only emerge after multiple interactions.
