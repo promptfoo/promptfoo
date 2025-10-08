@@ -125,6 +125,64 @@ This creates a living defense that adapts to your evolving security needs.
 └─────────────────┘
 ```
 
+This architecture diagram shows how an application uses adaptive guardrails to protect an LLM. The data flow works as follows:
+
+1. **User submits a prompt** to your application
+2. **Guardrail validates the prompt** against target-specific policies learned from red team testing
+3. **Prompt is processed** based on validation result:
+   - If `allowed: true`, the prompt proceeds to your LLM
+   - If `allowed: false`, the request is blocked with a reason
+4. **Application receives the response** and can take appropriate action (proceed or reject)
+
+Unlike output guardrails (which filter LLM responses), adaptive guardrails operate as input validation only, preventing malicious prompts from ever reaching your model.
+
+## Use Cases
+
+Adaptive guardrails address security and safety challenges specific to your AI applications across multiple industries:
+
+### Security
+
+**Prevent Discovered Jailbreaks**
+- Block prompt injection patterns found during red team testing
+- Stop role-playing attacks that bypassed your system prompts
+- Prevent instruction override attempts specific to your application
+
+**Protect Against Emerging Threats**
+- Automatically update policies as new attack vectors are discovered
+- Block variations of successful jailbreak attempts
+- Maintain protection as attackers evolve their techniques
+
+### Compliance and Policy Enforcement
+
+**Industry-Specific Regulations**
+- Financial services: Block prompts requesting unauthorized financial advice
+- Healthcare: Prevent medical diagnosis requests in non-clinical chatbots
+- Legal: Stop unauthorized legal advice in general-purpose assistants
+
+**Custom Business Policies**
+- Prevent chatbots from recommending competitor products
+- Block requests for proprietary methodology or trade secrets
+- Enforce brand guidelines and communication standards
+
+### Application-Specific Protection
+
+**Customer Support Chatbots**
+- Block social engineering attempts found in testing
+- Prevent extraction of customer data patterns
+- Stop attempts to access admin functions through conversation
+
+**Code Generation Assistants**
+- Block prompts that generated insecure code in testing
+- Prevent attempts to extract training data or model weights
+- Stop requests that bypassed code safety guidelines
+
+**Content Generation Systems**
+- Block prompts that generated policy-violating content
+- Prevent techniques that bypassed content moderation
+- Stop brand impersonation attempts discovered in testing
+
+Unlike generic content moderation, each use case is protected by policies derived from YOUR specific vulnerabilities, not general categories.
+
 ## Using Adaptive Guardrails
 
 ### 1. Generate Guardrail
@@ -441,25 +499,40 @@ Assistant: { allowed: false, reason: "..." }
 
 This approach helps the AI recognize subtle variations of known attacks.
 
-## Performance Characteristics
+## Technical Specifications
 
-### Generation Time
+### Performance Characteristics
 
-- **Initial Generation**: 10-30 seconds depending on number of issues
-- **Regeneration**: 5-15 seconds for policy updates
-- **Example Limit**: Maximum 300 training examples for optimal performance
+| Metric | Specification | Notes |
+|--------|--------------|-------|
+| **Initial Generation Time** | 10-30 seconds | Depends on number of discovered issues |
+| **Regeneration Time** | 5-15 seconds | For policy updates after new tests |
+| **Validation Latency** | 200-500ms | Average response time per prompt |
+| **Recommended Timeout** | 2-3 seconds | For production applications |
+| **Training Example Limit** | 300 examples | Maximum used during generation |
+| **Few-Shot Examples** | Up to 10 | Used during prompt validation |
 
-### Validation Latency
+### Accuracy and Detection
 
-- **Typical Response Time**: 200-500ms
-- **Factors**: Number of policies, complexity of prompt, API location
-- **Recommendation**: Implement timeout of 2-3 seconds
-
-### Accuracy
-
-- **True Positive Rate**: Blocks actual jailbreak attempts matching trained patterns
+- **True Positive Rate**: Blocks actual jailbreak attempts matching patterns discovered in your testing
 - **False Positive Rate**: Minimal - only triggers on patterns similar to discovered vulnerabilities
-- **Adaptive Learning**: Improves accuracy as more diverse attacks are tested
+- **Adaptive Learning**: Improves accuracy as more diverse attacks are tested and incorporated
+
+### Limits and Constraints
+
+| Feature | Limit | Behavior When Exceeded |
+|---------|-------|----------------------|
+| **Issues per Guardrail** | 300 examples | Additional issues available but not used in generation |
+| **Policies per Guardrail** | Unlimited | Automatically consolidated to prevent redundancy |
+| **API Request Size** | Standard HTTP limits | Large prompts may need truncation |
+| **Concurrent Validations** | Based on plan | Contact support for high-throughput requirements |
+
+### Input and Output Coverage
+
+| Validation Type | Supported | Details |
+|----------------|-----------|---------|
+| **Input Validation** | ✅ Yes | Validates user prompts before LLM processing |
+| **Output Validation** | ❌ No | For output filtering, use cloud provider guardrails |
 
 ## Management UI
 
@@ -805,25 +878,35 @@ Adaptive guardrails differ fundamentally from generic cloud provider content mod
 
 Adaptive guardrails complement cloud provider services by adding a custom security layer learned from your specific security posture.
 
-## Related Resources
+## What's Next
 
-### Red Team Testing
+Ready to implement adaptive guardrails? Here are your next steps:
 
-Learn more about red team testing to generate adaptive guardrails:
+### Get Started
 
+- [Run your first red team test](/docs/red-team/quickstart/) to discover vulnerabilities
+- [Generate your first guardrail](#using-adaptive-guardrails) from test results
+- [Integrate the API](#prompt-analysis-api) into your application
+
+### Learn More
+
+**Red Team Testing:**
 - [Introduction to AI Red Teaming](/docs/red-team/)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [Red Team Strategies](/docs/red-team/strategies/)
 - [Plugins and Configuration](/docs/red-team/plugins/)
 
-### Enterprise Features
-
-Explore other Promptfoo Enterprise capabilities:
-
+**Enterprise Features:**
 - [Enterprise Overview](/docs/enterprise/)
 - [Team Management](/docs/guides/teams/)
 - [Custom Deployment](/docs/deployment/)
 - [Evaluation Analytics](/docs/guides/analytics/)
+
+### Need Help?
+
+- [Contact sales](https://www.promptfoo.dev/contact/) for enterprise licensing
+- [Join our community](https://discord.gg/promptfoo) for technical discussions
+- [View API reference](#api-reference) for integration details
 
 ## FAQ
 
