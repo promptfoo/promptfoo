@@ -113,21 +113,20 @@ Use risk scores to prioritize remediation and set CI/CD deployment gates.
 
 - **[Layer strategy](/docs/red-team/strategies/#layered-strategies)** - Chain multiple strategies in a single scan
 - **Threshold configuration** - Set minimum pass scores for tests
-- **[ISO 42001 compliance](/docs/red-team/iso-42001/)** - Framework compliance mappings
+- **[ISO 42001 compliance](/docs/red-team/iso-42001/)** - Framework compliance mappings for AI governance
 
 ### Enterprise {#september-2025-enterprise}
 
-#### Licensing & Access Control
+#### Team Management
 
-- **Probe licensing** - Usage-based licensing with enforcement and visibility
-- **License tracking** - Only count providers when actively used in scans
+- **Flexible licensing** - Pay only for the red team tests you run
+- **License tracking** - Usage monitoring and optimization insights
 - **IDP mapping** - Identity provider team and role mapping for SSO
 - **Session configuration** - Timeout and inactivity settings
 
 #### Audit & Compliance
 
 - **Audit logging UI** - Comprehensive audit trails for webhooks, teams, providers, and user management
-- **ISO 42001 support** - Framework compliance mappings for AI governance
 
 ---
 
