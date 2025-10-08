@@ -10,6 +10,7 @@ import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
+import { extractCommand } from './commands/extract';
 import { feedbackCommand } from './commands/feedback';
 import { generateAssertionsCommand } from './commands/generate/assertions';
 import { generateDatasetCommand } from './commands/generate/dataset';
@@ -108,6 +109,7 @@ async function main() {
   debugCommand(program, defaultConfig, defaultConfigPath);
   deleteCommand(program);
   exportCommand(program);
+  extractCommand(program);
   const generateCommand = program.command('generate').description('Generate synthetic data');
   feedbackCommand(program);
   importCommand(program);
