@@ -713,10 +713,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       <TabPanel value={activeTab} index={0}>
         <PluginsTab
           selectedPlugins={selectedPlugins}
-          setSelectedPlugins={setSelectedPlugins}
           handlePluginToggle={handlePluginToggle}
           pluginConfig={pluginConfig}
-          setPluginConfig={setPluginConfig}
           selectedConfigPlugin={selectedConfigPlugin}
           setSelectedConfigPlugin={setSelectedConfigPlugin}
           configDialogOpen={configDialogOpen}
