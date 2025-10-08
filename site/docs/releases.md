@@ -1,12 +1,12 @@
 ---
-title: What's New?
+title: Release Notes
 sidebar_position: 100
 description: Track monthly Promptfoo releases featuring new providers, security plugins, performance improvements, and community contributions
 tags: [releases, changelog, updates, features]
 keywords: [Promptfoo releases, changelog, updates, features, monthly summaries]
 ---
 
-# What's New?
+# Release Notes
 
 Full release history for Promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
 
@@ -99,7 +99,7 @@ Use risk scores to prioritize remediation and set CI/CD deployment gates.
 - **Audit logging UI** - Comprehensive audit trails for webhooks, teams, providers, and user management
 - **ISO 42001 support** - Framework compliance mappings for AI governance
 
-### Evaluation Features {#september-2025-evals}
+### Evals {#september-2025-evals}
 
 #### Pause/Resume Evaluations
 
@@ -148,7 +148,7 @@ This month we added support for **new models**, **model audit cloud sharing**, a
 - **[Enhanced Vertex AI](/docs/providers/vertex/)** - Improved credential management and authentication
 - **[Google AI Studio](/docs/providers/google/)** - Added default provider configurations for Google AI Studio models
 
-### Evaluation Features {#august-2025-evals}
+### Evals {#august-2025-evals}
 
 #### Model Audit Cloud Sharing
 
