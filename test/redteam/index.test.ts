@@ -22,7 +22,7 @@ import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 
 import type { TestCaseWithPlugin } from '../../src/types/index';
-import { stripAnsi } from '../../test/util/utils';
+import { stripAnsi } from '../util/utils';
 
 jest.mock('cli-progress');
 jest.mock('../../src/logger');
