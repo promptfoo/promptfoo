@@ -14,9 +14,11 @@ Full release history for Promptfoo open source can be found on [GitHub](https://
 
 This month we shipped **reusable custom policies**, **risk scoring**, **8 new AI providers**, and **comprehensive enterprise features** for security teams.
 
-### Providers {#september-2025-providers}
+### Evals {#september-2025-evals}
 
-#### New Model Support
+#### Providers {#september-2025-providers}
+
+##### New Model Support
 
 - **[Claude 4.5 Sonnet](/docs/providers/anthropic/)** - Anthropic's latest model
 - **[Claude web tools](/docs/providers/anthropic/)** - `web_fetch_20250910` and `web_search_20250305` tool support
@@ -24,14 +26,14 @@ This month we shipped **reusable custom policies**, **risk scoring**, **8 new AI
 - **[OpenAI Realtime API](/docs/providers/openai/)** - Full audio input/output support for GPT Realtime models
 - **[Gemini 2.5 Flash](/docs/providers/google/)** - Flash and Flash-Lite model support
 
-#### New Providers
+##### New Providers
 
 - **[Nscale](/docs/providers/nscale/)** - Image generation provider
 - **[CometAPI](/docs/providers/cometapi/)** - 7 models with environment variable configuration
 - **[Envoy AI Gateway](/docs/providers/envoy/)** - Route requests through Envoy gateway
 - **[Meta Llama API](/docs/providers/)** - All 7 Meta Llama models including multimodal Llama 4
 
-#### Provider Updates
+##### Provider Updates
 
 - **[AWS Bedrock](/docs/providers/aws-bedrock/)** - Qwen models, OpenAI GPT models, API key authentication
 - **[AWS Bedrock Agents](/docs/providers/bedrock-agents/)** - Agent Runtime support (renamed from AgentCore)
@@ -40,6 +42,34 @@ This month we shipped **reusable custom policies**, **risk scoring**, **8 new AI
 - **[WebSocket provider](/docs/providers/websocket/)** - Custom endpoint URLs for OpenAI Realtime
 - **[Ollama](/docs/providers/ollama/)** - Thinking parameter configuration
 - **Azure Responses** - `azure:responses` provider alias
+
+#### Pause/Resume Evaluations
+
+Use `Ctrl+C` to pause long-running evaluations and `promptfoo eval --resume` to continue later.
+
+#### UI & Developer Experience
+
+- **Keyboard navigation** - Navigate results table with keyboard shortcuts
+- **Bulk delete** - Delete multiple eval results at once
+- **Unencrypted attack display** - Show both encoded and decoded attack forms
+- **Passes-only filter** - Filter to show only passing results
+- **Severity filtering** - Filter by severity level
+- **Metadata exists operator** - Filter by metadata field presence
+- **Highlight filtering** - Filter results by highlighted content
+- **Persistent headers** - Report page headers remain visible when scrolling
+- **Team switching** - Switch teams from command line
+
+#### Export & Integration
+
+- **Enhanced CSV exports** - Includes latency, grader reason, and grader comment
+- **Log export** - `promptfoo export logs` creates tar.gz for debugging
+- **Default cloud sharing** - Auto-enable sharing when connected to Promptfoo Cloud
+- **CI progress reporting** - Text-based milestone reporting for long-running evals
+
+#### Configuration
+
+- **Context arrays** - Pass context as array of strings ([example](/docs/configuration/expected-outputs/model-graded/context-relevance/#array-context))
+- **MCP preset** - Pre-configured Model Context Protocol plugin set
 
 ### Red Teaming {#september-2025-redteam}
 
@@ -99,56 +129,26 @@ Use risk scores to prioritize remediation and set CI/CD deployment gates.
 - **Audit logging UI** - Comprehensive audit trails for webhooks, teams, providers, and user management
 - **ISO 42001 support** - Framework compliance mappings for AI governance
 
-### Evals {#september-2025-evals}
-
-#### Pause/Resume Evaluations
-
-Use `Ctrl+C` to pause long-running evaluations and `promptfoo eval --resume` to continue later.
-
-#### UI & Developer Experience
-
-- **Keyboard navigation** - Navigate results table with keyboard shortcuts
-- **Bulk delete** - Delete multiple eval results at once
-- **Unencrypted attack display** - Show both encoded and decoded attack forms
-- **Passes-only filter** - Filter to show only passing results
-- **Severity filtering** - Filter by severity level
-- **Metadata exists operator** - Filter by metadata field presence
-- **Highlight filtering** - Filter results by highlighted content
-- **Persistent headers** - Report page headers remain visible when scrolling
-- **Team switching** - Switch teams from command line
-
-#### Export & Integration
-
-- **Enhanced CSV exports** - Includes latency, grader reason, and grader comment
-- **Log export** - `promptfoo export logs` creates tar.gz for debugging
-- **Default cloud sharing** - Auto-enable sharing when connected to Promptfoo Cloud
-- **CI progress reporting** - Text-based milestone reporting for long-running evals
-
-#### Configuration
-
-- **Context arrays** - Pass context as array of strings ([example](/docs/configuration/expected-outputs/model-graded/context-relevance/#array-context))
-- **MCP preset** - Pre-configured Model Context Protocol plugin set
-
 ---
 
 ## August 2025 Release Highlights {#august-2025}
 
 This month we added support for **new models**, **model audit cloud sharing**, and **performance improvements**.
 
-### Providers {#august-2025-providers}
+### Evals {#august-2025-evals}
 
-#### New Model Support
+#### Providers {#august-2025-providers}
+
+##### New Model Support
 
 - **[GPT-5](/docs/providers/openai/)** - Added support for OpenAI's GPT-5 model with advanced reasoning capabilities
 - **[Claude Opus 4.1](/docs/providers/anthropic/)** - Support for Anthropic's latest Claude model
 - **[xAI Grok Code Fast](/docs/providers/xai/)** - Added xAI's Grok Code Fast model for coding tasks
 
-#### Provider Updates
+##### Provider Updates
 
 - **[Enhanced Vertex AI](/docs/providers/vertex/)** - Improved credential management and authentication
 - **[Google AI Studio](/docs/providers/google/)** - Added default provider configurations for Google AI Studio models
-
-### Evals {#august-2025-evals}
 
 #### Model Audit Cloud Sharing
 
