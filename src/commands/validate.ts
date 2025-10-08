@@ -283,7 +283,6 @@ ${fromError(configParse.error).message}`,
 export async function doValidateTarget(
   opts: ValidateTargetOptions,
   defaultConfig: Partial<UnifiedConfig>,
-  defaultConfigPath: string | undefined,
 ): Promise<void> {
   setupEnv(opts.envPath);
   disableCache();
@@ -351,6 +350,6 @@ export function validateCommand(
     .option('-c, --config <path>', 'Path to configuration file to test all providers')
     .action(async (opts: ValidateTargetOptions) => {
       telemetry.record('command_used', { name: 'validate_target' });
-      await doValidateTarget(opts, defaultConfig, defaultConfigPath);
+      await doValidateTarget(opts, defaultConfig);
     });
 }

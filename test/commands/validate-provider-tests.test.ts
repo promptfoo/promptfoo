@@ -86,7 +86,7 @@ describe('Validate Command Provider Tests', () => {
         message: 'Session test passed',
       });
 
-      await doValidateTarget({ target: 'http://example.com' }, defaultConfig, defaultConfigPath);
+      await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
       expect(loadApiProvider).toHaveBeenCalledWith('http://example.com', {
         options: {
@@ -116,7 +116,7 @@ describe('Validate Command Provider Tests', () => {
         transformedRequest: {},
       });
 
-      await doValidateTarget({ target: 'http://example.com' }, defaultConfig, defaultConfigPath);
+      await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
       expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
       expect(testProviderSession).not.toHaveBeenCalled();
@@ -128,7 +128,7 @@ describe('Validate Command Provider Tests', () => {
     it('should test non-HTTP provider with basic connectivity only when -t flag is provided', async () => {
       jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
 
-      await doValidateTarget({ target: 'echo' }, defaultConfig, defaultConfigPath);
+      await doValidateTarget({ target: 'echo' }, defaultConfig);
 
       expect(loadApiProvider).toHaveBeenCalledWith('echo');
       expect(mockEchoProvider.callApi).toHaveBeenCalledWith('Hello, world!', expect.any(Object));
@@ -147,7 +147,7 @@ describe('Validate Command Provider Tests', () => {
       jest.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
       jest.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
-      await doValidateTarget({ target: cloudUUID }, defaultConfig, defaultConfigPath);
+      await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
       expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
       expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', {
@@ -222,7 +222,7 @@ describe('Validate Command Provider Tests', () => {
       jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
       (mockEchoProvider.callApi as jest.Mock).mockRejectedValue(new Error('Connection failed'));
 
-      await doValidateTarget({ target: 'echo' }, defaultConfig, defaultConfigPath);
+      await doValidateTarget({ target: 'echo' }, defaultConfig);
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test failed'));
       expect(process.exitCode).toBe(0); // Should not fail validation
@@ -234,7 +234,7 @@ describe('Validate Command Provider Tests', () => {
         error: 'Provider error',
       });
 
-      await doValidateTarget({ target: 'echo' }, defaultConfig, defaultConfigPath);
+      await doValidateTarget({ target: 'echo' }, defaultConfig);
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test failed'));
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Provider error'));
@@ -245,7 +245,7 @@ describe('Validate Command Provider Tests', () => {
       jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
       (mockEchoProvider.callApi as jest.Mock).mockResolvedValue({});
 
-      await doValidateTarget({ target: 'echo' }, defaultConfig, defaultConfigPath);
+      await doValidateTarget({ target: 'echo' }, defaultConfig);
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Connectivity test returned no output'),
@@ -256,7 +256,7 @@ describe('Validate Command Provider Tests', () => {
     it('should warn when loadApiProvider fails with -t flag', async () => {
       jest.mocked(loadApiProvider).mockRejectedValue(new Error('Failed to load provider'));
 
-      await doValidateTarget({ target: 'invalid-provider' }, defaultConfig, defaultConfigPath);
+      await doValidateTarget({ target: 'invalid-provider' }, defaultConfig);
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Provider tests failed: Failed to load provider'),
@@ -285,7 +285,7 @@ describe('Validate Command Provider Tests', () => {
         message: 'Test passed',
       });
 
-      await doValidateTarget({ target: 'http://custom-api.com' }, defaultConfig, defaultConfigPath);
+      await doValidateTarget({ target: 'http://custom-api.com' }, defaultConfig);
 
       // Should call HTTP-specific tests for providers with http:// id
       expect(testHTTPProviderConnectivity).toHaveBeenCalled();
@@ -298,7 +298,7 @@ describe('Validate Command Provider Tests', () => {
       // No config paths provided
       jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
 
-      await doValidateTarget({ target: 'echo' }, defaultConfig, undefined);
+      await doValidateTarget({ target: 'echo' }, defaultConfig);
 
       expect(loadApiProvider).toHaveBeenCalledWith('echo');
       expect(mockEchoProvider.callApi).toHaveBeenCalled();
@@ -316,7 +316,7 @@ describe('Validate Command Provider Tests', () => {
       jest.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
       jest.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
-      await doValidateTarget({ target: cloudUUID }, defaultConfig, undefined);
+      await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
       expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
       expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', {
@@ -330,7 +330,7 @@ describe('Validate Command Provider Tests', () => {
     it('should handle errors gracefully when testing without config', async () => {
       jest.mocked(loadApiProvider).mockRejectedValue(new Error('Provider not found'));
 
-      await doValidateTarget({ target: 'invalid-provider' }, defaultConfig, undefined);
+      await doValidateTarget({ target: 'invalid-provider' }, defaultConfig);
 
       // The error is caught by runProviderTests which logs a warning
       expect(logger.warn).toHaveBeenCalledWith(

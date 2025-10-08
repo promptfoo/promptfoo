@@ -1,5 +1,6 @@
-import logger from 'src/logger';
-import { ApiProvider } from 'src/types/providers';
+import logger from '../logger';
+
+import type { ApiProvider } from '../types/providers';
 
 /**
  * Formats config body for troubleshooting display
