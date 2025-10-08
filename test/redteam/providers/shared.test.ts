@@ -766,5 +766,28 @@ describe('shared redteam provider utilities', () => {
       expect(result.success).toBe(false);
       expect(result.unblockingPrompt).toBeUndefined();
     });
+
+    it('does not short-circuit when PROMPTFOO_ENABLE_UNBLOCKING=true', async () => {
+      process.env.PROMPTFOO_ENABLE_UNBLOCKING = 'true';
+
+      // Spy on logger to verify we don't see the "disabled by default" message
+      const loggerSpy = jest.spyOn(require('../../../src/logger').default, 'debug');
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'What industry are you in?',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      // Verify we did NOT log the "disabled by default" message
+      expect(loggerSpy).not.toHaveBeenCalledWith(expect.stringContaining('Disabled by default'));
+
+      // The function should still return false (because server feature check will fail in test env)
+      // but for a different reason than the env var check
+      expect(result.success).toBe(false);
+
+      loggerSpy.mockRestore();
+    });
   });
 });
