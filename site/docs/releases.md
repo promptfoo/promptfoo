@@ -142,24 +142,22 @@ Use `Ctrl+C` to pause long-running evaluations and `promptfoo eval --resume` to 
 
 This month we added support for **new models**, **model audit cloud sharing**, and **performance improvements**.
 
-### Evals
+### Providers {#august-2025-providers}
 
-#### New Models / Providers {#august-2025-providers}
-
-##### New Model Support
+#### New Model Support
 
 - **[GPT-5](/docs/providers/openai/)** - Added support for OpenAI's GPT-5 model with advanced reasoning capabilities
 - **[Claude Opus 4.1](/docs/providers/anthropic/)** - Support for Anthropic's latest Claude model
 - **[xAI Grok Code Fast](/docs/providers/xai/)** - Added xAI's Grok Code Fast model for coding tasks
 
-##### Provider Updates
+#### Provider Updates
 
 - **[Enhanced Vertex AI](/docs/providers/vertex/)** - Improved credential management and authentication
 - **[Google AI Studio](/docs/providers/google/)** - Added default provider configurations for Google AI Studio models
 
-#### Model Audit Cloud Integration {#august-2025-model-audit}
+### Evaluation Features {#august-2025-evals}
 
-##### Model Audit Cloud Sharing
+#### Model Audit Cloud Sharing
 
 Model audit results can now be shared to the cloud for team collaboration:
 
@@ -168,7 +166,7 @@ Model audit results can now be shared to the cloud for team collaboration:
 - **Centralized storage** - Store audit reports in the cloud
 - **Path management** - Remove recent scan paths from history
 
-##### Enhanced Authentication
+#### Enhanced Authentication
 
 Added support for advanced authentication methods:
 
@@ -176,35 +174,27 @@ Added support for advanced authentication methods:
 - **Signature authentication** - Support for uploaded signature-based authentication
 - **Credential sanitization** - Prevent credential exposure in debug logs
 
-#### Enhanced Configuration and Usability {#august-2025-usability}
-
-##### AI-Powered HTTP Configuration
+#### AI-Powered HTTP Configuration
 
 Added auto-fill capabilities for HTTP provider setup to reduce configuration time and errors.
 
-#### Performance and Reliability Improvements {#august-2025-performance}
-
-##### Performance Improvements
+#### Performance Improvements
 
 - **HuggingFace dataset fetching** - Improved speed and reliability for large datasets
 - **Error handling** - Better diagnostic messages and retry suggestions
 - **UI improvements** - Streamlined interfaces and progress indicators
 
-### Red Teaming
+### Red Teaming {#august-2025-redteam}
 
-#### Healthcare AI Safety {#august-2025-healthcare}
-
-##### Medical Off-Label Use Plugin
+#### Medical Off-Label Use Plugin
 
 Added **[Medical Off-Label Use Detection](/docs/red-team/plugins/medical/)** plugin to identify inappropriate pharmaceutical recommendations that could endanger patients.
 
-#### Enhanced Attack Detection {#august-2025-strategies}
-
-##### Unverifiable Claims Plugin
+#### Unverifiable Claims Plugin
 
 Added **[Unverifiable Claims Detection](/docs/red-team/plugins/)** plugin to test AI systems' susceptibility to generating fabricated but plausible-sounding claims.
 
-##### MCP Agent Testing
+#### MCP Agent Testing
 
 Added **[MCP Agent example](/docs/red-team/mcp-security-testing/)** for red team testing with tool call results, demonstrating how to test AI systems that use Model Context Protocol.
 
