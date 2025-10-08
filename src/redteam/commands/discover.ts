@@ -21,6 +21,7 @@ import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
+import path from 'path';
 
 
 // ========================================================
@@ -368,7 +369,10 @@ export function discoverCommand(
         // Using eval to bypass ts-node's module resolution issues
         const { Codex } = await (eval('import("@openai/codex-sdk")') as Promise<typeof import('@openai/codex-sdk')>);
         
-        const codex = new Codex();
+        const codex = new Codex(
+          // TODO: Re-use the logic from the OpenAI provider to set these. 
+          //{ baseUrl: '', apiKey: '' }
+      );
         const thread = codex.startThread({
           workingDirectory: args.srcDir,
           sandboxMode: "read-only",
@@ -376,38 +380,109 @@ export function discoverCommand(
         });
 
         const schema = z.object({
-          prompts: z.array(z.object({
-            rawText: z.string(),
-            variables: z.array(z.string()),
-          })),
+          // prompts: z.array(z.object({
+          //   rawText: z.string(),
+          //   variables: z.array(z.string()),
+          // })),
+          // // Existing target discovery:
+          // purpose: z.string(),
+          // limitations: z.string(),
+          // tools: z.array(z.object({
+          //   name: z.string(),
+          //   description: z.string(),
+          //   arguments: z.array(z.string()),
+          // })),
+          // user: z.string(),
+          // Additional:
+          // rag: z.boolean(),
+          // agentic: z.boolean(),
+          // mcp: z.boolean(),
+          a1: z.string(),
+          a2: z.string(),
+          a3: z.string(),
+          a4: z.string(),
+          a5: z.string(),
+          b1: z.string(),
+          c1: z.string(),
+          c2: z.string(),
+          d1: z.string(),
+          d2: z.string(),
+          d3: z.string(),
+          d4: z.string(),
+          d5: z.string(),
         });
 
         const { events } = await thread.runStreamed(
           dedent`
-            You are a security auditor tasked with discovering the following information about the system:
+            You are a security auditor tasked with discovering information about a target system.
 
-            - Any system prompts which are passed to LLM inference requests. These should be returned exactly (with no additional formatting).
-            - Any variables which are injectable into the system prompts. These should be returned without templating syntax.
+            ## Questions
+
+            ### Architecture Questions
+
+            a1. Does the system make calls to an LLM?
+            a2. How are calls to the LLM made?
+            a3. How is the input to the LLM sanitized?
+            a4. Any system prompts which are passed to LLM inference requests. These should be returned exactly (with no additional formatting).
+            a5. Are any runtime variables which interpolate into the system prompts? List these.
+
+            ### Purpose Questions
+
+            b1. What is the primary purpose or function of the application?
+
+            ### Access Control Questions
+
+            c1. When the LLM receives a call, who does the LLM believe it is talking to (i.e. the user)?
+            c2. What are the main limitations or restrictions on what the LLM can do?
+
+            ### External System Access
+
+            d1. What external systems are connected to the application? e.g. databases, APIs, etc.
+            d2. Are the contents of external systems included in the context windows of calls made to LLMs?
+            d3. How are external systems accessed? e.g. MCP, RPC, GRPC, etc.
+            d4. Can LLMs access external systems? If so, how?
+            d5. What external tools or functions can be called by the LLMs, including their interfaces?
+
+            ## Final answer structure
+
+            - Address each question by its unique identifier e.g. a1, a2, b1, etc.
+            - Respond to each question without referencing its identifier in the response.
           `, {
             outputSchema: zodToJsonSchema(schema, { target: "openAi" })
           }
         );
 
+        logger.info(chalk.green('Scanning') + ' ' + chalk.underline(args.srcDir))
+
         for await (const event of events) {
           switch (event.type) {
             case "item.completed":
-              // if (event.item.type === "agent_message") {
-              //   logger.info
-              //   // const parsed = schema.parse(event.item.text);
-              //   // logger.info(JSON.stringify(parsed, null, 2));
-              // }else{
-              //   logger.info(JSON.stringify(event.item, null, 2));
-              // }
-              // break;  
-              logger.info(JSON.stringify(event.item, null, 2));
+              logger.info(chalk.blue(chalk.bold(`Step ${event.item.id.replace("item_", "")}:`)) + ` ${event.item.type}`)
+              
+              if (event.item.type === "agent_message") {
+                // Write the output to a JSON file
+                const payloadFSPath = path.join('.', 'target-discovery-output.json')
+                const payload = JSON.parse(event.item.text) as Record<string, string>;
+                logger.info(`\nWriting payload to ${payloadFSPath}`)
+                fs.writeFileSync(payloadFSPath, JSON.stringify(payload, null, 2));
+
+                Object.entries(payload).forEach(([key, value]) => {
+                  const cleanValue = value.replace(/[\n\t]/g, '').trim();
+                  logger.info(chalk.blue(chalk.bold(`${key}:`)) + ` ${cleanValue}`);
+                });
+
+                // TODO: At this point we can perform more complex deserialization logic on these results,
+                // explore further, etc.
+              }
+
+              logger.debug(JSON.stringify(event.item, null, 2));
+
               break;
             case "turn.completed":
-              logger.info("usage", event.usage);
+              logger.info(chalk.blue(chalk.bold("\nUsage:")))
+              logger.info( event.usage.input_tokens.toLocaleString())
+              logger.info( event.usage.output_tokens.toLocaleString())
+              logger.info( event.usage.cached_input_tokens.toLocaleString())
               break;
           }
         }
