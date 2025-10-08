@@ -26,6 +26,7 @@ const renderWithTheme = (component: React.ReactNode, isDarkMode = false) => {
 
 const mockConfig: Config = {
   description: 'Test Configuration',
+  prompts: ['prompt1', 'prompt2'],
   numTests: 10,
   plugins: ['plugin1', 'plugin2', 'plugin3'],
   strategies: [{ id: 'basic' }],
@@ -37,6 +38,8 @@ const mockConfig: Config = {
   defaultTest: {},
   maxConcurrency: 4,
   testGenerationInstructions: '',
+  applicationDefinition: {},
+  entities: [],
 };
 
 describe('EstimatedProbesDisplay', () => {
@@ -133,7 +136,7 @@ describe('EstimatedProbesDisplay', () => {
       rerender(
         <ThemeProvider theme={createTheme()}>
           <EstimatedProbesDisplay config={updatedConfig} />
-        </ThemeProvider>
+        </ThemeProvider>,
       );
 
       expect(mockGetEstimatedProbes).toHaveBeenCalledWith(updatedConfig);
@@ -149,7 +152,7 @@ describe('EstimatedProbesDisplay', () => {
       rerender(
         <ThemeProvider theme={createTheme()}>
           <EstimatedProbesDisplay config={mockConfig} />
-        </ThemeProvider>
+        </ThemeProvider>,
       );
 
       // Should not call again due to memoization
@@ -169,7 +172,7 @@ describe('EstimatedProbesDisplay', () => {
       rerender(
         <ThemeProvider theme={createTheme()}>
           <EstimatedProbesDisplay config={newConfig} />
-        </ThemeProvider>
+        </ThemeProvider>,
       );
 
       expect(screen.getByText('200')).toBeInTheDocument();
@@ -191,7 +194,7 @@ describe('EstimatedProbesDisplay', () => {
           const tooltip = screen.getByRole('tooltip');
           expect(tooltip).toHaveTextContent(
             'Probes are the number of requests to the target application. ' +
-            'This is calculated based on your selected plugins, strategies, and number of test cases.'
+              'This is calculated based on your selected plugins, strategies, and number of test cases.',
           );
         });
       }
@@ -202,10 +205,7 @@ describe('EstimatedProbesDisplay', () => {
       const customTooltip = 'Custom tooltip explaining probe calculation';
 
       renderWithTheme(
-        <EstimatedProbesDisplay
-          config={mockConfig}
-          tooltipContent={customTooltip}
-        />
+        <EstimatedProbesDisplay config={mockConfig} tooltipContent={customTooltip} />,
       );
 
       const infoIcon = document.querySelector('[data-testid="InfoOutlinedIcon"]');
@@ -246,7 +246,7 @@ describe('EstimatedProbesDisplay', () => {
       };
 
       const { container } = renderWithTheme(
-        <EstimatedProbesDisplay config={mockConfig} sx={customSx} />
+        <EstimatedProbesDisplay config={mockConfig} sx={customSx} />,
       );
 
       // Verify component renders without errors with custom sx
@@ -259,7 +259,7 @@ describe('EstimatedProbesDisplay', () => {
       };
 
       const { container } = renderWithTheme(
-        <EstimatedProbesDisplay config={mockConfig} sx={customSx} />
+        <EstimatedProbesDisplay config={mockConfig} sx={customSx} />,
       );
 
       // Component should render with merged styles
@@ -371,7 +371,7 @@ describe('EstimatedProbesDisplay', () => {
         rerender(
           <ThemeProvider theme={createTheme()}>
             <EstimatedProbesDisplay config={mockConfig} />
-          </ThemeProvider>
+          </ThemeProvider>,
         );
       }
 
@@ -390,7 +390,7 @@ describe('EstimatedProbesDisplay', () => {
       rerender(
         <ThemeProvider theme={createTheme()}>
           <EstimatedProbesDisplay config={sameValuesDifferentObject} />
-        </ThemeProvider>
+        </ThemeProvider>,
       );
 
       // Should recalculate because it's a different object reference
