@@ -1,14 +1,13 @@
-import * as fs from 'fs';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import * as fs from 'fs';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
-import { type TestCase, type TestCaseWithPlugin } from '../types/index';
+import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
@@ -16,7 +15,9 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
   FOUNDATION_PLUGINS,
+  getDefaultNFanout,
   HARM_PLUGINS,
+  isFanoutStrategy,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
@@ -25,16 +26,15 @@ import {
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import { Plugins } from './plugins/index';
 import { CustomPlugin } from './plugins/custom';
+import { Plugins } from './plugins/index';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
-import { extractGoalFromPrompt, getShortPluginId } from './util';
-
 import { pluginMatchesStrategyTargets } from './strategies/util';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
+import { extractGoalFromPrompt, getShortPluginId } from './util';
 
 const MAX_MAX_CONCURRENCY = 20;
 
@@ -266,9 +266,14 @@ async function applyStrategies(
             ...(t?.metadata || {}),
             strategyId: t?.metadata?.strategyId || strategy.id,
             ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
-            ...(t?.metadata?.pluginConfig && { pluginConfig: t.metadata.pluginConfig }),
+            ...(t?.metadata?.pluginConfig && {
+              pluginConfig: t.metadata.pluginConfig,
+            }),
             ...(strategy.config && {
-              strategyConfig: { ...strategy.config, ...(t?.metadata?.strategyConfig || {}) },
+              strategyConfig: {
+                ...strategy.config,
+                ...(t?.metadata?.strategyConfig || {}),
+              },
             }),
           },
         })),
@@ -312,8 +317,16 @@ async function applyStrategies(
         generated: strategyTestCases.length,
       };
     } else {
+      // get an accurate 'Requested' count for strategies that add additional tests during generation
+      let n = 1;
+      if (typeof strategy.config?.n === 'number') {
+        n = strategy.config.n;
+      } else if (isFanoutStrategy(strategy.id)) {
+        n = getDefaultNFanout(strategy.id);
+      }
+
       strategyResults[displayId] = {
-        requested: applicableTestCases.length,
+        requested: applicableTestCases.length * n,
         generated: strategyTestCases.length,
       };
     }
@@ -556,7 +569,9 @@ export async function synthesize({
 
   validateStrategies(strategies);
 
-  const redteamProvider = await redteamProviderManager.getProvider({ provider });
+  const redteamProvider = await redteamProviderManager.getProvider({
+    provider,
+  });
 
   const {
     effectiveStrategyCount,
@@ -876,7 +891,10 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
+        pluginResults[plugin.id] = {
+          requested: plugin.numTests,
+          generated: customTests.length,
+        };
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
         pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };
