@@ -3,7 +3,7 @@ import type { Theme } from '@mui/material/styles';
 import { getASRColor, getPassRateColor } from '@promptfoo/app/src/utils/redteam';
 
 export type TestResultStats = {
-  // The count of successful defenses (tests that passed) 
+  // The count of successful defenses (tests that passed)
   pass: number;
   // The total number of tests run
   total: number;
