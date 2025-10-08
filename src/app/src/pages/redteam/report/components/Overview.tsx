@@ -16,9 +16,10 @@ import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
 
 import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import { type TestResultStats } from './FrameworkComplianceUtils';
 
 interface OverviewProps {
-  categoryStats: Record<PluginType, { pass: number; total: number }>;
+  categoryStats: Record<PluginType, TestResultStats>;
   plugins: RedteamPluginObject[];
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;

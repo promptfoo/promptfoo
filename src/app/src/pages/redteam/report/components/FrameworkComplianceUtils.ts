@@ -2,17 +2,19 @@ import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redt
 import type { Theme } from '@mui/material/styles';
 import { getASRColor, getPassRateColor } from '@promptfoo/app/src/utils/redteam';
 
+export type TestResultStats = {
+  // The count of failing attacks
+  pass: number;
+  // The total number of tests run
+  total: number;
+  // The count of failing attacks due to content moderation filtering
+  passWithFilter?: number;
+  // The number of successful attacks
+  failCount: number;
+};
+
 // Types for utility functions
-export type CategoryStats = Record<
-  string,
-  {
-    pass: number;
-    total: number;
-    passWithFilter?: number;
-    // The number of successful attacks
-    failCount: number;
-  }
->;
+export type CategoryStats = Record<string, TestResultStats>;
 
 type PluginCategories = {
   compliant: string[];

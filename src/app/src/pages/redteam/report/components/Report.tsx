@@ -55,6 +55,7 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
+import { type TestResultStats, type CategoryStats } from './FrameworkComplianceUtils';
 
 const App = () => {
   const navigate = useNavigate();
@@ -262,10 +263,7 @@ const App = () => {
 
         return acc;
       },
-      {} as Record<
-        string,
-        { pass: number; total: number; passWithFilter: number; failCount: number }
-      >,
+      {} as Record<string, Required<TestResultStats>>,
     );
   }, [evalData]);
 
@@ -274,7 +272,7 @@ const App = () => {
       return {};
     }
 
-    const stats: Record<string, { pass: number; total: number; failCount: number }> = {};
+    const stats: CategoryStats = {};
 
     Object.values(failuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
@@ -407,18 +405,7 @@ const App = () => {
    * Recalculates category (plugin) stats given the filtered failures and passes.
    */
   const filteredCategoryStats = React.useMemo(() => {
-    const stats: Record<
-      string,
-      {
-        // Passing count + failing count
-        total: number;
-        // Number of failing tests
-        failCount: number;
-        // Number of passing tests
-        pass: number;
-        passWithFilter: number;
-      }
-    > = {};
+    const stats: Record<string, Required<TestResultStats>> = {};
 
     Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
       // Initialize the stats for the plugin
@@ -439,7 +426,7 @@ const App = () => {
   }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
 
   const filteredStrategyStats = React.useMemo(() => {
-    const stats: Record<string, { pass: number; total: number; failCount: number }> = {};
+    const stats: CategoryStats = {};
 
     Object.values(filteredFailuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {

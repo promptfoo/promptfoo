@@ -23,13 +23,11 @@ import { useReportStore } from './store';
 import './FrameworkCompliance.css';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { formatASRForDisplay } from '@app/utils/redteam';
+import { type TestResultStats } from './FrameworkComplianceUtils';
 
 interface FrameworkComplianceProps {
   evalId: string;
-  categoryStats: Record<
-    string,
-    { pass: number; total: number; passWithFilter: number; failCount: number }
-  >;
+  categoryStats: Record<string, Required<TestResultStats>>;
 }
 
 const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps) => {

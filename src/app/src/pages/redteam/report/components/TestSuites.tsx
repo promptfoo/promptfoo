@@ -46,13 +46,11 @@ import {
 } from '@promptfoo/redteam/riskScoring';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { formatASRForDisplay } from '@app/utils/redteam';
+import { type TestResultStats } from './FrameworkComplianceUtils';
 
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: Record<
-    string,
-    { pass: number; total: number; passWithFilter: number; failCount: number }
-  >;
+  categoryStats: Record<string, Required<TestResultStats>>;
   plugins: RedteamPluginObject[];
   failuresByPlugin?: Record<string, any[]>;
   passesByPlugin?: Record<string, any[]>;

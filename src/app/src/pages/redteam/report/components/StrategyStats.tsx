@@ -26,6 +26,7 @@ import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { formatASRForDisplay } from '@app/utils/redteam';
+import { type TestResultStats, type CategoryStats } from './FrameworkComplianceUtils';
 
 interface TestWithMetadata {
   prompt: string;
@@ -39,7 +40,7 @@ interface TestWithMetadata {
 }
 
 interface StrategyStatsProps {
-  strategyStats: Record<string, { pass: number; total: number; failCount: number }>;
+  strategyStats: CategoryStats;
   failuresByPlugin: Record<string, TestWithMetadata[]>;
   passesByPlugin: Record<string, TestWithMetadata[]>;
 }
@@ -50,7 +51,7 @@ interface DrawerContentProps {
   onTabChange: (value: number) => void;
   failuresByPlugin: Record<string, TestWithMetadata[]>;
   passesByPlugin: Record<string, TestWithMetadata[]>;
-  selectedStrategyStats: { pass: number; total: number; failCount: number };
+  selectedStrategyStats: TestResultStats;
 }
 
 const DangerLinearProgress = styled(LinearProgress)(({ theme }) => ({
