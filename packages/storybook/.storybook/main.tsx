@@ -13,7 +13,6 @@ function getAbsolutePath(value: string): string {
 const config: StorybookConfig = {
   stories: ['../src/**/*.mdx', '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
   addons: [
-    getAbsolutePath('@chromatic-com/storybook'),
     {
       name: getAbsolutePath('@storybook/addon-themes'),
       options: {
@@ -22,17 +21,12 @@ const config: StorybookConfig = {
           light: {
             ...themes.light,
             name: 'Light',
-            textColor: 'red',
             class: 'light-theme',
-            color: '#ffffff',
             colorIcon: '#ffffff',
           },
           dark: {
-            ...themes.dark,
             name: 'Dark',
-            textColor: 'red',
             class: 'dark-theme',
-            color: '#1a1a1a',
             colorIcon: '#1a1a1a',
           },
         },

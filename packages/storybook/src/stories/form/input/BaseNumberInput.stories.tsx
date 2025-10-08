@@ -1,11 +1,37 @@
 import { BaseNumberInput } from 'promptfoo-toolkit';
 import { fn } from 'storybook/test';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState, useEffect } from 'react';
+import type { ComponentProps } from 'react';
+
+// Wrapper component that manages value state internally
+const BaseNumberInputWrapper = (props: ComponentProps<typeof BaseNumberInput>) => {
+  const { value: propValue, onChange, ...otherProps } = props;
+  const [value, setValue] = useState<number | undefined>(propValue);
+
+  // Update internal value when prop value changes
+  useEffect(() => {
+    setValue(propValue);
+  }, [propValue]);
+
+  const handleChange = (newValue: number | undefined) => {
+    setValue(newValue);
+    onChange?.(newValue);
+  };
+
+  return (
+    <BaseNumberInput
+      {...otherProps}
+      value={value}
+      onChange={handleChange}
+    />
+  );
+};
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories#default-export
 const meta = {
   title: 'Form/Input/BaseNumberInput',
-  component: BaseNumberInput,
+  component: BaseNumberInputWrapper,
   parameters: {
     // Optional parameter to center the component in the Canvas. More info: https://storybook.js.org/docs/configure/story-layout
     layout: 'centered',
@@ -97,7 +123,7 @@ const meta = {
   },
   // Use `fn` to spy on the onChange arg, which will appear in the actions panel once invoked
   args: { onChange: fn() },
-} satisfies Meta<typeof BaseNumberInput>;
+} satisfies Meta<typeof BaseNumberInputWrapper>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

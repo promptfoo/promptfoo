@@ -29,7 +29,6 @@
     --sb-border: var(--mui-palette-divider, #e1e5e9);
     --sb-sidebar-bg: var(--mui-palette-background-paper, #f7f9fa);
     --sb-toolbar-bg: var(--mui-palette-background-default, #ffffff);
-    --sb-input-bg: var(--mui-palette-background-paper, #ffffff);
     --sb-input-border: var(--mui-palette-divider, #e1e5e9);
     --sb-button-bg: var(--mui-palette-action-hover, #f7f9fa);
     --sb-button-hover: var(--mui-palette-action-selected, #e1e5e9);
@@ -49,7 +48,6 @@
     --sb-border: var(--mui-palette-divider, #333333);
     --sb-sidebar-bg: var(--mui-palette-background-paper, #2a2a2a);
     --sb-toolbar-bg: var(--mui-palette-background-default, #1a1a1a);
-    --sb-input-bg: var(--mui-palette-background-paper, #2a2a2a);
     --sb-input-border: var(--mui-palette-divider, #333333);
     --sb-button-bg: var(--mui-palette-action-hover, #2a2a2a);
     --sb-button-hover: var(--mui-palette-action-selected, #333333);

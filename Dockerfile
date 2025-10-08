@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # Copy the rest of the application code
 COPY . .
 
-WORKDIR /packages/toolkit
+WORKDIR /app/packages/toolkit
 RUN npm install
 
 # Run npm install for the react app
@@ -43,7 +43,8 @@ WORKDIR /app/src/app
 RUN npm install
 
 WORKDIR /app
-RUN npm run build
+
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 FROM base AS server
 WORKDIR /app

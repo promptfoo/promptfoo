@@ -13,5 +13,6 @@ dist
 scratch
 *.sqlite
 packages/storybook
+test
 
 venv

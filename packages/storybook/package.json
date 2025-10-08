@@ -12,7 +12,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-
+    "@storybook/global": "^5.0.0",
     "promptfoo-toolkit": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -27,8 +27,8 @@
     "@mui/system": "^7.3.2",
     "@storybook/addon-a11y": "^9.1.10",
     "@storybook/addon-docs": "^9.1.10",
-    "@storybook/addon-vitest": "^9.1.10",
     "@storybook/addon-themes": "^9.1.10",
+    "@storybook/addon-vitest": "^9.1.10",
     "@storybook/react-vite": "^9.1.10",
     "@types/node": "^24.6.0",
     "@types/react": "^18.3.24",
