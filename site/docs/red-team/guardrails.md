@@ -15,7 +15,7 @@ Adaptive Guardrails are an enterprise-grade input validation system that learns 
 In Promptfoo, a **target** is the AI application or endpoint you're testing and protecting. A target can be:
 
 - **An LLM API endpoint** (e.g., your chatbot's HTTP API at `https://api.yourapp.com/chat`)
-- **A specific model configuration** (e.g., `openai:gpt-4` with your custom system prompt)
+- **A specific model configuration** (e.g., `openai:gpt-5` with your custom system prompt)
 - **An AI agent or RAG system** (e.g., your customer support agent with document retrieval)
 - **Any application interface** accessible via HTTP, Python, JavaScript, or local providers
 
