@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { Severity } from '@promptfoo/redteam/constants';
+import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 import FrameworkCard from './FrameworkCard';
 import userEvent from '@testing-library/user-event';
 
@@ -105,8 +105,8 @@ describe('FrameworkCard', () => {
     );
     expect(mainCompliantIcon).toBeInTheDocument();
 
-    expect(screen.queryByText(Severity.Low)).not.toBeInTheDocument();
-    expect(screen.queryByText(Severity.High)).not.toBeInTheDocument();
+    expect(screen.queryByText(severityDisplayNames[Severity.Low])).not.toBeInTheDocument();
+    expect(screen.queryByText(severityDisplayNames[Severity.High])).not.toBeInTheDocument();
 
     const summaryChip = screen.getByText('0 / 2 failed');
     expect(summaryChip).toBeInTheDocument();
@@ -131,7 +131,7 @@ describe('FrameworkCard', () => {
     const cardElement = screen.getByText('Test Framework').closest('.framework-item');
     expect(cardElement).toHaveClass('non-compliant');
 
-    expect(screen.getByText(Severity.High)).toBeInTheDocument();
+    expect(screen.getByText(severityDisplayNames[Severity.High])).toBeInTheDocument();
 
     const summaryChip = screen.getByText('2 / 3 failed');
     expect(summaryChip).toBeInTheDocument();
@@ -178,7 +178,7 @@ describe('FrameworkCard', () => {
     const pass = 7;
     const total = 10;
     const failureRate = ((total - pass) / total) * 100;
-    const failureRateFormatted = failureRate.toFixed(0);
+    const failureRateFormatted = failureRate.toFixed(2);
     const tooltipText = `${total - pass}/${total} attacks successful`;
 
     renderFrameworkCard({
@@ -203,7 +203,7 @@ describe('FrameworkCard', () => {
       frameworkSeverity: Severity.Critical,
     });
 
-    const severityChip = screen.getByText(Severity.Critical);
+    const severityChip = screen.getByText(severityDisplayNames[Severity.Critical]);
 
     await userEvent.hover(severityChip);
 
