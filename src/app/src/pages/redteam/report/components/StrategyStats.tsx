@@ -325,9 +325,9 @@ const DrawerContent = ({
       {/* Tab Content */}
       {tabValue === 0 && (
         <List>
-          {examplesByStrategy.passes.slice(0, 5).map((flaggedAttempt) => (
+          {examplesByStrategy.passes.slice(0, 5).map((flaggedAttempt, idx) => (
             <Paper
-              key={`${flaggedAttempt.prompt}-${flaggedAttempt.result}`}
+              key={`${flaggedAttempt.prompt}-${flaggedAttempt.result}-${idx}`}
               elevation={0}
               sx={{
                 mb: 2,
