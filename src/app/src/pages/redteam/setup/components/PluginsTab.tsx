@@ -1,3 +1,4 @@
+import { useCallback, useMemo, useState } from 'react';
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -25,11 +26,29 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
+  DEFAULT_PLUGINS,
   displayNameOverrides,
+  EU_AI_ACT_MAPPING,
+  FOUNDATION_PLUGINS,
+  GUARDRAILS_EVALUATION_PLUGINS,
+  HARM_PLUGINS,
+  ISO_42001_MAPPING,
+  MCP_PLUGINS,
+  MITRE_ATLAS_MAPPING,
+  NIST_AI_RMF_MAPPING,
+  OWASP_API_TOP_10_MAPPING,
+  OWASP_LLM_RED_TEAM_MAPPING,
+  OWASP_LLM_TOP_10_MAPPING,
+  PLUGIN_PRESET_DESCRIPTIONS,
   type Plugin,
+  riskCategories,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
+import type { PluginConfig } from '@promptfoo/redteam/types';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -37,7 +56,7 @@ import {
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
 
-import type { LocalPluginConfig } from '../types';
+import type { ApplicationDefinition, LocalPluginConfig } from '../types';
 
 const ErrorFallback = ({ error }: { error: Error }) => (
   <div role="alert">
@@ -46,128 +65,377 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
-// Grouped prop interfaces for better organization and maintainability
-export interface PluginSelectionProps {
-  selectedPlugins: Set<Plugin>;
-  handlePluginToggle: (plugin: Plugin) => void;
-}
-
-export interface PluginConfigProps {
-  pluginConfig: LocalPluginConfig;
-  selectedConfigPlugin: Plugin | null;
-  setSelectedConfigPlugin: React.Dispatch<React.SetStateAction<Plugin | null>>;
-  configDialogOpen: boolean;
-  setConfigDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  isPluginConfigured: (plugin: Plugin) => boolean;
-  updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
-}
-
-export interface PresetProps {
-  handlePresetSelect: (preset: {
-    name: string;
-    plugins: Set<Plugin> | ReadonlySet<Plugin>;
-  }) => void;
-  isCustomMode: boolean;
-  currentlySelectedPreset: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> } | undefined;
-  presets: Array<{ name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }>;
-  PLUGIN_PRESET_DESCRIPTIONS: Record<string, string>;
-}
-
-export interface FilterProps {
-  filteredPlugins: Array<{ plugin: Plugin; category: string }>;
-  searchTerm: string;
-  setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
-  selectedCategory: string | undefined;
-  setSelectedCategory: React.Dispatch<React.SetStateAction<string | undefined>>;
-  allCategoryFilters: Array<{ key: string; label: string }>;
-  handleCategoryToggle: (category: string) => void;
-}
-
-export interface TestCaseProps {
-  handleGenerateTestCase: (plugin: Plugin) => void;
-  generatingTestCase: boolean;
-  generatingPlugin: Plugin | null;
-  testCaseDialogOpen: boolean;
-  setTestCaseDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  testCaseDialogMode: 'config' | 'result';
-  tempTestCaseConfig: any;
-  setTempTestCaseConfig: React.Dispatch<React.SetStateAction<any>>;
-  generatedTestCase: { prompt: string; context: string; metadata?: any } | null;
-  generateTestCaseWithConfig: (plugin: Plugin, config: any) => Promise<void>;
-  isTestCaseConfigValid: (plugin: Plugin, config: any) => boolean;
-}
-
-export interface PluginConstants {
-  PLUGINS_REQUIRING_CONFIG: string[];
-  PLUGINS_SUPPORTING_CONFIG: string[];
-}
+// Constants
+const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
+const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 
 export interface PluginsTabProps {
-  pluginSelectionProps: PluginSelectionProps;
-  pluginConfigProps: PluginConfigProps;
-  presetProps: PresetProps;
-  filterProps: FilterProps;
-  testCaseProps: TestCaseProps;
-  constants: PluginConstants;
-  setHasUserInteracted: React.Dispatch<React.SetStateAction<boolean>>;
+  selectedPlugins: Set<Plugin>;
+  handlePluginToggle: (plugin: Plugin) => void;
+  pluginConfig: LocalPluginConfig;
+  updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
+  recentlyUsedPlugins: Plugin[];
+  applicationDefinition?: ApplicationDefinition;
+  onUserInteraction: () => void;
 }
 
 export default function PluginsTab({
-  pluginSelectionProps,
-  pluginConfigProps,
-  presetProps,
-  filterProps,
-  testCaseProps,
-  constants,
-  setHasUserInteracted,
-}: PluginsTabProps) {
-  // Destructure props from grouped objects for easier access
-  const { selectedPlugins, handlePluginToggle } = pluginSelectionProps;
-  const {
-    pluginConfig,
-    selectedConfigPlugin,
-    setSelectedConfigPlugin,
-    configDialogOpen,
-    setConfigDialogOpen,
-    isPluginConfigured,
-    updatePluginConfig,
-  } = pluginConfigProps;
-  const {
-    handlePresetSelect,
-    isCustomMode,
-    currentlySelectedPreset,
-    presets,
-    PLUGIN_PRESET_DESCRIPTIONS,
-  } = presetProps;
-  const {
-    filteredPlugins,
-    searchTerm,
-    setSearchTerm,
-    selectedCategory,
-    setSelectedCategory,
-    allCategoryFilters,
-    handleCategoryToggle,
-  } = filterProps;
-  const {
-    handleGenerateTestCase,
-    generatingTestCase,
-    generatingPlugin,
-    testCaseDialogOpen,
-    setTestCaseDialogOpen,
-    testCaseDialogMode,
-    tempTestCaseConfig,
-    setTempTestCaseConfig,
-    generatedTestCase,
-    generateTestCaseWithConfig,
-    isTestCaseConfigValid,
-  } = testCaseProps;
-  const { PLUGINS_REQUIRING_CONFIG, PLUGINS_SUPPORTING_CONFIG } = constants;
+  selectedPlugins,
+  handlePluginToggle,
+  pluginConfig,
+  updatePluginConfig,
+  recentlyUsedPlugins,
+  applicationDefinition,
+  onUserInteraction,
+}: PluginsTabProps): JSX.Element {
   const theme = useTheme();
+  const { recordEvent } = useTelemetry();
+  const toast = useToast();
 
-  const handleConfigClick = (plugin: Plugin) => {
+  // Internal state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
+  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
+  const [generatingPlugin, setGeneratingPlugin] = useState<Plugin | null>(null);
+  const [generatedTestCase, setGeneratedTestCase] = useState<{
+    prompt: string;
+    context: string;
+    metadata?: any;
+  } | null>(null);
+  const [generatingTestCase, setGeneratingTestCase] = useState(false);
+  const [testCaseDialogMode, setTestCaseDialogMode] = useState<'config' | 'result'>('config');
+  const [tempTestCaseConfig, setTempTestCaseConfig] = useState<any>({});
+  const [isCustomMode, setIsCustomMode] = useState(true);
+
+  // Presets
+  const presets: {
+    name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
+    plugins: Set<Plugin> | ReadonlySet<Plugin>;
+  }[] = useMemo(
+    () => [
+      {
+        name: 'Recommended',
+        plugins: DEFAULT_PLUGINS,
+      },
+      {
+        name: 'Minimal Test',
+        plugins: new Set(['harmful:hate', 'harmful:self-harm']),
+      },
+      {
+        name: 'RAG',
+        plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
+      },
+      {
+        name: 'Foundation',
+        plugins: new Set(FOUNDATION_PLUGINS),
+      },
+      {
+        name: 'Guardrails Evaluation',
+        plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
+      },
+      {
+        name: 'MCP',
+        plugins: new Set(MCP_PLUGINS),
+      },
+      {
+        name: 'Harmful',
+        plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
+      },
+      {
+        name: 'NIST',
+        plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'OWASP LLM Top 10',
+        plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'OWASP Gen AI Red Team',
+        plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'OWASP API Top 10',
+        plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'MITRE',
+        plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'EU AI Act',
+        plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'ISO 42001',
+        plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
+      },
+    ],
+    [],
+  );
+
+  // Helper functions
+  const isPluginConfigured = useCallback(
+    (plugin: Plugin) => {
+      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
+        return true;
+      }
+      const config = pluginConfig[plugin];
+      if (!config || Object.keys(config).length === 0) {
+        return false;
+      }
+
+      for (const key in config) {
+        const value = config[key as keyof PluginConfig];
+        if (Array.isArray(value) && value.length === 0) {
+          return false;
+        }
+        if (typeof value === 'string' && value.trim() === '') {
+          return false;
+        }
+      }
+      return true;
+    },
+    [pluginConfig],
+  );
+
+  const isTestCaseConfigValid = useCallback((plugin: Plugin, config: any) => {
+    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      return true;
+    }
+    if (!config) {
+      return false;
+    }
+    if (plugin === 'indirect-prompt-injection') {
+      return config.indirectInjectionVar && config.indirectInjectionVar.trim() !== '';
+    }
+    if (plugin === 'prompt-extraction') {
+      return config.systemPrompt && config.systemPrompt.trim() !== '';
+    }
+    return true;
+  }, []);
+
+  // Category filters
+  const categoryFilters = useMemo(
+    () =>
+      Object.keys(riskCategories).map((category) => ({
+        key: category,
+        label: category,
+      })),
+    [],
+  );
+
+  const allCategoryFilters = useMemo(
+    () => [
+      ...(recentlyUsedPlugins.length > 0 ? [{ key: 'Recently Used', label: 'Recently Used' }] : []),
+      ...(selectedPlugins.size > 0
+        ? [{ key: 'Selected', label: `Selected (${selectedPlugins.size})` }]
+        : []),
+      ...categoryFilters,
+    ],
+    [recentlyUsedPlugins.length, selectedPlugins.size, categoryFilters],
+  );
+
+  // Get all plugins with categories
+  const allPluginsWithCategories = useMemo(() => {
+    const pluginsWithCategories: Array<{ plugin: Plugin; category: string }> = [];
+
+    if (selectedCategory === 'Selected') {
+      Array.from(selectedPlugins).forEach((plugin) => {
+        let originalCategory = 'Other';
+        if (recentlyUsedPlugins.includes(plugin)) {
+          originalCategory = 'Recently Used';
+        } else {
+          for (const [category, plugins] of Object.entries(riskCategories)) {
+            if (plugins.includes(plugin)) {
+              originalCategory = category;
+              break;
+            }
+          }
+        }
+        pluginsWithCategories.push({ plugin, category: originalCategory });
+      });
+      return pluginsWithCategories;
+    }
+
+    if (
+      recentlyUsedPlugins.length > 0 &&
+      (!selectedCategory || selectedCategory === 'Recently Used')
+    ) {
+      recentlyUsedPlugins.forEach((plugin) => {
+        pluginsWithCategories.push({ plugin, category: 'Recently Used' });
+      });
+    }
+
+    if (
+      !selectedCategory ||
+      (selectedCategory !== 'Recently Used' && selectedCategory !== 'Selected')
+    ) {
+      Object.entries(riskCategories).forEach(([category, plugins]) => {
+        if (!selectedCategory || selectedCategory === category) {
+          plugins
+            .filter((plugin) => plugin !== 'intent' && plugin !== 'policy')
+            .forEach((plugin) => {
+              if (!pluginsWithCategories.some((p) => p.plugin === plugin)) {
+                pluginsWithCategories.push({ plugin, category });
+              }
+            });
+        }
+      });
+    }
+
+    return pluginsWithCategories;
+  }, [selectedCategory, recentlyUsedPlugins, selectedPlugins]);
+
+  // Filter plugins based on search term
+  const filteredPlugins = useMemo(() => {
+    let plugins = allPluginsWithCategories;
+
+    if (searchTerm) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      plugins = plugins.filter(({ plugin }) => {
+        return (
+          plugin.toLowerCase().includes(lowerSearchTerm) ||
+          HARM_PLUGINS[plugin as keyof typeof HARM_PLUGINS]
+            ?.toLowerCase()
+            .includes(lowerSearchTerm) ||
+          displayNameOverrides[plugin as keyof typeof displayNameOverrides]
+            ?.toLowerCase()
+            .includes(lowerSearchTerm) ||
+          categoryAliases[plugin as keyof typeof categoryAliases]
+            ?.toLowerCase()
+            .includes(lowerSearchTerm) ||
+          subCategoryDescriptions[plugin]?.toLowerCase().includes(lowerSearchTerm)
+        );
+      });
+    }
+
+    return plugins;
+  }, [searchTerm, allPluginsWithCategories]);
+
+  const currentlySelectedPreset = useMemo(
+    () =>
+      presets.find(
+        (p) =>
+          Array.from(p.plugins as Set<Plugin>).every((plugin) => selectedPlugins.has(plugin)) &&
+          p.plugins.size === selectedPlugins.size,
+      ),
+    [presets, selectedPlugins],
+  );
+
+  // Event handlers
+  const handleCategoryToggle = useCallback((category: string) => {
+    setSelectedCategory((prev) => (prev === category ? undefined : category));
+  }, []);
+
+  const handlePresetSelect = useCallback(
+    (preset: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }) => {
+      recordEvent('feature_used', {
+        feature: 'redteam_config_plugins_preset_selected',
+        preset: preset.name,
+      });
+      onUserInteraction();
+      if (preset.name === 'Custom') {
+        setIsCustomMode(true);
+      } else {
+        preset.plugins.forEach((plugin) => {
+          if (!selectedPlugins.has(plugin)) {
+            handlePluginToggle(plugin);
+          }
+        });
+        // Remove plugins not in preset
+        selectedPlugins.forEach((plugin) => {
+          if (!preset.plugins.has(plugin)) {
+            handlePluginToggle(plugin);
+          }
+        });
+        setIsCustomMode(false);
+      }
+    },
+    [recordEvent, onUserInteraction, selectedPlugins, handlePluginToggle],
+  );
+
+  const handleGenerateTestCase = useCallback(
+    async (plugin: Plugin) => {
+      const supportsConfig = PLUGINS_SUPPORTING_CONFIG.includes(plugin);
+
+      setGeneratingPlugin(plugin);
+      setGeneratedTestCase(null);
+      setGeneratingTestCase(false);
+
+      if (supportsConfig) {
+        setTempTestCaseConfig(pluginConfig[plugin] || {});
+        setTestCaseDialogMode('config');
+        setTestCaseDialogOpen(true);
+      } else {
+        await generateTestCaseWithConfig(plugin, {});
+      }
+    },
+    [pluginConfig],
+  );
+
+  const generateTestCaseWithConfig = useCallback(
+    async (plugin: Plugin, configForGeneration: any) => {
+      setGeneratingTestCase(true);
+      setTestCaseDialogMode('result');
+
+      try {
+        recordEvent('feature_used', {
+          feature: 'redteam_plugin_generate_test_case',
+          plugin: plugin,
+        });
+
+        const response = await callApi('/redteam/generate-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache',
+          },
+          body: JSON.stringify({
+            pluginId: plugin,
+            config: {
+              applicationDefinition,
+              ...configForGeneration,
+            },
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        setGeneratedTestCase({
+          prompt: data.prompt,
+          context: data.context,
+          metadata: data.metadata,
+        });
+
+        if (!testCaseDialogOpen) {
+          setTestCaseDialogOpen(true);
+        }
+      } catch (error) {
+        console.error('Failed to generate test case:', error);
+        toast.showToast(
+          error instanceof Error ? error.message : 'Failed to generate test case',
+          'error',
+        );
+        setTestCaseDialogOpen(false);
+        setGeneratingPlugin(null);
+      } finally {
+        setGeneratingTestCase(false);
+      }
+    },
+    [recordEvent, applicationDefinition, testCaseDialogOpen, toast],
+  );
+
+  const handleConfigClick = useCallback((plugin: Plugin) => {
     setSelectedConfigPlugin(plugin);
     setConfigDialogOpen(true);
-  };
+  }, []);
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
@@ -278,7 +546,7 @@ export default function PluginsTab({
             <Box
               component="span"
               onClick={() => {
-                setHasUserInteracted(true);
+                onUserInteraction();
                 filteredPlugins.forEach(({ plugin }) => {
                   if (!selectedPlugins.has(plugin)) {
                     handlePluginToggle(plugin);
@@ -291,7 +559,7 @@ export default function PluginsTab({
             <Box
               component="span"
               onClick={() => {
-                setHasUserInteracted(true);
+                onUserInteraction();
                 filteredPlugins.forEach(({ plugin }) => {
                   if (selectedPlugins.has(plugin)) {
                     handlePluginToggle(plugin);
@@ -793,7 +1061,7 @@ export default function PluginsTab({
                   size="small"
                   fullWidth
                   onClick={() => {
-                    setHasUserInteracted(true);
+                    onUserInteraction();
                     selectedPlugins.forEach((plugin) => handlePluginToggle(plugin));
                   }}
                   sx={{ fontSize: '0.875rem' }}

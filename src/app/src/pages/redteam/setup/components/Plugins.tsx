@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -13,23 +11,9 @@ import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
-  DEFAULT_PLUGINS,
   displayNameOverrides,
-  EU_AI_ACT_MAPPING,
-  FOUNDATION_PLUGINS,
-  GUARDRAILS_EVALUATION_PLUGINS,
-  HARM_PLUGINS,
-  ISO_42001_MAPPING,
-  MCP_PLUGINS,
-  MITRE_ATLAS_MAPPING,
-  NIST_AI_RMF_MAPPING,
-  OWASP_API_TOP_10_MAPPING,
-  OWASP_LLM_RED_TEAM_MAPPING,
-  OWASP_LLM_TOP_10_MAPPING,
-  PLUGIN_PRESET_DESCRIPTIONS,
   type Plugin,
   riskCategories,
-  subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { Link as RouterLink } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
@@ -48,8 +32,6 @@ interface PluginsProps {
 }
 
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
-
-const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
 
 // TabPanel component for conditional rendering
 interface TabPanelProps {
@@ -76,8 +58,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
-  const toast = useToast();
-  const [isCustomMode, setIsCustomMode] = useState(true);
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
@@ -103,8 +83,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   // Track if user has interacted to prevent config updates from overriding user selections
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
   const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>(() => {
     const initialConfig: LocalPluginConfig = {};
     config.plugins.forEach((plugin) => {
@@ -114,36 +92,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     });
     return initialConfig;
   });
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
-
-  // Test case generation state
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
-  const [generatingPlugin, setGeneratingPlugin] = useState<Plugin | null>(null);
-  const [generatedTestCase, setGeneratedTestCase] = useState<{
-    prompt: string;
-    context: string;
-    metadata?: any;
-  } | null>(null);
-  const [generatingTestCase, setGeneratingTestCase] = useState(false);
-  // Add new state for dialog mode and temporary config
-  const [testCaseDialogMode, setTestCaseDialogMode] = useState<'config' | 'result'>('config');
-  const [tempTestCaseConfig, setTempTestCaseConfig] = useState<any>({});
-
-  // Category filter options based on riskCategories
-  const categoryFilters = Object.keys(riskCategories).map((category) => ({
-    key: category,
-    label: category,
-  }));
-
-  // Add "Recently Used" category and "Selected" filter if there are recently used plugins or selected plugins
-  const allCategoryFilters = [
-    ...(recentlyUsedSnapshot.length > 0 ? [{ key: 'Recently Used', label: 'Recently Used' }] : []),
-    ...(selectedPlugins.size > 0
-      ? [{ key: 'Selected', label: `Selected (${selectedPlugins.size})` }]
-      : []),
-    ...categoryFilters,
-  ];
 
   const [debouncedPlugins] = useDebounce(
     useMemo(
@@ -225,183 +173,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         } else {
           newSet.add(plugin);
           addPlugin(plugin);
-          if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-            setSelectedConfigPlugin(plugin);
-            setConfigDialogOpen(true);
-          }
         }
         return newSet;
       });
     },
     [addPlugin],
   );
-
-  const handlePresetSelect = (preset: {
-    name: string;
-    plugins: Set<Plugin> | ReadonlySet<Plugin>;
-  }) => {
-    recordEvent('feature_used', {
-      feature: 'redteam_config_plugins_preset_selected',
-      preset: preset.name,
-    });
-    setHasUserInteracted(true);
-    if (preset.name === 'Custom') {
-      setIsCustomMode(true);
-    } else {
-      setSelectedPlugins(new Set(preset.plugins));
-      setIsCustomMode(false);
-    }
-  };
-
-  // Handle category filter toggle
-  const handleCategoryToggle = (category: string) => {
-    setSelectedCategory(selectedCategory === category ? undefined : category);
-  };
-
-  // Get all plugins in a flat array with their categories
-  const allPluginsWithCategories = useMemo(() => {
-    const pluginsWithCategories: Array<{ plugin: Plugin; category: string }> = [];
-
-    // Handle "Selected" filter - show only selected plugins
-    if (selectedCategory === 'Selected') {
-      Array.from(selectedPlugins).forEach((plugin) => {
-        // Find the original category for this plugin
-        let originalCategory = 'Other';
-        if (recentlyUsedSnapshot.includes(plugin)) {
-          originalCategory = 'Recently Used';
-        } else {
-          for (const [category, plugins] of Object.entries(riskCategories)) {
-            if (plugins.includes(plugin)) {
-              originalCategory = category;
-              break;
-            }
-          }
-        }
-        pluginsWithCategories.push({ plugin, category: originalCategory });
-      });
-      return pluginsWithCategories;
-    }
-
-    // Add recently used plugins if selected category is "Recently Used" or no category selected
-    if (
-      recentlyUsedSnapshot.length > 0 &&
-      (!selectedCategory || selectedCategory === 'Recently Used')
-    ) {
-      recentlyUsedSnapshot.forEach((plugin) => {
-        pluginsWithCategories.push({ plugin, category: 'Recently Used' });
-      });
-    }
-
-    // Add plugins from risk categories
-    if (
-      !selectedCategory ||
-      (selectedCategory !== 'Recently Used' && selectedCategory !== 'Selected')
-    ) {
-      Object.entries(riskCategories).forEach(([category, plugins]) => {
-        if (!selectedCategory || selectedCategory === category) {
-          plugins
-            .filter((plugin) => plugin !== 'intent' && plugin !== 'policy') // Skip these as they have dedicated sections
-            .forEach((plugin) => {
-              // Avoid duplicates with recently used
-              if (!pluginsWithCategories.some((p) => p.plugin === plugin)) {
-                pluginsWithCategories.push({ plugin, category });
-              }
-            });
-        }
-      });
-    }
-
-    return pluginsWithCategories;
-  }, [selectedCategory, recentlyUsedSnapshot, selectedPlugins]);
-
-  // Filter plugins based on search term
-  const filteredPlugins = useMemo(() => {
-    let plugins = allPluginsWithCategories;
-
-    // Apply search filter if there's a search term
-    if (searchTerm) {
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      plugins = plugins.filter(({ plugin }) => {
-        return (
-          plugin.toLowerCase().includes(lowerSearchTerm) ||
-          HARM_PLUGINS[plugin as keyof typeof HARM_PLUGINS]
-            ?.toLowerCase()
-            .includes(lowerSearchTerm) ||
-          displayNameOverrides[plugin as keyof typeof displayNameOverrides]
-            ?.toLowerCase()
-            .includes(lowerSearchTerm) ||
-          categoryAliases[plugin as keyof typeof categoryAliases]
-            ?.toLowerCase()
-            .includes(lowerSearchTerm) ||
-          subCategoryDescriptions[plugin]?.toLowerCase().includes(lowerSearchTerm)
-        );
-      });
-    }
-
-    return plugins;
-  }, [searchTerm, allPluginsWithCategories]);
-
-  const presets: {
-    name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
-    plugins: Set<Plugin> | ReadonlySet<Plugin>;
-  }[] = [
-    {
-      name: 'Recommended',
-      plugins: DEFAULT_PLUGINS,
-    },
-    {
-      name: 'Minimal Test',
-      plugins: new Set(['harmful:hate', 'harmful:self-harm']),
-    },
-    {
-      name: 'RAG',
-      plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
-    },
-    {
-      name: 'Foundation',
-      plugins: new Set(FOUNDATION_PLUGINS),
-    },
-    {
-      name: 'Guardrails Evaluation',
-      plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
-    },
-    {
-      name: 'MCP',
-      plugins: new Set(MCP_PLUGINS),
-    },
-    {
-      name: 'Harmful',
-      plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
-    },
-    {
-      name: 'NIST',
-      plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
-    },
-    {
-      name: 'OWASP LLM Top 10',
-      plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
-    },
-    {
-      name: 'OWASP Gen AI Red Team',
-      plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
-    },
-    {
-      name: 'OWASP API Top 10',
-      plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
-    },
-    {
-      name: 'MITRE',
-      plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
-    },
-    {
-      name: 'EU AI Act',
-      plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
-    },
-    {
-      name: 'ISO 42001',
-      plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
-    },
-  ];
 
   const updatePluginConfig = useCallback(
     (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => {
@@ -444,24 +221,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
     return true;
   }, [selectedPlugins, pluginConfig]);
-
-  const isTestCaseConfigValid = useCallback((plugin: Plugin, config: any) => {
-    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-      // For plugins that don't require config or only support optional config, always allow generation
-      return true;
-    }
-    if (!config) {
-      return false;
-    }
-    if (plugin === 'indirect-prompt-injection') {
-      return config.indirectInjectionVar && config.indirectInjectionVar.trim() !== '';
-    }
-    if (plugin === 'prompt-extraction') {
-      return config.systemPrompt && config.systemPrompt.trim() !== '';
-    }
-    // Note: bfla, bola, ssrf are not in PLUGINS_REQUIRING_CONFIG, so they will return true above
-    return true;
-  }, []);
 
   const hasAnyPluginsConfigured = useCallback(() => {
     // Check regular plugins
@@ -519,104 +278,28 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return '';
   }, [hasAnyPluginsConfigured, isConfigValid, selectedPlugins, pluginConfig]);
 
-  const handleGenerateTestCase = async (plugin: Plugin) => {
-    const supportsConfig = PLUGINS_SUPPORTING_CONFIG.includes(plugin);
-
-    setGeneratingPlugin(plugin);
-    setGeneratedTestCase(null);
-    setGeneratingTestCase(false);
-
-    if (supportsConfig) {
-      // Initialize temp config with existing plugin config if available
-      setTempTestCaseConfig(pluginConfig[plugin] || {});
-      setTestCaseDialogMode('config');
-      setTestCaseDialogOpen(true);
-    } else {
-      // Directly generate test case for plugins that don't support config
-      await generateTestCaseWithConfig(plugin, {});
-    }
-  };
-
-  const generateTestCaseWithConfig = async (plugin: Plugin, configForGeneration: any) => {
-    setGeneratingTestCase(true);
-    setTestCaseDialogMode('result');
-
-    try {
-      recordEvent('feature_used', {
-        feature: 'redteam_plugin_generate_test_case',
-        plugin: plugin,
-      });
-
-      const response = await callApi('/redteam/generate-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-        },
-        body: JSON.stringify({
-          pluginId: plugin,
-          config: {
-            applicationDefinition: config.applicationDefinition,
-            ...configForGeneration,
-          },
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
+  const isPluginConfigured = useCallback(
+    (plugin: Plugin) => {
+      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
+        return true;
+      }
+      const config = pluginConfig[plugin];
+      if (!config || Object.keys(config).length === 0) {
+        return false;
       }
 
-      setGeneratedTestCase({
-        prompt: data.prompt,
-        context: data.context,
-        metadata: data.metadata,
-      });
-
-      if (!testCaseDialogOpen) {
-        setTestCaseDialogOpen(true);
+      for (const key in config) {
+        const value = config[key as keyof PluginConfig];
+        if (Array.isArray(value) && value.length === 0) {
+          return false;
+        }
+        if (typeof value === 'string' && value.trim() === '') {
+          return false;
+        }
       }
-    } catch (error) {
-      console.error('Failed to generate test case:', error);
-      toast.showToast(
-        error instanceof Error ? error.message : 'Failed to generate test case',
-        'error',
-      );
-      // Close dialog on error
-      setTestCaseDialogOpen(false);
-      setGeneratingPlugin(null);
-    } finally {
-      setGeneratingTestCase(false);
-    }
-  };
-
-  const isPluginConfigured = (plugin: Plugin) => {
-    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
       return true;
-    }
-    const config = pluginConfig[plugin];
-    if (!config || Object.keys(config).length === 0) {
-      return false;
-    }
-
-    for (const key in config) {
-      const value = config[key as keyof PluginConfig];
-      if (Array.isArray(value) && value.length === 0) {
-        return false;
-      }
-      if (typeof value === 'string' && value.trim() === '') {
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const currentlySelectedPreset = presets.find(
-    (p) =>
-      Array.from(p.plugins as Set<Plugin>).every((plugin) => selectedPlugins.has(plugin)) &&
-      p.plugins.size === selectedPlugins.size,
+    },
+    [pluginConfig],
   );
 
   // Check if user has selected all or most plugins
@@ -712,53 +395,13 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       {/* Tab Panel 0: Plugins */}
       <TabPanel value={activeTab} index={0}>
         <PluginsTab
-          pluginSelectionProps={{
-            selectedPlugins,
-            handlePluginToggle,
-          }}
-          pluginConfigProps={{
-            pluginConfig,
-            selectedConfigPlugin,
-            setSelectedConfigPlugin,
-            configDialogOpen,
-            setConfigDialogOpen,
-            isPluginConfigured,
-            updatePluginConfig,
-          }}
-          presetProps={{
-            handlePresetSelect,
-            isCustomMode,
-            currentlySelectedPreset,
-            presets,
-            PLUGIN_PRESET_DESCRIPTIONS,
-          }}
-          filterProps={{
-            filteredPlugins,
-            searchTerm,
-            setSearchTerm,
-            selectedCategory,
-            setSelectedCategory,
-            allCategoryFilters,
-            handleCategoryToggle,
-          }}
-          testCaseProps={{
-            handleGenerateTestCase,
-            generatingTestCase,
-            generatingPlugin,
-            testCaseDialogOpen,
-            setTestCaseDialogOpen,
-            testCaseDialogMode,
-            tempTestCaseConfig,
-            setTempTestCaseConfig,
-            generatedTestCase,
-            generateTestCaseWithConfig,
-            isTestCaseConfigValid,
-          }}
-          constants={{
-            PLUGINS_REQUIRING_CONFIG,
-            PLUGINS_SUPPORTING_CONFIG,
-          }}
-          setHasUserInteracted={setHasUserInteracted}
+          selectedPlugins={selectedPlugins}
+          handlePluginToggle={handlePluginToggle}
+          pluginConfig={pluginConfig}
+          updatePluginConfig={updatePluginConfig}
+          recentlyUsedPlugins={recentlyUsedSnapshot}
+          applicationDefinition={config.applicationDefinition}
+          onUserInteraction={() => setHasUserInteracted(true)}
         />
       </TabPanel>
 
