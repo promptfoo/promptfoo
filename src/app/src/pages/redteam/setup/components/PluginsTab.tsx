@@ -1,5 +1,3 @@
-import { useCallback, useState } from 'react';
-import AddIcon from '@mui/icons-material/Add';
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -19,7 +17,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
-import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
@@ -51,10 +48,8 @@ const ErrorFallback = ({ error }: { error: Error }) => (
 
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
-  setSelectedPlugins: React.Dispatch<React.SetStateAction<Set<Plugin>>>;
   handlePluginToggle: (plugin: Plugin) => void;
   pluginConfig: LocalPluginConfig;
-  setPluginConfig: React.Dispatch<React.SetStateAction<LocalPluginConfig>>;
   selectedConfigPlugin: Plugin | null;
   setSelectedConfigPlugin: React.Dispatch<React.SetStateAction<Plugin | null>>;
   configDialogOpen: boolean;
@@ -94,10 +89,8 @@ export interface PluginsTabProps {
 
 export default function PluginsTab({
   selectedPlugins,
-  setSelectedPlugins,
   handlePluginToggle,
   pluginConfig,
-  setPluginConfig,
   selectedConfigPlugin,
   setSelectedConfigPlugin,
   configDialogOpen,

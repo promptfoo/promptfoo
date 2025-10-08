@@ -6,6 +6,7 @@ import { callApi } from '@app/utils/api';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Divider from '@mui/material/Divider';
 import { useTheme } from '@mui/material/styles';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
@@ -705,6 +706,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           <Tab label="Custom Prompts" id="plugins-tab-1" aria-controls="plugins-tabpanel-1" />
           <Tab label="Custom Policies" id="plugins-tab-2" aria-controls="plugins-tabpanel-2" />
         </Tabs>
+        <Divider />
       </Box>
 
       {/* Tab Panel 0: Plugins */}
