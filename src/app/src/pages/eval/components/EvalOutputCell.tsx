@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import { callApi } from '@app/utils/api';
+import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
@@ -9,11 +9,7 @@ import { diffJson, diffSentences, diffWords } from 'diff';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
-import EvalOutputPromptDialog, {
-  type ReplayEvaluationParams,
-  type ReplayEvaluationResult,
-} from './EvalOutputPromptDialog';
-import type { Trace } from '../../../components/traces/TraceView';
+import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
@@ -89,6 +85,7 @@ function EvalOutputCell({
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
+  const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -110,53 +107,6 @@ function EvalOutputCell({
   const handlePromptClose = () => {
     setOpen(false);
   };
-
-  const handleReplayEvaluation = React.useCallback(
-    async (params: ReplayEvaluationParams): Promise<ReplayEvaluationResult> => {
-      try {
-        const response = await callApi('/eval/replay', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(params),
-        });
-
-        if (!response.ok) {
-          const error = await response.text();
-          return { error: error || 'Failed to replay evaluation' };
-        }
-
-        const data = await response.json();
-
-        // API returns { output, error, response } - output is already extracted to top level
-        if (data.error) {
-          return { error: `Provider error: ${data.error}` };
-        }
-
-        return { output: data.output || undefined };
-      } catch (error) {
-        return { error: error instanceof Error ? error.message : 'An error occurred' };
-      }
-    },
-    [],
-  );
-
-  const handleFetchTraces = React.useCallback(
-    async (evalId: string, signal: AbortSignal): Promise<Trace[]> => {
-      const response = await callApi(`/traces/evaluation/${evalId}`, {
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return Array.isArray(data.traces) ? data.traces : [];
-    },
-    [],
-  );
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
@@ -689,8 +639,8 @@ function EvalOutputCell({
               variables={output.testCase?.vars}
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
-              onReplay={handleReplayEvaluation}
-              fetchTraces={handleFetchTraces}
+              onReplay={replayEvaluation}
+              fetchTraces={fetchTraces}
               cloudConfig={cloudConfig}
             />
           )}
