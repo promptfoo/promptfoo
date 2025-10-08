@@ -12,5 +12,6 @@ Dockerfile
 dist
 scratch
 *.sqlite
+packages/storybook
 
 venv

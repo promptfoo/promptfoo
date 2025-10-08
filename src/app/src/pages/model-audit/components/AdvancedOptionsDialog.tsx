@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/shared/form/input/BaseNumberInput';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -14,6 +13,7 @@ import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { BaseNumberInput } from 'promptfoo-toolkit';
 
 import type { ScanOptions } from '../ModelAudit.types';
 

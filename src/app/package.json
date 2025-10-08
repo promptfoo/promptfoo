@@ -64,6 +64,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "promptfoo-toolkit": "file:../../packages/toolkit",
     "react-hook-form": "^7.64.0",
     "redent": "^4.0.0",
     "reselect": "^5.1.1",

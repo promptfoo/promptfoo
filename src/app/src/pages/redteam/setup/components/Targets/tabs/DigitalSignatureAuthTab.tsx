@@ -1,6 +1,5 @@
 import React from 'react';
 
-import { BaseNumberInput } from '@app/components/shared/form/input/BaseNumberInput';
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -22,6 +21,7 @@ import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { BaseNumberInput } from 'promptfoo-toolkit';
 import { convertStringKeyToPem, validatePrivateKey } from '../../../utils/crypto';
 import type { ProviderOptions } from '@promptfoo/types';
 

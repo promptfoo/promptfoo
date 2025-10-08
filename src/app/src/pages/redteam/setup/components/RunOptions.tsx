@@ -1,12 +1,12 @@
 import { useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/shared/form/input/BaseNumberInput';
 import { FormControlLabel, Switch } from '@mui/material';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { BaseNumberInput } from 'promptfoo-toolkit';
 import { Config } from '../types';
 import type { RedteamRunOptions } from '@promptfoo/types';
 

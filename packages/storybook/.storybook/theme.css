@@ -1,0 +1,220 @@
+/* 
+ * Use MUI CSS variables from CssBaseline
+ * 
+ * MUI's CssBaseline automatically injects CSS custom properties based on the theme.
+ * These variables follow the pattern: --mui-palette-{color}-{shade}
+ * 
+ * Available MUI CSS variables:
+ * - --mui-palette-background-default
+ * - --mui-palette-background-paper
+ * - --mui-palette-text-primary
+ * - --mui-palette-text-secondary
+ * - --mui-palette-divider
+ * - --mui-palette-primary-main
+ * - --mui-palette-primary-dark
+ * - --mui-palette-action-hover
+ * - --mui-palette-action-selected
+ * - --mui-palette-error-main
+ * - --mui-palette-warning-main
+ * - --mui-palette-success-main
+ * - --mui-palette-info-main
+ * 
+ * The fallback values (after the comma) are used if MUI variables aren't available.
+ */
+.light-theme {
+  .sbdocs-preview {
+    --sb-bg: var(--mui-palette-background-default, #ffffff);
+    --sb-text: var(--mui-palette-text-primary, #1a1a1a);
+    --sb-text-secondary: var(--mui-palette-text-secondary, #666666);
+    --sb-border: var(--mui-palette-divider, #e1e5e9);
+    --sb-sidebar-bg: var(--mui-palette-background-paper, #f7f9fa);
+    --sb-toolbar-bg: var(--mui-palette-background-default, #ffffff);
+    --sb-input-bg: var(--mui-palette-background-paper, #ffffff);
+    --sb-input-border: var(--mui-palette-divider, #e1e5e9);
+    --sb-button-bg: var(--mui-palette-action-hover, #f7f9fa);
+    --sb-button-hover: var(--mui-palette-action-selected, #e1e5e9);
+    --sb-accent: var(--mui-palette-primary-main, #1ea7fd);
+    --sb-accent-hover: var(--mui-palette-primary-dark, #0d7ec8);
+    --sb-error: var(--mui-palette-error-main, #d32f2f);
+    --sb-warning: var(--mui-palette-warning-main, #ed6c02);
+    --sb-success: var(--mui-palette-success-main, #2e7d32);
+    --sb-info: var(--mui-palette-info-main, #0288d1);
+  }
+}
+.dark-theme {
+  .sbdocs-preview {
+    --sb-bg: var(--mui-palette-background-default, #1a1a1a);
+    --sb-text: var(--mui-palette-text-primary, #ffffff);
+    --sb-text-secondary: var(--mui-palette-text-secondary, #b0b0b0);
+    --sb-border: var(--mui-palette-divider, #333333);
+    --sb-sidebar-bg: var(--mui-palette-background-paper, #2a2a2a);
+    --sb-toolbar-bg: var(--mui-palette-background-default, #1a1a1a);
+    --sb-input-bg: var(--mui-palette-background-paper, #2a2a2a);
+    --sb-input-border: var(--mui-palette-divider, #333333);
+    --sb-button-bg: var(--mui-palette-action-hover, #2a2a2a);
+    --sb-button-hover: var(--mui-palette-action-selected, #333333);
+    --sb-accent: var(--mui-palette-primary-main, #1ea7fd);
+    --sb-accent-hover: var(--mui-palette-primary-dark, #0d7ec8);
+    --sb-error: var(--mui-palette-error-main, #f44336);
+    --sb-warning: var(--mui-palette-warning-main, #ff9800);
+    --sb-success: var(--mui-palette-success-main, #4caf50);
+    --sb-info: var(--mui-palette-info-main, #2196f3);
+  }
+}
+
+/* Apply theme variables to Storybook UI */
+.dark-theme .sb-bar,
+.dark-theme .sb-bar .sb-bar__inner,
+.dark-theme .sidebar-container,
+.dark-theme .sidebar-header,
+.dark-theme .sidebar-title,
+.dark-theme .sidebar-item,
+.dark-theme .sidebar-item--active,
+.dark-theme .sidebar-item--active .sidebar-item__title,
+.dark-theme .sidebar-item__title,
+.dark-theme .sidebar-item__title:hover,
+.dark-theme .sidebar-item:hover,
+.dark-theme .sidebar-item:hover .sidebar-item__title {
+  background-color: var(--sb-sidebar-bg) !important;
+  color: var(--sb-text) !important;
+  border-color: var(--sb-border) !important;
+}
+
+.dark-theme .sb-bar,
+.dark-theme .sb-bar .sb-bar__inner {
+  background-color: var(--sb-toolbar-bg) !important;
+  border-bottom: 1px solid var(--sb-border) !important;
+}
+
+.dark-theme .os-host,
+.dark-theme .os-content,
+.dark-theme .os-padding,
+.dark-theme .os-viewport {
+  background-color: var(--sb-bg) !important;
+}
+
+.dark-theme .sidebar-container {
+  background-color: var(--sb-sidebar-bg) !important;
+  border-right: 1px solid var(--sb-border) !important;
+}
+
+.dark-theme .sidebar-header {
+  background-color: var(--sb-sidebar-bg) !important;
+  border-bottom: 1px solid var(--sb-border) !important;
+}
+
+.dark-theme .sidebar-item {
+  color: var(--sb-text) !important;
+}
+
+.dark-theme .sidebar-item:hover {
+  background-color: var(--sb-button-hover) !important;
+}
+
+.dark-theme .sidebar-item--active {
+  background-color: var(--sb-accent) !important;
+  color: white !important;
+}
+
+.dark-theme .sidebar-item__title {
+  color: var(--sb-text) !important;
+}
+
+.dark-theme .sidebar-item__title:hover {
+  color: var(--sb-text) !important;
+}
+
+/* Toolbar theming */
+.dark-theme .toolbar,
+.dark-theme .toolbar button,
+.dark-theme .toolbar input,
+.dark-theme .toolbar select {
+  background-color: var(--sb-toolbar-bg) !important;
+  color: var(--sb-text) !important;
+  border-color: var(--sb-border) !important;
+}
+
+.dark-theme .toolbar button:hover {
+  background-color: var(--sb-button-hover) !important;
+}
+
+/* Panel theming */
+.dark-theme .panel,
+.dark-theme .panel-header,
+.dark-theme .panel-content {
+  background-color: var(--sb-bg) !important;
+  color: var(--sb-text) !important;
+  border-color: var(--sb-border) !important;
+}
+
+/* Input theming */
+.dark-theme input,
+.dark-theme textarea,
+.dark-theme select {
+  background-color: var(--sb-input-bg) !important;
+  color: var(--sb-text) !important;
+  border-color: var(--sb-input-border) !important;
+}
+
+/* Button theming */
+.dark-theme button {
+  background-color: var(--sb-button-bg) !important;
+  color: var(--sb-text) !important;
+  border-color: var(--sb-border) !important;
+}
+
+.dark-theme button:hover {
+  background-color: var(--sb-button-hover) !important;
+}
+
+/* Accent button theming */
+.dark-theme .sb-bar button[data-testid='theme-selector'],
+.dark-theme .sb-bar button[title*='theme'] {
+  background-color: var(--sb-accent) !important;
+  color: white !important;
+}
+
+.dark-theme .sb-bar button[data-testid='theme-selector']:hover,
+.dark-theme .sb-bar button[title*='theme']:hover {
+  background-color: var(--sb-accent-hover) !important;
+}
+
+/* Story content area */
+.dark-theme .sb-main-padded {
+  background-color: var(--sb-bg) !important;
+}
+
+/* Docs theming */
+.dark-theme .docs-story,
+.dark-theme .docs-story .sbdocs,
+.dark-theme .docs-story .sbdocs-wrapper {
+  background-color: var(--sb-bg) !important;
+  color: var(--sb-text) !important;
+}
+
+/* Code blocks */
+.dark-theme pre,
+.dark-theme code {
+  background-color: var(--sb-input-bg) !important;
+  color: var(--sb-text) !important;
+  border: 1px solid var(--sb-border) !important;
+}
+
+/* Scrollbars */
+.dark-theme ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark-theme ::-webkit-scrollbar-track {
+  background: var(--sb-sidebar-bg);
+}
+
+.dark-theme ::-webkit-scrollbar-thumb {
+  background: var(--sb-border);
+  border-radius: 4px;
+}
+
+.dark-theme ::-webkit-scrollbar-thumb:hover {
+  background: var(--sb-text);
+}
