@@ -6,25 +6,26 @@ description: AI-powered adaptive guardrails that learn from your red team findin
 
 # Adaptive Guardrails
 
-Adaptive Guardrails provide continuous security improvements for your AI application by automatically generating and updating safety policies from red team test results. As new vulnerabilities are discovered, guardrails evolve to protect against the latest attack patterns—creating a living defense layer that grows stronger with each test cycle.
+Adaptive Guardrails are an enterprise-grade input validation system that learns from your red team testing to create custom security policies specific to your AI application. Unlike generic content moderation services that use one-size-fits-all rules, adaptive guardrails analyze your actual vulnerabilities to generate targeted protection that evolves with each testing cycle—creating a living defense layer tailored to your application's unique attack surface.
 
 ## Overview
 
 Promptfoo's Adaptive Guardrails provide 1:1 mapping for each target. Every guardrail is unique to a specific target (typically a provider or application ID), allowing policies to be applied specifically for that target's discovered vulnerabilities.
 
+Adaptive guardrails operate as **input guardrails**, validating user prompts before they reach your LLM. This pre-processing approach prevents malicious inputs from ever reaching your model, protecting against prompt injection, jailbreaks, and policy violations discovered through red team testing.
+
 **Key capabilities:**
 
-- **Self-Improving Protection**: Automatically updates as new vulnerabilities are found during red team testing
-- **Target-Specific Policies**: Each guardrail is tailored to the unique attack surface of your application
+- **Custom Learning**: Generates policies from YOUR red team findings, not generic categories
+- **Self-Improving Protection**: Automatically updates as new vulnerabilities are discovered
+- **Target-Specific Policies**: Each guardrail tailored to one application's unique attack surface
 - **AI-Powered Analysis**: Uses GPT-4o-mini to analyze jailbreak patterns and generate targeted policies
-- **Real-Time Protection**: REST API endpoint for validating prompts before they reach your LLM
-- **Manual Policy Control**: Add custom policies that persist across automated updates
+- **Real-Time Validation**: REST API endpoint validates prompts in 200-500ms
+- **Manual Policy Control**: Add custom business policies that persist across automated updates
 
-:::info Enterprise Feature
+:::tip Enterprise-Only Feature
 
-Adaptive guardrails are available in [Promptfoo Enterprise](/docs/enterprise/). They require red team testing to generate policies from discovered vulnerabilities.
-
-For generic prompt injection and content moderation APIs, see the [free guardrails API](#related-resources).
+Adaptive guardrails are exclusively available in [Promptfoo Enterprise](/docs/enterprise/). Unlike generic content moderation services (Azure AI Content Safety, AWS Bedrock Guardrails), adaptive guardrails learn from YOUR red team findings to create custom policies specific to your application's vulnerabilities.
 
 :::
 
@@ -748,18 +749,42 @@ if (!GUARDRAIL_API || !API_KEY) {
 }
 ```
 
+## Comparison to Cloud Provider Guardrails
+
+Adaptive guardrails differ fundamentally from generic cloud provider content moderation services:
+
+### Promptfoo Adaptive Guardrails vs. Competitors
+
+| Feature | Promptfoo Adaptive Guardrails | AWS Bedrock Guardrails | Azure AI Content Safety |
+|---------|------------------------------|------------------------|------------------------|
+| **Learning Approach** | Custom policies from YOUR red team findings | Pre-built generic categories | Pre-built generic categories |
+| **Policy Customization** | 100% tailored to your vulnerabilities | Configurable thresholds only | Configurable thresholds only |
+| **Coverage** | Input validation (pre-LLM) | Input and output | Input and output |
+| **Detection Categories** | Specific to discovered attacks | Generic: Hate, Violence, Sexual, etc. | Generic: Hate, Violence, Sexual, Self-harm |
+| **Continuous Improvement** | Updates automatically from new red team tests | Static policies, manual updates | Static policies, manual updates |
+| **Target Specificity** | 1:1 mapping per application | One-size-fits-all | One-size-fits-all |
+| **Training Data** | Your actual vulnerabilities | Generic training data | Generic training data |
+| **False Positives** | Minimal - targets known patterns | Higher - generic detection | Higher - generic detection |
+| **Enterprise Requirement** | Yes | Yes | Yes |
+
+### When to Use Adaptive Guardrails
+
+**Choose Adaptive Guardrails when:**
+- You need protection tailored to your application's specific vulnerabilities
+- You conduct regular red team testing
+- You want guardrails that improve as you discover new attack vectors
+- You need low false positives (only blocks patterns found in your testing)
+- You want security that evolves with your application
+
+**Cloud provider guardrails may suffice when:**
+- You need generic content moderation (hate speech, violence, etc.)
+- You don't have application-specific vulnerabilities
+- You need output validation (post-LLM response filtering)
+- You want plug-and-play without testing
+
+Adaptive guardrails complement cloud provider services by adding a custom security layer learned from your specific security posture.
+
 ## Related Resources
-
-### Free Guardrails API
-
-For generic prompt injection, PII detection, and harm detection without red team findings, see the free Guardrails API:
-
-- **Endpoints**: `/v1/guard` (prompt injection), `/v1/pii` (PII detection), `/v1/harm` (harm detection)
-- **Use Case**: General-purpose security filters
-- **Availability**: Public API, no account required
-- **Customization**: None - one-size-fits-all rules
-
-The free API is suitable for basic protection but lacks the customization and learning capabilities of adaptive guardrails.
 
 ### Red Team Testing
 
@@ -787,7 +812,7 @@ A: You can generate a guardrail with as few as 5-10 discovered issues. However, 
 
 **Q: Can I use adaptive guardrails without red team testing?**
 
-A: No, adaptive guardrails require red team findings to generate policies. For generic protection without testing, use the [free guardrails API](#related-resources).
+A: No, adaptive guardrails are built from your red team findings. The policies are generated by analyzing vulnerabilities discovered during testing. For generic content moderation, consider cloud provider solutions like Azure AI Content Safety or AWS Bedrock Guardrails, though these lack the customization and precision of adaptive guardrails.
 
 **Q: How often should I regenerate guardrails?**
 
@@ -820,3 +845,7 @@ A: Typical validation adds 200-500ms. Implement async validation or caching for 
 **Q: Can I use the same guardrail across multiple applications?**
 
 A: While possible, it's not recommended. Each application has unique vulnerabilities. Create separate guardrails per application for optimal protection.
+
+**Q: Do adaptive guardrails validate inputs, outputs, or both?**
+
+A: Adaptive guardrails are **input guardrails** that validate user prompts before they reach your LLM. This prevents malicious inputs from ever being processed. If you also need output validation (filtering LLM responses), consider combining adaptive guardrails with cloud provider services like AWS Bedrock Guardrails or Azure AI Content Safety, which support output filtering.
