@@ -201,7 +201,7 @@ function DownloadMenu() {
         ...row.vars,
         ...row.outputs
           .filter((output): output is EvaluateTableOutput => output != null)
-          .flatMap(({ pass, text, failureReason, gradingResult, metadata, latencyMs }) => [
+          .flatMap(({ pass, text, failureReason, gradingResult, latencyMs }) => [
             // Add pass/fail/error prefix to text
             (pass
               ? '[PASS] '

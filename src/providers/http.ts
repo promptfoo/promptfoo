@@ -1194,7 +1194,7 @@ export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
 ): Promise<(status: number) => boolean> {
   if (!validator) {
-    return (status: number) => true;
+    return (_status: number) => true;
   }
 
   if (typeof validator === 'function') {

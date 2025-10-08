@@ -391,7 +391,7 @@ const StrategyStats = ({
             <List>
               {getExamplesByStrategy(selectedStrategy)
                 .failures.slice(0, 5)
-                .map((failure, index) => (
+                .map((failure) => (
                   <Paper
                     key={`${failure.prompt}-${failure.result}`}
                     elevation={0}
@@ -501,7 +501,7 @@ const StrategyStats = ({
             <List>
               {getExamplesByStrategy(selectedStrategy)
                 .passes.slice(0, 5)
-                .map((pass, index) => (
+                .map((pass) => (
                   <Paper
                     key={`${pass.prompt}-${pass.result}`}
                     elevation={0}

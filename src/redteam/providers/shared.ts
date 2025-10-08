@@ -434,9 +434,11 @@ export async function tryUnblocking({
       '2025-06-16T14:49:11-07:00',
     );
 
-    // Allow disabling unblocking via environment variable
-    if (getEnvBool('PROMPTFOO_DISABLE_UNBLOCKING')) {
-      logger.debug('[Unblocking] Disabled via PROMPTFOO_DISABLE_UNBLOCKING');
+    // Unblocking is disabled by default, enable via environment variable
+    if (!getEnvBool('PROMPTFOO_ENABLE_UNBLOCKING')) {
+      logger.debug(
+        '[Unblocking] Disabled by default (set PROMPTFOO_ENABLE_UNBLOCKING=true to enable)',
+      );
       // Return a response that will not increment numRequests
       return {
         success: false,
