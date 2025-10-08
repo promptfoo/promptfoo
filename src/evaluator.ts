@@ -45,6 +45,10 @@ import {
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
+import globalMessageHandler, {
+  type MessageHandlerState,
+  type QueuedMessage,
+} from './util/globalMessageHandler';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { promptYesNo } from './util/readline';
@@ -81,9 +85,43 @@ class ProgressBarManager {
   private totalCount: number = 0;
   private completedCount: number = 0;
   private concurrency: number = 1;
+  private errorCount: number = 0;
+  private currentPayload: {
+    provider: string;
+    prompt: string;
+    vars: string;
+    errors: number;
+  } = {
+    provider: '',
+    prompt: '',
+    vars: '',
+    errors: 0,
+  };
+  private unsubscribeMessageHandler: (() => void) | null = null;
+  private queuedMessages: QueuedMessage[] = [];
 
   constructor(isWebUI: boolean) {
     this.isWebUI = isWebUI;
+
+    if (!this.isWebUI) {
+      this.unsubscribeMessageHandler = globalMessageHandler.subscribe((state) => {
+        this.handleMessageStateChange(state);
+      });
+    }
+  }
+
+  private handleMessageStateChange(state: MessageHandlerState): void {
+    this.errorCount = state.errorCount;
+    this.currentPayload = {
+      ...this.currentPayload,
+      errors: this.errorCount,
+    };
+
+    if (this.isWebUI || !this.progressBar) {
+      return;
+    }
+
+    this.progressBar.update(this.completedCount, this.currentPayload);
   }
 
   /**
@@ -104,7 +142,8 @@ class ProgressBarManager {
     // Create single progress bar
     this.progressBar = new cliProgress.SingleBar(
       {
-        format: 'Evaluating [{bar}] {percentage}% | {value}/{total} | {provider} {prompt} {vars}',
+        format:
+          'Evaluating [{bar}] {percentage}% | {value}/{total} | Errors: {errors} | {provider} {prompt} {vars}',
         hideCursor: true,
         gracefulExit: true,
       },
@@ -113,10 +152,10 @@ class ProgressBarManager {
 
     // Start the progress bar
     this.progressBar.start(this.totalCount, 0, {
-      provider: '',
-      prompt: '',
-      vars: '',
+      ...this.currentPayload,
     });
+
+    globalMessageHandler.startQueueing(['error']);
   }
 
   /**
@@ -136,11 +175,14 @@ class ProgressBarManager {
     const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
     const vars = formatVarsForDisplay(evalStep.test.vars, 10);
 
-    this.progressBar.increment({
+    this.currentPayload = {
       provider,
       prompt: prompt || '""',
       vars: vars || '',
-    });
+      errors: this.errorCount,
+    };
+
+    this.progressBar.increment(this.currentPayload);
   }
 
   /**
@@ -152,11 +194,14 @@ class ProgressBarManager {
     }
 
     this.completedCount++;
-    this.progressBar.increment({
+    this.currentPayload = {
       provider: 'Grading',
       prompt: `"${prompt.slice(0, 10).replace(/\n/g, ' ')}"`,
       vars: '',
-    });
+      errors: this.errorCount,
+    };
+
+    this.progressBar.increment(this.currentPayload);
   }
 
   /**
@@ -180,7 +225,7 @@ class ProgressBarManager {
     }
 
     // Just ensure we're at 100% - the bar will be stopped in stop()
-    this.progressBar.update(this.totalCount);
+    this.progressBar.update(this.totalCount, this.currentPayload);
   }
 
   /**
@@ -190,6 +235,20 @@ class ProgressBarManager {
     if (this.progressBar) {
       this.progressBar.stop();
     }
+
+    if (this.unsubscribeMessageHandler) {
+      this.unsubscribeMessageHandler();
+      this.unsubscribeMessageHandler = null;
+    }
+
+    this.queuedMessages = globalMessageHandler.drainQueue();
+    globalMessageHandler.stopQueueing();
+  }
+
+  consumeQueuedMessages(): QueuedMessage[] {
+    const messages = [...this.queuedMessages];
+    this.queuedMessages = [];
+    return messages;
   }
 }
 
@@ -700,6 +759,7 @@ class Evaluator {
     // Progress reporters declared here for cleanup in finally block
     let ciProgressReporter: CIProgressReporter | null = null;
     let progressBarManager: ProgressBarManager | null = null;
+    let queuedErrorMessages: QueuedMessage[] = [];
 
     if (maxEvalTimeMs > 0) {
       globalAbortController = new AbortController();
@@ -1382,17 +1442,18 @@ class Evaluator {
     // Set up progress tracking
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
+    const isInkUI = Boolean(cliState.experimentalUI);
 
     // Choose appropriate progress reporter
     logger.debug(
-      `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
+      `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}, isInkUI=${isInkUI}`,
     );
 
-    if (isCI() && !isWebUI) {
+    if (isCI() && !isWebUI && !isInkUI) {
       // Use CI-friendly progress reporter
       ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
       ciProgressReporter.start();
-    } else if (this.options.showProgressBar && process.stdout.isTTY) {
+    } else if (this.options.showProgressBar && process.stdout.isTTY && !isInkUI) {
       // Use visual progress bars
       progressBarManager = new ProgressBarManager(isWebUI);
     }
@@ -1406,6 +1467,8 @@ class Evaluator {
         const provider = evalStep.provider.label || evalStep.provider.id();
         const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
+      } else if (isInkUI) {
+        // Progress handled via experimental Ink UI callbacks
       } else if (progressBarManager) {
         // Progress bar update is handled by the manager
         const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
@@ -1431,10 +1494,10 @@ class Evaluator {
     }
 
     // Print info messages before starting progress bar
-    if (serialRunEvalOptions.length > 0) {
+    if (serialRunEvalOptions.length > 0 && !isInkUI) {
       logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
     }
-    if (concurrentRunEvalOptions.length > 0) {
+    if (concurrentRunEvalOptions.length > 0 && !isInkUI) {
       logger.info(
         `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
       );
@@ -1590,7 +1653,7 @@ class Evaluator {
           progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
         } else if (ciProgressReporter) {
           ciProgressReporter.update(runEvalOptions.length + compareCount);
-        } else if (!isWebUI) {
+        } else if (!isWebUI && !isInkUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
       }
@@ -1632,7 +1695,7 @@ class Evaluator {
             // For max-score assertions, we're still in the comparison phase
             // so we add to the total completed count
             ciProgressReporter.update(runEvalOptions.length + compareCount);
-          } else if (!isWebUI) {
+          } else if (!isWebUI && !isInkUI) {
             logger.debug(`Max-score assertion for test #${testIdx} complete`);
           }
 
@@ -1679,11 +1742,20 @@ class Evaluator {
       if (progressBarManager) {
         progressBarManager.complete();
         progressBarManager.stop();
+        queuedErrorMessages = progressBarManager.consumeQueuedMessages();
       } else if (ciProgressReporter) {
         ciProgressReporter.finish();
+      } else if (!isWebUI && !isInkUI) {
+        logger.debug('Evaluation finished without progress bar.');
       }
     } catch (cleanupErr) {
       logger.warn(`Error during progress reporter cleanup: ${cleanupErr}`);
+    }
+
+    if (queuedErrorMessages.length > 0) {
+      for (const entry of queuedErrorMessages) {
+        logger.error(entry.message);
+      }
     }
 
     if (globalTimeout) {

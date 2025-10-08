@@ -35,6 +35,7 @@ import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
+import { runEvalInkDemo, runEvalWithExperimentalInkUi, type ExperimentalUiHooks } from '../ui/ink';
 import type { Command } from 'commander';
 
 import type {
@@ -53,6 +54,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
   retryErrors: z.boolean().optional(),
+  experimentalUi: z.boolean().optional(),
   // Allow --resume or --resume <id>
   // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
   // resume: z.union([z.string(), z.boolean()]).optional(),
@@ -109,6 +111,7 @@ export async function doEval(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
+  uiHooks?: ExperimentalUiHooks,
 ): Promise<Eval> {
   // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
@@ -498,12 +501,21 @@ export async function doEval(
     */
 
     // Run the evaluation!!!!!!
-    const ret = await evaluate(testSuite, evalRecord, {
-      ...options,
-      eventSource: 'cli',
-      abortSignal: evaluateOptions.abortSignal,
-      isRedteam: Boolean(config.redteam),
-    });
+    uiHooks?.onBeforeEvaluate?.();
+
+    let ret!: Eval;
+    try {
+      ret = await evaluate(testSuite, evalRecord, {
+        ...options,
+        eventSource: 'cli',
+        abortSignal: evaluateOptions.abortSignal,
+        isRedteam: Boolean(config.redteam),
+      });
+      uiHooks?.onEvaluateComplete?.();
+    } catch (error) {
+      uiHooks?.onEvaluateError?.(error);
+      throw error;
+    }
 
     // Cleanup signal handler
     /*
@@ -1026,6 +1038,7 @@ export function evalCommand(
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
     .option('--no-progress-bar', 'Do not show progress bar')
+    .option('--experimental-ui', 'Render evaluation progress using the experimental Ink UI')
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
@@ -1069,6 +1082,7 @@ export function evalCommand(
       if (validatedOpts.remote) {
         cliState.remote = true;
       }
+      const useExperimentalUi = Boolean(validatedOpts.experimentalUi);
 
       for (const maybeFilePath of validatedOpts.output ?? []) {
         const { data: extension } = OutputFileExtension.safeParse(
@@ -1079,12 +1093,49 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
       }
+      if (useExperimentalUi) {
+        try {
+          cliState.experimentalUI = true;
+          await runEvalWithExperimentalInkUi({
+            cmdObj: validatedOpts as Partial<CommandLineOptions & Command>,
+            defaultConfig,
+            defaultConfigPath,
+            evaluateOptions,
+            doEval,
+          });
+        } finally {
+          delete cliState.experimentalUI;
+        }
+        return;
+      }
       doEval(
         validatedOpts as Partial<CommandLineOptions & Command>,
         defaultConfig,
         defaultConfigPath,
         evaluateOptions,
       );
+    });
+
+  evalCmd
+    .command('test-ui')
+    .description('Render a sample Ink UI to validate terminal rendering')
+    .option('--auto-exit <seconds>', 'Automatically exit after the specified number of seconds')
+    .action(async (options: { autoExit?: string }) => {
+      const rawValue = options.autoExit;
+      const parsedValue = rawValue !== undefined ? Number.parseFloat(rawValue) : undefined;
+
+      const autoExitSeconds =
+        parsedValue !== undefined && Number.isFinite(parsedValue) && parsedValue > 0
+          ? parsedValue
+          : undefined;
+
+      try {
+        await runEvalInkDemo({ autoExitSeconds });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(chalk.red(message));
+        process.exitCode = 1;
+      }
     });
 
   return evalCmd;
