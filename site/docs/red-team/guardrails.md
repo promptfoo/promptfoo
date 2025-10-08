@@ -143,11 +143,13 @@ Adaptive guardrails address security and safety challenges specific to your AI a
 ### Security
 
 **Prevent Discovered Jailbreaks**
+
 - Block prompt injection patterns found during red team testing
 - Stop role-playing attacks that bypassed your system prompts
 - Prevent instruction override attempts specific to your application
 
 **Protect Against Emerging Threats**
+
 - Automatically update policies as new attack vectors are discovered
 - Block variations of successful jailbreak attempts
 - Maintain protection as attackers evolve their techniques
@@ -155,11 +157,13 @@ Adaptive guardrails address security and safety challenges specific to your AI a
 ### Compliance and Policy Enforcement
 
 **Industry-Specific Regulations**
+
 - Financial services: Block prompts requesting unauthorized financial advice
 - Healthcare: Prevent medical diagnosis requests in non-clinical chatbots
 - Legal: Stop unauthorized legal advice in general-purpose assistants
 
 **Custom Business Policies**
+
 - Prevent chatbots from recommending competitor products
 - Block requests for proprietary methodology or trade secrets
 - Enforce brand guidelines and communication standards
@@ -167,16 +171,19 @@ Adaptive guardrails address security and safety challenges specific to your AI a
 ### Application-Specific Protection
 
 **Customer Support Chatbots**
+
 - Block social engineering attempts found in testing
 - Prevent extraction of customer data patterns
 - Stop attempts to access admin functions through conversation
 
 **Code Generation Assistants**
+
 - Block prompts that generated insecure code in testing
 - Prevent attempts to extract training data or model weights
 - Stop requests that bypassed code safety guidelines
 
 **Content Generation Systems**
+
 - Block prompts that generated policy-violating content
 - Prevent techniques that bypassed content moderation
 - Stop brand impersonation attempts discovered in testing
@@ -503,14 +510,14 @@ This approach helps the AI recognize subtle variations of known attacks.
 
 ### Performance Characteristics
 
-| Metric | Specification | Notes |
-|--------|--------------|-------|
+| Metric                      | Specification | Notes                                  |
+| --------------------------- | ------------- | -------------------------------------- |
 | **Initial Generation Time** | 10-30 seconds | Depends on number of discovered issues |
-| **Regeneration Time** | 5-15 seconds | For policy updates after new tests |
-| **Validation Latency** | 200-500ms | Average response time per prompt |
-| **Recommended Timeout** | 2-3 seconds | For production applications |
-| **Training Example Limit** | 300 examples | Maximum used during generation |
-| **Few-Shot Examples** | Up to 10 | Used during prompt validation |
+| **Regeneration Time**       | 5-15 seconds  | For policy updates after new tests     |
+| **Validation Latency**      | 200-500ms     | Average response time per prompt       |
+| **Recommended Timeout**     | 2-3 seconds   | For production applications            |
+| **Training Example Limit**  | 300 examples  | Maximum used during generation         |
+| **Few-Shot Examples**       | Up to 10      | Used during prompt validation          |
 
 ### Accuracy and Detection
 
@@ -520,19 +527,19 @@ This approach helps the AI recognize subtle variations of known attacks.
 
 ### Limits and Constraints
 
-| Feature | Limit | Behavior When Exceeded |
-|---------|-------|----------------------|
-| **Issues per Guardrail** | 300 examples | Additional issues available but not used in generation |
-| **Policies per Guardrail** | Unlimited | Automatically consolidated to prevent redundancy |
-| **API Request Size** | Standard HTTP limits | Large prompts may need truncation |
-| **Concurrent Validations** | Based on plan | Contact support for high-throughput requirements |
+| Feature                    | Limit                | Behavior When Exceeded                                 |
+| -------------------------- | -------------------- | ------------------------------------------------------ |
+| **Issues per Guardrail**   | 300 examples         | Additional issues available but not used in generation |
+| **Policies per Guardrail** | Unlimited            | Automatically consolidated to prevent redundancy       |
+| **API Request Size**       | Standard HTTP limits | Large prompts may need truncation                      |
+| **Concurrent Validations** | Based on plan        | Contact support for high-throughput requirements       |
 
 ### Input and Output Coverage
 
-| Validation Type | Supported | Details |
-|----------------|-----------|---------|
-| **Input Validation** | ✅ Yes | Validates user prompts before LLM processing |
-| **Output Validation** | ❌ No | For output filtering, use cloud provider guardrails |
+| Validation Type       | Supported | Details                                             |
+| --------------------- | --------- | --------------------------------------------------- |
+| **Input Validation**  | ✅ Yes    | Validates user prompts before LLM processing        |
+| **Output Validation** | ❌ No     | For output filtering, use cloud provider guardrails |
 
 ## Management UI
 
@@ -849,21 +856,22 @@ Adaptive guardrails differ fundamentally from generic cloud provider content mod
 
 ### Promptfoo Adaptive Guardrails vs. Competitors
 
-| Feature | Promptfoo Adaptive Guardrails | AWS Bedrock Guardrails | Azure AI Content Safety |
-|---------|------------------------------|------------------------|------------------------|
-| **Learning Approach** | Custom policies from YOUR red team findings | Pre-built generic categories | Pre-built generic categories |
-| **Policy Customization** | 100% tailored to your vulnerabilities | Configurable thresholds only | Configurable thresholds only |
-| **Coverage** | Input validation (pre-LLM) | Input and output | Input and output |
-| **Detection Categories** | Specific to discovered attacks | Generic: Hate, Violence, Sexual, etc. | Generic: Hate, Violence, Sexual, Self-harm |
-| **Continuous Improvement** | Updates automatically from new red team tests | Static policies, manual updates | Static policies, manual updates |
-| **Target Specificity** | 1:1 mapping per application | One-size-fits-all | One-size-fits-all |
-| **Training Data** | Your actual vulnerabilities | Generic training data | Generic training data |
-| **False Positives** | Minimal - targets known patterns | Higher - generic detection | Higher - generic detection |
-| **Enterprise Requirement** | Yes | Yes | Yes |
+| Feature                    | Promptfoo Adaptive Guardrails                 | AWS Bedrock Guardrails                | Azure AI Content Safety                    |
+| -------------------------- | --------------------------------------------- | ------------------------------------- | ------------------------------------------ |
+| **Learning Approach**      | Custom policies from YOUR red team findings   | Pre-built generic categories          | Pre-built generic categories               |
+| **Policy Customization**   | 100% tailored to your vulnerabilities         | Configurable thresholds only          | Configurable thresholds only               |
+| **Coverage**               | Input validation (pre-LLM)                    | Input and output                      | Input and output                           |
+| **Detection Categories**   | Specific to discovered attacks                | Generic: Hate, Violence, Sexual, etc. | Generic: Hate, Violence, Sexual, Self-harm |
+| **Continuous Improvement** | Updates automatically from new red team tests | Static policies, manual updates       | Static policies, manual updates            |
+| **Target Specificity**     | 1:1 mapping per application                   | One-size-fits-all                     | One-size-fits-all                          |
+| **Training Data**          | Your actual vulnerabilities                   | Generic training data                 | Generic training data                      |
+| **False Positives**        | Minimal - targets known patterns              | Higher - generic detection            | Higher - generic detection                 |
+| **Enterprise Requirement** | Yes                                           | Yes                                   | Yes                                        |
 
 ### When to Use Adaptive Guardrails
 
 **Choose Adaptive Guardrails when:**
+
 - You need protection tailored to your application's specific vulnerabilities
 - You conduct regular red team testing
 - You want guardrails that improve as you discover new attack vectors
@@ -871,6 +879,7 @@ Adaptive guardrails differ fundamentally from generic cloud provider content mod
 - You want security that evolves with your application
 
 **Cloud provider guardrails may suffice when:**
+
 - You need generic content moderation (hate speech, violence, etc.)
 - You don't have application-specific vulnerabilities
 - You need output validation (post-LLM response filtering)
@@ -891,12 +900,14 @@ Ready to implement adaptive guardrails? Here are your next steps:
 ### Learn More
 
 **Red Team Testing:**
+
 - [Introduction to AI Red Teaming](/docs/red-team/)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [Red Team Strategies](/docs/red-team/strategies/)
 - [Plugins and Configuration](/docs/red-team/plugins/)
 
 **Enterprise Features:**
+
 - [Enterprise Overview](/docs/enterprise/)
 - [Team Management](/docs/guides/teams/)
 - [Custom Deployment](/docs/deployment/)
