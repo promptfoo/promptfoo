@@ -4,27 +4,46 @@ import { AgenticStrategiesGroup } from './AgenticStrategiesGroup';
 import type { StrategyCardData } from './types';
 
 // Mock StrategyItem component
+// Mimic the behavior of the real component: show config button only when selected AND configurable
+const CONFIGURABLE_STRATEGIES = [
+  'layer',
+  'multilingual',
+  'best-of-n',
+  'goat',
+  'crescendo',
+  'jailbreak',
+  'jailbreak:tree',
+  'gcg',
+  'citation',
+  'custom',
+  'mischievous-user',
+];
+
 vi.mock('./StrategyItem', () => ({
-  StrategyItem: ({ strategy, isSelected, onToggle, onConfigClick }: any) => (
-    <div data-testid={`strategy-${strategy.id}`}>
-      <input
-        type="checkbox"
-        checked={isSelected}
-        onChange={() => onToggle(strategy.id)}
-        aria-label={strategy.name}
-      />
-      <span>{strategy.name}</span>
-      {strategy.configurable && (
-        <button
-          data-testid={`config-${strategy.id}`}
-          onClick={() => onConfigClick(strategy.id)}
-          aria-label={`Configure ${strategy.name}`}
-        >
-          Configure
-        </button>
-      )}
-    </div>
-  ),
+  StrategyItem: ({ strategy, isSelected, onToggle, onConfigClick }: any) => {
+    const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id);
+
+    return (
+      <div data-testid={`strategy-${strategy.id}`}>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggle(strategy.id)}
+          aria-label={strategy.name}
+        />
+        <span>{strategy.name}</span>
+        {hasSettingsButton && (
+          <button
+            data-testid={`config-${strategy.id}`}
+            onClick={() => onConfigClick(strategy.id)}
+            aria-label={`Configure ${strategy.name}`}
+          >
+            Configure
+          </button>
+        )}
+      </div>
+    );
+  },
 }));
 
 describe('AgenticStrategiesGroup', () => {
@@ -37,13 +56,11 @@ describe('AgenticStrategiesGroup', () => {
       id: 'jailbreak',
       name: 'Jailbreak',
       description: 'Attempts to bypass safety measures',
-      configurable: false,
     },
     {
       id: 'jailbreak:tree',
       name: 'Tree Jailbreak',
       description: 'Tree-based jailbreak approach',
-      configurable: true,
     },
   ];
 
@@ -52,25 +69,21 @@ describe('AgenticStrategiesGroup', () => {
       id: 'crescendo',
       name: 'Crescendo',
       description: 'Gradually escalating attack',
-      configurable: false,
     },
     {
       id: 'goat',
       name: 'GOAT',
       description: 'Generative Offensive Agent Tester',
-      configurable: false,
     },
     {
       id: 'custom',
       name: 'Custom',
       description: 'User-defined strategy',
-      configurable: true,
     },
     {
       id: 'mischievous-user',
       name: 'Mischievous User',
       description: 'Simulates mischievous user behavior',
-      configurable: false,
     },
   ];
 
@@ -205,7 +218,7 @@ describe('AgenticStrategiesGroup', () => {
     });
 
     it('renders nothing when both strategy arrays are empty', () => {
-      const { container } = render(
+      render(
         <AgenticStrategiesGroup
           singleTurnStrategies={[]}
           multiTurnStrategies={[]}
@@ -275,7 +288,7 @@ describe('AgenticStrategiesGroup', () => {
         <AgenticStrategiesGroup
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
-          selectedIds={[]}
+          selectedIds={['jailbreak:tree', 'custom']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
@@ -410,13 +423,11 @@ describe('AgenticStrategiesGroup', () => {
           id: 'strategy-with-dash',
           name: 'Strategy With Dash',
           description: 'Test strategy',
-          configurable: false,
         },
         {
           id: 'strategy:with:colon',
           name: 'Strategy With Colon',
           description: 'Test strategy',
-          configurable: false,
         },
       ];
 
@@ -445,7 +456,6 @@ describe('AgenticStrategiesGroup', () => {
           name: 'This is a very long strategy name that might cause layout issues in the UI',
           description:
             'This is an extremely long description that goes on and on and on to test how the component handles text overflow and wrapping in various screen sizes',
-          configurable: false,
         },
       ];
 
@@ -503,7 +513,7 @@ describe('AgenticStrategiesGroup', () => {
         <AgenticStrategiesGroup
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
-          selectedIds={['jailbreak', 'custom']}
+          selectedIds={['jailbreak:tree', 'custom']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
@@ -518,11 +528,11 @@ describe('AgenticStrategiesGroup', () => {
       expect(screen.getByTestId('strategy-custom')).toBeInTheDocument();
       expect(screen.getByTestId('strategy-mischievous-user')).toBeInTheDocument();
 
-      // Check that configurable strategies have config buttons
+      // Check that selected configurable strategies have config buttons
       expect(screen.getByTestId('config-jailbreak:tree')).toBeInTheDocument();
       expect(screen.getByTestId('config-custom')).toBeInTheDocument();
 
-      // Non-configurable strategies shouldn't have config buttons
+      // Non-selected or non-configurable strategies shouldn't have config buttons
       expect(screen.queryByTestId('config-jailbreak')).not.toBeInTheDocument();
       expect(screen.queryByTestId('config-crescendo')).not.toBeInTheDocument();
     });
