@@ -39,21 +39,6 @@ interface TestWithMetadata {
   };
 }
 
-interface StrategyStatsProps {
-  strategyStats: CategoryStats;
-  failuresByPlugin: Record<string, TestWithMetadata[]>;
-  passesByPlugin: Record<string, TestWithMetadata[]>;
-}
-
-interface DrawerContentProps {
-  selectedStrategy: string;
-  tabValue: number;
-  onTabChange: (value: number) => void;
-  failuresByPlugin: Record<string, TestWithMetadata[]>;
-  passesByPlugin: Record<string, TestWithMetadata[]>;
-  selectedStrategyStats: TestResultStats;
-}
-
 const DangerLinearProgress = styled(LinearProgress)(({ theme }) => ({
   height: 10,
   borderRadius: 5,
@@ -120,17 +105,23 @@ const DrawerContent = ({
   selectedStrategy,
   tabValue,
   onTabChange,
-  failuresByPlugin,
-  passesByPlugin,
+  succeededAttacksByPlugin,
+  failedAttacksByPlugin,
   selectedStrategyStats,
-}: DrawerContentProps) => {
+}: {
+  selectedStrategy: string;
+  tabValue: number;
+  onTabChange: (value: number) => void;
+  succeededAttacksByPlugin: Record<string, TestWithMetadata[]>;
+  failedAttacksByPlugin: Record<string, TestWithMetadata[]>;
+  selectedStrategyStats: TestResultStats;
+}) => {
   const theme = useTheme();
 
   const pluginStats = React.useMemo(() => {
     const pluginStats: Record<string, { successfulAttacks: number; total: number }> = {};
 
-    // Process failures (blocked attacks)
-    Object.entries(passesByPlugin).forEach(([plugin, tests]) => {
+    Object.entries(failedAttacksByPlugin).forEach(([plugin, tests]) => {
       tests.forEach((test) => {
         const testStrategy = getStrategyIdFromTest(test);
 
@@ -143,8 +134,7 @@ const DrawerContent = ({
       });
     });
 
-    // Process passes (successful attacks)
-    Object.entries(failuresByPlugin).forEach(([plugin, tests]) => {
+    Object.entries(succeededAttacksByPlugin).forEach(([plugin, tests]) => {
       tests.forEach((test) => {
         const testStrategy = getStrategyIdFromTest(test);
 
@@ -165,14 +155,13 @@ const DrawerContent = ({
         asr: calculateAttackSuccessRate(stats.total, stats.successfulAttacks),
       }))
       .sort((a, b) => b.asr - a.asr);
-  }, [failuresByPlugin, passesByPlugin, selectedStrategy]);
+  }, [succeededAttacksByPlugin, failedAttacksByPlugin, selectedStrategy]);
 
   const examplesByStrategy = React.useMemo(() => {
-    const failures: (typeof failuresByPlugin)[string] = [];
-    const passes: (typeof passesByPlugin)[string] = [];
+    const failures: (typeof succeededAttacksByPlugin)[string] = [];
+    const passes: (typeof failedAttacksByPlugin)[string] = [];
 
-    // Collect failures for this strategy
-    Object.values(failuresByPlugin).forEach((tests) => {
+    Object.values(succeededAttacksByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const testStrategy = getStrategyIdFromTest(test);
         if (testStrategy === selectedStrategy) {
@@ -181,8 +170,7 @@ const DrawerContent = ({
       });
     });
 
-    // Collect passes for this strategy
-    Object.values(passesByPlugin).forEach((tests) => {
+    Object.values(failedAttacksByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const testStrategy = getStrategyIdFromTest(test);
         if (testStrategy === selectedStrategy) {
@@ -192,7 +180,7 @@ const DrawerContent = ({
     });
 
     return { failures, passes };
-  }, [failuresByPlugin, passesByPlugin, selectedStrategy]);
+  }, [succeededAttacksByPlugin, failedAttacksByPlugin, selectedStrategy]);
 
   const getPromptDisplayString = (prompt: string): string => {
     try {
@@ -554,7 +542,15 @@ const DrawerContent = ({
   );
 };
 
-const StrategyStats = ({ strategyStats, failuresByPlugin, passesByPlugin }: StrategyStatsProps) => {
+const StrategyStats = ({
+  strategyStats,
+  failuresByPlugin,
+  passesByPlugin,
+}: {
+  strategyStats: CategoryStats;
+  failuresByPlugin: Record<string, TestWithMetadata[]>;
+  passesByPlugin: Record<string, TestWithMetadata[]>;
+}) => {
   const [selectedStrategy, setSelectedStrategy] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<Error | null>(null);
@@ -683,8 +679,8 @@ const StrategyStats = ({ strategyStats, failuresByPlugin, passesByPlugin }: Stra
             selectedStrategy={selectedStrategy}
             tabValue={tabValue}
             onTabChange={(newValue) => setTabValue(newValue)}
-            failuresByPlugin={failuresByPlugin}
-            passesByPlugin={passesByPlugin}
+            succeededAttacksByPlugin={failuresByPlugin}
+            failedAttacksByPlugin={passesByPlugin}
             selectedStrategyStats={strategyStats[selectedStrategy]}
           />
         )}
