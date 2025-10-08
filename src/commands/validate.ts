@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { validate as isUUID } from 'uuid';
 import { fromError } from 'zod-validation-error';
+import { disableCache } from '../cache';
 import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
 import telemetry from '../telemetry';
@@ -285,6 +286,7 @@ export async function doValidateTarget(
   defaultConfigPath: string | undefined,
 ): Promise<void> {
   setupEnv(opts.envPath);
+  disableCache();
 
   if (!opts.target && !opts.config) {
     logger.error('Please specify either -t <provider-id> or -c <config-path>');

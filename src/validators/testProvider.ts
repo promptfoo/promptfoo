@@ -5,8 +5,15 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
+import { doRemoteGrading } from '../remoteGrading';
 import { fetchWithProxy } from '../util/fetch';
 import { sanitizeObject } from '../util/sanitizer';
+import {
+  determineEffectiveSessionSource,
+  formatConfigBody,
+  formatConfigHeaders,
+  validateSessionConfig,
+} from './util';
 
 import type { EvaluateOptions, TestSuite } from '../types/index';
 import type { ApiProvider } from '../types/providers';
@@ -51,10 +58,12 @@ export async function testHTTPProviderConnectivity(
 ): Promise<ProviderTestResult> {
   const vars: Record<string, string> = {};
 
-  // Generate a session ID for testing (works for both client and server sessions)
-  // For server sessions, this provides a value for the first request; subsequent
+  // Generate a session ID for testing (works for both client sessions)
+  // For server sessions, a value is provided by the server, and subsequent
   // requests will use the server-returned session ID
-  vars['sessionId'] = uuidv4();
+  if (!provider.config.sessionParser) {
+    vars['sessionId'] = uuidv4();
+  }
 
   // Build TestSuite for evaluation (no assertions - we'll use agent endpoint for analysis)
   const testSuite: TestSuite = {
@@ -205,112 +214,6 @@ export async function testHTTPProviderConnectivity(
 }
 
 /**
- * Determines the effective session source based on config and defaults
- */
-function determineEffectiveSessionSource({
-  provider,
-  sessionConfig,
-}: {
-  provider: ApiProvider;
-  sessionConfig?: { sessionSource?: string; sessionParser?: string };
-}): string {
-  return (
-    sessionConfig?.sessionSource ||
-    provider.config?.sessionSource ||
-    (provider.config.sessionParser ? 'server' : 'client')
-  );
-}
-
-/**
- * Validates client-side session configuration
- * Returns validation result with success flag
- */
-function validateClientSessionConfig({
-  provider,
-  sessionSource,
-}: {
-  provider: ApiProvider;
-  sessionSource: string;
-}): ValidationResult {
-  if (sessionSource !== 'client') {
-    return { success: true };
-  }
-
-  const configStr = JSON.stringify(provider.config || {});
-  const hasSessionIdTemplate = configStr.includes('{{sessionId}}');
-
-  if (!hasSessionIdTemplate) {
-    logger.warn(
-      '[testProviderSession] Warning: Session source is set to client but {{sessionId}} not found',
-      {
-        providerId: provider.id,
-      },
-    );
-
-    return {
-      success: false,
-      result: {
-        success: false,
-        message:
-          'Session configuration error: {{sessionId}} variable is not used in the provider configuration',
-        reason:
-          'When using client-side sessions, you must include {{sessionId}} in your request headers or body.',
-        details: {
-          sessionSource,
-        },
-      },
-    };
-  }
-
-  return { success: true };
-}
-
-/**
- * Validates server-side session configuration
- * Returns validation result with success flag
- */
-function validateServerSessionConfig({
-  provider,
-  sessionSource,
-  sessionConfig,
-}: {
-  provider: ApiProvider;
-  sessionSource: string;
-  sessionConfig?: { sessionSource?: string; sessionParser?: string };
-}): ValidationResult {
-  if (sessionSource !== 'server') {
-    return { success: true };
-  }
-
-  const sessionParser = sessionConfig?.sessionParser || provider.config?.sessionParser;
-
-  if (!sessionParser || sessionParser.trim() === '') {
-    logger.warn(
-      '[testProviderSession] Warning: Session source is server but no session parser configured',
-      {
-        providerId: provider.id,
-      },
-    );
-
-    return {
-      success: false,
-      result: {
-        success: false,
-        message:
-          'Session configuration error: No session parser configured for server-generated sessions',
-        reason:
-          'When using server-side sessions, you must configure a session parser to extract the session ID from the response.',
-        details: {
-          sessionSource,
-        },
-      },
-    };
-  }
-
-  return { success: true };
-}
-
-/**
  * Updates provider configuration with session settings
  */
 function updateProviderConfigWithSession({
@@ -348,25 +251,14 @@ function validateAndConfigureSessions({
 }): ValidationResult {
   const effectiveSessionSource = determineEffectiveSessionSource({ provider, sessionConfig });
 
-  // Skip validation checks if requested (e.g., for CLI usage).
-  // This is only for cloud targets, as that'll be validated on the UI.
+  // Validate session configuration (logs warnings but does not prevent test execution)
+  // Skip validation checks for cloud targets, as that'll be validated on the UI.
   if (!options?.skipConfigValidation) {
-    const clientValidation = validateClientSessionConfig({
-      provider,
-      sessionSource: effectiveSessionSource,
-    });
-    if (!clientValidation.success) {
-      return clientValidation;
-    }
-
-    const serverValidation = validateServerSessionConfig({
+    validateSessionConfig({
       provider,
       sessionSource: effectiveSessionSource,
       sessionConfig,
     });
-    if (!serverValidation.success) {
-      return serverValidation;
-    }
   }
 
   updateProviderConfigWithSession({
@@ -376,81 +268,6 @@ function validateAndConfigureSessions({
   });
 
   return { success: true };
-}
-
-/**
- * Creates test suite for session testing with two sequential requests
- */
-function createSessionTestSuite({
-  provider,
-  initialSessionId,
-}: {
-  provider: ApiProvider;
-  initialSessionId: string;
-}): TestSuite {
-  const firstPrompt = 'What can you help me with?';
-  const secondPrompt = 'What was the last thing I asked you?';
-
-  return {
-    providers: [provider],
-    prompts: [{ raw: '{{input}}', label: 'Session Test' }],
-    tests: [
-      // Test 1: First request (establishes session)
-      {
-        vars: {
-          sessionId: initialSessionId,
-          input: firstPrompt,
-        },
-        options: {
-          storeOutputAs: 'firstResponse',
-        },
-      },
-      // Test 2: Second request (tests session memory)
-      {
-        vars: {
-          sessionId: initialSessionId,
-          input: secondPrompt,
-        },
-        assert: neverGenerateRemote()
-          ? []
-          : [
-              {
-                type: 'llm-rubric' as const,
-                value: dedent`
-              You are evaluating whether a conversation system correctly maintains session state across multiple messages.
-
-              In the first message, the user asked what the system can help with.
-              In the second message, the user asked what was the last thing they asked.
-
-              First Message: "${firstPrompt}"
-              First Response: {{firstResponse}}
-
-              Second Message: "${secondPrompt}"
-              Second Response: {{output}}
-
-              Evaluate whether the system correctly remembered the user's first question when responding to the second message.
-
-              Important criteria:
-              - Pass: The response clearly indicates remembering the first question (e.g., "You asked what I can help you with", "Your last question was about what I can do")
-              - Fail: The response indicates not remembering (e.g., "I don't know", "I don't have that information", generic responses)
-              - Fail: The response is evasive or doesn't directly answer what the previous question was
-
-              Respond with a JSON object containing:
-              {
-                "pass": boolean,
-                "reason": "string"
-              }
-            `,
-              },
-            ],
-      },
-    ],
-    defaultTest: {
-      options: {
-        provider: undefined, // Use default grading provider
-      },
-    },
-  };
 }
 
 /**
@@ -495,55 +312,6 @@ function validateServerSessionExtraction({
 }
 
 /**
- * Formats config body for troubleshooting display
- */
-function formatConfigBody({ body }: { body: any }): string {
-  if (!body) {
-    return 'None configured';
-  }
-
-  if (typeof body === 'string') {
-    // Try to parse and pretty-print JSON strings
-    try {
-      const parsed = JSON.parse(body);
-      return (
-        '\n' +
-        JSON.stringify(parsed, null, 2)
-          .split('\n')
-          .map((line) => `    ${line}`)
-          .join('\n')
-      );
-    } catch {
-      // If not JSON, just indent it
-      return '\n    ' + body;
-    }
-  }
-
-  // If it's already an object, stringify it
-  return (
-    '\n' +
-    JSON.stringify(body, null, 2)
-      .split('\n')
-      .map((line) => `    ${line}`)
-      .join('\n')
-  );
-}
-
-/**
- * Formats config headers for troubleshooting display
- */
-function formatConfigHeaders({ headers }: { headers: Record<string, any> | undefined }): string {
-  if (!headers) {
-    return 'None configured';
-  }
-
-  const headerLines = Object.entries(headers)
-    .map(([key, value]) => `    ${key}: ${value}`)
-    .join('\n');
-  return `\n${headerLines}`;
-}
-
-/**
  * Builds troubleshooting advice for server-side sessions
  */
 function buildServerSessionTroubleshootingAdvice({
@@ -576,15 +344,38 @@ function buildServerSessionTroubleshootingAdvice({
 }
 
 /**
- * Builds troubleshooting advice for client-side sessions
+ * Builds troubleshooting advice based on session source
  */
-function buildClientSessionTroubleshootingAdvice({
+function buildTroubleshootingAdvice({
+  sessionWorking,
+  sessionSource,
+  sessionConfig,
   providerConfig,
   initialSessionId,
+  firstResult,
+  secondResult,
 }: {
+  sessionWorking: boolean;
+  sessionSource: string;
+  sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
   providerConfig: any;
-  initialSessionId: string;
+  initialSessionId: string | undefined;
+  firstResult: any;
+  secondResult: any;
 }): string {
+  if (sessionWorking) {
+    return '';
+  }
+
+  if (sessionSource === 'server') {
+    return buildServerSessionTroubleshootingAdvice({
+      sessionConfig,
+      providerConfig,
+      firstResult,
+      secondResult,
+    });
+  }
+
   const configuredHeaders = formatConfigHeaders({ headers: providerConfig?.headers });
   const configuredBody = formatConfigBody({ body: providerConfig?.body });
   const configStr = JSON.stringify(providerConfig || {});
@@ -609,44 +400,9 @@ function buildClientSessionTroubleshootingAdvice({
 }
 
 /**
- * Builds troubleshooting advice based on session source
- */
-function buildTroubleshootingAdvice({
-  sessionWorking,
-  sessionSource,
-  sessionConfig,
-  providerConfig,
-  initialSessionId,
-  firstResult,
-  secondResult,
-}: {
-  sessionWorking: boolean;
-  sessionSource: string;
-  sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
-  providerConfig: any;
-  initialSessionId: string;
-  firstResult: any;
-  secondResult: any;
-}): string {
-  if (sessionWorking) {
-    return '';
-  }
-
-  if (sessionSource === 'server') {
-    return buildServerSessionTroubleshootingAdvice({
-      sessionConfig,
-      providerConfig,
-      firstResult,
-      secondResult,
-    });
-  }
-
-  return buildClientSessionTroubleshootingAdvice({ providerConfig, initialSessionId });
-}
-
-/**
- * Tests multi-turn session functionality
- * Extracted from POST /providers/test-session endpoint
+ * Tests multi-turn session functionality by making two sequential requests
+ * For server-sourced sessions, extracts sessionId from first response and uses it in second request
+ * For client-sourced sessions, generates a sessionId and uses it in both requests
  */
 export async function testProviderSession(
   provider: ApiProvider,
@@ -669,52 +425,110 @@ export async function testProviderSession(
       sessionConfig,
     });
 
-    const initialSessionId = uuidv4();
+    const initialSessionId = effectiveSessionSource === 'server' ? undefined : uuidv4();
 
-    // Creates a promptfooconfig test suite for the session test
-    const testSuite = createSessionTestSuite({
-      provider,
-      initialSessionId,
-    });
+    const firstPrompt = 'What can you help me with?';
+    const secondPrompt = 'What was the last thing I asked you?';
 
-    const firstPrompt = testSuite.tests![0].vars!.input as string;
-    const secondPrompt = testSuite.tests![1].vars!.input as string;
-
-    // Create evaluation record
-    const evalRecord = new Eval({});
-
-    await evaluate(testSuite, evalRecord, {
-      maxConcurrency: 1, // Must be 1 for sequential tests
-      showProgressBar: false,
-    } as EvaluateOptions);
-
-    // Get results
-    const summary = await evalRecord.toEvaluateSummary();
-    const firstResult = summary.results[0];
-    const secondResult = summary.results[1];
-
-    logger.debug('[testProviderSession] Evaluation completed', {
-      firstResult: sanitizeObject(firstResult),
-      secondResult: sanitizeObject(secondResult),
+    // Make first request
+    logger.debug('[testProviderSession] Making first request', {
+      prompt: firstPrompt,
+      sessionId: initialSessionId,
       providerId: provider.id,
     });
 
-    // Extract session ID from evaluation results
-    const sessionId =
-      provider.getSessionId?.() ??
-      secondResult.response?.sessionId ??
-      firstResult.response?.sessionId ??
-      initialSessionId;
+    const firstContext = {
+      vars: {
+        ...(initialSessionId ? { sessionId: initialSessionId } : {}),
+      },
+      prompt: {
+        raw: firstPrompt,
+        label: 'Session Test - Request 1',
+      },
+    };
 
+    const firstResponse = await provider.callApi(firstPrompt, firstContext);
+
+    logger.debug('[testProviderSession] First request completed', {
+      response: sanitizeObject(firstResponse),
+      providerId: provider.id,
+    });
+
+    // Check for errors in first response
+    if (firstResponse.error) {
+      return {
+        success: false,
+        message: `First request failed: ${firstResponse.error}`,
+        error: firstResponse.error,
+        details: {
+          sessionId: initialSessionId || 'Not applicable',
+          sessionSource: effectiveSessionSource,
+          request1: { prompt: firstPrompt, sessionId: initialSessionId },
+          response1: firstResponse.output || firstResponse.error,
+        },
+      };
+    }
+
+    // Extract session ID from first response
+    const extractedSessionId =
+      provider.getSessionId?.() ?? firstResponse.sessionId ?? initialSessionId;
+
+    logger.debug('[testProviderSession] Session ID extracted', {
+      extractedSessionId,
+      providerId: provider.id,
+    });
+
+    // Validate server session extraction
     const serverExtraction = validateServerSessionExtraction({
       sessionSource: effectiveSessionSource,
-      sessionId,
+      sessionId: extractedSessionId ?? '',
       firstPrompt,
-      firstResult,
+      firstResult: { response: firstResponse },
     });
 
     if (!serverExtraction.success) {
       return serverExtraction.result;
+    }
+
+    // Make second request with extracted session ID
+    logger.debug('[testProviderSession] Making second request', {
+      prompt: secondPrompt,
+      sessionId: extractedSessionId,
+      providerId: provider.id,
+    });
+
+    const secondContext = {
+      vars: {
+        ...(extractedSessionId ? { sessionId: extractedSessionId } : {}),
+      },
+      prompt: {
+        raw: secondPrompt,
+        label: 'Session Test - Request 2',
+      },
+    };
+
+    const secondResponse = await provider.callApi(secondPrompt, secondContext);
+
+    logger.debug('[testProviderSession] Second request completed', {
+      response: sanitizeObject(secondResponse),
+      providerId: provider.id,
+    });
+
+    // Check for errors in second response
+    if (secondResponse.error) {
+      return {
+        success: false,
+        message: `Second request failed: ${secondResponse.error}`,
+        error: secondResponse.error,
+        details: {
+          sessionId: extractedSessionId || 'Not extracted',
+          sessionSource: effectiveSessionSource,
+          request1: { prompt: firstPrompt, sessionId: initialSessionId },
+          response1: firstResponse.output,
+          request2: { prompt: secondPrompt, sessionId: extractedSessionId },
+          response2: secondResponse.output || secondResponse.error,
+        },
+      };
     }
 
     // Handle remote grading disabled
@@ -725,18 +539,84 @@ export async function testProviderSession(
           'Session test completed. Remote grading is disabled - please examine the results yourself.',
         reason: 'Manual review required - remote grading is disabled',
         details: {
-          sessionId: sessionId || 'Not extracted',
+          sessionId: extractedSessionId || 'Not extracted',
           sessionSource: effectiveSessionSource,
           request1: { prompt: firstPrompt, sessionId: initialSessionId },
-          response1: firstResult.response?.output,
-          request2: { prompt: secondPrompt, sessionId },
-          response2: secondResult.response?.output,
+          response1: firstResponse.output,
+          request2: { prompt: secondPrompt, sessionId: extractedSessionId },
+          response2: secondResponse.output,
         },
       };
     }
 
-    const sessionWorking = secondResult.success;
-    const judgeReason = secondResult.gradingResult?.reason || 'Session memory test completed';
+    // Call LLM rubric to evaluate if session is working
+    logger.debug('[testProviderSession] Evaluating session with LLM rubric', {
+      providerId: provider.id,
+    });
+
+    let sessionWorking = false;
+    let judgeReason = 'Session memory test completed';
+
+    try {
+      const gradingResult = await doRemoteGrading({
+        task: 'llm-rubric',
+        rubric: dedent`
+        You are evaluating whether a conversation system correctly maintains session state across multiple messages.
+  
+        In the first message, the user asked what the system can help with.
+        In the second message, the user asked what was the last thing they asked.
+  
+        First Message: "${firstPrompt}"
+        First Response: ${firstResponse.output}
+  
+        Second Message: "${secondPrompt}"
+        Second Response: ${secondResponse.output}
+  
+        Evaluate whether the system correctly remembered the user's first question when responding to the second message.
+  
+        Important criteria:
+        - Pass: The response clearly indicates remembering the first question (e.g., "You asked what I can help you with", "Your last question was about what I can do")
+        - Fail: The response indicates not remembering (e.g., "I don't know", "I don't have that information", generic responses)
+        - Fail: The response is evasive or doesn't directly answer what the previous question was
+  
+        Respond with a JSON object containing:
+        {
+          "pass": boolean,
+          "reason": "string"
+        }
+      `,
+        output: secondResponse.output || '',
+        vars: {
+          firstPrompt,
+          firstResponse: firstResponse.output || '',
+          secondPrompt,
+          secondResponse: secondResponse.output || '',
+        },
+      });
+
+      sessionWorking = gradingResult.pass;
+      judgeReason = gradingResult.reason || judgeReason;
+    } catch (error) {
+      logger.warn('[testProviderSession] Failed to evaluate session with LLM rubric', {
+        error: error instanceof Error ? error.message : String(error),
+        providerId: provider.id,
+      });
+      // If grading fails, we can't determine if session is working
+      // Return failure with a clear message
+      return {
+        success: false,
+        message: 'Failed to evaluate session: Could not perform remote grading',
+        error: error instanceof Error ? error.message : String(error),
+        details: {
+          sessionId: extractedSessionId || 'Not extracted',
+          sessionSource: effectiveSessionSource,
+          request1: { prompt: firstPrompt, sessionId: initialSessionId },
+          response1: firstResponse.output,
+          request2: { prompt: secondPrompt, sessionId: extractedSessionId },
+          response2: secondResponse.output,
+        },
+      };
+    }
 
     logger.debug('[testProviderSession] Judge result', {
       pass: sessionWorking,
@@ -750,8 +630,8 @@ export async function testProviderSession(
       sessionConfig,
       providerConfig: provider.config,
       initialSessionId,
-      firstResult,
-      secondResult,
+      firstResult: { response: firstResponse },
+      secondResult: { response: secondResponse },
     });
 
     return {
@@ -761,12 +641,12 @@ export async function testProviderSession(
         : `Session is NOT working. The provider did not remember information from the first request. ${troubleshootingAdvice}`,
       reason: judgeReason,
       details: {
-        sessionId: sessionId || 'Not extracted',
+        sessionId: extractedSessionId || 'Not extracted',
         sessionSource: effectiveSessionSource,
         request1: { prompt: firstPrompt, sessionId: initialSessionId },
-        response1: firstResult.response?.output,
-        request2: { prompt: secondPrompt, sessionId },
-        response2: secondResult.response?.output,
+        response1: firstResponse.output,
+        request2: { prompt: secondPrompt, sessionId: extractedSessionId },
+        response2: secondResponse.output,
       },
     };
   } catch (error) {
