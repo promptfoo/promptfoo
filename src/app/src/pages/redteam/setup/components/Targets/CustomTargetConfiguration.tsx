@@ -23,7 +23,6 @@ const CustomTargetConfiguration = ({
   updateCustomTarget,
   rawConfigJson,
   setRawConfigJson,
-  bodyError,
 }: CustomTargetConfigurationProps) => {
   const [targetId, setTargetId] = useState(selectedTarget.id?.replace('file://', '') || '');
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
@@ -49,7 +48,7 @@ const CustomTargetConfiguration = ({
     updateCustomTarget('id', idToSave);
   };
 
-  const handleConfigSave = (providerId: string, config: Record<string, any>) => {
+  const handleConfigSave = (_providerId: string, config: Record<string, any>) => {
     updateCustomTarget('config', config);
     setRawConfigJson(JSON.stringify(config, null, 2));
     setConfigDialogOpen(false);

@@ -153,6 +153,7 @@ const ProviderConfigDialog = ({
         )}
 
         <JsonTextField
+          key={`${providerId}-${open}`}
           label="Configuration (JSON)"
           defaultValue={JSON.stringify(localConfig, null, 2)}
           onChange={(parsed, error) => {
