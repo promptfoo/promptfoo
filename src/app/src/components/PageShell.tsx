@@ -277,7 +277,7 @@ export default function PageShell() {
     <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
       <PostHogProvider>
         <Layout>
-          <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
+          <Navigation onToggleDarkMode={toggleDarkMode} />
           <UpdateBanner />
           <Outlet />
           <PostHogPageViewTracker />

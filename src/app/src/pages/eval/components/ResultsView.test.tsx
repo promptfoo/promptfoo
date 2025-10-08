@@ -39,9 +39,7 @@ vi.mock('./store', () => {
 });
 
 vi.mock('./ShareModal', () => ({
-  default: vi.fn(({ open, onClose }) =>
-    open ? <div data-testid="share-modal">Share Modal</div> : null,
-  ),
+  default: vi.fn(({ open }) => (open ? <div data-testid="share-modal">Share Modal</div> : null)),
 }));
 
 vi.mock('./ResultsTable', () => ({

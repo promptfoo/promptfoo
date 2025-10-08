@@ -394,7 +394,7 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
 
     // The text "0.00%" appears multiple times in DataGrid cells
     // Using getAllByText to handle multiple matches
-    const attackSuccessRateElements = screen.getAllByText((content, element) => {
+    const attackSuccessRateElements = screen.getAllByText((_content, element) => {
       return Boolean(element && element.textContent?.includes('0.00%'));
     });
     expect(attackSuccessRateElements.length).toBeGreaterThan(0);

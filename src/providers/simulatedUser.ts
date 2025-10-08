@@ -114,7 +114,7 @@ export class SimulatedUser implements ApiProvider {
 
   async callApi(
     // NOTE: `prompt` is not used in this provider; `vars.instructions` is used instead.
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {

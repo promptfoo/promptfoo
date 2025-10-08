@@ -208,7 +208,6 @@ export async function runAssertion({
   test,
   latencyMs,
   providerResponse,
-  assertIndex,
   traceId,
 }: {
   prompt?: string;

@@ -33,7 +33,6 @@ interface HttpAdvancedConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: any) => void;
   defaultRequestTransform?: string;
-  onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
 }
 
@@ -71,7 +70,6 @@ const HttpAdvancedConfiguration = ({
   selectedTarget,
   defaultRequestTransform,
   updateCustomTarget,
-  onTargetTested,
   onSessionTested,
 }: HttpAdvancedConfigurationProps) => {
   // Tab state management

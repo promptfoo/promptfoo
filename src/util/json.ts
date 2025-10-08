@@ -105,7 +105,7 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
     return (
       JSON.stringify(
         value,
-        (key, val) => {
+        (_key, val) => {
           if (typeof val === 'object' && val !== null) {
             if (cache.has(val)) {
               return;
