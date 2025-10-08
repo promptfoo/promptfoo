@@ -743,18 +743,18 @@ describe('shared redteam provider utilities', () => {
 
   // New tests for tryUnblocking env flag
   describe('tryUnblocking environment flag', () => {
-    const originalEnv = process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+    const originalEnv = process.env.PROMPTFOO_ENABLE_UNBLOCKING;
 
     afterEach(() => {
       if (originalEnv === undefined) {
-        delete process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+        delete process.env.PROMPTFOO_ENABLE_UNBLOCKING;
       } else {
-        process.env.PROMPTFOO_DISABLE_UNBLOCKING = originalEnv;
+        process.env.PROMPTFOO_ENABLE_UNBLOCKING = originalEnv;
       }
     });
 
-    it('short-circuits when PROMPTFOO_DISABLE_UNBLOCKING=true', async () => {
-      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
+    it('short-circuits by default when PROMPTFOO_ENABLE_UNBLOCKING is not set', async () => {
+      delete process.env.PROMPTFOO_ENABLE_UNBLOCKING;
 
       const result = await tryUnblocking({
         messages: [],
