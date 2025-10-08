@@ -376,6 +376,35 @@ describe('synthesize', () => {
         expect(columns[requestedIndex]).toBe(getDefaultNFanout('jailbreak:composite').toString());
         // Generated = what our mock strategy returned
         expect(columns[generatedIndex]).toBe(getDefaultNFanout('jailbreak:composite').toString());
+
+        // Verify the "Using strategies:" summary shows correct fan-out
+        const summaryMessage = jest
+          .mocked(logger.info)
+          .mock.calls.map(([arg]) => arg)
+          .find(
+            (arg): arg is string =>
+              typeof arg === 'string' && arg.includes('Using strategies:'),
+          );
+
+        expect(summaryMessage).toBeDefined();
+        const summaryStripped = stripAnsi(summaryMessage!);
+        const summaryLine = summaryStripped.split('\n').find((line) => line.includes('jailbreak:composite'));
+        expect(summaryLine).toBeDefined();
+        expect(summaryLine).toContain(`(${getDefaultNFanout('jailbreak:composite')} additional tests)`);
+
+        // Verify the "Test Generation Summary:" shows correct total
+        const totalSummaryMessage = jest
+          .mocked(logger.info)
+          .mock.calls.map(([arg]) => arg)
+          .find(
+            (arg): arg is string =>
+              typeof arg === 'string' && arg.includes('Test Generation Summary:'),
+          );
+
+        expect(totalSummaryMessage).toBeDefined();
+        const totalStripped = stripAnsi(totalSummaryMessage!);
+        // 1 base + default fan-out
+        expect(totalStripped).toContain(`• Total tests: ${1 + getDefaultNFanout('jailbreak:composite')}`);
       } finally {
         pluginFindSpy.mockRestore();
         strategyFindSpy.mockRestore();
