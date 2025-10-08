@@ -3,45 +3,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
-import AddIcon from '@mui/icons-material/Add';
-import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
-import ErrorIcon from '@mui/icons-material/Error';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import RemoveIcon from '@mui/icons-material/Remove';
-import SearchIcon from '@mui/icons-material/Search';
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
-import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import Link from '@mui/material/Link';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import { alpha, useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
+import { useTheme } from '@mui/material/styles';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import {
-  AGENTIC_EXEMPT_PLUGINS,
   categoryAliases,
-  DATASET_EXEMPT_PLUGINS,
   DEFAULT_PLUGINS,
   displayNameOverrides,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
-  HUGGINGFACE_GATED_PLUGINS,
   ISO_42001_MAPPING,
   MCP_PLUGINS,
   MITRE_ATLAS_MAPPING,
@@ -54,19 +30,13 @@ import {
   riskCategories,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
-import { ErrorBoundary } from 'react-error-boundary';
 import { Link as RouterLink } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import CustomIntentSection from './CustomIntentPluginSection';
 import PageWrapper from './PageWrapper';
-import PluginConfigDialog from './PluginConfigDialog';
-import PresetCard from './PresetCard';
-import {
-  getPluginDocumentationUrl,
-  hasSpecificPluginDocumentation,
-} from './pluginDocumentationMap';
-import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
+import PluginsTab from './PluginsTab';
+import CustomPromptsTab from './CustomPromptsTab';
+import CustomPoliciesTab from './CustomPoliciesTab';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { LocalPluginConfig } from '../types';
@@ -76,16 +46,29 @@ interface PluginsProps {
   onBack: () => void;
 }
 
-const ErrorFallback = ({ error }: { error: Error }) => (
-  <div role="alert">
-    <p>Something went wrong:</p>
-    <pre>{error.message}</pre>
-  </div>
-);
-
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
 const PLUGINS_SUPPORTING_CONFIG = ['bfla', 'bola', 'ssrf', ...PLUGINS_REQUIRING_CONFIG];
+
+// TabPanel component for conditional rendering
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel({ children, value, index }: TabPanelProps) {
+  return (
+    <Box
+      role="tabpanel"
+      hidden={value !== index}
+      id={`plugins-tabpanel-${index}`}
+      aria-labelledby={`plugins-tab-${index}`}
+    >
+      {value === index && <Box>{children}</Box>}
+    </Box>
+  );
+}
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const theme = useTheme();
@@ -102,6 +85,20 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
     );
   });
+
+  // Tab state management
+  const [activeTab, setActiveTab] = useState<number>(0);
+
+  const handleTabChange = useCallback(
+    (_event: React.SyntheticEvent, newValue: number) => {
+      setActiveTab(newValue);
+      recordEvent('feature_used', {
+        feature: 'redteam_config_plugins_tab_changed',
+        tab: ['plugins', 'custom_prompts', 'custom_policies'][newValue],
+      });
+    },
+    [recordEvent],
+  );
 
   // Track if user has interacted to prevent config updates from overriding user selections
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
@@ -521,11 +518,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return '';
   }, [hasAnyPluginsConfigured, isConfigValid, selectedPlugins, pluginConfig]);
 
-  const handleConfigClick = (plugin: Plugin) => {
-    setSelectedConfigPlugin(plugin);
-    setConfigDialogOpen(true);
-  };
-
   const handleGenerateTestCase = async (plugin: Plugin) => {
     const supportsConfig = PLUGINS_SUPPORTING_CONFIG.includes(plugin);
 
@@ -674,7 +666,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         !isConfigValid() || !hasAnyPluginsConfigured() ? getNextButtonTooltip() : undefined
       }
     >
-      {/* Warning banner when all/most plugins are selected - full width sticky */}
+      {/* Warning banner when all/most plugins are selected - outside tabs, full width sticky */}
       {hasSelectedMostPlugins && (
         <Alert
           severity="warning"
@@ -706,993 +698,67 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         </Alert>
       )}
 
-      <ErrorBoundary FallbackComponent={ErrorFallback}>
-        <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
-          {/* Main content */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            {/* Presets section */}
-            <Box sx={{ mb: 3 }}>
-              <Typography
-                variant="h6"
-                sx={{
-                  mb: 2,
-                  fontWeight: 600,
-                  color: 'text.primary',
-                }}
-              >
-                Presets
-              </Typography>
+      {/* Tabs component */}
+      <Box sx={{ width: '100%', mb: 3 }}>
+        <Tabs value={activeTab} onChange={handleTabChange} aria-label="plugin configuration tabs">
+          <Tab label="Plugins" id="plugins-tab-0" aria-controls="plugins-tabpanel-0" />
+          <Tab label="Custom Prompts" id="plugins-tab-1" aria-controls="plugins-tabpanel-1" />
+          <Tab label="Custom Policies" id="plugins-tab-2" aria-controls="plugins-tabpanel-2" />
+        </Tabs>
+      </Box>
 
-              <Grid spacing={2} container sx={{ mb: 3 }}>
-                {presets.map((preset) => {
-                  const isSelected =
-                    preset.name === 'Custom'
-                      ? isCustomMode
-                      : preset.name === currentlySelectedPreset?.name;
-                  return (
-                    <Box key={preset.name}>
-                      <PresetCard
-                        name={preset.name}
-                        description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
-                        isSelected={isSelected}
-                        onClick={() => handlePresetSelect(preset)}
-                      />
-                    </Box>
-                  );
-                })}
-              </Grid>
-            </Box>
+      {/* Tab Panel 0: Plugins */}
+      <TabPanel value={activeTab} index={0}>
+        <PluginsTab
+          selectedPlugins={selectedPlugins}
+          setSelectedPlugins={setSelectedPlugins}
+          handlePluginToggle={handlePluginToggle}
+          pluginConfig={pluginConfig}
+          setPluginConfig={setPluginConfig}
+          selectedConfigPlugin={selectedConfigPlugin}
+          setSelectedConfigPlugin={setSelectedConfigPlugin}
+          configDialogOpen={configDialogOpen}
+          setConfigDialogOpen={setConfigDialogOpen}
+          isPluginConfigured={isPluginConfigured}
+          updatePluginConfig={updatePluginConfig}
+          handlePresetSelect={handlePresetSelect}
+          isCustomMode={isCustomMode}
+          currentlySelectedPreset={currentlySelectedPreset}
+          presets={presets}
+          filteredPlugins={filteredPlugins}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          selectedCategory={selectedCategory}
+          setSelectedCategory={setSelectedCategory}
+          allCategoryFilters={allCategoryFilters}
+          handleCategoryToggle={handleCategoryToggle}
+          handleGenerateTestCase={handleGenerateTestCase}
+          generatingTestCase={generatingTestCase}
+          generatingPlugin={generatingPlugin}
+          testCaseDialogOpen={testCaseDialogOpen}
+          setTestCaseDialogOpen={setTestCaseDialogOpen}
+          testCaseDialogMode={testCaseDialogMode}
+          tempTestCaseConfig={tempTestCaseConfig}
+          setTempTestCaseConfig={setTempTestCaseConfig}
+          generatedTestCase={generatedTestCase}
+          generateTestCaseWithConfig={generateTestCaseWithConfig}
+          isTestCaseConfigValid={isTestCaseConfigValid}
+          setHasUserInteracted={setHasUserInteracted}
+          PLUGINS_REQUIRING_CONFIG={PLUGINS_REQUIRING_CONFIG}
+          PLUGINS_SUPPORTING_CONFIG={PLUGINS_SUPPORTING_CONFIG}
+          PLUGIN_PRESET_DESCRIPTIONS={PLUGIN_PRESET_DESCRIPTIONS}
+        />
+      </TabPanel>
 
-            {/* Search and Filter section */}
-            <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-              <TextField
-                variant="outlined"
-                placeholder="Search plugins..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon />
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{ minWidth: 300, flexShrink: 0 }}
-              />
+      {/* Tab Panel 1: Custom Prompts */}
+      <TabPanel value={activeTab} index={1}>
+        <CustomPromptsTab />
+      </TabPanel>
 
-              <Box sx={{ flex: 1 }}>
-                <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                  <Chip
-                    label="All Categories"
-                    variant={selectedCategory === undefined ? 'filled' : 'outlined'}
-                    color={selectedCategory === undefined ? 'primary' : 'default'}
-                    onClick={() => setSelectedCategory(undefined)}
-                    sx={{
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bgcolor: selectedCategory === undefined ? 'primary.dark' : 'action.hover',
-                      },
-                    }}
-                  />
-                  {allCategoryFilters.map((filter) => (
-                    <Chip
-                      key={filter.key}
-                      label={filter.label}
-                      variant={selectedCategory === filter.key ? 'filled' : 'outlined'}
-                      color={selectedCategory === filter.key ? 'primary' : 'default'}
-                      onClick={() => handleCategoryToggle(filter.key)}
-                      sx={{
-                        cursor: 'pointer',
-                        '&:hover': {
-                          bgcolor:
-                            selectedCategory === filter.key ? 'primary.dark' : 'action.hover',
-                        },
-                      }}
-                    />
-                  ))}
-                </Stack>
-              </Box>
-            </Stack>
-
-            {/* Bulk selection actions */}
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: 2,
-                mb: 2,
-                '& > *': {
-                  color: 'primary.main',
-                  cursor: 'pointer',
-                  fontSize: '0.875rem',
-                  textDecoration: 'none',
-                  '&:hover': {
-                    textDecoration: 'underline',
-                  },
-                },
-              }}
-            >
-              <Box
-                component="span"
-                onClick={() => {
-                  setHasUserInteracted(true);
-                  filteredPlugins.forEach(({ plugin }) => {
-                    if (!selectedPlugins.has(plugin)) {
-                      handlePluginToggle(plugin);
-                    }
-                  });
-                }}
-              >
-                Select all
-              </Box>
-              <Box
-                component="span"
-                onClick={() => {
-                  setHasUserInteracted(true);
-                  filteredPlugins.forEach(({ plugin }) => {
-                    if (selectedPlugins.has(plugin)) {
-                      handlePluginToggle(plugin);
-                    }
-                  });
-                }}
-              >
-                Select none
-              </Box>
-            </Box>
-
-            {/* Plugin list */}
-            <Stack spacing={1} sx={{ mb: 3 }}>
-              {filteredPlugins.map(({ plugin, category }) => (
-                <Paper
-                  key={plugin}
-                  variant="outlined"
-                  onClick={() => handlePluginToggle(plugin)}
-                  sx={{
-                    border: '1px solid',
-                    borderColor: (() => {
-                      if (selectedPlugins.has(plugin)) {
-                        // Show red border if missing required config
-                        if (
-                          PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                          !isPluginConfigured(plugin)
-                        ) {
-                          return 'error.main';
-                        }
-                        return 'primary.main';
-                      }
-                      return theme.palette.divider;
-                    })(),
-                    borderRadius: 1,
-                    cursor: 'pointer',
-                    bgcolor: (() => {
-                      if (selectedPlugins.has(plugin)) {
-                        // Show red background if plugin is selected but missing required config
-                        if (
-                          PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                          !isPluginConfigured(plugin)
-                        ) {
-                          return 'rgba(211, 47, 47, 0.08)'; // error red with transparency
-                        }
-                        return 'rgba(25, 118, 210, 0.08)'; // primary blue with transparency
-                      }
-                      return 'transparent';
-                    })(),
-                    '&:hover': {
-                      bgcolor: (() => {
-                        if (selectedPlugins.has(plugin)) {
-                          // Show red hover if plugin is selected but missing required config
-                          if (
-                            PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                            !isPluginConfigured(plugin)
-                          ) {
-                            return 'rgba(211, 47, 47, 0.12)'; // error red with more transparency
-                          }
-                          return 'rgba(25, 118, 210, 0.12)'; // primary blue with more transparency
-                        }
-                        return 'rgba(0, 0, 0, 0.04)';
-                      })(),
-                      cursor: 'pointer',
-                      borderColor: (() => {
-                        if (selectedPlugins.has(plugin)) {
-                          // Keep red border on hover if missing config
-                          if (
-                            PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                            !isPluginConfigured(plugin)
-                          ) {
-                            return 'error.main';
-                          }
-                          return 'primary.main';
-                        }
-                        return theme.palette.action.hover;
-                      })(),
-                    },
-                    p: 2,
-                    transition: 'all 0.2s ease-in-out',
-                    display: 'flex',
-                    alignItems: 'center',
-                    width: '100%',
-                    ...(selectedPlugins.has(plugin) && {
-                      boxShadow:
-                        PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin)
-                          ? '0 2px 8px rgba(211, 47, 47, 0.15)' // red shadow for missing config
-                          : '0 2px 8px rgba(25, 118, 210, 0.15)', // blue shadow for normal selection
-                    }),
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', mr: 2, flexShrink: 0 }}>
-                    <Checkbox
-                      checked={selectedPlugins.has(plugin)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handlePluginToggle(plugin);
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                      color="primary"
-                      size="small"
-                      aria-label={displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                    />
-                    {/* Generate test case button */}
-                    <Tooltip
-                      title={`Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
-                    >
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleGenerateTestCase(plugin);
-                        }}
-                        disabled={generatingTestCase && generatingPlugin === plugin}
-                        sx={{ color: 'text.secondary', ml: 0.5 }}
-                      >
-                        {generatingTestCase && generatingPlugin === plugin ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <MagicWandIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                      <Typography
-                        variant="subtitle1"
-                        sx={{
-                          fontWeight: selectedPlugins.has(plugin) ? 600 : 500,
-                          color: selectedPlugins.has(plugin) ? 'primary.main' : 'text.primary',
-                        }}
-                      >
-                        {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                      </Typography>
-
-                      {/* Category badge for "Recently Used" plugins */}
-                      {category === 'Recently Used' && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            backgroundColor: 'action.hover',
-                            px: 1,
-                            py: 0.25,
-                            borderRadius: 1,
-                            color: 'text.secondary',
-                            fontSize: '0.7rem',
-                            textAlign: 'center',
-                          }}
-                        >
-                          Recently Used
-                        </Typography>
-                      )}
-
-                      {AGENTIC_EXEMPT_PLUGINS.includes(plugin as any) && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            fontSize: '0.7rem',
-                            color: 'text.secondary',
-                            fontWeight: 400,
-                            backgroundColor: 'action.hover',
-                            px: 0.5,
-                            py: 0.25,
-                            borderRadius: 0.5,
-                          }}
-                        >
-                          agentic
-                        </Typography>
-                      )}
-                      {DATASET_EXEMPT_PLUGINS.includes(plugin as any) && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            fontSize: '0.7rem',
-                            color: 'text.secondary',
-                            fontWeight: 400,
-                            backgroundColor: 'action.hover',
-                            px: 0.5,
-                            py: 0.25,
-                            borderRadius: 0.5,
-                          }}
-                        >
-                          no strategies
-                        </Typography>
-                      )}
-                      {HUGGINGFACE_GATED_PLUGINS.includes(plugin as any) && (
-                        <Tooltip title="This dataset requires a HuggingFace API key to access. Set HF_TOKEN environment variable.">
-                          <Typography
-                            variant="caption"
-                            sx={(theme) => ({
-                              fontSize: '0.7rem',
-                              color: 'warning.main',
-                              fontWeight: 500,
-                              backgroundColor: alpha(theme.palette.warning.main, 0.08),
-                              px: 0.5,
-                              py: 0.25,
-                              borderRadius: 0.5,
-                              border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`,
-                            })}
-                          >
-                            🤗 API key required
-                          </Typography>
-                        </Tooltip>
-                      )}
-                    </Box>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: 'text.secondary',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                      }}
-                    >
-                      {subCategoryDescriptions[plugin]}
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
-                    {/* Settings/Configuration button */}
-                    {selectedPlugins.has(plugin) && PLUGINS_SUPPORTING_CONFIG.includes(plugin) && (
-                      <IconButton
-                        size="small"
-                        title={
-                          isPluginConfigured(plugin)
-                            ? 'Edit Configuration'
-                            : 'Configuration Required'
-                        }
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleConfigClick(plugin);
-                        }}
-                        sx={{
-                          mr: 1,
-                          opacity: 0.6,
-                          '&:hover': {
-                            opacity: 1,
-                            backgroundColor: alpha(theme.palette.primary.main, 0.08),
-                          },
-                          ...(PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                            !isPluginConfigured(plugin) && {
-                              color: 'error.main',
-                              opacity: 1,
-                            }),
-                        }}
-                      >
-                        <SettingsOutlinedIcon fontSize="small" />
-                      </IconButton>
-                    )}
-
-                    {/* Documentation link */}
-                    {hasSpecificPluginDocumentation(plugin) && (
-                      <Tooltip
-                        title={`View ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin} documentation`}
-                      >
-                        <IconButton
-                          size="small"
-                          component={Link}
-                          href={getPluginDocumentationUrl(plugin)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          sx={{ color: 'text.secondary' }}
-                        >
-                          <HelpOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Box>
-                </Paper>
-              ))}
-            </Stack>
-
-            {/* Custom sections */}
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
-                Custom Configurations
-              </Typography>
-
-              <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 2 }}>
-                  Custom Prompts (
-                  {config.plugins.filter(
-                    (p): p is { id: string; config: any } =>
-                      typeof p === 'object' && 'id' in p && p.id === 'intent' && 'config' in p,
-                  )[0]?.config?.intent?.length || 0}
-                  )
-                </Typography>
-                <CustomIntentSection />
-              </Paper>
-
-              <Paper variant="outlined" sx={{ p: 3 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 2 }}>
-                  Custom Policies (
-                  {config.plugins.filter(
-                    (p) => typeof p === 'object' && 'id' in p && p.id === 'policy',
-                  ).length || 0}
-                  )
-                </Typography>
-                <CustomPoliciesSection />
-              </Paper>
-            </Box>
-
-            <PluginConfigDialog
-              open={configDialogOpen}
-              plugin={selectedConfigPlugin}
-              config={selectedConfigPlugin ? pluginConfig[selectedConfigPlugin] || {} : {}}
-              onClose={() => {
-                setConfigDialogOpen(false);
-                setSelectedConfigPlugin(null);
-              }}
-              onSave={(plugin, newConfig) => {
-                updatePluginConfig(plugin, newConfig);
-              }}
-            />
-
-            {/* Test Case Generation Dialog */}
-            <Dialog
-              open={testCaseDialogOpen}
-              onClose={() => {
-                setTestCaseDialogOpen(false);
-                setGeneratedTestCase(null);
-                setGeneratingPlugin(null);
-                setTestCaseDialogMode('config');
-                setTempTestCaseConfig({});
-              }}
-              maxWidth="md"
-              fullWidth
-            >
-              <DialogTitle>
-                {testCaseDialogMode === 'config' ? 'Configure Test Generation' : 'Test Case Sample'}{' '}
-                -{' '}
-                {generatingPlugin &&
-                  (displayNameOverrides[generatingPlugin] ||
-                    categoryAliases[generatingPlugin] ||
-                    generatingPlugin)}
-              </DialogTitle>
-              <DialogContent>
-                {testCaseDialogMode === 'config' &&
-                generatingPlugin &&
-                PLUGINS_SUPPORTING_CONFIG.includes(generatingPlugin) ? (
-                  <Box sx={{ pt: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                      {PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin)
-                        ? 'This plugin requires configuration to generate relevant test cases.'
-                        : 'This plugin supports configuration to generate more targeted test cases. Configuration is optional.'}
-                    </Typography>
-
-                    {/* Render configuration fields based on plugin */}
-                    {generatingPlugin === 'indirect-prompt-injection' && (
-                      <TextField
-                        fullWidth
-                        required
-                        label="Indirect Injection Variable"
-                        value={tempTestCaseConfig.indirectInjectionVar || ''}
-                        onChange={(e) =>
-                          setTempTestCaseConfig({
-                            ...tempTestCaseConfig,
-                            indirectInjectionVar: e.target.value,
-                          })
-                        }
-                        placeholder="e.g., name, userContent, document"
-                        helperText="Specify the variable name in your prompt that contains untrusted data"
-                        sx={{ mb: 2 }}
-                      />
-                    )}
-
-                    {generatingPlugin === 'prompt-extraction' && (
-                      <TextField
-                        fullWidth
-                        required
-                        label="System Prompt"
-                        multiline
-                        rows={4}
-                        value={tempTestCaseConfig.systemPrompt || ''}
-                        onChange={(e) =>
-                          setTempTestCaseConfig({
-                            ...tempTestCaseConfig,
-                            systemPrompt: e.target.value,
-                          })
-                        }
-                        placeholder="Enter your actual system prompt here..."
-                        helperText="Provide your system prompt so the plugin can test if it can be extracted"
-                        sx={{ mb: 2 }}
-                      />
-                    )}
-
-                    {generatingPlugin === 'bfla' && (
-                      <Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          BFLA tests whether users can access functions they shouldn't. Leave empty
-                          for general testing.
-                        </Typography>
-                        {((tempTestCaseConfig.targetIdentifiers as string[]) || ['']).map(
-                          (item: string, index: number) => {
-                            return (
-                              <Box
-                                key={index}
-                                sx={{ display: 'flex', alignItems: 'center', mb: 1 }}
-                              >
-                                <TextField
-                                  fullWidth
-                                  label={`Target Identifier ${index + 1}`}
-                                  variant="outlined"
-                                  value={item}
-                                  onChange={(e) => {
-                                    const newArray = [
-                                      ...((tempTestCaseConfig.targetIdentifiers as string[]) || [
-                                        '',
-                                      ]),
-                                    ];
-                                    newArray[index] = e.target.value;
-                                    setTempTestCaseConfig({
-                                      ...tempTestCaseConfig,
-                                      targetIdentifiers: newArray,
-                                    });
-                                  }}
-                                  placeholder="e.g., getUserData, /api/admin/users, deleteUser"
-                                  sx={{ mr: 1 }}
-                                />
-                                {((tempTestCaseConfig.targetIdentifiers as string[]) || [''])
-                                  .length > 1 && (
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => {
-                                      const newArray = [
-                                        ...((tempTestCaseConfig.targetIdentifiers as string[]) || [
-                                          '',
-                                        ]),
-                                      ];
-                                      newArray.splice(index, 1);
-                                      if (newArray.length === 0) {
-                                        newArray.push('');
-                                      }
-                                      setTempTestCaseConfig({
-                                        ...tempTestCaseConfig,
-                                        targetIdentifiers: newArray,
-                                      });
-                                    }}
-                                  >
-                                    <RemoveIcon />
-                                  </IconButton>
-                                )}
-                              </Box>
-                            );
-                          },
-                        )}
-                        <Button
-                          startIcon={<AddIcon />}
-                          onClick={() => {
-                            const currentArray =
-                              (tempTestCaseConfig.targetIdentifiers as string[]) || [''];
-                            setTempTestCaseConfig({
-                              ...tempTestCaseConfig,
-                              targetIdentifiers: [...currentArray, ''],
-                            });
-                          }}
-                          variant="outlined"
-                          size="small"
-                          sx={{ mt: 1 }}
-                          disabled={(
-                            (tempTestCaseConfig.targetIdentifiers as string[]) || ['']
-                          ).some((item) => {
-                            return item.trim() === '';
-                          })}
-                        >
-                          Add
-                        </Button>
-                      </Box>
-                    )}
-
-                    {generatingPlugin === 'bola' && (
-                      <Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          BOLA tests whether users can access objects they shouldn't own. Leave
-                          empty for general testing.
-                        </Typography>
-                        {((tempTestCaseConfig.targetSystems as string[]) || ['']).map(
-                          (item: string, index: number) => {
-                            return (
-                              <Box
-                                key={index}
-                                sx={{ display: 'flex', alignItems: 'center', mb: 1 }}
-                              >
-                                <TextField
-                                  fullWidth
-                                  label={`Target System ${index + 1}`}
-                                  variant="outlined"
-                                  value={item}
-                                  onChange={(e) => {
-                                    const newArray = [
-                                      ...((tempTestCaseConfig.targetSystems as string[]) || ['']),
-                                    ];
-                                    newArray[index] = e.target.value;
-                                    setTempTestCaseConfig({
-                                      ...tempTestCaseConfig,
-                                      targetSystems: newArray,
-                                    });
-                                  }}
-                                  placeholder="e.g., user_123, order_456, document_789"
-                                  sx={{ mr: 1 }}
-                                />
-                                {((tempTestCaseConfig.targetSystems as string[]) || ['']).length >
-                                  1 && (
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => {
-                                      const newArray = [
-                                        ...((tempTestCaseConfig.targetSystems as string[]) || ['']),
-                                      ];
-                                      newArray.splice(index, 1);
-                                      if (newArray.length === 0) {
-                                        newArray.push('');
-                                      }
-                                      setTempTestCaseConfig({
-                                        ...tempTestCaseConfig,
-                                        targetSystems: newArray,
-                                      });
-                                    }}
-                                  >
-                                    <RemoveIcon />
-                                  </IconButton>
-                                )}
-                              </Box>
-                            );
-                          },
-                        )}
-                        <Button
-                          startIcon={<AddIcon />}
-                          onClick={() => {
-                            const currentArray = (tempTestCaseConfig.targetSystems as string[]) || [
-                              '',
-                            ];
-                            setTempTestCaseConfig({
-                              ...tempTestCaseConfig,
-                              targetSystems: [...currentArray, ''],
-                            });
-                          }}
-                          variant="outlined"
-                          size="small"
-                          sx={{ mt: 1 }}
-                          disabled={((tempTestCaseConfig.targetSystems as string[]) || ['']).some(
-                            (item) => item.trim() === '',
-                          )}
-                        >
-                          Add
-                        </Button>
-                      </Box>
-                    )}
-
-                    {generatingPlugin === 'ssrf' && (
-                      <Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          SSRF tests whether your application can be tricked into making requests to
-                          unintended destinations. Leave empty for general testing.
-                        </Typography>
-                        {((tempTestCaseConfig.targetUrls as string[]) || ['']).map(
-                          (item: string, index: number) => {
-                            return (
-                              <Box
-                                key={index}
-                                sx={{ display: 'flex', alignItems: 'center', mb: 1 }}
-                              >
-                                <TextField
-                                  fullWidth
-                                  label={`Target URL ${index + 1}`}
-                                  variant="outlined"
-                                  value={item}
-                                  onChange={(e) => {
-                                    const newArray = [
-                                      ...((tempTestCaseConfig.targetUrls as string[]) || ['']),
-                                    ];
-                                    newArray[index] = e.target.value;
-                                    setTempTestCaseConfig({
-                                      ...tempTestCaseConfig,
-                                      targetUrls: newArray,
-                                    });
-                                  }}
-                                  placeholder="e.g., http://internal-api.company.com, file:///etc/passwd"
-                                  sx={{ mr: 1 }}
-                                />
-                                {((tempTestCaseConfig.targetUrls as string[]) || ['']).length >
-                                  1 && (
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => {
-                                      const newArray = [
-                                        ...((tempTestCaseConfig.targetUrls as string[]) || ['']),
-                                      ];
-                                      newArray.splice(index, 1);
-                                      if (newArray.length === 0) {
-                                        newArray.push('');
-                                      }
-                                      setTempTestCaseConfig({
-                                        ...tempTestCaseConfig,
-                                        targetUrls: newArray,
-                                      });
-                                    }}
-                                  >
-                                    <RemoveIcon />
-                                  </IconButton>
-                                )}
-                              </Box>
-                            );
-                          },
-                        )}
-                        <Button
-                          startIcon={<AddIcon />}
-                          onClick={() => {
-                            const currentArray = (tempTestCaseConfig.targetUrls as string[]) || [
-                              '',
-                            ];
-                            setTempTestCaseConfig({
-                              ...tempTestCaseConfig,
-                              targetUrls: [...currentArray, ''],
-                            });
-                          }}
-                          variant="outlined"
-                          size="small"
-                          sx={{ mt: 1 }}
-                          disabled={((tempTestCaseConfig.targetUrls as string[]) || ['']).some(
-                            (item) => item.trim() === '',
-                          )}
-                        >
-                          Add
-                        </Button>
-                      </Box>
-                    )}
-                  </Box>
-                ) : generatingTestCase ? (
-                  <Box
-                    sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}
-                  >
-                    <CircularProgress sx={{ mb: 2 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Generating test case...
-                    </Typography>
-                  </Box>
-                ) : generatedTestCase && testCaseDialogMode === 'result' ? (
-                  <Box sx={{ pt: 2 }}>
-                    <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
-                      <Typography variant="body2">
-                        This is a sample test case generated for the <code>{generatingPlugin}</code>{' '}
-                        plugin. Fine tune it by adjusting your application details.
-                      </Typography>
-                    </Alert>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Test Case:
-                    </Typography>
-                    <Box
-                      sx={{
-                        p: 2,
-                        backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
-                        borderRadius: 1,
-                        border: '1px solid',
-                        borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-                        fontFamily: 'monospace',
-                        fontSize: '0.875rem',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      {generatedTestCase.prompt}
-                    </Box>
-                  </Box>
-                ) : null}
-              </DialogContent>
-              <DialogActions>
-                {/* Documentation link in footer */}
-                {generatingPlugin && hasSpecificPluginDocumentation(generatingPlugin) && (
-                  <Box sx={{ flex: 1, mr: 2 }}>
-                    <Link
-                      href={getPluginDocumentationUrl(generatingPlugin)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        fontSize: '0.875rem',
-                        textDecoration: 'none',
-                        '&:hover': {
-                          textDecoration: 'underline',
-                        },
-                        paddingLeft: 2,
-                      }}
-                    >
-                      Learn more about{' '}
-                      {displayNameOverrides[generatingPlugin] ||
-                        categoryAliases[generatingPlugin] ||
-                        generatingPlugin}
-                      <Box component="span" sx={{ fontSize: '0.75rem' }}>
-                        ↗
-                      </Box>
-                    </Link>
-                  </Box>
-                )}
-                <Button
-                  onClick={() => {
-                    setTestCaseDialogOpen(false);
-                    setGeneratedTestCase(null);
-                    setGeneratingPlugin(null);
-                    setTestCaseDialogMode('config');
-                    setTempTestCaseConfig({});
-                  }}
-                >
-                  {testCaseDialogMode === 'config' ? 'Cancel' : 'Close'}
-                </Button>
-
-                {testCaseDialogMode === 'config' &&
-                  generatingPlugin &&
-                  PLUGINS_SUPPORTING_CONFIG.includes(generatingPlugin) && (
-                    <>
-                      {/* Show Skip button for optional config plugins */}
-                      {!PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin) && (
-                        <Button
-                          onClick={() => {
-                            if (generatingPlugin) {
-                              generateTestCaseWithConfig(generatingPlugin, {});
-                            }
-                          }}
-                          disabled={generatingTestCase}
-                        >
-                          Skip Configuration
-                        </Button>
-                      )}
-
-                      <Button
-                        variant="contained"
-                        onClick={() => {
-                          if (generatingPlugin) {
-                            generateTestCaseWithConfig(generatingPlugin, tempTestCaseConfig);
-                          }
-                        }}
-                        disabled={
-                          generatingTestCase ||
-                          !isTestCaseConfigValid(generatingPlugin, tempTestCaseConfig)
-                        }
-                      >
-                        Generate Test Case
-                      </Button>
-                    </>
-                  )}
-              </DialogActions>
-            </Dialog>
-          </Box>
-
-          {/* Selected Plugins Sidebar */}
-          <Box
-            sx={{
-              width: 320,
-              position: 'sticky',
-              top: 72,
-              maxHeight: '60vh',
-              overflowY: 'auto',
-            }}
-          >
-            <Paper
-              variant="outlined"
-              sx={{
-                p: 2,
-                backgroundColor: 'background.paper',
-              }}
-            >
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                Selected Plugins ({selectedPlugins.size})
-              </Typography>
-
-              {selectedPlugins.size === 0 ? (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ textAlign: 'center', py: 4 }}
-                >
-                  No plugins selected yet.
-                  <br />
-                  Click on plugins to add them here.
-                </Typography>
-              ) : (
-                <Stack sx={{ maxHeight: '400px', overflowY: 'auto' }} spacing={1}>
-                  {Array.from(selectedPlugins).map((plugin) => {
-                    const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
-                    const hasError = requiresConfig && !isPluginConfigured(plugin);
-
-                    return (
-                      <Paper
-                        key={plugin}
-                        variant="outlined"
-                        sx={{
-                          p: 1.5,
-                          display: 'flex',
-                          alignItems: 'center',
-                          backgroundColor: hasError ? 'error.50' : 'primary.50',
-                          borderColor: hasError ? 'error.main' : 'primary.200',
-                          borderWidth: hasError ? 2 : 1,
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            flex: 1,
-                            minWidth: 0,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                          }}
-                        >
-                          {hasError && (
-                            <ErrorIcon
-                              fontSize="small"
-                              sx={{
-                                color: 'error.main',
-                                flexShrink: 0,
-                              }}
-                            />
-                          )}
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: 500,
-                              fontSize: '0.875rem',
-                              color: hasError ? 'error.main' : 'text.primary',
-                            }}
-                          >
-                            {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                          </Typography>
-                        </Box>
-                        <IconButton
-                          size="small"
-                          onClick={() => handlePluginToggle(plugin)}
-                          sx={{ color: 'text.secondary', ml: 1 }}
-                        >
-                          <RemoveIcon fontSize="small" />
-                        </IconButton>
-                      </Paper>
-                    );
-                  })}
-                </Stack>
-              )}
-
-              {selectedPlugins.size > 0 && (
-                <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    fullWidth
-                    onClick={() => {
-                      setHasUserInteracted(true);
-                      selectedPlugins.forEach((plugin) => handlePluginToggle(plugin));
-                    }}
-                    sx={{ fontSize: '0.875rem' }}
-                  >
-                    Clear All
-                  </Button>
-                </Box>
-              )}
-            </Paper>
-          </Box>
-        </Box>
-      </ErrorBoundary>
+      {/* Tab Panel 2: Custom Policies */}
+      <TabPanel value={activeTab} index={2}>
+        <CustomPoliciesTab />
+      </TabPanel>
     </PageWrapper>
   );
 }
