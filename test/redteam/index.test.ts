@@ -347,7 +347,24 @@ describe('synthesize', () => {
         expect(reportMessage).toBeDefined();
 
         const stripped = stripAnsi(reportMessage!);
-        const row = stripped.split('\n').find((line) => line.includes('jailbreak:composite'));
+        const lines = stripped.split('\n');
+
+        // Find header row and parse column indexes
+        const headerRow = lines.find((line) => line.includes('Requested') && line.includes('Generated'));
+        expect(headerRow).toBeDefined();
+
+        const headerColumns = headerRow!
+          .split('│')
+          .map((col) => col.trim())
+          .filter((col) => col.length > 0);
+
+        const requestedIndex = headerColumns.indexOf('Requested');
+        const generatedIndex = headerColumns.indexOf('Generated');
+        expect(requestedIndex).toBeGreaterThan(-1);
+        expect(generatedIndex).toBeGreaterThan(-1);
+
+        // Find the jailbreak:composite row
+        const row = lines.find((line) => line.includes('jailbreak:composite'));
         expect(row).toBeDefined();
 
         const columns = row!
@@ -355,8 +372,10 @@ describe('synthesize', () => {
           .map((col) => col.trim())
           .filter((col) => col.length > 0);
 
-        expect(columns[3]).toBe(getDefaultNFanout('jailbreak:composite').toString()); // Requested = default fan-out * 1 base test
-        expect(columns[4]).toBe(getDefaultNFanout('jailbreak:composite').toString()); // Generated = what our mock strategy returned
+        // Requested = default fan-out * 1 base test
+        expect(columns[requestedIndex]).toBe(getDefaultNFanout('jailbreak:composite').toString());
+        // Generated = what our mock strategy returned
+        expect(columns[generatedIndex]).toBe(getDefaultNFanout('jailbreak:composite').toString());
       } finally {
         pluginFindSpy.mockRestore();
         strategyFindSpy.mockRestore();
