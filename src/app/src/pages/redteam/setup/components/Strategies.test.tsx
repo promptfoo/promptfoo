@@ -287,7 +287,9 @@ describe('Strategies', () => {
       expect(screen.getByText('Agentic Strategies')).toBeInTheDocument();
 
       // Should render the description
-      expect(screen.getByText(/Advanced AI-powered strategies that dynamically adapt/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Advanced AI-powered strategies that dynamically adapt/),
+      ).toBeInTheDocument();
     });
 
     it('renders subsection labels for single-turn and multi-turn agentic strategies', () => {
@@ -302,8 +304,12 @@ describe('Strategies', () => {
       expect(screen.getByText('Single and Multi-turn')).toBeInTheDocument();
 
       // Check for subsection descriptions
-      expect(screen.getByText(/These strategies work only for single-turn evaluations/)).toBeInTheDocument();
-      expect(screen.getByText(/These strategies can be used for both single and multi-turn evaluations/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/These strategies work only for single-turn evaluations/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/These strategies can be used for both single and multi-turn evaluations/),
+      ).toBeInTheDocument();
     });
 
     it('renders Reset All button for agentic strategies section', () => {
@@ -315,7 +321,7 @@ describe('Strategies', () => {
 
       // Find all Reset buttons - one should be "Reset All" for the agentic strategies
       const resetButtons = screen.getAllByText(/Reset/);
-      const resetAllButton = resetButtons.find(btn => btn.textContent === 'Reset All');
+      const resetAllButton = resetButtons.find((btn) => btn.textContent === 'Reset All');
 
       expect(resetAllButton).toBeInTheDocument();
     });

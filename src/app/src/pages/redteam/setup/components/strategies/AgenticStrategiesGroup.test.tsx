@@ -37,13 +37,13 @@ describe('AgenticStrategiesGroup', () => {
       id: 'jailbreak',
       name: 'Jailbreak',
       description: 'Attempts to bypass safety measures',
-      configurable: false
+      configurable: false,
     },
     {
       id: 'jailbreak:tree',
       name: 'Tree Jailbreak',
       description: 'Tree-based jailbreak approach',
-      configurable: true
+      configurable: true,
     },
   ];
 
@@ -52,25 +52,25 @@ describe('AgenticStrategiesGroup', () => {
       id: 'crescendo',
       name: 'Crescendo',
       description: 'Gradually escalating attack',
-      configurable: false
+      configurable: false,
     },
     {
       id: 'goat',
       name: 'GOAT',
       description: 'Generative Offensive Agent Tester',
-      configurable: false
+      configurable: false,
     },
     {
       id: 'custom',
       name: 'Custom',
       description: 'User-defined strategy',
-      configurable: true
+      configurable: true,
     },
     {
       id: 'mischievous-user',
       name: 'Mischievous User',
       description: 'Simulates mischievous user behavior',
-      configurable: false
+      configurable: false,
     },
   ];
 
@@ -88,7 +88,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       expect(screen.getByText('Agentic Strategies')).toBeInTheDocument();
@@ -103,11 +103,13 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       expect(
-        screen.getByText('Advanced AI-powered strategies that dynamically adapt their attack patterns')
+        screen.getByText(
+          'Advanced AI-powered strategies that dynamically adapt their attack patterns',
+        ),
       ).toBeInTheDocument();
     });
 
@@ -120,12 +122,12 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       expect(screen.getByText('Single-turn Only')).toBeInTheDocument();
       expect(
-        screen.getByText('These strategies work only for single-turn evaluations')
+        screen.getByText('These strategies work only for single-turn evaluations'),
       ).toBeInTheDocument();
     });
 
@@ -138,12 +140,12 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       expect(screen.getByText('Single and Multi-turn')).toBeInTheDocument();
       expect(
-        screen.getByText('These strategies can be used for both single and multi-turn evaluations')
+        screen.getByText('These strategies can be used for both single and multi-turn evaluations'),
       ).toBeInTheDocument();
     });
 
@@ -156,7 +158,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       // Check single-turn strategies
@@ -179,7 +181,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       expect(screen.queryByText('Single-turn Only')).not.toBeInTheDocument();
@@ -195,7 +197,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       expect(screen.getByText('Single-turn Only')).toBeInTheDocument();
@@ -211,7 +213,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       // Should still render the container and header
@@ -233,7 +235,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const jailbreakCheckbox = screen.getByLabelText('Jailbreak') as HTMLInputElement;
@@ -256,7 +258,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const jailbreakCheckbox = screen.getByLabelText('Jailbreak');
@@ -277,7 +279,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const treeJailbreakConfigButton = screen.getByTestId('config-jailbreak:tree');
@@ -300,7 +302,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       expect(screen.getByText('Reset All')).toBeInTheDocument();
@@ -315,7 +317,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const resetButton = screen.getByText('Reset All');
@@ -331,7 +333,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const resetButton = screen.getByText('Reset All');
@@ -347,7 +349,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const resetButton = screen.getByText('Reset All');
@@ -366,7 +368,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const resetButton = screen.getByText('Reset All');
@@ -386,7 +388,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       const resetButton = screen.getByText('Reset All');
@@ -396,7 +398,7 @@ describe('AgenticStrategiesGroup', () => {
         'jailbreak',
         'jailbreak:tree',
         'crescendo',
-        'custom'
+        'custom',
       ]);
     });
   });
@@ -408,13 +410,13 @@ describe('AgenticStrategiesGroup', () => {
           id: 'strategy-with-dash',
           name: 'Strategy With Dash',
           description: 'Test strategy',
-          configurable: false
+          configurable: false,
         },
         {
           id: 'strategy:with:colon',
           name: 'Strategy With Colon',
           description: 'Test strategy',
-          configurable: false
+          configurable: false,
         },
       ];
 
@@ -426,7 +428,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       expect(screen.getByText('Strategy With Dash')).toBeInTheDocument();
@@ -441,8 +443,9 @@ describe('AgenticStrategiesGroup', () => {
         {
           id: 'long-strategy',
           name: 'This is a very long strategy name that might cause layout issues in the UI',
-          description: 'This is an extremely long description that goes on and on and on to test how the component handles text overflow and wrapping in various screen sizes',
-          configurable: false
+          description:
+            'This is an extremely long description that goes on and on and on to test how the component handles text overflow and wrapping in various screen sizes',
+          configurable: false,
         },
       ];
 
@@ -454,11 +457,13 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       expect(
-        screen.getByText('This is a very long strategy name that might cause layout issues in the UI')
+        screen.getByText(
+          'This is a very long strategy name that might cause layout issues in the UI',
+        ),
       ).toBeInTheDocument();
     });
 
@@ -473,7 +478,7 @@ describe('AgenticStrategiesGroup', () => {
             onToggle={mockOnToggle}
             onConfigClick={mockOnConfigClick}
             onSelectNone={undefined as any}
-          />
+          />,
         );
       };
 
@@ -502,7 +507,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       // Check that strategy items are rendered with correct data-testid
@@ -533,7 +538,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       // Check for main container
@@ -554,7 +559,7 @@ describe('AgenticStrategiesGroup', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
-        />
+        />,
       );
 
       // Verify all strategies are rendered in their respective sections
@@ -564,7 +569,8 @@ describe('AgenticStrategiesGroup', () => {
         expect(within(singleTurnSection).getByText('Tree Jailbreak')).toBeInTheDocument();
       }
 
-      const multiTurnSection = screen.getByText('Single and Multi-turn').parentElement?.parentElement;
+      const multiTurnSection =
+        screen.getByText('Single and Multi-turn').parentElement?.parentElement;
       if (multiTurnSection) {
         expect(within(multiTurnSection).getByText('Crescendo')).toBeInTheDocument();
         expect(within(multiTurnSection).getByText('GOAT')).toBeInTheDocument();
