@@ -24,7 +24,6 @@ import { AzureCompletionProvider } from './azure/completion';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
-import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
@@ -114,9 +113,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'agentic:memory-poisoning',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new MemoryPoisoningProvider(providerOptions);
     },
@@ -126,7 +125,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       if (splits.length < 4) {
@@ -151,7 +150,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const modelName = providerPath.split(':')[1];
       return new AI21ChatCompletionProvider(modelName, providerOptions);
@@ -166,7 +165,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -183,7 +182,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -222,7 +221,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       // Handle azure:moderation directly
       if (providerPath === 'azure:moderation') {
@@ -263,19 +262,9 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('bam:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const modelType = splits[1];
-      const modelName = splits.slice(2).join(':');
-      if (modelType === 'chat') {
-        return new BAMProvider(modelName || 'ibm/granite-13b-chat-v2', providerOptions);
-      }
+    create: async () => {
       throw new Error(
-        `Invalid BAM provider: ${providerPath}. Use one of the following providers: bam:chat:<model name>`,
+        'IBM BAM provider has been deprecated. The service was sunset in March 2025. Please use the WatsonX provider instead. See https://promptfoo.dev/docs/providers/watsonx for migration instructions.',
       );
     },
   },
@@ -284,7 +273,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -323,7 +312,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const agentId = providerPath.substring('bedrock-agent:'.length);
       const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
@@ -335,7 +324,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -394,7 +383,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const modelName = providerPath.split(':')[1];
       return new ClouderaAiChatCompletionProvider(modelName, {
@@ -422,7 +411,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -446,7 +435,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
@@ -472,9 +461,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'echo',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new EchoProvider(providerOptions);
     },
@@ -497,7 +486,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       let endpoint = splits.slice(1).join(':');
@@ -519,7 +508,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const [_, modelType, modelName] = providerPath.split(':');
       if (modelType === 'image') {
@@ -535,7 +524,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
@@ -562,7 +551,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const modelName = providerPath.split(':')[1];
       return new GroqProvider(modelName, providerOptions);
@@ -573,7 +562,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       // Parse helicone:model format (e.g., helicone:openai/gpt-4o)
       const model = providerPath.substring('helicone:'.length);
@@ -639,7 +628,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -661,7 +650,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -690,7 +679,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
@@ -716,7 +705,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       // Load OpenAI module
       const splits = providerPath.split(':');
@@ -810,7 +799,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
@@ -822,7 +811,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -913,7 +902,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
@@ -932,7 +921,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
     },
@@ -942,7 +931,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
@@ -954,7 +943,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const webhookUrl = providerPath.substring('webhook:'.length);
       return new WebhookProvider(webhookUrl, providerOptions);
@@ -990,7 +979,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new BrowserProvider(providerPath, providerOptions);
     },
@@ -1001,7 +990,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
 
@@ -1032,7 +1021,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new HttpProvider(providerPath, providerOptions);
     },
@@ -1065,7 +1054,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
@@ -1077,7 +1066,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const modelName = providerPath.split(':')[1];
       return new LlamaProvider(modelName, providerOptions);
@@ -1088,7 +1077,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       let config = providerOptions.config || { enabled: true };
@@ -1112,9 +1101,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'promptfoo:manual-input',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new ManualInputProvider(providerOptions);
     },
@@ -1122,9 +1111,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'promptfoo:redteam:best-of-n',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new RedteamBestOfNProvider(providerOptions.config);
     },
@@ -1132,9 +1121,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'promptfoo:redteam:crescendo',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new RedteamCrescendoProvider(providerOptions.config);
     },
@@ -1144,9 +1133,9 @@ export const providerMap: ProviderFactory[] = [
       providerPath === 'promptfoo:redteam:custom' ||
       providerPath.startsWith('promptfoo:redteam:custom:'),
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new RedteamCustomProvider(providerOptions.config);
     },
@@ -1154,9 +1143,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'promptfoo:redteam:goat',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new RedteamGoatProvider(providerOptions.config);
     },
@@ -1164,9 +1153,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'promptfoo:redteam:mischievous-user',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new RedteamMischievousUserProvider(providerOptions.config);
     },
@@ -1174,9 +1163,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new RedteamIterativeProvider(providerOptions.config);
     },
@@ -1184,9 +1173,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:image',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new RedteamImageIterativeProvider(providerOptions.config);
     },
@@ -1194,9 +1183,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:tree',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new RedteamIterativeTreeProvider(providerOptions.config);
     },
@@ -1204,9 +1193,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'promptfoo:simulated-user',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new SimulatedUser(providerOptions);
     },
@@ -1216,7 +1205,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const modelName = providerPath.split(':')[2];
       return new PromptfooModelProvider(modelName, {
@@ -1228,9 +1217,9 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'sequence',
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new SequenceProvider(providerOptions);
     },
@@ -1245,7 +1234,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new WebSocketProvider(providerPath, providerOptions);
     },
@@ -1256,7 +1245,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       if (splits.length < 3) {
@@ -1290,7 +1279,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       try {
         const { SlackProvider } = await import('./slack');

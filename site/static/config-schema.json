@@ -126,12 +126,6 @@
                             "AZURE_TOKEN_SCOPE": {
                               "type": "string"
                             },
-                            "BAM_API_HOST": {
-                              "type": "string"
-                            },
-                            "BAM_API_KEY": {
-                              "type": "string"
-                            },
                             "CLOUDFLARE_ACCOUNT_ID": {
                               "type": "string"
                             },

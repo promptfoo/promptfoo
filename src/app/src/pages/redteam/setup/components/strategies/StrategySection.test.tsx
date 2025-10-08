@@ -286,18 +286,16 @@ describe('StrategySection', () => {
   describe('Configurable strategies', () => {
     beforeEach(() => {
       vi.mock('./StrategyItem', () => ({
-        StrategyItem: vi
-          .fn()
-          .mockImplementation(({ strategy, isSelected, onToggle, onConfigClick }) => (
-            <div>
-              {isSelected && strategy.id === 'configurable-strategy-id' && (
-                <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
-                  Settings
-                </button>
-              )}
-              {strategy.name}
-            </div>
-          )),
+        StrategyItem: vi.fn().mockImplementation(({ strategy, isSelected, onConfigClick }) => (
+          <div>
+            {isSelected && strategy.id === 'configurable-strategy-id' && (
+              <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
+                Settings
+              </button>
+            )}
+            {strategy.name}
+          </div>
+        )),
         CONFIGURABLE_STRATEGIES: ['configurable-strategy-id'],
       }));
     });
