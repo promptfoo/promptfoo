@@ -503,7 +503,7 @@ class RedteamIterativeProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams & { injectVar?: string },
     options?: CallApiOptionsParams,
   ) {

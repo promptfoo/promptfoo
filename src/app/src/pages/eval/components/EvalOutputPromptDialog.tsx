@@ -196,7 +196,7 @@ export default function EvalOutputPromptDialog({
     setActiveTab(0); // Reset to first tab when dialog opens
   }, [prompt]);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
 
