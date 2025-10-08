@@ -21,11 +21,6 @@ interface ProviderConfigEditorProps {
   setProvider: (provider: ProviderOptions) => void;
   extensions?: string[];
   onExtensionsChange?: (extensions: string[]) => void;
-  opts?: {
-    defaultRequestTransform?: string;
-    hideErrors?: boolean;
-    disableModelSelection?: boolean;
-  };
   setError?: (error: string | null) => void;
   validateAll?: boolean;
   onValidate?: (isValid: boolean) => void;
@@ -41,7 +36,6 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
       setProvider,
       extensions,
       onExtensionsChange,
-      opts = {},
       setError,
       validateAll = false,
       onValidate,
@@ -270,7 +264,6 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
             setBodyError={setBodyError}
             urlError={urlError}
             setUrlError={setUrlError}
-            updateFullTarget={setProvider}
             onTargetTested={onTargetTested}
             onSessionTested={onSessionTested}
           />

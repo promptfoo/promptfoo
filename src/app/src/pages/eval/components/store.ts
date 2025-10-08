@@ -113,7 +113,7 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
  */
 function buildRedteamFilterOptions(
   config?: Partial<UnifiedConfig> | null,
-  table?: EvaluateTable | null,
+  _table?: EvaluateTable | null,
 ): { plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {} {
   const isRedteam = Boolean(config?.redteam);
 
@@ -362,7 +362,7 @@ interface SettingsState {
 
 export const useResultsViewSettingsStore = create<SettingsState>()(
   persist(
-    (set, get) => ({
+    (set, _get) => ({
       maxTextLength: 250,
       setMaxTextLength: (maxTextLength: number) => set(() => ({ maxTextLength })),
       wordBreak: 'break-word',

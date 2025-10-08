@@ -1606,7 +1606,7 @@ describe('ResultsTable Malformed Markdown Handling', () => {
 
     render(<ResultsTable {...defaultProps} />);
 
-    const elementsWithMalformedMarkdown = screen.getAllByText((content, element) => {
+    const elementsWithMalformedMarkdown = screen.getAllByText((_content, element) => {
       if (!element) {
         return false;
       }

@@ -743,18 +743,18 @@ describe('shared redteam provider utilities', () => {
 
   // New tests for tryUnblocking env flag
   describe('tryUnblocking environment flag', () => {
-    const originalEnv = process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+    const originalEnv = process.env.PROMPTFOO_ENABLE_UNBLOCKING;
 
     afterEach(() => {
       if (originalEnv === undefined) {
-        delete process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+        delete process.env.PROMPTFOO_ENABLE_UNBLOCKING;
       } else {
-        process.env.PROMPTFOO_DISABLE_UNBLOCKING = originalEnv;
+        process.env.PROMPTFOO_ENABLE_UNBLOCKING = originalEnv;
       }
     });
 
-    it('short-circuits when PROMPTFOO_DISABLE_UNBLOCKING=true', async () => {
-      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
+    it('short-circuits by default when PROMPTFOO_ENABLE_UNBLOCKING is not set', async () => {
+      delete process.env.PROMPTFOO_ENABLE_UNBLOCKING;
 
       const result = await tryUnblocking({
         messages: [],
@@ -765,6 +765,29 @@ describe('shared redteam provider utilities', () => {
 
       expect(result.success).toBe(false);
       expect(result.unblockingPrompt).toBeUndefined();
+    });
+
+    it('does not short-circuit when PROMPTFOO_ENABLE_UNBLOCKING=true', async () => {
+      process.env.PROMPTFOO_ENABLE_UNBLOCKING = 'true';
+
+      // Spy on logger to verify we don't see the "disabled by default" message
+      const loggerSpy = jest.spyOn(require('../../../src/logger').default, 'debug');
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'What industry are you in?',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      // Verify we did NOT log the "disabled by default" message
+      expect(loggerSpy).not.toHaveBeenCalledWith(expect.stringContaining('Disabled by default'));
+
+      // The function should still return false (because server feature check will fail in test env)
+      // but for a different reason than the env var check
+      expect(result.success).toBe(false);
+
+      loggerSpy.mockRestore();
     });
   });
 });
