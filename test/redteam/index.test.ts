@@ -350,7 +350,9 @@ describe('synthesize', () => {
         const lines = stripped.split('\n');
 
         // Find header row and parse column indexes
-        const headerRow = lines.find((line) => line.includes('Requested') && line.includes('Generated'));
+        const headerRow = lines.find(
+          (line) => line.includes('Requested') && line.includes('Generated'),
+        );
         expect(headerRow).toBeDefined();
 
         const headerColumns = headerRow!
@@ -382,15 +384,18 @@ describe('synthesize', () => {
           .mocked(logger.info)
           .mock.calls.map(([arg]) => arg)
           .find(
-            (arg): arg is string =>
-              typeof arg === 'string' && arg.includes('Using strategies:'),
+            (arg): arg is string => typeof arg === 'string' && arg.includes('Using strategies:'),
           );
 
         expect(summaryMessage).toBeDefined();
         const summaryStripped = stripAnsi(summaryMessage!);
-        const summaryLine = summaryStripped.split('\n').find((line) => line.includes('jailbreak:composite'));
+        const summaryLine = summaryStripped
+          .split('\n')
+          .find((line) => line.includes('jailbreak:composite'));
         expect(summaryLine).toBeDefined();
-        expect(summaryLine).toContain(`(${getDefaultNFanout('jailbreak:composite')} additional tests)`);
+        expect(summaryLine).toContain(
+          `(${getDefaultNFanout('jailbreak:composite')} additional tests)`,
+        );
 
         // Verify the "Test Generation Summary:" shows correct total
         const totalSummaryMessage = jest
@@ -404,7 +409,9 @@ describe('synthesize', () => {
         expect(totalSummaryMessage).toBeDefined();
         const totalStripped = stripAnsi(totalSummaryMessage!);
         // 1 base + default fan-out
-        expect(totalStripped).toContain(`• Total tests: ${1 + getDefaultNFanout('jailbreak:composite')}`);
+        expect(totalStripped).toContain(
+          `• Total tests: ${1 + getDefaultNFanout('jailbreak:composite')}`,
+        );
       } finally {
         pluginFindSpy.mockRestore();
         strategyFindSpy.mockRestore();
