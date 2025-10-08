@@ -16,7 +16,7 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
-} from '../../types';
+} from '../../types/index';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 

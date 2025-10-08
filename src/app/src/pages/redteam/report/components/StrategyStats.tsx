@@ -65,7 +65,7 @@ const DangerLinearProgress = styled(LinearProgress)(({ theme }) => ({
     backgroundColor:
       theme.palette.mode === 'light' ? theme.palette.error.main : theme.palette.error.light,
   },
-})) as React.FC<React.ComponentProps<typeof LinearProgress>>;
+}));
 
 const StyledCard = styled(Card)(({ theme }) => ({
   transition: 'all 0.3s ease',
@@ -113,11 +113,11 @@ const StyledStrategyDescription = styled(Typography)(({ theme }) => ({
   marginBottom: theme.spacing(2),
 }));
 
-const StrategyStats: React.FC<StrategyStatsProps> = ({
+const StrategyStats = ({
   strategyStats,
   failuresByPlugin = {},
   passesByPlugin = {},
-}) => {
+}: StrategyStatsProps) => {
   const [selectedStrategy, setSelectedStrategy] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<Error | null>(null);
@@ -309,7 +309,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             }}
           >
             <Grid container spacing={3}>
-              <Grid item xs={4}>
+              <Grid size={{ xs: 4 }}>
                 <Typography variant="h6" align="center">
                   {selectedStrategy && strategyStats[selectedStrategy]?.total}
                 </Typography>
@@ -317,7 +317,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                   Total Attempts
                 </Typography>
               </Grid>
-              <Grid item xs={4}>
+              <Grid size={{ xs: 4 }}>
                 <Typography variant="h6" align="center" color="error.main">
                   {selectedStrategy &&
                     strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass}
@@ -326,7 +326,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                   Flagged Attempts
                 </Typography>
               </Grid>
-              <Grid item xs={4}>
+              <Grid size={{ xs: 4 }}>
                 <Typography variant="h6" align="center">
                   {selectedStrategy &&
                     `${(
@@ -391,7 +391,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             <List>
               {getExamplesByStrategy(selectedStrategy)
                 .failures.slice(0, 5)
-                .map((failure, index) => (
+                .map((failure) => (
                   <Paper
                     key={`${failure.prompt}-${failure.result}`}
                     elevation={0}
@@ -501,7 +501,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             <List>
               {getExamplesByStrategy(selectedStrategy)
                 .passes.slice(0, 5)
-                .map((pass, index) => (
+                .map((pass) => (
                   <Paper
                     key={`${pass.prompt}-${pass.result}`}
                     elevation={0}

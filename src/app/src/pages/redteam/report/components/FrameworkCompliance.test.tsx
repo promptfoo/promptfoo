@@ -60,19 +60,13 @@ describe('FrameworkCompliance', () => {
     });
   });
 
-  const renderFrameworkCompliance = (
-    categoryStats = {},
-    strategyStats = {},
-    pluginPassRateThreshold = 0.9,
-  ) => {
+  const renderFrameworkCompliance = (categoryStats = {}, pluginPassRateThreshold = 0.9) => {
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold,
       setPluginPassRateThreshold: vi.fn(),
     });
 
-    return render(
-      <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />,
-    );
+    return render(<FrameworkCompliance evalId="test-eval-id" categoryStats={categoryStats} />);
   };
 
   it('should display the correct number of compliant frameworks and render a FrameworkCard for each framework', () => {
@@ -83,11 +77,7 @@ describe('FrameworkCompliance', () => {
       'plugin-D': { pass: 5, total: 10, passWithFilter: 5 },
     };
 
-    const strategyStats = {
-      'strategy-1': { pass: 1, total: 5 },
-    };
-
-    renderFrameworkCompliance(categoryStats, strategyStats);
+    renderFrameworkCompliance(categoryStats);
 
     expect(screen.getByText(/Framework Compliance \(1\/3\)/)).toBeInTheDocument();
 
@@ -128,11 +118,7 @@ describe('FrameworkCompliance', () => {
       'plugin-C': { pass: 10, total: 10, passWithFilter: 10 },
     };
 
-    const strategyStats = {
-      'strategy-1': { pass: 5, total: 5 },
-    };
-
-    renderFrameworkCompliance(categoryStats, strategyStats);
+    renderFrameworkCompliance(categoryStats);
 
     expect(screen.getByText(/0.0% Attack Success Rate/)).toBeInTheDocument();
     expect(screen.getByText(/\(0\/30 tests failed across 3 plugins\)/)).toBeInTheDocument();
@@ -149,11 +135,7 @@ describe('FrameworkCompliance', () => {
       'plugin-C': { pass: 5, total: 10, passWithFilter: 5 },
     };
 
-    const strategyStats = {
-      'strategy-1': { pass: 1, total: 5 },
-    };
-
-    renderFrameworkCompliance(categoryStats, strategyStats);
+    renderFrameworkCompliance(categoryStats);
 
     expect(mockFrameworkCard).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -172,11 +154,7 @@ describe('FrameworkCompliance', () => {
       'plugin-2': { pass: 8, total: 10, passWithFilter: 8 },
     };
 
-    const strategyStats = {
-      'strategy-1': { pass: 2, total: 5 },
-    };
-
-    renderFrameworkCompliance(categoryStats, strategyStats, pluginPassRateThreshold);
+    renderFrameworkCompliance(categoryStats, pluginPassRateThreshold);
 
     expect(mockCSVExporter).toHaveBeenCalledTimes(1);
     expect(mockCSVExporter).toHaveBeenCalledWith(
@@ -218,16 +196,13 @@ describe('FrameworkCompliance', () => {
       expectedText: /Framework Compliance/,
       expectedFailedText: null,
     },
-  ])(
-    'should handle $name',
-    ({ categoryStats, strategyStats, expectedText, expectedFailedText }) => {
-      renderFrameworkCompliance(categoryStats, strategyStats);
+  ])('should handle $name', ({ categoryStats, expectedText, expectedFailedText }) => {
+    renderFrameworkCompliance(categoryStats);
 
-      expect(screen.getByText(expectedText)).toBeInTheDocument();
+    expect(screen.getByText(expectedText)).toBeInTheDocument();
 
-      if (expectedFailedText) {
-        expect(screen.getByText(expectedFailedText)).toBeInTheDocument();
-      }
-    },
-  );
+    if (expectedFailedText) {
+      expect(screen.getByText(expectedFailedText)).toBeInTheDocument();
+    }
+  });
 });

@@ -1,11 +1,14 @@
 import { randomUUID } from 'crypto';
-import * as path from 'path';
 
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
-import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
+import {
+  MODEL_GRADED_ASSERTION_TYPES,
+  runAssertions,
+  runCompareAssertion,
+} from './assertions/index';
 import { getCache } from './cache';
 import cliState from './cliState';
 import { FILE_METADATA_KEY } from './constants';
@@ -15,11 +18,11 @@ import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluator
 import logger from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
+import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
-import { CIProgressReporter } from './progress/ciProgressReporter';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,
@@ -38,7 +41,7 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
-} from './types';
+} from './types/index';
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -65,7 +68,7 @@ import type {
   ScoringFunction,
   TokenUsage,
   Vars,
-} from './types';
+} from './types/index';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -120,9 +123,9 @@ class ProgressBarManager {
    * Update progress for a specific evaluation
    */
   updateProgress(
-    index: number,
+    _index: number,
     evalStep: RunEvalOptions | undefined,
-    phase: 'serial' | 'concurrent' = 'concurrent',
+    _phase: 'serial' | 'concurrent' = 'concurrent',
   ): void {
     if (this.isWebUI || !evalStep || !this.progressBar) {
       return;
@@ -264,8 +267,6 @@ export async function runEval({
   conversations,
   registers,
   isRedteam,
-  allTests,
-  concurrency,
   abortSignal,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
@@ -615,14 +616,20 @@ export function generateVarCombinations(
 
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+
+      // For glob patterns, we need to resolve the base directory and use relative patterns
+      const basePath = cliState.basePath || '';
       const filePaths =
-        globSync(resolvedPath.replace(/\\/g, '/'), {
+        globSync(filePath, {
+          cwd: basePath || process.cwd(),
           windowsPathsNoEscape: true,
         }) || [];
+
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
-        throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
+        throw new Error(
+          `No files found for variable ${key} at path ${filePath} in directory ${basePath || process.cwd()}`,
+        );
       }
     } else {
       values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
@@ -761,6 +768,17 @@ class Evaluator {
 
     // Split prompts by provider
     // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
+
+    // Create a map of existing prompts for resume support
+    const existingPromptsMap = new Map<string, CompletedPrompt>();
+    if (cliState.resume && this.evalRecord.persisted && this.evalRecord.prompts.length > 0) {
+      logger.debug('Resuming evaluation: preserving metrics from previous run');
+      for (const existingPrompt of this.evalRecord.prompts) {
+        const key = `${existingPrompt.provider}:${existingPrompt.id}`;
+        existingPromptsMap.set(key, existingPrompt);
+      }
+    }
+
     for (const provider of testSuite.providers) {
       for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
@@ -768,12 +786,17 @@ class Evaluator {
         if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
           continue;
         }
+
+        const promptId = generateIdFromPrompt(prompt);
+        const existingPromptKey = `${providerKey}:${promptId}`;
+        const existingPrompt = existingPromptsMap.get(existingPromptKey);
+
         const completedPrompt = {
           ...prompt,
-          id: generateIdFromPrompt(prompt),
+          id: promptId,
           provider: providerKey,
           label: prompt.label,
-          metrics: {
+          metrics: existingPrompt?.metrics || {
             score: 0,
             testPassCount: 0,
             testFailCount: 0,
@@ -1044,6 +1067,40 @@ class Evaluator {
         }
       }
     }
+    // Pre-mark comparison rows before any filtering (used by resume logic)
+    for (const evalOption of runEvalOptions) {
+      if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
+        rowsWithSelectBestAssertion.add(evalOption.testIdx);
+      }
+      if (evalOption.test.assert?.some((a) => a.type === 'max-score')) {
+        rowsWithMaxScoreAssertion.add(evalOption.testIdx);
+      }
+    }
+
+    // Resume support: if CLI is in resume mode, skip already-completed (testIdx,promptIdx) pairs
+    if (cliState.resume && this.evalRecord.persisted) {
+      try {
+        const { default: EvalResult } = await import('./models/evalResult');
+        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);
+        const originalCount = runEvalOptions.length;
+        // Filter out steps that already exist in DB
+        for (let i = runEvalOptions.length - 1; i >= 0; i--) {
+          const step = runEvalOptions[i];
+          if (completedPairs.has(`${step.testIdx}:${step.promptIdx}`)) {
+            runEvalOptions.splice(i, 1);
+          }
+        }
+        const skipped = originalCount - runEvalOptions.length;
+        if (skipped > 0) {
+          logger.info(`Resuming: skipping ${skipped} previously completed cases`);
+        }
+      } catch (err) {
+        logger.warn(
+          `Resume: failed to load completed results. Running full evaluation. ${String(err)}`,
+        );
+      }
+    }
+
     // Determine run parameters
 
     if (concurrency > 1) {
@@ -1416,13 +1473,18 @@ class Evaluator {
         await this.evalRecord.addPrompts(prompts);
       });
     } catch (err) {
-      if (ciProgressReporter) {
-        ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
-      }
       if (options.abortSignal?.aborted) {
+        // User interruption or max duration timeout
         evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
-        logger.warn(`Evaluation aborted: ${String(err)}`);
+        if (evalTimedOut) {
+          logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+        } else {
+          logger.info('Evaluation interrupted, saving progress...');
+        }
       } else {
+        if (ciProgressReporter) {
+          ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
+        }
         throw err;
       }
     }

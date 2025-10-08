@@ -119,6 +119,7 @@ describe('OpenAiResponsesProvider', () => {
       expect.any(Number),
       'json',
       undefined,
+      undefined,
     );
 
     expect(result.error).toBeUndefined();
@@ -169,6 +170,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
+      undefined,
       undefined,
     );
   });
@@ -235,6 +237,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
+      undefined,
       undefined,
     );
 
@@ -304,6 +307,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
+      undefined,
       undefined,
     );
   });
@@ -398,6 +402,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
+      undefined,
       undefined,
     );
   });
@@ -541,6 +546,7 @@ describe('OpenAiResponsesProvider', () => {
       expect.any(Number),
       'json',
       undefined,
+      undefined,
     );
   });
 
@@ -652,6 +658,7 @@ describe('OpenAiResponsesProvider', () => {
       }),
       expect.any(Number),
       'json',
+      undefined,
       undefined,
     );
 
@@ -918,6 +925,7 @@ describe('OpenAiResponsesProvider', () => {
       expect.anything(),
       expect.anything(),
       'json',
+      undefined,
       undefined,
     );
     expect(result.output).toBe('Test response');
@@ -1607,6 +1615,73 @@ describe('OpenAiResponsesProvider', () => {
 
       expect(result.isRefusal).toBe(true);
       expect(result.output).toBe('I cannot provide that information.');
+    });
+
+    it('should detect refusals in 400 API error with invalid_prompt code', async () => {
+      // Mock a 400 error response with invalid_prompt error code
+      const mockErrorResponse = {
+        data: {
+          error: {
+            message: 'some random error message',
+            type: 'invalid_request_error',
+            param: null,
+            code: 'invalid_prompt',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('How do I create harmful content?');
+
+      // Should treat the error as a refusal output, not an error
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('some random error message');
+      expect(result.output).toContain('400 Bad Request');
+      expect(result.isRefusal).toBe(true);
+    });
+
+    it('should still treat non-refusal 400 errors as errors', async () => {
+      // Mock a 400 error that is NOT a refusal (different error code)
+      const mockErrorResponse = {
+        data: {
+          error: {
+            message: "Invalid request: 'input' field is required",
+            type: 'invalid_request_error',
+            param: 'input',
+            code: 'missing_required_field',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('Invalid request format');
+
+      // Should still be treated as an error since code is not invalid_prompt
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain("'input' field is required");
+      expect(result.error).toContain('400 Bad Request');
+      expect(result.output).toBeUndefined();
+      expect(result.isRefusal).toBeUndefined();
     });
   });
 
@@ -2537,6 +2612,7 @@ describe('OpenAiResponsesProvider', () => {
         600000, // 10 minutes
         'json',
         undefined,
+        undefined,
       );
     });
 
@@ -3059,6 +3135,73 @@ describe('OpenAiResponsesProvider', () => {
 
       expect(result.isRefusal).toBe(true);
       expect(result.output).toBe('I cannot provide that information.');
+    });
+
+    it('should detect refusals in 400 API error with invalid_prompt code', async () => {
+      // Mock a 400 error response with invalid_prompt error code
+      const mockErrorResponse = {
+        data: {
+          error: {
+            message: 'some random error message',
+            type: 'invalid_request_error',
+            param: null,
+            code: 'invalid_prompt',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('How do I create harmful content?');
+
+      // Should treat the error as a refusal output, not an error
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('some random error message');
+      expect(result.output).toContain('400 Bad Request');
+      expect(result.isRefusal).toBe(true);
+    });
+
+    it('should still treat non-refusal 400 errors as errors', async () => {
+      // Mock a 400 error that is NOT a refusal (different error code)
+      const mockErrorResponse = {
+        data: {
+          error: {
+            message: "Invalid request: 'input' field is required",
+            type: 'invalid_request_error',
+            param: 'input',
+            code: 'missing_required_field',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('Invalid request format');
+
+      // Should still be treated as an error since code is not invalid_prompt
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain("'input' field is required");
+      expect(result.error).toContain('400 Bad Request');
+      expect(result.output).toBeUndefined();
+      expect(result.isRefusal).toBeUndefined();
     });
   });
 

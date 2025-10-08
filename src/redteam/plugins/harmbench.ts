@@ -2,10 +2,10 @@ import { parse as csvParse } from 'csv-parse/sync';
 import dedent from 'dedent';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import { fetchWithTimeout } from '../../util/fetch';
+import { fetchWithTimeout } from '../../util/fetch/index';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type { Assertion, TestCase } from '../../types';
+import type { Assertion, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:harmbench';
 
@@ -56,7 +56,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
     throw new Error('Not implemented');
   }
 
-  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number = 0): Promise<TestCase[]> {
     const records = await fetchDataset(n);
 
     return records.map(
@@ -75,7 +75,7 @@ export class HarmbenchPlugin extends RedteamPluginBase {
     );
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

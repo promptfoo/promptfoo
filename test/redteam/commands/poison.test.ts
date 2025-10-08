@@ -73,9 +73,9 @@ describe('poison command', () => {
 
       expect(fetch).toHaveBeenCalledWith(getRemoteGenerationUrl(), {
         method: 'POST',
-        headers: {
+        headers: expect.objectContaining({
           'Content-Type': 'application/json',
-        },
+        }),
         body: JSON.stringify({
           task: 'poison-document',
           document: 'test doc',

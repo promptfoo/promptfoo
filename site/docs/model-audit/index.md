@@ -337,11 +337,6 @@ ModelAudit supports both NumPy 1.x and 2.x. If you encounter NumPy compatibility
 pip install modelaudit[numpy1]
 ```
 
-## Next Steps
-
-- **[Advanced Usage](./usage.md)** - Cloud storage, CI/CD integration, and advanced features
-- **[Scanner Reference](./scanners.md)** - Detailed scanner capabilities and security checks
-
 ## See Also
 
 - [Advanced Usage](./usage.md)

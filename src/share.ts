@@ -9,7 +9,7 @@ import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
 import { checkCloudPermissions, makeRequest as makeCloudRequest } from './util/cloud';
-import { fetchWithProxy } from './util/fetch';
+import { fetchWithProxy } from './util/fetch/index';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -102,6 +102,8 @@ async function sendEvalRecord(
   headers: Record<string, string>,
 ): Promise<string> {
   const evalDataWithoutResults = { ...evalRecord, results: [] };
+  const jsonData = JSON.stringify(evalDataWithoutResults);
+
   logger.debug(
     `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts`,
   );
@@ -109,7 +111,8 @@ async function sendEvalRecord(
   const response = await fetchWithProxy(url, {
     method: 'POST',
     headers,
-    body: JSON.stringify(evalDataWithoutResults),
+    body: jsonData,
+    compress: true,
   });
 
   if (!response.ok) {
@@ -117,6 +120,18 @@ async function sendEvalRecord(
     // Ensure full error is visible by formatting it properly
     const errorMessage = `Failed to send initial eval data to ${url}: ${response.statusText}`;
     const bodyMessage = responseBody ? `\nResponse body: ${responseBody}` : '';
+    const debugInfo = {
+      url,
+      statusCode: response.status,
+      statusText: response.statusText,
+      headers: Object.keys(headers),
+      evalId: evalRecord.id,
+      errorMessage,
+      bodyMessage,
+    };
+    logger.error(
+      `Sharing your eval data to ${url} failed. Debug info: ${JSON.stringify(debugInfo, null, 2)}`,
+    );
     throw new Error(`${errorMessage}${bodyMessage}`);
   }
 
@@ -141,12 +156,12 @@ async function sendChunkOfResults(
   const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
 
   logger.debug(`Sending chunk of ${chunk.length} results to ${targetUrl}`);
-  logger.debug(`Chunk size: ${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB`);
 
   const response = await fetchWithProxy(targetUrl, {
     method: 'POST',
     headers,
     body: stringifiedChunk,
+    compress: true,
   });
 
   if (!response.ok) {
@@ -492,7 +507,7 @@ export async function hasModelAuditBeenShared(audit: ModelAudit): Promise<boolea
         );
     }
   } catch (e) {
-    logger.error(`[hasModelAuditBeenShared]: error checking if model audit has been shared: ${e}`);
+    logger.debug(`[hasModelAuditBeenShared]: error checking if model audit has been shared: ${e}`);
     return false;
   }
 }
@@ -579,7 +594,7 @@ export async function createShareableModelAuditUrl(
  * @returns The shareable URL for the model audit.
  */
 export function getShareableModelAuditUrl(
-  audit: ModelAudit,
+  _audit: ModelAudit,
   remoteAuditId: string,
   showAuth: boolean = false,
 ): string {

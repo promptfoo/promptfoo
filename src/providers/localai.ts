@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvFloat, getEnvString } from '../envars';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 interface LocalAiCompletionOptions {
@@ -39,7 +39,7 @@ class LocalAiGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }

@@ -17,11 +17,11 @@ interface FoundationModelConfigurationProps {
   providerType: string;
 }
 
-const FoundationModelConfiguration: React.FC<FoundationModelConfigurationProps> = ({
+const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   providerType,
-}) => {
+}: FoundationModelConfigurationProps) => {
   const [modelId, setModelId] = useState(selectedTarget.id || '');
 
   useEffect(() => {

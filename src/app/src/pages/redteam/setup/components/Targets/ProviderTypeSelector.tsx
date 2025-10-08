@@ -118,6 +118,13 @@ const allProviderOptions = [
     description: 'AWS-hosted models from various providers',
     tag: 'cloud',
   },
+  // AWS Bedrock Agents
+  {
+    value: 'bedrock-agent',
+    label: 'AWS Bedrock Agents',
+    description: 'Amazon Bedrock Agents for orchestrating AI workflows',
+    tag: 'agents',
+  },
   // Azure OpenAI
   {
     value: 'azure',
@@ -236,13 +243,6 @@ const allProviderOptions = [
     label: 'JFrog ML',
     description: "JFrog's LLM Model Library",
     tag: 'cloud',
-  },
-  // Lambda Labs
-  {
-    value: 'lambdalabs',
-    label: 'Lambda Labs',
-    description: 'Lambda Labs models via Inference API',
-    tag: 'specialized',
   },
   // llama.cpp
   {
@@ -644,6 +644,20 @@ export default function ProviderTypeSelector({
         },
         'bedrock',
       );
+    } else if (value === 'bedrock-agent') {
+      setProvider(
+        {
+          id: 'bedrock-agent:YOUR_AGENT_ID',
+          config: {
+            agentId: 'YOUR_AGENT_ID',
+            agentAliasId: 'YOUR_ALIAS_ID',
+            region: 'us-east-1',
+            enableTrace: false,
+          },
+          label: currentLabel,
+        },
+        'bedrock-agent',
+      );
     } else if (value === 'ollama') {
       setProvider(
         {
@@ -707,15 +721,6 @@ export default function ProviderTypeSelector({
         },
         'helicone',
       );
-    } else if (value === 'ibm-bam') {
-      setProvider(
-        {
-          id: 'bam:chat:ibm/granite-13b-chat-v2',
-          config: {},
-          label: currentLabel,
-        },
-        'ibm-bam',
-      );
     } else if (value === 'jfrog') {
       setProvider(
         {
@@ -746,7 +751,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'watsonx') {
       setProvider(
         {
-          id: 'watsonx:ibm/granite-13b-chat-v2',
+          id: 'watsonx:ibm/granite-3-3-8b-instruct',
           config: {},
           label: currentLabel,
         },

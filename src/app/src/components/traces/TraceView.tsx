@@ -1,50 +1,93 @@
 import { useEffect, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import TraceTimeline from './TraceTimeline';
 
+export interface Trace {
+  traceId: string;
+  testCaseId?: string | number;
+  spans?: any[];
+}
+
 interface TraceViewProps {
   evaluationId?: string;
   testCaseId?: string;
+  testIndex?: number;
+  promptIndex?: number;
+  onVisibilityChange?: (shouldShow: boolean) => void;
+  fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
 }
 
-export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) {
-  const [traces, setTraces] = useState<any[]>([]);
+export default function TraceView({
+  evaluationId,
+  testCaseId,
+  testIndex,
+  promptIndex,
+  onVisibilityChange,
+  fetchTraces,
+}: TraceViewProps) {
+  const [traces, setTraces] = useState<Trace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchTraces = async () => {
+    let isActive = true;
+    const controller = new AbortController();
+
+    const loadTraces = async () => {
       if (!evaluationId) {
         setLoading(false);
+        return;
+      }
+
+      if (!fetchTraces) {
+        setLoading(false);
+        setError('Trace fetching is not available');
         return;
       }
 
       try {
         setLoading(true);
         setError(null);
-        const response = await callApi(`/traces/evaluation/${evaluationId}`);
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        const fetchedTraces = await fetchTraces(evaluationId, controller.signal);
+        if (!isActive) {
+          return;
         }
-
-        const data = await response.json();
-        setTraces(data.traces || []);
+        setTraces(fetchedTraces || []);
       } catch (err) {
         console.error('Error fetching traces:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch traces');
+        if (!isActive) {
+          return;
+        }
+        // Don't show error if request was aborted
+        if ((err as Error).name !== 'AbortError') {
+          setError(err instanceof Error ? err.message : 'Failed to fetch traces');
+        }
       } finally {
+        if (!isActive) {
+          return;
+        }
         setLoading(false);
       }
     };
 
-    fetchTraces();
-  }, [evaluationId]);
+    loadTraces();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [evaluationId, fetchTraces]);
+
+  useEffect(() => {
+    if (onVisibilityChange) {
+      const shouldShow = !!evaluationId && (loading || !!error || traces.length > 0);
+      onVisibilityChange(shouldShow);
+    }
+  }, [evaluationId, loading, error, traces, onVisibilityChange]);
 
   if (!evaluationId) {
     return null;
@@ -76,12 +119,46 @@ export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) 
     );
   }
 
-  // Filter traces by test case ID if provided
-  const filteredTraces = testCaseId
-    ? traces.filter((trace) => trace.testCaseId === testCaseId)
-    : traces;
+  // Filter traces with try-direct-match then fallback approach
+  const isComposedId = (id: unknown): id is string =>
+    typeof id === 'string' && /^\d+-\d+$/.test(id);
 
-  if (filteredTraces.length === 0 && testCaseId) {
+  const matchesIndices = (id: unknown, ti?: number, pi?: number) => {
+    if (!isComposedId(id) || ti === undefined || pi === undefined) {
+      return false;
+    }
+    const [a, b] = id.split('-');
+    return Number.parseInt(a, 10) === ti && Number.parseInt(b, 10) === pi;
+  };
+
+  let filteredTraces: any[] = traces;
+
+  if (traces.length > 0) {
+    if (testCaseId) {
+      // Try direct testCaseId match first
+      const directMatches = traces.filter((trace) => trace.testCaseId === testCaseId);
+
+      if (directMatches.length > 0) {
+        filteredTraces = directMatches;
+      } else if (testIndex !== undefined && promptIndex !== undefined) {
+        // Fallback: try index-based matching on composed trace.testCaseId
+        filteredTraces = traces.filter((trace) =>
+          matchesIndices(trace.testCaseId, testIndex, promptIndex),
+        );
+      } else {
+        // No direct match and no indices for fallback
+        filteredTraces = [];
+      }
+    } else if (testIndex !== undefined && promptIndex !== undefined) {
+      // No testCaseId but indices provided - try index-based filtering
+      filteredTraces = traces.filter((trace) =>
+        matchesIndices(trace.testCaseId, testIndex, promptIndex),
+      );
+    }
+    // If no testCaseId and no indices, show all traces for the evaluation
+  }
+
+  if (filteredTraces.length === 0 && (testCaseId || testIndex !== undefined)) {
     return (
       <Box sx={{ p: 2 }}>
         <Typography variant="body2" color="text.secondary">

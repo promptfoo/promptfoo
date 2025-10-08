@@ -50,7 +50,7 @@ vi.mock('./EnterpriseBanner', () => ({
 }));
 
 vi.mock('./Overview', () => ({
-  default: vi.fn(({ vulnerabilitiesDataGridRef }: any) => null),
+  default: vi.fn(() => null),
 }));
 
 vi.mock('./StrategyStats', () => ({
@@ -62,7 +62,7 @@ vi.mock('./RiskCategories', () => ({
 }));
 
 vi.mock('./TestSuites', () => ({
-  default: vi.fn(({ vulnerabilitiesDataGridRef }: any) => null),
+  default: vi.fn(() => null),
 }));
 
 vi.mock('./FrameworkCompliance', () => ({
@@ -108,10 +108,12 @@ describe('Report Component Navigation', () => {
   it('should navigate to eval page when clicking view all logs button', async () => {
     render(<Report />);
 
-    // Wait for the component to load
-    await screen.findByLabelText('view all logs');
+    // Wait for the component to load - use findAllByLabelText since there are multiple buttons
+    await screen.findAllByLabelText('view all logs');
 
-    const viewLogsButton = screen.getByLabelText('view all logs');
+    // Get all buttons with the label and use the first one
+    const viewLogsButtons = screen.getAllByLabelText('view all logs');
+    const viewLogsButton = viewLogsButtons[0];
 
     // Test normal click - should use navigate
     fireEvent.click(viewLogsButton);
@@ -122,9 +124,12 @@ describe('Report Component Navigation', () => {
   it('should open in new tab when ctrl/cmd clicking view all logs button', async () => {
     render(<Report />);
 
-    await screen.findByLabelText('view all logs');
+    // Wait for the component to load - use findAllByLabelText since there are multiple buttons
+    await screen.findAllByLabelText('view all logs');
 
-    const viewLogsButton = screen.getByLabelText('view all logs');
+    // Get all buttons with the label and use the first one
+    const viewLogsButtons = screen.getAllByLabelText('view all logs');
+    const viewLogsButton = viewLogsButtons[0];
 
     // Test Ctrl+click - should open new tab
     fireEvent.click(viewLogsButton, { ctrlKey: true });

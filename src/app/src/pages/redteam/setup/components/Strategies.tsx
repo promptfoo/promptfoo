@@ -135,7 +135,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       setIsMultiTurnEnabled(true);
     }
 
-    const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([presetId, preset]) => {
+    const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([_presetId, preset]) => {
       if (!preset) {
         return false;
       }

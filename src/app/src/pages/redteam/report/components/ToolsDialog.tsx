@@ -1,5 +1,3 @@
-import React from 'react';
-
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -29,7 +27,7 @@ interface ToolsDialogProps {
   tools: Tool[];
 }
 
-const ToolsDialog: React.FC<ToolsDialogProps> = ({ open, onClose, tools }) => {
+const ToolsDialog = ({ open, onClose, tools }: ToolsDialogProps) => {
   if (!tools || tools.length === 0) {
     return null;
   }

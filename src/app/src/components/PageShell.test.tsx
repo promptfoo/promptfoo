@@ -9,20 +9,12 @@ import PageShell from './PageShell';
 vi.mock('@mui/material/useMediaQuery');
 
 vi.mock('@app/components/Navigation', () => {
-  const MockNavigation = ({
-    darkMode,
-    onToggleDarkMode,
-  }: {
-    darkMode: boolean;
-    onToggleDarkMode: () => void;
-  }) => {
+  const MockNavigation = ({ onToggleDarkMode }: { onToggleDarkMode: () => void }) => {
     return (
       <div data-testid="navigation-mock">
         <button data-testid="toggle-button" onClick={onToggleDarkMode}>
           Toggle Dark Mode
         </button>
-        <div>Dark Mode: {darkMode ? 'true' : 'false'}</div>
-        <div>darkMode: {String(darkMode)}</div>
       </div>
     );
   };
@@ -143,22 +135,6 @@ describe('PageShell', () => {
       });
 
       expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-    });
-  });
-
-  it('should pass the correct darkMode value and toggleDarkMode callback to the Navigation component', async () => {
-    localStorage.setItem('darkMode', 'true');
-    renderPageShell();
-
-    await waitFor(() => {
-      expect(screen.getByText('darkMode: true')).toBeInTheDocument();
-    });
-
-    localStorage.setItem('darkMode', 'false');
-    renderPageShell();
-
-    await waitFor(() => {
-      expect(screen.getByText('darkMode: false')).toBeInTheDocument();
     });
   });
 

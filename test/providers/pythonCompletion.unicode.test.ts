@@ -3,7 +3,8 @@ import * as path from 'path';
 import * as os from 'os';
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import type { CallApiContextParams } from '../../src/types';
+import type { CallApiContextParams } from '../../src/types/index';
+import * as pythonUtils from '../../src/python/pythonUtils';
 import { runPython } from '../../src/python/pythonUtils';
 
 // Mock the expensive Python execution for fast, reliable tests
@@ -20,6 +21,11 @@ describe('PythonProvider Unicode handling', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset mocked implementations to avoid test interference
+    mockRunPython.mockReset();
+    // Reset Python state to avoid test interference
+    pythonUtils.state.cachedPythonPath = null;
+    pythonUtils.state.validationPromise = null;
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-unicode-test-'));
   });
 

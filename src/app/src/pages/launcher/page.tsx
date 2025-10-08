@@ -46,7 +46,7 @@ const createAppTheme = (darkMode: boolean) =>
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
-  borderRadius: theme.shape.borderRadius * 2,
+  borderRadius: (theme.shape.borderRadius as number) * 2,
   border: `1px solid ${theme.palette.divider}`,
   backgroundColor: 'transparent',
 }));
@@ -135,10 +135,21 @@ export default function LauncherPage() {
   }, [darkMode]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    // Simple delay to allow server startup, then start health checks
+    let interval: NodeJS.Timeout;
+    const timeout = setTimeout(() => {
       checkHealth();
-    }, 2000);
-    return () => clearInterval(interval);
+      interval = setInterval(() => {
+        checkHealth();
+      }, 2000);
+    }, 3000);
+
+    return () => {
+      clearTimeout(timeout);
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
   }, [checkHealth]);
 
   useEffect(() => {

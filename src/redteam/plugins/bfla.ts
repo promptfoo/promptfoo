@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { RedteamGraderBase } from './base';
 
-import type { AssertionValue, ResultSuggestion } from '../../types';
+import type { AssertionValue, ResultSuggestion } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:bfla';
 
@@ -69,13 +69,7 @@ export class BflaGrader extends RedteamGraderBase {
     }
   `;
 
-  getSuggestions({
-    rawPrompt,
-    renderedValue,
-  }: {
-    rawPrompt: string;
-    renderedValue?: AssertionValue;
-  }): ResultSuggestion[] {
+  getSuggestions({}: { rawPrompt: string; renderedValue?: AssertionValue }): ResultSuggestion[] {
     const noteValue = dedent`
       It's recommended to enforce proper access control at the API or application logic layer
       to prevent unauthorized actions or function-level escalation.

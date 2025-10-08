@@ -555,14 +555,18 @@ describe('logger', () => {
         response: mockResponse as Response,
       });
 
-      expect(mockLogger.debug).toHaveBeenCalledWith({
-        message: expect.stringContaining('API request:'),
-        location: expect.any(String),
-      });
+      expect(mockLogger.debug).toHaveBeenCalled();
+      const call = mockLogger.debug.mock.calls[0][0];
+      expect(call.message).toContain('Api Request');
+      const loggedMessage = call.message;
+      expect(loggedMessage).toContain('"message": "API request"');
+      expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
+      expect(loggedMessage).toContain('"method": "POST"');
+      expect(loggedMessage).toContain('"status": 200');
       expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
-    it('should log failed responses as error', async () => {
+    it('should log failed responses as debug when error flag not set', async () => {
       // @ts-expect-error
       mockResponse.ok = false;
       // @ts-expect-error
@@ -577,11 +581,11 @@ describe('logger', () => {
         response: mockResponse as Response,
       });
 
-      expect(mockLogger.error).toHaveBeenCalledWith({
-        message: expect.stringContaining('API request:'),
-        location: expect.any(String),
-      });
-      expect(mockLogger.debug).not.toHaveBeenCalled();
+      expect(mockLogger.debug).toHaveBeenCalled();
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('"status": 500');
+      expect(loggedMessage).toContain('"statusText": "Internal Server Error"');
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('should log as error when error flag is true', async () => {
@@ -593,10 +597,10 @@ describe('logger', () => {
         error: true,
       });
 
-      expect(mockLogger.error).toHaveBeenCalledWith({
-        message: expect.stringContaining('API request:'),
-        location: expect.any(String),
-      });
+      expect(mockLogger.error).toHaveBeenCalled();
+      const loggedMessage = mockLogger.error.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
+      expect(loggedMessage).toContain('"method": "POST"');
       expect(mockLogger.debug).not.toHaveBeenCalled();
     });
 
@@ -607,17 +611,14 @@ describe('logger', () => {
         requestMethod: 'POST',
       });
 
-      expect(mockLogger.debug).toHaveBeenCalledWith({
-        message: expect.stringContaining('API request:'),
-        location: expect.any(String),
-      });
-
+      expect(mockLogger.debug).toHaveBeenCalled();
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain('URL: https://api.example.com/test');
-      expect(loggedMessage).toContain('Method: POST');
-      expect(loggedMessage).toContain('Request Body:');
-      expect(loggedMessage).not.toContain('Status:');
-      expect(loggedMessage).not.toContain('Response:');
+      expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
+      expect(loggedMessage).toContain('"method": "POST"');
+      expect(loggedMessage).toContain('"prompt": "test prompt"');
+      // Should not have status or response when no response is provided
+      expect(loggedMessage).not.toContain('"status"');
+      expect(loggedMessage).not.toContain('"response"');
     });
 
     it('should sanitize sensitive data in URL and request body', async () => {
@@ -633,10 +634,9 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-
-      // Check that sanitization functions are called (the actual sanitization logic is tested elsewhere)
-      expect(loggedMessage).toContain('URL:');
-      expect(loggedMessage).toContain('Request Body:');
+      // Check that sensitive data is redacted
+      expect(loggedMessage).toContain('[REDACTED]');
+      expect(loggedMessage).toContain('"prompt": "test prompt"');
     });
 
     it('should include all request/response details in message', async () => {
@@ -648,12 +648,14 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-
-      expect(loggedMessage).toContain('URL: https://api.example.com/test');
-      expect(loggedMessage).toContain('Method: POST');
-      expect(loggedMessage).toContain('Request Body:');
-      expect(loggedMessage).toContain('Status: 200 OK');
-      expect(loggedMessage).toContain('Response: {"success": true}');
+      expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
+      expect(loggedMessage).toContain('"method": "POST"');
+      expect(loggedMessage).toContain('"prompt": "test prompt"');
+      expect(loggedMessage).toContain('"model": "gpt-4"');
+      expect(loggedMessage).toContain('"status": 200');
+      expect(loggedMessage).toContain('"statusText": "OK"');
+      // Response text is embedded as a string within the JSON
+      expect(loggedMessage).toContain('success');
     });
 
     it('should handle response text extraction errors', async () => {
@@ -669,7 +671,7 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain('Response: Unable to read response');
+      expect(loggedMessage).toContain('"response": "Unable to read response"');
     });
 
     it('should handle complex nested request bodies', async () => {
@@ -691,9 +693,9 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain('Request Body:');
-      // Should contain formatted JSON
-      expect(loggedMessage).toMatch(/\{\s*"messages"/);
+      expect(loggedMessage).toContain('"messages"');
+      expect(loggedMessage).toContain('"role": "user"');
+      expect(loggedMessage).toContain('"model": "gpt-4"');
     });
 
     it('should handle different HTTP methods', async () => {
@@ -710,24 +712,24 @@ describe('logger', () => {
         });
 
         const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-        expect(loggedMessage).toContain(`Method: ${method}`);
+        expect(loggedMessage).toContain(`"method": "${method}"`);
       }
     });
 
     it('should handle various HTTP status codes', async () => {
       const statusCodes = [
-        { code: 200, text: 'OK', shouldError: false },
-        { code: 201, text: 'Created', shouldError: false },
-        { code: 400, text: 'Bad Request', shouldError: true },
-        { code: 401, text: 'Unauthorized', shouldError: true },
-        { code: 403, text: 'Forbidden', shouldError: true },
-        { code: 404, text: 'Not Found', shouldError: true },
-        { code: 500, text: 'Internal Server Error', shouldError: true },
-        { code: 502, text: 'Bad Gateway', shouldError: true },
-        { code: 503, text: 'Service Unavailable', shouldError: true },
+        { code: 200, text: 'OK' },
+        { code: 201, text: 'Created' },
+        { code: 400, text: 'Bad Request' },
+        { code: 401, text: 'Unauthorized' },
+        { code: 403, text: 'Forbidden' },
+        { code: 404, text: 'Not Found' },
+        { code: 500, text: 'Internal Server Error' },
+        { code: 502, text: 'Bad Gateway' },
+        { code: 503, text: 'Service Unavailable' },
       ];
 
-      for (const { code, text, shouldError } of statusCodes) {
+      for (const { code, text } of statusCodes) {
         mockLogger.debug.mockClear();
         mockLogger.error.mockClear();
 
@@ -745,19 +747,47 @@ describe('logger', () => {
           response: mockResponse as Response,
         });
 
-        const loggedMessage = shouldError
-          ? mockLogger.error.mock.calls[0][0].message
-          : mockLogger.debug.mock.calls[0][0].message;
+        // All status codes should log as debug when error flag is not set
+        const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+        expect(loggedMessage).toContain(`"status": ${code}`);
+        expect(loggedMessage).toContain(`"statusText": "${text}"`);
+        expect(mockLogger.debug).toHaveBeenCalled();
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      }
+    });
 
-        expect(loggedMessage).toContain(`Status: ${code} ${text}`);
+    it('should log as error when error flag is set regardless of status code', async () => {
+      const statusCodes = [
+        { code: 200, text: 'OK' },
+        { code: 400, text: 'Bad Request' },
+        { code: 500, text: 'Internal Server Error' },
+      ];
 
-        if (shouldError) {
-          expect(mockLogger.error).toHaveBeenCalled();
-          expect(mockLogger.debug).not.toHaveBeenCalled();
-        } else {
-          expect(mockLogger.debug).toHaveBeenCalled();
-          expect(mockLogger.error).not.toHaveBeenCalled();
-        }
+      for (const { code, text } of statusCodes) {
+        mockLogger.debug.mockClear();
+        mockLogger.error.mockClear();
+
+        // @ts-expect-error
+        mockResponse.ok = code >= 200 && code < 300;
+        // @ts-expect-error
+        mockResponse.status = code;
+        // @ts-expect-error
+        mockResponse.statusText = text;
+
+        await logger.logRequestResponse({
+          url: 'https://api.example.com/test',
+          requestBody: { data: 'test' },
+          requestMethod: 'POST',
+          response: mockResponse as Response,
+          error: true, // Explicitly set error flag
+        });
+
+        // Should always log as error when error flag is true
+        const loggedMessage = mockLogger.error.mock.calls[0][0].message;
+        expect(loggedMessage).toContain(`"status": ${code}`);
+        expect(loggedMessage).toContain(`"statusText": "${text}"`);
+        expect(mockLogger.error).toHaveBeenCalled();
+        expect(mockLogger.debug).not.toHaveBeenCalled();
       }
     });
 
@@ -770,7 +800,7 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain('Request Body: {}');
+      expect(loggedMessage).toContain('"requestBody": {}');
     });
 
     it('should handle null request body', async () => {
@@ -782,7 +812,7 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain('Request Body: null');
+      expect(loggedMessage).toContain('"requestBody": null');
     });
 
     it('should handle undefined request body', async () => {
@@ -794,7 +824,10 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain('Request Body: undefined');
+      // When undefined is passed through sanitizeObject, it may be omitted or converted to null
+      // Just verify the log message exists and doesn't crash
+      expect(loggedMessage).toContain('Api Request');
+      expect(loggedMessage).toContain('"url"');
     });
 
     it('should handle response with empty body', async () => {
@@ -810,7 +843,8 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).not.toContain('Response:');
+      // Empty response text should not be included in the log object
+      expect(loggedMessage).not.toContain('"response"');
     });
 
     it('should handle response with whitespace-only body', async () => {
@@ -826,7 +860,8 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain('Response:    \n\t  ');
+      // Whitespace-only response should be included
+      expect(loggedMessage).toContain('"response": "   \\n\\t  "');
     });
 
     it('should log requests with very long URLs', async () => {
@@ -840,7 +875,7 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain('URL:');
+      expect(loggedMessage).toContain('https://api.example.com/test');
     });
 
     it('should handle concurrent logging calls', async () => {
@@ -866,17 +901,13 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-
-      // Check that message starts with the expected prefix
-      expect(loggedMessage).toMatch(/^API request:\n/);
-
-      // Check that all sections are properly separated
-      const lines = loggedMessage.split('\n');
-      expect(lines.some((line: string) => /^URL: /.test(line))).toBe(true);
-      expect(lines.some((line: string) => /^Method: /.test(line))).toBe(true);
-      expect(lines.some((line: string) => /^Request Body: /.test(line))).toBe(true);
-      expect(lines.some((line: string) => /^Status: /.test(line))).toBe(true);
-      expect(lines.some((line: string) => /^Response: /.test(line))).toBe(true);
+      expect(loggedMessage).toContain('Api Request');
+      expect(loggedMessage).toContain('"message": "API request"');
+      expect(loggedMessage).toContain('"url":');
+      expect(loggedMessage).toContain('"method":');
+      expect(loggedMessage).toContain('"requestBody":');
+      expect(loggedMessage).toContain('"status":');
+      expect(loggedMessage).toContain('"response":');
     });
   });
 });

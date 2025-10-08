@@ -1,7 +1,7 @@
 import * as rouge from 'js-rouge';
 import { handleRougeScore } from '../../src/assertions/rouge';
 
-import type { Assertion, AssertionParams } from '../../src/types';
+import type { Assertion, AssertionParams } from '../../src/types/index';
 
 jest.mock('js-rouge', () => ({
   n: jest.fn(),

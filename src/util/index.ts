@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { stringify } from 'csv-stringify/sync';
@@ -6,9 +7,8 @@ import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
-import * as os from 'os';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
@@ -25,17 +25,18 @@ import {
   OutputFileExtension,
   ResultFailureReason,
   type TestCase,
-} from '../types';
+} from '../types/index';
 import invariant from '../util/invariant';
-import { convertTestResultsToTableRow } from './exportToFile';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
+import { convertTestResultsToTableRow } from './exportToFile/index';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
-import type { Vars } from '../types';
+import type { Vars } from '../types/index';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -212,7 +213,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
-    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+    const template = fs.readFileSync(path.join(getDirectory(), 'tableOutput.html'), 'utf-8');
     const htmlTable = [
       [
         ...table.head.vars,
@@ -399,6 +400,18 @@ export function providerToIdentifier(
   return undefined;
 }
 
+/**
+ * Filters out runtime-only variables that are added during evaluation
+ * but aren't part of the original test definition
+ */
+function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
+  if (!vars) {
+    return vars;
+  }
+  const { _conversation, ...userVars } = vars;
+  return userVars;
+}
+
 export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
   return deepEqual(vars1, vars2);
 }
@@ -408,7 +421,11 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
     ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
     : true;
 
-  return varsMatch(testCase.vars, result.vars) && providersMatch;
+  // Filter out runtime variables like _conversation when matching
+  // These are added during evaluation but shouldn't affect test matching
+  const resultVars = filterRuntimeVars(result.testCase?.vars ?? result.vars);
+  const testVars = filterRuntimeVars(testCase.vars);
+  return varsMatch(testVars, resultVars) && providersMatch;
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
@@ -481,11 +498,12 @@ export function parsePathOrGlob(
     }
   }
 
-  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
-  const safeFilename = path.relative(
-    basePath,
-    path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
-  );
+  // Check for glob patterns in the original path or the resolved path
+  // On Windows, normalize separators for cross-platform glob pattern detection
+  const normalizedFilePath = filePath.replace(/\\/g, '/');
+  const isPathPattern =
+    stats?.isDirectory() || hasMagic(promptPath) || hasMagic(normalizedFilePath);
+  const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
   return {
     extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
     filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),

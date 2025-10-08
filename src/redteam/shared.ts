@@ -6,10 +6,9 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
-import { createShareableUrl } from '../share';
-import { isRunningUnderNpx } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
+import { promptfooCommand } from '../util/promptfooCommand';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
 
@@ -113,20 +112,16 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   );
 
   logger.info(chalk.green('\nRed team scan complete!'));
-  const command = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
-  if (options.loadedFromCloud) {
-    const url = await createShareableUrl(evalResult, false);
-    logger.info(`View results: ${chalk.greenBright.bold(url)}`);
-  } else {
+  if (!evalResult?.shared) {
     if (options.liveRedteamConfig) {
       logger.info(
         chalk.blue(
-          `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(`${command} redteam report`)} on the command line.`,
+          `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(promptfooCommand('redteam report'))} on the command line.`,
         ),
       );
     } else {
       logger.info(
-        chalk.blue(`To view the results, run ${chalk.bold(`${command} redteam report`)}`),
+        chalk.blue(`To view the results, run ${chalk.bold(promptfooCommand('redteam report'))}`),
       );
     }
   }

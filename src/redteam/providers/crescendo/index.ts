@@ -1,27 +1,9 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../../remoteGeneration';
-import { isBasicRefusal } from '../../util';
-import { getGoalRubric } from '../prompts';
-import {
-  getLastMessageContent,
-  getTargetResponse,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  type TargetResponse,
-  tryUnblocking,
-} from '../shared';
-import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -33,9 +15,28 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
-} from '../../../types';
+} from '../../../types/index';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, isValidJson } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
+import { isBasicRefusal } from '../../util';
+import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  isValidChatMessageArray,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -145,9 +146,7 @@ export class CrescendoProvider implements ApiProvider {
     // Ensure continueAfterSuccess defaults to false
     this.config.continueAfterSuccess = config.continueAfterSuccess ?? false;
 
-    logger.debug(
-      `[Crescendo] CrescendoProvider initialized with config: ${JSON.stringify(config)}`,
-    );
+    logger.debug('[Crescendo] CrescendoProvider initialized with config', { config });
   }
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
@@ -196,7 +195,7 @@ export class CrescendoProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<CrescendoResponse> {
-    logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[Crescendo] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -512,6 +511,7 @@ export class CrescendoProvider implements ApiProvider {
     const messages = this.memory.getConversation(this.targetConversationId);
     return {
       output: lastResponse.output,
+      ...(lastResponse.error ? { error: lastResponse.error } : {}),
       metadata: {
         redteamFinalPrompt: getLastMessageContent(messages, 'user'),
         messages: messages as Record<string, any>[],
@@ -591,7 +591,7 @@ export class CrescendoProvider implements ApiProvider {
       throw new Error(`Error from redteam provider: ${response.error}`);
     }
     if (!response.output) {
-      logger.debug(`[Crescendo] No output from redteam provider: ${JSON.stringify(response)}`);
+      logger.debug('[Crescendo] No output from redteam provider', { response });
       return {
         generatedQuestion: undefined,
       };
@@ -650,7 +650,7 @@ export class CrescendoProvider implements ApiProvider {
     vars: Record<string, string | object>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
-    roundNum: number,
+    _roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<TargetResponse> {
@@ -683,7 +683,29 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const conversationHistory = this.memory.getConversation(this.targetConversationId);
-    const targetPrompt = this.stateful ? renderedPrompt : JSON.stringify(conversationHistory);
+    let targetPrompt: string;
+
+    if (this.stateful) {
+      targetPrompt = renderedPrompt;
+    } else {
+      // Check if renderedPrompt is already a JSON chat structure
+      if (isValidJson(renderedPrompt)) {
+        const parsed = JSON.parse(renderedPrompt);
+        if (isValidChatMessageArray(parsed)) {
+          // It's already a structured chat array, use it directly
+          targetPrompt = renderedPrompt;
+          logger.debug('[Crescendo] Using rendered chat template instead of conversation history');
+        } else {
+          // It's not a chat structure, use conversation history
+          targetPrompt = JSON.stringify(conversationHistory);
+          logger.debug('[Crescendo] Using conversation history (not a chat template)');
+        }
+      } else {
+        // Not valid JSON, use conversation history
+        targetPrompt = JSON.stringify(conversationHistory);
+        logger.debug('[Crescendo] Using conversation history (invalid JSON)');
+      }
+    }
 
     logger.debug(
       `[Crescendo] Sending to target chat (${this.stateful ? 1 : conversationHistory.length} messages):`,
@@ -692,10 +714,11 @@ export class CrescendoProvider implements ApiProvider {
 
     const targetResponse = await getTargetResponse(provider, targetPrompt, context, options);
     logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
-    if (targetResponse.error) {
-      throw new Error(`[Crescendo] Target returned an error: ${targetResponse.error}`);
-    }
-    invariant(targetResponse.output, '[Crescendo] Target did not return an output');
+
+    invariant(
+      Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
+      '[Crescendo] Target did not return an output property',
+    );
     logger.debug(`[Crescendo] Received response from target: ${targetResponse.output}`);
 
     this.memory.addMessage(this.targetConversationId, {
@@ -761,7 +784,7 @@ export class CrescendoProvider implements ApiProvider {
           }>(refusalResponse.output)
         : refusalResponse.output;
 
-    logger.debug(`[Crescendo] Refusal score parsed response: ${JSON.stringify(parsed)}`);
+    logger.debug('[Crescendo] Refusal score parsed response', { parsed });
     invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
     invariant(
       typeof parsed.metadata === 'number',
@@ -818,7 +841,7 @@ export class CrescendoProvider implements ApiProvider {
           }>(evalResponse.output)
         : evalResponse.output;
 
-    logger.debug(`[Crescendo] Eval score parsed response: ${JSON.stringify(parsed)}`);
+    logger.debug('[Crescendo] Eval score parsed response', { parsed });
     invariant(
       typeof parsed.value === 'boolean',
       `Expected eval grader value to be a boolean: ${parsed}`,
@@ -835,7 +858,7 @@ export class CrescendoProvider implements ApiProvider {
     return this.memory.duplicateConversationExcludingLastTurn(conversationId);
   }
 
-  private logChatHistory(conversationId: string, lastMessageOnly = false): void {
+  private logChatHistory(conversationId: string, _lastMessageOnly = false): void {
     const messages = this.memory.getConversation(conversationId);
     logger.debug(`[Crescendo] Memory for conversation ${conversationId}:`);
     for (const message of messages) {

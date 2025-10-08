@@ -1,7 +1,7 @@
 import fs from 'fs';
 import * as path from 'path';
 import { doEval } from '../../src/commands/eval';
-import { setupEnv } from '../../src/util';
+import { setupEnv } from '../../src/util/index';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');
