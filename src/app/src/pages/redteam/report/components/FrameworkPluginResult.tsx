@@ -77,7 +77,7 @@ export default function FrameworkPluginResult({
               <Typography
                 variant="caption"
                 sx={{
-                  fontWeight: type === 'untested' ? 'semibold' : 'bold',
+                  fontWeight: type === 'untested' ? 600 : 'bold',
                   color:
                     type === 'failed'
                       ? 'error.main'

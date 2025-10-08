@@ -1,6 +1,6 @@
 /**
  * The Attack Success Rate (ASR) is the number of tests which failed grading divided by the
- * total number of tests. A test which passed or errored is considered a failure.
+ * total number of tests.
  * @param testCount - The total number of tests.
  * @param failCount - The number of failed tests.
  * @returns The attack success rate.
