@@ -1,5 +1,8 @@
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
+// Default number of composite jailbreak variations to generate per test case
+export const DEFAULT_COMPOSITE_JAILBREAK_N = 5;
+
 // Redteam configuration defaults
 export const REDTEAM_DEFAULTS = {
   MAX_CONCURRENCY: 4,

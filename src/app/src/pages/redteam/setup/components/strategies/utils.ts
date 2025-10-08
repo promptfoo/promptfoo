@@ -1,4 +1,4 @@
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, DEFAULT_COMPOSITE_JAILBREAK_N } from '@promptfoo/redteam/constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -50,8 +50,30 @@ export function getEstimatedProbes(config: Config) {
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
-    // Don't add 1 since we handle multilingual separately
-    return total + (strategyId === 'multilingual' ? 0 : STRATEGY_PROBE_MULTIPLIER[strategyId]);
+
+    // Don't add for multilingual since we handle it separately
+    if (strategyId === 'multilingual') {
+      return total;
+    }
+
+    // Special handling for composite jailbreak to read config.n
+    if (strategyId === 'jailbreak:composite') {
+      let n = DEFAULT_COMPOSITE_JAILBREAK_N; // Default value
+
+      // If strategy is an object with config, try to read n value
+      if (typeof strategy !== 'string' && strategy.config?.n !== undefined) {
+        const configN = Number(strategy.config.n);
+        // Validate that n is a positive number
+        if (!isNaN(configN) && configN > 0) {
+          n = configN;
+        }
+      }
+
+      return total + n;
+    }
+
+    // For all other strategies, use the predefined multiplier
+    return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
   }, 0);
 
   // Find if multilingual strategy is present and get number of languages
