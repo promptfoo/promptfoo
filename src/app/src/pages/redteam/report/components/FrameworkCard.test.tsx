@@ -65,21 +65,11 @@ describe('FrameworkCard', () => {
     isCompliant: true,
     frameworkSeverity: Severity.Low,
     categoryStats: {
-      'plugin-1': { pass: 10, total: 10 },
-      'plugin-2': { pass: 9, total: 10 },
+      'plugin-1': { pass: 10, total: 10, failCount: 0 },
+      'plugin-2': { pass: 9, total: 10, failCount: 1 },
     },
     pluginPassRateThreshold: 0.8,
     nonCompliantPlugins: [],
-    sortedNonCompliantPlugins: vi.fn((plugins) => plugins),
-    sortedCompliantPlugins: vi.fn((plugins) => plugins),
-    getPluginPassRate: vi.fn((plugin) => {
-      const stats = defaultProps.categoryStats[plugin] || { pass: 0, total: 0 };
-      return {
-        pass: stats.pass,
-        total: stats.total,
-        rate: stats.total > 0 ? (stats.pass / stats.total) * 100 : 0,
-      };
-    }),
     idx: 0,
   };
 
@@ -101,8 +91,8 @@ describe('FrameworkCard', () => {
       isCompliant: true,
       nonCompliantPlugins: [],
       categoryStats: {
-        'plugin-1': { pass: 10, total: 10 },
-        'plugin-2': { pass: 9, total: 10 },
+        'plugin-1': { pass: 10, total: 10, failCount: 0 },
+        'plugin-2': { pass: 9, total: 10, failCount: 1 },
       },
     });
 
@@ -132,9 +122,9 @@ describe('FrameworkCard', () => {
       frameworkSeverity: Severity.High,
       nonCompliantPlugins: nonCompliantPlugins,
       categoryStats: {
-        'plugin-1': { pass: 10, total: 10 },
-        'plugin-2': { pass: 5, total: 10 },
-        'plugin-3': { pass: 0, total: 10 },
+        'plugin-1': { pass: 10, total: 10, failCount: 0 },
+        'plugin-2': { pass: 5, total: 10, failCount: 5 },
+        'plugin-3': { pass: 0, total: 10, failCount: 10 },
       },
     });
 
@@ -155,11 +145,11 @@ describe('FrameworkCard', () => {
   });
 
   it('should render categorized plugin lists with correct category names, chips, and plugin status for an OWASP framework with plugins in multiple categories', () => {
-    const categoryStats: Record<string, { pass: number; total: number }> = {
-      'plugin-1': { pass: 10, total: 10 },
-      'plugin-2': { pass: 0, total: 10 },
-      'plugin-3': { pass: 5, total: 10 },
-      'plugin-4': { pass: 10, total: 10 },
+    const categoryStats: Record<string, { pass: number; total: number; failCount: number }> = {
+      'plugin-1': { pass: 10, total: 10, failCount: 0 },
+      'plugin-2': { pass: 0, total: 10, failCount: 10 },
+      'plugin-3': { pass: 5, total: 10, failCount: 5 },
+      'plugin-4': { pass: 10, total: 10, failCount: 0 },
     };
 
     renderFrameworkCard({
@@ -169,15 +159,6 @@ describe('FrameworkCard', () => {
       categoryStats: categoryStats,
       pluginPassRateThreshold: 0.8,
       nonCompliantPlugins: ['plugin-2', 'plugin-3'],
-      sortedNonCompliantPlugins: vi.fn((plugins) => plugins),
-      getPluginPassRate: vi.fn((plugin: string) => {
-        const stats = categoryStats[plugin] || { pass: 0, total: 0 };
-        return {
-          pass: stats.pass,
-          total: stats.total,
-          rate: stats.total > 0 ? (stats.pass / stats.total) * 100 : 0,
-        };
-      }),
     });
 
     expect(screen.getByText('1. API1:2023 Broken Object Level Authorization')).toBeInTheDocument();
@@ -202,11 +183,9 @@ describe('FrameworkCard', () => {
 
     renderFrameworkCard({
       categoryStats: {
-        [pluginName]: { pass, total },
+        [pluginName]: { pass, total, failCount: total - pass },
       },
-      getPluginPassRate: vi.fn(() => ({ pass, total, rate: (pass / total) * 100 })),
       nonCompliantPlugins: [pluginName],
-      sortedNonCompliantPlugins: vi.fn((plugins) => plugins),
     });
 
     screen.getByText(pluginName);

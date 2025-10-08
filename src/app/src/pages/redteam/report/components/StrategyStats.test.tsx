@@ -58,14 +58,14 @@ interface TestWithMetadata {
 }
 
 describe('StrategyStats', () => {
-  let strategyStats: Record<string, { pass: number; total: number }>;
+  let strategyStats: Record<string, { pass: number; total: number; failCount: number }>;
   let failuresByPlugin: Record<string, TestWithMetadata[]>;
   let passesByPlugin: Record<string, TestWithMetadata[]>;
 
   beforeEach(() => {
     strategyStats = {
-      'prompt-injection': { pass: 2, total: 10 },
-      jailbreak: { pass: 5, total: 8 },
+      'prompt-injection': { pass: 2, total: 10, failCount: 8 },
+      jailbreak: { pass: 5, total: 8, failCount: 3 },
     };
 
     failuresByPlugin = {
@@ -301,7 +301,7 @@ describe('StrategyStats', () => {
 
   it('should render without error when strategyStats contains entries with total=0', () => {
     const strategyStatsWithZeroTotal = {
-      'prompt-injection': { pass: 0, total: 0 },
+      'prompt-injection': { pass: 0, total: 0, failCount: 0 },
     };
 
     render(
@@ -394,7 +394,7 @@ describe('StrategyStats', () => {
 
   it('should handle a strategy with statistics but no examples in failuresByPlugin or passesByPlugin', async () => {
     const strategyStatsWithNoExamples = {
-      'no-examples': { pass: 3, total: 7 },
+      'no-examples': { pass: 3, total: 7, failCount: 4 },
     };
 
     render(
@@ -421,9 +421,9 @@ describe('StrategyStats', () => {
     const htmlStrategyName = 'strategy-with-<div>html</div>';
 
     const strategyStatsWithSpecialChars = {
-      [longStrategyName]: { pass: 1, total: 2 },
-      [specialCharsStrategyName]: { pass: 2, total: 3 },
-      [htmlStrategyName]: { pass: 3, total: 4 },
+      [longStrategyName]: { pass: 1, total: 2, failCount: 1 },
+      [specialCharsStrategyName]: { pass: 2, total: 3, failCount: 1 },
+      [htmlStrategyName]: { pass: 3, total: 4, failCount: 1 },
     };
 
     const failuresByPluginWithSpecialChars: Record<string, TestWithMetadata[]> = {
