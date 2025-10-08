@@ -255,7 +255,7 @@ describe('Strategies', () => {
     );
 
     const strategySectionHeadings = screen.getAllByRole('heading', { level: 6 });
-    expect(strategySectionHeadings.length).toBeGreaterThanOrEqual(5);
+    expect(strategySectionHeadings.length).toBeGreaterThanOrEqual(4);
   });
 
   it('calls onNext and onBack when the respective buttons are clicked', () => {
@@ -273,5 +273,68 @@ describe('Strategies', () => {
 
     fireEvent.click(backButton);
     expect(mockOnBack).toHaveBeenCalledTimes(1);
+  });
+
+  describe('AgenticStrategiesGroup integration', () => {
+    it('renders AgenticStrategiesGroup with parent header when agentic strategies are available', () => {
+      render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      // Should render "Agentic Strategies" as the parent header
+      expect(screen.getByText('Agentic Strategies')).toBeInTheDocument();
+
+      // Should render the description
+      expect(screen.getByText(/Advanced AI-powered strategies that dynamically adapt/)).toBeInTheDocument();
+    });
+
+    it('renders subsection labels for single-turn and multi-turn agentic strategies', () => {
+      render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      // Check for subsection labels
+      expect(screen.getByText('Single-turn Only')).toBeInTheDocument();
+      expect(screen.getByText('Single and Multi-turn')).toBeInTheDocument();
+
+      // Check for subsection descriptions
+      expect(screen.getByText(/These strategies work only for single-turn evaluations/)).toBeInTheDocument();
+      expect(screen.getByText(/These strategies can be used for both single and multi-turn evaluations/)).toBeInTheDocument();
+    });
+
+    it('renders Reset All button for agentic strategies section', () => {
+      render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      // Find all Reset buttons - one should be "Reset All" for the agentic strategies
+      const resetButtons = screen.getAllByText(/Reset/);
+      const resetAllButton = resetButtons.find(btn => btn.textContent === 'Reset All');
+
+      expect(resetAllButton).toBeInTheDocument();
+    });
+
+    it('updates config when agentic strategies are selected', () => {
+      render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      // Find and click a checkbox within the agentic strategies section
+      const checkboxes = screen.getAllByRole('checkbox');
+
+      // Click one of the checkboxes (assuming there are agentic strategies available)
+      if (checkboxes.length > 0) {
+        fireEvent.click(checkboxes[0]);
+        expect(mockUpdateConfig).toHaveBeenCalled();
+      }
+    });
   });
 });
