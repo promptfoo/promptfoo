@@ -148,6 +148,14 @@ export interface RunEvalOptions {
 
   conversations?: EvalConversations;
   registers?: EvalRegisters;
+  activeSessions?: Map<
+    string,
+    {
+      sessionId: string;
+      provider: ApiProvider;
+      conversationKey: string;
+    }
+  >;
   isRedteam: boolean;
 
   allTests?: RunEvalOptions[];
