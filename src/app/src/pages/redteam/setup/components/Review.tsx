@@ -524,7 +524,7 @@ export default function Review({
                     onDelete={() => {
                       const strategyId =
                         Object.entries(strategyDisplayNames).find(
-                          ([id, displayName]) => displayName === label,
+                          ([_id, displayName]) => displayName === label,
                         )?.[0] || label;
 
                       const newStrategies = config.strategies.filter((strategy) => {
@@ -586,7 +586,7 @@ export default function Review({
                         size="small"
                         onClick={() => {
                           const newPlugins = config.plugins.filter(
-                            (p, i) =>
+                            (p, _i) =>
                               !(
                                 typeof p === 'object' &&
                                 p.id === 'policy' &&
@@ -692,7 +692,7 @@ export default function Review({
             <Box sx={{ boxShadow: theme.shadows[1], borderRadius: 1, overflow: 'hidden' }}>
               <Accordion
                 expanded={isPurposeExpanded}
-                onChange={(e, expanded) => {
+                onChange={(_e, expanded) => {
                   setIsPurposeExpanded(expanded);
                 }}
                 sx={{
@@ -932,7 +932,7 @@ export default function Review({
 
               <Accordion
                 expanded={isAdvancedConfigExpanded}
-                onChange={(e, expanded) => {
+                onChange={(_e, expanded) => {
                   setIsAdvancedConfigExpanded(expanded);
                 }}
                 sx={{
@@ -968,7 +968,7 @@ export default function Review({
 
               <Accordion
                 expanded={isRunOptionsExpanded}
-                onChange={(e, expanded) => {
+                onChange={(_e, expanded) => {
                   setIsRunOptionsExpanded(expanded);
                 }}
                 sx={{

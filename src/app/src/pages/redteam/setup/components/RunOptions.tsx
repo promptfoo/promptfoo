@@ -41,7 +41,6 @@ interface RunOptionsProps {
   updateConfig: (section: keyof Config, value: any) => void;
   updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
-  useGuardrailAssertion?: boolean;
 }
 
 export interface NumberOfTestCasesInputProps {
@@ -254,7 +253,6 @@ export const RunOptionsContent = ({
   runOptions,
   updateConfig,
   updateRunOption,
-  useGuardrailAssertion,
 }: RunOptionsProps) => {
   // These two settings are mutually exclusive
   const canSetDelay = Boolean(!runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1);

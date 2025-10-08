@@ -22,13 +22,13 @@ interface PageWrapperProps {
   warningMessage?: string;
 }
 
-const Root = styled(Box)(({ theme }) => ({
+const Root = styled(Box)({
   display: 'flex',
   flexDirection: 'column',
   height: '100vh',
   width: '100%',
   overflow: 'hidden',
-}));
+});
 
 const ContentContainer = styled(Box)({
   flex: 1,

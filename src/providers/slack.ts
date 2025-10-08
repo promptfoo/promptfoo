@@ -67,8 +67,8 @@ export class SlackProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _context?: CallApiContextParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const config = this.options.config!;
     const channel = config.channel!;

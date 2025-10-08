@@ -137,7 +137,6 @@ function DebouncedTextField({
 function Filter({
   value,
   index,
-  totalFilters,
   onClose,
 }: {
   value: ResultsFilter;
