@@ -568,6 +568,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             ...configForGeneration,
           },
         }),
+        timeout: 10000, // 10 second timeout
       });
 
       const data = await response.json();
@@ -587,10 +588,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       }
     } catch (error) {
       console.error('Failed to generate test case:', error);
-      toast.showToast(
-        error instanceof Error ? error.message : 'Failed to generate test case',
-        'error',
-      );
+      // Provide specific message for timeout errors
+      const errorMessage =
+        error instanceof Error
+          ? error.message.includes('timed out')
+            ? 'Test generation timed out. Please try again or check your connection.'
+            : error.message
+          : 'Failed to generate test case';
+      toast.showToast(errorMessage, 'error');
       // Close dialog on error
       setTestCaseDialogOpen(false);
       setGeneratingPlugin(null);

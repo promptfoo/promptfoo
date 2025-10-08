@@ -236,6 +236,7 @@ export const CustomPoliciesSection = () => {
             policy: policy.policy,
           },
         }),
+        timeout: 10000, // 10 second timeout
       });
 
       if (!response.ok) {
@@ -250,10 +251,14 @@ export const CustomPoliciesSection = () => {
       });
     } catch (error) {
       console.error('Error generating test case:', error);
-      toast.showToast(
-        `Failed to generate test case: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
-      );
+      // Provide specific message for timeout errors
+      const errorMessage =
+        error instanceof Error
+          ? error.message.includes('timed out')
+            ? 'Test generation timed out. Please try again or check your connection.'
+            : `Failed to generate test case: ${error.message}`
+          : 'Failed to generate test case: Unknown error';
+      toast.showToast(errorMessage, 'error');
       setTestCaseDialogOpen(false);
     } finally {
       setGeneratingTestCase(false);

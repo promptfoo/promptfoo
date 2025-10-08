@@ -1,8 +1,40 @@
 import useApiConfig from '@app/stores/apiConfig';
 
-export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
+export interface CallApiOptions extends RequestInit {
+  timeout?: number; // Timeout in milliseconds
+}
+
+export async function callApi(path: string, options: CallApiOptions = {}): Promise<Response> {
   const { apiBaseUrl } = useApiConfig.getState();
-  return fetch(`${apiBaseUrl}/api${path}`, options);
+  const { timeout, ...fetchOptions } = options;
+
+  const url = `${apiBaseUrl}/api${path}`;
+
+  // If no timeout specified, use standard fetch
+  if (!timeout) {
+    return fetch(url, fetchOptions);
+  }
+
+  // Implement timeout with AbortController
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...fetchOptions,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeout}ms`);
+    }
+    throw error;
+  }
 }
 
 export async function fetchUserEmail(): Promise<string | null> {
