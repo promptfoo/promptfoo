@@ -10,7 +10,28 @@ Adaptive Guardrails are an enterprise-grade input validation system that learns 
 
 ## Overview
 
-Promptfoo's Adaptive Guardrails provide 1:1 mapping for each target. Every guardrail is unique to a specific target (typically a provider or application ID), allowing policies to be applied specifically for that target's discovered vulnerabilities.
+### What is a Target?
+
+In Promptfoo, a **target** is the AI application or endpoint you're testing and protecting. A target can be:
+
+- **An LLM API endpoint** (e.g., your chatbot's HTTP API at `https://api.yourapp.com/chat`)
+- **A specific model configuration** (e.g., `openai:gpt-4` with your custom system prompt)
+- **An AI agent or RAG system** (e.g., your customer support agent with document retrieval)
+- **Any application interface** accessible via HTTP, Python, JavaScript, or local providers
+
+Each target has a unique identifier (label) used to track vulnerabilities and generate guardrails. When you run red team tests, Promptfoo discovers vulnerabilities specific to that target's implementation, prompts, and behavior.
+
+### 1:1 Guardrail Mapping
+
+Promptfoo's Adaptive Guardrails provide **1:1 mapping** for each target. Every guardrail is unique to a specific target, containing only policies derived from that target's discovered vulnerabilities. This means:
+
+- Your chatbot guardrail blocks patterns found in chatbot testing
+- Your code assistant guardrail blocks patterns found in code assistant testing
+- No generic rules applied across all applications
+
+This target-specific approach minimizes false positives and maximizes protection relevance.
+
+### Input Validation
 
 Adaptive guardrails operate as **input guardrails**, validating user prompts before they reach your LLM. This pre-processing approach prevents malicious inputs from ever reaching your model, protecting against prompt injection, jailbreaks, and policy violations discovered through red team testing.
 
@@ -108,11 +129,11 @@ This creates a living defense that adapts to your evolving security needs.
 
 ### 1. Generate Guardrail
 
-Select a target that has vulnerabilities identified from past red team scans:
+After running red team tests against a target, generate a guardrail from the discovered vulnerabilities:
 
 1. Navigate to your red team evaluation results
-2. Select a target application
-3. Click "Generate Guardrail" to initiate guardrail policies based on known issues
+2. Select the target you tested (identified by its label, e.g., "customer-chatbot" or "code-assistant")
+3. Click "Generate Guardrail" to create policies from that target's issues
 
 The system will:
 
