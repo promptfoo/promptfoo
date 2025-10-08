@@ -1,4 +1,3 @@
-import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
 import Box from '@mui/material/Box';
@@ -7,12 +6,9 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useNavigate } from 'react-router-dom';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_NAMES,
@@ -27,10 +23,11 @@ import {
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
-  getPluginDisplayName,
   getSeverityColor,
 } from './FrameworkComplianceUtils';
 import FrameworkPluginResult from './FrameworkPluginResult';
+import { useCallback, useMemo } from 'react';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 
 interface FrameworkCardProps {
   evalId: string;
@@ -40,8 +37,6 @@ interface FrameworkCardProps {
   categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
   nonCompliantPlugins: string[];
-  sortPluginsByASR: (plugins: string[]) => string[];
-  getPluginASR: (plugin: string) => { asr: number; total: number; failCount: number };
   idx: number;
 }
 
@@ -53,14 +48,50 @@ const FrameworkCard = ({
   categoryStats,
   pluginPassRateThreshold,
   nonCompliantPlugins,
-  getPluginASR,
-  sortPluginsByASR: getPluginsSortedByASR,
   idx,
 }: FrameworkCardProps) => {
   const theme = useTheme();
 
-  const sortedPlugins = getPluginsSortedByASR(nonCompliantPlugins);
+  /**
+   * Gets the Attack Success Rate (ASR) for a given plugin.
+   * @param plugin - The plugin to get the ASR for.
+   * @returns The ASR for the given plugin.
+   */
+  const getPluginASR = useCallback(
+    (plugin: string): { asr: number; total: number; failCount: number } => {
+      const stats = categoryStats[plugin];
+      return {
+        asr: stats ? calculateAttackSuccessRate(stats.total, stats.failCount) : 0,
+        total: stats ? stats.total : 0,
+        failCount: stats ? stats.failCount : 0,
+      };
+    },
+    [categoryStats],
+  );
+
+  /**
+   * Given a list of plugins, returns the plugins sorted by ASR (highest first).
+   * @param plugins - The list of plugins to sort.
+   * @returns The sorted list of plugins.
+   */
+  const sortPluginsByASR = useCallback(
+    (plugins: string[]): string[] => {
+      return [...plugins].sort((a, b) => {
+        const asrA = getPluginASR(a).asr;
+        const asrB = getPluginASR(b).asr;
+        return asrB - asrA;
+      });
+    },
+    [getPluginASR],
+  );
+
+  const sortedPlugins = useMemo(
+    () => sortPluginsByASR(nonCompliantPlugins),
+    [nonCompliantPlugins, sortPluginsByASR],
+  );
+
   const breakInside = idx === 0 ? 'undefined' : 'avoid';
+
   return (
     <Card
       className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}
@@ -132,10 +163,8 @@ const FrameworkCard = ({
                   } = categorizePlugins(expandedPlugins, categoryStats, pluginPassRateThreshold);
 
                   // Sort all sets appropriately
-                  const sortedNonCompliantItems = getPluginsSortedByASR(
-                    nonCompliantCategoryPlugins,
-                  );
-                  const sortedCompliantItems = getPluginsSortedByASR(compliantCategoryPlugins);
+                  const sortedNonCompliantItems = sortPluginsByASR(nonCompliantCategoryPlugins);
+                  const sortedCompliantItems = sortPluginsByASR(compliantCategoryPlugins);
                   const sortedUntestedItems = [...untestedPlugins].sort((a, b) => {
                     // Sort untested plugins by severity since they have no pass rates
                     const severityA =
@@ -390,7 +419,7 @@ const FrameworkCard = ({
                       categoryStats[plugin].pass / categoryStats[plugin].total >=
                         pluginPassRateThreshold,
                   );
-                  return getPluginsSortedByASR(compliantPlugins);
+                  return sortPluginsByASR(compliantPlugins);
                 })().map((plugin, index) => (
                   <FrameworkPluginResult
                     key={`${plugin}-${framework}-${index}`}

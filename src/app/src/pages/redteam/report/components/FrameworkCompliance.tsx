@@ -60,23 +60,6 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
     [categoryStats, pluginPassRateThreshold],
   );
 
-  /**
-   * Gets the Attack Success Rate (ASR) for a given plugin.
-   * @param plugin - The plugin to get the ASR for.
-   * @returns The ASR for the given plugin.
-   */
-  const getPluginASR = React.useCallback(
-    (plugin: string): { asr: number; total: number; failCount: number } => {
-      const stats = categoryStats[plugin];
-      return {
-        asr: stats ? calculateAttackSuccessRate(stats.total, stats.failCount) : 0,
-        total: stats ? stats.total : 0,
-        failCount: stats ? stats.failCount : 0,
-      };
-    },
-    [categoryStats],
-  );
-
   const getFrameworkSeverity = React.useCallback(
     (framework: string): Severity => {
       const nonCompliantPlugins = getNonCompliantPlugins(framework);
@@ -161,22 +144,6 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
     };
   }, [categoryStats, pluginPassRateThreshold]);
 
-  /**
-   * Given a list of plugins, returns the plugins sorted by ASR (highest first).
-   * @param plugins - The list of plugins to sort.
-   * @returns The sorted list of plugins.
-   */
-  const sortPluginsByASR = React.useCallback(
-    (plugins: string[]): string[] => {
-      return [...plugins].sort((a, b) => {
-        const asrA = getPluginASR(a).asr;
-        const asrB = getPluginASR(b).asr;
-        return asrB - asrA;
-      });
-    },
-    [getPluginASR],
-  );
-
   return (
     <Box sx={{ pageBreakBefore: 'always', breakBefore: 'always' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -235,8 +202,6 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
                     categoryStats={categoryStats}
                     pluginPassRateThreshold={pluginPassRateThreshold}
                     nonCompliantPlugins={nonCompliantPlugins}
-                    sortPluginsByASR={sortPluginsByASR}
-                    getPluginASR={getPluginASR}
                     idx={idx}
                   />
                 </Grid>
