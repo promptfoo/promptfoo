@@ -24,7 +24,7 @@ describe('ProviderSelector', () => {
   });
 
   it('renders the component correctly', () => {
-    expect(screen.getByPlaceholderText('Select LLM providers')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search and select LLM providers...')).toBeInTheDocument();
   });
 
   it('displays the correct number of providers', () => {
@@ -36,10 +36,12 @@ describe('ProviderSelector', () => {
 
   it('calls onChange when a provider is selected', () => {
     const providerToSelect = mockProviders[0].id;
-    fireEvent.change(screen.getByPlaceholderText('Select LLM providers'), {
+    fireEvent.change(screen.getByPlaceholderText('Search and select LLM providers...'), {
       target: { value: providerToSelect },
     });
-    fireEvent.keyDown(screen.getByPlaceholderText('Select LLM providers'), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByPlaceholderText('Search and select LLM providers...'), {
+      key: 'Enter',
+    });
 
     expect(mockOnChange).toHaveBeenCalledWith([
       { id: 'openai:gpt-4', config: { temperature: 0.5 } },
@@ -51,11 +53,8 @@ describe('ProviderSelector', () => {
   it('opens the config dialog when a provider is clicked', () => {
     const providerChip = screen.getByText(mockProviders[0].id);
     fireEvent.click(providerChip);
-    expect(
-      screen.getByText(
-        'Click a provider to configure its settings. Hover over chips to see model IDs.',
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Provider Configuration')).toBeInTheDocument();
   });
 
   it('closes the config dialog when Cancel is clicked', async () => {

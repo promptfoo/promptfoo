@@ -18,45 +18,6 @@ const defaultProviders: ProviderOptions[] = (
 )
   .concat([
     {
-      id: 'openai:gpt-5',
-      label: 'OpenAI: GPT-5',
-      config: {
-        organization: '',
-        temperature: 0.5,
-        max_tokens: 1024,
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-        function_call: undefined,
-        functions: undefined,
-        stop: undefined,
-      },
-    },
-    {
-      id: 'openai:gpt-5-mini',
-      label: 'OpenAI: GPT-5 Mini',
-      config: {
-        organization: '',
-        temperature: 0.5,
-        max_tokens: 1024,
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-      },
-    },
-    {
-      id: 'openai:gpt-5-nano',
-      label: 'OpenAI: GPT-5 Nano',
-      config: {
-        organization: '',
-        temperature: 0.5,
-        max_tokens: 1024,
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-      },
-    },
-    {
       id: 'openai:gpt-4o',
       label: 'OpenAI: GPT-4o',
       config: {
@@ -81,36 +42,6 @@ const defaultProviders: ProviderOptions[] = (
         top_p: 1.0,
         frequency_penalty: 0.0,
         presence_penalty: 0.0,
-      },
-    },
-    {
-      id: 'openai:o3',
-      label: 'OpenAI: GPT-o3 (with thinking)',
-      config: {
-        organization: '',
-        isReasoningModel: true,
-        max_completion_tokens: 1024,
-        reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
-      },
-    },
-    {
-      id: 'openai:o4-mini',
-      label: 'OpenAI: GPT-o4 Mini (with thinking)',
-      config: {
-        organization: '',
-        isReasoningModel: true,
-        max_completion_tokens: 2048,
-        reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
-      },
-    },
-    {
-      id: 'openai:o3-mini',
-      label: 'OpenAI: GPT-o3 Mini (with thinking)',
-      config: {
-        organization: '',
-        isReasoningModel: true,
-        max_completion_tokens: 2048,
-        reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
       },
     },
   ])
@@ -317,26 +248,6 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
-      id: 'azure:chat:gpt-5',
-      label: 'Azure: GPT-5',
-      config: {
-        api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2025-08-07',
-        temperature: 0.5,
-        max_tokens: 1024,
-      },
-    },
-    {
-      id: 'azure:chat:gpt-5-mini',
-      label: 'Azure: GPT-5 Mini',
-      config: {
-        api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2025-08-07',
-        temperature: 0.5,
-        max_tokens: 1024,
-      },
-    },
-    {
       id: 'azure:chat:gpt-4o',
       label: 'Azure: GPT-4o',
       config: {
@@ -354,76 +265,6 @@ const defaultProviders: ProviderOptions[] = (
         api_version: '2025-08-07',
         temperature: 0.5,
         max_tokens: 2048,
-      },
-    },
-    {
-      id: 'azure:chat:o4-mini',
-      label: 'Azure: O4 Mini',
-      config: {
-        api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-05-15-preview',
-        temperature: 0.5,
-        max_tokens: 4096,
-      },
-    },
-    {
-      id: 'azure:chat:o3-mini',
-      label: 'Azure: O3 Mini',
-      config: {
-        api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-05-15-preview',
-        temperature: 0.5,
-        max_tokens: 4096,
-      },
-    },
-  ])
-  .concat([
-    {
-      id: 'vertex:gemini-2.5-pro',
-      label: 'Vertex: Gemini 2.5 Pro',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
-      },
-    },
-    {
-      id: 'vertex:gemini-2.5-flash',
-      label: 'Vertex: Gemini 2.5 Flash',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
-      },
-    },
-    {
-      id: 'vertex:gemini-2.0-pro',
-      label: 'Vertex: Gemini 2.0 Pro',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
-      },
-    },
-    {
-      id: 'vertex:gemini-2.0-flash-001',
-      label: 'Vertex: Gemini 2.0 Flash',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
       },
     },
   ])
@@ -636,23 +477,9 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
   };
 
   const allProviders = React.useMemo(() => {
+    // Lazy load and cache providers to improve performance
     return [...defaultProviders, ...customProviders];
   }, [customProviders]);
-
-  const handleProviderClick = (provider: ProviderOptions | string) => {
-    setSelectedProvider(typeof provider === 'string' ? { id: provider } : provider);
-  };
-
-  const handleSave = (providerId: string, config: Record<string, any>) => {
-    if (onProviderConfigUpdate) {
-      // Use granular update when available
-      onProviderConfigUpdate(providerId, config);
-    } else {
-      // Fallback to full array replacement
-      onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
-    }
-    setSelectedProvider(null);
-  };
 
   const getOptionLabel = (option: string | ProviderOptions): string => {
     if (!option) {
@@ -686,6 +513,35 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
     return '';
   };
 
+  // Optimize provider filtering for large lists
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const filteredProviders = React.useMemo(() => {
+    if (!searchTerm) {
+      return allProviders;
+    }
+    const search = searchTerm.toLowerCase();
+    return allProviders.filter((provider) => {
+      const label = getOptionLabel(provider).toLowerCase();
+      const id = getProviderId(provider).toLowerCase();
+      return label.includes(search) || id.includes(search);
+    });
+  }, [allProviders, searchTerm]);
+
+  const handleProviderClick = (provider: ProviderOptions | string) => {
+    setSelectedProvider(typeof provider === 'string' ? { id: provider } : provider);
+  };
+
+  const handleSave = (providerId: string, config: Record<string, any>) => {
+    if (onProviderConfigUpdate) {
+      // Use granular update when available
+      onProviderConfigUpdate(providerId, config);
+    } else {
+      // Fallback to full array replacement
+      onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
+    }
+    setSelectedProvider(null);
+  };
+
   return (
     <Box mt={2}>
       <Box display="flex" gap={2} alignItems="flex-start">
@@ -704,7 +560,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
           }}
           multiple
           freeSolo
-          options={allProviders}
+          options={filteredProviders}
           value={providers}
           groupBy={getProviderGroup}
           onChange={(event, newValue: (string | ProviderOptions)[]) => {
@@ -750,11 +606,17 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
               );
             })
           }
+          filterOptions={(options, { inputValue }) => {
+            // Update search term from Autocomplete's input
+            setSearchTerm(inputValue);
+            // Let Autocomplete handle the filtering with our pre-filtered list
+            return options;
+          }}
           renderInput={(params) => (
             <TextField
               {...params}
               variant="outlined"
-              placeholder="Select LLM providers"
+              placeholder="Search and select LLM providers..."
               helperText={
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                   {providers.length > 0

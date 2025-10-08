@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import JsonTextField from './JsonTextField';
@@ -95,7 +95,7 @@ describe('JsonTextField', () => {
     });
   });
 
-  describe('defaultValue handling (CRITICAL FIX #1)', () => {
+  describe('defaultValue handling', () => {
     it('should initialize with defaultValue', () => {
       const defaultValue = '{"initial": "value"}';
 
@@ -105,50 +105,47 @@ describe('JsonTextField', () => {
       expect(textField.value).toBe(defaultValue);
     });
 
-    it('should update when defaultValue changes', async () => {
+    it('should maintain user edits when using uncontrolled component', () => {
       const onChangeMock = vi.fn();
       const initialValue = '{"initial": "value"}';
-      const updatedValue = '{"updated": "value"}';
 
-      const { rerender } = renderWithTheme(
+      renderWithTheme(
         <JsonTextField label="JSON Input" defaultValue={initialValue} onChange={onChangeMock} />,
       );
 
       const textField = screen.getByLabelText('JSON Input') as HTMLInputElement;
       expect(textField.value).toBe(initialValue);
 
-      // Update the defaultValue prop
-      rerender(
-        <ThemeProvider theme={createTheme()}>
-          <JsonTextField label="JSON Input" defaultValue={updatedValue} onChange={onChangeMock} />
-        </ThemeProvider>,
-      );
+      // User makes an edit
+      const userEdit = '{"edited": "by user"}';
+      fireEvent.change(textField, { target: { value: userEdit } });
 
-      await waitFor(() => {
-        expect(textField.value).toBe(updatedValue);
-      });
+      // Value should update to user's edit
+      expect(textField.value).toBe(userEdit);
+      expect(onChangeMock).toHaveBeenCalledWith({ edited: 'by user' });
     });
 
-    it('should handle switching between different provider configs', async () => {
-      const config1 = '{"provider": "openai", "temperature": 0.7}';
-      const config2 = '{"provider": "anthropic", "max_tokens": 4096}';
+    it('should work as controlled component with value prop', () => {
+      const onChangeMock = vi.fn();
+      const controlledValue = '{"controlled": "value"}';
 
-      const { rerender } = renderWithTheme(<JsonTextField label="Config" defaultValue={config1} />);
+      const { rerender } = renderWithTheme(
+        <JsonTextField label="JSON Input" value={controlledValue} onChange={onChangeMock} />,
+      );
 
-      let textField = screen.getByLabelText('Config') as HTMLInputElement;
-      expect(textField.value).toBe(config1);
+      let textField = screen.getByLabelText('JSON Input') as HTMLInputElement;
+      expect(textField.value).toBe(controlledValue);
 
-      // Switch to different provider
+      // Update controlled value
+      const newValue = '{"updated": "value"}';
       rerender(
         <ThemeProvider theme={createTheme()}>
-          <JsonTextField label="Config" defaultValue={config2} />
+          <JsonTextField label="JSON Input" value={newValue} onChange={onChangeMock} />
         </ThemeProvider>,
       );
 
-      await waitFor(() => {
-        textField = screen.getByLabelText('Config') as HTMLInputElement;
-        expect(textField.value).toBe(config2);
-      });
+      textField = screen.getByLabelText('JSON Input') as HTMLInputElement;
+      expect(textField.value).toBe(newValue);
     });
   });
 

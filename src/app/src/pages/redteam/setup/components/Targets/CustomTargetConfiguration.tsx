@@ -57,6 +57,9 @@ const CustomTargetConfiguration = ({
 
   return (
     <Box mt={2}>
+      <Typography variant="h6" gutterBottom>
+        Custom Target Configuration
+      </Typography>
       <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
         <TextField
           fullWidth
