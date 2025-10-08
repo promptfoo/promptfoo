@@ -62,10 +62,13 @@ const ProviderConfigDialog = ({
   const providerType = providerId.split(':')[0];
   const docUrl = PROVIDER_DOCS[providerType];
 
+  const [configKey, setConfigKey] = useState(0);
+
   useEffect(() => {
     if (open) {
       setLocalConfig({ ...config });
       setJsonError(null);
+      setConfigKey((prev) => prev + 1);
     }
   }, [open, providerId, config]);
 
@@ -153,7 +156,7 @@ const ProviderConfigDialog = ({
         )}
 
         <JsonTextField
-          key={`${providerId}-${open}`}
+          key={configKey}
           label="Configuration (JSON)"
           defaultValue={JSON.stringify(localConfig, null, 2)}
           onChange={(parsed, error) => {
