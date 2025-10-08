@@ -10,30 +10,6 @@ vi.mock('../../../store/providersStore', () => ({
   })),
 }));
 
-vi.mock('../../../schemas/providerSchemas', () => ({
-  getProviderSchema: vi.fn((providerId: string) => {
-    if (providerId.startsWith('openai:')) {
-      return {
-        fields: [
-          {
-            name: 'temperature',
-            type: 'number',
-            label: 'Temperature',
-            description: 'Controls randomness (0-2)',
-            defaultValue: 0.7,
-            validation: {
-              min: 0,
-              max: 2,
-            },
-          },
-        ],
-      };
-    }
-    return null;
-  }),
-  validateProviderConfig: vi.fn(() => ({ valid: true, errors: [] })),
-}));
-
 const mockProviders = [
   { id: 'openai:gpt-4', config: { temperature: 0.5 } },
   { id: 'anthropic:claude-3', config: { temperature: 0.75 } },
@@ -147,18 +123,27 @@ describe('ProviderSelector', () => {
     const providerChip = screen.getByText(mockProviders[0].id);
     fireEvent.click(providerChip);
 
-    // Find and modify a config field (assuming temperature exists)
-    const temperatureInput = screen.getByLabelText(/temperature/i);
-    fireEvent.change(temperatureInput, { target: { value: '0.8' } });
+    // Wait for dialog to open
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    // Find and modify the JSON config
+    const jsonInput = screen.getByLabelText(/Configuration \(JSON\)/i);
+    fireEvent.change(jsonInput, {
+      target: { value: JSON.stringify({ temperature: 0.8 }) },
+    });
 
     // Save the config
     const saveButton = screen.getByRole('button', { name: /save/i });
     fireEvent.click(saveButton);
 
     // Verify the onChange was called with updated config
-    expect(mockOnChange).toHaveBeenCalledWith([
-      { ...mockProviders[0], config: { temperature: 0.8 } },
-      mockProviders[1],
-    ]);
+    await waitFor(() => {
+      expect(mockOnChange).toHaveBeenCalledWith([
+        { ...mockProviders[0], config: { temperature: 0.8 } },
+        mockProviders[1],
+      ]);
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import JsonTextField from '@app/components/JsonTextField';
 import Alert from '@mui/material/Alert';
@@ -69,13 +69,13 @@ const ProviderConfigDialog = ({
     }
   }, [open, providerId, config]);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (jsonError) {
       return;
     }
     onSave(providerId, localConfig);
     onClose();
-  };
+  }, [jsonError, providerId, localConfig, onSave, onClose]);
 
   const handleUseTemplate = (templateKey: string) => {
     const template = CONFIG_TEMPLATES[templateKey];
@@ -90,9 +90,7 @@ const ProviderConfigDialog = ({
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        if (!jsonError) {
-          handleSave();
-        }
+        handleSave();
       }
       if (e.key === 'Escape') {
         onClose();
@@ -101,7 +99,7 @@ const ProviderConfigDialog = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, jsonError, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, handleSave, onClose]);
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
