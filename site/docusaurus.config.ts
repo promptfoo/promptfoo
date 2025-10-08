@@ -26,7 +26,6 @@ const config: Config = {
   projectName: 'promptfoo', // Usually your repo name.
 
   onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'throw',
   onBrokenAnchors: 'throw',
   // Even if you don't use internalization, you can use this field to set useful
   // metadata like html lang. For example, if your site is Chinese, you may want
@@ -216,10 +215,8 @@ const config: Config = {
           label: 'Log in',
         },
         {
-          href: 'https://github.com/promptfoo/promptfoo',
+          type: 'custom-githubStars',
           position: 'right',
-          className: 'header-github-link',
-          'aria-label': 'GitHub repository',
         },
         {
           href: 'https://discord.gg/promptfoo',
@@ -527,6 +524,9 @@ const config: Config = {
   // Mermaid diagram support
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: 'throw',
+    },
   },
   themes: ['@docusaurus/theme-mermaid'],
 };

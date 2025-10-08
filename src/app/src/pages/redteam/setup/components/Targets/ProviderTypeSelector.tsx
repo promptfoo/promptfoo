@@ -721,15 +721,6 @@ export default function ProviderTypeSelector({
         },
         'helicone',
       );
-    } else if (value === 'ibm-bam') {
-      setProvider(
-        {
-          id: 'bam:chat:ibm/granite-13b-chat-v2',
-          config: {},
-          label: currentLabel,
-        },
-        'ibm-bam',
-      );
     } else if (value === 'jfrog') {
       setProvider(
         {

@@ -28,7 +28,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       modelName: this.deploymentName,
       providerType: 'azure',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any, config?: any) =>
+      costCalculator: (modelName: string, usage: any, _config?: any) =>
         calculateAzureCost(modelName, usage) ?? 0,
     });
 
@@ -57,7 +57,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
   getAzureResponsesBody(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Record<string, any> {
     const config = {
       ...this.config,

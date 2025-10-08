@@ -471,13 +471,7 @@ function EvalsDropdown({
   );
 }
 
-export default function Navigation({
-  darkMode,
-  onToggleDarkMode,
-}: {
-  darkMode: boolean;
-  onToggleDarkMode: () => void;
-}) {
+export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () => void }) {
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);

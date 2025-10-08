@@ -396,11 +396,7 @@ export abstract class RedteamGraderBase {
     }
   }
 
-  getSuggestions({
-    test,
-    rawPrompt,
-    renderedValue,
-  }: {
+  getSuggestions({}: {
     test: AtomicTestCase;
     rawPrompt: string;
     renderedValue?: AssertionValue;
