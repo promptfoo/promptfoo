@@ -8,7 +8,7 @@ import telemetry from '../../src/telemetry';
 import { getDefaultTeam } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { openAuthBrowser } from '../../src/util/server';
-import { createMockResponse } from '../util/utils';
+import { createMockResponse, stripAnsi } from '../util/utils';
 
 const mockCloudUser = {
   id: '1',
@@ -121,13 +121,17 @@ describe('auth command', () => {
       );
       // Check that both info calls were made
       const infoCalls = jest.mocked(logger.info).mock.calls;
+      const infoMessages = infoCalls.map((call) => stripAnsi(String(call[0])));
       expect(infoCalls.length).toBeGreaterThanOrEqual(2);
+
       expect(
-        infoCalls.some((call) => call[0].includes('Manual login URL: https://www.promptfoo.app/')),
+        infoMessages.some((message) =>
+          message.includes('Manual login URL: https://www.promptfoo.app/'),
+        ),
       ).toBe(true);
       expect(
-        infoCalls.some((call) =>
-          call[0].includes('After login, get your API token at: https://www.promptfoo.app/welcome'),
+        infoMessages.some((message) =>
+          message.includes('After login, get your API token at: https://www.promptfoo.app/welcome'),
         ),
       ).toBe(true);
       expect(process.exitCode).toBe(1);
