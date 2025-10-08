@@ -86,9 +86,7 @@ describe('TargetConfiguration', () => {
     it("should call onNext when 'Next' is clicked, provider is valid, and there are no validation errors", () => {
       mockValidate.mockReturnValue(true);
 
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       const nextButton = screen.getByRole('button', { name: /Next/i });
 
@@ -114,18 +112,14 @@ describe('TargetConfiguration', () => {
         providerType: 'http',
       });
 
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       const nextButton = screen.getByRole('button', { name: /Next/i });
       expect(nextButton).toBeDisabled();
     });
 
     it("should call onBack when 'Back' is clicked", () => {
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       const backButton = screen.getByRole('button', { name: /Back/i });
       fireEvent.click(backButton);
@@ -147,9 +141,7 @@ describe('TargetConfiguration', () => {
         providerType: 'http',
       });
 
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       expect(screen.getByTestId('http-config')).toBeInTheDocument();
       expect(screen.getByText('HTTP Configuration')).toBeInTheDocument();
@@ -170,9 +162,7 @@ describe('TargetConfiguration', () => {
         providerType: 'websocket',
       });
 
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       expect(screen.getByTestId('websocket-config')).toBeInTheDocument();
       expect(screen.getByText('WebSocket Configuration')).toBeInTheDocument();
@@ -189,9 +179,7 @@ describe('TargetConfiguration', () => {
         providerType: 'openai',
       });
 
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       expect(screen.getByTestId('openai-config')).toBeInTheDocument();
       expect(screen.getByText('OpenAI Configuration')).toBeInTheDocument();
@@ -208,9 +196,7 @@ describe('TargetConfiguration', () => {
         providerType: 'custom',
       });
 
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       expect(screen.getByTestId('custom-config')).toBeInTheDocument();
       expect(screen.getByText('Custom Configuration')).toBeInTheDocument();
@@ -229,9 +215,7 @@ describe('TargetConfiguration', () => {
         providerType: 'http',
       });
 
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       // Trigger error from the provider config editor
       const errorButton = screen.getByText('Trigger Error');
@@ -244,9 +228,7 @@ describe('TargetConfiguration', () => {
     it('should disable Next button when there are validation errors', () => {
       mockValidate.mockReturnValue(false);
 
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       // Trigger error from the provider config editor
       const errorButton = screen.getByText('Trigger Error');
@@ -269,9 +251,7 @@ describe('TargetConfiguration', () => {
         providerType: 'http',
       });
 
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       const docLink = screen.getByRole('link', { name: /View the documentation/i });
       expect(docLink).toHaveAttribute('href', 'https://www.promptfoo.dev/docs/providers/http');
@@ -288,9 +268,7 @@ describe('TargetConfiguration', () => {
         providerType: 'openai',
       });
 
-      renderWithTheme(
-        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-      );
+      renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       const docLink = screen.getByRole('link', { name: /View the documentation/i });
       expect(docLink).toHaveAttribute('href', 'https://www.promptfoo.dev/docs/providers/openai');
@@ -309,7 +287,7 @@ describe('TargetConfiguration', () => {
     });
 
     const { container } = renderWithTheme(
-      <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
+      <TargetConfiguration onNext={onNextMock} onBack={onBackMock} />,
     );
 
     const alert = queryByRole(container, 'alert');
@@ -327,9 +305,7 @@ describe('TargetConfiguration', () => {
       providerType: 'go',
     });
 
-    renderWithTheme(
-      <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
-    );
+    renderWithTheme(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
     expect(screen.getByText(/Configure Target:/i)).toBeInTheDocument();
   });

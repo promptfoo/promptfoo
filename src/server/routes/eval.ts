@@ -245,7 +245,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
         ],
         vars: table.head.vars, // Assuming vars are the same
       },
-      body: table.body.map((row, index) => {
+      body: table.body.map((row, _index) => {
         // Find matching row in comparison table by test index
         const testIdx = row.testIdx;
         const matchingRows = comparisonTables

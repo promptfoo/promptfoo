@@ -264,6 +264,8 @@ Always follow this workflow:
 
    NEVER blindly `git add` everything - there might be other unrelated files lying around.
 
+   **NEVER use `git commit --amend` or `git push --force` unless explicitly asked by the user.**
+
 3. **Push and create PR**:
 
    ```bash

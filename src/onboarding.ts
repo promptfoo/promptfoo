@@ -265,7 +265,7 @@ export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[
   return Object.entries(map)
     .filter(([prefix, key]) => ids.some((id) => id.startsWith(prefix)) && !getEnvString(key))
     .map(
-      ([prefix, key]) => dedent`
+      ([_prefix, key]) => dedent`
     ${chalk.bold(`Warning: ${key} environment variable is not set.`)}
     Please set this environment variable like: export ${key}=<my-api-key>
   `,

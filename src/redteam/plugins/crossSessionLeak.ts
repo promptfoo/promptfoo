@@ -65,7 +65,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
     `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,
@@ -74,7 +74,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number): Promise<TestCase[]> {
     const nunjucks = getNunjucksEngine();
     const renderedTemplate = nunjucks.renderString(await this.getTemplate(), {
       purpose: this.purpose,
@@ -136,7 +136,7 @@ export class CrossSessionLeakGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;
   rubric = '';
   async getResult(
-    prompt: string,
+    _prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
   ): Promise<{ grade: GradingResult; rubric: string }> {

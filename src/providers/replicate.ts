@@ -339,7 +339,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const cache = getCache();
     const cacheKey = `replicate:image:${safeJsonStringify({ context, prompt })}`;

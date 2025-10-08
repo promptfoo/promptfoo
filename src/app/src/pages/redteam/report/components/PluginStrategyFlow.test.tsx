@@ -25,7 +25,7 @@ vi.mock('recharts', () => ({
           })}
         </div>
       ))}
-      {props.data.links.map((link: any, index: number) => (
+      {props.data.links.map((_link: any, index: number) => (
         <div key={index} data-testid="sankey-link"></div>
       ))}
       {props.children}
@@ -108,14 +108,8 @@ describe('PluginStrategyFlow', () => {
         },
       ];
 
-      const strategyStats = {};
-
       render(
-        <PluginStrategyFlow
-          failuresByPlugin={failuresByPlugin}
-          passesByPlugin={passesByPlugin}
-          strategyStats={strategyStats}
-        />,
+        <PluginStrategyFlow failuresByPlugin={failuresByPlugin} passesByPlugin={passesByPlugin} />,
       );
 
       expect(screen.queryByText(/No data available/)).not.toBeInTheDocument();
@@ -154,14 +148,8 @@ describe('PluginStrategyFlow', () => {
         },
       ];
 
-      const strategyStats = {};
-
       render(
-        <PluginStrategyFlow
-          failuresByPlugin={failuresByPlugin}
-          passesByPlugin={passesByPlugin}
-          strategyStats={strategyStats}
-        />,
+        <PluginStrategyFlow failuresByPlugin={failuresByPlugin} passesByPlugin={passesByPlugin} />,
       );
 
       expect(screen.getByText('testPlugin (3)')).toBeInTheDocument();
@@ -181,14 +169,9 @@ describe('PluginStrategyFlow', () => {
       ];
 
       const passesByPlugin: TestRecord[] = [];
-      const strategyStats = {};
 
       render(
-        <PluginStrategyFlow
-          failuresByPlugin={failuresByPlugin}
-          passesByPlugin={passesByPlugin}
-          strategyStats={strategyStats}
-        />,
+        <PluginStrategyFlow failuresByPlugin={failuresByPlugin} passesByPlugin={passesByPlugin} />,
       );
 
       const tooltipElement = screen.getByTestId('tooltip');
@@ -218,14 +201,8 @@ describe('PluginStrategyFlow', () => {
         },
       ];
 
-      const strategyStats = {};
-
       render(
-        <PluginStrategyFlow
-          failuresByPlugin={failuresByPlugin}
-          passesByPlugin={passesByPlugin}
-          strategyStats={strategyStats}
-        />,
+        <PluginStrategyFlow failuresByPlugin={failuresByPlugin} passesByPlugin={passesByPlugin} />,
       );
 
       expect(screen.getByText(`${longPluginId} (2)`)).toBeInTheDocument();
@@ -236,14 +213,9 @@ describe('PluginStrategyFlow', () => {
   it('should display "No data available to display the strategy flow." when both failuresByPlugin and passesByPlugin are empty arrays', () => {
     const failuresByPlugin: TestRecord[] = [];
     const passesByPlugin: TestRecord[] = [];
-    const strategyStats = {};
 
     render(
-      <PluginStrategyFlow
-        failuresByPlugin={failuresByPlugin}
-        passesByPlugin={passesByPlugin}
-        strategyStats={strategyStats}
-      />,
+      <PluginStrategyFlow failuresByPlugin={failuresByPlugin} passesByPlugin={passesByPlugin} />,
     );
 
     expect(screen.getByText('No data available to display the strategy flow.')).toBeInTheDocument();
@@ -280,14 +252,8 @@ describe('PluginStrategyFlow', () => {
       },
     ];
 
-    const strategyStats = {};
-
     render(
-      <PluginStrategyFlow
-        failuresByPlugin={failuresByPlugin}
-        passesByPlugin={passesByPlugin}
-        strategyStats={strategyStats}
-      />,
+      <PluginStrategyFlow failuresByPlugin={failuresByPlugin} passesByPlugin={passesByPlugin} />,
     );
 
     expect(screen.getByText('No data available to display the strategy flow.')).toBeInTheDocument();
@@ -313,16 +279,8 @@ describe('PluginStrategyFlow', () => {
       },
     ];
 
-    const strategyStats = {
-      'strategy-3': { pass: 5, total: 10 },
-    };
-
     render(
-      <PluginStrategyFlow
-        failuresByPlugin={failuresByPlugin}
-        passesByPlugin={passesByPlugin}
-        strategyStats={strategyStats}
-      />,
+      <PluginStrategyFlow failuresByPlugin={failuresByPlugin} passesByPlugin={passesByPlugin} />,
     );
 
     expect(screen.queryByText(/No data available/)).not.toBeInTheDocument();
@@ -352,14 +310,9 @@ describe('PluginStrategyFlow', () => {
     ];
 
     const passesByPlugin: TestRecord[] = [];
-    const strategyStats = {};
 
     render(
-      <PluginStrategyFlow
-        failuresByPlugin={failuresByPlugin}
-        passesByPlugin={passesByPlugin}
-        strategyStats={strategyStats}
-      />,
+      <PluginStrategyFlow failuresByPlugin={failuresByPlugin} passesByPlugin={passesByPlugin} />,
     );
 
     expect(screen.queryByText(/No data available/)).toBeInTheDocument();
@@ -377,7 +330,6 @@ describe('PluginStrategyFlow', () => {
       ];
 
       const passesByPlugin: TestRecord[] = [];
-      const strategyStats = {};
 
       Object.defineProperty(Element.prototype, 'getComputedTextLength', {
         value: () => undefined,
@@ -385,11 +337,7 @@ describe('PluginStrategyFlow', () => {
       });
 
       render(
-        <PluginStrategyFlow
-          failuresByPlugin={failuresByPlugin}
-          passesByPlugin={passesByPlugin}
-          strategyStats={strategyStats}
-        />,
+        <PluginStrategyFlow failuresByPlugin={failuresByPlugin} passesByPlugin={passesByPlugin} />,
       );
 
       const labelElement = screen.getByText('plugin-A (1)');

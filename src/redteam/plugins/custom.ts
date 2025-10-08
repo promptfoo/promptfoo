@@ -61,7 +61,7 @@ export class CustomPlugin extends RedteamPluginBase {
     return this.definition.metric ?? `custom`;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     const nunjucks = getNunjucksEngine();
     const renderedGrader = nunjucks.renderString(this.definition.grader, { purpose: this.purpose });
 

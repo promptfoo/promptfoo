@@ -178,6 +178,7 @@ export default class Eval {
   vars: string[];
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+  _shared: boolean = false;
 
   static async latest() {
     const db = getDb();
@@ -902,6 +903,14 @@ export default class Eval {
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+  }
+
+  get shared() {
+    return this._shared;
+  }
+
+  set shared(shared: boolean) {
+    this._shared = shared;
   }
 }
 

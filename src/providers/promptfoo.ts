@@ -54,9 +54,9 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse & { output?: string[] }> {
     // Check if remote generation is disabled
     if (neverGenerateRemote()) {
@@ -162,7 +162,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Check if remote generation is disabled
     if (neverGenerateRemote()) {
@@ -256,8 +256,8 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Check if this is a redteam task
     const isRedteamTask = this.taskId === REDTEAM_SIMULATED_USER_TASK_ID;
