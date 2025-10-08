@@ -7,6 +7,7 @@ import type { StrategyCardData } from './types';
 describe('StrategyItem', () => {
   const mockOnToggle = vi.fn();
   const mockOnConfigClick = vi.fn();
+  const mockOnGenerateTest = vi.fn();
 
   const baseStrategy: StrategyCardData = {
     id: 'test-strategy',
@@ -248,6 +249,154 @@ describe('StrategyItem', () => {
 
       expect(mockOnConfigClick).toHaveBeenCalledWith('multilingual');
       expect(mockOnToggle).not.toHaveBeenCalled(); // Should not toggle
+    });
+  });
+
+  describe('Magic Wand Button', () => {
+    it('renders magic wand button when onGenerateTest is provided', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+        />,
+      );
+
+      // Magic wand button should be present
+      const buttons = screen.getAllByRole('button');
+      // Should have one button (magic wand) - no settings since not selected
+      expect(buttons).toHaveLength(1);
+    });
+
+    it('does not render magic wand button when onGenerateTest is not provided', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+        />,
+      );
+
+      // No buttons should be present (no magic wand, no settings)
+      const buttons = screen.queryAllByRole('button');
+      expect(buttons).toHaveLength(0);
+    });
+
+    it('shows loading spinner when isGenerating is true', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+          isGenerating={true}
+        />,
+      );
+
+      // Check for CircularProgress (loading spinner)
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    });
+
+    it('disables magic wand button when generating', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+          isGenerating={true}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+      expect(magicWandButton).toBeDisabled();
+    });
+
+    it('calls onGenerateTest when magic wand button is clicked', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+      fireEvent.click(magicWandButton);
+
+      expect(mockOnGenerateTest).toHaveBeenCalledWith('test-strategy');
+      expect(mockOnToggle).not.toHaveBeenCalled(); // Should not toggle
+    });
+
+    it('stops event propagation when magic wand is clicked', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+
+      // Click the magic wand button
+      fireEvent.click(magicWandButton);
+
+      // onToggle should NOT be called (event propagation stopped)
+      expect(mockOnToggle).not.toHaveBeenCalled();
+      // onGenerateTest should be called
+      expect(mockOnGenerateTest).toHaveBeenCalledWith('test-strategy');
+    });
+
+    it('shows both magic wand and settings buttons when appropriate', () => {
+      const configurableStrategy: StrategyCardData = {
+        ...baseStrategy,
+        id: 'multilingual',
+      };
+
+      render(
+        <StrategyItem
+          strategy={configurableStrategy}
+          isSelected={true}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+        />,
+      );
+
+      // Should have two buttons: magic wand and settings
+      const buttons = screen.getAllByRole('button');
+      expect(buttons).toHaveLength(2);
+    });
+
+    it('shows tooltip for magic wand button', async () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+
+      // The tooltip should contain the strategy name
+      expect(magicWandButton).toHaveAttribute('aria-label', expect.stringContaining('Generate a test case'));
     });
   });
 

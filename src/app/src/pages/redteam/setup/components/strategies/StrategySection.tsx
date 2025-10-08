@@ -13,6 +13,8 @@ interface StrategySectionProps {
   onToggle: (id: string) => void;
   onConfigClick: (id: string) => void;
   onSelectNone?: (strategyIds: string[]) => void;
+  onGenerateTest?: (id: string) => void;
+  generatingStrategyId?: string | null;
   highlighted?: boolean;
   description?: string;
 }
@@ -24,6 +26,8 @@ export function StrategySection({
   onToggle,
   onConfigClick,
   onSelectNone,
+  onGenerateTest,
+  generatingStrategyId,
   highlighted = false,
   description,
 }: StrategySectionProps) {
@@ -108,6 +112,8 @@ export function StrategySection({
             isSelected={selectedIds.includes(strategy.id)}
             onToggle={onToggle}
             onConfigClick={onConfigClick}
+            onGenerateTest={onGenerateTest}
+            isGenerating={generatingStrategyId === strategy.id}
           />
         ))}
       </Box>

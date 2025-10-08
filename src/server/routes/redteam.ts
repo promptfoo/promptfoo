@@ -10,6 +10,7 @@ import { doRedteamRun } from '../../redteam/shared';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
+import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
 export const redteamRouter = Router();
 
@@ -259,6 +260,115 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   res.json({ message: 'Job cancelled' });
+});
+
+// Generate a test case for a specific strategy
+redteamRouter.post('/generate-strategy-test', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { strategyId, config } = req.body;
+
+    if (!strategyId) {
+      res.status(400).json({ error: 'Strategy ID is required' });
+      return;
+    }
+
+    // Use harmful:hate plugin as the base plugin (as per requirements)
+    const pluginId = 'harmful:hate';
+
+    // Find the plugin
+    const plugin = Plugins.find((p) => p.key === pluginId);
+    if (!plugin) {
+      res.status(400).json({ error: `Plugin ${pluginId} not found` });
+      return;
+    }
+
+    // Get default values from config
+    const purpose = config?.applicationDefinition?.purpose || 'general AI assistant';
+    const injectVar = config?.injectVar || 'query';
+
+    const pluginConfig = {
+      language: config?.language || 'en',
+      // Random number to avoid caching
+      __random: Math.random(),
+    };
+
+    // Get the red team provider
+    const redteamProvider = await redteamProviderManager.getProvider({
+      provider: config?.provider || REDTEAM_MODEL,
+    });
+
+    // Generate test case with the plugin
+    const testCases = await plugin.action({
+      provider: redteamProvider,
+      purpose,
+      injectVar,
+      n: 1,
+      delayMs: 0,
+      config: pluginConfig,
+    });
+
+    if (testCases.length === 0) {
+      res.status(500).json({ error: 'Failed to generate test case' });
+      return;
+    }
+
+    const testCase = testCases[0];
+
+    // Ensure test case has pluginId in metadata for compatibility with strategies
+    const testCaseWithPlugin: TestCaseWithPlugin = {
+      ...testCase,
+      metadata: {
+        ...testCase.metadata,
+        pluginId: testCase.metadata?.pluginId || pluginId,
+      },
+    };
+
+    // Import strategy loader - use dynamic import for ES modules
+    const { Strategies } = await import('../../redteam/strategies/index');
+
+    const strategy = Strategies.find((s: any) => s.id === strategyId);
+    if (!strategy) {
+      res.status(400).json({ error: `Strategy ${strategyId} not found` });
+      return;
+    }
+
+    // Apply the strategy transformation
+    const strategyConfig = config?.strategyConfig || {};
+    const transformedTestCases = await strategy.action([testCaseWithPlugin], injectVar, strategyConfig);
+
+    let finalTestCase: TestCase;
+    if (transformedTestCases.length > 0) {
+      // Strategy produced transformed test cases
+      finalTestCase = transformedTestCases[0];
+    } else if (strategyId === 'basic') {
+      // Basic strategy doesn't transform, use original
+      finalTestCase = testCase;
+    } else {
+      // For other strategies that don't produce test cases, use the original
+      finalTestCase = testCase;
+      logger.debug(`Strategy ${strategyId} did not transform test case, using original`);
+    }
+
+    const generatedPrompt = finalTestCase.vars?.[injectVar] || 'Unable to extract test prompt';
+
+    const context = `This test case uses the "${strategyId}" strategy with the "${pluginId}" plugin. The strategy demonstrates how adversarial inputs are transformed to test your application's defenses.`;
+
+    res.json({
+      prompt: generatedPrompt,
+      context,
+      metadata: {
+        ...finalTestCase.metadata,
+        strategyId,
+        pluginId,
+      },
+    });
+  } catch (error) {
+    logger.error('Error generating strategy test case', { error });
+    res.status(500).json({
+      error: 'Failed to generate strategy test case',
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
 });
 
 // NOTE: This comes last, so the other routes take precedence
