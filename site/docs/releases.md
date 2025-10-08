@@ -129,13 +129,6 @@ Use `Ctrl+C` to pause long-running evaluations and `promptfoo eval --resume` to 
 - **Context arrays** - Pass context as array of strings ([example](/docs/configuration/expected-outputs/model-graded/context-relevance/#array-context))
 - **MCP preset** - Pre-configured Model Context Protocol plugin set
 
-### See Also {#september-2025-see-also}
-
-- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
-- [Red Team Plugins](/docs/red-team/plugins/)
-- [Provider Configuration](/docs/providers/)
-- [Risk Scoring](/docs/red-team/)
-
 ---
 
 ## August 2025 Release Highlights {#august-2025}
@@ -197,13 +190,6 @@ Added **[Unverifiable Claims Detection](/docs/red-team/plugins/)** plugin to tes
 #### MCP Agent Testing
 
 Added **[MCP Agent example](/docs/red-team/mcp-security-testing/)** for red team testing with tool call results, demonstrating how to test AI systems that use Model Context Protocol.
-
-### See Also {#august-2025-see-also}
-
-- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
-- [Model Audit](/docs/model-audit/)
-- [Red Team Plugins](/docs/red-team/plugins/)
-- [Provider Configuration](/docs/providers/)
 
 ---
 
@@ -291,13 +277,6 @@ Both strategies leverage AI agents to conduct intelligent, adaptive conversation
 ##### Other Strategy Improvements
 
 - **HTTP Target Improvements** - Enhanced test button now provides detailed error diagnostics, automatic retry suggestions, and context-aware fixes for common configuration issues like authentication failures, CORS errors, and malformed requests
-
-### See Also {#july-2025-see-also}
-
-- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
-- [Tracing](/docs/tracing/)
-- [Red Team Strategies](/docs/red-team/strategies/)
-- [Provider Configuration](/docs/providers/)
 
 ---
 
@@ -445,15 +424,6 @@ Red team tests now include automatic token estimation for HTTP providers, helpin
 
 A new [System Prompt Override plugin](/docs/red-team/plugins/system-prompt-override/) tests whether your LLM deployment is vulnerable to system instruction manipulation—a critical security flaw that could disable safety features.
 
-### See Also {#june-2025-see-also}
-
-- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
-- [OpenTelemetry Tracing](/docs/tracing/)
-- [Medical & Financial Plugins](/docs/red-team/plugins/)
-- [Model Audit](/docs/model-audit/)
-
----
-
 #### Strategies {#june-2025-strategies}
 
 ##### Smarter Multi-Turn Attack Techniques
@@ -467,10 +437,3 @@ Real attacks rarely succeed in a single message. We've enhanced our attack strat
    - Adapt strategies based on system responses
 
 2. **[Emoji Encoding Strategy](/docs/red-team/strategies/other-encodings/#emoji-encoding)** - New obfuscation technique using emoji to bypass content filters
-
-### See Also {#june-2025-see-also}
-
-- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
-- [OpenTelemetry Tracing](/docs/tracing/)
-- [Medical & Financial Plugins](/docs/red-team/plugins/)
-- [Model Audit](/docs/model-audit/)
