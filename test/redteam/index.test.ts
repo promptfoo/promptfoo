@@ -4,7 +4,7 @@ import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
-import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
+import { HARM_PLUGINS, PII_PLUGINS, getDefaultNFanout } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
@@ -22,6 +22,7 @@ import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 
 import type { TestCaseWithPlugin } from '../../src/types/index';
+import { stripAnsi } from '../../test/util/utils';
 
 jest.mock('cli-progress');
 jest.mock('../../src/logger');
@@ -304,6 +305,62 @@ describe('synthesize', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Generation Report:'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('test-plugin'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('mockStrategy'));
+    });
+
+    it('should use default fan-out values when strategy config omits n', async () => {
+      const pluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      const pluginFindSpy = jest
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'mockPlugin' });
+
+      const strategyAction = jest
+        .fn()
+        .mockImplementation(async () =>
+          Array.from({ length: 5 }, (_, idx) => ({ vars: { query: `fanout-${idx}` } })),
+        );
+      const strategyFindSpy = jest.spyOn(Strategies, 'find').mockImplementation((predicate) => {
+        if (typeof predicate === 'function') {
+          const strategies = [{ action: strategyAction, id: 'jailbreak:composite' }];
+          return strategies.find(predicate);
+        }
+        return undefined;
+      });
+
+      try {
+        await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'jailbreak:composite' }],
+          targetLabels: ['test-provider'],
+        });
+
+        const reportMessage = jest
+          .mocked(logger.info)
+          .mock.calls.map(([arg]) => arg)
+          .find(
+            (arg): arg is string =>
+              typeof arg === 'string' && arg.includes('Test Generation Report'),
+          );
+
+        expect(reportMessage).toBeDefined();
+
+        const stripped = stripAnsi(reportMessage!);
+        const row = stripped.split('\n').find((line) => line.includes('jailbreak:composite'));
+        expect(row).toBeDefined();
+
+        const columns = row!
+          .split('│')
+          .map((col) => col.trim())
+          .filter((col) => col.length > 0);
+
+        expect(columns[3]).toBe(getDefaultNFanout('jailbreak:composite').toString()); // Requested = default fan-out * 1 base test
+        expect(columns[4]).toBe(getDefaultNFanout('jailbreak:composite').toString()); // Generated = what our mock strategy returned
+      } finally {
+        pluginFindSpy.mockRestore();
+        strategyFindSpy.mockRestore();
+      }
     });
 
     it('should expand strategy collections into individual strategies', async () => {
