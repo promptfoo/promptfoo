@@ -480,20 +480,32 @@ describe('Plugins', () => {
         .filter((label) => label !== null);
 
       // Check if the display name override is being used
-      const hasBolaOverride = pluginNames.some((name) => name === 'Object-Level Authorization Bypass');
+      const hasBolaOverride = pluginNames.some(
+        (name) => name === 'Object-Level Authorization Bypass',
+      );
 
       if (hasBolaOverride) {
-        const bolaIndex = pluginNames.findIndex((name) => name === 'Object-Level Authorization Bypass');
+        const bolaIndex = pluginNames.findIndex(
+          (name) => name === 'Object-Level Authorization Bypass',
+        );
 
         // Verify it's in the correct alphabetical position
         if (bolaIndex > 0) {
           const previousPlugin = pluginNames[bolaIndex - 1];
-          expect((previousPlugin || '').toLowerCase().localeCompare('object-level authorization bypass'.toLowerCase())).toBeLessThanOrEqual(0);
+          expect(
+            (previousPlugin || '')
+              .toLowerCase()
+              .localeCompare('object-level authorization bypass'.toLowerCase()),
+          ).toBeLessThanOrEqual(0);
         }
 
         if (bolaIndex < pluginNames.length - 1) {
           const nextPlugin = pluginNames[bolaIndex + 1];
-          expect('object-level authorization bypass'.toLowerCase().localeCompare((nextPlugin || '').toLowerCase())).toBeLessThanOrEqual(0);
+          expect(
+            'object-level authorization bypass'
+              .toLowerCase()
+              .localeCompare((nextPlugin || '').toLowerCase()),
+          ).toBeLessThanOrEqual(0);
         }
       }
 
