@@ -46,9 +46,13 @@ const ErrorFallback = ({ error }: { error: Error }) => (
   </div>
 );
 
-export interface PluginsTabProps {
+// Grouped prop interfaces for better organization and maintainability
+export interface PluginSelectionProps {
   selectedPlugins: Set<Plugin>;
   handlePluginToggle: (plugin: Plugin) => void;
+}
+
+export interface PluginConfigProps {
   pluginConfig: LocalPluginConfig;
   selectedConfigPlugin: Plugin | null;
   setSelectedConfigPlugin: React.Dispatch<React.SetStateAction<Plugin | null>>;
@@ -56,6 +60,9 @@ export interface PluginsTabProps {
   setConfigDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
   isPluginConfigured: (plugin: Plugin) => boolean;
   updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
+}
+
+export interface PresetProps {
   handlePresetSelect: (preset: {
     name: string;
     plugins: Set<Plugin> | ReadonlySet<Plugin>;
@@ -63,6 +70,10 @@ export interface PluginsTabProps {
   isCustomMode: boolean;
   currentlySelectedPreset: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> } | undefined;
   presets: Array<{ name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }>;
+  PLUGIN_PRESET_DESCRIPTIONS: Record<string, string>;
+}
+
+export interface FilterProps {
   filteredPlugins: Array<{ plugin: Plugin; category: string }>;
   searchTerm: string;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
@@ -70,6 +81,9 @@ export interface PluginsTabProps {
   setSelectedCategory: React.Dispatch<React.SetStateAction<string | undefined>>;
   allCategoryFilters: Array<{ key: string; label: string }>;
   handleCategoryToggle: (category: string) => void;
+}
+
+export interface TestCaseProps {
   handleGenerateTestCase: (plugin: Plugin) => void;
   generatingTestCase: boolean;
   generatingPlugin: Plugin | null;
@@ -81,49 +95,73 @@ export interface PluginsTabProps {
   generatedTestCase: { prompt: string; context: string; metadata?: any } | null;
   generateTestCaseWithConfig: (plugin: Plugin, config: any) => Promise<void>;
   isTestCaseConfigValid: (plugin: Plugin, config: any) => boolean;
-  setHasUserInteracted: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+export interface PluginConstants {
   PLUGINS_REQUIRING_CONFIG: string[];
   PLUGINS_SUPPORTING_CONFIG: string[];
-  PLUGIN_PRESET_DESCRIPTIONS: Record<string, string>;
+}
+
+export interface PluginsTabProps {
+  pluginSelectionProps: PluginSelectionProps;
+  pluginConfigProps: PluginConfigProps;
+  presetProps: PresetProps;
+  filterProps: FilterProps;
+  testCaseProps: TestCaseProps;
+  constants: PluginConstants;
+  setHasUserInteracted: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export default function PluginsTab({
-  selectedPlugins,
-  handlePluginToggle,
-  pluginConfig,
-  selectedConfigPlugin,
-  setSelectedConfigPlugin,
-  configDialogOpen,
-  setConfigDialogOpen,
-  isPluginConfigured,
-  updatePluginConfig,
-  handlePresetSelect,
-  isCustomMode,
-  currentlySelectedPreset,
-  presets,
-  filteredPlugins,
-  searchTerm,
-  setSearchTerm,
-  selectedCategory,
-  setSelectedCategory,
-  allCategoryFilters,
-  handleCategoryToggle,
-  handleGenerateTestCase,
-  generatingTestCase,
-  generatingPlugin,
-  testCaseDialogOpen,
-  setTestCaseDialogOpen,
-  testCaseDialogMode,
-  tempTestCaseConfig,
-  setTempTestCaseConfig,
-  generatedTestCase,
-  generateTestCaseWithConfig,
-  isTestCaseConfigValid,
+  pluginSelectionProps,
+  pluginConfigProps,
+  presetProps,
+  filterProps,
+  testCaseProps,
+  constants,
   setHasUserInteracted,
-  PLUGINS_REQUIRING_CONFIG,
-  PLUGINS_SUPPORTING_CONFIG,
-  PLUGIN_PRESET_DESCRIPTIONS,
 }: PluginsTabProps) {
+  // Destructure props from grouped objects for easier access
+  const { selectedPlugins, handlePluginToggle } = pluginSelectionProps;
+  const {
+    pluginConfig,
+    selectedConfigPlugin,
+    setSelectedConfigPlugin,
+    configDialogOpen,
+    setConfigDialogOpen,
+    isPluginConfigured,
+    updatePluginConfig,
+  } = pluginConfigProps;
+  const {
+    handlePresetSelect,
+    isCustomMode,
+    currentlySelectedPreset,
+    presets,
+    PLUGIN_PRESET_DESCRIPTIONS,
+  } = presetProps;
+  const {
+    filteredPlugins,
+    searchTerm,
+    setSearchTerm,
+    selectedCategory,
+    setSelectedCategory,
+    allCategoryFilters,
+    handleCategoryToggle,
+  } = filterProps;
+  const {
+    handleGenerateTestCase,
+    generatingTestCase,
+    generatingPlugin,
+    testCaseDialogOpen,
+    setTestCaseDialogOpen,
+    testCaseDialogMode,
+    tempTestCaseConfig,
+    setTempTestCaseConfig,
+    generatedTestCase,
+    generateTestCaseWithConfig,
+    isTestCaseConfigValid,
+  } = testCaseProps;
+  const { PLUGINS_REQUIRING_CONFIG, PLUGINS_SUPPORTING_CONFIG } = constants;
   const theme = useTheme();
 
   const handleConfigClick = (plugin: Plugin) => {

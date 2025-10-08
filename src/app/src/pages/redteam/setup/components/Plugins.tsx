@@ -712,41 +712,53 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       {/* Tab Panel 0: Plugins */}
       <TabPanel value={activeTab} index={0}>
         <PluginsTab
-          selectedPlugins={selectedPlugins}
-          handlePluginToggle={handlePluginToggle}
-          pluginConfig={pluginConfig}
-          selectedConfigPlugin={selectedConfigPlugin}
-          setSelectedConfigPlugin={setSelectedConfigPlugin}
-          configDialogOpen={configDialogOpen}
-          setConfigDialogOpen={setConfigDialogOpen}
-          isPluginConfigured={isPluginConfigured}
-          updatePluginConfig={updatePluginConfig}
-          handlePresetSelect={handlePresetSelect}
-          isCustomMode={isCustomMode}
-          currentlySelectedPreset={currentlySelectedPreset}
-          presets={presets}
-          filteredPlugins={filteredPlugins}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          selectedCategory={selectedCategory}
-          setSelectedCategory={setSelectedCategory}
-          allCategoryFilters={allCategoryFilters}
-          handleCategoryToggle={handleCategoryToggle}
-          handleGenerateTestCase={handleGenerateTestCase}
-          generatingTestCase={generatingTestCase}
-          generatingPlugin={generatingPlugin}
-          testCaseDialogOpen={testCaseDialogOpen}
-          setTestCaseDialogOpen={setTestCaseDialogOpen}
-          testCaseDialogMode={testCaseDialogMode}
-          tempTestCaseConfig={tempTestCaseConfig}
-          setTempTestCaseConfig={setTempTestCaseConfig}
-          generatedTestCase={generatedTestCase}
-          generateTestCaseWithConfig={generateTestCaseWithConfig}
-          isTestCaseConfigValid={isTestCaseConfigValid}
+          pluginSelectionProps={{
+            selectedPlugins,
+            handlePluginToggle,
+          }}
+          pluginConfigProps={{
+            pluginConfig,
+            selectedConfigPlugin,
+            setSelectedConfigPlugin,
+            configDialogOpen,
+            setConfigDialogOpen,
+            isPluginConfigured,
+            updatePluginConfig,
+          }}
+          presetProps={{
+            handlePresetSelect,
+            isCustomMode,
+            currentlySelectedPreset,
+            presets,
+            PLUGIN_PRESET_DESCRIPTIONS,
+          }}
+          filterProps={{
+            filteredPlugins,
+            searchTerm,
+            setSearchTerm,
+            selectedCategory,
+            setSelectedCategory,
+            allCategoryFilters,
+            handleCategoryToggle,
+          }}
+          testCaseProps={{
+            handleGenerateTestCase,
+            generatingTestCase,
+            generatingPlugin,
+            testCaseDialogOpen,
+            setTestCaseDialogOpen,
+            testCaseDialogMode,
+            tempTestCaseConfig,
+            setTempTestCaseConfig,
+            generatedTestCase,
+            generateTestCaseWithConfig,
+            isTestCaseConfigValid,
+          }}
+          constants={{
+            PLUGINS_REQUIRING_CONFIG,
+            PLUGINS_SUPPORTING_CONFIG,
+          }}
           setHasUserInteracted={setHasUserInteracted}
-          PLUGINS_REQUIRING_CONFIG={PLUGINS_REQUIRING_CONFIG}
-          PLUGINS_SUPPORTING_CONFIG={PLUGINS_SUPPORTING_CONFIG}
-          PLUGIN_PRESET_DESCRIPTIONS={PLUGIN_PRESET_DESCRIPTIONS}
         />
       </TabPanel>
 
