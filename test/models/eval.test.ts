@@ -475,7 +475,9 @@ describe('evaluator', () => {
       for (const row of result.body) {
         const hasError = row.outputs.some(
           (output) =>
-            output.text.includes('error') || (output.gradingResult?.reason || '').includes('error'),
+            output.error?.includes('error') ||
+            output.text.includes('error') ||
+            (output.gradingResult?.reason || '').includes('error'),
         );
         expect(hasError).toBe(true);
       }
