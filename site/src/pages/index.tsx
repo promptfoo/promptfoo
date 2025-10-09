@@ -24,16 +24,16 @@ function HomepageHeader() {
             AI SECURITY PLATFORM • TRUSTED BY FORTUNE 100 COMPANIES
           </div>
           <h1 className={styles.heroTitle}>
-            Build Secure AI Applications
+            Catch AI vulnerabilities
             <br />
-            From the Start
+            in development, not production
           </h1>
           <p className={styles.heroSubtitle}>
-            AI security trusted by 200,000+ users to prevent vulnerabilities in development.
+            Security for apps, agents, and models trusted by 200,000+ users
           </p>
           <div className={styles.heroButtons}>
             <Link className="button button--primary button--lg" to="/contact/">
-              Request Enterprise Demo
+              Book a Demo
             </Link>
             <Link
               className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
@@ -649,7 +649,7 @@ export default function Home(): JSX.Element {
   return (
     <Layout
       title="Build Secure AI Applications"
-      description={`The AI Security Platform that shifts left to prevent vulnerabilities in development. Trusted by Fortune 100 companies and ${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide.`}
+      description={`The AI Security Platform that catches vulnerabilities in development. Trusted by Fortune 100 companies and ${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide.`}
       wrapperClassName="homepage-wrapper"
     >
       <Head>
