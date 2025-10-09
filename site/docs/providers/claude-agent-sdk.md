@@ -8,6 +8,10 @@ description: 'Use Claude Agent SDK for evals with configurable tools, permission
 
 This provider makes [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview) available for evals through its [TypeScript SDK](https://docs.claude.com/en/api/agent-sdk/typescript).
 
+:::info
+The Claude Agent SDK was formerly known as the Claude Code SDK. It's still built on top of Claude Code and exposes all its functionality.
+:::
+
 ## Provider IDs
 
 You can reference this provider using either:
@@ -38,7 +42,7 @@ For AWS Bedrock:
 export CLAUDE_CODE_USE_BEDROCK=true
 ```
 
-- Follow the [Claude Agent SDK Bedrock documentation](https://docs.anthropic.com/en/docs/claude-agent-sdk/amazon-bedrock) to make credentials available to Claude Agent SDK.
+- Follow the [Claude Code Bedrock documentation](https://docs.claude.com/en/docs/claude-code/amazon-bedrock) to make credentials available to Claude Agent SDK.
 
 For Google Vertex:
 
@@ -48,7 +52,7 @@ For Google Vertex:
 export CLAUDE_CODE_USE_VERTEX=true
 ```
 
-- Follow the [Claude Agent SDK Vertex documentation](https://docs.anthropic.com/en/docs/claude-agent-sdk/google-vertex-ai) to make credentials available to Claude Agent SDK.
+- Follow the [Claude Code Vertex documentation](https://docs.claude.com/en/docs/claude-code/google-vertex-ai) to make credentials available to Claude Agent SDK.
 
 ## Quick Start
 
@@ -61,7 +65,7 @@ providers:
   - anthropic:claude-agent-sdk
 
 prompts:
-  - 'Output the a python function that prints the first 10 numbers in the Fibonacci sequence'
+  - 'Output a python function that prints the first 10 numbers in the Fibonacci sequence'
 ```
 
 When your test cases finish, the temporary directory is deleted.
@@ -137,7 +141,7 @@ providers:
       fallback_model: claude-sonnet-4-20250514
 ```
 
-Claude Agent SDK also supports a number of [model aliases](https://docs.anthropic.com/en/docs/claude-agent-sdk/model-config#model-aliases), which can also be used in the configuration.
+Claude Agent SDK also supports a number of [model aliases](https://docs.claude.com/en/docs/claude-code/model-config#model-aliases), which can also be used in the configuration.
 
 ```yaml
 providers:
@@ -147,7 +151,15 @@ providers:
       fallback_model: haiku
 ```
 
-Claude Agent SDK also supports configuring models through [environment variables](https://docs.anthropic.com/en/docs/claude-agent-sdk/model-config#environment-variables). When using this provider, any environment variables you set will be passed through to the Claude Agent SDK.
+Claude Agent SDK also supports configuring models through [environment variables](https://docs.claude.com/en/docs/claude-code/model-config#environment-variables). When using this provider, any environment variables you set will be passed through to the Claude Agent SDK.
+
+## System Prompt
+
+Unless you specify a `custom_system_prompt`, the default Claude Code system prompt will be used. You can append additional instructions to it with `append_system_prompt`.
+
+:::info
+Note that this differs slightly from the Claude Agent SDK's behavior when used independently of Promptfoo. The Agent SDK will *not* use the Claude Code system prompt by default unless it's specified—it will instead use an empty system prompt if none is provided. If you want to use an empty system prompt with this provider, set `custom_system_prompt` to an empty string.
+:::
 
 ## Tools and Permissions
 
@@ -205,7 +217,7 @@ providers:
 
 ⚠️ **Security Note**: Some tools allow Claude Agent SDK to modify files, run system commands, search the web, and more. Think carefully about security implications before using these tools.
 
-[Here's a full list of available tools.](https://docs.anthropic.com/en/docs/claude-agent-sdk/settings#tools-available-to-claude)
+[Here's a full list of available tools.](https://docs.claude.com/en/docs/claude-code/settings#tools-available-to-claude)
 
 ## MCP Integration
 
@@ -231,7 +243,7 @@ providers:
       strict_mcp_config: true # Only use configured servers (true by default)
 ```
 
-For detailed MCP configuration, see [Claude Agent SDK MCP documentation](https://docs.anthropic.com/en/docs/claude-agent-sdk/mcp).
+For detailed MCP configuration, see [Claude Code MCP documentation](https://docs.claude.com/en/docs/claude-code/mcp).
 
 ## Setting Sources
 
@@ -288,5 +300,5 @@ Here are a few complete example implementations:
 
 ## See Also
 
-- [Claude Agent SDK TypeScript SDK documentation](https://docs.anthropic.com/en/docs/claude-agent-sdk)
+- [Claude Agent SDK documentation](https://docs.claude.com/en/api/agent-sdk)
 - [Standard Anthropic provider](/docs/providers/anthropic/) - For text-only interactions

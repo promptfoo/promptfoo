@@ -1,6 +1,6 @@
 # claude-agent-sdk (Claude Agent SDK Examples)
 
-The Claude Agent SDK provider enables you to run agentic evals with configurable tools, permissions, and environments.
+The Claude Agent SDK provider (aka Claude Code provider) enables you to run agentic evals with configurable tools, permissions, and environments.
 
 ```bash
 npx promptfoo@latest init --example claude-agent-sdk
