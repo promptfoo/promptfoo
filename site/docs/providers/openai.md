@@ -1173,42 +1173,6 @@ providers:
       max_output_tokens: 1000
 ```
 
-### GPT-5 Pro
-
-GPT-5 Pro is OpenAI's premium reasoning model designed for the most challenging tasks requiring maximum reasoning capability. It uses significantly more compute to provide consistently better answers on complex problems.
-
-Key features:
-
-- **Context window**: 400,000 tokens
-- **Max output tokens**: 272,000 tokens
-- **Knowledge cutoff**: September 30, 2024
-- **Reasoning**: Defaults to and only supports `reasoning.effort: high`
-- **Pricing**: $15/1M input tokens, $120/1M output tokens
-- **Availability**: Responses API only
-
-GPT-5 Pro is optimized for:
-
-- Complex mathematical and scientific reasoning
-- Advanced code generation and debugging
-- Multi-step problem solving
-- Detailed analysis requiring deep reasoning
-
-:::warning
-GPT-5 Pro is designed for tough problems and some requests may take several minutes. Use `background: true` to avoid timeouts.
-:::
-
-Example configuration:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:gpt-5-pro
-    config:
-      reasoning:
-        effort: 'high' # Only supported value
-      max_output_tokens: 5000
-      background: true # Recommended for long-running tasks
-```
-
 ### Deep Research Models (Responses API Only)
 
 Deep research models (`o3-deep-research`, `o4-mini-deep-research`) are specialized reasoning models designed for complex research tasks that require web search capabilities.

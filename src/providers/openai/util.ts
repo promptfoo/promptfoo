@@ -146,16 +146,6 @@ export const OPENAI_CHAT_MODELS = [
       audioOutput: 80 / 1e6,
     },
   })),
-  // gpt-audio model (text + audio token pricing)
-  ...['gpt-audio'].map((model) => ({
-    id: model,
-    cost: {
-      input: 2.5 / 1e6,
-      output: 10 / 1e6,
-      audioInput: 40 / 1e6,
-      audioOutput: 80 / 1e6,
-    },
-  })),
   ...['gpt-4o-mini-audio-preview', 'gpt-4o-mini-audio-preview-2024-12-17'].map((model) => ({
     id: model,
     cost: {

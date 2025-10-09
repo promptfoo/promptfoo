@@ -46,6 +46,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5-mini-2025-08-07',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
+    // Audio models
+    'gpt-audio',
+    'gpt-audio-2025-08-28',
+    'gpt-audio-mini',
+    'gpt-audio-mini-2025-10-06',
     // Computer use model
     'computer-use-preview',
     // Image generation model
