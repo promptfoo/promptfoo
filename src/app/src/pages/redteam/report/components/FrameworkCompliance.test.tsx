@@ -71,17 +71,17 @@ describe('FrameworkCompliance', () => {
 
   it('should display the correct number of compliant frameworks and render a FrameworkCard for each framework', () => {
     const categoryStats = {
-      'plugin-A': { pass: 10, total: 10, passWithFilter: 10 },
-      'plugin-B': { pass: 9, total: 10, passWithFilter: 9 },
-      'plugin-C': { pass: 8, total: 10, passWithFilter: 8 },
-      'plugin-D': { pass: 5, total: 10, passWithFilter: 5 },
+      'plugin-A': { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+      'plugin-B': { pass: 9, total: 10, passWithFilter: 9, failCount: 1 },
+      'plugin-C': { pass: 8, total: 10, passWithFilter: 8, failCount: 2 },
+      'plugin-D': { pass: 5, total: 10, passWithFilter: 5, failCount: 5 },
     };
 
     renderFrameworkCompliance(categoryStats);
 
     expect(screen.getByText(/Framework Compliance \(1\/3\)/)).toBeInTheDocument();
 
-    expect(screen.getByText(/20.0% Attack Success Rate/)).toBeInTheDocument();
+    expect(screen.getByText(/20\.00% Attack Success Rate/)).toBeInTheDocument();
     expect(screen.getByText(/\(8\/40 tests failed across 4 plugins\)/)).toBeInTheDocument();
 
     expect(mockFrameworkCard).toHaveBeenCalledTimes(3);
@@ -113,14 +113,14 @@ describe('FrameworkCompliance', () => {
 
   it('should show 0% attack success rate and 0 failed tests when all plugins are compliant', () => {
     const categoryStats = {
-      'plugin-A': { pass: 10, total: 10, passWithFilter: 10 },
-      'plugin-B': { pass: 10, total: 10, passWithFilter: 10 },
-      'plugin-C': { pass: 10, total: 10, passWithFilter: 10 },
+      'plugin-A': { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+      'plugin-B': { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+      'plugin-C': { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
     };
 
     renderFrameworkCompliance(categoryStats);
 
-    expect(screen.getByText(/0.0% Attack Success Rate/)).toBeInTheDocument();
+    expect(screen.getByText(/0\.00% Attack Success Rate/)).toBeInTheDocument();
     expect(screen.getByText(/\(0\/30 tests failed across 3 plugins\)/)).toBeInTheDocument();
   });
 
@@ -130,9 +130,9 @@ describe('FrameworkCompliance', () => {
     ));
 
     const categoryStats = {
-      'plugin-A': { pass: 10, total: 10, passWithFilter: 10 },
-      'plugin-B': { pass: 8, total: 10, passWithFilter: 8 },
-      'plugin-C': { pass: 5, total: 10, passWithFilter: 5 },
+      'plugin-A': { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+      'plugin-B': { pass: 8, total: 10, passWithFilter: 8, failCount: 2 },
+      'plugin-C': { pass: 5, total: 10, passWithFilter: 5, failCount: 5 },
     };
 
     renderFrameworkCompliance(categoryStats);
@@ -150,8 +150,8 @@ describe('FrameworkCompliance', () => {
   it('should render the CSVExporter component with the correct categoryStats and pluginPassRateThreshold props', () => {
     const pluginPassRateThreshold = 0.75;
     const categoryStats = {
-      'plugin-1': { pass: 5, total: 10, passWithFilter: 5 },
-      'plugin-2': { pass: 8, total: 10, passWithFilter: 8 },
+      'plugin-1': { pass: 5, total: 10, passWithFilter: 5, failCount: 5 },
+      'plugin-2': { pass: 8, total: 10, passWithFilter: 8, failCount: 2 },
     };
 
     renderFrameworkCompliance(categoryStats, pluginPassRateThreshold);
@@ -170,23 +170,23 @@ describe('FrameworkCompliance', () => {
     {
       name: 'categoryStats entries with zero total tests',
       categoryStats: {
-        'plugin-A': { pass: 0, total: 0, passWithFilter: 0 },
-        'plugin-B': { pass: 0, total: 0, passWithFilter: 0 },
+        'plugin-A': { pass: 0, total: 0, passWithFilter: 0, failCount: 0 },
+        'plugin-B': { pass: 0, total: 0, passWithFilter: 0, failCount: 0 },
       },
       strategyStats: {},
-      expectedText: /0.0% Attack Success Rate/,
+      expectedText: /0\.00% Attack Success Rate/,
       expectedFailedText: /\(0\/0 tests failed across 0 plugins\)/,
     },
     {
       name: 'no tests at all (totalTests = 0)',
       categoryStats: {
-        'plugin-A': { pass: 0, total: 0, passWithFilter: 0 },
-        'plugin-B': { pass: 0, total: 0, passWithFilter: 0 },
-        'plugin-C': { pass: 0, total: 0, passWithFilter: 0 },
-        'plugin-D': { pass: 0, total: 0, passWithFilter: 0 },
+        'plugin-A': { pass: 0, total: 0, passWithFilter: 0, failCount: 0 },
+        'plugin-B': { pass: 0, total: 0, passWithFilter: 0, failCount: 0 },
+        'plugin-C': { pass: 0, total: 0, passWithFilter: 0, failCount: 0 },
+        'plugin-D': { pass: 0, total: 0, passWithFilter: 0, failCount: 0 },
       },
       strategyStats: { 'strategy-1': { pass: 0, total: 0 } },
-      expectedText: /0.0% Attack Success Rate/,
+      expectedText: /0\.00% Attack Success Rate/,
       expectedFailedText: /\(0\/0 tests failed across 0 plugins\)/,
     },
     {

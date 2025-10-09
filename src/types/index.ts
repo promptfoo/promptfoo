@@ -1155,6 +1155,7 @@ export type EvalSummary = ResultLightweightWithLabel & {
     id: string;
     label: string | null;
   }[];
+  attackSuccessRate?: number;
 };
 
 export interface OutputMetadata {

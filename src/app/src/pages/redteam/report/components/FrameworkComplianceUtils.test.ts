@@ -31,9 +31,9 @@ describe('expandPluginCollections', () => {
   it("should return a set containing all 'harmful:*' plugin keys from categoryStats when the plugins array contains 'harmful'", () => {
     const plugins = ['harmful'];
     const categoryStats: CategoryStats = {
-      'harmful:sql-injection': { pass: 1, total: 10 },
-      'harmful:pii-detection': { pass: 5, total: 10 },
-      'regular-plugin': { pass: 8, total: 10 },
+      'harmful:sql-injection': { pass: 1, total: 10, failCount: 9 },
+      'harmful:pii-detection': { pass: 5, total: 10, failCount: 5 },
+      'regular-plugin': { pass: 8, total: 10, failCount: 2 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -45,9 +45,9 @@ describe('expandPluginCollections', () => {
   it("should effectively ignore the 'harmful' plugin when no keys in categoryStats start with 'harmful:'", () => {
     const plugins = ['plugin1', 'harmful', 'plugin2'];
     const categoryStats: CategoryStats = {
-      plugin1: { pass: 1, total: 10 },
-      plugin2: { pass: 5, total: 10 },
-      'other:plugin': { pass: 8, total: 10 },
+      plugin1: { pass: 1, total: 10, failCount: 9 },
+      plugin2: { pass: 5, total: 10, failCount: 5 },
+      'other:plugin': { pass: 8, total: 10, failCount: 2 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -59,10 +59,10 @@ describe('expandPluginCollections', () => {
   it("should return a set containing both normal plugin names and all 'harmful:*' plugin keys from categoryStats when the plugins array contains both types", () => {
     const plugins = ['regular-plugin-1', 'harmful', 'regular-plugin-2'];
     const categoryStats: CategoryStats = {
-      'harmful:sql-injection': { pass: 1, total: 10 },
-      'harmful:pii-detection': { pass: 5, total: 10 },
-      'regular-plugin-1': { pass: 8, total: 10 },
-      'unrelated-plugin': { pass: 9, total: 10 },
+      'harmful:sql-injection': { pass: 1, total: 10, failCount: 9 },
+      'harmful:pii-detection': { pass: 5, total: 10, failCount: 5 },
+      'regular-plugin-1': { pass: 8, total: 10, failCount: 2 },
+      'unrelated-plugin': { pass: 9, total: 10, failCount: 1 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -79,10 +79,10 @@ describe('expandPluginCollections', () => {
   it("should not expand plugin names containing 'harmful' as a substring", () => {
     const plugins = ['harmful-test', 'not-harmful'];
     const categoryStats: CategoryStats = {
-      'harmful:sql-injection': { pass: 1, total: 10 },
-      'harmful:pii-detection': { pass: 5, total: 10 },
-      'harmful-test': { pass: 8, total: 10 },
-      'not-harmful': { pass: 9, total: 10 },
+      'harmful:sql-injection': { pass: 1, total: 10, failCount: 9 },
+      'harmful:pii-detection': { pass: 5, total: 10, failCount: 5 },
+      'harmful-test': { pass: 8, total: 10, failCount: 2 },
+      'not-harmful': { pass: 9, total: 10, failCount: 1 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -106,7 +106,7 @@ describe('categorizePlugins', () => {
   beforeEach(() => {});
 
   const createCategoryStats = (
-    stats: Record<string, { pass: number; total: number }>,
+    stats: Record<string, { pass: number; total: number; failCount: number }>,
   ): CategoryStats => {
     return stats;
   };
@@ -114,8 +114,8 @@ describe('categorizePlugins', () => {
   it('should correctly categorize plugins into compliant, nonCompliant, and untested arrays when given a mix of plugins', () => {
     const plugins = ['compliant-plugin', 'non-compliant-plugin', 'untested-plugin'];
     const categoryStats = createCategoryStats({
-      'compliant-plugin': { pass: 8, total: 10 },
-      'non-compliant-plugin': { pass: 6, total: 10 },
+      'compliant-plugin': { pass: 8, total: 10, failCount: 2 },
+      'non-compliant-plugin': { pass: 6, total: 10, failCount: 4 },
     });
     const passRateThreshold = 0.75;
 
@@ -129,8 +129,8 @@ describe('categorizePlugins', () => {
   it('should correctly categorize plugins when plugins argument is a Set', () => {
     const pluginsSet = new Set(['compliant-plugin', 'non-compliant-plugin', 'untested-plugin']);
     const categoryStats: CategoryStats = {
-      'compliant-plugin': { pass: 8, total: 10 },
-      'non-compliant-plugin': { pass: 6, total: 10 },
+      'compliant-plugin': { pass: 8, total: 10, failCount: 2 },
+      'non-compliant-plugin': { pass: 6, total: 10, failCount: 4 },
     };
     const passRateThreshold = 0.75;
 
@@ -145,7 +145,7 @@ describe('categorizePlugins', () => {
     const plugins = ['threshold-plugin'];
     const passRateThreshold = 0.75;
     const categoryStats: CategoryStats = {
-      'threshold-plugin': { pass: 75, total: 100 },
+      'threshold-plugin': { pass: 75, total: 100, failCount: 25 },
     };
 
     const result = categorizePlugins(plugins, categoryStats, passRateThreshold);
@@ -158,7 +158,7 @@ describe('categorizePlugins', () => {
   it('should categorize a plugin as compliant if its pass count is greater than its total count', () => {
     const plugins = ['invalid-plugin'];
     const categoryStats: CategoryStats = {
-      'invalid-plugin': { pass: 12, total: 10 },
+      'invalid-plugin': { pass: 12, total: 10, failCount: 0 },
     };
     const passRateThreshold = 0.75;
 
@@ -172,7 +172,7 @@ describe('categorizePlugins', () => {
   it('should correctly categorize plugins with total=0 as untested', () => {
     const plugins = ['zero-total-plugin'];
     const categoryStats: CategoryStats = {
-      'zero-total-plugin': { pass: 0, total: 0 },
+      'zero-total-plugin': { pass: 0, total: 0, failCount: 0 },
     };
     const passRateThreshold = 0.75;
 
@@ -210,8 +210,8 @@ describe('categorizePlugins', () => {
   it('should correctly categorize plugins with passRateThreshold at 0 and 1', () => {
     const plugins = ['plugin1', 'plugin2'];
     const categoryStats: CategoryStats = {
-      plugin1: { pass: 5, total: 10 },
-      plugin2: { pass: 10, total: 10 },
+      plugin1: { pass: 5, total: 10, failCount: 5 },
+      plugin2: { pass: 10, total: 10, failCount: 0 },
     };
 
     const result0 = categorizePlugins(plugins, categoryStats, 0);
