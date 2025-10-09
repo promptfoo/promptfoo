@@ -40,12 +40,49 @@ export async function generateRedTeamConfig(
   // Select strategies
   const strategies = options.strategies || DEFAULT_STRATEGIES;
 
-  // Normalize prompts to use mustache syntax
+  // Normalize prompts to use mustache syntax with simplified variable names
   const normalizedPrompts = prompts.map((p) => {
+    // Create variable mapping: original name -> input1, input2, etc.
+    const varMapping = new Map<string, string>();
+    p.variables.forEach((v, i) => {
+      varMapping.set(v.name, `input${i + 1}`);
+    });
+
+    // Helper to rename variables in content
+    const renameVariables = (content: string): string => {
+      let result = content;
+      for (const [oldName, newName] of varMapping.entries()) {
+        // Replace all occurrences of {{oldName}} with {{newName}}
+        result = result.replace(
+          new RegExp(`{{${oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}}}`, 'g'),
+          `{{${newName}}}`,
+        );
+      }
+      return result;
+    };
+
+    // Handle composed prompts with message arrays
+    if (p.type === 'composed' && p.messages) {
+      // Format as a message array for the config
+      return p.messages.map((msg) => ({
+        role: msg.role,
+        content:
+          msg.isVariable && msg.variableName
+            ? `{{${varMapping.get(msg.variableName) || msg.variableName}}}`
+            : renameVariables(
+                p.variables.length > 0
+                  ? normalizeVariableSyntax(msg.content, p.variables)
+                  : msg.content,
+              ),
+      }));
+    }
+
+    // Single prompt - existing logic with renamed variables
     if (p.variables.length === 0) {
       return p.content;
     }
-    return normalizeVariableSyntax(p.content, p.variables);
+    const normalized = normalizeVariableSyntax(p.content, p.variables);
+    return renameVariables(normalized);
   });
 
   // Generate config object
@@ -186,15 +223,63 @@ function selectPlugins(prompts: ExtractedPrompt[], providedPlugins?: string[]): 
 export function generateExtractionSummary(prompts: ExtractedPrompt[]): string {
   const lines: string[] = [];
 
-  lines.push(`Found ${prompts.length} prompt${prompts.length !== 1 ? 's' : ''}:\n`);
+  const composedCount = prompts.filter((p) => p.type === 'composed').length;
+  const singleCount = prompts.length - composedCount;
+
+  lines.push(`Found ${prompts.length} prompt${prompts.length !== 1 ? 's' : ''}:`);
+  if (composedCount > 0) {
+    lines.push(`  - ${composedCount} composed (multi-message)`);
+  }
+  if (singleCount > 0) {
+    lines.push(`  - ${singleCount} single`);
+  }
+  lines.push('');
 
   for (let i = 0; i < prompts.length; i++) {
     const prompt = prompts[i];
-    const preview =
-      prompt.content.length > 60 ? `${prompt.content.substring(0, 60)}...` : prompt.content;
 
     lines.push(`[${i + 1}] ${prompt.location.file}:${prompt.location.line}`);
-    lines.push(`    "${preview}"`);
+
+    // Handle composed prompts differently
+    if (prompt.type === 'composed' && prompt.messages) {
+      lines.push(`    Type: Composed (${prompt.messages.length} messages)`);
+
+      // Show summary of messages
+      const systemMsgs = prompt.messages.filter((m) => m.role === 'system').length;
+      const userMsgs = prompt.messages.filter((m) => m.role === 'user').length;
+      const assistantMsgs = prompt.messages.filter((m) => m.role === 'assistant').length;
+      const dynamicMsgs = prompt.messages.filter((m) => m.isVariable).length;
+
+      if (systemMsgs > 0) {
+        lines.push(`    - ${systemMsgs} system message${systemMsgs !== 1 ? 's' : ''}`);
+      }
+      if (userMsgs > 0) {
+        lines.push(`    - ${userMsgs} user message${userMsgs !== 1 ? 's' : ''}`);
+      }
+      if (assistantMsgs > 0) {
+        lines.push(
+          `    - ${assistantMsgs} assistant message${assistantMsgs !== 1 ? 's' : ''} (few-shot)`,
+        );
+      }
+      if (dynamicMsgs > 0) {
+        lines.push(`    - ${dynamicMsgs} dynamic message${dynamicMsgs !== 1 ? 's' : ''}`);
+      }
+
+      // Show first message preview
+      const firstMsg = prompt.messages[0];
+      const preview =
+        firstMsg.content.length > 60 ? `${firstMsg.content.substring(0, 60)}...` : firstMsg.content;
+      lines.push(`    First message: [${firstMsg.role}] "${preview}"`);
+    } else {
+      // Single prompt
+      const preview =
+        prompt.content.length > 60 ? `${prompt.content.substring(0, 60)}...` : prompt.content;
+      lines.push(`    "${preview}"`);
+
+      if (prompt.role) {
+        lines.push(`    Role: ${prompt.role}`);
+      }
+    }
 
     if (prompt.variables.length > 0) {
       const varNames = prompt.variables.map((v) => v.name).join(', ');
@@ -203,10 +288,6 @@ export function generateExtractionSummary(prompts: ExtractedPrompt[]): string {
 
     if (prompt.apiProvider) {
       lines.push(`    Provider: ${prompt.apiProvider}`);
-    }
-
-    if (prompt.role) {
-      lines.push(`    Role: ${prompt.role}`);
     }
 
     lines.push(`    Confidence: ${(prompt.confidence * 100).toFixed(0)}%`);

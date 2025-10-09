@@ -164,22 +164,36 @@ export function extractCommand(program: Command) {
           const choices = promptsWithSimilarity.map((p, i) => {
             const fileName = path.basename(p.location.file);
             const location = `${fileName}:${p.location.line}`;
-            const roleLabel = p.role ? ` [${p.role}]` : '';
+            const typeLabel = p.type === 'composed' ? chalk.blue(' [COMPOSED]') : '';
+            const roleLabel = p.role && !p.type ? ` [${p.role}]` : '';
             const providerLabel = p.apiProvider ? ` (${p.apiProvider})` : '';
             const confidenceLabel = ` - ${(p.confidence * 100).toFixed(0)}%`;
 
             // Add duplicate indicator
             const duplicateLabel = p.isDuplicate ? chalk.red(' [DUPLICATE]') : '';
 
-            // Truncate content for display, preserving readability
-            const maxContentLength = 80;
-            let displayContent = p.content.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-            if (displayContent.length > maxContentLength) {
-              displayContent = displayContent.substring(0, maxContentLength) + '...';
+            // Format display content based on type
+            let displayContent: string;
+            if (p.type === 'composed' && p.messages) {
+              // Show message count and first message preview
+              const msgCount = p.messages.length;
+              const firstMsg = p.messages[0];
+              const preview = firstMsg.content
+                .substring(0, 60)
+                .replace(/\n/g, ' ')
+                .replace(/\s+/g, ' ');
+              displayContent = `${msgCount} messages: ${firstMsg.role}: ${preview}...`;
+            } else {
+              // Truncate content for display, preserving readability
+              const maxContentLength = 80;
+              displayContent = p.content.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+              if (displayContent.length > maxContentLength) {
+                displayContent = displayContent.substring(0, maxContentLength) + '...';
+              }
             }
 
             return {
-              name: `${location}${roleLabel}${providerLabel}${confidenceLabel}${duplicateLabel}\n  ${chalk.gray(displayContent)}`,
+              name: `${location}${typeLabel}${roleLabel}${providerLabel}${confidenceLabel}${duplicateLabel}\n  ${chalk.gray(displayContent)}`,
               value: i,
               checked: !p.isDuplicate, // Uncheck duplicates by default
             };

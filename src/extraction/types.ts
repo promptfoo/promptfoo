@@ -11,6 +11,17 @@ export interface Variable {
   sampleValue?: string;
 }
 
+export interface Message {
+  /** Role of the message */
+  role: 'system' | 'user' | 'assistant';
+  /** Content of the message */
+  content: string;
+  /** Whether this is a template/variable reference */
+  isVariable?: boolean;
+  /** Variable name if this is a dynamic message */
+  variableName?: string;
+}
+
 export interface ExtractedPrompt {
   /** The prompt text content */
   content: string;
@@ -28,6 +39,10 @@ export interface ExtractedPrompt {
   apiProvider?: string;
   /** Role (for chat messages) */
   role?: 'system' | 'user' | 'assistant';
+  /** If this is a composed prompt with multiple messages */
+  messages?: Message[];
+  /** Type of prompt extraction */
+  type?: 'single' | 'composed';
 }
 
 export interface DiffChange {

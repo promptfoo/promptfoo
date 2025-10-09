@@ -13,6 +13,13 @@ interface LLMExtractedPrompt {
   apiProvider?: string;
   confidence: number;
   reasoning?: string;
+  messages?: Array<{
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+    isVariable?: boolean;
+    variableName?: string;
+  }>;
+  type?: 'single' | 'composed';
 }
 
 /**
@@ -40,62 +47,52 @@ export async function extractPromptsFromFile(
 
   // Use LLM to extract prompts
   const prompt = dedent`
-    You are a code analysis assistant specialized in extracting LLM prompts from source code.
+    Extract prompts being sent to LLM APIs from this ${language} code.
 
-    Analyze the following ${language} code and identify ALL prompts being sent to LLM APIs (OpenAI, Anthropic, Claude, etc.).
+    TASK:
+    1. Find where LLM APIs are called (OpenAI, Anthropic, etc.)
+    2. Look at the message content being sent
+    3. If content references a variable, trace back to find that variable's definition
+    4. Extract the actual prompt text, replacing dynamic parts with {{variableName}}
 
-    IMPORTANT: Extract EVERY distinct prompt you find, including:
-    1. System prompts that define the AI's behavior
-    2. User prompts and message templates
-    3. Prompt templates with variables (e.g., "Hello {{name}}", "Answer: \${question}")
-    4. Direct string literals in API calls
-    5. Prompts in LLM framework configurations (LangChain, LlamaIndex, etc.)
-    6. Multi-line prompts, template literals, and dedented strings
-    7. Prompts in array/list structures (message arrays)
-    8. Prompts in function calls or method chains
+    RULES:
+    - When you see "content: someVar", find where someVar is defined
+    - For template literals like \`Hello \${name}\`, extract as "Hello {{name}}"
+    - For variables built from other variables (e.g., contextString from map/join), mark as {{contextString}}
+    - Include all static text - this is the actual prompt being sent to the LLM
+    - Ignore conditional logic (||, ??) - extract the template, not the fallback value
 
-    For each distinct prompt found, provide:
-    - content: The COMPLETE prompt text, preserving formatting (string)
-    - line: Approximate line number where it starts (number)
-    - role: "system", "user", or "assistant" (string, if identifiable from context)
-    - apiProvider: "openai", "anthropic", "claude", or other provider name (string, if identifiable)
-    - confidence: Score from 0 to 1 indicating certainty this is an LLM prompt (number)
-    - reasoning: Brief explanation of why this is a prompt and how you identified it (string)
+    OUTPUT FORMAT:
+    Return a JSON array. Each extracted prompt should have:
+    {
+      "content": "The actual prompt text with {{variables}}",
+      "line": <line number>,
+      "role": "system" | "user" | "assistant",
+      "apiProvider": "openai" | "anthropic" | etc,
+      "confidence": 0.0-1.0,
+      "reasoning": "Brief explanation"
+    }
 
-    Guidelines:
-    - Extract the full prompt text, including template variables like {{var}}, \${var}, {var}, etc.
-    - Include prompts even if they appear multiple times in different contexts
-    - Use higher confidence (>0.8) for clear API calls, lower for uncertain cases
-    - If a string could be a prompt but you're not sure, include it with lower confidence
-    - Look for patterns: messages arrays, system/user roles, openai.chat.completions, etc.
+    EXAMPLE:
+    Code:
+    \`\`\`
+    const greeting = \`Hello \${name}, welcome!\`;
+    const messages = [{role: 'user', content: greeting}];
+    await openai.chat.completions.create({messages});
+    \`\`\`
 
-    CRITICAL: Return ONLY a valid JSON array. Do not include:
-    - Markdown code blocks or formatting
-    - Explanatory text before or after the JSON
-    - Comments in the JSON
-    - Trailing commas
+    Extract:
+    [{
+      "content": "Hello {{name}}, welcome!",
+      "line": 1,
+      "role": "user",
+      "apiProvider": "openai",
+      "confidence": 0.95,
+      "reasoning": "Template literal prompt with dynamic name variable"
+    }]
 
+    Return ONLY valid JSON array. No markdown, no explanations.
     If no prompts found, return: []
-
-    Example output:
-    [
-      {
-        "content": "You are a helpful assistant that answers questions concisely.",
-        "line": 10,
-        "role": "system",
-        "apiProvider": "openai",
-        "confidence": 0.95,
-        "reasoning": "System message in OpenAI chat.completions call"
-      },
-      {
-        "content": "Translate the following to French: {{text}}",
-        "line": 25,
-        "role": "user",
-        "apiProvider": "anthropic",
-        "confidence": 0.9,
-        "reasoning": "Template prompt with variable in Anthropic messages API"
-      }
-    ]
 
     Code to analyze:
     \`\`\`${language}
@@ -128,10 +125,14 @@ export async function extractPromptsFromFile(
     let jsonStr = output.trim();
 
     // Remove markdown code blocks if present
-    const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (codeBlockMatch) {
-      jsonStr = codeBlockMatch[1].trim();
-      logger.debug('[promptExtractor] Extracted JSON from code block');
+    // Use greedy match to handle nested code blocks in JSON content
+    if (jsonStr.startsWith('```')) {
+      const firstNewline = jsonStr.indexOf('\n');
+      const lastBacktick = jsonStr.lastIndexOf('```');
+      if (firstNewline !== -1 && lastBacktick > firstNewline) {
+        jsonStr = jsonStr.substring(firstNewline + 1, lastBacktick).trim();
+        logger.debug('[promptExtractor] Extracted JSON from code block');
+      }
     }
 
     // Try to fix common JSON issues
@@ -175,9 +176,22 @@ export async function extractPromptsFromFile(
     if (Array.isArray(parsedOutput)) {
       llmPrompts = parsedOutput;
     } else if (typeof parsedOutput === 'object' && parsedOutput !== null) {
-      // LLM returned a single object instead of an array - wrap it
-      logger.debug('[promptExtractor] LLM returned single object, wrapping in array');
-      llmPrompts = [parsedOutput];
+      // Check if the LLM wrapped the array in an object (e.g., {"result": [...]})
+      // This happens with response_format: {type: "json_object"}
+      if ('result' in parsedOutput && Array.isArray(parsedOutput.result)) {
+        logger.debug('[promptExtractor] Unwrapping result array from object');
+        llmPrompts = parsedOutput.result;
+      } else if ('prompts' in parsedOutput && Array.isArray(parsedOutput.prompts)) {
+        logger.debug('[promptExtractor] Unwrapping prompts array from object');
+        llmPrompts = parsedOutput.prompts;
+      } else if ('data' in parsedOutput && Array.isArray(parsedOutput.data)) {
+        logger.debug('[promptExtractor] Unwrapping data array from object');
+        llmPrompts = parsedOutput.data;
+      } else {
+        // LLM returned a single prompt object (not wrapped) - wrap it
+        logger.debug('[promptExtractor] LLM returned single object, wrapping in array');
+        llmPrompts = [parsedOutput];
+      }
     } else {
       throw new Error(`LLM output is neither an array nor an object: ${typeof parsedOutput}`);
     }
@@ -193,6 +207,29 @@ export async function extractPromptsFromFile(
   const extractedPrompts: ExtractedPrompt[] = [];
 
   for (const llmPrompt of llmPrompts) {
+    // Validate that this looks like a valid prompt object
+    if (!llmPrompt || typeof llmPrompt !== 'object') {
+      logger.warn('[promptExtractor] Skipping invalid prompt object (not an object)', {
+        prompt: llmPrompt,
+      });
+      continue;
+    }
+
+    // Skip if missing required fields
+    if (!llmPrompt.content || typeof llmPrompt.content !== 'string') {
+      logger.warn('[promptExtractor] Skipping invalid prompt object (missing content)', {
+        prompt: llmPrompt,
+      });
+      continue;
+    }
+
+    if (typeof llmPrompt.confidence !== 'number') {
+      logger.warn('[promptExtractor] Skipping invalid prompt object (missing confidence)', {
+        prompt: llmPrompt,
+      });
+      continue;
+    }
+
     // Skip if below confidence threshold
     if (llmPrompt.confidence < minConfidence) {
       logger.debug(`[promptExtractor] Skipping low confidence prompt`, {
@@ -202,35 +239,82 @@ export async function extractPromptsFromFile(
       continue;
     }
 
-    // Detect variables in the prompt
-    const variables = detectVariables(llmPrompt.content);
-
     // Get context around the line
     const lineNumber = llmPrompt.line || 1;
     const contextStart = Math.max(0, lineNumber - 2);
     const contextEnd = Math.min(lines.length, lineNumber + 2);
     const context = lines.slice(contextStart, contextEnd).join('\n');
 
-    extractedPrompts.push({
-      content: llmPrompt.content,
-      variables,
-      location: {
-        file: filePath,
-        line: lineNumber,
-        context,
-      },
-      confidence: llmPrompt.confidence,
-      apiProvider: llmPrompt.apiProvider,
-      role: llmPrompt.role,
-    });
+    // Handle composed prompts differently
+    if (llmPrompt.type === 'composed' && llmPrompt.messages) {
+      // For composed prompts, detect variables across all messages
+      const allVariables = new Set<string>();
+      for (const msg of llmPrompt.messages) {
+        const vars = detectVariables(msg.content);
+        for (const v of vars) {
+          allVariables.add(v.name);
+        }
+        // Also add variable names from isVariable flags
+        if (msg.isVariable && msg.variableName) {
+          allVariables.add(msg.variableName);
+        }
+      }
 
-    logger.debug(`[promptExtractor] Extracted prompt`, {
-      line: lineNumber,
-      confidence: llmPrompt.confidence,
-      variableCount: variables.length,
-      apiProvider: llmPrompt.apiProvider,
-      role: llmPrompt.role,
-    });
+      // Convert to Variable objects
+      const variables = Array.from(allVariables).map((name) => ({
+        name,
+        syntax: `{{${name}}}`,
+        syntaxType: 'mustache' as const,
+      }));
+
+      extractedPrompts.push({
+        content: llmPrompt.content,
+        variables,
+        location: {
+          file: filePath,
+          line: lineNumber,
+          context,
+        },
+        confidence: llmPrompt.confidence,
+        apiProvider: llmPrompt.apiProvider,
+        role: llmPrompt.role,
+        messages: llmPrompt.messages,
+        type: 'composed',
+      });
+
+      logger.debug(`[promptExtractor] Extracted composed prompt`, {
+        line: lineNumber,
+        confidence: llmPrompt.confidence,
+        messageCount: llmPrompt.messages.length,
+        variableCount: variables.length,
+        apiProvider: llmPrompt.apiProvider,
+      });
+    } else {
+      // Single prompt - existing logic
+      const variables = detectVariables(llmPrompt.content);
+
+      extractedPrompts.push({
+        content: llmPrompt.content,
+        variables,
+        location: {
+          file: filePath,
+          line: lineNumber,
+          context,
+        },
+        confidence: llmPrompt.confidence,
+        apiProvider: llmPrompt.apiProvider,
+        role: llmPrompt.role,
+        type: 'single',
+      });
+
+      logger.debug(`[promptExtractor] Extracted single prompt`, {
+        line: lineNumber,
+        confidence: llmPrompt.confidence,
+        variableCount: variables.length,
+        apiProvider: llmPrompt.apiProvider,
+        role: llmPrompt.role,
+      });
+    }
   }
 
   logger.info(`[promptExtractor] Extracted ${extractedPrompts.length} prompts from ${filePath}`);
@@ -253,39 +337,33 @@ export async function extractPromptsFromContent(
   const language = getLanguageFromExtension(ext);
 
   const prompt = dedent`
-    You are a code analysis assistant specialized in extracting LLM prompts from source code.
+    Extract prompts being sent to LLM APIs from this ${language} code.
 
-    Analyze the following ${language} code and identify ALL prompts being sent to LLM APIs.
+    TASK:
+    1. Find where LLM APIs are called (OpenAI, Anthropic, etc.)
+    2. Look at the message content being sent
+    3. If content references a variable, trace back to find that variable's definition
+    4. Extract the actual prompt text, replacing dynamic parts with {{variableName}}
 
-    IMPORTANT: Extract EVERY distinct prompt, including:
-    - System prompts, user prompts, assistant messages
-    - Templates with variables ({{var}}, \${var}, {var})
-    - Multi-line prompts and template literals
-    - Prompts in API calls and framework configurations
+    RULES:
+    - When you see "content: someVar", find where someVar is defined
+    - For template literals like \`Hello \${name}\`, extract as "Hello {{name}}"
+    - For variables built from other variables, mark as {{variableName}}
+    - Include all static text - this is the actual prompt being sent to the LLM
+    - Ignore conditional logic (||, ??) - extract the template, not the fallback value
 
-    For each prompt, provide:
-    - content: Complete prompt text with variables (string)
-    - line: Approximate line number (number)
-    - role: "system", "user", or "assistant" if identifiable (string)
-    - apiProvider: Provider name if identifiable (string)
-    - confidence: Score 0-1 (number)
-    - reasoning: Brief explanation (string)
+    OUTPUT FORMAT:
+    [{
+      "content": "The actual prompt text with {{variables}}",
+      "line": <line number>,
+      "role": "system" | "user" | "assistant",
+      "apiProvider": "openai" | "anthropic" | etc,
+      "confidence": 0.0-1.0,
+      "reasoning": "Brief explanation"
+    }]
 
-    CRITICAL: Return ONLY valid JSON array. No markdown, no explanations, no trailing commas.
-
+    Return ONLY valid JSON array. No markdown, no explanations.
     If no prompts found, return: []
-
-    Example:
-    [
-      {
-        "content": "You are a helpful assistant.",
-        "line": 1,
-        "role": "system",
-        "apiProvider": "openai",
-        "confidence": 0.95,
-        "reasoning": "System message in API call"
-      }
-    ]
 
     Code to analyze:
     \`\`\`${language}
@@ -310,9 +388,13 @@ export async function extractPromptsFromContent(
 
     // Parse JSON from output
     let jsonStr = output.trim();
-    const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (codeBlockMatch) {
-      jsonStr = codeBlockMatch[1].trim();
+    // Use greedy match to handle nested code blocks in JSON content
+    if (jsonStr.startsWith('```')) {
+      const firstNewline = jsonStr.indexOf('\n');
+      const lastBacktick = jsonStr.lastIndexOf('```');
+      if (firstNewline !== -1 && lastBacktick > firstNewline) {
+        jsonStr = jsonStr.substring(firstNewline + 1, lastBacktick).trim();
+      }
     }
 
     // Fix common JSON issues
@@ -346,7 +428,19 @@ export async function extractPromptsFromContent(
     if (Array.isArray(parsedOutput)) {
       llmPrompts = parsedOutput;
     } else if (typeof parsedOutput === 'object' && parsedOutput !== null) {
-      llmPrompts = [parsedOutput];
+      // Check if the LLM wrapped the array in an object
+      if ('result' in parsedOutput && Array.isArray(parsedOutput.result)) {
+        logger.debug('[promptExtractor] Unwrapping result array from object');
+        llmPrompts = parsedOutput.result;
+      } else if ('prompts' in parsedOutput && Array.isArray(parsedOutput.prompts)) {
+        logger.debug('[promptExtractor] Unwrapping prompts array from object');
+        llmPrompts = parsedOutput.prompts;
+      } else if ('data' in parsedOutput && Array.isArray(parsedOutput.data)) {
+        logger.debug('[promptExtractor] Unwrapping data array from object');
+        llmPrompts = parsedOutput.data;
+      } else {
+        llmPrompts = [parsedOutput];
+      }
     } else {
       logger.warn('[promptExtractor] LLM output is neither an array nor an object');
       return [];
@@ -357,6 +451,19 @@ export async function extractPromptsFromContent(
     const extractedPrompts: ExtractedPrompt[] = [];
 
     for (const llmPrompt of llmPrompts) {
+      // Validate prompt object
+      if (!llmPrompt || typeof llmPrompt !== 'object') {
+        continue;
+      }
+
+      if (!llmPrompt.content || typeof llmPrompt.content !== 'string') {
+        continue;
+      }
+
+      if (typeof llmPrompt.confidence !== 'number') {
+        continue;
+      }
+
       if (llmPrompt.confidence < minConfidence) {
         continue;
       }
