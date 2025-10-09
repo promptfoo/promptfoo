@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useEffect, useState } from 'react';
 
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -66,6 +67,7 @@ export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const toast = useToast();
+  const { data: cloudConfig } = useCloudConfig();
   const [isInitialMount, setIsInitialMount] = useState(true);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
@@ -341,8 +343,16 @@ export const CustomPoliciesSection = () => {
               />
               <TestCaseGenerateButton
                 onClick={() => handleGenerateTestCase(policy.id)}
-                disabled={generatingTestCase && generatingPolicyId === policy.id}
+                disabled={
+                  !cloudConfig?.isEnabled ||
+                  (generatingTestCase && generatingPolicyId === policy.id)
+                }
                 isGenerating={generatingTestCase && generatingPolicyId === policy.id}
+                tooltipTitle={
+                  cloudConfig?.isEnabled
+                    ? undefined
+                    : 'Cloud connection required for test generation'
+                }
               />
               <IconButton
                 onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}

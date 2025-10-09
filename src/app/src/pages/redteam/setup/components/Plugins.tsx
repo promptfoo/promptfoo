@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -93,6 +94,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
   const toast = useToast();
+  const { data: cloudConfig } = useCloudConfig();
   const [isCustomMode, setIsCustomMode] = useState(true);
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
@@ -950,23 +952,32 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     />
                     {/* Generate test case button */}
                     <Tooltip
-                      title={`Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
+                      title={
+                        cloudConfig?.isEnabled
+                          ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
+                          : 'Cloud connection required for test generation'
+                      }
                     >
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleGenerateTestCase(plugin);
-                        }}
-                        disabled={generatingTestCase && generatingPlugin === plugin}
-                        sx={{ color: 'text.secondary', ml: 0.5 }}
-                      >
-                        {generatingTestCase && generatingPlugin === plugin ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <MagicWandIcon fontSize="small" />
-                        )}
-                      </IconButton>
+                      <span>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleGenerateTestCase(plugin);
+                          }}
+                          disabled={
+                            !cloudConfig?.isEnabled ||
+                            (generatingTestCase && generatingPlugin === plugin)
+                          }
+                          sx={{ color: 'text.secondary', ml: 0.5 }}
+                        >
+                          {generatingTestCase && generatingPlugin === plugin ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <MagicWandIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </span>
                     </Tooltip>
                   </Box>
 

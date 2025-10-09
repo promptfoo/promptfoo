@@ -238,21 +238,24 @@ export const TestCaseGenerateButton: React.FC<{
   disabled?: boolean;
   isGenerating?: boolean;
   size?: 'small' | 'medium';
-}> = ({ onClick, disabled = false, isGenerating = false, size = 'small' }) => (
-  <Tooltip title="Generate test case">
-    <IconButton
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      disabled={disabled}
-      sx={{ color: 'text.secondary', ml: size === 'small' ? 0.5 : 1 }}
-    >
-      {isGenerating ? (
-        <CircularProgress size={size === 'small' ? 16 : 20} />
-      ) : (
-        <MagicWandIcon fontSize={size} />
-      )}
-    </IconButton>
+  tooltipTitle?: string;
+}> = ({ onClick, disabled = false, isGenerating = false, size = 'small', tooltipTitle }) => (
+  <Tooltip title={tooltipTitle || 'Generate test case'}>
+    <span>
+      <IconButton
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        disabled={disabled}
+        sx={{ color: 'text.secondary', ml: size === 'small' ? 0.5 : 1 }}
+      >
+        {isGenerating ? (
+          <CircularProgress size={size === 'small' ? 16 : 20} />
+        ) : (
+          <MagicWandIcon fontSize={size} />
+        )}
+      </IconButton>
+    </span>
   </Tooltip>
 );
