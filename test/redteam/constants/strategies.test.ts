@@ -1,7 +1,9 @@
 import {
   ADDITIONAL_STRATEGIES,
   ALL_STRATEGIES,
+  getDefaultNFanout,
   isCustomStrategy,
+  isFanoutStrategy,
   STRATEGY_COLLECTIONS,
 } from '../../../src/redteam/constants/strategies';
 
@@ -23,5 +25,15 @@ describe('strategies constants', () => {
     expect(isCustomStrategy('custom')).toBe(true);
     expect(isCustomStrategy('custom:test')).toBe(true);
     expect(isCustomStrategy('other')).toBe(false);
+  });
+
+  it('should expose fan-out metadata for supported strategies', () => {
+    expect(isFanoutStrategy('jailbreak:composite')).toBe(true);
+    expect(getDefaultNFanout('jailbreak:composite')).toBeGreaterThanOrEqual(1);
+
+    expect(isFanoutStrategy('gcg')).toBe(true);
+    expect(getDefaultNFanout('gcg')).toBeGreaterThanOrEqual(1);
+
+    expect(isFanoutStrategy('base64')).toBe(false);
   });
 });

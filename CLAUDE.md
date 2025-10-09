@@ -227,23 +227,21 @@ logger.debug('[HTTP Provider]: Calling endpoint', {
 logger.debug(`Calling ${url} with headers: ${JSON.stringify(headers)}`);
 ```
 
-````
-
 ## Git Workflow - CRITICAL
 
-### NEVER COMMIT DIRECTLY TO MAIN BRANCH
+### Rules
 
-### NEVER MERGE BRANCHES INTO MAIN DIRECTLY
-
-### NEVER PUSH TO MAIN BRANCH - EVER
-
-**ABSOLUTELY FORBIDDEN ACTIONS:**
-
-- `git push origin main` or `git push main` - NEVER DO THIS
-- `git merge feature-branch` while on main - NEVER DO THIS
-- Any direct commits to main branch - NEVER DO THIS
+1. NEVER COMMIT DIRECTLY TO MAIN BRANCH
+2. NEVER MERGE BRANCHES INTO MAIN DIRECTLY
+3. NEVER PUSH TO MAIN BRANCH - EVER
+4. **ABSOLUTELY FORBIDDEN ACTIONS:**
+   - `git push origin main` or `git push main` - NEVER DO THIS
+   - `git merge feature-branch` while on main - NEVER DO THIS
+   - Any direct commits to main branch - NEVER DO THIS
 
 All changes to main MUST go through pull requests and code review process.
+
+### Workflow
 
 Always follow this workflow:
 
@@ -253,7 +251,7 @@ Always follow this workflow:
    git checkout main
    git pull origin main
    git checkout -b feature/your-branch-name
-````
+   ```
 
 2. **Make your changes and commit**:
 
@@ -266,14 +264,30 @@ Always follow this workflow:
 
    **NEVER use `git commit --amend` or `git push --force` unless explicitly asked by the user.**
 
-3. **Push and create PR**:
+3. **Lint**:
+
+   ```bash
+   npm run lint
+   ```
+
+   If there are lint errors, fix them.
+
+4. **Format**:
+
+   ```bash
+   npm run format
+   ```
+
+   If there are formatting errors, fix them.
+
+5. **Push and create PR**:
 
    ```bash
    git push -u origin feature/your-branch-name
    gh pr create --title "Your PR Title" --body "PR description"
    ```
 
-4. **Wait for review and CI checks** before merging
+6. **Wait for review and CI checks** before merging
 
 ## Project Conventions
 
