@@ -25,9 +25,19 @@ interface EvalOptions {
    * ID of a specific eval to load.
    */
   fetchId: string | null;
+
+  /** NEW: baseline eval ID from URL (?baseline=...) */
+  baselineId?: string | null;
+
+  /** NEW: handler to change/clear baseline (updates URL in page.tsx) */
+  onBaselineChange?: (id: string | null) => void;
 }
 
-export default function Eval({ fetchId }: EvalOptions) {
+export default function Eval({ 
+  fetchId,
+  baselineId = null,
+  onBaselineChange, 
+}: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
   const [searchParams] = useSearchParams();
@@ -352,6 +362,10 @@ export default function Eval({ fetchId }: EvalOptions) {
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}
         onRecentEvalSelected={handleRecentEvalSelection}
+
+        // new: pass baseline props down to the viewer surface
+        baselineId={baselineId}
+        onBaselineChange={onBaselineChange?? (()=> {})}
       />
     </ShiftKeyProvider>
   );

@@ -12,7 +12,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
-import EyeIcon from '@mui/icons-material/Visibility';
+import EyeIcon from '@mui/icons-material/Visibility'; 
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -58,6 +58,11 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 
+import { computeDiff } from '../../../diff/computeDiff';
+import type { RunDiff } from '../../../diff/types';
+import CompareView from './CompareView';
+
+
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
   flexWrap: 'wrap',
@@ -70,7 +75,12 @@ interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (file: string) => void;
   defaultEvalId?: string;
+  
+  // New baseline comparison props
+  baselineId?: string | null;
+  onBaselineChange?: (id: string | null) => void;
 }
+
 
 const SearchInputField = React.memo(
   ({
@@ -164,6 +174,8 @@ export default function ResultsView({
   recentEvals,
   onRecentEvalSelected,
   defaultEvalId,
+  baselineId,
+  onBaselineChange,
 }: ResultsViewProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -243,6 +255,8 @@ export default function ResultsView({
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
   const currentEvalId = evalId || defaultEvalId || 'default';
+
+  const [resultsTableZoom, setResultsTableZoom] = React.useState<number>(1);
 
   // Handle menu close
   const handleMenuClose = () => {
@@ -491,7 +505,66 @@ export default function ResultsView({
     new Set(resultsChartsScores).size > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
-  const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
+  // --- Compare mode wiring (baseline bridge) ---
+const [baselineLocal, setBaselineLocal] = React.useState<string | null>(baselineId ?? null);
+
+// keep local in sync if parent prop changes
+React.useEffect(() => {
+  setBaselineLocal(baselineId ?? null);
+}, [baselineId]);
+
+// use parent's setter if provided; otherwise use local
+const setBaselineId = React.useCallback(
+  (id: string | null) => {
+    if (onBaselineChange) onBaselineChange(id);
+    else setBaselineLocal(id);
+  },
+  [onBaselineChange],
+);
+
+// this is the value the page should use everywhere
+const effectiveBaselineId = baselineId ?? baselineLocal;
+
+// --- Baseline diff state ---
+const [diff, setDiff] = React.useState<RunDiff | null>(null);
+
+React.useEffect(() => {
+  // If there’s no baseline selected, show the regular table
+  if (!effectiveBaselineId || !evalId) {
+    setDiff(null);
+    return;
+  }
+
+  async function fetchRunJson(id: string) {
+    // Try the explicit results endpoint first; fall back to /eval/:id if needed
+    const tryEndpoints = [`/eval/${id}/results`, `/eval/${id}`];
+    for (const ep of tryEndpoints) {
+      const res = await callApi(ep, { cache: 'no-store' });
+      if (res.ok) {
+        const body = await res.json();
+        // Some routes return {data: ...}, others return the plain object
+        return body?.data ?? body;
+      }
+    }
+    throw new Error(`Failed to fetch eval ${id}`);
+  }
+  let cancelled = false;
+  (async () => {
+    try {
+      const [fromRun, toRun] = await Promise.all([
+        fetchRunJson(effectiveBaselineId!),
+        fetchRunJson(evalId!),
+      ]);
+      if (!cancelled) setDiff(computeDiff(fromRun, toRun, {}));
+    } catch (e) {
+      console.error('Failed to compute baseline diff:', e);
+      if (!cancelled) setDiff(null);
+    }
+  })();
+    return () => {
+    cancelled = true;
+  };
+}, [effectiveBaselineId, evalId]);
 
   return (
     <>
@@ -558,19 +631,19 @@ export default function ResultsView({
                   labelId="results-table-zoom-label"
                   size="small"
                   label="Zoom"
-                  value={resultsTableZoom}
-                  onChange={(e: SelectChangeEvent<number>) =>
-                    setResultsTableZoom(e.target.value as number)
-                  }
+                  value={String(resultsTableZoom)}
+                  onChange={(e: SelectChangeEvent) => {
+                    setResultsTableZoom(Number(e.target.value));
+                  }}
                   sx={{ minWidth: 100 }}
                 >
-                  <MenuItem value={0.5}>50%</MenuItem>
-                  <MenuItem value={0.75}>75%</MenuItem>
-                  <MenuItem value={0.9}>90%</MenuItem>
-                  <MenuItem value={1}>100%</MenuItem>
-                  <MenuItem value={1.25}>125%</MenuItem>
-                  <MenuItem value={1.5}>150%</MenuItem>
-                  <MenuItem value={2}>200%</MenuItem>
+                  <MenuItem value={"0.5"}>50%</MenuItem>
+                  <MenuItem value={"0.75"}>75%</MenuItem>
+                  <MenuItem value={"0.9"}>90%</MenuItem>
+                  <MenuItem value={"1"}>100%</MenuItem>
+                  <MenuItem value={"1.25"}>125%</MenuItem>
+                  <MenuItem value={"1.5"}>150%</MenuItem>
+                  <MenuItem value={"2"}>200%</MenuItem>
                 </Select>
               </FormControl>
             </Box>
@@ -589,7 +662,50 @@ export default function ResultsView({
                 placeholder="Text or regex"
               />
             </Box>
+            {/* Candidate & Baseline side-by-side */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {/* Candidate (current) label */}
+              <FormControl size="small" sx={{ minWidth: 260 }}>
+                <InputLabel shrink>Candidate (current)</InputLabel>
+                <TextField
+                  size="small"
+                  value={config?.description || evalId || ''}
+                  inputProps={{ readOnly: true }}
+                />
+              </FormControl>
 
+              {/* Baseline picker */}
+              <FormControl size="small" sx={{ minWidth: 260 }}>
+                <InputLabel id="baseline-select-label">Baseline</InputLabel>
+                <Select
+                  labelId="baseline-select-label"
+                  label="Baseline"
+                  value={effectiveBaselineId ?? ''}
+                  onChange={(e: SelectChangeEvent) =>
+                    setBaselineId(((e.target.value as string) || '') || null)
+                  }
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {recentEvals
+                    .filter((r) => r.evalId !== evalId) // don’t allow picking self
+                    .map((r) => (
+                      <MenuItem key={r.evalId} value={r.evalId}>
+                        {r.description || r.evalId}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+
+              {effectiveBaselineId && (
+                <Button
+                  size="small"
+                  onClick={() => setBaselineId(null)}
+                  startIcon={<ClearIcon fontSize="small" />}
+                >
+                  Clear
+                </Button>
+              )}
+            </Box>
             <FiltersButton
               appliedFiltersCount={filters.appliedCount}
               onClick={() => setFiltersFormOpen(true)}
@@ -816,17 +932,26 @@ export default function ResultsView({
             />
           )}
         </Box>
-        <ResultsTable
-          maxTextLength={maxTextLength}
-          columnVisibility={currentColumnState.columnVisibility}
-          wordBreak={wordBreak}
-          showStats={showInferenceDetails}
-          filterMode={filterMode}
-          failureFilter={failureFilter}
-          debouncedSearchText={debouncedSearchValue}
-          onFailureFilterToggle={handleFailureFilterToggle}
-          zoom={resultsTableZoom}
-        />
+        {diff ? (
+          <CompareView
+            diff={diff}
+            baselineId={effectiveBaselineId!}
+            currentEvalId={evalId!}
+            onClearBaseline={() => setBaselineId(null)}
+          />
+        ) : (
+          <ResultsTable
+            maxTextLength={maxTextLength}
+            columnVisibility={currentColumnState.columnVisibility}
+            wordBreak={wordBreak}
+            showStats={showInferenceDetails}
+            filterMode={filterMode}
+            failureFilter={failureFilter}
+            debouncedSearchText={debouncedSearchValue}
+            onFailureFilterToggle={handleFailureFilterToggle}
+            zoom={resultsTableZoom}
+          />
+        )}
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
