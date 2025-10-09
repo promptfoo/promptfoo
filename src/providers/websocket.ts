@@ -1,5 +1,10 @@
+import path from 'path';
+
 import WebSocket, { type ClientOptions } from 'ws';
+import cliState from '../cliState';
+import { importModule } from '../esm';
 import logger from '../logger';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
@@ -16,8 +21,10 @@ const nunjucks = getNunjucksEngine();
 interface WebSocketProviderConfig {
   messageTemplate: string;
   url?: string;
+
   timeoutMs?: number;
   transformResponse?: string | Function;
+  streamResponse?: (data: any, accumulator: ProviderResponse) => [ProviderResponse, boolean];
   headers?: Record<string, string>;
   /**
    * @deprecated
@@ -35,10 +42,116 @@ export function createTransformResponse(parser: any): (data: any) => ProviderRes
   return (data) => ({ output: data });
 }
 
+export async function createStreamResponse(
+  transform: string | Function | undefined,
+): Promise<(data: any, accumulator: ProviderResponse) => [ProviderResponse, boolean]> {
+  if (!transform) {
+    return (data) => [data, true];
+  }
+
+  if (typeof transform === 'function') {
+    return (data, accumulator) => {
+      try {
+        // Pass prompt, vars, and context to user-provided function (extra args are safe)
+        return (transform as any)(data, accumulator);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const wrappedError = new Error(`Error in stream response function: ${errorMessage}`);
+        logger.error(wrappedError.message);
+        throw wrappedError;
+      }
+    };
+  }
+
+  if (typeof transform === 'string' && transform.startsWith('file://')) {
+    let filename = transform.slice('file://'.length);
+    let functionName: string | undefined;
+    if (filename.includes(':')) {
+      const splits = filename.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filename, functionName] = splits;
+      }
+    }
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
+    if (typeof requiredModule === 'function') {
+      return (data, accumulator) => {
+        try {
+          return requiredModule(data, accumulator);
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          const wrappedError = new Error(
+            `Error in stream response function from ${filename}: ${errorMessage}`,
+          );
+          logger.error(wrappedError.message);
+          throw wrappedError;
+        }
+      };
+    }
+    throw new Error(
+      `stream response malformed: ${filename} must export a function or have a default export as a function`,
+    );
+  } else if (typeof transform === 'string') {
+    return (data, accumulator) => {
+      try {
+        const trimmedTransform = transform.trim();
+        // Check if it's a function expression (either arrow or regular)
+        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
+
+        let transformFn: Function;
+        if (isFunctionExpression) {
+          // For function expressions, call them with the arguments
+          transformFn = new Function(
+            'data',
+            'accumulator',
+            `try { return (${trimmedTransform})(data, accumulator); } catch(e) { throw new Error('Stream response failed: ' + e.message) }`,
+          );
+        } else {
+          // Check if it contains a return statement
+          const hasReturn = /\breturn\b/.test(trimmedTransform);
+
+          if (hasReturn) {
+            // Use as function body if it has return statements
+            transformFn = new Function(
+              'data',
+              'accumulator',
+              `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+            );
+          } else {
+            // Wrap simple expressions with return
+            transformFn = new Function(
+              'data',
+              'accumulator',
+              `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+            );
+          }
+        }
+
+        const result: [ProviderResponse, boolean] = transformFn(data, accumulator);
+        return result;
+      } catch (err) {
+        logger.error(
+          `[Websocket Provider] Error in stream response: ${String(err)}. Data: ${data}. Accumulator: ${safeJsonStringify(accumulator)}.)}.`,
+        );
+        throw new Error(`Failed to transform request: ${String(err)}`);
+      }
+    };
+  }
+
+  throw new Error(
+    `Unsupported request transform type: ${typeof transform}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
+  );
+}
+
 export class WebSocketProvider implements ApiProvider {
   url: string;
   config: WebSocketProviderConfig;
   transformResponse: (data: any) => ProviderResponse;
+  streamResponse?: Promise<
+    (data: any, accumulator: ProviderResponse) => [ProviderResponse, boolean]
+  >;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as WebSocketProviderConfig;
@@ -46,6 +159,9 @@ export class WebSocketProvider implements ApiProvider {
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
     );
+    this.streamResponse = this.config.streamResponse
+      ? createStreamResponse(this.config.streamResponse)
+      : undefined;
     invariant(
       this.config.messageTemplate,
       `Expected WebSocket provider ${this.url} to have a config containing {messageTemplate}, but got ${safeJsonStringify(
@@ -68,9 +184,10 @@ export class WebSocketProvider implements ApiProvider {
       prompt,
     };
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
+    const streamResponse = this.streamResponse ? await this.streamResponse : undefined;
 
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
-
+    let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve) => {
       const wsOptions: ClientOptions = {};
       if (this.config.headers) {
@@ -81,28 +198,42 @@ export class WebSocketProvider implements ApiProvider {
         ws.close();
         resolve({ error: 'WebSocket request timed out' });
       }, this.config.timeoutMs || 10000);
+      ws.on('open', () => {
+        logger.debug(`WebSocket connection opened successfully`);
+      });
 
       ws.onmessage = (event) => {
         clearTimeout(timeout);
-        logger.debug(`Received WebSocket response: ${event.data}`);
-        try {
-          let data = event.data;
-          if (typeof data === 'string') {
-            try {
-              data = JSON.parse(data);
-            } catch {
-              // If parsing fails, assume it's a text response
-            }
+        if (streamResponse) {
+          const [newAccumulator, isComplete] = streamResponse(event, accumulator);
+          accumulator = newAccumulator;
+          if (isComplete) {
+            ws.close();
+            const response = this.transformResponse(accumulator);
+            resolve(response);
           }
-          resolve({ output: this.transformResponse(data) });
-        } catch (err) {
-          resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
+        } else {
+          try {
+            let data = event.data;
+            if (typeof data === 'string') {
+              try {
+                data = JSON.parse(data);
+              } catch {
+                // If parsing fails, assume it's a text response
+              }
+            }
+            resolve({ output: this.transformResponse(data) });
+          } catch (err) {
+            resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
+          } finally {
+            ws.close();
+          }
         }
-        ws.close();
       };
 
       ws.onerror = (err) => {
         clearTimeout(timeout);
+        logger.error(`WebSocket error: ${JSON.stringify(err)}`);
         resolve({ error: `WebSocket error: ${JSON.stringify(err)}` });
       };
 

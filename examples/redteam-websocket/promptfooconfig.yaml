@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Websocket test'
+
+prompts:
+  - '{{prompt}}'
+
+targets:
+  # - id: 'ws://localhost:3300/ws'
+  #   config:
+  #     messageTemplate: '{"input": "{{prompt}}"}'
+  - id: 'ws://localhost:3300/ws-stream'
+    config:
+      messageTemplate: '{"input": "{{prompt}}"}'
+      streamResponse: |
+        (event, data) => {
+          const { message, type } = JSON.parse(event.data);
+          if(type === "message"){return [{output: message},true]}
+          if(type === "error"){return [{error: message},true]}
+          return [data, false];
+        }
+
+redteam:
+  purpose: Assist users with planning affordable trips to Europe
+  plugins:
+    - harmful:self-harm
+    - politics
+  strategies:
+    - jailbreak
+    - prompt-injection

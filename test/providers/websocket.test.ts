@@ -114,8 +114,8 @@ describe('WebSocketProvider', () => {
 
     // Should still work and return expected response
     expect(response).toEqual({ output: { output: { result: 'test' } } });
-    // Headers should be undefined when not provided
-    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers: undefined });
+    // When headers are not provided, the options object should be empty
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com', {});
   });
 
   it('should throw if messageTemplate is missing', () => {
@@ -208,5 +208,101 @@ describe('WebSocketProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ output: { output: 'transformed-test' } });
+  });
+
+  describe('streamResponse behavior', () => {
+    it('should stream chunks and resolve when stream signals complete', async () => {
+      let callCount = 0;
+      const chunks = ['hello ', 'world'];
+      const streamResponse = (data: any, accumulator: any) => {
+        const previousOutput = typeof accumulator.output === 'string' ? accumulator.output : '';
+        const merged = { output: previousOutput + String(data) };
+        callCount += 1;
+        const isComplete = callCount === chunks.length ? 'DONE' : '';
+        return [merged, isComplete];
+      };
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse,
+          transformResponse: (data: any) => ({ output: (data as any).output }),
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: chunks[0] } as WebSocket.MessageEvent);
+            setTimeout(() => {
+              mockWs.onmessage?.({ data: chunks[1] } as WebSocket.MessageEvent);
+            }, 5);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
+
+      const response = await provider.callApi('ignored');
+      expect(response).toEqual({ output: { output: 'hello world' } });
+      expect(mockWs.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('should complete immediately if stream signals completion on first message', async () => {
+      const streamResponse = (data: any) => [{ output: String(data) }, 'COMPLETE'];
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse,
+          transformResponse: (data: any) => ({ output: (data as any).output }),
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
+
+      const response = await provider.callApi('ignored');
+      expect(response).toEqual({ output: { output: 'chunk' } });
+      expect(mockWs.close).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('timeouts', () => {
+    it.each([
+      { caseName: 'without streamResponse (non-streaming path)', useStreaming: false },
+      { caseName: 'with streamResponse (streaming path)', useStreaming: true },
+    ])('should timeout $caseName', async ({ useStreaming }) => {
+      jest.useFakeTimers();
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 100,
+          ...(useStreaming
+            ? {
+                // never signal completion; ensures timeout path is exercised
+                streamResponse: (_data: any, acc: any) => [acc, ''],
+              }
+            : {}),
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => mockWs);
+
+      const promise = provider.callApi('timeout test');
+      jest.advanceTimersByTime(100);
+      await expect(promise).resolves.toEqual({ error: 'WebSocket request timed out' });
+      expect(mockWs.close).toHaveBeenCalled();
+
+      jest.useRealTimers();
+    });
   });
 });
