@@ -788,7 +788,12 @@ describe('Plugins', () => {
 
     // Import the actual implementation code for testing
     // This simulates the key logic from generateTestCaseWithConfig function
-    const generateTestCaseWithConfig = async (plugin: string, config: any, toast: any, callApi: any) => {
+    const generateTestCaseWithConfig = async (
+      plugin: string,
+      config: any,
+      toast: any,
+      callApi: any,
+    ) => {
       try {
         const response = await callApi('/redteam/generate-test', {
           method: 'POST',

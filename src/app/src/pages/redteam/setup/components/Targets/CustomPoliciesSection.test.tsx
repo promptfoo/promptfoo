@@ -398,7 +398,10 @@ describe('CustomPoliciesSection', () => {
 
       const result = await generateTestCase(policy, config, mockToast, mockCallApi);
 
-      expect(mockToast.showToast).toHaveBeenCalledWith('Test case generated successfully', 'success');
+      expect(mockToast.showToast).toHaveBeenCalledWith(
+        'Test case generated successfully',
+        'success',
+      );
       expect(result).toEqual({
         prompt: 'Generated prompt',
         context: 'Generated context',
