@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -66,6 +74,7 @@ const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter((id) => id
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
+  const toast = useToast();
   const theme = useTheme();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
@@ -75,6 +84,16 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     isOpen: false,
     selectedStrategy: null,
   });
+
+  // Test case generation state
+  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
+  const [generatingStrategy, setGeneratingStrategy] = useState<string | null>(null);
+  const [generatedTestCase, setGeneratedTestCase] = useState<{
+    prompt: string;
+    context: string;
+    metadata?: any;
+  } | null>(null);
+  const [generatingTestCase, setGeneratingTestCase] = useState(false);
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
@@ -348,6 +367,61 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies, updateConfig],
   );
 
+  const handleGenerateStrategyTest = useCallback(
+    async (strategyId: string) => {
+      setGeneratingStrategy(strategyId);
+      setGeneratedTestCase(null);
+      setGeneratingTestCase(true);
+      setTestCaseDialogOpen(true);
+
+      try {
+        recordEvent('feature_used', {
+          feature: 'redteam_strategy_generate_test_case',
+          strategy: strategyId,
+        });
+
+        const response = await callApi('/redteam/generate-strategy-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache',
+          },
+          body: JSON.stringify({
+            strategyId,
+            config: {
+              applicationDefinition: config.applicationDefinition,
+              strategyConfig: {},
+            },
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        setGeneratedTestCase({
+          prompt: data.prompt,
+          context: data.context,
+          metadata: data.metadata,
+        });
+      } catch (error) {
+        console.error('Failed to generate strategy test case:', error);
+        toast.showToast(
+          error instanceof Error ? error.message : 'Failed to generate strategy test case',
+          'error',
+        );
+        setTestCaseDialogOpen(false);
+        setGeneratingStrategy(null);
+      } finally {
+        setGeneratingTestCase(false);
+      }
+    },
+    [config.applicationDefinition, recordEvent, toast],
+  );
+
   // ----------------------------------------------
   // Derived states
   // ----------------------------------------------
@@ -490,6 +564,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            onGenerateTest={handleGenerateStrategyTest}
+            generatingStrategyId={generatingStrategy}
           />
         )}
 
@@ -503,6 +579,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            onGenerateTest={handleGenerateStrategyTest}
+            generatingStrategyId={generatingStrategy}
           />
         )}
 
@@ -516,6 +594,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            onGenerateTest={handleGenerateStrategyTest}
+            generatingStrategyId={generatingStrategy}
           />
         )}
 
@@ -529,6 +609,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            onGenerateTest={handleGenerateStrategyTest}
+            generatingStrategyId={generatingStrategy}
           />
         )}
 
@@ -542,6 +624,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            onGenerateTest={handleGenerateStrategyTest}
+            generatingStrategyId={generatingStrategy}
           />
         )}
 
@@ -577,6 +661,91 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
           }
         />
+
+        {/* Test Case Generation Dialog */}
+        <Dialog
+          open={testCaseDialogOpen}
+          onClose={() => {
+            setTestCaseDialogOpen(false);
+            setGeneratedTestCase(null);
+            setGeneratingStrategy(null);
+          }}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle>
+            Test Case Sample - {generatingStrategy && (strategyDisplayNames[generatingStrategy as keyof typeof strategyDisplayNames] || generatingStrategy)}
+          </DialogTitle>
+          <DialogContent>
+            {generatingTestCase ? (
+              <Box
+                sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}
+              >
+                <CircularProgress sx={{ mb: 2 }} />
+                <Typography variant="body2" color="text.secondary">
+                  Generating test case...
+                </Typography>
+              </Box>
+            ) : generatedTestCase ? (
+              <Box sx={{ pt: 2 }}>
+                <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
+                  <Typography variant="body2">
+                    {generatedTestCase.context}
+                  </Typography>
+                </Alert>
+                <Typography variant="subtitle2" gutterBottom>
+                  Test Case:
+                </Typography>
+                <Box
+                  sx={{
+                    p: 2,
+                    backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {generatedTestCase.prompt}
+                </Box>
+                {generatedTestCase.metadata && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Metadata:
+                    </Typography>
+                    <Box
+                      sx={{
+                        p: 2,
+                        backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                        fontFamily: 'monospace',
+                        fontSize: '0.75rem',
+                      }}
+                    >
+                      <pre>{JSON.stringify(generatedTestCase.metadata, null, 2)}</pre>
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+            ) : null}
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => {
+                setTestCaseDialogOpen(false);
+                setGeneratedTestCase(null);
+                setGeneratingStrategy(null);
+              }}
+            >
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </PageWrapper>
   );

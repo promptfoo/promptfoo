@@ -1,10 +1,13 @@
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import { alpha } from '@mui/material/styles';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   AGENTIC_STRATEGIES,
@@ -20,9 +23,18 @@ interface StrategyItemProps {
   isSelected: boolean;
   onToggle: (id: string) => void;
   onConfigClick: (id: string) => void;
+  onGenerateTest?: (id: string) => void;
+  isGenerating?: boolean;
 }
 
-export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: StrategyItemProps) {
+export function StrategyItem({
+  strategy,
+  isSelected,
+  onToggle,
+  onConfigClick,
+  onGenerateTest,
+  isGenerating = false
+}: StrategyItemProps) {
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
 
   return (
@@ -63,6 +75,25 @@ export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: 
           onClick={(e) => e.stopPropagation()}
           color="primary"
         />
+        {onGenerateTest && (
+          <Tooltip title={`Generate a test case for ${strategy.name}`}>
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                onGenerateTest(strategy.id);
+              }}
+              disabled={isGenerating}
+              sx={{ color: 'text.secondary', ml: 0.5 }}
+            >
+              {isGenerating ? (
+                <CircularProgress size={16} />
+              ) : (
+                <AutoFixHighIcon fontSize="small" />
+              )}
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
 
       {/* Content container */}
