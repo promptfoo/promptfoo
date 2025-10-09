@@ -19,6 +19,18 @@ You can reference this provider using either:
 - `anthropic:claude-agent-sdk` (full name)
 - `anthropic:claude-code` (alias)
 
+## Installation
+
+The Claude Agent SDK provider requires the `@anthropic-ai/claude-agent-sdk` package to be installed separately:
+
+```bash
+npm install @anthropic-ai/claude-agent-sdk
+```
+
+:::note
+This is an optional dependency and only needs to be installed if you want to use the Claude Agent SDK provider.
+:::
+
 ## Setup
 
 The easiest way to get started is with an Anthropic API key. You can set it with the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.

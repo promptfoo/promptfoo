@@ -8,6 +8,12 @@ npx promptfoo@latest init --example claude-agent-sdk
 
 ## Setup
 
+Install the Claude Agent SDK:
+
+```bash
+npm install @anthropic-ai/claude-agent-sdk
+```
+
 Export your Anthropic API key as `ANTHROPIC_API_KEY`:
 
 ```bash
