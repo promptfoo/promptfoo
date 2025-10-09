@@ -15,6 +15,7 @@ The Claude Agent SDK was formerly known as the Claude Code SDK. It's still built
 ## Provider IDs
 
 You can reference this provider using either:
+
 - `anthropic:claude-agent-sdk` (full name)
 - `anthropic:claude-code` (alias)
 
@@ -110,24 +111,24 @@ prompts:
 
 ## Supported Parameters
 
-| Parameter              | Type     | Description                                                                    | Default              |
-| ---------------------- | -------- | ------------------------------------------------------------------------------ | -------------------- |
-| `apiKey`               | string   | Anthropic API key                                                              | Environment variable |
-| `working_dir`          | string   | Directory for file operations                                                  | Temporary directory  |
-| `model`                | string   | Primary model to use (passed to Claude Agent SDK)                                   | Claude Agent SDK default  |
-| `fallback_model`       | string   | Fallback model if primary fails                                                | Claude Agent SDK default  |
-| `max_turns`            | number   | Maximum conversation turns                                                     | Claude Agent SDK default  |
-| `max_thinking_tokens`  | number   | Maximum tokens for thinking                                                    | Claude Agent SDK default  |
-| `permission_mode`      | string   | File access permissions: `default`, `plan`, `acceptEdits`, `bypassPermissions` | `default`            |
-| `custom_system_prompt` | string   | Replace default system prompt                                                  | None                 |
-| `append_system_prompt` | string   | Append to default system prompt                                                | None                 |
-| `custom_allowed_tools` | string[] | Replace default allowed tools                                                  | None                 |
-| `append_allowed_tools` | string[] | Add to default allowed tools                                                   | None                 |
-| `allow_all_tools`      | boolean  | Allow all available tools                                                      | false                |
-| `disallowed_tools`     | string[] | Tools to explicitly block (overrides allowed)                                  | None                 |
-| `mcp`                  | object   | MCP server configuration                                                       | None                 |
-| `strict_mcp_config`    | boolean  | Only allow configured MCP servers                                              | true                 |
-| `setting_sources`      | string[] | Where SDK looks for settings, CLAUDE.md, and slash commands                    | None (disabled)      |
+| Parameter              | Type     | Description                                                                    | Default                  |
+| ---------------------- | -------- | ------------------------------------------------------------------------------ | ------------------------ |
+| `apiKey`               | string   | Anthropic API key                                                              | Environment variable     |
+| `working_dir`          | string   | Directory for file operations                                                  | Temporary directory      |
+| `model`                | string   | Primary model to use (passed to Claude Agent SDK)                              | Claude Agent SDK default |
+| `fallback_model`       | string   | Fallback model if primary fails                                                | Claude Agent SDK default |
+| `max_turns`            | number   | Maximum conversation turns                                                     | Claude Agent SDK default |
+| `max_thinking_tokens`  | number   | Maximum tokens for thinking                                                    | Claude Agent SDK default |
+| `permission_mode`      | string   | File access permissions: `default`, `plan`, `acceptEdits`, `bypassPermissions` | `default`                |
+| `custom_system_prompt` | string   | Replace default system prompt                                                  | None                     |
+| `append_system_prompt` | string   | Append to default system prompt                                                | None                     |
+| `custom_allowed_tools` | string[] | Replace default allowed tools                                                  | None                     |
+| `append_allowed_tools` | string[] | Add to default allowed tools                                                   | None                     |
+| `allow_all_tools`      | boolean  | Allow all available tools                                                      | false                    |
+| `disallowed_tools`     | string[] | Tools to explicitly block (overrides allowed)                                  | None                     |
+| `mcp`                  | object   | MCP server configuration                                                       | None                     |
+| `strict_mcp_config`    | boolean  | Only allow configured MCP servers                                              | true                     |
+| `setting_sources`      | string[] | Where SDK looks for settings, CLAUDE.md, and slash commands                    | None (disabled)          |
 
 ## Models
 
@@ -158,7 +159,7 @@ Claude Agent SDK also supports configuring models through [environment variables
 Unless you specify a `custom_system_prompt`, the default Claude Code system prompt will be used. You can append additional instructions to it with `append_system_prompt`.
 
 :::info
-Note that this differs slightly from the Claude Agent SDK's behavior when used independently of Promptfoo. The Agent SDK will *not* use the Claude Code system prompt by default unless it's specified—it will instead use an empty system prompt if none is provided. If you want to use an empty system prompt with this provider, set `custom_system_prompt` to an empty string.
+Note that this differs slightly from the Claude Agent SDK's behavior when used independently of Promptfoo. The Agent SDK will _not_ use the Claude Code system prompt by default unless it's specified—it will instead use an empty system prompt if none is provided. If you want to use an empty system prompt with this provider, set `custom_system_prompt` to an empty string.
 :::
 
 ## Tools and Permissions

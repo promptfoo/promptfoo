@@ -316,7 +316,9 @@ describe('ClaudeCodeSDKProvider', () => {
         });
         await provider.callApi('Test prompt');
 
-        expect(tempDirSpy).toHaveBeenCalledWith(expect.stringContaining('promptfoo-claude-agent-sdk-'));
+        expect(tempDirSpy).toHaveBeenCalledWith(
+          expect.stringContaining('promptfoo-claude-agent-sdk-'),
+        );
         expect(rmSyncSpy).toHaveBeenCalledWith('/tmp/test-temp-dir', {
           recursive: true,
           force: true,
