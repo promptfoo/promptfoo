@@ -392,7 +392,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           tokenUsage: getTokenUsage(data, cached),
           isRefusal: true,
           ...(finishReason && { finishReason }),
-          guardrails: contentFiltered ? { flagged: true } : { flagged: false },
+          guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
         };
       }
 

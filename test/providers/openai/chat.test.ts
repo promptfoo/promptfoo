@@ -199,7 +199,12 @@ describe('OpenAI Provider', () => {
     it('should handle model refusals correctly', async () => {
       const mockResponse = {
         data: {
-          choices: [{ message: { refusal: 'Content policy violation' } }],
+          choices: [
+            {
+              message: { refusal: 'Content policy violation' },
+              finish_reason: 'stop',
+            },
+          ],
           usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
         },
         cached: false,
