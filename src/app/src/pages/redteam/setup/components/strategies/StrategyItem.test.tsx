@@ -261,6 +261,7 @@ describe('StrategyItem', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
+          isCloudEnabled={true}
         />,
       );
 
@@ -294,6 +295,7 @@ describe('StrategyItem', () => {
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
           isGenerating={true}
+          isCloudEnabled={true}
         />,
       );
 
@@ -310,6 +312,7 @@ describe('StrategyItem', () => {
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
           isGenerating={true}
+          isCloudEnabled={true}
         />,
       );
 
@@ -326,6 +329,7 @@ describe('StrategyItem', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
+          isCloudEnabled={true}
         />,
       );
 
@@ -345,6 +349,7 @@ describe('StrategyItem', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
+          isCloudEnabled={true}
         />,
       );
 
@@ -373,6 +378,7 @@ describe('StrategyItem', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
+          isCloudEnabled={true}
         />,
       );
 
@@ -389,6 +395,7 @@ describe('StrategyItem', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
+          isCloudEnabled={true}
         />,
       );
 
@@ -396,7 +403,84 @@ describe('StrategyItem', () => {
       const magicWandButton = buttons[0];
 
       // The tooltip should contain the strategy name
-      expect(magicWandButton).toHaveAttribute('aria-label', expect.stringContaining('Generate a test case'));
+      expect(magicWandButton).toHaveAttribute(
+        'aria-label',
+        expect.stringContaining('Generate a test case'),
+      );
+    });
+
+    it('disables magic wand button when cloud is not enabled', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+          isCloudEnabled={false}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+      expect(magicWandButton).toBeDisabled();
+    });
+
+    it('shows appropriate tooltip when cloud is not enabled', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+          isCloudEnabled={false}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+
+      // Should show cloud connection message in tooltip
+      expect(
+        magicWandButton.parentElement?.getAttribute('title') ||
+          magicWandButton.getAttribute('aria-label'),
+      ).toContain('Connect to Promptfoo Cloud');
+    });
+
+    it('enables magic wand button when cloud is enabled', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+          isCloudEnabled={true}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+      expect(magicWandButton).not.toBeDisabled();
+    });
+
+    it('disables magic wand button when both generating and cloud is enabled', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+          isGenerating={true}
+          isCloudEnabled={true}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+      expect(magicWandButton).toBeDisabled();
     });
   });
 

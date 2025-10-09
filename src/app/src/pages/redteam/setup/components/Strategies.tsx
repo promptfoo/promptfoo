@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -76,6 +77,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { recordEvent } = useTelemetry();
   const toast = useToast();
   const theme = useTheme();
+  const { data: cloudConfig } = useCloudConfig();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
   const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
@@ -94,6 +96,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     metadata?: any;
   } | null>(null);
   const [generatingTestCase, setGeneratingTestCase] = useState(false);
+
+  // Check if cloud is enabled for magic wand feature
+  const isCloudEnabled = cloudConfig?.isEnabled ?? false;
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
@@ -374,6 +379,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       setGeneratingTestCase(true);
       setTestCaseDialogOpen(true);
 
+      // Create an abort controller for timeout
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 60000); // 60 second timeout
+
       try {
         recordEvent('feature_used', {
           feature: 'redteam_strategy_generate_test_case',
@@ -394,6 +403,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               strategyConfig: {},
             },
           }),
+          signal: abortController.signal,
         });
 
         const data = await response.json();
@@ -409,13 +419,21 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         });
       } catch (error) {
         console.error('Failed to generate strategy test case:', error);
-        toast.showToast(
-          error instanceof Error ? error.message : 'Failed to generate strategy test case',
-          'error',
-        );
+        if (error instanceof Error && error.name === 'AbortError') {
+          toast.showToast(
+            'Test generation timed out. Please try again or check your connection.',
+            'error',
+          );
+        } else {
+          toast.showToast(
+            error instanceof Error ? error.message : 'Failed to generate strategy test case',
+            'error',
+          );
+        }
         setTestCaseDialogOpen(false);
         setGeneratingStrategy(null);
       } finally {
+        clearTimeout(timeoutId);
         setGeneratingTestCase(false);
       }
     },
@@ -566,6 +584,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
+            isCloudEnabled={isCloudEnabled}
           />
         )}
 
@@ -581,6 +600,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
+            isCloudEnabled={isCloudEnabled}
           />
         )}
 
@@ -596,6 +616,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
+            isCloudEnabled={isCloudEnabled}
           />
         )}
 
@@ -611,6 +632,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
+            isCloudEnabled={isCloudEnabled}
           />
         )}
 
@@ -626,6 +648,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
+            isCloudEnabled={isCloudEnabled}
           />
         )}
 
@@ -674,13 +697,14 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           fullWidth
         >
           <DialogTitle>
-            Test Case Sample - {generatingStrategy && (strategyDisplayNames[generatingStrategy as keyof typeof strategyDisplayNames] || generatingStrategy)}
+            Test Case Sample -{' '}
+            {generatingStrategy &&
+              (strategyDisplayNames[generatingStrategy as keyof typeof strategyDisplayNames] ||
+                generatingStrategy)}
           </DialogTitle>
           <DialogContent>
             {generatingTestCase ? (
-              <Box
-                sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}
-              >
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
                 <CircularProgress sx={{ mb: 2 }} />
                 <Typography variant="body2" color="text.secondary">
                   Generating test case...
@@ -689,9 +713,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             ) : generatedTestCase ? (
               <Box sx={{ pt: 2 }}>
                 <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
-                  <Typography variant="body2">
-                    {generatedTestCase.context}
-                  </Typography>
+                  <Typography variant="body2">{generatedTestCase.context}</Typography>
                 </Alert>
                 <Typography variant="subtitle2" gutterBottom>
                   Test Case:

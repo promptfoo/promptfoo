@@ -19,7 +19,7 @@ const renderWithProviders = (component: React.ReactNode) => {
   return render(
     <MemoryRouter>
       <ThemeProvider theme={theme}>{component}</ThemeProvider>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 };
 
@@ -43,12 +43,7 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
   describe('Magic Wand Button Rendering', () => {
     it('should display magic wand buttons on all strategy cards', async () => {
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Wait for strategies to load
       await waitFor(() => {
@@ -56,9 +51,9 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
       });
 
       // Find all strategy cards
-      const strategyCards = screen.getAllByRole('generic').filter(el =>
-        el.className.includes('MuiPaper')
-      );
+      const strategyCards = screen
+        .getAllByRole('generic')
+        .filter((el) => el.className.includes('MuiPaper'));
 
       // Each card should have a magic wand button
       strategyCards.forEach((card) => {
@@ -71,12 +66,7 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
     });
 
     it('should show tooltip on magic wand button hover', async () => {
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       await waitFor(() => {
         expect(screen.getByText('Select Strategies')).toBeInTheDocument();
@@ -84,12 +74,15 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Find first magic wand button
       const buttons = screen.getAllByRole('button');
-      const magicWandButton = buttons.find(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const magicWandButton = buttons.find((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       expect(magicWandButton).toBeTruthy();
-      expect(magicWandButton).toHaveAttribute('aria-label', expect.stringContaining('Generate a test case'));
+      expect(magicWandButton).toHaveAttribute(
+        'aria-label',
+        expect.stringContaining('Generate a test case'),
+      );
     });
   });
 
@@ -112,12 +105,7 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
         status: 200,
       } as Response);
 
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       await waitFor(() => {
         expect(screen.getByText('Select Strategies')).toBeInTheDocument();
@@ -125,8 +113,8 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Find and click a magic wand button
       const buttons = screen.getAllByRole('button');
-      const magicWandButton = buttons.find(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const magicWandButton = buttons.find((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       expect(magicWandButton).toBeTruthy();
@@ -141,7 +129,7 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
             headers: expect.objectContaining({
               'Content-Type': 'application/json',
             }),
-          })
+          }),
         );
       });
 
@@ -155,28 +143,25 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
     it('should show loading state while generating', async () => {
       // Mock API with delay
-      vi.mocked(apiUtils.callApi).mockImplementation(() =>
-        new Promise((resolve) => {
-          setTimeout(() => {
-            resolve({
-              json: () => Promise.resolve({
-                prompt: 'Test prompt',
-                context: 'Test context',
-                metadata: {},
-              }),
-              ok: true,
-              status: 200,
-            } as Response);
-          }, 100);
-        })
+      vi.mocked(apiUtils.callApi).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => {
+              resolve({
+                json: () =>
+                  Promise.resolve({
+                    prompt: 'Test prompt',
+                    context: 'Test context',
+                    metadata: {},
+                  }),
+                ok: true,
+                status: 200,
+              } as Response);
+            }, 100);
+          }),
       );
 
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       await waitFor(() => {
         expect(screen.getByText('Select Strategies')).toBeInTheDocument();
@@ -184,8 +169,8 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Click magic wand button
       const buttons = screen.getAllByRole('button');
-      const magicWandButton = buttons.find(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const magicWandButton = buttons.find((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       fireEvent.click(magicWandButton!);
@@ -205,19 +190,15 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
     it('should handle API errors gracefully', async () => {
       // Mock API error
       vi.mocked(apiUtils.callApi).mockResolvedValue({
-        json: () => Promise.resolve({
-          error: 'Failed to generate test case',
-        }),
+        json: () =>
+          Promise.resolve({
+            error: 'Failed to generate test case',
+          }),
         ok: false,
         status: 500,
       } as Response);
 
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       await waitFor(() => {
         expect(screen.getByText('Select Strategies')).toBeInTheDocument();
@@ -225,18 +206,15 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Click magic wand button
       const buttons = screen.getAllByRole('button');
-      const magicWandButton = buttons.find(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const magicWandButton = buttons.find((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       fireEvent.click(magicWandButton!);
 
       // Wait for error handling
       await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith(
-          'Failed to generate test case',
-          'error'
-        );
+        expect(mockShowToast).toHaveBeenCalledWith('Failed to generate test case', 'error');
       });
 
       // Dialog should close on error
@@ -247,16 +225,9 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
     it('should handle network errors', async () => {
       // Mock network error
-      vi.mocked(apiUtils.callApi).mockRejectedValue(
-        new Error('Network error')
-      );
+      vi.mocked(apiUtils.callApi).mockRejectedValue(new Error('Network error'));
 
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       await waitFor(() => {
         expect(screen.getByText('Select Strategies')).toBeInTheDocument();
@@ -264,18 +235,15 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Click magic wand button
       const buttons = screen.getAllByRole('button');
-      const magicWandButton = buttons.find(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const magicWandButton = buttons.find((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       fireEvent.click(magicWandButton!);
 
       // Wait for error handling
       await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith(
-          'Network error',
-          'error'
-        );
+        expect(mockShowToast).toHaveBeenCalledWith('Network error', 'error');
       });
     });
   });
@@ -284,21 +252,17 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
     it('should close dialog when Close button is clicked', async () => {
       // Mock successful API response
       vi.mocked(apiUtils.callApi).mockResolvedValue({
-        json: () => Promise.resolve({
-          prompt: 'Test prompt',
-          context: 'Test context',
-          metadata: {},
-        }),
+        json: () =>
+          Promise.resolve({
+            prompt: 'Test prompt',
+            context: 'Test context',
+            metadata: {},
+          }),
         ok: true,
         status: 200,
       } as Response);
 
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       await waitFor(() => {
         expect(screen.getByText('Select Strategies')).toBeInTheDocument();
@@ -306,8 +270,8 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Generate test case
       const buttons = screen.getAllByRole('button');
-      const magicWandButton = buttons.find(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const magicWandButton = buttons.find((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       fireEvent.click(magicWandButton!);
@@ -336,21 +300,17 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
       };
 
       vi.mocked(apiUtils.callApi).mockResolvedValue({
-        json: () => Promise.resolve({
-          prompt: 'Encoded test prompt',
-          context: 'Test context',
-          metadata: mockMetadata,
-        }),
+        json: () =>
+          Promise.resolve({
+            prompt: 'Encoded test prompt',
+            context: 'Test context',
+            metadata: mockMetadata,
+          }),
         ok: true,
         status: 200,
       } as Response);
 
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       await waitFor(() => {
         expect(screen.getByText('Select Strategies')).toBeInTheDocument();
@@ -358,8 +318,8 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Generate test case
       const buttons = screen.getAllByRole('button');
-      const magicWandButton = buttons.find(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const magicWandButton = buttons.find((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       fireEvent.click(magicWandButton!);
@@ -376,21 +336,17 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
   describe('Multiple Strategy Types', () => {
     it('should work with recommended strategies', async () => {
       vi.mocked(apiUtils.callApi).mockResolvedValue({
-        json: () => Promise.resolve({
-          prompt: 'Basic strategy test',
-          context: 'This test case uses the "basic" strategy',
-          metadata: { strategyId: 'basic' },
-        }),
+        json: () =>
+          Promise.resolve({
+            prompt: 'Basic strategy test',
+            context: 'This test case uses the "basic" strategy',
+            metadata: { strategyId: 'basic' },
+          }),
         ok: true,
         status: 200,
       } as Response);
 
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Find a strategy in the Recommended section
       await waitFor(() => {
@@ -400,8 +356,8 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
       // Find magic wand button in recommended section
       const recommendedSection = screen.getByText('Recommended Strategies').closest('div');
       const buttons = within(recommendedSection!).getAllByRole('button');
-      const magicWandButton = buttons.find(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const magicWandButton = buttons.find((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       fireEvent.click(magicWandButton!);
@@ -413,21 +369,17 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
     it('should work with agentic strategies', async () => {
       vi.mocked(apiUtils.callApi).mockResolvedValue({
-        json: () => Promise.resolve({
-          prompt: 'Jailbreak strategy test',
-          context: 'This test case uses the "jailbreak" strategy',
-          metadata: { strategyId: 'jailbreak' },
-        }),
+        json: () =>
+          Promise.resolve({
+            prompt: 'Jailbreak strategy test',
+            context: 'This test case uses the "jailbreak" strategy',
+            metadata: { strategyId: 'jailbreak' },
+          }),
         ok: true,
         status: 200,
       } as Response);
 
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Find agentic strategies section
       await waitFor(() => {
@@ -436,8 +388,8 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Test generation should work for agentic strategies
       const buttons = screen.getAllByRole('button');
-      const agenticMagicWand = buttons.find(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const agenticMagicWand = buttons.find((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       expect(agenticMagicWand).toBeTruthy();
@@ -447,28 +399,25 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
   describe('Concurrent Requests', () => {
     it('should disable all magic wand buttons while generating', async () => {
       // Mock API with delay
-      vi.mocked(apiUtils.callApi).mockImplementation(() =>
-        new Promise((resolve) => {
-          setTimeout(() => {
-            resolve({
-              json: () => Promise.resolve({
-                prompt: 'Test',
-                context: 'Context',
-                metadata: {},
-              }),
-              ok: true,
-              status: 200,
-            } as Response);
-          }, 100);
-        })
+      vi.mocked(apiUtils.callApi).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => {
+              resolve({
+                json: () =>
+                  Promise.resolve({
+                    prompt: 'Test',
+                    context: 'Context',
+                    metadata: {},
+                  }),
+                ok: true,
+                status: 200,
+              } as Response);
+            }, 100);
+          }),
       );
 
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       await waitFor(() => {
         expect(screen.getByText('Select Strategies')).toBeInTheDocument();
@@ -476,8 +425,8 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Get all magic wand buttons
       const allButtons = screen.getAllByRole('button');
-      const magicWandButtons = allButtons.filter(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const magicWandButtons = allButtons.filter((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       // Click first magic wand
@@ -485,7 +434,8 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Check that the clicked button shows loading
       await waitFor(() => {
-        const firstCardButtons = magicWandButtons[0].parentElement?.querySelector('[role="progressbar"]');
+        const firstCardButtons =
+          magicWandButtons[0].parentElement?.querySelector('[role="progressbar"]');
         expect(firstCardButtons).toBeTruthy();
       });
     });
@@ -495,22 +445,18 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
       vi.mocked(apiUtils.callApi).mockImplementation(() => {
         callCount++;
         return Promise.resolve({
-          json: () => Promise.resolve({
-            prompt: `Test ${callCount}`,
-            context: 'Context',
-            metadata: {},
-          }),
+          json: () =>
+            Promise.resolve({
+              prompt: `Test ${callCount}`,
+              context: 'Context',
+              metadata: {},
+            }),
           ok: true,
           status: 200,
         } as Response);
       });
 
-      renderWithProviders(
-        <Strategies
-          onNext={mockOnNext}
-          onBack={mockOnBack}
-        />
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       await waitFor(() => {
         expect(screen.getByText('Select Strategies')).toBeInTheDocument();
@@ -518,8 +464,8 @@ describe('Strategies Integration Tests - Magic Wand Feature', () => {
 
       // Find and rapidly click magic wand button
       const buttons = screen.getAllByRole('button');
-      const magicWandButton = buttons.find(btn =>
-        btn.getAttribute('aria-label')?.includes('Generate a test case')
+      const magicWandButton = buttons.find((btn) =>
+        btn.getAttribute('aria-label')?.includes('Generate a test case'),
       );
 
       // Rapid clicks

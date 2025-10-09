@@ -17,6 +17,7 @@ interface StrategySectionProps {
   generatingStrategyId?: string | null;
   highlighted?: boolean;
   description?: string;
+  isCloudEnabled?: boolean;
 }
 
 export function StrategySection({
@@ -30,6 +31,7 @@ export function StrategySection({
   generatingStrategyId,
   highlighted = false,
   description,
+  isCloudEnabled = false,
 }: StrategySectionProps) {
   const selectedStrategiesInSection = strategies
     .map((strategy) => strategy.id)
@@ -114,6 +116,7 @@ export function StrategySection({
             onConfigClick={onConfigClick}
             onGenerateTest={onGenerateTest}
             isGenerating={generatingStrategyId === strategy.id}
+            isCloudEnabled={isCloudEnabled}
           />
         ))}
       </Box>

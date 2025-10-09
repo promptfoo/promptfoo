@@ -30,7 +30,7 @@ jest.mock('../../../src/redteam/strategies/index', () => ({
             ...tc.vars,
             query: `[jailbreak] ${tc.vars.query}`,
           },
-        }))
+        })),
       ),
     },
     {
@@ -43,7 +43,7 @@ jest.mock('../../../src/redteam/strategies/index', () => ({
             ...tc.vars,
             query: Buffer.from(tc.vars.query).toString('base64'),
           },
-        }))
+        })),
       ),
     },
     {
@@ -82,7 +82,9 @@ describe('POST /redteam/generate-strategy-test', () => {
     });
 
     // Mock provider manager
-    (redteamProviderManager.redteamProviderManager.getProvider as jest.Mock) = jest.fn().mockResolvedValue(mockProvider);
+    (redteamProviderManager.redteamProviderManager.getProvider as jest.Mock) = jest
+      .fn()
+      .mockResolvedValue(mockProvider);
 
     // Mock logger methods
     (logger.debug as jest.Mock) = jest.fn();
@@ -166,12 +168,10 @@ describe('POST /redteam/generate-strategy-test', () => {
         },
       ]);
 
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'base64',
-          config: {},
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'base64',
+        config: {},
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.prompt).toBe(Buffer.from(originalPrompt).toString('base64'));
@@ -188,18 +188,16 @@ describe('POST /redteam/generate-strategy-test', () => {
         },
       ]);
 
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'basic',
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'basic',
+      });
 
       expect(response.status).toBe(200);
       expect(mockPlugin.action).toHaveBeenCalledWith(
         expect.objectContaining({
           purpose: 'general AI assistant',
           injectVar: 'query',
-        })
+        }),
       );
     });
 
@@ -229,23 +227,19 @@ describe('POST /redteam/generate-strategy-test', () => {
 
   describe('Error Cases', () => {
     it('should return 400 for missing strategy ID', async () => {
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          config: {},
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        config: {},
+      });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error', 'Strategy ID is required');
     });
 
     it('should return 400 for invalid strategy ID', async () => {
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'nonexistent-strategy',
-          config: {},
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'nonexistent-strategy',
+        config: {},
+      });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -255,12 +249,10 @@ describe('POST /redteam/generate-strategy-test', () => {
     it('should return 500 when plugin fails to generate test case', async () => {
       mockPlugin.action.mockResolvedValue([]); // Empty array means no test cases generated
 
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'basic',
-          config: {},
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'basic',
+        config: {},
+      });
 
       expect(response.status).toBe(500);
       expect(response.body).toHaveProperty('error', 'Failed to generate test case');
@@ -269,12 +261,10 @@ describe('POST /redteam/generate-strategy-test', () => {
     it('should handle plugin action errors gracefully', async () => {
       mockPlugin.action.mockRejectedValue(new Error('Plugin execution failed'));
 
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'basic',
-          config: {},
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'basic',
+        config: {},
+      });
 
       expect(response.status).toBe(500);
       expect(response.body).toHaveProperty('error', 'Failed to generate strategy test case');
@@ -282,15 +272,14 @@ describe('POST /redteam/generate-strategy-test', () => {
     });
 
     it('should handle provider errors gracefully', async () => {
-      (redteamProviderManager.redteamProviderManager.getProvider as jest.Mock)
-        .mockRejectedValue(new Error('Provider initialization failed'));
+      (redteamProviderManager.redteamProviderManager.getProvider as jest.Mock).mockRejectedValue(
+        new Error('Provider initialization failed'),
+      );
 
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'basic',
-          config: {},
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'basic',
+        config: {},
+      });
 
       expect(response.status).toBe(500);
       expect(response.body).toHaveProperty('error', 'Failed to generate strategy test case');
@@ -311,12 +300,10 @@ describe('POST /redteam/generate-strategy-test', () => {
         },
       ]);
 
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'crescendo',
-          config: {},
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'crescendo',
+        config: {},
+      });
 
       // Crescendo returns empty array, should use original test case
       expect(response.status).toBe(200);
@@ -341,12 +328,10 @@ describe('POST /redteam/generate-strategy-test', () => {
         },
       ]);
 
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'basic',
-          config: {},
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'basic',
+        config: {},
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.metadata).toMatchObject({
@@ -365,12 +350,10 @@ describe('POST /redteam/generate-strategy-test', () => {
         },
       ]);
 
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'basic',
-          config: {},
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'basic',
+        config: {},
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.prompt).toBe('Unable to extract test prompt');
@@ -391,14 +374,12 @@ describe('POST /redteam/generate-strategy-test', () => {
         maxTokens: 150,
       };
 
-      const response = await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'jailbreak',
-          config: {
-            strategyConfig,
-          },
-        });
+      const response = await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'jailbreak',
+        config: {
+          strategyConfig,
+        },
+      });
 
       expect(response.status).toBe(200);
       // Verify strategy action was called with the config
@@ -407,7 +388,7 @@ describe('POST /redteam/generate-strategy-test', () => {
       expect(jailbreakStrategy?.action).toHaveBeenCalledWith(
         expect.any(Array),
         'query',
-        strategyConfig
+        strategyConfig,
       );
     });
 
@@ -427,15 +408,9 @@ describe('POST /redteam/generate-strategy-test', () => {
 
       // Send multiple concurrent requests
       const promises = [
-        request(app)
-          .post('/redteam/generate-strategy-test')
-          .send({ strategyId: 'basic' }),
-        request(app)
-          .post('/redteam/generate-strategy-test')
-          .send({ strategyId: 'jailbreak' }),
-        request(app)
-          .post('/redteam/generate-strategy-test')
-          .send({ strategyId: 'base64' }),
+        request(app).post('/redteam/generate-strategy-test').send({ strategyId: 'basic' }),
+        request(app).post('/redteam/generate-strategy-test').send({ strategyId: 'jailbreak' }),
+        request(app).post('/redteam/generate-strategy-test').send({ strategyId: 'base64' }),
       ];
 
       const responses = await Promise.all(promises);
@@ -470,12 +445,10 @@ describe('POST /redteam/generate-strategy-test', () => {
         },
       ]);
 
-      await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'basic',
-          config: sensitiveConfig,
-        });
+      await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'basic',
+        config: sensitiveConfig,
+      });
 
       // Check that logger was called
       expect(logger.error).not.toHaveBeenCalled(); // No errors should occur
@@ -487,18 +460,16 @@ describe('POST /redteam/generate-strategy-test', () => {
     it('should log errors with appropriate context', async () => {
       mockPlugin.action.mockRejectedValue(new Error('Test error'));
 
-      await request(app)
-        .post('/redteam/generate-strategy-test')
-        .send({
-          strategyId: 'basic',
-          config: {},
-        });
+      await request(app).post('/redteam/generate-strategy-test').send({
+        strategyId: 'basic',
+        config: {},
+      });
 
       expect(logger.error).toHaveBeenCalledWith(
         'Error generating strategy test case',
         expect.objectContaining({
           error: expect.any(Error),
-        })
+        }),
       );
     });
   });
