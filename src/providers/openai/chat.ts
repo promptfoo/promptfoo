@@ -392,7 +392,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           tokenUsage: getTokenUsage(data, cached),
           isRefusal: true,
           ...(finishReason && { finishReason }),
-          guardrails: contentFiltered ? { flagged: true } : undefined,
+          guardrails: contentFiltered ? { flagged: true } : { flagged: false },
         };
       }
 
@@ -543,7 +543,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               data.usage?.audio_prompt_tokens,
               data.usage?.audio_completion_tokens,
             ),
-            ...(contentFiltered ? { guardrails: { flagged: true } } : {}),
+            guardrails: { flagged: contentFiltered },
           };
         }
       }
@@ -579,7 +579,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             data.usage?.audio_prompt_tokens,
             data.usage?.audio_completion_tokens,
           ),
-          ...(contentFiltered ? { guardrails: { flagged: true } } : {}),
+          guardrails: { flagged: contentFiltered },
         };
       }
 
@@ -597,7 +597,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           data.usage?.audio_prompt_tokens,
           data.usage?.audio_completion_tokens,
         ),
-        ...(contentFiltered ? { guardrails: { flagged: true } } : {}),
+        guardrails: { flagged: contentFiltered },
       };
     } catch (err) {
       await data?.deleteFromCache?.();
