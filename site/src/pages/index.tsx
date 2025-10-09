@@ -26,12 +26,10 @@ function HomepageHeader() {
           <h1 className={styles.heroTitle}>
             Build Secure AI Applications
             <br />
-            From the Start—Not After
+            From the Start
           </h1>
           <p className={styles.heroSubtitle}>
-            The AI Security Platform that shifts left to prevent vulnerabilities in development,
-            trusted by security teams at the world's most regulated companies to deploy GenAI with
-            confidence.
+            AI security trusted by 200,000+ users to prevent vulnerabilities in development.
           </p>
           <div className={styles.heroButtons}>
             <Link className="button button--primary button--lg" to="/contact/">
@@ -311,13 +309,13 @@ function CommunitySection() {
         <div className={styles.communityStats}>
           <div className={styles.communityStatCard}>
             <div className={styles.communityStatNumber}>{SITE_CONSTANTS.USER_COUNT_DISPLAY}+</div>
-            <div className={styles.communityStatLabel}>Active Users</div>
+            <div className={styles.communityStatLabel}>Open Source Users</div>
             <p>Developers securing AI applications with Promptfoo</p>
           </div>
           <div className={styles.communityStatCard}>
             <div className={styles.communityStatNumber}>200+</div>
             <div className={styles.communityStatLabel}>Contributors</div>
-            <p>From OpenAI, Anthropic, Google, Microsoft, Amazon</p>
+            <p>From major foundation labs and tech companies</p>
           </div>
           <div className={styles.communityStatCard}>
             <div className={styles.communityStatNumber}>75%</div>

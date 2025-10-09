@@ -30,6 +30,7 @@ import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import { createEnvoyProvider } from './envoy';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
+import { createSnowflakeProvider } from './snowflake';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
@@ -1332,6 +1333,19 @@ export const providerMap: ProviderFactory[] = [
         }
         throw error;
       }
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('snowflake:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createSnowflakeProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
 ];
