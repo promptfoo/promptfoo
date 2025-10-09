@@ -13,7 +13,7 @@ import logger from '../logger';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
-import type { Options as QueryOptions } from '@anthropic-ai/claude-code';
+import type { Options as QueryOptions, SettingSource } from '@anthropic-ai/claude-agent-sdk';
 
 import type {
   ApiProvider,
@@ -24,21 +24,23 @@ import type {
 import type { EnvOverrides } from '../types/env';
 
 /**
- * Claude Code SDK Provider
+ * Claude Agent SDK Provider
  *
- * Default permissions are restricted so it can be treated similarly to a plain chat API provider with standard input/output and no side effects. File reads/grep/glob/ls are allowed, but no file system writes or system calls by default. User can override these restrictions with 'custom_allowed_tools', 'append_allowed_tools', 'disallowed_tools', and 'permission_mode'
+ * Two default configurations:
+ * - No working_dir: Runs in temp directory with no tools - behaves like plain chat API
+ * - With working_dir: Runs in specified directory with read-only file tools (Read/Grep/Glob/LS)
  *
- * Runs in isolated working directory (either provided by the user or a temp dir)
+ * User can override tool permissions with 'custom_allowed_tools', 'append_allowed_tools', 'disallowed_tools', and 'permission_mode'.
  *
- * To test with side effects (file writes, system calls, etc.), user can override permissions and use a custom working directory. They're then responsible for setup/teardown of the custom working directory, as well as security/safety considerations.
+ * For side effects (file writes, system calls, etc.), user can override permissions and use a custom working directory. They're then responsible for setup/teardown and security considerations.
  *
- * MCP server connection details are passed through from config. strict_mcp_config is true by default to only allow MCP servers that are explicitly configured, but user can override.
+ * MCP server connection details are passed through from config. strict_mcp_config is true by default to only allow explicitly configured MCP servers.
  */
 
 // When a working directory is provided, we allow read-only tools by default (when no working directory is provided, default to no tools)
 export const FS_READONLY_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'LS'].sort(); // sort and export for tests
 
-// Claude Code SDK supports these model aliases in addition to full model names
+// Claude Agent SDK supports these model aliases in addition to full model names
 // See: https://docs.anthropic.com/en/docs/claude-code/model-config
 export const CLAUDE_CODE_MODEL_ALIASES = [
   'default',
@@ -50,12 +52,12 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
 ];
 
 /**
- * Helper to load the Claude Code SDK ESM module
+ * Helper to load the Claude Agent SDK ESM module
  * Uses the same pattern as other providers for resolving npm packages
  */
-async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-code')> {
+async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
   const require = createRequire(path.resolve(cliState.basePath || ''));
-  const claudeCodePath = require.resolve('@anthropic-ai/claude-code');
+  const claudeCodePath = require.resolve('@anthropic-ai/claude-agent-sdk');
   return importModule(claudeCodePath);
 }
 
@@ -70,7 +72,7 @@ export interface ClaudeCodeOptions {
 
   /**
    * 'model' and 'fallback_model' are optional
-   * if not supplied, Claude Code SDK uses default models
+   * if not supplied, Claude Agent SDK uses default models
    */
   model?: string;
   fallback_model?: string;
@@ -86,6 +88,9 @@ export interface ClaudeCodeOptions {
    */
   permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
 
+  /**
+   * User can set a custom system prompt, or append to the default claude code system prompt
+   */
   custom_system_prompt?: string;
   append_system_prompt?: string;
 
@@ -100,6 +105,12 @@ export interface ClaudeCodeOptions {
    * 'disallowed_tools' is passed through as is; it always takes precedence over 'allowed_tools'
    */
   disallowed_tools?: string[];
+
+  /**
+   * 'setting_sources' controls where the Claude Agent SDK looks for settings, CLAUDE.md, and slash commands—accepts 'user', 'project', and 'local'
+   * if not supplied, it won't look for any settings, CLAUDE.md, or slash commands
+   */
+  setting_sources?: SettingSource[];
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -113,7 +124,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   // Only SDK and Anthropic are supported for now
   // Could later potentially support Claude Code via external CLI calls, as well as Bedrock/Vertex providers
   private providerId = 'anthropic:claude-code';
-  private claudeCodeModule?: typeof import('@anthropic-ai/claude-code');
+  private claudeCodeModule?: typeof import('@anthropic-ai/claude-agent-sdk');
 
   constructor(
     options: {
@@ -133,7 +144,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       !ClaudeCodeSDKProvider.ANTHROPIC_MODELS_NAMES.includes(this.config.model) &&
       !CLAUDE_CODE_MODEL_ALIASES.includes(this.config.model)
     ) {
-      logger.warn(`Using unknown model for Claude Code SDK: ${this.config.model}`);
+      logger.warn(`Using unknown model for Claude Agent SDK: ${this.config.model}`);
     }
 
     if (
@@ -142,7 +153,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       !CLAUDE_CODE_MODEL_ALIASES.includes(this.config.fallback_model)
     ) {
       logger.warn(
-        `Using unknown model for Claude Code SDK fallback: ${this.config.fallback_model}`,
+        `Using unknown model for Claude Agent SDK fallback: ${this.config.fallback_model}`,
       );
     }
   }
@@ -162,7 +173,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
 
-    // Set up env for the Claude Code SDK call
+    // Set up env for the Claude Agent SDK call
     // Pass through entire environment like claude-code CLI does, with EnvOverrides taking precedence
     // Sort keys for stable cache key generation
     const env: Record<string, string> = {};
@@ -182,7 +193,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     }
 
-    // Ensure API key is available to Claude Code SDK
+    // Ensure API key is available to Claude Agent SDK
     if (this.apiKey) {
       env.ANTHROPIC_API_KEY = this.apiKey;
     }
@@ -196,7 +207,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
 
-    // Set up allowed tools for the Claude Code SDK call
+    // Set up allowed tools for the Claude Agent SDK call
     // Check for conflicting config options (may want a zod schema in the future)
     if (
       config.allow_all_tools &&
@@ -243,8 +254,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
       permissionMode: config.permission_mode,
-      customSystemPrompt: config.custom_system_prompt,
-      appendSystemPrompt: config.append_system_prompt,
+      systemPrompt: config.custom_system_prompt
+        ? config.custom_system_prompt
+        : {
+            type: 'preset',
+            preset: 'claude_code',
+            append: config.append_system_prompt,
+          },
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
@@ -325,10 +341,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Make sure we didn't already abort
     if (callOptions?.abortSignal?.aborted) {
-      return { error: 'Claude Code SDK call aborted before it started' };
+      return { error: 'Claude Agent SDK call aborted before it started' };
     }
 
-    // Propagate abort signal to the Claude Code SDK call
+    // Propagate abort signal to the Claude Agent SDK call
     const abortController = new AbortController();
     let abortHandler: (() => void) | undefined;
     if (callOptions?.abortSignal) {
@@ -338,7 +354,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       callOptions.abortSignal.addEventListener('abort', abortHandler);
     }
 
-    // Make the Claude Code SDK call
+    // Make the Claude Agent SDK call
     const options: QueryOptions = {
       ...cacheKeyQueryOptions,
       abortController,
@@ -349,7 +365,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Log the query params for debugging
     logger.debug(
-      `Calling Claude Code SDK: ${JSON.stringify({
+      `Calling Claude Agent SDK: ${JSON.stringify({
         prompt,
         options: {
           ...options,
@@ -382,7 +398,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const cost = msg.total_cost_usd ?? 0;
           const sessionId = msg.session_id;
           if (msg.subtype == 'success') {
-            logger.debug(`Claude Code SDK response: ${raw}`);
+            logger.debug(`Claude Agent SDK response: ${raw}`);
             const response = {
               output: msg.result,
               tokenUsage,
@@ -401,7 +417,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             return response;
           } else {
             return {
-              error: `Claude Code SDK call failed: ${msg.subtype}`,
+              error: `Claude Agent SDK call failed: ${msg.subtype}`,
               tokenUsage,
               cost,
               raw,
@@ -411,18 +427,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         }
       }
 
-      return { error: "Claude Code SDK call didn't return a result" };
+      return { error: "Claude Agent SDK call didn't return a result" };
     } catch (error: any) {
       const isAbort = error?.name === 'AbortError' || callOptions?.abortSignal?.aborted;
 
       if (isAbort) {
-        logger.warn('Claude Code SDK call aborted');
-        return { error: 'Claude Code SDK call aborted' };
+        logger.warn('Claude Agent SDK call aborted');
+        return { error: 'Claude Agent SDK call aborted' };
       }
 
-      logger.error(`Error calling Claude Code SDK: ${error}`);
+      logger.error(`Error calling Claude Agent SDK: ${error}`);
       return {
-        error: `Error calling Claude Code SDK: ${error}`,
+        error: `Error calling Claude Agent SDK: ${error}`,
       };
     } finally {
       if (isTempDir && workingDir) {
@@ -436,7 +452,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   }
 
   toString(): string {
-    return '[Anthropic Claude Code SDK Provider]';
+    return '[Anthropic Claude Agent SDK Provider]';
   }
 
   /**

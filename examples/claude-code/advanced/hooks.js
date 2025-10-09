@@ -13,8 +13,9 @@ function extensionHook(hookName, context) {
   }
 
   try {
-    // Check git status before reset
-    const workspacePath = path.resolve('./workspace');
+    // Resolve workspace path relative to this hook file (not the cwd)
+    const workspacePath = path.join(__dirname, 'workspace');
+
     console.log('Checking git status before reset...');
     const gitStatus = execSync('git status --porcelain', {
       cwd: workspacePath,

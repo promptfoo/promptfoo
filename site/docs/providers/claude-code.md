@@ -117,10 +117,11 @@ prompts:
 | `disallowed_tools`     | string[] | Tools to explicitly block (overrides allowed)                                  | None                 |
 | `mcp`                  | object   | MCP server configuration                                                       | None                 |
 | `strict_mcp_config`    | boolean  | Only allow configured MCP servers                                              | true                 |
+| `setting_sources`      | string[] | Where SDK looks for settings, CLAUDE.md, and slash commands                    | None (disabled)      |
 
 ## Models
 
-Model selection is optional, since Claude Code uses sensible defaults. When specified, models are passed directly to the Claude Code SDK.
+Model selection is optional, since Claude Code uses sensible defaults. When specified, models are passed directly to the Claude Agent SDK.
 
 ```yaml
 providers:
@@ -140,7 +141,7 @@ providers:
       fallback_model: haiku
 ```
 
-Claude Code also supports configuring models through [environment variables](https://docs.anthropic.com/en/docs/claude-code/model-config#environment-variables). When using this provider, any environment variables you set will be passed through to the Claude Code SDK.
+Claude Code also supports configuring models through [environment variables](https://docs.anthropic.com/en/docs/claude-code/model-config#environment-variables). When using this provider, any environment variables you set will be passed through to the Claude Agent SDK.
 
 ## Tools and Permissions
 
@@ -202,7 +203,7 @@ providers:
 
 ## MCP Integration
 
-Unlike the standard Anthropic provider, Claude Code handles MCP (Model Context Protocol) connections directly. Configuration is forwarded to the Claude Code SDK:
+Unlike the standard Anthropic provider, Claude Code handles MCP (Model Context Protocol) connections directly. Configuration is forwarded to the Claude Agent SDK:
 
 ```yaml
 providers:
@@ -225,6 +226,23 @@ providers:
 ```
 
 For detailed MCP configuration, see [Claude Code MCP documentation](https://docs.anthropic.com/en/docs/claude-code/mcp).
+
+## Setting Sources
+
+By default, the Claude Code provider does not look for settings files, CLAUDE.md, or slash commands. You can enable this by specifying `setting_sources`:
+
+```yaml
+providers:
+  - id: anthropic:claude-code
+    config:
+      setting_sources: ['project', 'local']
+```
+
+Available values:
+
+- `user` - User-level settings
+- `project` - Project-level settings
+- `local` - Local directory settings
 
 ## Caching Behavior
 

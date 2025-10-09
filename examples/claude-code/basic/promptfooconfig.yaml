@@ -2,7 +2,7 @@
 description: 'Claude Code basic usage - temp directory with no tools'
 
 prompts:
-  - 'Output a Python function that prints the first 10 numbers in the Fibonacci sequence'
+  - 'Output a Python function that prints the first 10 numbers in the Fibonacci sequence. Do not create any files. Just output the code.'
 
 providers:
   - anthropic:claude-code

@@ -8,7 +8,7 @@ import {
   FS_READONLY_ALLOWED_TOOLS,
 } from '../../src/providers/claudeCode';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
-import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-code';
+import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
 import type { CallApiContextParams } from '../../src/types';
 
@@ -19,7 +19,7 @@ jest.mock('../../src/esm', () => ({
 jest.mock('../../src/providers/mcp/transform');
 jest.mock('node:module', () => ({
   createRequire: jest.fn(() => ({
-    resolve: jest.fn(() => '@anthropic-ai/claude-code'),
+    resolve: jest.fn(() => '@anthropic-ai/claude-agent-sdk'),
   })),
 }));
 
@@ -38,6 +38,7 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
   },
   server_tool_use: {
     web_search_requests: 0,
+    web_fetch_requests: 0,
   },
   service_tier: 'standard',
 });
@@ -159,7 +160,7 @@ describe('ClaudeCodeSDKProvider', () => {
       new ClaudeCodeSDKProvider({ config: { model: 'unknown-model' } });
 
       expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown model for Claude Code SDK: unknown-model',
+        'Using unknown model for Claude Agent SDK: unknown-model',
       );
 
       warnSpy.mockRestore();
@@ -171,7 +172,7 @@ describe('ClaudeCodeSDKProvider', () => {
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
 
       expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown model for Claude Code SDK fallback: unknown-fallback',
+        'Using unknown model for Claude Agent SDK fallback: unknown-fallback',
       );
 
       warnSpy.mockRestore();
@@ -252,7 +253,7 @@ describe('ClaudeCodeSDKProvider', () => {
         });
         const result = await provider.callApi('Test prompt');
 
-        expect(result.error).toBe('Claude Code SDK call failed: error_during_execution');
+        expect(result.error).toBe('Claude Agent SDK call failed: error_during_execution');
         expect(result.tokenUsage).toEqual({
           prompt: 10,
           completion: 0,
@@ -269,9 +270,9 @@ describe('ClaudeCodeSDKProvider', () => {
         });
         const result = await provider.callApi('Test prompt');
 
-        expect(result.error).toBe('Error calling Claude Code SDK: Error: Network error');
+        expect(result.error).toBe('Error calling Claude Agent SDK: Error: Network error');
         expect(errorSpy).toHaveBeenCalledWith(
-          'Error calling Claude Code SDK: Error: Network error',
+          'Error calling Claude Agent SDK: Error: Network error',
         );
 
         errorSpy.mockRestore();
@@ -667,7 +668,7 @@ describe('ClaudeCodeSDKProvider', () => {
           abortSignal: abortController2.signal,
         });
 
-        expect(result2.error).toBe('Claude Code SDK call aborted before it started');
+        expect(result2.error).toBe('Claude Agent SDK call aborted before it started');
         expect(mockQuery).not.toHaveBeenCalled();
 
         // Test abort during execution
@@ -680,42 +681,75 @@ describe('ClaudeCodeSDKProvider', () => {
           abortSignal: new AbortController().signal,
         });
 
-        expect(result3.error).toBe('Claude Code SDK call aborted');
-        expect(warnSpy).toHaveBeenCalledWith('Claude Code SDK call aborted');
+        expect(result3.error).toBe('Claude Agent SDK call aborted');
+        expect(warnSpy).toHaveBeenCalledWith('Claude Agent SDK call aborted');
 
         warnSpy.mockRestore();
       });
     });
 
     describe('Claude Code specific configuration', () => {
-      it('should pass all Claude Code specific options', async () => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
+      describe('should pass all Claude Code specific options', () => {
+        it('with custom system prompt', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          config: {
-            permission_mode: 'acceptEdits',
-            custom_system_prompt: 'Custom prompt',
-            append_system_prompt: 'Append this',
-            model: 'claude-3-5-sonnet-20241022',
-            fallback_model: 'claude-3-5-haiku-20241022',
-            max_turns: 10,
-            max_thinking_tokens: 2000,
-          },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              permission_mode: 'acceptEdits',
+              custom_system_prompt: 'Custom prompt',
+              model: 'claude-3-5-sonnet-20241022',
+              fallback_model: 'claude-3-5-haiku-20241022',
+              max_turns: 10,
+              max_thinking_tokens: 2000,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              permissionMode: 'acceptEdits',
+              systemPrompt: 'Custom prompt',
+              model: 'claude-3-5-sonnet-20241022',
+              fallbackModel: 'claude-3-5-haiku-20241022',
+              maxTurns: 10,
+              maxThinkingTokens: 2000,
+            }),
+          });
         });
-        await provider.callApi('Test prompt');
 
-        expect(mockQuery).toHaveBeenCalledWith({
-          prompt: 'Test prompt',
-          options: expect.objectContaining({
-            permissionMode: 'acceptEdits',
-            customSystemPrompt: 'Custom prompt',
-            appendSystemPrompt: 'Append this',
-            model: 'claude-3-5-sonnet-20241022',
-            fallbackModel: 'claude-3-5-haiku-20241022',
-            maxTurns: 10,
-            maxThinkingTokens: 2000,
-          }),
+        it('with append system prompt', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              permission_mode: 'acceptEdits',
+              append_system_prompt: 'Append this',
+              model: 'claude-3-5-sonnet-20241022',
+              fallback_model: 'claude-3-5-haiku-20241022',
+              max_turns: 10,
+              max_thinking_tokens: 2000,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              permissionMode: 'acceptEdits',
+              systemPrompt: {
+                type: 'preset',
+                preset: 'claude_code',
+                append: 'Append this',
+              },
+              model: 'claude-3-5-sonnet-20241022',
+              fallbackModel: 'claude-3-5-haiku-20241022',
+              maxTurns: 10,
+              maxThinkingTokens: 2000,
+            }),
+          });
         });
       });
     });
