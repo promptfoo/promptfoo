@@ -6,7 +6,7 @@ import {
   CLAUDE_CODE_MODEL_ALIASES,
   ClaudeCodeSDKProvider,
   FS_READONLY_ALLOWED_TOOLS,
-} from '../../src/providers/claudeCode';
+} from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
@@ -132,7 +132,7 @@ describe('ClaudeCodeSDKProvider', () => {
       const provider = new ClaudeCodeSDKProvider();
 
       expect(provider.config).toEqual({});
-      expect(provider.id()).toBe('anthropic:claude-code');
+      expect(provider.id()).toBe('anthropic:claude-agent-sdk');
     });
 
     it('should initialize with custom config', () => {
@@ -178,10 +178,10 @@ describe('ClaudeCodeSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
-    it('should not warn about Claude Code model aliases', () => {
+    it('should not warn about Claude Agent SDK model aliases', () => {
       const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
 
-      // Test all Claude Code aliases
+      // Test all Claude Agent SDK aliases
       CLAUDE_CODE_MODEL_ALIASES.forEach((alias) => {
         new ClaudeCodeSDKProvider({ config: { model: alias } });
         new ClaudeCodeSDKProvider({ config: { fallback_model: alias } });
@@ -279,7 +279,7 @@ describe('ClaudeCodeSDKProvider', () => {
       });
 
       it('should return error when API key is missing', async () => {
-        // ensure process env won't provide the key or any other claude code env vars
+        // ensure process env won't provide the key or any other Claude Agent SDK env vars
         delete process.env.ANTHROPIC_API_KEY;
         delete process.env.CLAUDE_CODE_USE_BEDROCK;
         delete process.env.CLAUDE_CODE_USE_VERTEX;
@@ -316,7 +316,7 @@ describe('ClaudeCodeSDKProvider', () => {
         });
         await provider.callApi('Test prompt');
 
-        expect(tempDirSpy).toHaveBeenCalledWith(expect.stringContaining('promptfoo-claude-code-'));
+        expect(tempDirSpy).toHaveBeenCalledWith(expect.stringContaining('promptfoo-claude-agent-sdk-'));
         expect(rmSyncSpy).toHaveBeenCalledWith('/tmp/test-temp-dir', {
           recursive: true,
           force: true,
@@ -688,8 +688,8 @@ describe('ClaudeCodeSDKProvider', () => {
       });
     });
 
-    describe('Claude Code specific configuration', () => {
-      describe('should pass all Claude Code specific options', () => {
+    describe('Claude Agent SDK specific configuration', () => {
+      describe('should pass all Claude Agent SDK specific options', () => {
         it('with custom system prompt', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 

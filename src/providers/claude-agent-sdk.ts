@@ -41,7 +41,7 @@ import type { EnvOverrides } from '../types/env';
 export const FS_READONLY_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'LS'].sort(); // sort and export for tests
 
 // Claude Agent SDK supports these model aliases in addition to full model names
-// See: https://docs.anthropic.com/en/docs/claude-code/model-config
+// See: https://docs.anthropic.com/en/docs/claude-agent-sdk/model-config
 export const CLAUDE_CODE_MODEL_ALIASES = [
   'default',
   'sonnet',
@@ -89,7 +89,7 @@ export interface ClaudeCodeOptions {
   permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
 
   /**
-   * User can set a custom system prompt, or append to the default claude code system prompt
+   * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
    */
   custom_system_prompt?: string;
   append_system_prompt?: string;
@@ -122,8 +122,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   apiKey?: string;
 
   // Only SDK and Anthropic are supported for now
-  // Could later potentially support Claude Code via external CLI calls, as well as Bedrock/Vertex providers
-  private providerId = 'anthropic:claude-code';
+  // Could later potentially support Claude Agent SDK via external CLI calls, as well as Bedrock/Vertex providers
+  private providerId = 'anthropic:claude-agent-sdk';
   private claudeCodeModule?: typeof import('@anthropic-ai/claude-agent-sdk');
 
   constructor(
@@ -174,7 +174,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     };
 
     // Set up env for the Claude Agent SDK call
-    // Pass through entire environment like claude-code CLI does, with EnvOverrides taking precedence
+    // Pass through entire environment like claude-agent-sdk CLI does, with EnvOverrides taking precedence
     // Sort keys for stable cache key generation
     const env: Record<string, string> = {};
     for (const key of Object.keys(process.env).sort()) {
@@ -297,7 +297,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         });
         // Hash to avoid super long cache keys or including sensitive env vars in the key
         const hash = crypto.createHash('sha256').update(stringified).digest('hex');
-        cacheKey = `anthropic:claude-code:${hash}`;
+        cacheKey = `anthropic:claude-agent-sdk:${hash}`;
       }
     }
 
@@ -318,7 +318,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     }
 
-    // Transform MCP config to Claude Code MCP servers
+    // Transform MCP config to Claude Agent SDK MCP servers
     const mcpServers = config.mcp ? transformMCPConfigToClaudeCode(config.mcp) : {};
 
     if (workingDir) {
@@ -336,7 +336,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     } else if (isTempDir) {
       // use a temp dir
-      workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-claude-code-'));
+      workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
     }
 
     // Make sure we didn't already abort
@@ -456,7 +456,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   }
 
   /**
-   * For normal Claude Code support, just use the Anthropic API key
+   * For normal Claude Agent SDK support, just use the Anthropic API key
    * Users can also use Bedrock (with CLAUDE_CODE_USE_BEDROCK env var) or Vertex (with CLAUDE_CODE_USE_VERTEX env var)
    */
   getApiKey(): string | undefined {
@@ -505,7 +505,7 @@ async function getWorkingDirFingerprint(workingDir: string): Promise<string> {
 
   // Create fingerprint from directory mtime + all file mtimes
   const fileMtimes = allFiles
-    .map((file) => {
+    .map((file: string) => {
       const stat = fs.statSync(file);
       const relativePath = path.relative(workingDir, file);
       return `${relativePath}:${stat.mtimeMs}`;

@@ -7,7 +7,7 @@ const path = require('path');
  * @param {Object} context - Context information for the hook
  */
 function extensionHook(hookName, context) {
-  // Only run on afterEach to reset files after Claude Code modifications
+  // Only run on afterEach to reset files after Claude Agent SDK modifications
   if (hookName !== 'afterEach') {
     return;
   }

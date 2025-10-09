@@ -178,13 +178,15 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('anthropic:claude-code'),
+    test: (providerPath: string) =>
+      providerPath.startsWith('anthropic:claude-agent-sdk') ||
+      providerPath.startsWith('anthropic:claude-code'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const { ClaudeCodeSDKProvider } = await import('./claudeCode');
+      const { ClaudeCodeSDKProvider } = await import('./claude-agent-sdk');
       return new ClaudeCodeSDKProvider({
         ...providerOptions,
         env: context.env,

@@ -1,9 +1,9 @@
-# claude-code (Claude Code Examples)
+# claude-agent-sdk (Claude Agent SDK Examples)
 
-The Claude Code provider enables you to run agentic evals with configurable tools, permissions, and environments.
+The Claude Agent SDK provider enables you to run agentic evals with configurable tools, permissions, and environments.
 
 ```bash
-npx promptfoo@latest init --example claude-code
+npx promptfoo@latest init --example claude-agent-sdk
 ```
 
 ## Setup
@@ -18,7 +18,7 @@ export ANTHROPIC_API_KEY=your_api_key_here
 
 ### Basic Usage
 
-This example shows Claude Code in its simplest form - running in a temporary directory with no file system access or tools enabled, behaving similarly to the standard Anthropic provider.
+This example shows Claude Agent SDK in its simplest form - running in a temporary directory with no file system access or tools enabled, behaving similarly to the standard Anthropic provider.
 
 **Location**: `./basic/`
 
@@ -30,7 +30,7 @@ This example shows Claude Code in its simplest form - running in a temporary dir
 
 ### Working Directory
 
-This example provides Claude Code with read-only access to a sample project containing Python, TypeScript, and JavaScript files with intentional bugs for analysis. Because the `working_dir` is set, Claude Code has access to the following read-only tools:
+This example provides Claude Agent SDK with read-only access to a sample project containing Python, TypeScript, and JavaScript files with intentional bugs for analysis. Because the `working_dir` is set, Claude Agent SDK has access to the following read-only tools:
 
 - `Read` - Read file contents
 - `Grep` - Search file contents
@@ -47,7 +47,7 @@ This example provides Claude Code with read-only access to a sample project cont
 
 ### Advanced Editing
 
-This example shows Claude Code's ability to modify files with:
+This example shows Claude Agent SDK's ability to modify files with:
 
 - **File editing tools**: `Write`, `Edit`, and `MultiEdit` tools are added to the default set of read-only tools by setting `append_allowed_tools`
 - **Permission mode**: `permission_mode` is set to `acceptEdits` for automatic approval of file edits
@@ -84,7 +84,7 @@ rm -rf advanced/workspace/.git
 
 ### MCP Integration
 
-This example shows Claude Code integration with:
+This example shows Claude Agent SDK integration with:
 
 - **MCP weather server**: Uses `@h1deya/mcp-server-weather` for weather data
 - **Tool permissions**: Specific MCP tools (`mcp__weather__get-forecast`, `mcp__weather__get-alerts`)

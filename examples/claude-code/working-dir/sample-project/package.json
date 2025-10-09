@@ -1,7 +1,7 @@
 {
   "name": "sample-api",
   "version": "1.0.0",
-  "description": "A simple Express API for testing Claude Code",
+  "description": "A simple Express API for testing Claude Agent SDK",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

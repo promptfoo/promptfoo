@@ -257,7 +257,7 @@
       }
     },
     {
-      "includes": ["examples/claude-code/advanced/workspace/**/*"],
+      "includes": ["examples/claude-agent-sdk/advanced/workspace/**/*"],
       "linter": {
         "enabled": false
       },

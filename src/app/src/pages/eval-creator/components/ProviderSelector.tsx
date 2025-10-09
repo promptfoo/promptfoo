@@ -164,7 +164,7 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'anthropic:claude-code',
+      id: 'anthropic:claude-agent-sdk',
       label: 'Anthropic: Claude Agent SDK',
       config: {},
     },

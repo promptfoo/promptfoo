@@ -1,12 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Claude Code with file edits and afterEach hook'
+description: 'Claude Agent SDK with file edits and afterEach hook'
 
 prompts:
   - |
     Refactor the auth.js file to use async/await patterns with proper error handling
 
 providers:
-  - id: anthropic:claude-code
+  - id: anthropic:claude-agent-sdk
     config:
       working_dir: ./workspace
       # Add file editing tools to the default set of read-only tools

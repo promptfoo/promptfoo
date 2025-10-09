@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Claude Code with read-only MCP server'
+description: 'Claude Agent SDK with read-only MCP server'
 
 prompts:
   - |
@@ -7,7 +7,7 @@ prompts:
     (coordinates: 37.7749, -122.4194). Report what you found.
 
 providers:
-  - id: anthropic:claude-code
+  - id: anthropic:claude-agent-sdk
     config:
       # Configure MCP server for weather data
       mcp:

@@ -1,5 +1,5 @@
 import { getAuthHeaders } from './util';
-import type { McpServerConfig as ClaudeCodeMcpServerConfig } from '@anthropic-ai/claude-code';
+import type { McpServerConfig as ClaudeCodeMcpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type {
@@ -109,7 +109,7 @@ function transformMCPServerConfigToClaudeCode(
     const command = isPy ? (process.platform === 'win32' ? 'python' : 'python3') : process.execPath;
     out = { type: 'stdio', command, args: [config.path] };
   } else {
-    throw new Error('MCP configuration cannot be converted to Claude Code MCP server config');
+    throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');
   }
 
   return [key, out];
