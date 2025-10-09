@@ -311,7 +311,17 @@ export default function PluginsTab({
       });
     }
 
-    return plugins;
+     // Sort plugins alphabetically by display name (case-insensitive)
+     const getDisplayName = (plugin: Plugin) => {
+      return (displayNameOverrides[plugin] || categoryAliases[plugin] || plugin).toLowerCase();
+    };
+
+    return plugins.sort((a, b) => {
+      const displayNameA = getDisplayName(a.plugin);
+      const displayNameB = getDisplayName(b.plugin);
+
+      return displayNameA.localeCompare(displayNameB);
+    });
   }, [searchTerm, allPluginsWithCategories]);
 
   const currentlySelectedPreset = useMemo(
