@@ -37,7 +37,7 @@ describe('Plugins Component - Timeout Error Handling', () => {
           headers: {
             'Content-Type': 'application/json',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
+            Pragma: 'no-cache',
           },
           body: JSON.stringify({
             pluginId: plugin,
@@ -87,7 +87,7 @@ describe('Plugins Component - Timeout Error Handling', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
           }),
-        })
+        }),
       );
     });
 
@@ -97,13 +97,11 @@ describe('Plugins Component - Timeout Error Handling', () => {
 
       const mockToast = { showToast: vi.fn() };
 
-      await expect(
-        generateTestCaseWithConfig('bola', {}, mockToast)
-      ).rejects.toThrow(timeoutError);
+      await expect(generateTestCaseWithConfig('bola', {}, mockToast)).rejects.toThrow(timeoutError);
 
       expect(mockToast.showToast).toHaveBeenCalledWith(
         'Test generation timed out. Please try again or check your connection.',
-        'error'
+        'error',
       );
     });
 
@@ -113,14 +111,9 @@ describe('Plugins Component - Timeout Error Handling', () => {
 
       const mockToast = { showToast: vi.fn() };
 
-      await expect(
-        generateTestCaseWithConfig('bola', {}, mockToast)
-      ).rejects.toThrow(genericError);
+      await expect(generateTestCaseWithConfig('bola', {}, mockToast)).rejects.toThrow(genericError);
 
-      expect(mockToast.showToast).toHaveBeenCalledWith(
-        'Internal server error',
-        'error'
-      );
+      expect(mockToast.showToast).toHaveBeenCalledWith('Internal server error', 'error');
     });
 
     it('should handle various timeout error messages', async () => {
@@ -134,13 +127,11 @@ describe('Plugins Component - Timeout Error Handling', () => {
         mockCallApi.mockRejectedValueOnce(new Error(message));
         const mockToast = { showToast: vi.fn() };
 
-        await expect(
-          generateTestCaseWithConfig('bola', {}, mockToast)
-        ).rejects.toThrow();
+        await expect(generateTestCaseWithConfig('bola', {}, mockToast)).rejects.toThrow();
 
         expect(mockToast.showToast).toHaveBeenCalledWith(
           'Test generation timed out. Please try again or check your connection.',
-          'error'
+          'error',
         );
       }
     });
@@ -155,14 +146,11 @@ describe('Plugins Component - Timeout Error Handling', () => {
 
       const mockToast = { showToast: vi.fn() };
 
-      await expect(
-        generateTestCaseWithConfig('bola', {}, mockToast)
-      ).rejects.toThrow('Invalid configuration provided');
-
-      expect(mockToast.showToast).toHaveBeenCalledWith(
+      await expect(generateTestCaseWithConfig('bola', {}, mockToast)).rejects.toThrow(
         'Invalid configuration provided',
-        'error'
       );
+
+      expect(mockToast.showToast).toHaveBeenCalledWith('Invalid configuration provided', 'error');
     });
 
     it('should handle network errors gracefully', async () => {
@@ -171,14 +159,9 @@ describe('Plugins Component - Timeout Error Handling', () => {
 
       const mockToast = { showToast: vi.fn() };
 
-      await expect(
-        generateTestCaseWithConfig('bola', {}, mockToast)
-      ).rejects.toThrow(networkError);
+      await expect(generateTestCaseWithConfig('bola', {}, mockToast)).rejects.toThrow(networkError);
 
-      expect(mockToast.showToast).toHaveBeenCalledWith(
-        'NetworkError: Failed to fetch',
-        'error'
-      );
+      expect(mockToast.showToast).toHaveBeenCalledWith('NetworkError: Failed to fetch', 'error');
     });
 
     it('should pass plugin configuration in request body', async () => {
@@ -224,13 +207,11 @@ describe('Plugins Component - Timeout Error Handling', () => {
       const mockToast = { showToast: vi.fn() };
 
       // First attempt fails
-      await expect(
-        generateTestCaseWithConfig('bola', {}, mockToast)
-      ).rejects.toThrow(timeoutError);
+      await expect(generateTestCaseWithConfig('bola', {}, mockToast)).rejects.toThrow(timeoutError);
 
       expect(mockToast.showToast).toHaveBeenCalledWith(
         'Test generation timed out. Please try again or check your connection.',
-        'error'
+        'error',
       );
 
       // Clear toast calls
@@ -249,13 +230,15 @@ describe('Plugins Component - Timeout Error Handling', () => {
 
       // Both calls should include timeout
       expect(mockCallApi).toHaveBeenCalledTimes(2);
-      expect(mockCallApi).toHaveBeenNthCalledWith(1,
+      expect(mockCallApi).toHaveBeenNthCalledWith(
+        1,
         '/redteam/generate-test',
-        expect.objectContaining({ timeout: 10000 })
+        expect.objectContaining({ timeout: 10000 }),
       );
-      expect(mockCallApi).toHaveBeenNthCalledWith(2,
+      expect(mockCallApi).toHaveBeenNthCalledWith(
+        2,
         '/redteam/generate-test',
-        expect.objectContaining({ timeout: 10000 })
+        expect.objectContaining({ timeout: 10000 }),
       );
     });
 
@@ -277,9 +260,9 @@ describe('Plugins Component - Timeout Error Handling', () => {
           headers: {
             'Content-Type': 'application/json',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
+            Pragma: 'no-cache',
           },
-        })
+        }),
       );
     });
   });

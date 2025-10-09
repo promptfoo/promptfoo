@@ -91,7 +91,7 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
           }),
-        })
+        }),
       );
     });
 
@@ -103,13 +103,11 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
       const policy = { policy: 'Test policy' };
       const config = { applicationDefinition: { purpose: 'Test app' } };
 
-      await expect(
-        generateTestCase(policy, config, mockToast)
-      ).rejects.toThrow(timeoutError);
+      await expect(generateTestCase(policy, config, mockToast)).rejects.toThrow(timeoutError);
 
       expect(mockToast.showToast).toHaveBeenCalledWith(
         'Test generation timed out. Please try again or check your connection.',
-        'error'
+        'error',
       );
     });
 
@@ -121,13 +119,11 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
       const policy = { policy: 'Test policy' };
       const config = { applicationDefinition: { purpose: 'Test app' } };
 
-      await expect(
-        generateTestCase(policy, config, mockToast)
-      ).rejects.toThrow(genericError);
+      await expect(generateTestCase(policy, config, mockToast)).rejects.toThrow(genericError);
 
       expect(mockToast.showToast).toHaveBeenCalledWith(
         'Failed to generate test case: Internal server error',
-        'error'
+        'error',
       );
     });
 
@@ -143,13 +139,11 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
       const policy = { policy: 'Test policy' };
       const config = { applicationDefinition: { purpose: 'Test app' } };
 
-      await expect(
-        generateTestCase(policy, config, mockToast)
-      ).rejects.toThrow('Bad Request');
+      await expect(generateTestCase(policy, config, mockToast)).rejects.toThrow('Bad Request');
 
       expect(mockToast.showToast).toHaveBeenCalledWith(
         'Failed to generate test case: Bad Request',
-        'error'
+        'error',
       );
     });
 
@@ -167,13 +161,11 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
         const policy = { policy: 'Test policy' };
         const config = { applicationDefinition: { purpose: 'Test app' } };
 
-        await expect(
-          generateTestCase(policy, config, mockToast)
-        ).rejects.toThrow();
+        await expect(generateTestCase(policy, config, mockToast)).rejects.toThrow();
 
         expect(mockToast.showToast).toHaveBeenCalledWith(
           'Test generation timed out. Please try again or check your connection.',
-          'error'
+          'error',
         );
       }
     });
@@ -197,7 +189,7 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
 
       expect(mockToast.showToast).toHaveBeenCalledWith(
         'Test case generated successfully',
-        'success'
+        'success',
       );
       expect(result).toEqual({
         prompt: 'Generated prompt',
@@ -254,13 +246,11 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
       const config = { applicationDefinition: { purpose: 'Test app' } };
 
       // First attempt fails
-      await expect(
-        generateTestCase(policy, config, mockToast)
-      ).rejects.toThrow(timeoutError);
+      await expect(generateTestCase(policy, config, mockToast)).rejects.toThrow(timeoutError);
 
       expect(mockToast.showToast).toHaveBeenCalledWith(
         'Test generation timed out. Please try again or check your connection.',
-        'error'
+        'error',
       );
 
       // Clear toast calls
@@ -271,19 +261,21 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
 
       expect(mockToast.showToast).toHaveBeenCalledWith(
         'Test case generated successfully',
-        'success'
+        'success',
       );
       expect(result).toBeDefined();
 
       // Both calls should include timeout
       expect(mockCallApi).toHaveBeenCalledTimes(2);
-      expect(mockCallApi).toHaveBeenNthCalledWith(1,
+      expect(mockCallApi).toHaveBeenNthCalledWith(
+        1,
         '/redteam/generate-test',
-        expect.objectContaining({ timeout: 10000 })
+        expect.objectContaining({ timeout: 10000 }),
       );
-      expect(mockCallApi).toHaveBeenNthCalledWith(2,
+      expect(mockCallApi).toHaveBeenNthCalledWith(
+        2,
         '/redteam/generate-test',
-        expect.objectContaining({ timeout: 10000 })
+        expect.objectContaining({ timeout: 10000 }),
       );
     });
 
@@ -295,13 +287,11 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
       const policy = { policy: 'Test policy' };
       const config = { applicationDefinition: { purpose: 'Test app' } };
 
-      await expect(
-        generateTestCase(policy, config, mockToast)
-      ).rejects.toThrow(networkError);
+      await expect(generateTestCase(policy, config, mockToast)).rejects.toThrow(networkError);
 
       expect(mockToast.showToast).toHaveBeenCalledWith(
         'Failed to generate test case: NetworkError: Failed to fetch',
-        'error'
+        'error',
       );
     });
 
@@ -313,14 +303,9 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
       const policy = { policy: 'Test policy' };
       const config = { applicationDefinition: { purpose: 'Test app' } };
 
-      await expect(
-        generateTestCase(policy, config, mockToast)
-      ).rejects.toThrow(emptyError);
+      await expect(generateTestCase(policy, config, mockToast)).rejects.toThrow(emptyError);
 
-      expect(mockToast.showToast).toHaveBeenCalledWith(
-        'Failed to generate test case: ',
-        'error'
-      );
+      expect(mockToast.showToast).toHaveBeenCalledWith('Failed to generate test case: ', 'error');
     });
 
     it('should handle non-Error objects thrown', async () => {
@@ -330,13 +315,11 @@ describe('CustomPoliciesSection - Timeout Error Handling', () => {
       const policy = { policy: 'Test policy' };
       const config = { applicationDefinition: { purpose: 'Test app' } };
 
-      await expect(
-        generateTestCase(policy, config, mockToast)
-      ).rejects.toThrow();
+      await expect(generateTestCase(policy, config, mockToast)).rejects.toThrow();
 
       expect(mockToast.showToast).toHaveBeenCalledWith(
         'Failed to generate test case: Unknown error',
-        'error'
+        'error',
       );
     });
   });

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { callApi } from './api';
-import useApiConfig from '@app/stores/apiConfig';
 
 // Mock the apiConfig store
 vi.mock('@app/stores/apiConfig', () => ({
@@ -30,10 +29,7 @@ describe('callApi', () => {
 
       await callApi('/test');
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3000/api/test',
-        {}
-      );
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/api/test', {});
     });
 
     it('should pass through options to fetch', async () => {
@@ -48,10 +44,7 @@ describe('callApi', () => {
 
       await callApi('/test', options);
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3000/api/test',
-        options
-      );
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/api/test', options);
     });
   });
 
@@ -89,7 +82,7 @@ describe('callApi', () => {
 
       // Call the API with a timeout
       await expect(callApi('/test', { timeout: 50 })).rejects.toThrow(
-        'Request timed out after 50ms'
+        'Request timed out after 50ms',
       );
     });
 
@@ -100,7 +93,7 @@ describe('callApi', () => {
       vi.mocked(global.fetch).mockRejectedValueOnce(abortError);
 
       await expect(callApi('/test', { timeout: 1000 })).rejects.toThrow(
-        'Request timed out after 1000ms'
+        'Request timed out after 1000ms',
       );
     });
 
@@ -119,9 +112,7 @@ describe('callApi', () => {
       const networkError = new Error('Network error');
       vi.mocked(global.fetch).mockRejectedValueOnce(networkError);
 
-      await expect(callApi('/test', { timeout: 5000 })).rejects.toThrow(
-        'Network error'
-      );
+      await expect(callApi('/test', { timeout: 5000 })).rejects.toThrow('Network error');
 
       expect(clearTimeoutSpy).toHaveBeenCalled();
     });
@@ -130,9 +121,7 @@ describe('callApi', () => {
       const networkError = new Error('Network failure');
       vi.mocked(global.fetch).mockRejectedValueOnce(networkError);
 
-      await expect(callApi('/test', { timeout: 5000 })).rejects.toThrow(
-        'Network failure'
-      );
+      await expect(callApi('/test', { timeout: 5000 })).rejects.toThrow('Network failure');
     });
 
     it('should not include timeout in fetch options', async () => {
@@ -142,7 +131,7 @@ describe('callApi', () => {
       await callApi('/test', {
         method: 'POST',
         timeout: 5000,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
       });
 
       // Check that timeout is not passed to fetch
@@ -162,7 +151,7 @@ describe('callApi', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer token'
+          Authorization: 'Bearer token',
         },
         body: JSON.stringify({ data: 'test' }),
         mode: 'cors' as RequestMode,
@@ -174,10 +163,7 @@ describe('callApi', () => {
 
       await callApi('/test', options);
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3000/api/test',
-        options
-      );
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3000/api/test', options);
     });
 
     it('should maintain the same behavior when timeout is not provided', async () => {
