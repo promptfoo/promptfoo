@@ -562,4 +562,3 @@ function getLanguageFromExtension(ext: string): string {
 
   return languageMap[ext.toLowerCase()] || 'code';
 }
-

@@ -84,8 +84,8 @@ function TrustBar() {
           ))}
         </div>
         <p className={styles.trustBarSubtext}>
-          + Thomson Reuters, Datadog, Airbnb, BCG, Fidelity, and{' '}
-          {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide
+          + Thomson Reuters, Datadog, Airbnb, BCG, Fidelity, and {SITE_CONSTANTS.USER_COUNT_DISPLAY}
+          + developers worldwide
         </p>
       </div>
     </section>
@@ -125,8 +125,7 @@ function ProblemSection() {
     {
       icon: <BoltIcon />,
       title: 'Explosive Growth',
-      description:
-        'GenAI deployments growing 2-3x per year in enterprise organizations',
+      description: 'GenAI deployments growing 2-3x per year in enterprise organizations',
     },
     {
       icon: <IntegrationInstructionsIcon />,
@@ -186,8 +185,8 @@ function ProblemSection() {
 
         <div className={styles.transitionText}>
           <p>
-            There's a better way. Security doesn't have to slow down innovation—when it's built
-            into development from the start.
+            There's a better way. Security doesn't have to slow down innovation—when it's built into
+            development from the start.
           </p>
           <Link to="#solution" className={styles.transitionLink}>
             See How It Works →
@@ -362,7 +361,9 @@ function CommunitySection() {
             <h3>
               <SecurityIcon /> Fortune 100 Proven
             </h3>
-            <p>The world's most regulated companies trust Promptfoo to secure their AI deployments.</p>
+            <p>
+              The world's most regulated companies trust Promptfoo to secure their AI deployments.
+            </p>
             <div className={styles.testimonialList}>
               <div className={styles.testimonialItem}>
                 <strong>CVS Health</strong>
@@ -501,10 +502,7 @@ function PersonaSection() {
 
         <div className={styles.personaTabs}>
           <button
-            className={clsx(
-              styles.personaTab,
-              activePersona === 'ciso' && styles.personaTabActive,
-            )}
+            className={clsx(styles.personaTab, activePersona === 'ciso' && styles.personaTabActive)}
             onClick={() => setActivePersona('ciso')}
           >
             <div className={styles.personaTabTitle}>For CISOs</div>
@@ -586,7 +584,7 @@ function FAQSection() {
     {
       question: "What if we're already using another AI security tool?",
       answer:
-        "Great! Many customers use Promptfoo alongside existing tools. We integrate with your security stack (Datadog, Splunk, Jira, etc.) and often find vulnerabilities other tools miss. Many customers run head-to-head bake-offs—we win 75% of the time.",
+        'Great! Many customers use Promptfoo alongside existing tools. We integrate with your security stack (Datadog, Splunk, Jira, etc.) and often find vulnerabilities other tools miss. Many customers run head-to-head bake-offs—we win 75% of the time.',
     },
     {
       question: 'How do you stay current with new threats?',
@@ -657,10 +655,7 @@ export default function Home(): JSX.Element {
       wrapperClassName="homepage-wrapper"
     >
       <Head>
-        <meta
-          property="og:image"
-          content="https://www.promptfoo.dev/img/meta/homepage.png"
-        />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <HomepageHeader />

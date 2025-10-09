@@ -141,12 +141,15 @@ async function selectPlugins(
   logger.debug('[configGenerator] Using LLM to select appropriate plugins');
 
   // Prepare prompt content summary
-  const promptSummaries = prompts.map((p, i) => {
-    const preview = p.content.substring(0, 200);
-    const role = p.role ? ` [${p.role}]` : '';
-    const variables = p.variables.length > 0 ? ` (vars: ${p.variables.map((v) => v.name).join(', ')})` : '';
-    return `${i + 1}. ${p.location.file}:${p.location.line}${role}${variables}\n   "${preview}${p.content.length > 200 ? '...' : ''}"`;
-  }).join('\n\n');
+  const promptSummaries = prompts
+    .map((p, i) => {
+      const preview = p.content.substring(0, 200);
+      const role = p.role ? ` [${p.role}]` : '';
+      const variables =
+        p.variables.length > 0 ? ` (vars: ${p.variables.map((v) => v.name).join(', ')})` : '';
+      return `${i + 1}. ${p.location.file}:${p.location.line}${role}${variables}\n   "${preview}${p.content.length > 200 ? '...' : ''}"`;
+    })
+    .join('\n\n');
 
   const pluginSelectionPrompt = dedent`
     You are a security testing expert. Analyze these extracted LLM prompts and select appropriate security testing plugins.
