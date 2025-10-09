@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
+import globalMessageHandler, { type MessageLevel } from './util/globalMessageHandler';
 import { safeJsonStringify } from './util/json';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
@@ -31,7 +32,7 @@ export const LOG_LEVELS = {
   debug: 3,
 } as const;
 
-type LogLevel = keyof typeof LOG_LEVELS;
+export type LogLevel = keyof typeof LOG_LEVELS;
 
 /**
  * Context object for sanitized logging
@@ -361,14 +362,24 @@ function createLogMethodWithContext(
   level: keyof typeof LOG_LEVELS,
 ): (message: string, context?: SanitizedLogContext) => void {
   return (message: string, context?: SanitizedLogContext) => {
-    if (!context) {
-      internalLogger[level](message);
-      return;
+    const formattedMessage = (() => {
+      if (!context) {
+        return message;
+      }
+      const sanitized = sanitizeContext(context);
+      const contextStr = safeJsonStringify(sanitized, true);
+      return `${message}\n${contextStr}`;
+    })();
+
+    const handled = globalMessageHandler.handle(level as MessageLevel, formattedMessage);
+
+    if (handled && globalLogCallback) {
+      globalLogCallback(formattedMessage);
     }
 
-    const sanitized = sanitizeContext(context);
-    const contextStr = safeJsonStringify(sanitized, true);
-    internalLogger[level](`${message}\n${contextStr}`);
+    if (!handled) {
+      internalLogger[level](formattedMessage);
+    }
   };
 }
 

@@ -455,7 +455,7 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
       }
 
       // For other errors, log and continue (existing behavior)
-      logger.warn(
+      logger.debug(
         `Error checking permissions: ${convertErrorsToReadableMessage(errors)}. Continuing anyway.`,
       );
       return;

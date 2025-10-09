@@ -6,7 +6,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
 
 providers:
-  - id: https://webhook.site/3d47d2dd-d450-4869-b80d-41862e577e45
+  - id: https://localhost:3800/api/fail
     config:
       method: 'POST'
       headers:
