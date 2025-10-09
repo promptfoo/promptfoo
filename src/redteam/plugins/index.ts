@@ -15,6 +15,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
+  getRemoteHealthUrl,
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
@@ -54,6 +55,8 @@ import { XSTestPlugin } from './xstest';
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
 import type { HarmPlugin } from '../constants';
 
+import { checkRemoteHealth } from '../../util/apiHealth';
+
 export interface PluginFactory {
   key: string;
   validate?: (config: PluginConfig) => void;
@@ -78,6 +81,16 @@ async function fetchRemoteTestCases(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteTestCases should never be called when remote generation is disabled',
   );
+
+  // Health check remote before generating test cases
+  const remoteHealth = await checkRemoteHealth(
+    getRemoteHealthUrl() as string, // Only returns null if remote gen is disabled
+  );
+
+  if (remoteHealth.status !== 'OK') {
+    logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
+    return [];
+  }
 
   const body = JSON.stringify({
     config,
