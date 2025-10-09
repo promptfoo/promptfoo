@@ -4,6 +4,7 @@ import { Severity } from '@promptfoo/redteam/constants';
 import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SeverityCard from './SeverityCard';
+import { useTheme } from '@mui/material/styles';
 
 describe('SeverityCard', () => {
   const mockNavigateToIssues = vi.fn();
@@ -275,5 +276,34 @@ describe('SeverityCard', () => {
       expect(screen.getByText('0')).toBeInTheDocument();
       expect(screen.getByText('Vulnerabilities')).toBeInTheDocument();
     });
+  });
+});
+
+describe('renderWithProviders', () => {
+  it('should render a simple component and ensure it is present in the document when called with default options', () => {
+    const TestComponent = () => <div>Test Component Content</div>;
+
+    renderWithProviders(<TestComponent />);
+
+    expect(screen.getByText('Test Component Content')).toBeInTheDocument();
+  });
+
+  it('should provide a dark mode theme context when called with providerOptions containing darkMode: true', () => {
+    const TestComponent = () => {
+      const theme = useTheme();
+      return (
+        <div
+          data-testid="theme-aware-div"
+          style={{ backgroundColor: theme.palette.background.default }}
+        >
+          Dark Mode Test
+        </div>
+      );
+    };
+
+    renderWithProviders(<TestComponent />, {}, { darkMode: true });
+
+    const divElement = screen.getByTestId('theme-aware-div');
+    expect(divElement).toHaveStyle('background-color: #121212');
   });
 });
