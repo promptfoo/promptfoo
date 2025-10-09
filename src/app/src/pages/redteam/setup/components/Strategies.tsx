@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -77,7 +76,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { recordEvent } = useTelemetry();
   const toast = useToast();
   const theme = useTheme();
-  const { data: cloudConfig } = useCloudConfig();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
   const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
@@ -96,9 +94,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     metadata?: any;
   } | null>(null);
   const [generatingTestCase, setGeneratingTestCase] = useState(false);
-
-  // Check if cloud is enabled for magic wand feature
-  const isCloudEnabled = cloudConfig?.isEnabled ?? false;
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
@@ -584,7 +579,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
-            isCloudEnabled={isCloudEnabled}
           />
         )}
 
@@ -600,7 +594,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
-            isCloudEnabled={isCloudEnabled}
           />
         )}
 
@@ -616,7 +609,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
-            isCloudEnabled={isCloudEnabled}
           />
         )}
 
@@ -632,7 +624,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
-            isCloudEnabled={isCloudEnabled}
           />
         )}
 
@@ -648,7 +639,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
-            isCloudEnabled={isCloudEnabled}
           />
         )}
 

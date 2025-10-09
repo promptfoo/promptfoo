@@ -25,7 +25,6 @@ interface StrategyItemProps {
   onConfigClick: (id: string) => void;
   onGenerateTest?: (id: string) => void;
   isGenerating?: boolean;
-  isCloudEnabled?: boolean;
 }
 
 export function StrategyItem({
@@ -35,7 +34,6 @@ export function StrategyItem({
   onConfigClick,
   onGenerateTest,
   isGenerating = false,
-  isCloudEnabled = false,
 }: StrategyItemProps) {
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
 
@@ -78,30 +76,22 @@ export function StrategyItem({
           color="primary"
         />
         {onGenerateTest && (
-          <Tooltip
-            title={
-              isCloudEnabled
-                ? `Generate a test case for ${strategy.name}`
-                : 'Connect to Promptfoo Cloud to generate test cases'
-            }
-          >
-            <span>
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onGenerateTest(strategy.id);
-                }}
-                disabled={isGenerating || !isCloudEnabled}
-                sx={{ color: 'text.secondary', ml: 0.5 }}
-              >
-                {isGenerating ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <AutoFixHighIcon fontSize="small" />
-                )}
-              </IconButton>
-            </span>
+          <Tooltip title={`Generate a test case for ${strategy.name}`}>
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                onGenerateTest(strategy.id);
+              }}
+              disabled={isGenerating}
+              sx={{ color: 'text.secondary', ml: 0.5 }}
+            >
+              {isGenerating ? (
+                <CircularProgress size={16} />
+              ) : (
+                <AutoFixHighIcon fontSize="small" />
+              )}
+            </IconButton>
           </Tooltip>
         )}
       </Box>
