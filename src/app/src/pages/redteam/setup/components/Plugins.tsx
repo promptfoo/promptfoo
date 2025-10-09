@@ -341,11 +341,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     // Sort plugins alphabetically by display name (case-insensitive)
-    return plugins.sort((a, b) => {
-      const getDisplayName = (plugin: Plugin) => {
-        return (displayNameOverrides[plugin] || categoryAliases[plugin] || plugin).toLowerCase();
-      };
+    const getDisplayName = (plugin: Plugin) => {
+      return (displayNameOverrides[plugin] || categoryAliases[plugin] || plugin).toLowerCase();
+    };
 
+    return plugins.sort((a, b) => {
       const displayNameA = getDisplayName(a.plugin);
       const displayNameB = getDisplayName(b.plugin);
 
