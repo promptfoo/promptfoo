@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
@@ -81,7 +83,9 @@ function EvalOutputCell({
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText } = useTableStore();
+  const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
+  const { data: cloudConfig } = useCloudConfig();
+  const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -624,6 +628,11 @@ function EvalOutputCell({
               testIndex={rowIndex}
               promptIndex={promptIndex}
               variables={output.testCase?.vars}
+              onAddFilter={addFilter}
+              onResetFilters={resetFilters}
+              onReplay={replayEvaluation}
+              fetchTraces={fetchTraces}
+              cloudConfig={cloudConfig}
             />
           )}
         </>

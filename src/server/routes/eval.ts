@@ -12,6 +12,8 @@ import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
+import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
+import { setDownloadHeaders } from '../utils/downloadHelpers';
 import type { Request, Response } from 'express';
 
 import type {
@@ -166,23 +168,49 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
   }
 });
 
+// Query parameter schemas
+const evalTableQuerySchema = z.object({
+  format: z.string().optional(),
+  limit: z.coerce.number().positive().default(50),
+  offset: z.coerce.number().nonnegative().default(0),
+  filterMode: EvalResultsFilterMode.default('all'),
+  search: z.string().default(''),
+  filter: z
+    .union([z.string(), z.array(z.string())])
+    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
+    .default([]),
+  comparisonEvalIds: z
+    .union([z.string(), z.array(z.string())])
+    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
+    .default([]),
+});
+const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
+
 evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
-  const limit = Number(req.query.limit) || 50;
-  const offset = Number(req.query.offset) || 0;
-  const filterMode = EvalResultsFilterMode.parse(req.query.filterMode) ?? 'all';
-  const searchText = req.query.search ? String(req.query.search) : '';
-  const filters = Array.isArray(req.query.filter)
-    ? req.query.filter
-    : typeof req.query.filter === 'string'
-      ? [req.query.filter]
-      : [];
 
-  const comparisonEvalIds = Array.isArray(req.query.comparisonEvalIds)
-    ? req.query.comparisonEvalIds
-    : typeof req.query.comparisonEvalIds === 'string'
-      ? [req.query.comparisonEvalIds]
-      : [];
+  // Parse and validate query parameters
+  const queryResult = evalTableQuerySchema.safeParse(req.query);
+
+  if (!queryResult.success) {
+    const validationError = fromZodError(queryResult.error);
+    res.status(400).json({ error: validationError.message });
+    return;
+  }
+
+  const {
+    format,
+    limit: baseLimit,
+    offset: baseOffset,
+    filterMode,
+    search: searchText,
+    filter: filters,
+    comparisonEvalIds,
+  } = queryResult.data;
+
+  // Apply UNLIMITED_RESULTS when format is specified
+  const limit = format ? UNLIMITED_RESULTS : baseLimit;
+  const offset = format ? 0 : baseOffset;
 
   const eval_ = await Eval.findById(id);
   if (!eval_) {
@@ -245,7 +273,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
         ],
         vars: table.head.vars, // Assuming vars are the same
       },
-      body: table.body.map((row, _index) => {
+      body: table.body.map((row) => {
         // Find matching row in comparison table by test index
         const testIdx = row.testIdx;
         const matchingRows = comparisonTables
@@ -266,6 +294,24 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     };
   }
 
+  // Handle export formats
+  if (format === 'csv') {
+    const csvData = evalTableToCsv(returnTable, {
+      isRedteam: Boolean(eval_.config.redteam),
+    });
+
+    setDownloadHeaders(res, `${id}.csv`, 'text/csv');
+    res.send(csvData);
+    return;
+  } else if (format === 'json') {
+    const jsonData = evalTableToJson(returnTable);
+
+    setDownloadHeaders(res, `${id}.json`, 'application/json');
+    res.json(jsonData);
+    return;
+  }
+
+  // Default response for table view
   res.json({
     table: returnTable,
     totalCount: table.totalCount,

@@ -51,6 +51,7 @@ describe('OpenAI Provider', () => {
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.guardrails).toEqual({ flagged: false });
     });
 
     it('should handle caching correctly', async () => {
@@ -198,7 +199,12 @@ describe('OpenAI Provider', () => {
     it('should handle model refusals correctly', async () => {
       const mockResponse = {
         data: {
-          choices: [{ message: { refusal: 'Content policy violation' } }],
+          choices: [
+            {
+              message: { refusal: 'Content policy violation' },
+              finish_reason: 'stop',
+            },
+          ],
           usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
         },
         cached: false,
@@ -216,6 +222,7 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Content policy violation');
       expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0 });
       expect(result.isRefusal).toBe(true);
+      expect(result.guardrails).toEqual({ flagged: true });
     });
 
     it('should detect refusals in 400 API error with invalid_prompt code', async () => {

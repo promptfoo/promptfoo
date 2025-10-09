@@ -1,7 +1,6 @@
 import { screen } from '@testing-library/dom';
 import { render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DownloadMenu from './DownloadMenu';
 import { useTableStore as useResultsViewStore } from './store';
@@ -27,14 +26,41 @@ vi.mock('../../../hooks/useToast', () => ({
   }),
 }));
 
-vi.mock('js-yaml', () => ({
-  default: {
-    dump: vi.fn().mockReturnValue('mocked yaml'),
-  },
+// Mock the new download hooks
+const mockDownloadCsvFn = vi.fn();
+const mockDownloadJsonFn = vi.fn();
+let csvHookOptions:
+  | { onSuccess?: (fileName: string) => void; onError?: (error: Error) => void }
+  | undefined;
+let jsonHookOptions:
+  | { onSuccess?: (fileName: string) => void; onError?: (error: Error) => void }
+  | undefined;
+let csvIsLoading = false;
+let jsonIsLoading = false;
+
+const { downloadBlobMock, useDownloadEvalMock } = vi.hoisted(() => ({
+  downloadBlobMock: vi.fn(),
+  useDownloadEvalMock: vi.fn(),
 }));
 
-vi.mock('csv-stringify/browser/esm/sync', () => ({
-  stringify: vi.fn().mockReturnValue('mocked csv'),
+vi.mock('../../../hooks/useDownloadEval', () => ({
+  downloadBlob: downloadBlobMock,
+  DownloadFormat: {
+    CSV: 'csv',
+    JSON: 'json',
+  },
+  useDownloadEval: useDownloadEvalMock,
+}));
+
+const { yamlDumpMock } = vi.hoisted(() => ({
+  yamlDumpMock: vi.fn().mockReturnValue('mocked yaml'),
+}));
+
+vi.mock('js-yaml', () => ({
+  default: {
+    dump: yamlDumpMock,
+  },
+  dump: yamlDumpMock,
 }));
 
 global.URL.createObjectURL = vi.fn(() => 'mocked-blob-url');
@@ -75,6 +101,53 @@ describe('DownloadMenu', () => {
   const mockEvalId = 'test-eval-id';
 
   beforeEach(() => {
+    csvIsLoading = false;
+    jsonIsLoading = false;
+    csvHookOptions = undefined;
+    jsonHookOptions = undefined;
+
+    yamlDumpMock.mockClear();
+    yamlDumpMock.mockReturnValue('mocked yaml');
+
+    downloadBlobMock.mockReset();
+    downloadBlobMock.mockImplementation((blob: Blob, fileName: string) => {
+      const url = global.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      global.URL.revokeObjectURL(url);
+    });
+
+    mockDownloadCsvFn.mockReset();
+    mockDownloadCsvFn.mockImplementation(async () => {
+      csvHookOptions?.onSuccess?.(`${mockEvalId}.csv`);
+      return `${mockEvalId}.csv`;
+    });
+
+    mockDownloadJsonFn.mockReset();
+    mockDownloadJsonFn.mockImplementation(async () => {
+      jsonHookOptions?.onSuccess?.(`${mockEvalId}.json`);
+      return `${mockEvalId}.json`;
+    });
+
+    useDownloadEvalMock.mockReset();
+    useDownloadEvalMock.mockImplementation(
+      (
+        format: string,
+        options?: { onSuccess?: (fileName: string) => void; onError?: (error: Error) => void },
+      ) => {
+        if (format === 'csv') {
+          csvHookOptions = options;
+          return { download: mockDownloadCsvFn, isLoading: csvIsLoading };
+        }
+        jsonHookOptions = options;
+        return { download: mockDownloadJsonFn, isLoading: jsonIsLoading };
+      },
+    );
+
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       table: mockTable,
       config: mockConfig,
@@ -112,161 +185,44 @@ describe('DownloadMenu', () => {
 
   it('downloads CSV when clicking the button', async () => {
     render(<DownloadMenu />);
+    expect(csvHookOptions?.onSuccess).toBeInstanceOf(Function);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
-    });
-  });
-
-  it('downloads CSV with Description column when descriptions are present', async () => {
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
-
-    await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      // Verify csv-stringify input contains Description header and value
-      const calls = (csvStringify as unknown as ReturnType<typeof vi.fn>).mock.calls;
-      expect(calls.length).toBeGreaterThan(0);
-      const rows = calls[0][0] as string[][];
-      expect(rows[0][0]).toBe('Description');
-      expect(rows[1][0]).toBe('Test case with description');
-      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock
-        .calls[0][0] as Blob;
-      expect(blob.type).toBe('text/csv;charset=utf-8;');
-    });
-  });
-
-  it('downloads CSV with extremely long description text', async () => {
-    const longDescription = 'This is a very long description. '.repeat(1000);
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      table: {
-        head: {
-          vars: ['var1', 'var2'],
-          prompts: [{ provider: 'provider1', label: 'label1' }],
-        },
-        body: [
-          {
-            test: { vars: { testVar: 'value' }, description: longDescription },
-            vars: ['value1', 'value2'],
-            outputs: [{ pass: false, text: 'failed output' }],
-          },
-        ],
-      },
-      config: mockConfig,
-      evalId: mockEvalId,
-    });
-
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
-
-    await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      expect(blob.type).toBe('text/csv;charset=utf-8;');
-    });
-  });
-
-  it('downloads CSV with Description column and empty string for empty descriptions', async () => {
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      table: {
-        head: {
-          vars: ['var1', 'var2'],
-          prompts: [{ provider: 'provider1', label: 'label1' }],
-        },
-        body: [
-          {
-            test: { vars: { testVar: 'value' }, description: '' },
-            vars: ['value1', 'value2'],
-            outputs: [{ pass: false, text: 'failed output' }],
-          },
-          {
-            test: { vars: { testVar: 'value2' } },
-            vars: ['value3', 'value4'],
-            outputs: [{ pass: true, text: 'passed output' }],
-          },
-        ],
-      },
-      config: mockConfig,
-      evalId: mockEvalId,
-    });
-
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
-
-    await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      expect(blob.type).toBe('text/csv;charset=utf-8;');
-    });
-  });
-
-  it('downloads CSV with Unicode and special characters in description', async () => {
-    vi.mock('csv-stringify/browser/esm/sync', () => ({
-      stringify: vi.fn().mockImplementation((data) => {
-        const header = data[0].join(',');
-        const row = data[1].join(',');
-        return `${header}\n${row}`;
-      }),
-    }));
-
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      table: {
-        head: {
-          vars: ['var1', 'var2'],
-          prompts: [{ provider: 'provider1', label: 'label1' }],
-        },
-        body: [
-          {
-            test: {
-              vars: { testVar: 'value' },
-              description: 'Test case with Unicode: こんにちは世界 and emoji: 😊',
-            },
-            vars: ['value1', 'value2'],
-            outputs: [{ pass: false, text: 'failed output' }],
-          },
-          {
-            test: { vars: { testVar: 'value2' } },
-            vars: ['value3', 'value4'],
-            outputs: [{ pass: true, text: 'passed output' }],
-          },
-        ],
-      },
-      config: mockConfig,
-      evalId: mockEvalId,
-    });
-
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
-
-    await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      const blob = (global.URL.createObjectURL as ReturnType<typeof vi.fn>).mock
-        .calls[0][0] as Blob;
-
-      const reader = new FileReader();
-      reader.readAsText(blob);
-      reader.onload = () => {
-        expect(reader.result).toContain('Test case with Unicode: こんにちは世界 and emoji: 😊');
-      };
+      expect(mockDownloadCsvFn).toHaveBeenCalledWith(mockEvalId);
     });
   });
 
   it('downloads Table JSON when clicking the button', async () => {
     render(<DownloadMenu />);
+    expect(jsonHookOptions?.onSuccess).toBeInstanceOf(Function);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('JSON Export'));
+    await userEvent.click(screen.getByText('Download Results JSON'));
 
     await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+      expect(mockDownloadJsonFn).toHaveBeenCalledWith(mockEvalId);
     });
+  });
+
+  it('shows loading state while CSV download is in progress', async () => {
+    csvIsLoading = true;
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+
+    const csvButton = screen.getByRole('button', { name: 'Downloading...' });
+    expect(csvButton).toBeDisabled();
+  });
+
+  it('shows loading state while JSON download is in progress', async () => {
+    jsonIsLoading = true;
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+
+    const jsonButton = screen.getByRole('button', { name: 'Downloading...' });
+    expect(jsonButton).toBeDisabled();
   });
 
   it('downloads DPO JSON when clicking the button', async () => {
@@ -321,11 +277,11 @@ describe('DownloadMenu', () => {
     });
   });
 
-  it('shows a toast when table data is not available', async () => {
+  it('shows a toast when evalId is not available', async () => {
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      table: null,
+      table: mockTable,
       config: mockConfig,
-      evalId: mockEvalId,
+      evalId: null,
     });
 
     // Clear any previous calls to the mock
@@ -333,144 +289,9 @@ describe('DownloadMenu', () => {
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
+    await userEvent.click(screen.getByText('Download Results CSV'));
 
-    expect(showToastMock).toHaveBeenCalledWith('No table data', 'error');
-  });
-
-  it('generates a CSV file with valid outputs when table data contains null or undefined outputs', async () => {
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      table: {
-        ...mockTable,
-        body: [
-          {
-            test: { vars: { testVar: 'value' } },
-            vars: ['value1', 'value2'],
-            outputs: [null, { pass: false, text: 'failed output' }, undefined],
-          },
-          {
-            test: { vars: { testVar: 'value2' } },
-            vars: ['value3', 'value4'],
-            outputs: [{ pass: true, text: 'passed output' }, null],
-          },
-        ],
-      },
-      config: mockConfig,
-      evalId: mockEvalId,
-    });
-
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
-
-    await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-    });
-  });
-
-  it('includes grader reason, comment, and latency data in CSV export headers and rows', async () => {
-    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      table: {
-        head: {
-          vars: ['var1', 'var2'],
-          prompts: [
-            { provider: 'openai', label: 'gpt-4' },
-            { provider: 'anthropic', label: 'claude' },
-          ],
-        },
-        body: [
-          {
-            test: { vars: { testVar: 'value' } },
-            vars: ['value1', 'value2'],
-            outputs: [
-              {
-                pass: true,
-                text: 'output1',
-                latencyMs: 150,
-                gradingResult: { reason: 'Good response', comment: 'Well done' },
-              },
-              {
-                pass: false,
-                text: 'output2',
-                latencyMs: 250,
-                failureReason: 1, // ASSERT = 1
-                gradingResult: { reason: 'Failed assertion', comment: 'Needs improvement' },
-              },
-            ],
-          },
-          {
-            test: { vars: { testVar: 'value2' } },
-            vars: ['value3', 'value4'],
-            outputs: [
-              { pass: true, text: 'output3', latencyMs: 100 },
-              { pass: true, text: 'output4' }, // No latency, grader reason, or comment
-            ],
-          },
-        ],
-      },
-      config: mockConfig,
-      evalId: mockEvalId,
-    });
-
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('CSV Export'));
-
-    await waitFor(() => {
-      const calls = (csvStringify as unknown as ReturnType<typeof vi.fn>).mock.calls;
-      expect(calls.length).toBeGreaterThan(0);
-      const rows = calls[0][0] as string[][];
-
-      // Check headers include grader reason, comment, and latency columns
-      expect(rows[0]).toContain('Grader Reason');
-      expect(rows[0]).toContain('Comment');
-      expect(rows[0]).toContain('Latency (ms)');
-      expect(rows[0].filter((h: string) => h === 'Grader Reason')).toHaveLength(2); // Two prompts
-      expect(rows[0].filter((h: string) => h === 'Comment')).toHaveLength(2); // Two prompts
-      expect(rows[0].filter((h: string) => h === 'Latency (ms)')).toHaveLength(2); // Two prompts
-
-      // Check structure: var1, var2, [openai] gpt-4, Grader Reason, Comment, Latency (ms), [anthropic] claude, Grader Reason, Comment, Latency (ms)
-      expect(rows[0]).toEqual([
-        'var1',
-        'var2',
-        '[openai] gpt-4',
-        'Grader Reason',
-        'Comment',
-        'Latency (ms)',
-        '[anthropic] claude',
-        'Grader Reason',
-        'Comment',
-        'Latency (ms)',
-      ]);
-
-      // Check first row data: value1, value2, [PASS] output1, Good response, Well done, 150, [FAIL] output2, Failed assertion, Needs improvement, 250
-      expect(rows[1]).toEqual([
-        'value1',
-        'value2',
-        '[PASS] output1',
-        'Good response',
-        'Well done',
-        150,
-        '[FAIL] output2',
-        'Failed assertion',
-        'Needs improvement',
-        250,
-      ]);
-
-      // Check second row: value3, value4, [PASS] output3, '', '', 100, [PASS] output4, '', '', ''
-      expect(rows[2]).toEqual([
-        'value3',
-        'value4',
-        '[PASS] output3',
-        '',
-        '',
-        100,
-        '[PASS] output4',
-        '',
-        '',
-        '',
-      ]);
-    });
+    expect(showToastMock).toHaveBeenCalledWith('No evaluation ID', 'error');
   });
 
   it('handles null gradingResult in downloadHumanEvalTestCases without crashing', async () => {
@@ -546,7 +367,7 @@ describe('DownloadMenu', () => {
 
     // Check the category headings
     expect(screen.getByText('Configuration Files')).toBeInTheDocument();
-    expect(screen.getByText('Table Data Exports')).toBeInTheDocument();
+    expect(screen.getByText('Export Results')).toBeInTheDocument();
     expect(screen.getByText('Advanced Exports')).toBeInTheDocument();
   });
 
