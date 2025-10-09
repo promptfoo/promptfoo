@@ -27,6 +27,8 @@ interface TestCaseDialogProps {
   plugin: Plugin | string | null;
   isGenerating: boolean;
   generatedTestCase: { prompt: string; context?: string } | null;
+  targetResponse?: { output: string; error?: string } | null;
+  isRunningTest?: boolean;
   mode?: 'config' | 'result';
   config?: any;
   onConfigChange?: (config: any) => void;
@@ -42,6 +44,8 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   plugin,
   isGenerating,
   generatedTestCase,
+  targetResponse,
+  isRunningTest = false,
   mode = 'result',
   config,
   onConfigChange,
@@ -178,10 +182,52 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                 fontSize: '0.875rem',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
+                mb: 3,
               }}
             >
               {generatedTestCase.prompt}
             </Box>
+
+            {isRunningTest ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
+                <CircularProgress sx={{ mb: 2 }} />
+                <Typography variant="body2" color="text.secondary">
+                  Running test against target...
+                </Typography>
+              </Box>
+            ) : targetResponse ? (
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Target Response:
+                </Typography>
+                <Box
+                  sx={{
+                    p: 2,
+                    backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {targetResponse.error ? (
+                    <Box>
+                      <Typography color="error" variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                        Error:
+                      </Typography>
+                      <Typography variant="body2" color="error">
+                        {targetResponse.error}
+                      </Typography>
+                    </Box>
+                  ) : (
+                    targetResponse.output
+                  )}
+                </Box>
+              </Box>
+            ) : null}
           </Box>
         ) : null}
       </DialogContent>

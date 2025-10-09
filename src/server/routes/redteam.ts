@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import cliState from '../../cliState';
 import logger from '../../logger';
+import { loadApiProvider } from '../../providers/index';
 import { REDTEAM_MODEL } from '../../redteam/constants';
 import { Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
@@ -10,6 +11,7 @@ import { doRedteamRun } from '../../redteam/shared';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
+import type { ProviderOptions } from '../../types/providers';
 
 export const redteamRouter = Router();
 
@@ -138,6 +140,43 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     logger.error(`Error generating test case: ${error}`);
     res.status(500).json({
       error: 'Failed to generate test case',
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+// Run a test case against the target
+redteamRouter.post('/run-test', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { prompt, target } = req.body;
+
+    if (!prompt) {
+      res.status(400).json({ error: 'Prompt is required' });
+      return;
+    }
+
+    if (!target || !target.id) {
+      res.status(400).json({ error: 'Target configuration is required' });
+      return;
+    }
+
+    // Load the provider
+    const provider = await loadApiProvider(target.id, {
+      options: target as ProviderOptions,
+    });
+
+    // Call the provider with the prompt
+    const result = await provider.callApi(prompt);
+
+    res.json({
+      output: result.output,
+      error: result.error,
+      metadata: result.metadata,
+    });
+  } catch (error) {
+    logger.error(`Error running test case: ${error}`);
+    res.status(500).json({
+      error: 'Failed to run test case',
       details: error instanceof Error ? error.message : String(error),
     });
   }
