@@ -475,6 +475,60 @@ describe('util', () => {
 
       expect(resultIsForTestCase(absolutePathResult, noPathTestCase)).toBe(true);
     });
+
+    it('matches when result.vars has runtime variables like _conversation', () => {
+      // This tests the fix for issue #5849 - cache behavior regression
+      // result.vars contains runtime variables that should be filtered out
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+          _conversation: [], // Runtime variable added during evaluation
+        },
+        testCase: {
+          vars: {
+            input: 'hello',
+            language: 'en',
+          },
+        },
+      } as any as EvaluateResult;
+
+      // Should match because _conversation is filtered out
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('matches when result.vars has runtime variables and testCase also has them', () => {
+      // Edge case: both have runtime vars (shouldn't happen in practice but should still work)
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+          _conversation: [],
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+          _conversation: [],
+        },
+      } as any as EvaluateResult;
+
+      // Should match because both have same vars after filtering
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
   });
 
   describe('parsePathOrGlob', () => {

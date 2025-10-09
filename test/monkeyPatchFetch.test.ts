@@ -173,7 +173,6 @@ describe('monkeyPatchFetch', () => {
       requestBody: options.body,
       requestMethod: 'POST',
       response: null,
-      error: true,
     });
 
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Error in fetch:'));

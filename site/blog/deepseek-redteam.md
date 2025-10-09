@@ -181,6 +181,6 @@ We encourage you to [run your own red team](https://www.promptfoo.dev/docs/red-t
 npx promptfoo@latest init --example redteam-deepseek-foundation
 ```
 
-Once complete, ensure that you run complete red teams against the LLM application that uses DeepSeek-R1 for inference and consider [enforcing guardrails](https://www.promptfoo.dev/docs/red-team/guardrails/) as a defense-in-depth measure to mitigate the risk of toxicity or harmful content.
+Once complete, ensure that you run complete red teams against the LLM application that uses DeepSeek-R1 for inference and consider [enforcing guardrails](https://www.promptfoo.dev/guardrails/) as a defense-in-depth measure to mitigate the risk of toxicity or harmful content.
 
 Curious about learning more? [Contact us](https://www.promptfoo.dev/contact/) to schedule a demo.
