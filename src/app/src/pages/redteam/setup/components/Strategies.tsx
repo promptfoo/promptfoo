@@ -22,6 +22,7 @@ import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
 import StrategyConfigDialog from './StrategyConfigDialog';
 import { PresetSelector } from './strategies/PresetSelector';
+import { AgenticStrategiesGroup } from './strategies/AgenticStrategiesGroup';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
@@ -493,25 +494,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           />
         )}
 
-        {/* Agentic strategies */}
-        {categorizedStrategies.agenticSingleTurn.length > 0 && (
-          <StrategySection
-            title="Agentic Strategies (Single-turn)"
-            description="Advanced AI-powered strategies that dynamically adapt their attack patterns"
-            strategies={categorizedStrategies.agenticSingleTurn}
-            selectedIds={selectedStrategyIds}
-            onToggle={handleStrategyToggle}
-            onConfigClick={handleConfigClick}
-            onSelectNone={handleSelectNoneInSection}
-          />
-        )}
-
-        {/* Multi-turn agentic strategies */}
-        {categorizedStrategies.agenticMultiTurn.length > 0 && (
-          <StrategySection
-            title="Agentic Strategies (Multi-turn)"
-            description="AI-powered strategies that evolve across multiple conversation turns"
-            strategies={categorizedStrategies.agenticMultiTurn}
+        {/* Agentic strategies grouped */}
+        {(categorizedStrategies.agenticSingleTurn.length > 0 ||
+          categorizedStrategies.agenticMultiTurn.length > 0) && (
+          <AgenticStrategiesGroup
+            singleTurnStrategies={categorizedStrategies.agenticSingleTurn}
+            multiTurnStrategies={categorizedStrategies.agenticMultiTurn}
             selectedIds={selectedStrategyIds}
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}

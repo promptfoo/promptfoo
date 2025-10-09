@@ -300,6 +300,7 @@ export interface EvaluateTableOutput {
   testCase: AtomicTestCase;
   text: string;
   tokenUsage?: Partial<TokenUsage>;
+  error?: string | null;
   audio?: {
     id?: string;
     expiresAt?: number;

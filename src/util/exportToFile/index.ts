@@ -3,10 +3,6 @@ import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
-  const failReasons = (result.gradingResult?.componentResults || [])
-    .filter((result) => (result ? !result.pass : false))
-    .map((result) => result.reason)
-    .join(' --- ');
   const outputTextDisplay = (
     typeof result.response?.output === 'object'
       ? JSON.stringify(result.response.output)
@@ -16,7 +12,7 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
     if (result.success) {
       resultText = `${outputTextDisplay || result.error || ''}`;
     } else {
-      resultText = `${result.error || failReasons}\n---\n${outputTextDisplay}`;
+      resultText = `${outputTextDisplay}`;
     }
   } else if (result.error) {
     resultText = `${result.error}`;
