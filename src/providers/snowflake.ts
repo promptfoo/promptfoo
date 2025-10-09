@@ -194,18 +194,19 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
 
 export function createSnowflakeProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: Record<string, string | undefined>;
-  } = {},
+  options: ProviderOptions = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
   if (!modelName) {
-    throw new Error('Snowflake provider requires a model name. Use format: snowflake:<model_name>');
+    throw new Error(
+      'Snowflake provider requires a model name. Use format: snowflake:<model_name>'
+    );
   }
 
-  return new SnowflakeCortexProvider(modelName, options.config || {});
+  return new SnowflakeCortexProvider(modelName, {
+    ...options,
+    config: options.config ?? {},
+  });
 }
