@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -76,6 +77,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { recordEvent } = useTelemetry();
   const toast = useToast();
   const theme = useTheme();
+  const { status: apiHealthStatus } = useApiHealth();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
   const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
@@ -94,6 +96,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     metadata?: any;
   } | null>(null);
   const [generatingTestCase, setGeneratingTestCase] = useState(false);
+
+  // Check if API is connected for magic wand feature
+  const isApiConnected = apiHealthStatus === 'connected';
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
@@ -579,6 +584,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
+            isApiConnected={isApiConnected}
           />
         )}
 
@@ -594,6 +600,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
+            isApiConnected={isApiConnected}
           />
         )}
 
@@ -609,6 +616,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
+            isApiConnected={isApiConnected}
           />
         )}
 
@@ -624,6 +632,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
+            isApiConnected={isApiConnected}
           />
         )}
 
@@ -639,6 +648,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onSelectNone={handleSelectNoneInSection}
             onGenerateTest={handleGenerateStrategyTest}
             generatingStrategyId={generatingStrategy}
+            isApiConnected={isApiConnected}
           />
         )}
 

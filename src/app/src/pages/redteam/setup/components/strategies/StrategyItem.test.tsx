@@ -261,6 +261,7 @@ describe('StrategyItem', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
+          isApiConnected={true}
         />,
       );
 
@@ -294,6 +295,7 @@ describe('StrategyItem', () => {
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
           isGenerating={true}
+          isApiConnected={true}
         />,
       );
 
@@ -310,6 +312,7 @@ describe('StrategyItem', () => {
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
           isGenerating={true}
+          isApiConnected={true}
         />,
       );
 
@@ -326,6 +329,7 @@ describe('StrategyItem', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
+          isApiConnected={true}
         />,
       );
 
@@ -345,6 +349,7 @@ describe('StrategyItem', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
+          isApiConnected={true}
         />,
       );
 
@@ -373,6 +378,7 @@ describe('StrategyItem', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
+          isApiConnected={true}
         />,
       );
 
@@ -389,6 +395,7 @@ describe('StrategyItem', () => {
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onGenerateTest={mockOnGenerateTest}
+          isApiConnected={true}
         />,
       );
 
@@ -396,7 +403,83 @@ describe('StrategyItem', () => {
       const magicWandButton = buttons[0];
 
       // The tooltip should contain the strategy name
-      expect(magicWandButton).toHaveAttribute('aria-label', expect.stringContaining('Generate a test case'));
+      expect(magicWandButton).toHaveAttribute(
+        'aria-label',
+        expect.stringContaining('Generate a test case'),
+      );
+    });
+
+    it('disables magic wand button when API is not connected', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+          isApiConnected={false}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+      expect(magicWandButton).toBeDisabled();
+    });
+
+    it('shows appropriate tooltip when API is not connected', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+          isApiConnected={false}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+
+      // Tooltip text check - need to check parent span's title attribute
+      expect(magicWandButton.parentElement?.getAttribute('title')).toContain(
+        'API health check required',
+      );
+    });
+
+    it('enables magic wand button when API is connected', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+          isApiConnected={true}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+      expect(magicWandButton).not.toBeDisabled();
+    });
+
+    it('disables magic wand button when both generating and API is connected', () => {
+      render(
+        <StrategyItem
+          strategy={baseStrategy}
+          isSelected={false}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          onGenerateTest={mockOnGenerateTest}
+          isGenerating={true}
+          isApiConnected={true}
+        />,
+      );
+
+      const buttons = screen.getAllByRole('button');
+      const magicWandButton = buttons[0];
+      expect(magicWandButton).toBeDisabled();
     });
   });
 
