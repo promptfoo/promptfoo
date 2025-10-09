@@ -177,7 +177,7 @@ async function generateMultilingual(
       progressBar.start(chunks.length, 0);
     }
 
-    await async.forEachOfLimit(chunks, maxConcurrency, async (chunkObj, index) => {
+    await async.forEachOfLimit(chunks, maxConcurrency, async (chunkObj, _index) => {
       const chunk = chunkObj.data;
       const chunkNum = chunkObj.chunkNum;
       try {
