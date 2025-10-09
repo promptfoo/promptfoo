@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import useCloudConfig from '@app/hooks/useCloudConfig';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -94,7 +94,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
   const toast = useToast();
-  const { data: cloudConfig } = useCloudConfig();
+  const { status: apiHealthStatus } = useApiHealth();
   const [isCustomMode, setIsCustomMode] = useState(true);
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
@@ -953,9 +953,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     {/* Generate test case button */}
                     <Tooltip
                       title={
-                        cloudConfig?.isEnabled
+                        apiHealthStatus === 'connected'
                           ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
-                          : 'Cloud connection required for test generation'
+                          : 'API connection required for test generation'
                       }
                     >
                       <span>
@@ -966,7 +966,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                             handleGenerateTestCase(plugin);
                           }}
                           disabled={
-                            !cloudConfig?.isEnabled ||
+                            apiHealthStatus !== 'connected' ||
                             (generatingTestCase && generatingPlugin === plugin)
                           }
                           sx={{ color: 'text.secondary', ml: 0.5 }}
