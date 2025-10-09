@@ -1228,6 +1228,7 @@ export const providerMap: ProviderFactory[] = [
     test: (providerPath: string) =>
       providerPath.startsWith('ws:') ||
       providerPath.startsWith('wss:') ||
+      providerPath.startsWith('websocket://') ||
       providerPath === 'websocket' ||
       providerPath === 'ws' ||
       providerPath === 'wss',

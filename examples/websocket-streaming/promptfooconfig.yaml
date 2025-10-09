@@ -1,0 +1,96 @@
+description: OpenAI Realtime API WebSocket streaming example
+
+prompts:
+  - 'Hello, how are you today?'
+  - 'What is artificial intelligence in simple terms?'
+  - 'Tell me a programming joke'
+
+tests:
+  - vars: {}
+
+providers:
+  # OpenAI Realtime API via WebSocket
+  - id: wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01
+    config:
+      # Enable streaming to accumulate response audio deltas
+      stream: true
+
+      # OpenAI Realtime uses different event types
+      streamChunkType: 'response.audio_transcript.delta'
+      streamDoneType: 'response.audio_transcript.done'
+      streamDeltaField: 'delta'
+
+      # Send conversation item via Realtime API
+      messageTemplate: |
+        {
+          "type": "conversation.item.create",
+          "item": {
+            "type": "message",
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "{{prompt}}"
+              }
+            ]
+          }
+        }
+
+      # Authentication header for OpenAI API
+      headers:
+        Authorization: 'Bearer {{env.OPENAI_API_KEY}}'
+
+      # Realtime API can take longer
+      timeoutMs: 30000
+
+      # Extract text from transcript
+      transformResponse: 'data'
+
+  # Local test server - Simple inline transform
+  - id: websocket://localhost:8080
+    label: local-inline
+    config:
+      messageTemplate: |
+        {
+          "prompt": "{{prompt}}",
+          "stream": true
+        }
+      # Inline stream transform - most flexible approach
+      transformStream: |
+        (context) => {
+          const { message, messages } = context;
+          if (message.type === 'done') {
+            const chunks = messages
+              .filter(m => m.type === 'chunk' && m.delta)
+              .map(m => m.delta);
+            return { done: true, output: chunks.join('') };
+          }
+          return message.type === 'error'
+            ? { done: true, error: message.error }
+            : {};
+        }
+      timeoutMs: 15000
+
+  # Local test server - File-based transform
+  - id: websocket://localhost:8080
+    label: local-file-transform
+    config:
+      messageTemplate: '{"prompt": "{{prompt}}", "stream": true}'
+      transformStream: file://stream-transforms/simple-chunk.js
+      timeoutMs: 15000
+
+  # Local test server - Legacy mode (backward compatibility)
+  - id: websocket://localhost:8080
+    label: local-legacy
+    config:
+      stream: true
+      streamChunkType: chunk
+      streamDoneType: done
+      streamDeltaField: delta
+      messageTemplate: '{"prompt": "{{prompt}}", "stream": true}'
+      timeoutMs: 15000
+
+# defaultTest:
+#   assert:
+#     - type: llm-rubric
+#       value: is a helpful and appropriate response

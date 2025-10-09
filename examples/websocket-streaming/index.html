@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebSocket Streaming Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      border-radius: 8px;
+      padding: 30px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-top: 0;
+    }
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+    .status.connected {
+      background: #d4edda;
+      color: #155724;
+    }
+    .status.disconnected {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .input-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #555;
+      font-weight: 500;
+    }
+    textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-primary {
+      background: #007bff;
+      color: white;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #0056b3;
+    }
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: #545b62;
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .checkbox-group input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    .response-area {
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+      min-height: 150px;
+      margin-bottom: 20px;
+    }
+    .response-area h3 {
+      margin-top: 0;
+      color: #555;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .response-content {
+      color: #333;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .streaming {
+      color: #007bff;
+    }
+    .complete {
+      color: #28a745;
+    }
+    .error {
+      color: #dc3545;
+    }
+    .logs {
+      background: #263238;
+      color: #aed581;
+      padding: 15px;
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+    }
+    .logs h3 {
+      margin-top: 0;
+      color: #81c784;
+      font-size: 14px;
+    }
+    .log-entry {
+      margin-bottom: 5px;
+    }
+    .log-time {
+      color: #64b5f6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>WebSocket Streaming Test</h1>
+
+    <div id="status" class="status disconnected">
+      Disconnected
+    </div>
+
+    <div class="input-group">
+      <label for="prompt">Enter your prompt:</label>
+      <textarea id="prompt" rows="4" placeholder="Try: 'hello', 'what is ai', or 'tell me a joke'">Hello, how are you?</textarea>
+    </div>
+
+    <div class="checkbox-group">
+      <input type="checkbox" id="streamToggle" checked>
+      <label for="streamToggle" style="margin: 0;">Enable streaming</label>
+    </div>
+
+    <div class="controls">
+      <button id="sendBtn" class="btn-primary" disabled>Send Message</button>
+      <button id="clearBtn" class="btn-secondary">Clear Response</button>
+    </div>
+
+    <div class="response-area">
+      <h3>Response</h3>
+      <div id="response" class="response-content">
+        <em>Response will appear here...</em>
+      </div>
+    </div>
+
+    <div class="logs">
+      <h3>Event Log</h3>
+      <div id="logs"></div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let isStreaming = false;
+
+    const statusEl = document.getElementById('status');
+    const promptEl = document.getElementById('prompt');
+    const responseEl = document.getElementById('response');
+    const logsEl = document.getElementById('logs');
+    const sendBtn = document.getElementById('sendBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const streamToggle = document.getElementById('streamToggle');
+
+    function log(message, type = 'info') {
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
+      logsEl.appendChild(entry);
+      logsEl.scrollTop = logsEl.scrollHeight;
+    }
+
+    function updateStatus(connected) {
+      if (connected) {
+        statusEl.textContent = 'Connected';
+        statusEl.className = 'status connected';
+        sendBtn.disabled = false;
+      } else {
+        statusEl.textContent = 'Disconnected';
+        statusEl.className = 'status disconnected';
+        sendBtn.disabled = true;
+      }
+    }
+
+    function connect() {
+      try {
+        ws = new WebSocket('ws://localhost:8080');
+
+        ws.onopen = () => {
+          log('Connected to WebSocket server', 'success');
+          updateStatus(true);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+
+            switch (data.type) {
+              case 'connected':
+                log(`Server: ${data.message}`);
+                break;
+
+              case 'chunk':
+                if (!isStreaming) {
+                  responseEl.textContent = '';
+                  responseEl.className = 'response-content streaming';
+                  isStreaming = true;
+                }
+                responseEl.textContent += data.delta;
+                log(`Chunk: "${data.delta}"`);
+                break;
+
+              case 'done':
+                responseEl.className = 'response-content complete';
+                isStreaming = false;
+                log('Stream completed');
+                sendBtn.disabled = false;
+                break;
+
+              case 'complete':
+                responseEl.textContent = data.content;
+                responseEl.className = 'response-content complete';
+                log('Non-streaming response received');
+                sendBtn.disabled = false;
+                break;
+
+              case 'error':
+                responseEl.textContent = `Error: ${data.error}`;
+                responseEl.className = 'response-content error';
+                log(`Error: ${data.error}`, 'error');
+                sendBtn.disabled = false;
+                break;
+
+              default:
+                log(`Unknown message type: ${data.type}`);
+            }
+          } catch (err) {
+            log(`Error parsing message: ${err.message}`, 'error');
+          }
+        };
+
+        ws.onerror = (error) => {
+          log('WebSocket error occurred', 'error');
+          console.error('WebSocket error:', error);
+        };
+
+        ws.onclose = () => {
+          log('Disconnected from server');
+          updateStatus(false);
+          // Auto-reconnect after 2 seconds
+          setTimeout(connect, 2000);
+        };
+      } catch (err) {
+        log(`Failed to connect: ${err.message}`, 'error');
+        setTimeout(connect, 2000);
+      }
+    }
+
+    function sendMessage() {
+      const prompt = promptEl.value.trim();
+      if (!prompt || !ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      const message = {
+        prompt: prompt,
+        stream: streamToggle.checked
+      };
+
+      log(`Sending: ${JSON.stringify(message)}`);
+      ws.send(JSON.stringify(message));
+
+      sendBtn.disabled = true;
+      responseEl.textContent = streamToggle.checked ? 'Streaming...' : 'Waiting for response...';
+      responseEl.className = 'response-content';
+      isStreaming = false;
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+
+    clearBtn.addEventListener('click', () => {
+      responseEl.textContent = '';
+      responseEl.className = 'response-content';
+      log('Response cleared');
+    });
+
+    promptEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        sendMessage();
+      }
+    });
+
+    // Connect on page load
+    connect();
+  </script>
+</body>
+</html>
