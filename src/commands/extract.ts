@@ -8,12 +8,9 @@ import logger from '../logger';
 import { redteamProviderManager } from '../redteam/providers/shared';
 import telemetry from '../telemetry';
 import { generateExtractionSummary, generateRedTeamConfig } from '../extraction/configGenerator';
-import { extractPromptsFromDiff } from '../extraction/diffParser';
-import { extractPromptsFromFile, detectSimilarPrompts } from '../extraction/promptExtractor';
-import type { ExtractedPrompt } from '../extraction/types';
+import { extractPromptsFromFile } from '../extraction/promptExtractor';
 
 interface ExtractCommandOptions {
-  diff?: string;
   output?: string;
   purpose?: string;
   plugins?: string;
@@ -26,9 +23,8 @@ interface ExtractCommandOptions {
 
 export function extractCommand(program: Command) {
   program
-    .command('extract [file]')
+    .command('extract <file>')
     .description('Extract prompts from source files and generate red team configuration')
-    .option('--diff <source>', 'Extract from git diff (commit range or diff file)')
     .option('-o, --output <path>', 'Output path for red team config', 'redteam.yaml')
     .option('--purpose <description>', 'System purpose (auto-detected if not provided)')
     .option('--plugins <plugins>', 'Comma-separated plugin IDs')
@@ -37,27 +33,17 @@ export function extractCommand(program: Command) {
     .option('--interactive', 'Interactive mode for selections')
     .option('--min-confidence <number>', 'Minimum confidence threshold (0-1)', '0.6')
     .option('--env-file, --env-path <path>', 'Path to .env file')
-    .action(async (file: string | undefined, cmdObj: ExtractCommandOptions) => {
+    .action(async (file: string, cmdObj: ExtractCommandOptions) => {
       // Track telemetry
       telemetry.record('command_used', {
         name: 'extract',
-        hasFile: !!file,
-        hasDiff: !!cmdObj.diff,
         interactive: !!cmdObj.interactive,
       });
 
       try {
-        // Validate inputs
-        if (!file && !cmdObj.diff) {
-          logger.error('Error: Either a file path or --diff option is required');
-          logger.info('Usage: promptfoo extract <file> [options]');
-          logger.info('   or: promptfoo extract --diff <commit-range> [options]');
-          process.exitCode = 1;
-          return;
-        }
-
-        if (file && cmdObj.diff) {
-          logger.error('Error: Cannot specify both file and --diff option');
+        // Validate file exists
+        if (!fs.existsSync(file)) {
+          logger.error(`Error: File not found: ${file}`);
           process.exitCode = 1;
           return;
         }
@@ -85,92 +71,42 @@ export function extractCommand(program: Command) {
         });
         logger.info(`Using ${provider.id()} for prompt extraction\n`);
 
-        // Extract prompts
-        let prompts: ExtractedPrompt[];
+        // Extract prompts from file
+        const prompts = await extractPromptsFromFile(file, provider, minConfidence);
 
-        if (cmdObj.diff) {
-          // Extract from diff
-          const changes = await extractPromptsFromDiff(cmdObj.diff, provider, minConfidence);
-          prompts = changes.map((c) => c.prompt);
-
-          if (changes.length === 0) {
-            logger.info(chalk.yellow('No prompts found in diff'));
-            return;
-          }
-
+        if (prompts.length === 0) {
+          logger.info(chalk.yellow(`No prompts found in ${file}`));
           logger.info(
-            chalk.green(
-              `✓ Found ${prompts.length} prompt${prompts.length !== 1 ? 's' : ''} in diff\n`,
-            ),
+            dedent`
+            Try:
+            - Lowering --min-confidence (current: ${minConfidence})
+            - Checking if the file contains LLM API calls
+            - Using a supported file type (.js, .ts, .py)
+          `,
           );
-        } else if (file) {
-          // Validate file exists
-          if (!fs.existsSync(file)) {
-            logger.error(`Error: File not found: ${file}`);
-            process.exitCode = 1;
-            return;
-          }
-
-          // Extract from file
-          prompts = await extractPromptsFromFile(file, provider, minConfidence);
-
-          if (prompts.length === 0) {
-            logger.info(chalk.yellow(`No prompts found in ${file}`));
-            logger.info(
-              dedent`
-              Try:
-              - Lowering --min-confidence (current: ${minConfidence})
-              - Checking if the file contains LLM API calls
-              - Using a supported file type (.js, .ts, .py)
-            `,
-            );
-            return;
-          }
-
-          logger.info(
-            chalk.green(`✓ Found ${prompts.length} prompt${prompts.length !== 1 ? 's' : ''}\n`),
-          );
-        } else {
-          throw new Error('Internal error: no file or diff specified');
+          return;
         }
+
+        logger.info(
+          chalk.green(`✓ Found ${prompts.length} prompt${prompts.length !== 1 ? 's' : ''}\n`),
+        );
 
         // Display extraction summary
         const summary = generateExtractionSummary(prompts);
         logger.info(summary);
 
-        // Detect similar prompts for deduplication
-        const promptsWithSimilarity = detectSimilarPrompts(prompts, 0.85);
-        const duplicates = promptsWithSimilarity.filter((p) => p.isDuplicate);
-
-        if (duplicates.length > 0) {
-          logger.warn(
-            chalk.yellow(
-              `\n⚠️  Detected ${duplicates.length} duplicate prompt${duplicates.length !== 1 ? 's' : ''}`,
-            ),
-          );
-          if (cmdObj.interactive) {
-            logger.info(
-              chalk.gray(
-                'Duplicates are unselected by default. You can review and select them if needed.\n',
-              ),
-            );
-          }
-        }
-
         // Interactive mode: let user select prompts
+        let selectedPrompts = prompts;
         if (cmdObj.interactive && prompts.length > 1) {
           logger.info(chalk.cyan('🎯 Select prompts to include in red team configuration:\n'));
 
-          const choices = promptsWithSimilarity.map((p, i) => {
+          const choices = prompts.map((p, i) => {
             const fileName = path.basename(p.location.file);
             const location = `${fileName}:${p.location.line}`;
             const typeLabel = p.type === 'composed' ? chalk.blue(' [COMPOSED]') : '';
             const roleLabel = p.role && !p.type ? ` [${p.role}]` : '';
             const providerLabel = p.apiProvider ? ` (${p.apiProvider})` : '';
             const confidenceLabel = ` - ${(p.confidence * 100).toFixed(0)}%`;
-
-            // Add duplicate indicator
-            const duplicateLabel = p.isDuplicate ? chalk.red(' [DUPLICATE]') : '';
 
             // Format display content based on type
             let displayContent: string;
@@ -193,9 +129,9 @@ export function extractCommand(program: Command) {
             }
 
             return {
-              name: `${location}${typeLabel}${roleLabel}${providerLabel}${confidenceLabel}${duplicateLabel}\n  ${chalk.gray(displayContent)}`,
+              name: `${location}${typeLabel}${roleLabel}${providerLabel}${confidenceLabel}\n  ${chalk.gray(displayContent)}`,
               value: i,
-              checked: !p.isDuplicate, // Uncheck duplicates by default
+              checked: true,
             };
           });
 
@@ -212,25 +148,16 @@ export function extractCommand(program: Command) {
           }
 
           // Filter prompts based on selection
-          prompts = selectedIndices.map((idx) => prompts[idx]);
+          selectedPrompts = selectedIndices.map((idx) => prompts[idx]);
           logger.info(
             chalk.green(
-              `\n✓ Selected ${prompts.length} prompt${prompts.length !== 1 ? 's' : ''}\n`,
-            ),
-          );
-        } else if (!cmdObj.interactive && duplicates.length > 0) {
-          // Non-interactive mode: auto-filter duplicates
-          const originalCount = prompts.length;
-          prompts = promptsWithSimilarity.filter((p) => !p.isDuplicate);
-          logger.info(
-            chalk.green(
-              `✓ Automatically filtered ${originalCount - prompts.length} duplicate${originalCount - prompts.length !== 1 ? 's' : ''}, keeping ${prompts.length} unique prompt${prompts.length !== 1 ? 's' : ''}\n`,
+              `\n✓ Selected ${selectedPrompts.length} prompt${selectedPrompts.length !== 1 ? 's' : ''}\n`,
             ),
           );
         }
 
         // Detect variables
-        const totalVariables = prompts.reduce((sum, p) => sum + p.variables.length, 0);
+        const totalVariables = selectedPrompts.reduce((sum, p) => sum + p.variables.length, 0);
         if (totalVariables > 0) {
           logger.info(
             chalk.cyan(
@@ -242,13 +169,17 @@ export function extractCommand(program: Command) {
         // Generate config
         logger.info(chalk.cyan('🔧 Generating red team configuration...\n'));
 
-        const config = await generateRedTeamConfig(prompts, {
-          purpose: cmdObj.purpose,
-          plugins,
-          strategies,
-          provider: cmdObj.provider,
-          output: cmdObj.output,
-        });
+        const config = await generateRedTeamConfig(
+          selectedPrompts,
+          {
+            purpose: cmdObj.purpose,
+            plugins,
+            strategies,
+            provider: cmdObj.provider,
+            output: cmdObj.output,
+          },
+          provider,
+        );
 
         // Write config to file
         const outputPath = path.resolve(cmdObj.output || 'redteam.yaml');

@@ -7,5 +7,4 @@
 export * from './types';
 export * from './variableDetector';
 export * from './promptExtractor';
-export * from './diffParser';
 export * from './configGenerator';

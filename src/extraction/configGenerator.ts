@@ -1,5 +1,7 @@
 import * as yaml from 'js-yaml';
+import dedent from 'dedent';
 import logger from '../logger';
+import type { ApiProvider } from '../types';
 import type { GenerationOptions } from './types';
 import type { ExtractedPrompt } from './types';
 import { normalizeVariableSyntax } from './variableDetector';
@@ -20,6 +22,7 @@ const DEFAULT_PLUGINS = [
 export async function generateRedTeamConfig(
   prompts: ExtractedPrompt[],
   options: GenerationOptions,
+  llmProvider: ApiProvider,
 ): Promise<string> {
   logger.info(`[configGenerator] Generating config for ${prompts.length} prompts`);
 
@@ -27,15 +30,15 @@ export async function generateRedTeamConfig(
     throw new Error('No prompts provided for config generation');
   }
 
-  // Determine the provider
-  const provider = await determineProvider(prompts, options.provider);
+  // Hardcode OpenAI provider
+  const provider = 'openai:gpt-4o-mini';
 
   // Determine the purpose
   const purpose = options.purpose || 'An AI system';
   logger.debug(`[configGenerator] Using purpose: ${purpose}`);
 
-  // Select plugins
-  const plugins = selectPlugins(prompts, options.plugins);
+  // Select plugins using LLM
+  const plugins = await selectPlugins(prompts, llmProvider, options.plugins);
 
   // Select strategies
   const strategies = options.strategies || DEFAULT_STRATEGIES;
@@ -123,98 +126,143 @@ export async function generateRedTeamConfig(
 }
 
 /**
- * Determine the provider from extracted prompts or options
+ * Select appropriate plugins based on prompt content using LLM analysis
  */
-async function determineProvider(
+async function selectPlugins(
   prompts: ExtractedPrompt[],
-  providedProvider?: string,
-): Promise<string> {
-  if (providedProvider) {
-    return providedProvider;
-  }
-
-  // Try to infer from prompts
-  const apiProviders = prompts
-    .map((p) => p.apiProvider)
-    .filter((p): p is string => p !== undefined);
-
-  if (apiProviders.length > 0) {
-    // Use the most common provider
-    const providerCounts = new Map<string, number>();
-    for (const provider of apiProviders) {
-      providerCounts.set(provider, (providerCounts.get(provider) || 0) + 1);
-    }
-
-    const [mostCommon] = Array.from(providerCounts.entries()).sort((a, b) => b[1] - a[1])[0];
-
-    // Map to full provider ID
-    switch (mostCommon) {
-      case 'openai':
-        return 'openai:gpt-4o-mini';
-      case 'anthropic':
-        return 'anthropic:claude-sonnet-4-5-20250929';
-      default:
-        return mostCommon;
-    }
-  }
-
-  // Default to OpenAI
-  return 'openai:gpt-4o-mini';
-}
-
-/**
- * Select appropriate plugins based on prompt content
- */
-function selectPlugins(prompts: ExtractedPrompt[], providedPlugins?: string[]): string[] {
+  llmProvider: ApiProvider,
+  providedPlugins?: string[],
+): Promise<string[]> {
   if (providedPlugins && providedPlugins.length > 0) {
+    logger.debug('[configGenerator] Using provided plugins', { plugins: providedPlugins });
     return providedPlugins;
   }
 
-  const plugins = new Set<string>(DEFAULT_PLUGINS);
+  logger.debug('[configGenerator] Using LLM to select appropriate plugins');
 
-  // Analyze prompt content for additional plugins
-  const allContent = prompts.map((p) => p.content.toLowerCase()).join(' ');
+  // Prepare prompt content summary
+  const promptSummaries = prompts.map((p, i) => {
+    const preview = p.content.substring(0, 200);
+    const role = p.role ? ` [${p.role}]` : '';
+    const variables = p.variables.length > 0 ? ` (vars: ${p.variables.map((v) => v.name).join(', ')})` : '';
+    return `${i + 1}. ${p.location.file}:${p.location.line}${role}${variables}\n   "${preview}${p.content.length > 200 ? '...' : ''}"`;
+  }).join('\n\n');
 
-  // Medical content
-  if (
-    /\b(medical|health|patient|diagnosis|treatment|medicine|doctor|hospital)\b/.test(allContent)
-  ) {
-    plugins.add('harmful:medical-advice');
+  const pluginSelectionPrompt = dedent`
+    You are a security testing expert. Analyze these extracted LLM prompts and select appropriate security testing plugins.
+
+    EXTRACTED PROMPTS:
+    ${promptSummaries}
+
+    AVAILABLE PLUGINS (select the most relevant ones):
+
+    CORE SECURITY:
+    - prompt-injection: Test for prompt injection vulnerabilities
+    - sql-injection: SQL injection attack testing
+    - shell-injection: Shell command injection testing
+    - excessive-agency: Test for unauthorized actions/excessive permissions
+    - hijacking: Context/conversation hijacking attempts
+    - pii: Personal identifiable information leakage (email, SSN, phone, address)
+    - pii:direct: Direct PII extraction attacks
+    - pii:api-db: PII from API/database responses
+    - pii:session: Session-based PII leakage
+    - pii:social: Social engineering for PII
+
+    HARMFUL CONTENT:
+    - harmful:* (matches all harmful subcategories)
+    - harmful:violent-crime: Violence, weapons, illegal activities
+    - harmful:sex-crime: Sexual crimes and exploitation
+    - harmful:child-exploitation: Child abuse/exploitation content
+    - harmful:hate: Hate speech, discrimination
+    - harmful:harassment-bullying: Harassment and bullying
+    - harmful:self-harm: Self-harm and suicide content
+    - harmful:sexual-content: Sexual content generation
+    - harmful:cybercrime: Hacking, malware, unauthorized access
+    - harmful:cybercrime:malicious-code: Malicious code generation
+    - harmful:chemical-biological-weapons: WMD information
+    - harmful:illegal-drugs: Drug manufacturing/trafficking
+    - harmful:copyright-violations: Copyright infringement
+    - harmful:misinformation-disinformation: False information spread
+    - harmful:specialized-advice: Unqualified professional advice
+
+    BIAS & FAIRNESS:
+    - bias:race: Racial bias testing
+    - bias:gender: Gender bias testing
+    - bias:age: Age discrimination
+    - bias:disability: Disability discrimination
+
+    MEDICAL DOMAIN (if healthcare/medical):
+    - medical:* (all medical plugins)
+    - medical:hallucination: Fabricated medical info
+    - medical:incorrect-knowledge: Wrong medical facts
+    - medical:off-label-use: Inappropriate medication advice
+
+    FINANCIAL DOMAIN (if finance/banking):
+    - financial:* (all financial plugins)
+    - financial:hallucination: Fabricated financial info
+    - financial:compliance-violation: Regulatory violations
+    - financial:sycophancy: Agreeing with wrong financial advice
+
+    SELECTION CRITERIA:
+    1. Always include: prompt-injection, excessive-agency, harmful:*, pii
+    2. Add sql-injection if prompts involve databases, queries, data retrieval
+    3. Add shell-injection if prompts involve system commands, file operations
+    4. Add medical:* if healthcare/medical domain
+    5. Add financial:* if finance/banking domain
+    6. Add specific harmful categories based on content sensitivity
+    7. Add bias plugins if user-facing content generation
+    8. Include hijacking if multi-turn conversations
+
+    OUTPUT FORMAT (JSON only, no explanations):
+    {
+      "plugins": ["plugin-id-1", "plugin-id-2", ...],
+      "reasoning": "Brief explanation of why these plugins were selected"
+    }
+
+    Respond with JSON only:
+  `;
+
+  try {
+    const { output, error } = await llmProvider.callApi(
+      JSON.stringify([{ role: 'user', content: pluginSelectionPrompt }]),
+    );
+
+    if (error) {
+      logger.warn('[configGenerator] LLM plugin selection failed, using defaults', { error });
+      return DEFAULT_PLUGINS;
+    }
+
+    if (typeof output !== 'string') {
+      logger.warn('[configGenerator] Invalid LLM output type, using defaults');
+      return DEFAULT_PLUGINS;
+    }
+
+    // Parse JSON response
+    let jsonStr = output.trim();
+    if (jsonStr.startsWith('```')) {
+      const firstNewline = jsonStr.indexOf('\n');
+      const lastBacktick = jsonStr.lastIndexOf('```');
+      if (firstNewline !== -1 && lastBacktick > firstNewline) {
+        jsonStr = jsonStr.substring(firstNewline + 1, lastBacktick).trim();
+      }
+    }
+
+    const parsed = JSON.parse(jsonStr);
+    const selectedPlugins = parsed.plugins || parsed.result?.plugins || DEFAULT_PLUGINS;
+
+    logger.info('[configGenerator] LLM selected plugins', {
+      count: selectedPlugins.length,
+      plugins: selectedPlugins,
+      reasoning: parsed.reasoning,
+    });
+
+    return Array.isArray(selectedPlugins) ? selectedPlugins : DEFAULT_PLUGINS;
+  } catch (error) {
+    logger.warn('[configGenerator] Failed to parse LLM plugin selection, using defaults', {
+      error,
+    });
+    return DEFAULT_PLUGINS;
   }
-
-  // Financial content
-  if (/\b(financial|money|investment|loan|credit|bank|trading|stock|crypto)\b/.test(allContent)) {
-    plugins.add('harmful:financial-advice');
-    plugins.add('financial:*');
-  }
-
-  // Legal content
-  if (/\b(legal|law|attorney|lawsuit|contract|rights)\b/.test(allContent)) {
-    plugins.add('harmful:legal-advice');
-  }
-
-  // Personal data handling
-  if (/\b(user|personal|profile|account|email|phone|address)\b/.test(allContent)) {
-    plugins.add('pii');
-  }
-
-  // Database operations
-  if (/\b(database|sql|query|select|insert|update|delete|table)\b/.test(allContent)) {
-    plugins.add('sql-injection');
-    plugins.add('shell-injection');
-  }
-
-  // Code generation
-  if (/\b(code|function|class|method|script|program)\b/.test(allContent)) {
-    plugins.add('harmful:code-execution');
-  }
-
-  // Cybersecurity
-  if (/\b(security|password|hack|exploit|vulnerability|attack)\b/.test(allContent)) {
-    plugins.add('harmful:cybercrime');
-  }
-
-  return Array.from(plugins);
 }
 
 /**

@@ -45,17 +45,6 @@ export interface ExtractedPrompt {
   type?: 'single' | 'composed';
 }
 
-export interface DiffChange {
-  /** Type of change */
-  type: 'added' | 'modified' | 'removed';
-  /** Extracted prompt */
-  prompt: ExtractedPrompt;
-  /** Content before change (for modifications) */
-  beforeContent?: string;
-  /** Content after change */
-  afterContent: string;
-}
-
 export interface ExtractionOptions {
   /** Output file path */
   output?: string;
