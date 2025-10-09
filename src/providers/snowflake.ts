@@ -200,9 +200,7 @@ export function createSnowflakeProvider(
   const modelName = splits.slice(1).join(':');
 
   if (!modelName) {
-    throw new Error(
-      'Snowflake provider requires a model name. Use format: snowflake:<model_name>'
-    );
+    throw new Error('Snowflake provider requires a model name. Use format: snowflake:<model_name>');
   }
 
   return new SnowflakeCortexProvider(modelName, {
