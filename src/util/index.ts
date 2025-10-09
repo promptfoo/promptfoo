@@ -423,7 +423,8 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
 
   // Filter out runtime variables like _conversation when matching
   // These are added during evaluation but shouldn't affect test matching
-  const resultVars = filterRuntimeVars(result.testCase?.vars ?? result.vars);
+  // Use result.vars (not result.testCase.vars) as it contains the actual vars used during evaluation
+  const resultVars = filterRuntimeVars(result.vars);
   const testVars = filterRuntimeVars(testCase.vars);
   return varsMatch(testVars, resultVars) && providersMatch;
 }
