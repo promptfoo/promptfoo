@@ -82,7 +82,6 @@ export async function monkeyPatchFetch(
         requestBody: opts.body,
         requestMethod: opts.method || 'GET',
         response: null,
-        error: true,
       });
       if (isConnectionError(e as Error)) {
         logger.debug(
