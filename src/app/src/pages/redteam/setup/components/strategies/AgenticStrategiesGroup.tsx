@@ -42,29 +42,29 @@ export function AgenticStrategiesGroup({
         <Box>
           <Typography variant="h6">Agentic Strategies</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Advanced AI-powered strategies that dynamically adapt their attack patterns
+            Advanced LLM-powered strategies that dynamically adapt their attack patterns
           </Typography>
         </Box>
-        {(singleTurnStrategies.length > 0 || multiTurnStrategies.length > 0) && (
-          <Button
-            variant="text"
-            size="small"
-            color="primary"
-            onClick={handleResetAll}
-            disabled={selectedAgenticStrategies.length === 0}
-            sx={{
-              fontSize: '0.875rem',
-              fontWeight: 'normal',
-              padding: 0,
-              margin: 0,
-              '&:hover': {
-                backgroundColor: 'transparent',
-              },
-            }}
-          >
-            Reset All
-          </Button>
-        )}
+        {(singleTurnStrategies.length > 0 || multiTurnStrategies.length > 0) &&
+          selectedAgenticStrategies.length === 0 && (
+            <Button
+              variant="text"
+              size="small"
+              color="primary"
+              onClick={handleResetAll}
+              sx={{
+                fontSize: '0.875rem',
+                fontWeight: 'normal',
+                padding: 0,
+                margin: 0,
+                '&:hover': {
+                  backgroundColor: 'transparent',
+                },
+              }}
+            >
+              Reset All
+            </Button>
+          )}
       </Box>
 
       {/* Container with subtle border/background */}
