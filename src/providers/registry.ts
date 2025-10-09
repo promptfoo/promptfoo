@@ -182,7 +182,7 @@ export const providerMap: ProviderFactory[] = [
       providerPath.startsWith('anthropic:claude-agent-sdk') ||
       providerPath.startsWith('anthropic:claude-code'),
     create: async (
-      providerPath: string,
+      _providerPath: string,
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
