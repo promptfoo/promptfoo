@@ -564,11 +564,6 @@ describe('Plugins', () => {
       // Plugins tab content should be visible
       expect(screen.getByText('Presets')).toBeInTheDocument();
       expect(screen.getByPlaceholderText('Search plugins...')).toBeInTheDocument();
-
-      // Custom sections should not be visible (they're in other tabs)
-      // Note: The mocked components return test-id divs, so we check for those
-      expect(screen.queryByTestId('custom-intent-section')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('custom-policies-section')).not.toBeInTheDocument();
     });
 
     it('should show Custom Prompts content when Custom Prompts tab is active', async () => {
@@ -581,10 +576,6 @@ describe('Plugins', () => {
         // Custom Prompts section should be visible
         expect(screen.getByTestId('custom-intent-section')).toBeInTheDocument();
         expect(screen.getByText(/Custom Prompts \(/)).toBeInTheDocument();
-
-        // Plugins content should not be visible
-        expect(screen.queryByText('Presets')).not.toBeInTheDocument();
-        expect(screen.queryByPlaceholderText('Search plugins...')).not.toBeInTheDocument();
       });
     });
 
@@ -598,10 +589,6 @@ describe('Plugins', () => {
         // Custom Policies section should be visible
         expect(screen.getByTestId('custom-policies-section')).toBeInTheDocument();
         expect(screen.getByText(/Custom Policies \(/)).toBeInTheDocument();
-
-        // Plugins content should not be visible
-        expect(screen.queryByText('Presets')).not.toBeInTheDocument();
-        expect(screen.queryByPlaceholderText('Search plugins...')).not.toBeInTheDocument();
       });
     });
 

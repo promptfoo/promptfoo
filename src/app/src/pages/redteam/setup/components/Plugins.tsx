@@ -48,7 +48,7 @@ function TabPanel({ children, value, index }: TabPanelProps) {
       id={`plugins-tabpanel-${index}`}
       aria-labelledby={`plugins-tab-${index}`}
     >
-      {value === index && <Box>{children}</Box>}
+      <Box>{children}</Box>
     </Box>
   );
 }
