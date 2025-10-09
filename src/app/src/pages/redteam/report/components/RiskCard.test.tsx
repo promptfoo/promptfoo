@@ -66,7 +66,6 @@ describe('RiskCard', () => {
       'sql-injection': [{ prompt: 'prompt3', output: 'output3' }],
       xss: [{ prompt: 'prompt4', output: 'output4' }],
     },
-    strategyStats: { strategy1: { pass: 2, total: 3 } },
   };
 
   const createTestProps = (overrides = {}) => ({
@@ -154,7 +153,6 @@ describe('RiskCard', () => {
     expect(RiskCategoryDrawerMock.mockProps.passes).toEqual(
       defaultProps.passesByPlugin['sql-injection'],
     );
-    expect(RiskCategoryDrawerMock.mockProps.strategyStats).toEqual(defaultProps.strategyStats);
     expect(RiskCategoryDrawerMock.mockProps.numPassed).toBe(5);
     expect(RiskCategoryDrawerMock.mockProps.numFailed).toBe(5);
   });

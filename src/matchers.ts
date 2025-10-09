@@ -444,7 +444,7 @@ export async function renderLlmRubricPrompt(
   try {
     // Render every string scalar within the JSON
     // Does not render object keys (only values)
-    const parsed = JSON.parse(rubricPrompt, (k, v) =>
+    const parsed = JSON.parse(rubricPrompt, (_k, v) =>
       typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
     );
     return JSON.stringify(parsed);
@@ -1348,7 +1348,7 @@ export async function matchesSelectBest(
       rejectedPrediction: 0,
     },
   };
-  return outputs.map((output, index) => {
+  return outputs.map((_output, index) => {
     if (index === verdict) {
       return {
         pass: true,

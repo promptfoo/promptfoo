@@ -15,7 +15,6 @@ import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import { alpha } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
@@ -48,6 +47,7 @@ import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-co
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
@@ -1252,7 +1252,7 @@ function ResultsTable({
           }}
         >
           <tbody>
-            {reactTable.getRowModel().rows.map((row, rowIndex) => {
+            {reactTable.getRowModel().rows.map((row) => {
               let colBorderDrawn = false;
 
               return (
@@ -1466,12 +1466,11 @@ function ResultsTable({
             }}
           >
             <span>Go to:</span>
-            <TextField
+            <BaseNumberInput
               size="small"
-              type="number"
               value={pagination.pageIndex + 1}
-              onChange={(e) => {
-                const page = e.target.value ? Number(e.target.value) - 1 : null;
+              onChange={(v) => {
+                const page = v !== undefined ? v - 1 : null;
                 if (page !== null && page >= 0 && page < pageCount) {
                   setPagination((prev) => ({
                     ...prev,
@@ -1484,12 +1483,8 @@ function ResultsTable({
                 width: '60px',
                 textAlign: 'center',
               }}
-              slotProps={{
-                htmlInput: {
-                  min: 1,
-                  max: pageCount || 1,
-                },
-              }}
+              min={1}
+              max={pageCount || 1}
               disabled={pageCount === 1}
             />
           </Typography>

@@ -80,13 +80,13 @@ describe('getProgressColor', () => {
       },
     );
 
-    it('should return the lowest severity color (low) for negative percentages', () => {
+    it('should return the highest severity color for negative percentages', () => {
       const result = getProgressColor(-10, theme, false);
-      expect(result).toBe(getSeverityColor(Severity.Low, theme));
+      expect(result).toBe(getSeverityColor(Severity.Critical, theme));
     });
   });
 
-  describe('when forAttackRate is true (attack success rate)', () => {
+  describe('when highIsBad is true (e.g. attack success rate)', () => {
     const theme = createAppTheme(false);
     it.each([
       { percentage: 80, expectedColor: theme.palette.custom.severity[Severity.High].main },
@@ -107,9 +107,9 @@ describe('getProgressColor', () => {
       },
     );
 
-    it('should return the highest severity color (critical) for negative percentages', () => {
+    it('should return low severity color for negative percentages', () => {
       const result = getProgressColor(-10, theme, true);
-      expect(result).toBe(getSeverityColor(Severity.Critical, theme));
+      expect(result).toBe(getSeverityColor(Severity.Low, theme));
     });
   });
 

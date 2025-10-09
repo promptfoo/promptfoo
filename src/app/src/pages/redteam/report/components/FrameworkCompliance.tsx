@@ -22,14 +22,9 @@ import './FrameworkCompliance.css';
 interface FrameworkComplianceProps {
   evalId: string;
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
-  strategyStats: Record<string, { pass: number; total: number }>;
 }
 
-const FrameworkCompliance = ({
-  evalId,
-  categoryStats,
-  strategyStats,
-}: FrameworkComplianceProps) => {
+const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const getNonCompliantPlugins = React.useCallback(

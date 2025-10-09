@@ -18,7 +18,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');

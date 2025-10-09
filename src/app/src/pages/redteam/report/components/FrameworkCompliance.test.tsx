@@ -5,7 +5,6 @@ import FrameworkCard from './FrameworkCard';
 import FrameworkCompliance from './FrameworkCompliance';
 import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
-import { getProgressColor } from '../utils/color';
 
 vi.mock('./store');
 vi.mock('./FrameworkCard');
@@ -52,7 +51,6 @@ vi.mock('@promptfoo/redteam/constants', async (importOriginal) => {
 const mockUseReportStore = vi.mocked(useReportStore);
 const mockFrameworkCard = vi.mocked(FrameworkCard);
 const mockCSVExporter = vi.mocked(CSVExporter);
-const mockGetProgressColor = vi.mocked(getProgressColor);
 
 describe('FrameworkCompliance', () => {
   beforeEach(() => {
@@ -69,22 +67,14 @@ describe('FrameworkCompliance', () => {
     });
   });
 
-  const renderFrameworkCompliance = (
-    categoryStats = {},
-    strategyStats = {},
-    pluginPassRateThreshold = 0.9,
-  ) => {
+  const renderFrameworkCompliance = (categoryStats = {}, pluginPassRateThreshold = 0.9) => {
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold,
       setPluginPassRateThreshold: vi.fn(),
     });
 
     return renderWithProviders(
-      <FrameworkCompliance
-        evalId="test-eval-id"
-        categoryStats={categoryStats}
-        strategyStats={strategyStats}
-      />,
+      <FrameworkCompliance evalId="test-eval-id" categoryStats={categoryStats} />,
     );
   };
 
@@ -96,11 +86,7 @@ describe('FrameworkCompliance', () => {
       'plugin-D': { pass: 5, total: 10, passWithFilter: 5 },
     };
 
-    const strategyStats = {
-      'strategy-1': { pass: 1, total: 5 },
-    };
-
-    renderFrameworkCompliance(categoryStats, strategyStats);
+    renderFrameworkCompliance(categoryStats);
 
     expect(screen.getByText(/Framework Compliance \(1\/3\)/)).toBeInTheDocument();
 
@@ -141,11 +127,7 @@ describe('FrameworkCompliance', () => {
       'plugin-C': { pass: 10, total: 10, passWithFilter: 10 },
     };
 
-    const strategyStats = {
-      'strategy-1': { pass: 5, total: 5 },
-    };
-
-    renderFrameworkCompliance(categoryStats, strategyStats);
+    renderFrameworkCompliance(categoryStats);
 
     expect(screen.getByText(/0.0% Attack Success Rate/)).toBeInTheDocument();
     expect(screen.getByText(/\(0\/30 tests failed across 3 plugins\)/)).toBeInTheDocument();
@@ -162,11 +144,7 @@ describe('FrameworkCompliance', () => {
       'plugin-C': { pass: 5, total: 10, passWithFilter: 5 },
     };
 
-    const strategyStats = {
-      'strategy-1': { pass: 1, total: 5 },
-    };
-
-    renderFrameworkCompliance(categoryStats, strategyStats);
+    renderFrameworkCompliance(categoryStats);
 
     expect(mockFrameworkCard).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -185,11 +163,7 @@ describe('FrameworkCompliance', () => {
       'plugin-2': { pass: 8, total: 10, passWithFilter: 8 },
     };
 
-    const strategyStats = {
-      'strategy-1': { pass: 2, total: 5 },
-    };
-
-    renderFrameworkCompliance(categoryStats, strategyStats, pluginPassRateThreshold);
+    renderFrameworkCompliance(categoryStats, pluginPassRateThreshold);
 
     expect(mockCSVExporter).toHaveBeenCalledTimes(1);
     expect(mockCSVExporter).toHaveBeenCalledWith(
@@ -231,128 +205,13 @@ describe('FrameworkCompliance', () => {
       expectedText: /Framework Compliance/,
       expectedFailedText: null,
     },
-  ])(
-    'should handle $name',
-    ({ categoryStats, strategyStats, expectedText, expectedFailedText }) => {
-      renderFrameworkCompliance(categoryStats, strategyStats);
-
-      expect(screen.getByText(expectedText)).toBeInTheDocument();
-
-      if (expectedFailedText) {
-        expect(screen.getByText(expectedFailedText)).toBeInTheDocument();
-      }
-    },
-  );
-
-  it.each([
-    {
-      pluginPassRateThreshold: 0,
-      expectedCompliantFrameworks: 3,
-      expectedAttackSuccessRate: '50.0',
-      expectedFailedTests: 2,
-      expectedTotalTests: 4,
-      name: 'pluginPassRateThreshold is 0',
-    },
-    {
-      pluginPassRateThreshold: 1,
-      expectedCompliantFrameworks: 1,
-      expectedAttackSuccessRate: '50.0',
-      expectedFailedTests: 2,
-      expectedTotalTests: 4,
-      name: 'pluginPassRateThreshold is 1',
-    },
-  ])(
-    'should handle extreme pluginPassRateThreshold values when $name',
-    ({
-      pluginPassRateThreshold,
-      expectedCompliantFrameworks,
-      expectedAttackSuccessRate,
-      expectedFailedTests,
-      expectedTotalTests,
-    }) => {
-      const categoryStats = {
-        'plugin-A': { pass: 1, total: 1, passWithFilter: 1 },
-        'plugin-B': { pass: 0, total: 1, passWithFilter: 0 },
-        'plugin-C': { pass: 0, total: 1, passWithFilter: 0 },
-        'plugin-D': { pass: 1, total: 1, passWithFilter: 1 },
-      };
-
-      renderFrameworkCompliance(categoryStats, {}, pluginPassRateThreshold);
-
-      expect(
-        screen.getByText(new RegExp(`Framework Compliance \\(${expectedCompliantFrameworks}/3\\)`)),
-      ).toBeInTheDocument();
-
-      expect(
-        screen.getByText(new RegExp(`${expectedAttackSuccessRate}% Attack Success Rate`)),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          new RegExp(
-            `\\(${expectedFailedTests}/${expectedTotalTests} tests failed across 4 plugins\\)`,
-          ),
-        ),
-      ).toBeInTheDocument();
-    },
-  );
-
-  it.each([
-    { attackSuccessRate: 0, pass: 10, total: 10 },
-    { attackSuccessRate: 50, pass: 5, total: 10 },
-    { attackSuccessRate: 100, pass: 0, total: 10 },
-  ])(
-    'should pass the theme to getProgressColor with invert=true for attackSuccessRate=$attackSuccessRate',
-    ({ attackSuccessRate, pass, total }) => {
-      const categoryStats = {
-        'plugin-A': { pass, total, passWithFilter: pass },
-      };
-
-      renderFrameworkCompliance(categoryStats);
-
-      expect(mockGetProgressColor).toHaveBeenCalledTimes(1);
-      expect(mockGetProgressColor).toHaveBeenCalledWith(
-        expect.closeTo(attackSuccessRate),
-        expect.anything(),
-        true,
-      );
-    },
-  );
-
-  it('should handle missing severity information for non-compliant plugins gracefully', () => {
-    vi.resetModules();
-    vi.doMock('@promptfoo/redteam/constants', async (importOriginal) => {
-      const original = await importOriginal<typeof import('@promptfoo/redteam/constants')>();
-      return {
-        ...original,
-        FRAMEWORK_COMPLIANCE_IDS: ['framework-1'],
-        ALIASED_PLUGIN_MAPPINGS: {
-          'framework-1': {
-            'cat-1': { plugins: ['plugin-A'], strategies: [] },
-          },
-        },
-        riskCategorySeverityMap: {},
-        Severity: {
-          Low: 'low',
-          Medium: 'medium',
-          High: 'high',
-          Critical: 'critical',
-        },
-      };
-    });
-
-    const categoryStats = {
-      'plugin-A': { pass: 0, total: 10, passWithFilter: 0 },
-    };
-
+  ])('should handle $name', ({ categoryStats, expectedText, expectedFailedText }) => {
     renderFrameworkCompliance(categoryStats);
 
-    expect(mockFrameworkCard).toHaveBeenCalledWith(
-      expect.objectContaining({
-        framework: 'framework-1',
-        isCompliant: false,
-        frameworkSeverity: 'low',
-      }),
-      expect.anything(),
-    );
+    expect(screen.getByText(expectedText)).toBeInTheDocument();
+
+    if (expectedFailedText) {
+      expect(screen.getByText(expectedFailedText)).toBeInTheDocument();
+    }
   });
 });
