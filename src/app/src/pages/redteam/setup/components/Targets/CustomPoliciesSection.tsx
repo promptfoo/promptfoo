@@ -67,7 +67,7 @@ export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const toast = useToast();
-  const { status: apiHealthStatus } = useApiHealth();
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [isInitialMount, setIsInitialMount] = useState(true);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
@@ -101,6 +101,11 @@ export const CustomPoliciesSection = () => {
   });
 
   const [debouncedPolicies] = useDebounce(policies, 500);
+
+  // Check API health on mount
+  useEffect(() => {
+    checkHealth();
+  }, [checkHealth]);
 
   // Sync policies to config - immediate on mount, debounced on changes
   const syncPolicies = useCallback(
@@ -351,7 +356,7 @@ export const CustomPoliciesSection = () => {
                 tooltipTitle={
                   apiHealthStatus === 'connected'
                     ? undefined
-                    : 'API connection required for test generation'
+                    : 'Promptfoo Cloud connection is required for test generation'
                 }
               />
               <IconButton

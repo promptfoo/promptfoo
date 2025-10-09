@@ -94,7 +94,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
   const toast = useToast();
-  const { status: apiHealthStatus } = useApiHealth();
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [isCustomMode, setIsCustomMode] = useState(true);
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
@@ -172,7 +172,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
-  }, []);
+    checkHealth();
+  }, [checkHealth]);
 
   useEffect(() => {
     if (debouncedPlugins) {
@@ -955,7 +956,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       title={
                         apiHealthStatus === 'connected'
                           ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
-                          : 'API connection required for test generation'
+                          : 'Promptfoo Cloud connection is required for test generation'
                       }
                     >
                       <span>
