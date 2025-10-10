@@ -91,17 +91,10 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
     success: boolean;
     result?: any;
     error?: string;
+    noTransform?: boolean;
   } | null>(null);
 
   const testTransform = async () => {
-    if (!transformCode) {
-      setTestResult({
-        success: false,
-        error: 'No transform function provided',
-      });
-      return;
-    }
-
     if (!testInput || !testInput.trim()) {
       setTestResult({
         success: false,
@@ -113,7 +106,15 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
     setTestLoading(true);
     try {
       const result = await onTest(transformCode, testInput);
-      setTestResult(result);
+      // Add info if no transform was applied
+      if (!transformCode?.trim() && result.success) {
+        setTestResult({
+          ...result,
+          noTransform: true,
+        });
+      } else {
+        setTestResult(result);
+      }
     } catch (error) {
       console.error('Error testing transform:', error);
       setTestResult({
@@ -162,7 +163,7 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
               {/* Transform Code Editor */}
               <Box>
                 <Typography variant="subtitle2" gutterBottom>
-                  Transform Function
+                  Transform Function (Optional)
                 </Typography>
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2" sx={{ mb: 1 }}>
@@ -181,6 +182,9 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                     {functionDocumentation.signature}
                   </Typography>
                   <Typography variant="body2">{functionDocumentation.description}</Typography>
+                  <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
+                    Leave empty to test the base behavior without any transformation.
+                  </Typography>
                 </Alert>
                 <Box
                   sx={{
@@ -195,7 +199,7 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                     onValueChange={onTransformCodeChange}
                     highlight={highlightJS}
                     padding={10}
-                    placeholder="Enter transform function..."
+                    placeholder="Enter transform function, or leave empty to see base behavior..."
                     style={{
                       fontFamily: '"Fira code", "Fira Mono", monospace',
                       fontSize: 14,
@@ -264,10 +268,16 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                 >
                   {testResult.success ? (
                     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                      <Alert severity="success" sx={{ mb: 2 }}>
-                        {functionDocumentation.successMessage}
-                      </Alert>
-                      {onApply && (
+                      {testResult.noTransform ? (
+                        <Alert severity="info" sx={{ mb: 2 }}>
+                          No transform applied - showing base behavior
+                        </Alert>
+                      ) : (
+                        <Alert severity="success" sx={{ mb: 2 }}>
+                          {functionDocumentation.successMessage}
+                        </Alert>
+                      )}
+                      {onApply && !testResult.noTransform && (
                         <Button
                           variant="contained"
                           color="primary"

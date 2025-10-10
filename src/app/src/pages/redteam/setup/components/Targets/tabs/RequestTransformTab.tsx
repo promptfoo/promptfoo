@@ -119,9 +119,11 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
             onValueChange={(code) => updateCustomTarget('transformRequest', code)}
             highlight={highlightJS}
             padding={10}
-            placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API. Format as:
+            placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API.
 
-                      A JSON object with prompt variable: \`{ messages: [{ role: 'user', content: prompt }] }\`
+                      Example: { messages: [{ role: 'user', content: prompt }] }
+                      
+                      Leave empty to send the prompt as-is.
                     `}
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
@@ -160,7 +162,8 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
         onTest={handleTest}
         onApply={(code) => updateCustomTarget('transformRequest', code)}
         functionDocumentation={{
-          signature: '(prompt, vars, context) => any',
+          signature:
+            '(prompt: string, vars: Record<string, any>, context: CallApiContextParams) => string | object',
           description: (
             <>
               • <strong>prompt</strong>: string - The test prompt input
