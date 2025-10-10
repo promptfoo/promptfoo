@@ -69,7 +69,7 @@ targets:
       transformResponse: 'data.message'
 ```
 
-The streaming target uses `streamResponse(data, accumulator)` to decide when to stop and what to return. The server sends messages like:
+The streaming target uses `streamResponse(accumulator, data, context?)` to decide when to stop and what to return. The server sends messages like:
 
 ```json
 {"type":"delta","message":"partial text..."}
@@ -83,11 +83,11 @@ The example’s handler returns the final `message` when it sees the terminal fr
   config:
     messageTemplate: '{"input": {{prompt | dump}}}'
     streamResponse: |
-      (event, data) => {
+      (accumulator, event, context) => {
         const { message, type } = JSON.parse(event.data);
         if (type === 'message') { return [{ output: message }, true]; }
         if (type === 'error')   { return [{ error: message }, true]; }
-        return [data, false];
+        return [{output: message}, false];
       }
 ```
 

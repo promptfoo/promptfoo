@@ -140,8 +140,8 @@ const WebSocketEndpointConfiguration = ({
                 onValueChange={(code) => updateWebSocketTarget('streamResponse', code)}
                 highlight={highlightJS}
                 padding={10}
-                placeholder={dedent`Optional: Accumulate/Transform the streaming WebSocket responses.
-            Provide a function that receives the message event and an accumulator, and
+                placeholder={dedent`Optional: Accumulate/Transform streaming WebSocket responses.
+            Provide a function that receives (accumulator, event, context) and
             returns [nextAccumulator, isComplete]. Example:
 
             ${DEFAULT_WEBSOCKET_STREAM_RESPONSE}`}

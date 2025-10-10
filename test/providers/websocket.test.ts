@@ -214,7 +214,7 @@ describe('WebSocketProvider', () => {
     it('should stream chunks and resolve when stream signals complete', async () => {
       let callCount = 0;
       const chunks = ['hello ', 'world'];
-      const streamResponse = (event: any, accumulator: any) => {
+      const streamResponse = (accumulator: any, event: any) => {
         const previousOutput = typeof accumulator.output === 'string' ? accumulator.output : '';
         const currentChunk =
           typeof event?.data === 'string' ? event.data : String(event?.data ?? event);
@@ -251,7 +251,10 @@ describe('WebSocketProvider', () => {
     });
 
     it('should complete immediately if stream signals completion on first message', async () => {
-      const streamResponse = (event: any) => [{ output: String(event?.data ?? event) }, 'COMPLETE'];
+      const streamResponse = (_acc: any, event: any) => [
+        { output: String(event?.data ?? event) },
+        true,
+      ];
 
       provider = new WebSocketProvider('ws://test.com', {
         config: {
@@ -275,6 +278,38 @@ describe('WebSocketProvider', () => {
       expect(response).toEqual({ output: 'chunk' });
       expect(mockWs.close).toHaveBeenCalledTimes(1);
     });
+
+    it('should pass context as third argument to streamResponse', async () => {
+      let received: any[] | null = null;
+      const streamResponse = (acc: any, event: any, ctx: any) => {
+        received = [acc, event, ctx];
+        return [{ output: 'ok' }, true];
+      };
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse,
+          transformResponse: (data: any) => ({ output: (data as any).output }),
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
+
+      const context = { vars: { x: 1 }, debug: true } as any;
+      const response = await provider.callApi('ignored', context);
+      expect(response).toEqual({ output: 'ok' });
+      expect(received).not.toBeNull();
+      expect(received?.[2]).toEqual(context);
+    });
   });
 
   describe('timeouts', () => {
@@ -291,7 +326,7 @@ describe('WebSocketProvider', () => {
           ...(useStreaming
             ? {
                 // never signal completion; ensures timeout path is exercised
-                streamResponse: (_data: any, acc: any) => [acc, ''],
+                streamResponse: (acc: any, _data: any) => [acc, ''],
               }
             : {}),
         },

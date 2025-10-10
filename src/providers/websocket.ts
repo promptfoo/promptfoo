@@ -34,7 +34,11 @@ interface WebSocketProviderConfig {
 
   timeoutMs?: number;
   transformResponse?: string | Function;
-  streamResponse?: (data: any, accumulator: ProviderResponse) => [ProviderResponse, boolean];
+  streamResponse?: (
+    accumulator: ProviderResponse,
+    data: any,
+    context: CallApiContextParams | undefined,
+  ) => [ProviderResponse, boolean];
   headers?: Record<string, string>;
   /**
    * @deprecated
@@ -54,16 +58,22 @@ export function createTransformResponse(parser: any): (data: any) => ProviderRes
 
 export async function createStreamResponse(
   transform: string | Function | undefined,
-): Promise<(data: any, accumulator: ProviderResponse) => [ProviderResponse, boolean]> {
+): Promise<
+  (
+    accumulator: ProviderResponse,
+    data: any,
+    context: CallApiContextParams | undefined,
+  ) => [ProviderResponse, boolean]
+> {
   if (!transform) {
-    return (data) => [processResult(data), true];
+    return (_accumulator, data) => [processResult(data), true];
   }
 
   if (typeof transform === 'function') {
-    return (data, accumulator) => {
+    return (accumulator, data, context) => {
       try {
-        // Pass prompt, vars, and context to user-provided function (extra args are safe)
-        return (transform as any)(data, accumulator);
+        // Pass accumulator, data, and context to user-provided function (extra args are safe)
+        return (transform as any)(accumulator, data, context);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wrappedError = new Error(`Error in stream response function: ${errorMessage}`);
@@ -87,9 +97,9 @@ export async function createStreamResponse(
       functionName,
     );
     if (typeof requiredModule === 'function') {
-      return (data, accumulator) => {
+      return (accumulator, data, context) => {
         try {
-          return requiredModule(data, accumulator);
+          return requiredModule(accumulator, data, context);
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : String(err);
           const wrappedError = new Error(
@@ -104,7 +114,7 @@ export async function createStreamResponse(
       `stream response malformed: ${filename} must export a function or have a default export as a function`,
     );
   } else if (typeof transform === 'string') {
-    return (data, accumulator) => {
+    return (accumulator, data, context) => {
       try {
         const trimmedTransform = transform.trim();
         // Check if it's a function expression (either arrow or regular)
@@ -114,9 +124,10 @@ export async function createStreamResponse(
         if (isFunctionExpression) {
           // For function expressions, call them with the arguments
           transformFn = new Function(
-            'data',
             'accumulator',
-            `try { return (${trimmedTransform})(data, accumulator); } catch(e) { throw new Error('Stream response failed: ' + e.message) }`,
+            'data',
+            'context',
+            `try { return (${trimmedTransform})(accumulator, data, context); } catch(e) { throw new Error('Stream response failed: ' + e.message) }`,
           );
         } else {
           // Check if it contains a return statement
@@ -125,21 +136,23 @@ export async function createStreamResponse(
           if (hasReturn) {
             // Use as function body if it has return statements
             transformFn = new Function(
-              'data',
               'accumulator',
+              'data',
+              'context',
               `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
             );
           } else {
             // Wrap simple expressions with return
             transformFn = new Function(
-              'data',
               'accumulator',
+              'data',
+              'context',
               `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
             );
           }
         }
 
-        const result: [ProviderResponse, boolean] = transformFn(data, accumulator);
+        const result: [ProviderResponse, boolean] = transformFn(accumulator, data, context);
         return result;
       } catch (err) {
         logger.error(`[Websocket Provider] Error in stream response: ${String(err)}.`);
@@ -158,7 +171,11 @@ export class WebSocketProvider implements ApiProvider {
   config: WebSocketProviderConfig;
   transformResponse: (data: any) => ProviderResponse;
   streamResponse?: Promise<
-    (data: any, accumulator: ProviderResponse) => [ProviderResponse, boolean]
+    (
+      accumulator: ProviderResponse,
+      data: any,
+      context: CallApiContextParams | undefined,
+    ) => [ProviderResponse, boolean]
   >;
 
   constructor(url: string, options: ProviderOptions) {
@@ -213,7 +230,7 @@ export class WebSocketProvider implements ApiProvider {
       ws.onmessage = (event) => {
         clearTimeout(timeout);
         if (streamResponse) {
-          const [newAccumulator, isComplete] = streamResponse(event, accumulator);
+          const [newAccumulator, isComplete] = streamResponse(accumulator, event, context);
           accumulator = newAccumulator;
           if (isComplete) {
             ws.close();

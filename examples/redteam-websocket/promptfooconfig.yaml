@@ -13,11 +13,11 @@ targets:
     config:
       messageTemplate: '{"input": {{prompt | dump}}}'
       streamResponse: |-
-        (event, data) => {
+        (accumulator, event, context) => {
                   const { message, type } = JSON.parse(event.data);
                   if(type === "message"){return [{output: message},true]}
                   if(type === "error"){return [{error: message},true]}
-                  return [data, false];}
+                  return [{output: message}, false];}
 
 redteam:
   purpose: Assist users with planning affordable trips to Europe

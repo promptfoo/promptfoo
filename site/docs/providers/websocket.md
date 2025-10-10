@@ -27,7 +27,7 @@ providers:
 - `url` (required): The WebSocket URL to connect to.
 - `messageTemplate` (required): A template for the message to be sent over the WebSocket connection. You can use placeholders like `{{prompt}}` which will be replaced with the actual prompt.
 - `transformResponse` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire response will be used as the output. If the response is valid JSON, the object will be returned.
-- `streamResponse` (optional): A JavaScript function to extract the desired output from streamed WebSocket messages when the server sends multiple messages per prompt. It receives `(data, accumulator)` and must return `[nextAccumulator, complete]`. When `streamResponse` is provided, it is used instead of `transformResponse`.
+- `streamResponse` (optional): A JavaScript function to extract the desired output from streamed WebSocket messages when the server sends multiple messages per prompt. It receives `(accumulator, data, context?)` and must return `[nextAccumulator, complete]`. When `streamResponse` is provided, it is used instead of `transformResponse`.
 - `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 10000 (10 seconds).
 - `headers` (optional): A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.
 
@@ -80,9 +80,10 @@ Some WebSocket endpoints stream their replies as multiple messages (for example,
 
 ### How `streamResponse` works
 
-- It is called for every incoming WebSocket message and receives two arguments:
-  - `data`: the raw WebSocket message event. Access the payload via `data.data`. If your server sends JSON, you will typically start by parsing this such as: `JSON.parse(data.data)`.
+- It is called for every incoming WebSocket message and receives:
   - `accumulator`: the current accumulated result. This should be a `ProviderResponse`-shaped object, e.g. `{ output: string }`.
+  - `data`: the raw WebSocket message event. Access the payload via `data.data`. If your server sends JSON, you will typically start by parsing this such as: `JSON.parse(data.data)`.
+  - `context` (optional): the call context from `callApi`, including test vars and flags.
 - It must return a tuple `[result, complete]` where:
   - `result`: the updated accumulated result you want to carry forward.
   - `complete` (boolean): set `true` only when you’ve received the final message and want to stop streaming and return the result.
@@ -116,7 +117,7 @@ providers:
     config:
       messageTemplate: '{"prompt": {{ prompt | dump }} }'
       streamResponse: |
-        (data, accumulator) => {
+        (accumulator, data, context) => {
           const msg = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
           const previous = typeof accumulator?.output === 'string' ? accumulator.output : '';
 
@@ -150,7 +151,7 @@ providers:
     config:
       messageTemplate: '{"prompt": {{ prompt | dump }} }'
       streamResponse: |
-        (data, accumulator) => {
+        (accumulator, data, context) => {
           const msg = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
           if (msg?.complete === true) {
             return [{ output: msg.content }, true];
@@ -170,7 +171,7 @@ providers:
     config:
       messageTemplate: '{"prompt": {{ prompt | dump }} }'
       streamResponse: |
-        (data, accumulator) => {
+        (accumulator, data, context) => {
           const msg = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
           const previous = typeof accumulator?.output === 'string' ? accumulator.output : '';
 
@@ -222,14 +223,14 @@ Note that when using the WebSocket provider, the connection will be opened for e
 
 Supported config options:
 
-| Option            | Type     | Description                                                                                                                                              |
-| ----------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url               | string   | The WebSocket URL to connect to. If not provided, the `id` of the provider will be used as the URL.                                                      |
-| messageTemplate   | string   | A template string for the message to be sent over the WebSocket connection. Supports Nunjucks templating.                                                |
-| transformResponse | string   | A function body or string to parse a single response. Ignored when `streamResponse` is provided.                                                         |
-| streamResponse    | Function | A function body, function expression, or `file://` reference that receives `(data, accumulator)` and returns `[result, complete]` for streamed messages. |
-| timeoutMs         | number   | The timeout in milliseconds for the WebSocket connection. Defaults to 10000 (10 seconds) if not specified.                                               |
-| headers           | object   | A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.                                 |
+| Option            | Type     | Description                                                                                                                                                        |
+| ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| url               | string   | The WebSocket URL to connect to. If not provided, the `id` of the provider will be used as the URL.                                                                |
+| messageTemplate   | string   | A template string for the message to be sent over the WebSocket connection. Supports Nunjucks templating.                                                          |
+| transformResponse | string   | A function body or string to parse a single response. Ignored when `streamResponse` is provided.                                                                   |
+| streamResponse    | Function | A function body, function expression, or `file://` reference that receives `(accumulator, data, context?)` and returns `[result, complete]` for streamed messages. |
+| timeoutMs         | number   | The timeout in milliseconds for the WebSocket connection. Defaults to 10000 (10 seconds) if not specified.                                                         |
+| headers           | object   | A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.                                           |
 
 Note: The `messageTemplate` supports Nunjucks templating, allowing you to use the `{{prompt}}` variable or any other variables passed in the test context.
 
