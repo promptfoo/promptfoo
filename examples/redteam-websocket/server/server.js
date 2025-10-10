@@ -72,7 +72,7 @@ wss.on('connection', (ws, request) => {
         model: CHATBOT_MODEL,
         input,
       });
-      if (!response.output.length && !response.output[0].content.length) {
+      if (!response.output.length && !response.output[0]?.content.length) {
         console.error(response);
       }
       const text = response.output[0].content[0].text;

@@ -76,8 +76,7 @@ const WebSocketEndpointConfiguration = ({
           onBlur={() => {
             if (
               selectedTarget.config.timeoutMs === undefined ||
-              Number.isNaN(selectedTarget.config.timeoutMs) ||
-              selectedTarget.config.timeoutMs === 0
+              Number.isNaN(selectedTarget.config.timeoutMs)
             ) {
               updateWebSocketTarget(
                 'timeoutMs',

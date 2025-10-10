@@ -87,7 +87,7 @@ ws.onopen = () => {
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
   // msg.type: 'ready' | 'delta' | 'message' | 'done' | 'error'
-  if (msg.type === 'delta') process.stdout.write(msg.output || '');
+  if (msg.type === 'delta') process.stdout.write(msg.message || '');
   else console.log(msg);
 };
 

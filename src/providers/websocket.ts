@@ -132,9 +132,7 @@ export async function createStreamResponse(
         const result: [ProviderResponse, boolean] = transformFn(data, accumulator);
         return result;
       } catch (err) {
-        logger.error(
-          `[Websocket Provider] Error in stream response: ${String(err)}. Data: ${data}. Accumulator: ${safeJsonStringify(accumulator)}.)}.`,
-        );
+        logger.error(`[Websocket Provider] Error in stream response: ${String(err)}.`);
         throw new Error(`Failed to transform request: ${String(err)}`);
       }
     };

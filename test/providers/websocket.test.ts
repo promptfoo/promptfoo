@@ -300,7 +300,7 @@ describe('WebSocketProvider', () => {
       jest.mocked(WebSocket).mockImplementation(() => mockWs);
 
       const promise = provider.callApi('timeout test');
-      jest.advanceTimersByTime(100);
+      await jest.advanceTimersByTimeAsync(100);
       await expect(promise).resolves.toEqual({ error: 'WebSocket request timed out' });
       expect(mockWs.close).toHaveBeenCalled();
 
