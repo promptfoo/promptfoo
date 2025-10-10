@@ -1,9 +1,7 @@
 import React, { memo, useCallback, useEffect, useState } from 'react';
 
 import { useApiHealth } from '@app/hooks/useApiHealth';
-import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -19,7 +17,8 @@ import Typography from '@mui/material/Typography';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import { TestCaseDialog, TestCaseGenerateButton } from '../TestCaseDialog';
+import { TestCaseGenerateButton } from '../TestCaseDialog';
+import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 
 interface PolicyInstance {
   id: string;
@@ -65,22 +64,17 @@ PolicyInput.displayName = 'PolicyInput';
 
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
-  const { recordEvent } = useTelemetry();
   const toast = useToast();
   const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [isInitialMount, setIsInitialMount] = useState(true);
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
-  const [generatedTestCase, setGeneratedTestCase] = useState<{
-    prompt: string;
-    context?: string;
-  } | null>(null);
-  const [generatingTestCase, setGeneratingTestCase] = useState(false);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
-  const [targetResponse, setTargetResponse] = useState<{ output: string; error?: string } | null>(
-    null,
-  );
-  const [isRunningTest, setIsRunningTest] = useState(false);
+  
+  // Test case generation state - now from context
+  const {
+    generateTestCase,
+    isGenerating: generatingTestCase,
+  } = useTestCaseGeneration();
   const [policies, setPolicies] = useState<PolicyInstance[]>(() => {
     // Initialize from existing config or create a default empty policy
     const existingPolicies = config.plugins
@@ -226,115 +220,23 @@ export const CustomPoliciesSection = () => {
     }
 
     setGeneratingPolicyId(policyId);
-    setGeneratedTestCase(null);
-    setGeneratingTestCase(true);
-    setTestCaseDialogOpen(true);
 
-    try {
-      recordEvent('feature_used', {
-        feature: 'redteam_policy_generate_test_case',
-        plugin: 'policy',
-      });
-
-      const response = await callApi('/redteam/generate-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    await generateTestCase(
+      'policy',
+      {
+        policy: policy.policy,
+      },
+      {
+        telemetryFeature: 'redteam_policy_generate_test_case',
+        mode: 'result',
+        onSuccess: () => {
+          setGeneratingPolicyId(null);
         },
-        body: JSON.stringify({
-          pluginId: 'policy',
-          config: {
-            policy: policy.policy,
-          },
-        }),
-        timeout: 10000, // 10 second timeout
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate test case');
-      }
-
-      const data = await response.json();
-      setGeneratedTestCase({
-        prompt: data.prompt || '',
-        context: data.context || policy.policy,
-      });
-
-      // Run the test case against the target using the providers/test endpoint
-      if (!config.target || !config.target.id) {
-        console.warn('[CustomPoliciesSection] Skipping test execution - no target configured');
-        return;
-      }
-
-      setIsRunningTest(true);
-      setTargetResponse(null);
-      try {
-        console.log('[CustomPoliciesSection] Running test against target', {
-          targetId: config.target.id,
-          prompt: data.prompt?.substring(0, 50),
-        });
-
-        const testResponse = await callApi('/providers/test', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            ...config.target,
-            prompt: data.prompt,
-          }),
-          timeout: 30000, // 30 second timeout
-        });
-
-        console.log('[CustomPoliciesSection] Test response received', {
-          ok: testResponse.ok,
-          status: testResponse.status,
-        });
-
-        if (!testResponse.ok) {
-          const errorData = await testResponse.json();
-          throw new Error(errorData.error || 'Failed to run test case');
-        }
-
-        const testData = await testResponse.json();
-        setTargetResponse({
-          output: testData.providerResponse?.output || '',
-          error: testData.providerResponse?.error || testData.testResult?.error,
-        });
-      } catch (error) {
-        console.error('Error running test case:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to run test case';
-        setTargetResponse({
-          output: '',
-          error: errorMessage,
-        });
-      } finally {
-        setIsRunningTest(false);
-      }
-    } catch (error) {
-      console.error('Error generating test case:', error);
-      // Provide specific message for timeout errors
-      const errorMessage =
-        error instanceof Error
-          ? error.message.includes('timed out')
-            ? 'Test generation timed out. Please try again or check your connection.'
-            : `Failed to generate test case: ${error.message}`
-          : 'Failed to generate test case: Unknown error';
-      toast.showToast(errorMessage, 'error');
-      setTestCaseDialogOpen(false);
-    } finally {
-      setGeneratingTestCase(false);
-    }
-  };
-
-  const handleCloseTestCaseDialog = () => {
-    setTestCaseDialogOpen(false);
-    setGeneratingPolicyId(null);
-    setGeneratedTestCase(null);
-    setGeneratingTestCase(false);
-    setTargetResponse(null);
-    setIsRunningTest(false);
+        onError: () => {
+          setGeneratingPolicyId(null);
+        },
+      },
+    );
   };
 
   return (
@@ -442,17 +344,6 @@ export const CustomPoliciesSection = () => {
           </Box>
         ))}
       </Stack>
-
-      <TestCaseDialog
-        open={testCaseDialogOpen}
-        onClose={handleCloseTestCaseDialog}
-        plugin="policy"
-        isGenerating={generatingTestCase}
-        generatedTestCase={generatedTestCase}
-        targetResponse={targetResponse}
-        isRunningTest={isRunningTest}
-        mode="result"
-      />
     </Box>
   );
 };

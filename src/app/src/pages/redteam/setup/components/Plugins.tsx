@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -56,13 +54,14 @@ import CustomIntentSection from './CustomIntentPluginSection';
 import PageWrapper from './PageWrapper';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
+import { useTestCaseGeneration } from './TestCaseGenerationProvider';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
 import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
 import type { PluginConfig } from '@promptfoo/redteam/types';
-import { TestCaseGenerateButton, TestCaseDialog } from './TestCaseDialog';
+import { TestCaseGenerateButton } from './TestCaseDialog';
 import type { LocalPluginConfig } from '../types';
 
 interface PluginsProps {
@@ -86,7 +85,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
-  const toast = useToast();
   const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [isCustomMode, setIsCustomMode] = useState(true);
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
@@ -114,23 +112,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
 
-  // Test case generation state
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
-  const [generatingPlugin, setGeneratingPlugin] = useState<Plugin | null>(null);
-  const [generatedTestCase, setGeneratedTestCase] = useState<{
-    prompt: string;
-    context: string;
-    metadata?: any;
-  } | null>(null);
-  const [generatingTestCase, setGeneratingTestCase] = useState(false);
-  // Add new state for dialog mode and temporary config
-  const [testCaseDialogMode, setTestCaseDialogMode] = useState<'config' | 'result'>('config');
-  const [tempTestCaseConfig, setTempTestCaseConfig] = useState<any>({});
-  // Test running state
-  const [targetResponse, setTargetResponse] = useState<{ output: string; error?: string } | null>(
-    null,
-  );
-  const [isRunningTest, setIsRunningTest] = useState(false);
+  // Test case generation state - now from context
+  const {
+    generateTestCase,
+    isGenerating: generatingTestCase,
+    currentPlugin: generatingPlugin,
+  } = useTestCaseGeneration();
 
   // Category filter options based on riskCategories
   const categoryFilters = Object.keys(riskCategories).map((category) => ({
@@ -458,24 +445,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return true;
   }, [selectedPlugins, pluginConfig]);
 
-  const isTestCaseConfigValid = useCallback((plugin: Plugin, config: any) => {
-    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-      // For plugins that don't require config or only support optional config, always allow generation
-      return true;
-    }
-    if (!config) {
-      return false;
-    }
-    if (plugin === 'indirect-prompt-injection') {
-      return config.indirectInjectionVar && config.indirectInjectionVar.trim() !== '';
-    }
-    if (plugin === 'prompt-extraction') {
-      return config.systemPrompt && config.systemPrompt.trim() !== '';
-    }
-    // Note: bfla, bola, ssrf are not in PLUGINS_REQUIRING_CONFIG, so they will return true above
-    return true;
-  }, []);
-
   const hasAnyPluginsConfigured = useCallback(() => {
     // Check regular plugins
     if (selectedPlugins.size > 0) {
@@ -540,121 +509,17 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const handleGenerateTestCase = async (plugin: Plugin) => {
     const supportsConfig = PLUGINS_SUPPORTING_CONFIG.includes(plugin);
 
-    setGeneratingPlugin(plugin);
-    setGeneratedTestCase(null);
-    setGeneratingTestCase(false);
-
-    if (supportsConfig) {
-      // Initialize temp config with existing plugin config if available
-      setTempTestCaseConfig(pluginConfig[plugin] || {});
-      setTestCaseDialogMode('config');
-      setTestCaseDialogOpen(true);
+    if (supportsConfig && PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      // For plugins that require config, we need to show config dialog first
+      // This is handled by the config dialog flow
+      setSelectedConfigPlugin(plugin);
+      setConfigDialogOpen(true);
     } else {
-      // Directly generate test case for plugins that don't support config
-      await generateTestCaseWithConfig(plugin, {});
-    }
-  };
-
-  const generateTestCaseWithConfig = async (plugin: Plugin, configForGeneration: any) => {
-    setGeneratingTestCase(true);
-    setTestCaseDialogMode('result');
-
-    try {
-      recordEvent('feature_used', {
-        feature: 'redteam_plugin_generate_test_case',
-        plugin: plugin,
+      // Directly generate test case
+      await generateTestCase(plugin, pluginConfig[plugin] || {}, {
+        telemetryFeature: 'redteam_plugin_generate_test_case',
+        mode: 'result',
       });
-
-      const response = await callApi('/redteam/generate-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-        },
-        body: JSON.stringify({
-          pluginId: plugin,
-          config: {
-            applicationDefinition: config.applicationDefinition,
-            ...configForGeneration,
-          },
-        }),
-        timeout: 10000, // 10 second timeout
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setGeneratedTestCase({
-        prompt: data.prompt,
-        context: data.context,
-        metadata: data.metadata,
-      });
-
-      if (!testCaseDialogOpen) {
-        setTestCaseDialogOpen(true);
-      }
-
-      // Run the test case against the target using the providers/test endpoint
-      if (!config.target || !config.target.id) {
-        console.warn('[Plugins] Skipping test execution - no target configured');
-        return;
-      }
-
-      setIsRunningTest(true);
-      setTargetResponse(null);
-      try {
-        const testResponse = await callApi('/providers/test', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            providerOptions: config.target,
-            prompt: data.prompt,
-          }),
-          timeout: 30000, // 30 second timeout
-        });
-
-        if (!testResponse.ok) {
-          const errorData = await testResponse.json();
-          throw new Error(errorData.error || 'Failed to run test');
-        }
-
-        const testData = await testResponse.json();
-        setTargetResponse({
-          output: testData.providerResponse?.output || '',
-          error: testData.providerResponse?.error || testData.testResult?.error,
-        });
-      } catch (error) {
-        console.error('Failed to run test against target:', error);
-        const errorMessage =
-          error instanceof Error ? error.message : 'Failed to run test against target';
-        setTargetResponse({
-          output: '',
-          error: errorMessage,
-        });
-      } finally {
-        setIsRunningTest(false);
-      }
-    } catch (error) {
-      console.error('Failed to generate test case:', error);
-      // Provide specific message for timeout errors
-      const errorMessage =
-        error instanceof Error
-          ? error.message.includes('timed out')
-            ? 'Test generation timed out. Please try again or check your connection.'
-            : error.message
-          : 'Failed to generate test case';
-      toast.showToast(errorMessage, 'error');
-      // Close dialog on error
-      setTestCaseDialogOpen(false);
-      setGeneratingPlugin(null);
-    } finally {
-      setGeneratingTestCase(false);
     }
   };
 
@@ -1200,44 +1065,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               onSave={(plugin, newConfig) => {
                 updatePluginConfig(plugin, newConfig);
               }}
-            />
-
-            {/* Test Case Generation Dialog */}
-            <TestCaseDialog
-              open={testCaseDialogOpen}
-              onClose={() => {
-                setTestCaseDialogOpen(false);
-                setGeneratedTestCase(null);
-                setGeneratingPlugin(null);
-                setTestCaseDialogMode('config');
-                setTempTestCaseConfig({});
-                setTargetResponse(null);
-                setIsRunningTest(false);
-              }}
-              plugin={generatingPlugin}
-              isGenerating={generatingTestCase}
-              generatedTestCase={generatedTestCase}
-              targetResponse={targetResponse}
-              isRunningTest={isRunningTest}
-              mode={testCaseDialogMode}
-              config={tempTestCaseConfig}
-              onConfigChange={setTempTestCaseConfig}
-              onGenerate={(configForGeneration) => {
-                if (generatingPlugin) {
-                  generateTestCaseWithConfig(generatingPlugin, configForGeneration);
-                }
-              }}
-              requiresConfig={
-                generatingPlugin ? PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin) : false
-              }
-              supportsConfig={
-                generatingPlugin ? PLUGINS_SUPPORTING_CONFIG.includes(generatingPlugin) : false
-              }
-              isConfigValid={
-                generatingPlugin
-                  ? isTestCaseConfigValid(generatingPlugin, tempTestCaseConfig)
-                  : true
-              }
             />
           </Box>
 

@@ -44,6 +44,7 @@ import Setup from './components/Setup';
 import Strategies from './components/Strategies';
 import TargetConfiguration from './components/Targets/TargetConfiguration';
 import TargetTypeSelection from './components/Targets/TargetTypeSelection';
+import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import { generateOrderedYaml } from './utils/yamlHelpers';
@@ -724,7 +725,9 @@ export default function RedTeamSetupPage() {
             </CustomTabPanel>
             <CustomTabPanel value={value} index={3}>
               <ErrorBoundary name="Plugins Page">
-                <Plugins onNext={handleNext} onBack={handleBack} />
+                <TestCaseGenerationProvider redTeamConfig={config}>
+                  <Plugins onNext={handleNext} onBack={handleBack} />
+                </TestCaseGenerationProvider>
               </ErrorBoundary>
             </CustomTabPanel>
             <CustomTabPanel value={value} index={4}>
