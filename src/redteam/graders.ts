@@ -79,6 +79,7 @@ import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
 import { VLGuardGrader } from './plugins/vlguard';
+import { WordplayGrader } from './plugins/wordplay';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
@@ -176,6 +177,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
   'promptfoo:redteam:unverifiable-claims': new UnverifiableClaimsGrader(),
   'promptfoo:redteam:vlguard': new VLGuardGrader(),
+  'promptfoo:redteam:wordplay': new WordplayGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {
