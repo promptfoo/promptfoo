@@ -606,15 +606,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       }
 
       // Run the test case against the target
-      // Note: This must call the LOCAL server, not Cloud, because the target config is local
       setIsRunningTest(true);
       setTargetResponse(null);
       try {
-        const localApiUrl = 'http://localhost:15500';
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-        const testResponse = await fetch(`${localApiUrl}/api/redteam/run-test`, {
+        const testResponse = await callApi('/redteam/run-test', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -623,10 +618,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             prompt: data.prompt,
             target: config.target,
           }),
-          signal: controller.signal,
+          timeout: 30000, // 30 second timeout
         });
-
-        clearTimeout(timeoutId);
 
         if (!testResponse.ok) {
           const errorData = await testResponse.json();
@@ -640,14 +633,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         });
       } catch (error) {
         console.error('Failed to run test against target:', error);
-        let errorMessage = 'Failed to run test';
-        if (error instanceof Error) {
-          if (error.name === 'AbortError') {
-            errorMessage = 'Test execution timed out after 30 seconds';
-          } else {
-            errorMessage = error.message;
-          }
-        }
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to run test against target';
         setTargetResponse({
           output: '',
           error: errorMessage,
