@@ -113,7 +113,7 @@ describe('WebSocketProvider', () => {
     const response = await provider.callApi('test prompt');
 
     // Should still work and return expected response
-    expect(response).toEqual({ output: { output: { result: 'test' } } });
+    expect(response).toEqual({ output: { result: 'test' } });
     // When headers are not provided, the options object should be empty
     expect(WebSocket).toHaveBeenCalledWith('ws://test.com', {});
   });
@@ -142,7 +142,7 @@ describe('WebSocketProvider', () => {
     });
 
     const response = await provider.callApi('test prompt');
-    expect(response).toEqual({ output: { output: responseData } });
+    expect(response).toEqual({ output: responseData });
   });
 
   it('should handle WebSocket errors', async () => {
@@ -185,7 +185,7 @@ describe('WebSocketProvider', () => {
     });
 
     const response = await provider.callApi('test prompt');
-    expect(response).toEqual({ output: { output: 'plain text response' } });
+    expect(response).toEqual({ output: 'plain text response' });
   });
 
   it('should use custom response transformer', async () => {
@@ -207,7 +207,7 @@ describe('WebSocketProvider', () => {
     });
 
     const response = await provider.callApi('test prompt');
-    expect(response).toEqual({ output: { output: 'transformed-test' } });
+    expect(response).toEqual({ output: 'transformed-test' });
   });
 
   describe('streamResponse behavior', () => {
@@ -244,7 +244,7 @@ describe('WebSocketProvider', () => {
       });
 
       const response = await provider.callApi('ignored');
-      expect(response).toEqual({ output: { output: 'hello world' } });
+      expect(response).toEqual({ output: 'hello world' });
       expect(mockWs.close).toHaveBeenCalledTimes(1);
     });
 
@@ -270,7 +270,7 @@ describe('WebSocketProvider', () => {
       });
 
       const response = await provider.callApi('ignored');
-      expect(response).toEqual({ output: { output: 'chunk' } });
+      expect(response).toEqual({ output: 'chunk' });
       expect(mockWs.close).toHaveBeenCalledTimes(1);
     });
   });

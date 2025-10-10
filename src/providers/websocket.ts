@@ -206,7 +206,7 @@ export class WebSocketProvider implements ApiProvider {
       const ws = new WebSocket(this.url, wsOptions);
       const timeout = setTimeout(() => {
         ws.close();
-        resolve({ error: `WebSocket request timed out. Prompt: ${prompt}` });
+        resolve({ error: `WebSocket request timed out` });
       }, this.config.timeoutMs || 10000);
       ws.on('open', () => {
         logger.debug(`WebSocket connection opened successfully`);
