@@ -1,12 +1,15 @@
 description: 'Azure Foundry Assistant Provider Example'
 
 providers:
-  - azure:foundry-assistant:asst_uRGMedGFDehLkjJJaq51J9GY:
+  - id: azure:foundry-assistant:asst_uRGMedGFDehLkjJJaq51J9GY
+    config:
       projectUrl: 'https://faiza-m92xlckl-swedencentral.services.ai.azure.com/api/projects/faiza-m92xlckl-swedence-project'
-      config:
-        temperature: 0.7
-        max_tokens: 150
-        instructions: 'You are a helpful assistant that provides clear and concise answers.'
+      temperature: 0.7
+      max_tokens: 150
+      instructions: 'You are a helpful assistant that provides clear and concise answers.'
+
+prompts:
+  - '{{question}}'
 
 tests:
   - vars:

@@ -92,7 +92,7 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
     this.assistantConfig = options.config || {};
 
     // Extract project URL from options or use environment variable
-    this.projectUrl = options.projectUrl || process.env.AZURE_AI_PROJECT_URL || '';
+    this.projectUrl = options.config?.projectUrl || process.env.AZURE_AI_PROJECT_URL || '';
 
     if (!this.projectUrl) {
       throw new Error(
@@ -285,7 +285,7 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Create a simple cache key based on the input and configuration
     const cacheKey = `azure_foundry_assistant:${this.deploymentName}:${JSON.stringify({
@@ -792,7 +792,7 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
   private async processCompletedRun(
     client: AIProjectClient,
     threadId: string,
-    run: Run,
+    _run: Run,
   ): Promise<ProviderResponse> {
     try {
       // Get all messages in the thread
