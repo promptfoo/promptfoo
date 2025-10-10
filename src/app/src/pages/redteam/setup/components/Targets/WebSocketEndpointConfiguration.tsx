@@ -41,10 +41,12 @@ const WebSocketEndpointConfiguration = ({
         />
         <TextField
           fullWidth
-          label="Response Transform"
-          value={selectedTarget.config.transformResponse}
+          label="Response Transform (Optional)"
+          value={selectedTarget.config.transformResponse || ''}
           onChange={(e) => updateWebSocketTarget('transformResponse', e.target.value)}
           margin="normal"
+          placeholder="e.g., json.message or (json, text) => json.data"
+          helperText="Leave empty to use the raw response"
         />
         <TextField
           fullWidth
