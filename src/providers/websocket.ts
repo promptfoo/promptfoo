@@ -18,6 +18,16 @@ import type {
 
 const nunjucks = getNunjucksEngine();
 
+export const processResult = (transformedResponse: any): ProviderResponse => {
+  if (
+    typeof transformedResponse === 'object' &&
+    (transformedResponse.output || transformedResponse.error)
+  ) {
+    return transformedResponse;
+  }
+  return { output: transformedResponse };
+};
+
 interface WebSocketProviderConfig {
   messageTemplate: string;
   url?: string;
@@ -46,7 +56,7 @@ export async function createStreamResponse(
   transform: string | Function | undefined,
 ): Promise<(data: any, accumulator: ProviderResponse) => [ProviderResponse, boolean]> {
   if (!transform) {
-    return (data) => [data, true];
+    return (data) => [processResult(data), true];
   }
 
   if (typeof transform === 'function') {
@@ -142,16 +152,6 @@ export async function createStreamResponse(
     `Unsupported request transform type: ${typeof transform}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
   );
 }
-
-export const processResult = (transformedResponse: any): ProviderResponse => {
-  if (
-    typeof transformedResponse === 'object' &&
-    (transformedResponse.output || transformedResponse.error)
-  ) {
-    return transformedResponse;
-  }
-  return { output: transformedResponse };
-};
 
 export class WebSocketProvider implements ApiProvider {
   url: string;
