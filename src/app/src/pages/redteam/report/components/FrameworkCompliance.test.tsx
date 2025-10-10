@@ -1,14 +1,21 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-import FrameworkCompliance from './FrameworkCompliance';
-import { useReportStore } from './store';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
+import FrameworkCompliance from './FrameworkCompliance';
 import CSVExporter from './FrameworkCsvExporter';
+import { useReportStore } from './store';
 
 vi.mock('./store');
 vi.mock('./FrameworkCard');
 vi.mock('./FrameworkCsvExporter');
+vi.mock('../utils/color', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/color')>();
+  return {
+    ...actual,
+    getProgressColor: vi.fn().mockReturnValue('mockedColor'),
+  };
+});
 
 vi.mock('@promptfoo/redteam/constants', async (importOriginal) => {
   const original = await importOriginal<typeof import('@promptfoo/redteam/constants')>();
@@ -66,7 +73,9 @@ describe('FrameworkCompliance', () => {
       setPluginPassRateThreshold: vi.fn(),
     });
 
-    return render(<FrameworkCompliance evalId="test-eval-id" categoryStats={categoryStats} />);
+    return renderWithProviders(
+      <FrameworkCompliance evalId="test-eval-id" categoryStats={categoryStats} />,
+    );
   };
 
   it('should display the correct number of compliant frameworks and render a FrameworkCard for each framework', () => {
