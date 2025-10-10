@@ -71,6 +71,7 @@ export interface ProviderOptions {
       | string;
     stateful?: boolean;
     sessionSource?: 'client' | 'server';
+    streamResponse?: string;
   };
 }
 
