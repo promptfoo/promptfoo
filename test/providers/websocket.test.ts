@@ -214,9 +214,11 @@ describe('WebSocketProvider', () => {
     it('should stream chunks and resolve when stream signals complete', async () => {
       let callCount = 0;
       const chunks = ['hello ', 'world'];
-      const streamResponse = (data: any, accumulator: any) => {
+      const streamResponse = (event: any, accumulator: any) => {
         const previousOutput = typeof accumulator.output === 'string' ? accumulator.output : '';
-        const merged = { output: previousOutput + String(data) };
+        const currentChunk =
+          typeof event?.data === 'string' ? event.data : String(event?.data ?? event);
+        const merged = { output: previousOutput + currentChunk };
         callCount += 1;
         const isComplete = callCount === chunks.length ? 'DONE' : '';
         return [merged, isComplete];
@@ -249,7 +251,7 @@ describe('WebSocketProvider', () => {
     });
 
     it('should complete immediately if stream signals completion on first message', async () => {
-      const streamResponse = (data: any) => [{ output: String(data) }, 'COMPLETE'];
+      const streamResponse = (event: any) => [{ output: String(event?.data ?? event) }, 'COMPLETE'];
 
       provider = new WebSocketProvider('ws://test.com', {
         config: {
