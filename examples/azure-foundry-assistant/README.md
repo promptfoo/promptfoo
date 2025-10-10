@@ -1,6 +1,12 @@
-# Azure Foundry Assistant Example
+# azure-foundry-assistant (Azure AI Foundry Assistant)
 
 This example demonstrates how to use the Azure Foundry Assistant provider with promptfoo. This provider uses the `@azure/ai-projects` SDK instead of direct HTTP calls to the OpenAI-compatible API.
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example azure-foundry-assistant
+```
 
 ## Setup
 

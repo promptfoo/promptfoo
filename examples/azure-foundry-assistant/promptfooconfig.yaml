@@ -1,4 +1,4 @@
-description: 'Azure Foundry Assistant Provider Example'
+description: 'Azure AI Foundry Assistant evaluation'
 
 providers:
   - id: azure:foundry-assistant:asst_uRGMedGFDehLkjJJaq51J9GY
