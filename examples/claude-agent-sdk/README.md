@@ -57,35 +57,19 @@ This example shows Claude Agent SDK's ability to modify files with:
 
 - **File editing tools**: `Write`, `Edit`, and `MultiEdit` tools are added to the default set of read-only tools by setting `append_allowed_tools`
 - **Permission mode**: `permission_mode` is set to `acceptEdits` for automatic approval of file edits
-- **Git workspace with cleanup**: The working directory (`./workspace`) is a git repository that gets reset after each test using an `afterEach` extension hook defined in `hooks.js`
+- **Automatic git workspace management**: The working directory (`./workspace`) uses `beforeAll`, `afterEach`, and `afterAll` extension hooks defined in `hooks.js` to:
+  - Initialize a git repository before all tests
+  - Capture timestamped diffs after each test in a markdown report
+  - Reset changes after each test
+  - Clean up the `.git` directory after all tests
 - **Serial execution**: `maxConcurrency: 1` to prevent race conditions during concurrent tests
 
 **Location**: `./advanced/`
-
-**Setup**:
-
-In order for the `afterEach` cleanup hook to work, you'll need to initialize a git repository in the `workspace` directory.
-
-```bash
-cd advanced/workspace
-git init
-git add .
-git commit -m "Initial commit"
-cd ../..
-```
 
 **Usage**:
 
 ```bash
 (cd advanced && promptfoo eval)
-```
-
-**Cleanup**:
-
-If you're running this example inside the promptfoo repo itself, rather than as a standalone example, remove the `.git` directory in the `advanced/workspace` directory after running the example to prevent adding it to the main repo.
-
-```bash
-rm -rf advanced/workspace/.git
 ```
 
 ### MCP Integration
