@@ -10,7 +10,9 @@ dotenv.config();
 
 function validateEnvironmentVariables() {
   const missing = [];
-  if (!process.env.OPENAI_API_KEY) { missing.push('OPENAI_API_KEY'); }
+  if (!process.env.OPENAI_API_KEY) {
+    missing.push('OPENAI_API_KEY');
+  }
   if (missing.length > 0) {
     // eslint-disable-next-line no-console
     console.error(`Missing required environment variables: ${missing.join(', ')}`);
@@ -70,13 +72,13 @@ wss.on('connection', (ws, request) => {
         model: CHATBOT_MODEL,
         input,
       });
-      if(!response.output.length && !response.output[0].content.length) {
-        console.error(response)
+      if (!response.output.length && !response.output[0].content.length) {
+        console.error(response);
       }
       const text = response.output[0].content[0].text;
       ws.send(JSON.stringify({ type: 'message', message: text, raw: response }));
     } catch (err) {
-      console.error(err)
+      console.error(err);
       const message = err && err.message ? err.message : 'OpenAI request failed';
       ws.send(JSON.stringify({ type: 'error', error: message }));
     }
@@ -103,7 +105,7 @@ wssStream.on('connection', (ws, request) => {
     try {
       payload = JSON.parse(raw.toString());
     } catch {
-      console.error(raw)
+      console.error(raw);
       ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON payload' }));
       return;
     }
