@@ -307,6 +307,7 @@ export const ADDITIONAL_PLUGINS = [
   'unsafebench',
   'unverifiable-claims',
   'vlguard',
+  'wordplay',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
