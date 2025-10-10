@@ -50,12 +50,14 @@ export interface SessionTestResult {
 type ValidationResult = { success: true } | { success: false; result: SessionTestResult };
 
 /**
- * Tests basic provider connectivity with a prompt (defaults to "Hello, world!")
+ * Tests basic provider connectivity with a prompt.
  * Extracted from POST /providers/test endpoint
+ * @param provider The provider to test
+ * @param prompt An optional prompt to test w/
  */
 export async function testHTTPProviderConnectivity(
   provider: ApiProvider,
-  prompt?: string,
+  prompt: string = 'Hello World!',
 ): Promise<ProviderTestResult> {
   const vars: Record<string, string> = {};
 
@@ -69,17 +71,8 @@ export async function testHTTPProviderConnectivity(
   // Build TestSuite for evaluation (no assertions - we'll use agent endpoint for analysis)
   const testSuite: TestSuite = {
     providers: [provider],
-    prompts: [
-      {
-        raw: prompt || 'Hello, world!',
-        label: 'Connectivity Test',
-      },
-    ],
-    tests: [
-      {
-        vars,
-      },
-    ],
+    prompts: [{ raw: prompt, label: 'Connectivity Test' }],
+    tests: [{ vars }],
   };
 
   try {

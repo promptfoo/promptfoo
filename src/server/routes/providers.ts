@@ -17,24 +17,30 @@ import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
 
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
+import { z } from 'zod';
 
 export const providersRouter = Router();
 
+const TestPayloadSchema = z.object({
+  prompt: z.string().optional(),
+  providerOptions: ProviderOptionsSchema,
+});
+
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
-  const body = req.body;
-  let providerOptions: ProviderOptions;
-  const { prompt } = body;
+  let payload: z.infer<typeof TestPayloadSchema>;
 
   try {
-    providerOptions = ProviderOptionsSchema.parse(body);
+    payload = TestPayloadSchema.parse(req.body);
   } catch (e) {
     res.status(400).json({ error: fromZodError(e as ZodError).toString() });
     return;
   }
 
-  invariant(providerOptions.id, 'id is required');
+  const providerOptions = payload.providerOptions as ProviderOptions;
 
-  const loadedProvider = await loadApiProvider(providerOptions.id, {
+  invariant(payload.providerOptions.id, 'id is required');
+
+  const loadedProvider = await loadApiProvider(providerOptions.id!, {
     options: {
       ...providerOptions,
       config: {
@@ -45,7 +51,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   });
 
   // Use refactored function with optional prompt
-  const result = await testHTTPProviderConnectivity(loadedProvider, prompt);
+  const result = await testHTTPProviderConnectivity(loadedProvider, payload.prompt);
 
   res.status(200).json({
     testResult: {
