@@ -248,7 +248,7 @@ describe('WebSocketEndpointConfiguration', () => {
     update.mockClear();
     const providerZero: ProviderOptions = {
       ...baseProvider,
-      config: { ...baseProvider.config, timeoutMs: 0 },
+      config: { ...baseProvider.config, timeoutMs: undefined },
     };
 
     rerender(
