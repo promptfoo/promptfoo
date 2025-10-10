@@ -23,6 +23,7 @@ export const providersRouter = Router();
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
   let providerOptions: ProviderOptions;
+  const { prompt } = body;
 
   try {
     providerOptions = ProviderOptionsSchema.parse(body);
@@ -43,8 +44,8 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     },
   });
 
-  // Use refactored function
-  const result = await testHTTPProviderConnectivity(loadedProvider);
+  // Use refactored function with optional prompt
+  const result = await testHTTPProviderConnectivity(loadedProvider, prompt);
 
   res.status(200).json({
     testResult: {

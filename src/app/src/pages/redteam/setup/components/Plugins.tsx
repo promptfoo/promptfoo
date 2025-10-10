@@ -605,18 +605,18 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         setTestCaseDialogOpen(true);
       }
 
-      // Run the test case against the target
+      // Run the test case against the target using the providers/test endpoint
       setIsRunningTest(true);
       setTargetResponse(null);
       try {
-        const testResponse = await callApi('/redteam/run-test', {
+        const testResponse = await callApi('/providers/test', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            ...config.target,
             prompt: data.prompt,
-            target: config.target,
           }),
           timeout: 30000, // 30 second timeout
         });
@@ -628,8 +628,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
         const testData = await testResponse.json();
         setTargetResponse({
-          output: testData.output || '',
-          error: testData.error,
+          output: testData.providerResponse?.output || '',
+          error: testData.providerResponse?.error || testData.testResult?.error,
         });
       } catch (error) {
         console.error('Failed to run test against target:', error);

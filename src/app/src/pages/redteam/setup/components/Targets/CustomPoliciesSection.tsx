@@ -261,18 +261,18 @@ export const CustomPoliciesSection = () => {
         context: data.context || policy.policy,
       });
 
-      // Run the test case against the target
+      // Run the test case against the target using the providers/test endpoint
       setIsRunningTest(true);
       setTargetResponse(null);
       try {
-        const testResponse = await callApi('/redteam/run-test', {
+        const testResponse = await callApi('/providers/test', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            ...config.target,
             prompt: data.prompt,
-            target: config.target,
           }),
           timeout: 30000, // 30 second timeout
         });
@@ -284,8 +284,8 @@ export const CustomPoliciesSection = () => {
 
         const testData = await testResponse.json();
         setTargetResponse({
-          output: testData.output || '',
-          error: testData.error,
+          output: testData.providerResponse?.output || '',
+          error: testData.providerResponse?.error || testData.testResult?.error,
         });
       } catch (error) {
         console.error('Error running test case:', error);
