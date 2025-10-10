@@ -417,7 +417,7 @@ Application Details:
       // Check for the specific alert text
       expect(
         screen.getByText(
-          /Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud. You can still save your configuration and run it via CLI./i,
+          /Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud./i,
         ),
       ).toBeInTheDocument();
     });
@@ -857,7 +857,7 @@ Application Details:
       // Alert should now be visible
       expect(
         screen.getByText(
-          /Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud. You can still save your configuration and run it via CLI./i,
+          /Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud./i,
         ),
       ).toBeInTheDocument();
 

@@ -1126,7 +1126,7 @@ export default function Review({
             {apiHealthStatus !== 'connected' && apiHealthStatus !== 'loading' && (
               <Alert severity="warning" sx={{ mb: 2 }}>
                 {apiHealthStatus === 'blocked'
-                  ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud. You can still save your configuration and run it via CLI.'
+                  ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
                   : apiHealthStatus === 'disabled'
                     ? 'Remote generation is disabled. The "Run Now" option is not available.'
                     : 'Checking connection status...'}
