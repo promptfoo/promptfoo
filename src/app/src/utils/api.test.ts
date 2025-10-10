@@ -49,7 +49,7 @@ describe('callApi', () => {
   });
 
   describe('timeout functionality', () => {
-    it('should not use AbortController when no timeout is specified', async () => {
+    it('should not use AbortSignal when no timeout is specified', async () => {
       const mockResponse = new Response('{}', { status: 200 });
       vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
 
@@ -60,7 +60,7 @@ describe('callApi', () => {
       expect(fetchCall[1]).toEqual({});
     });
 
-    it('should use AbortController when timeout is specified', async () => {
+    it('should use AbortSignal.timeout() when timeout is specified', async () => {
       const mockResponse = new Response('{}', { status: 200 });
       vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
 
@@ -73,12 +73,12 @@ describe('callApi', () => {
     });
 
     it('should throw timeout error when request exceeds timeout', async () => {
-      // Simulate an abort error (what happens when timeout occurs)
-      const abortError = new Error('The operation was aborted');
-      abortError.name = 'AbortError';
+      // Simulate a timeout error (what AbortSignal.timeout() throws)
+      const timeoutError = new Error('The operation was aborted due to timeout');
+      timeoutError.name = 'TimeoutError';
 
-      // Mock fetch to reject with abort error
-      vi.mocked(global.fetch).mockRejectedValueOnce(abortError);
+      // Mock fetch to reject with timeout error
+      vi.mocked(global.fetch).mockRejectedValueOnce(timeoutError);
 
       // Call the API with a timeout
       await expect(callApi('/test', { timeout: 50 })).rejects.toThrow(
@@ -87,34 +87,14 @@ describe('callApi', () => {
     });
 
     it('should throw timeout error with correct message format', async () => {
-      // Create an AbortError
-      const abortError = new Error('The operation was aborted');
-      abortError.name = 'AbortError';
-      vi.mocked(global.fetch).mockRejectedValueOnce(abortError);
+      // Create a TimeoutError
+      const timeoutError = new Error('The operation was aborted due to timeout');
+      timeoutError.name = 'TimeoutError';
+      vi.mocked(global.fetch).mockRejectedValueOnce(timeoutError);
 
       await expect(callApi('/test', { timeout: 1000 })).rejects.toThrow(
         'Request timed out after 1000ms',
       );
-    });
-
-    it('should clear timeout when request completes successfully', async () => {
-      const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
-      const mockResponse = new Response('{}', { status: 200 });
-      vi.mocked(global.fetch).mockResolvedValueOnce(mockResponse);
-
-      await callApi('/test', { timeout: 5000 });
-
-      expect(clearTimeoutSpy).toHaveBeenCalled();
-    });
-
-    it('should clear timeout even when request fails', async () => {
-      const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
-      const networkError = new Error('Network error');
-      vi.mocked(global.fetch).mockRejectedValueOnce(networkError);
-
-      await expect(callApi('/test', { timeout: 5000 })).rejects.toThrow('Network error');
-
-      expect(clearTimeoutSpy).toHaveBeenCalled();
     });
 
     it('should preserve non-timeout errors', async () => {
