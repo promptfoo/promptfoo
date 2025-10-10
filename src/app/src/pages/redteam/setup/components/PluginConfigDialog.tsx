@@ -4,10 +4,12 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
@@ -297,6 +299,33 @@ export default function PluginConfigDialog({
             />
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
               {`Example: If your prompt is "Hello {{name}}, how can I help?" and user data goes into the 'name' variable, enter "name" above.`}
+            </Typography>
+          </Box>
+        );
+      case 'openai-guardrails':
+        return (
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              OpenAI Guardrails tests your model against jailbreak attempts from OpenAI's official
+              evaluation dataset, including role-playing attacks, system manipulation, and
+              obfuscation techniques.
+            </Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={localConfig.includeSafe || false}
+                  onChange={(e) =>
+                    setLocalConfig({ ...localConfig, includeSafe: e.target.checked })
+                  }
+                />
+              }
+              label="Include safe prompts to test for over-blocking"
+              sx={{ my: 2 }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              When enabled, tests will include a 50/50 split of safe and jailbreak prompts. Safe
+              prompts test whether your guardrails are too strict and incorrectly block legitimate
+              requests (over-blocking/false positives).
             </Typography>
           </Box>
         );
