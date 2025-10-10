@@ -48,6 +48,15 @@ interface OTLPTraceRequest {
   resourceSpans: OTLPResourceSpan[];
 }
 
+const SPAN_KIND_MAP: Record<number, string> = {
+  0: 'unspecified',
+  1: 'internal',
+  2: 'server',
+  3: 'client',
+  4: 'producer',
+  5: 'consumer',
+};
+
 export class OTLPReceiver {
   private app: express.Application;
   private traceStore: TraceStore;
@@ -234,6 +243,10 @@ export class OTLPReceiver {
             'otel.scope.name': scopeSpan.scope?.name,
             'otel.scope.version': scopeSpan.scope?.version,
           };
+
+          const spanKindName = SPAN_KIND_MAP[span.kind] ?? 'unspecified';
+          attributes['otel.span.kind'] = spanKindName;
+          attributes['otel.span.kind_code'] = span.kind;
 
           traces.push({
             traceId,

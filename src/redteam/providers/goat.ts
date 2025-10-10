@@ -14,6 +14,13 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration
 import { getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
+import {
+  extractTraceIdFromTraceparent,
+  fetchTraceContext,
+  type TraceContextData,
+} from '../../tracing/traceContext';
+import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
+import { resolveTracingOptions, type RawTracingConfig } from './tracingOptions';
 
 import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types';
 import type {
@@ -37,9 +44,11 @@ interface GoatMetadata extends BaseRedteamMetadata {
     turn: number;
     prompt: string;
     response: string;
+    traceSummary?: string;
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
+  traceSnapshots?: Record<string, unknown>[];
 }
 
 /**
@@ -60,6 +69,7 @@ interface GoatConfig {
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   stateful: boolean;
   continueAfterSuccess: boolean;
+  tracing?: RawTracingConfig;
 }
 
 export default class GoatProvider implements ApiProvider {
@@ -82,6 +92,7 @@ export default class GoatProvider implements ApiProvider {
       stateful?: boolean;
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
       continueAfterSuccess?: boolean;
+      tracing?: RawTracingConfig;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -95,6 +106,7 @@ export default class GoatProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         options.excludeTargetOutputFromAgenticAttackGeneration ?? false,
       continueAfterSuccess: options.continueAfterSuccess ?? false,
+      tracing: options.tracing,
     };
     this.nunjucks = getNunjucksEngine();
     logger.debug('[GOAT] Constructor options', {
@@ -112,6 +124,15 @@ export default class GoatProvider implements ApiProvider {
   ): Promise<GoatResponse> {
     // Reset successful attacks array for each new call
     this.successfulAttacks = [];
+
+    const tracingOptions = resolveTracingOptions({
+      strategyId: 'goat',
+      test: context?.test,
+      config: this.config,
+    });
+    const shouldFetchTrace =
+      tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
+    const traceSnapshots: TraceContextData[] = [];
 
     let response: Response | undefined = undefined;
     logger.debug('[GOAT] callApi context', { context });
@@ -146,6 +167,7 @@ export default class GoatProvider implements ApiProvider {
 
     let previousAttackerMessage = '';
     let previousTargetOutput = '';
+    let previousTraceSummary: string | undefined;
 
     // Generate goal-specific evaluation rubric
     const userGoal = context?.test?.metadata?.goal || context?.vars[this.config.injectVar];
@@ -211,6 +233,7 @@ export default class GoatProvider implements ApiProvider {
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
             modifiers: context?.test?.metadata?.modifiers,
+            traceSummary: previousTraceSummary,
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
           response = await fetchWithProxy(getRemoteGenerationUrl(), {
@@ -245,6 +268,7 @@ export default class GoatProvider implements ApiProvider {
           failureReason,
           purpose: context?.test?.metadata?.purpose,
           modifiers: context?.test?.metadata?.modifiers,
+          traceSummary: previousTraceSummary,
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
@@ -292,6 +316,7 @@ export default class GoatProvider implements ApiProvider {
           ? messages[messages.length - 1].content
           : JSON.stringify(messages);
         logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
+        const iterationStart = Date.now();
         const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
@@ -301,6 +326,35 @@ export default class GoatProvider implements ApiProvider {
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         logger.debug(`GOAT turn ${turn} target response`, { response: targetResponse });
+
+        let traceContext: TraceContextData | null = null;
+        let computedTraceSummary: string | undefined;
+        if (shouldFetchTrace) {
+          const traceparent = context?.traceparent ?? undefined;
+          const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
+
+          if (traceId) {
+            traceContext = await fetchTraceContext(traceId, {
+              earliestStartTime: iterationStart,
+              includeInternalSpans: tracingOptions.includeInternalSpans,
+              maxSpans: tracingOptions.maxSpans,
+              maxDepth: tracingOptions.maxDepth,
+              maxRetries: tracingOptions.maxRetries,
+              retryDelayMs: tracingOptions.retryDelayMs,
+              spanFilter: tracingOptions.spanFilter,
+              sanitizeAttributes: tracingOptions.sanitizeAttributes,
+            });
+
+            if (traceContext) {
+              targetResponse.traceContext = traceContext;
+              traceSnapshots.push(traceContext);
+              if (tracingOptions.includeInAttack || tracingOptions.includeInGrading) {
+                computedTraceSummary = formatTraceSummary(traceContext);
+                targetResponse.traceSummary = computedTraceSummary;
+              }
+            }
+          }
+        }
 
         if (targetResponse.sessionId) {
           context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
@@ -334,6 +388,14 @@ export default class GoatProvider implements ApiProvider {
         });
 
         // Store the attack response for potential unblocking in next turn
+        const attackTraceSummary = tracingOptions.includeInAttack
+          ? computedTraceSummary
+          : undefined;
+        const gradingTraceSummary = tracingOptions.includeInGrading
+          ? computedTraceSummary
+          : undefined;
+
+        previousTraceSummary = attackTraceSummary;
         previousTargetOutput = stringifiedOutput;
 
         lastTargetResponse = finalResponse;
@@ -347,6 +409,13 @@ export default class GoatProvider implements ApiProvider {
             targetProvider,
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
             additionalRubric,
+            undefined,
+            tracingOptions.includeInGrading
+              ? {
+                  traceContext: targetResponse.traceContext,
+                  traceSummary: gradingTraceSummary,
+                }
+              : undefined,
           );
           graderPassed = grade.pass;
           storedGraderResult = grade;
@@ -358,6 +427,7 @@ export default class GoatProvider implements ApiProvider {
             turn,
             prompt: attackerMessage.content,
             response: stringifiedOutput,
+            traceSummary: attackTraceSummary,
           });
 
           // Only break early if continueAfterSuccess is false
@@ -385,6 +455,10 @@ export default class GoatProvider implements ApiProvider {
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+            : undefined,
         sessionId: getSessionId(lastTargetResponse, context),
       },
       tokenUsage: totalTokenUsage,
