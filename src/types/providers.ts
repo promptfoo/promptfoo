@@ -66,6 +66,10 @@ export interface CallApiContextParams {
   // Evaluation metadata (for manual correlation if needed)
   evaluationId?: string;
   testCaseId?: string;
+
+  // Extension-provided metadata from hooks (beforeAll, beforeEach)
+  // Can be used to pass session IDs, auth tokens, or other custom data to providers
+  metadata?: Record<string, any>;
 }
 
 export interface CallApiOptionsParams {

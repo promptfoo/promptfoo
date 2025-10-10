@@ -127,6 +127,53 @@ describe('HttpProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow('Network error');
   });
 
+  it('should use metadata from context in headers and body', async () => {
+    provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-id': '{{ sessionId }}',
+        },
+        body: {
+          prompt: '{{ prompt }}',
+          userId: '{{ userId }}',
+        },
+        transformResponse: (data: any) => data.result,
+      },
+    });
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test prompt', {
+      metadata: { sessionId: 'session-123', userId: 'user-456' },
+      vars: {},
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.output).toBe('response text');
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-session-id': 'session-123',
+        },
+        body: JSON.stringify({ prompt: 'test prompt', userId: 'user-456' }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
   it('should use custom method/headers/queryParams', async () => {
     provider = new HttpProvider(mockUrl, {
       config: {

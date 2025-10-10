@@ -153,6 +153,9 @@ export interface RunEvalOptions {
   allTests?: RunEvalOptions[];
   concurrency?: number;
 
+  // Metadata from the test suite (set by hooks like beforeAll)
+  suiteMetadata?: Record<string, any>;
+
   /**
    * AbortSignal that can be used to cancel the evaluation
    * This is passed to the provider's callApi function
@@ -917,6 +920,10 @@ export const TestSuiteSchema = z.object({
         .optional(),
     })
     .optional(),
+
+  // Extension-provided metadata (set by hooks like beforeAll, beforeEach)
+  // Available to providers via CallApiContextParams.metadata
+  metadata: z.record(z.any()).optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;

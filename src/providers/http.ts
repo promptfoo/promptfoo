@@ -1636,6 +1636,7 @@ export class HttpProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const vars = {
+      ...(context?.metadata || {}),
       ...(context?.vars || {}),
       prompt,
     } as Record<string, any>;

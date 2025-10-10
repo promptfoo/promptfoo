@@ -457,6 +457,7 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
               nunjucksFilters: extensionReturnValue.suite.nunjucksFilters,
               derivedMetrics: extensionReturnValue.suite.derivedMetrics,
               redteam: extensionReturnValue.suite.redteam,
+              metadata: extensionReturnValue.suite.metadata,
             },
           };
           break;
