@@ -142,6 +142,29 @@ The OG image generation process can take several minutes and may cause CI timeou
 - Follow Jest best practices with describe/it blocks
 - Use consistent error handling with proper type checks
 
+### React Hooks
+
+- **`useMemo` vs `useCallback`**: Use `useMemo` when computing a value, and `useCallback` when creating a stable function reference. Specifically:
+  - Use `useMemo` when the hook returns a value that doesn't accept arguments (a non-callable)
+  - Use `useCallback` when the hook returns a function that accepts arguments and will be called later
+
+  ```typescript
+  // ✅ Good - useMemo for computed values
+  const tooltipMessage = useMemo(() => {
+    return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+  }, [apiStatus]);
+
+  // ✅ Good - useCallback for functions that accept arguments
+  const handleClick = useCallback((id: string) => {
+    console.log('Clicked:', id);
+  }, []);
+
+  // ❌ Bad - useCallback for computed values
+  const getTooltipMessage = useCallback(() => {
+    return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+  }, [apiStatus]);
+  ```
+
 ## Logging and Sanitization
 
 **IMPORTANT**: Always sanitize sensitive data before logging to prevent exposing secrets, API keys, passwords, and other credentials in logs.
