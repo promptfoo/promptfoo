@@ -291,6 +291,21 @@ Application Details:
   });
 
   describe('Run Now Button - API Health Integration', () => {
+    it('should call checkHealth on component mount', () => {
+      const checkHealthMock = vi.fn();
+      apiHealthStatus.checkHealth = checkHealthMock;
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      expect(checkHealthMock).toHaveBeenCalled();
+    });
+
     it('should enable the Run Now button when API status is connected', () => {
       apiHealthStatus.status = 'connected';
 
