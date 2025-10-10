@@ -133,7 +133,11 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         } else {
           setUrlError('Please enter a valid WebSocket URL (ws:// or wss://)');
         }
-      } else if (field in updatedTarget.config) {
+      } else if (
+        field in updatedTarget.config ||
+        field === 'streamResponse' ||
+        field === 'transformResponse'
+      ) {
         (updatedTarget.config as any)[field] = value;
       } else if (field === 'label') {
         updatedTarget.label = value;

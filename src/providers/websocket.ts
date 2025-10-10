@@ -145,6 +145,16 @@ export async function createStreamResponse(
   );
 }
 
+export const processResult = (transformedResponse: any): ProviderResponse => {
+  if (
+    typeof transformedResponse === 'object' &&
+    (transformedResponse.output || transformedResponse.error)
+  ) {
+    return transformedResponse;
+  }
+  return { output: transformedResponse };
+};
+
 export class WebSocketProvider implements ApiProvider {
   url: string;
   config: WebSocketProviderConfig;
@@ -196,7 +206,7 @@ export class WebSocketProvider implements ApiProvider {
       const ws = new WebSocket(this.url, wsOptions);
       const timeout = setTimeout(() => {
         ws.close();
-        resolve({ error: 'WebSocket request timed out' });
+        resolve({ error: `WebSocket request timed out. Prompt: ${prompt}` });
       }, this.config.timeoutMs || 10000);
       ws.on('open', () => {
         logger.debug(`WebSocket connection opened successfully`);
@@ -209,7 +219,7 @@ export class WebSocketProvider implements ApiProvider {
           accumulator = newAccumulator;
           if (isComplete) {
             ws.close();
-            const response = this.transformResponse(accumulator);
+            const response = processResult(accumulator);
             resolve(response);
           }
         } else {
@@ -222,7 +232,7 @@ export class WebSocketProvider implements ApiProvider {
                 // If parsing fails, assume it's a text response
               }
             }
-            resolve({ output: this.transformResponse(data) });
+            resolve(processResult(this.transformResponse(data)));
           } catch (err) {
             resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
           } finally {
