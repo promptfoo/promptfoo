@@ -280,7 +280,7 @@ export default function Review({
     return isRunning || ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus);
   }, [isRunning, apiHealthStatus]);
 
-  const getRunNowTooltipMessage = useCallback((): string | undefined => {
+  const runNowTooltipMessage = useMemo((): string | undefined => {
     if (isRunning) {
       return undefined;
     }
@@ -1134,7 +1134,7 @@ export default function Review({
             )}
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Tooltip title={getRunNowTooltipMessage()} arrow>
+                <Tooltip title={runNowTooltipMessage} arrow>
                   <span>
                     <Button
                       variant="contained"
