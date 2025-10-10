@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Session management with HTTP, Javascript, and Python providers
+
+extensions:
+  - file://hooks.js:extensionHook
+
+prompts:
+  - 'Process this data: {{input}}'
+
+providers:
+  - id: http://localhost:8000/echo
+    label: 'http-provider'
+    config:
+      method: POST
+      headers:
+        Content-Type: application/json
+        x-session-id: '{{sessionId}}'
+      body:
+        prompt: '{{prompt}}'
+      transformResponse: json.output
+
+  - id: file://customProvider.js
+
+  - id: python:file://customProvider.py:call_api
+    label: 'python-provider'
+
+# The server will echo the prompt back to the client; use equals assertion to verify the output:
+
+tests:
+  - vars:
+      input: 'user profile request'
+    assert:
+      - type: equals
+        value: 'Process this data: user profile request'
+
+  - vars:
+      input: 'authentication check'
+    assert:
+      - type: equals
+        value: 'Process this data: authentication check'
