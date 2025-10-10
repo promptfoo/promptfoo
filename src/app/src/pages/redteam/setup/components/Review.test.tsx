@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { callApi } from '@app/utils/api';
+import type { ApiHealthStatus } from '@app/hooks/useApiHealth';
 
 // Mock the dependencies
 vi.mock('@app/hooks/useEmailVerification', () => ({
@@ -31,10 +32,15 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 // Mock the useApiHealth hook
-let apiHealthStatus = {
-  status: 'connected' as const,
+let apiHealthStatus: {
+  status: ApiHealthStatus;
+  checkHealth: ReturnType<typeof vi.fn>;
+  message: string | null;
+  isChecking: boolean;
+} = {
+  status: 'connected',
   checkHealth: vi.fn(),
-  message: null as string | null,
+  message: null,
   isChecking: false,
 };
 
