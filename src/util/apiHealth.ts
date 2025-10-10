@@ -79,6 +79,13 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
     // Type guard for Error objects
     const error = err instanceof Error ? err : new Error(String(err));
 
+    if ((err as any)['cause']['code'] === 'ECONNREFUSED') {
+      return {
+        status: 'ERROR',
+        message: 'API is not reachable',
+      };
+    }
+
     // If it's a timeout error, return a softer message
     if (error.name === 'TimeoutError') {
       return {
