@@ -1,0 +1,1 @@
+Process this query using the session context: {{query}}

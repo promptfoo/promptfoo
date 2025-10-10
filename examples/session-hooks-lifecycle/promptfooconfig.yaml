@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Session management with hooks
+
+prompts:
+  - file://prompts.txt
+
+providers:
+  - id: file://javascript/sessionProvider.js
+    label: Session-based Provider
+
+extensions:
+  - file://javascript/sessionHooks.js
+
+tests:
+  - vars:
+      query: "What is the capital of France?"
+    assert:
+      - type: contains
+        value: "Session has"
+      - type: contains
+        value: "request #1"
+
+  - vars:
+      query: "Tell me an interesting fact about Paris"
+    assert:
+      - type: contains
+        value: "Session has 1 prior exchanges"
+      - type: contains
+        value: "request #2"
+
+  - vars:
+      query: "What did we just discuss?"
+    assert:
+      - type: contains-any
+        value:
+          - "Session has 2 prior exchanges"
+          - "request #3"
