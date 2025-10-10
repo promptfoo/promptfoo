@@ -69,7 +69,7 @@ import {
 } from './pluginDocumentationMap';
 import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
 import type { PluginConfig } from '@promptfoo/redteam/types';
-
+import { TestCaseGenerateButton } from './TestCaseDialog';
 import type { LocalPluginConfig } from '../types';
 
 interface PluginsProps {
@@ -614,26 +614,16 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       setIsRunningTest(true);
       setTargetResponse(null);
       try {
-        console.log('[Plugins] Running test against target', {
-          targetId: config.target.id,
-          prompt: data.prompt?.substring(0, 50),
-        });
-
         const testResponse = await callApi('/providers/test', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            ...config.target,
+            providerOptions: config.target,
             prompt: data.prompt,
           }),
           timeout: 30000, // 30 second timeout
-        });
-
-        console.log('[Plugins] Test response received', {
-          ok: testResponse.ok,
-          status: testResponse.status,
         });
 
         if (!testResponse.ok) {
@@ -1009,35 +999,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       size="small"
                       aria-label={displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
                     />
-                    {/* Generate test case button */}
-                    <Tooltip
-                      title={
+                    <TestCaseGenerateButton
+                      onClick={() => handleGenerateTestCase(plugin)}
+                      disabled={
+                        apiHealthStatus !== 'connected' ||
+                        (generatingTestCase && generatingPlugin === plugin)
+                      }
+                      isGenerating={generatingTestCase && generatingPlugin === plugin}
+                      tooltipTitle={
                         apiHealthStatus === 'connected'
                           ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
                           : 'Promptfoo Cloud connection is required for test generation'
                       }
-                    >
-                      <span>
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGenerateTestCase(plugin);
-                          }}
-                          disabled={
-                            apiHealthStatus !== 'connected' ||
-                            (generatingTestCase && generatingPlugin === plugin)
-                          }
-                          sx={{ color: 'text.secondary', ml: 0.5 }}
-                        >
-                          {generatingTestCase && generatingPlugin === plugin ? (
-                            <CircularProgress size={16} />
-                          ) : (
-                            <MagicWandIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                      </span>
-                    </Tooltip>
+                    />
                   </Box>
 
                   <Box sx={{ flex: 1, minWidth: 0 }}>
