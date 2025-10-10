@@ -77,6 +77,10 @@ export const CustomPoliciesSection = () => {
   } | null>(null);
   const [generatingTestCase, setGeneratingTestCase] = useState(false);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
+  const [targetResponse, setTargetResponse] = useState<{ output: string; error?: string } | null>(
+    null,
+  );
+  const [isRunningTest, setIsRunningTest] = useState(false);
   const [policies, setPolicies] = useState<PolicyInstance[]>(() => {
     // Initialize from existing config or create a default empty policy
     const existingPolicies = config.plugins
@@ -256,6 +260,44 @@ export const CustomPoliciesSection = () => {
         prompt: data.prompt || '',
         context: data.context || policy.policy,
       });
+
+      // Run the test case against the target
+      setIsRunningTest(true);
+      setTargetResponse(null);
+      try {
+        const testResponse = await callApi('/redteam/run-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: data.prompt,
+            target: config.target,
+          }),
+          timeout: 30000, // 30 second timeout for running test
+        });
+
+        if (!testResponse.ok) {
+          const errorData = await testResponse.json();
+          throw new Error(errorData.error || 'Failed to run test case');
+        }
+
+        const testData = await testResponse.json();
+        setTargetResponse({
+          output: testData.output || '',
+          error: testData.error,
+        });
+      } catch (error) {
+        console.error('Error running test case:', error);
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to run test case: Unknown error';
+        setTargetResponse({
+          output: '',
+          error: errorMessage,
+        });
+      } finally {
+        setIsRunningTest(false);
+      }
     } catch (error) {
       console.error('Error generating test case:', error);
       // Provide specific message for timeout errors
@@ -277,6 +319,8 @@ export const CustomPoliciesSection = () => {
     setGeneratingPolicyId(null);
     setGeneratedTestCase(null);
     setGeneratingTestCase(false);
+    setTargetResponse(null);
+    setIsRunningTest(false);
   };
 
   return (
@@ -391,6 +435,8 @@ export const CustomPoliciesSection = () => {
         plugin="policy"
         isGenerating={generatingTestCase}
         generatedTestCase={generatedTestCase}
+        targetResponse={targetResponse}
+        isRunningTest={isRunningTest}
         mode="result"
       />
     </Box>

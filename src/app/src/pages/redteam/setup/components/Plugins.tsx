@@ -133,6 +133,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   // Add new state for dialog mode and temporary config
   const [testCaseDialogMode, setTestCaseDialogMode] = useState<'config' | 'result'>('config');
   const [tempTestCaseConfig, setTempTestCaseConfig] = useState<any>({});
+  // Test running state
+  const [targetResponse, setTargetResponse] = useState<{ output: string; error?: string } | null>(
+    null,
+  );
+  const [isRunningTest, setIsRunningTest] = useState(false);
 
   // Category filter options based on riskCategories
   const categoryFilters = Object.keys(riskCategories).map((category) => ({
@@ -598,6 +603,43 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
       if (!testCaseDialogOpen) {
         setTestCaseDialogOpen(true);
+      }
+
+      // Run the test case against the target
+      setIsRunningTest(true);
+      setTargetResponse(null);
+      try {
+        const testResponse = await callApi('/redteam/run-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: data.prompt,
+            target: config.target,
+          }),
+          timeout: 30000, // 30 second timeout for running tests
+        });
+
+        const testData = await testResponse.json();
+        setTargetResponse({
+          output: testData.output || '',
+          error: testData.error,
+        });
+      } catch (error) {
+        console.error('Failed to run test against target:', error);
+        const errorMessage =
+          error instanceof Error
+            ? error.message.includes('timed out')
+              ? 'Test execution timed out'
+              : error.message
+            : 'Failed to run test';
+        setTargetResponse({
+          output: '',
+          error: errorMessage,
+        });
+      } finally {
+        setIsRunningTest(false);
       }
     } catch (error) {
       console.error('Failed to generate test case:', error);
@@ -1186,6 +1228,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 setGeneratingPlugin(null);
                 setTestCaseDialogMode('config');
                 setTempTestCaseConfig({});
+                setTargetResponse(null);
+                setIsRunningTest(false);
               }}
               maxWidth="md"
               fullWidth
@@ -1521,10 +1565,64 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         fontSize: '0.875rem',
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
+                        mb: 3,
                       }}
                     >
                       {generatedTestCase.prompt}
                     </Box>
+
+                    {/* Target Response Section */}
+                    {isRunningTest ? (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          py: 4,
+                        }}
+                      >
+                        <CircularProgress sx={{ mb: 2 }} />
+                        <Typography variant="body2" color="text.secondary">
+                          Running test against target...
+                        </Typography>
+                      </Box>
+                    ) : targetResponse ? (
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Target Response:
+                        </Typography>
+                        <Box
+                          sx={{
+                            p: 2,
+                            backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                            borderRadius: 1,
+                            border: '1px solid',
+                            borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                            fontFamily: 'monospace',
+                            fontSize: '0.875rem',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {targetResponse.error ? (
+                            <Box>
+                              <Typography
+                                color="error"
+                                variant="body2"
+                                sx={{ mb: 1, fontWeight: 'bold' }}
+                              >
+                                Error:
+                              </Typography>
+                              <Typography variant="body2" color="error">
+                                {targetResponse.error}
+                              </Typography>
+                            </Box>
+                          ) : (
+                            targetResponse.output
+                          )}
+                        </Box>
+                      </Box>
+                    ) : null}
                   </Box>
                 ) : null}
               </DialogContent>
@@ -1565,6 +1663,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     setGeneratingPlugin(null);
                     setTestCaseDialogMode('config');
                     setTempTestCaseConfig({});
+                    setTargetResponse(null);
+                    setIsRunningTest(false);
                   }}
                 >
                   {testCaseDialogMode === 'config' ? 'Cancel' : 'Close'}
