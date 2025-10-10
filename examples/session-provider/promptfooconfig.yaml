@@ -1,0 +1,24 @@
+description: Session lifecycle example
+providers:
+  - id: ./sessionProvider.js
+    label: session-provider
+    config:
+      baseUrl: http://127.0.0.1:4100
+prompts:
+  - label: conversation
+    raw: |
+      [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "{{user_message}}"}
+      ]
+tests:
+  - description: first turn
+    metadata:
+      conversationId: conv-123
+    vars:
+      user_message: 'Hello, how are you today?'
+  - description: follow-up
+    metadata:
+      conversationId: conv-123
+    vars:
+      user_message: 'Thanks for your help!'

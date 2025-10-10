@@ -257,6 +257,88 @@ When running multiple test files or test sequences, you may want to maintain sep
 
 Each unique `conversationId` maintains its own separate conversation history. If no `conversationId` is specified, all tests using the same provider and prompt will share a conversation history.
 
+## Session Lifecycle Management
+
+For conversational AI providers that maintain server-side session state, promptfoo supports automatic session lifecycle management. When a custom provider implements `startSession` and `closeSession` methods, promptfoo automatically:
+
+1. **Starts the session** before the first message (calls `startSession()`)
+2. **Passes the session ID** to each message (via `context.sessionId`)
+3. **Closes the session** after all messages complete (calls `closeSession()`)
+
+This is useful for APIs that require explicit session initialization and cleanup, such as chatbot services that maintain conversation state server-side.
+
+### Example: Session-Based Provider
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - file://./sessionProvider.js
+    label: conversation-bot
+
+tests:
+  - description: First message
+    metadata:
+      conversationId: 'session-123'
+    vars:
+      message: 'Hello, how are you?'
+
+  - description: Follow-up message
+    metadata:
+      conversationId: 'session-123'
+    vars:
+      message: 'Thanks for your help!'
+```
+
+When tests with the same `conversationId` run:
+
+1. Before the first test: Provider's `startSession()` is called
+2. Both tests: Provider's `callApi()` receives `context.sessionId`
+3. After all tests: Provider's `closeSession()` is called automatically
+
+### Implementing Session Lifecycle
+
+Custom providers can implement optional session methods:
+
+```javascript title="sessionProvider.js"
+class SessionProvider {
+  id() {
+    return 'session-provider';
+  }
+
+  // Called once before the first message
+  async startSession(context) {
+    const response = await fetch('https://api.example.com/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        conversationId: context.conversationId,
+      }),
+    });
+    const data = await response.json();
+    return { sessionId: data.sessionId };
+  }
+
+  // Called for each message with sessionId in context
+  async callApi(prompt, context) {
+    const response = await fetch(`https://api.example.com/sessions/${context.sessionId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message: prompt }),
+    });
+    const data = await response.json();
+    return { output: data.reply };
+  }
+
+  // Called once after all messages complete
+  async closeSession(sessionId) {
+    await fetch(`https://api.example.com/sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+  }
+}
+
+module.exports = SessionProvider;
+```
+
+See the [session lifecycle example](https://github.com/promptfoo/promptfoo/tree/main/examples/session-provider) for a complete working implementation with a mock server.
+
 ### Including JSON in prompt content
 
 In some cases, you may want to send JSON _within_ the OpenAI `content` field. In order to do this, you must ensure that the JSON is properly escaped.
