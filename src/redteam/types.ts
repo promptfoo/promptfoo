@@ -61,6 +61,8 @@ export type PluginConfig = {
   systemPrompt?: string;
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies?: string[];
+  // Include safe/benign prompts along with unsafe prompts (for testing over-blocking)
+  includeSafe?: boolean;
 };
 export type StrategyConfig = RedteamObjectConfig;
 
