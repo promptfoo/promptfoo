@@ -311,8 +311,8 @@ export default function PluginsTab({
       });
     }
 
-     // Sort plugins alphabetically by display name (case-insensitive)
-     const getDisplayName = (plugin: Plugin) => {
+    // Sort plugins alphabetically by display name (case-insensitive)
+    const getDisplayName = (plugin: Plugin) => {
       return (displayNameOverrides[plugin] || categoryAliases[plugin] || plugin).toLowerCase();
     };
 
