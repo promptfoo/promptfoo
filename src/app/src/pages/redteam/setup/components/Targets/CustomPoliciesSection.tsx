@@ -262,9 +262,19 @@ export const CustomPoliciesSection = () => {
       });
 
       // Run the test case against the target using the providers/test endpoint
+      if (!config.target || !config.target.id) {
+        console.warn('[CustomPoliciesSection] Skipping test execution - no target configured');
+        return;
+      }
+
       setIsRunningTest(true);
       setTargetResponse(null);
       try {
+        console.log('[CustomPoliciesSection] Running test against target', {
+          targetId: config.target.id,
+          prompt: data.prompt?.substring(0, 50),
+        });
+
         const testResponse = await callApi('/providers/test', {
           method: 'POST',
           headers: {
@@ -275,6 +285,11 @@ export const CustomPoliciesSection = () => {
             prompt: data.prompt,
           }),
           timeout: 30000, // 30 second timeout
+        });
+
+        console.log('[CustomPoliciesSection] Test response received', {
+          ok: testResponse.ok,
+          status: testResponse.status,
         });
 
         if (!testResponse.ok) {

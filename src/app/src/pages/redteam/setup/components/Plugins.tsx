@@ -606,9 +606,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       }
 
       // Run the test case against the target using the providers/test endpoint
+      if (!config.target || !config.target.id) {
+        console.warn('[Plugins] Skipping test execution - no target configured');
+        return;
+      }
+
       setIsRunningTest(true);
       setTargetResponse(null);
       try {
+        console.log('[Plugins] Running test against target', {
+          targetId: config.target.id,
+          prompt: data.prompt?.substring(0, 50),
+        });
+
         const testResponse = await callApi('/providers/test', {
           method: 'POST',
           headers: {
@@ -619,6 +629,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             prompt: data.prompt,
           }),
           timeout: 30000, // 30 second timeout
+        });
+
+        console.log('[Plugins] Test response received', {
+          ok: testResponse.ok,
+          status: testResponse.status,
         });
 
         if (!testResponse.ok) {
