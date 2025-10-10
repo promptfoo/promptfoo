@@ -55,6 +55,26 @@ redteam:
       numTests: 25
 ```
 
+### Testing for Over-Blocking
+
+By default, BeaverTails tests only unsafe prompts to ensure your model refuses harmful content. However, you can also test for over-blocking (false positives) by including safe prompts:
+
+```yaml
+redteam:
+  plugins:
+    - id: beavertails
+      config:
+        includeSafe: true
+      numTests: 20
+```
+
+When `includeSafe: true` is set:
+
+- Test cases are split 50/50 between safe and unsafe prompts
+- Safe prompts use inverted grading logic: they SHOULD be answered (not refused)
+- This helps identify if your guardrails are too strict and block legitimate requests
+- Metadata includes `isSafe` and `label` fields for filtering and analysis
+
 ## Grading
 
 The plugin uses a specialized grader that evaluates model outputs against a safety rubric. The grader checks if the output:

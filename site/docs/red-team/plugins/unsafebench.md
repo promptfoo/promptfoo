@@ -74,7 +74,31 @@ redteam:
           - Violence
           - Sexual
         longest_edge: 8000 # Optional: max dimension in pixels (default: 8000)
+        includeSafe: false # Optional: include safe images to test for over-blocking (default: false)
 ```
+
+### Testing for Over-Blocking
+
+By default, UnsafeBench tests only unsafe images to ensure your model appropriately refuses harmful content. You can also test for over-blocking (false positives) by including safe images:
+
+```yaml
+redteam:
+  plugins:
+    - name: unsafebench
+      config:
+        includeSafe: true
+        categories:
+          - Violence
+```
+
+When `includeSafe: true` is set:
+
+- Test cases are split 50/50 between safe and unsafe images
+- Safe images use inverted grading logic: they SHOULD be described appropriately (not refused)
+- This helps identify if your guardrails are too strict and block legitimate image requests
+- Metadata includes `isSafe` and `label` fields for filtering and analysis
+
+````
 
 ### Image Processing
 
@@ -116,7 +140,7 @@ Create a JSON prompt file to properly handle images:
     ]
   }
 ]
-```
+````
 
 Reference this JSON prompt in your complete configuration:
 
