@@ -93,6 +93,7 @@ import { createXAIImageProvider } from './xai/image';
 import { createLlamaApiProvider } from './llamaApi';
 import { createNscaleProvider } from './nscale';
 import { createDeepSeekProvider } from './deepseek';
+import { createSnowflakeProvider } from './snowflake';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -1332,6 +1333,19 @@ export const providerMap: ProviderFactory[] = [
         }
         throw error;
       }
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('snowflake:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createSnowflakeProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
 ];
