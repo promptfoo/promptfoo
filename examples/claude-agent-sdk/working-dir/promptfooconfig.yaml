@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Agent SDK with working directory - read-only access'
+
+prompts:
+  - 'Review the files in this project and identify potential bugs'
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./sample-project
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains-any
+        value: ['auth', 'calculator', 'function', 'bug']

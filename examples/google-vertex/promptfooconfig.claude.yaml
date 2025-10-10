@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Vertex Claude Code Analysis'
+description: 'Vertex Claude Agent SDK Analysis'
 
 prompts:
   - 'Analyze this code and list any potential issues: ```{{code}}```'

@@ -257,6 +257,15 @@
       }
     },
     {
+      "includes": ["examples/claude-agent-sdk/advanced/workspace/**/*"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
       "includes": ["examples/**/*", "site/**/*"],
       "linter": {
         "rules": {

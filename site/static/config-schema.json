@@ -126,6 +126,12 @@
                             "AZURE_TOKEN_SCOPE": {
                               "type": "string"
                             },
+                            "CLAUDE_CODE_USE_BEDROCK": {
+                              "type": "string"
+                            },
+                            "CLAUDE_CODE_USE_VERTEX": {
+                              "type": "string"
+                            },
                             "CLOUDFLARE_ACCOUNT_ID": {
                               "type": "string"
                             },
