@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { Router } from 'express';
+import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -20,6 +21,17 @@ import type { ZodError } from 'zod-validation-error';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 
 export const providersRouter = Router();
+
+// Validation schemas
+const TestRequestTransformSchema = z.object({
+  transformCode: z.string().optional(),
+  prompt: z.string(),
+});
+
+const TestResponseTransformSchema = z.object({
+  transformCode: z.string().optional(),
+  response: z.string(),
+});
 
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
@@ -169,20 +181,14 @@ providersRouter.post(
   '/test-request-transform',
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { transformCode, prompt } = req.body;
+      const { transformCode, prompt } = TestRequestTransformSchema.parse(req.body);
 
-      if (!transformCode) {
-        res.status(400).json({ success: false, error: 'Transform code is required' });
-        return;
-      }
-
-      if (typeof prompt !== 'string') {
-        res.status(400).json({ success: false, error: 'Prompt must be a string' });
-        return;
-      }
+      // Treat empty string as undefined to show base behavior
+      const normalizedTransformCode =
+        transformCode && transformCode.trim() ? transformCode : undefined;
 
       // Use the actual HTTP provider's transform function
-      const transformFn = await createTransformRequest(transformCode);
+      const transformFn = await createTransformRequest(normalizedTransformCode);
       const result = await transformFn(
         prompt,
         {},
@@ -206,6 +212,13 @@ providersRouter.post(
         result,
       });
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          success: false,
+          error: fromZodError(error).toString(),
+        });
+        return;
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[POST /providers/test-request-transform] Error: ${errorMessage}`);
       res.status(200).json({
@@ -221,17 +234,11 @@ providersRouter.post(
   '/test-response-transform',
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { transformCode, response: responseText } = req.body;
+      const { transformCode, response: responseText } = TestResponseTransformSchema.parse(req.body);
 
-      if (!transformCode) {
-        res.status(400).json({ success: false, error: 'Transform code is required' });
-        return;
-      }
-
-      if (typeof responseText !== 'string') {
-        res.status(400).json({ success: false, error: 'Response must be a string' });
-        return;
-      }
+      // Treat empty string as undefined to show base behavior
+      const normalizedTransformCode =
+        transformCode && transformCode.trim() ? transformCode : undefined;
 
       // Parse the response as JSON if possible
       let jsonData;
@@ -242,7 +249,7 @@ providersRouter.post(
       }
 
       // Use the actual HTTP provider's transform function
-      const transformFn = await createTransformResponse(transformCode);
+      const transformFn = await createTransformResponse(normalizedTransformCode);
       const result = transformFn(jsonData, responseText);
 
       // Check if result is empty/null/undefined
@@ -267,6 +274,13 @@ providersRouter.post(
         result: output,
       });
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          success: false,
+          error: fromZodError(error).toString(),
+        });
+        return;
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[POST /providers/test-response-transform] Error: ${errorMessage}`);
       res.status(200).json({

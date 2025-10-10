@@ -34,7 +34,6 @@ import Switch from '@mui/material/Switch';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import dedent from 'dedent';
 import yaml from 'js-yaml';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
@@ -751,6 +750,24 @@ ${exampleRequest}`;
             docs
           </a>{' '}
           for examples.
+          <Box sx={{ mt: 1 }}>
+            <details>
+              <summary>Examples</summary>
+              <ul style={{ listStyleType: 'decimal' }}>
+                <li>
+                  A JavaScript object path: <code>json.choices[0].message.content</code>
+                </li>{' '}
+                <li>
+                  A function:{' '}
+                  <code>{`(json, text) => json.choices[0].message.content || text`}</code>{' '}
+                </li>
+                <li>
+                  With guardrails:{' '}
+                  <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
+                </li>
+              </ul>
+            </details>
+          </Box>
         </Typography>
         <Box
           sx={{
@@ -766,12 +783,7 @@ ${exampleRequest}`;
             onValueChange={(code) => updateCustomTarget('transformResponse', code)}
             highlight={highlightJS}
             padding={10}
-            placeholder={dedent`Optional: Transform the API response before using it. Format as either:
-
-                        1. A JavaScript object path: \`json.choices[0].message.content\`
-                        2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
-
-                        With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
+            placeholder={'json.choices[0].message.content'}
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
