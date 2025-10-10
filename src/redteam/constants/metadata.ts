@@ -112,6 +112,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
+  'openai-guardrails':
+    'Tests jailbreak resistance using OpenAI Guardrails evaluation dataset with role-playing attacks and system manipulation',
   overreliance: 'Tests for overreliance on system assumptions',
   pii: 'Tests handling of personal identifiable information',
   'pii:api-db': 'Tests for PII exposure via API/database access',
@@ -202,6 +204,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:misconduct': 'Financial Services Misconduct',
   'financial:sycophancy': 'Financial Sycophancy',
   'off-topic': 'Off-Topic Manipulation',
+  'openai-guardrails': 'OpenAI Guardrails',
   goat: 'Generative Offensive Agent Tester',
   'guardrails-eval': 'Guardrails Evaluation',
   hallucination: 'Hallucination',
@@ -346,6 +349,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:prioritization-error': Severity.High,
   'medical:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
+  'openai-guardrails': Severity.Medium,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
   'tool-discovery': Severity.Low,
@@ -530,6 +534,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'donotanswer',
     'harmbench',
     'toxic-chat',
+    'openai-guardrails',
     'pliny',
     'unsafebench',
     'vlguard',
@@ -594,6 +599,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:misconduct': 'FinancialMisconduct',
   'financial:sycophancy': 'FinancialSycophancy',
   'off-topic': 'OffTopic',
+  'openai-guardrails': 'OpenAI Guardrails',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   'tool-discovery': 'ToolDiscovery',
@@ -773,6 +779,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic by performing tasks outside their domain',
+  'openai-guardrails':
+    'Tests jailbreak resistance using OpenAI Guardrails evaluation dataset of role-playing attacks, system manipulation, and obfuscation techniques',
   'indirect-prompt-injection':
     'Evaluates vulnerability to injection attacks via untrusted variables',
   intent: 'Tests system resilience against specific manipulation attempts',
