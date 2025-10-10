@@ -101,6 +101,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.879.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.879.0",
     "@aws-sdk/credential-provider-sso": "^3.879.0",
+    "@azure/ai-projects": "^1.0.0",
     "@azure/identity": "^4.11.2",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@fal-ai/client": "^1.6.2",
