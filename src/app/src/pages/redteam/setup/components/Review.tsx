@@ -44,6 +44,7 @@ import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
+import EstimatedProbesDisplay from './EstimatedProbesDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
@@ -1051,6 +1052,8 @@ export default function Review({
             <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
           </Tooltip>
         </Box>
+
+        <EstimatedProbesDisplay config={config} />
 
         <Paper elevation={2} sx={{ p: 3 }}>
           <Box sx={{ mb: 4 }}>
