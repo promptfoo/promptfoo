@@ -606,10 +606,15 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       }
 
       // Run the test case against the target
+      // Note: This must call the LOCAL server, not Cloud, because the target config is local
       setIsRunningTest(true);
       setTargetResponse(null);
       try {
-        const testResponse = await callApi('/redteam/run-test', {
+        const localApiUrl = 'http://localhost:15500';
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+        const testResponse = await fetch(`${localApiUrl}/api/redteam/run-test`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -618,8 +623,15 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             prompt: data.prompt,
             target: config.target,
           }),
-          timeout: 30000, // 30 second timeout for running tests
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
+
+        if (!testResponse.ok) {
+          const errorData = await testResponse.json();
+          throw new Error(errorData.error || 'Failed to run test');
+        }
 
         const testData = await testResponse.json();
         setTargetResponse({
@@ -628,12 +640,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         });
       } catch (error) {
         console.error('Failed to run test against target:', error);
-        const errorMessage =
-          error instanceof Error
-            ? error.message.includes('timed out')
-              ? 'Test execution timed out'
-              : error.message
-            : 'Failed to run test';
+        let errorMessage = 'Failed to run test';
+        if (error instanceof Error) {
+          if (error.name === 'AbortError') {
+            errorMessage = 'Test execution timed out after 30 seconds';
+          } else {
+            errorMessage = error.message;
+          }
+        }
         setTargetResponse({
           output: '',
           error: errorMessage,

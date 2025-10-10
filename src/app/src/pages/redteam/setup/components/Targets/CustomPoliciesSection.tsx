@@ -262,10 +262,15 @@ export const CustomPoliciesSection = () => {
       });
 
       // Run the test case against the target
+      // Note: This must call the LOCAL server, not Cloud, because the target config is local
       setIsRunningTest(true);
       setTargetResponse(null);
       try {
-        const testResponse = await callApi('/redteam/run-test', {
+        const localApiUrl = 'http://localhost:15500';
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+        const testResponse = await fetch(`${localApiUrl}/api/redteam/run-test`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -274,8 +279,10 @@ export const CustomPoliciesSection = () => {
             prompt: data.prompt,
             target: config.target,
           }),
-          timeout: 30000, // 30 second timeout for running test
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (!testResponse.ok) {
           const errorData = await testResponse.json();
@@ -289,8 +296,14 @@ export const CustomPoliciesSection = () => {
         });
       } catch (error) {
         console.error('Error running test case:', error);
-        const errorMessage =
-          error instanceof Error ? error.message : 'Failed to run test case: Unknown error';
+        let errorMessage = 'Failed to run test case';
+        if (error instanceof Error) {
+          if (error.name === 'AbortError') {
+            errorMessage = 'Test execution timed out after 30 seconds';
+          } else {
+            errorMessage = error.message;
+          }
+        }
         setTargetResponse({
           output: '',
           error: errorMessage,
