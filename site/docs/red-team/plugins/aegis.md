@@ -1,4 +1,5 @@
 ---
+title: Aegis
 sidebar_label: Aegis
 description: Red team LLM content safety using NVIDIA's Aegis dataset to detect harmful outputs across 13 risk categories including hate speech, violence, and exploitation
 ---
