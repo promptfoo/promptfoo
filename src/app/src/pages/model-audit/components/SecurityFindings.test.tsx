@@ -449,8 +449,8 @@ describe('SecurityFindings', () => {
       const groupByFileButton = screen.getByRole('button', { name: 'Group by File' });
       await user.click(groupByFileButton);
 
-      expect(() => screen.getByText('file1.py')).toThrowError();
-      expect(() => screen.getByText('file2.js')).toThrowError();
+      expect(screen.queryByText('file1.py')).not.toBeInTheDocument();
+      expect(screen.queryByText('file2.js')).not.toBeInTheDocument();
       expect(
         screen.getByText('A critical vulnerability was found in file1.py.'),
       ).toBeInTheDocument();

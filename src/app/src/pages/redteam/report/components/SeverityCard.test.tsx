@@ -1,4 +1,4 @@
-import { renderWithProviders } from '@app/utils/testutils';
+import { renderWithProviders } from '@app/test-utils';
 import { red } from '@mui/material/colors';
 import { Severity } from '@promptfoo/redteam/constants';
 import { fireEvent, screen } from '@testing-library/react';

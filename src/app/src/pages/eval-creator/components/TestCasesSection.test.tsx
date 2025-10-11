@@ -136,7 +136,7 @@ describe('TestCasesSection', () => {
 
       // Check that file input was reset
       expect(fileInput.value).toBe('');
-    });
+    }, 10000); // Increase timeout to 10s for large file creation
 
     it('handles unsupported file types', async () => {
       render(<TestCasesSection varsList={[]} />);

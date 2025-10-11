@@ -1,4 +1,4 @@
-import { renderWithProviders } from '@app/utils/testutils';
+import { renderWithProviders } from '@app/test-utils';
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';

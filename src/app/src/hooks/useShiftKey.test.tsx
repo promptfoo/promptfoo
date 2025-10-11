@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { suppressConsoleErrors } from '../test-utils/console';
 import { useShiftKey } from './useShiftKey';
 
 const createWrapper = (shiftKeyValue: boolean) => {
@@ -13,9 +14,11 @@ const createWrapper = (shiftKeyValue: boolean) => {
 
 describe('useShiftKey', () => {
   it('should throw an error when used outside of a ShiftKeyProvider', () => {
-    expect(() => renderHook(() => useShiftKey())).toThrowError(
-      'useShiftKey must be used within a ShiftKeyProvider',
-    );
+    suppressConsoleErrors(() => {
+      expect(() => renderHook(() => useShiftKey())).toThrowError(
+        'useShiftKey must be used within a ShiftKeyProvider',
+      );
+    });
   });
 
   it.each([

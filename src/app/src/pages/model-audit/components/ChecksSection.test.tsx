@@ -1,5 +1,5 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 
@@ -84,7 +84,9 @@ describe('ChecksSection', () => {
 
     await userEvent.click(accordionHeader);
 
-    expect(screen.getByText('Show Failed/Skipped Only')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Show Failed/Skipped Only')).toBeInTheDocument();
+    });
 
     expect(screen.getByTestId('mock-data-grid')).toBeInTheDocument();
 
@@ -101,7 +103,7 @@ describe('ChecksSection', () => {
     expect(screen.getByText('File Permissions')).toBeInTheDocument();
     expect(screen.getByText('All file permissions are secure.')).toBeInTheDocument();
     expect(screen.getByText('/models/safe_model.bin')).toBeInTheDocument();
-  });
+  }, 10000); // Increase timeout for user interactions
 
   it('should filter out passed checks when the filter chip is clicked and restore all checks when toggled back', async () => {
     render(

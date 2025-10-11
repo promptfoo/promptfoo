@@ -1,4 +1,4 @@
-import { renderWithProviders } from '@app/utils/testutils';
+import { renderWithProviders } from '@app/test-utils';
 import { fireEvent, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

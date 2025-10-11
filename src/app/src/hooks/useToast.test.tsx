@@ -7,9 +7,14 @@ import { useToast } from './useToast';
 
 describe('useToast', () => {
   it('should throw an error when used outside of a ToastProvider', () => {
+    // Suppress expected console errors during this test
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
     expect(() => renderHook(() => useToast())).toThrowError(
       'useToast must be used within a ToastProvider',
     );
+
+    consoleErrorSpy.mockRestore();
   });
 
   it('should return the context value when used within a ToastProvider', () => {

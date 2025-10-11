@@ -91,6 +91,9 @@ describe('PostHogPageViewTracker', () => {
   });
 
   it('should throw an error when rendered outside of a PostHogProvider', () => {
+    // Suppress expected console errors during this test
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
     mockedUsePostHog.mockImplementation(() => {
       throw new Error('usePostHog must be used within a PostHogProvider');
     });
@@ -98,5 +101,7 @@ describe('PostHogPageViewTracker', () => {
     expect(() => {
       render(<PostHogPageViewTracker />, { wrapper: MemoryRouter });
     }).toThrowError('usePostHog must be used within a PostHogProvider');
+
+    consoleErrorSpy.mockRestore();
   });
 });

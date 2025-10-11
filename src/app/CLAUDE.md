@@ -199,21 +199,74 @@ const renderWithRouter = (component: React.ReactNode, initialRoute = '/') => {
 };
 ```
 
+### Test Utilities
+
+**IMPORTANT: Always use the test utilities from `@app/test-utils` instead of writing boilerplate:**
+
+```typescript
+import {
+  // Console utilities
+  suppressConsoleErrors, // Suppress expected console errors
+  createConsoleErrorSpy, // Manual console error spy
+  // Render utilities
+  renderWithProviders, // Render with MUI theme
+  renderWithRouter, // Render with Router + theme
+  createTestTheme, // Create custom theme
+  // Mock utilities
+  createMockResponse, // Create mock API response
+  createMockToast, // Create mock toast function
+  mockCallApi, // Create mock callApi
+  createMockNavigate, // Create mock navigate
+  setupMockUser, // Setup userEvent
+  waitForNextTick, // Wait for event loop
+  createDeferred, // Manually-resolvable promise
+} from '@app/test-utils';
+```
+
+**Common patterns:**
+
+```typescript
+// Suppress console errors for error tests
+it('handles errors', () => {
+  suppressConsoleErrors(() => {
+    expect(() => renderHook(() => useMyHook())).toThrowError('error');
+  });
+});
+
+// Render with providers
+it('renders with theme', () => {
+  renderWithProviders(<MyComponent />);
+  expect(screen.getByText('Content')).toBeInTheDocument();
+});
+
+// Mock API calls
+const callApiMock = vi.fn();
+callApiMock.mockResolvedValueOnce(
+  createMockResponse({ data: [{ id: '1' }] })
+);
+```
+
 ### Best Practices
 
+- **Use test utilities** - Import from `@app/test-utils` to reduce boilerplate
+- **Suppress expected errors** - Use `suppressConsoleErrors()` for error boundary/context validation tests
 - **Clean up after tests** - Vitest auto-cleans most things, but clear mocks if needed
 - **Use Testing Library queries** - `getByRole`, `getByLabelText`, etc.
 - **Test user behavior** - Not implementation details
-- **Mock API calls** - Don't make real network requests
-- **Wrap MUI components** in ThemeProvider for tests
+- **Mock API calls** - Don't make real network requests with `createMockResponse()`
+- **Wrap MUI components** - Use `renderWithProviders()` or `renderWithRouter()`
 
 ### Example Test Files
 
 See these for reference patterns:
 
-- `src/app/src/components/JsonTextField.test.tsx` - Component testing
+- `src/app/src/hooks/useShiftKey.test.tsx` - Hook with context validation + console suppression
+- `src/app/src/components/ErrorBoundary.test.tsx` - Error boundary with console suppression
+- `src/app/src/pages/datasets/page.test.tsx` - Component with API calls and error handling
 - `src/app/src/stores/userStore.test.ts` - Zustand store testing
 - `src/app/src/utils/discovery.test.ts` - Utility function testing
+
+**For comprehensive testing guide, see:** `src/app/TESTING_BEST_PRACTICES.md`
 
 ## Common Patterns & Best Practices
 
