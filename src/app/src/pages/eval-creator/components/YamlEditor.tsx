@@ -191,8 +191,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       setCode(formattedCode);
       setOriginalCode(formattedCode);
     }
-    // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
-  }, [initialYaml, initialConfig]);
+  }, [initialYaml, initialConfig, getTestSuite]);
 
   // Auto-update effect for store changes (only when not editing)
   React.useEffect(() => {
