@@ -4,11 +4,14 @@ import os from 'os';
 import path from 'path';
 
 import { Router } from 'express';
+import { z } from 'zod';
+import { fromError } from 'zod-validation-error';
 import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
+import { api } from '../schemas';
 import type { Request, Response } from 'express';
 
 import type { ModelAuditScanResults } from '../../types/modelAudit';
@@ -29,12 +32,7 @@ modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): P
 // Check path type
 modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { path: inputPath } = req.body;
-
-    if (!inputPath) {
-      res.status(400).json({ error: 'No path provided' });
-      return;
-    }
+    const { path: inputPath } = api.modelAudit.checkPath.post.body.parse(req.body);
 
     // Handle home directory expansion
     let expandedPath = inputPath;
@@ -63,6 +61,10 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
       name: path.basename(absolutePath),
     });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromError(error).toString() });
+      return;
+    }
     logger.error(`Error checking path: ${error}`);
     res.status(500).json({ error: String(error) });
   }
@@ -71,12 +73,7 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 // Run model scan
 modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { paths, options } = req.body;
-
-    if (!paths || !Array.isArray(paths) || paths.length === 0) {
-      res.status(400).json({ error: 'No paths provided' });
-      return;
-    }
+    const { paths, options } = api.modelAudit.scan.post.body.parse(req.body);
 
     // Check if modelaudit is installed
     const installed = await checkModelAuditInstalled();
@@ -386,6 +383,10 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       }
     });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromError(error).toString() });
+      return;
+    }
     logger.error(`Error in model scan endpoint: ${error}`);
     res.status(500).json({ error: String(error) });
   }
@@ -394,14 +395,18 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
 // Get all model scans
 modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
   try {
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
-    const audits = await ModelAudit.getMany(limit);
+    const { limit } = api.modelAudit.scans.list.query.parse(req.query);
+    const audits = await ModelAudit.getMany(limit || 100);
 
     res.json({
       scans: audits.map((audit) => audit.toJSON()),
       total: audits.length,
     });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromError(error).toString() });
+      return;
+    }
     logger.error(`Error fetching model audits: ${error}`);
     res.status(500).json({ error: String(error) });
   }
@@ -410,7 +415,8 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
 // Get specific model scan by ID
 modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const audit = await ModelAudit.findById(req.params.id);
+    const { id } = api.modelAudit.scans.byId.params.parse(req.params);
+    const audit = await ModelAudit.findById(id);
 
     if (!audit) {
       res.status(404).json({ error: 'Model scan not found' });
@@ -419,6 +425,10 @@ modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<
 
     res.json(audit.toJSON());
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromError(error).toString() });
+      return;
+    }
     logger.error(`Error fetching model audit: ${error}`);
     res.status(500).json({ error: String(error) });
   }
@@ -427,7 +437,8 @@ modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<
 // Delete model scan
 modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const audit = await ModelAudit.findById(req.params.id);
+    const { id } = api.modelAudit.scans.byId.params.parse(req.params);
+    const audit = await ModelAudit.findById(id);
 
     if (!audit) {
       res.status(404).json({ error: 'Model scan not found' });
@@ -435,8 +446,17 @@ modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promi
     }
 
     await audit.delete();
-    res.json({ success: true, message: 'Model scan deleted successfully' });
+    res.json(
+      api.modelAudit.scans.byId.delete.res.parse({
+        success: true,
+        message: 'Model scan deleted successfully',
+      }),
+    );
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromError(error).toString() });
+      return;
+    }
     logger.error(`Error deleting model audit: ${error}`);
     res.status(500).json({ error: String(error) });
   }

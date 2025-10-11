@@ -225,38 +225,52 @@ export function createApp() {
   });
 
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.body;
-    logger.debug(`[${req.method} ${req.path}] Share request for eval ID: ${id || 'undefined'}`);
-
-    const result = await readResult(id);
-    if (!result) {
-      logger.warn(`Result not found for id: ${id}`);
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
-    const eval_ = await Eval.findById(id);
-    invariant(eval_, 'Eval not found');
-
     try {
+      const { id } = api.results.share.post.body.parse(req.body);
+      logger.debug(`[${req.method} ${req.path}] Share request for eval ID: ${id}`);
+
+      const result = await readResult(id);
+      if (!result) {
+        logger.warn(`Result not found for id: ${id}`);
+        res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
+      const eval_ = await Eval.findById(id);
+      invariant(eval_, 'Eval not found');
+
       const url = await createShareableUrl(eval_, true);
       logger.debug(`Generated share URL for eval ${id}: ${stripAuthFromUrl(url || '')}`);
       res.json({ url });
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: fromError(error).toString() });
+        return;
+      }
       logger.error(
-        `Failed to generate share URL for eval ${id}: ${error instanceof Error ? error.message : error}`,
+        `Failed to generate share URL: ${error instanceof Error ? error.message : error}`,
       );
       res.status(500).json({ error: 'Failed to generate share URL' });
     }
   });
 
   app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
-    const testSuite: TestSuite = {
-      prompts: req.body.prompts as Prompt[],
-      tests: req.body.tests as TestCase[],
-      providers: [],
-    };
-    const results = await synthesizeFromTestSuite(testSuite, {});
-    res.json({ results });
+    try {
+      const { prompts, tests } = api.datasets.generate.post.body.parse(req.body);
+      const testSuite: TestSuite = {
+        prompts: prompts as Prompt[],
+        tests: tests as TestCase[],
+        providers: [],
+      };
+      const results = await synthesizeFromTestSuite(testSuite, {});
+      res.json({ results });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: fromError(error).toString() });
+        return;
+      }
+      logger.error(`Error generating dataset: ${error}`);
+      res.status(500).json({ error: 'Failed to generate dataset' });
+    }
   });
 
   app.use('/api/eval', evalRouter);

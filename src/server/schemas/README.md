@@ -51,12 +51,12 @@ api.{resource}.{endpoint}.{method}.{part}
 
 ### Examples
 
-| HTTP Route | Schema Path |
-|------------|-------------|
-| `GET /api/user/email` | `api.user.email.get.res` |
+| HTTP Route                   | Schema Path                              |
+| ---------------------------- | ---------------------------------------- |
+| `GET /api/user/email`        | `api.user.email.get.res`                 |
 | `PATCH /api/eval/:id/author` | `api.eval.author.update.params/body/res` |
-| `GET /api/results?type=eval` | `api.results.list.query/res` |
-| `GET /api/traces/:traceId` | `api.traces.byId.params/res` |
+| `GET /api/results?type=eval` | `api.results.list.query/res`             |
+| `GET /api/traces/:traceId`   | `api.traces.byId.params/res`             |
 
 ### HTTP Terminology
 
@@ -108,14 +108,10 @@ import { callApiValidated } from '@app/utils/api';
 const userData = await callApiValidated('/user/email', api.user.email.get.res);
 // TypeScript automatically knows: { email: string | null }
 
-const evalData = await callApiValidated(
-  `/eval/${id}/author`,
-  api.eval.author.update.res,
-  {
-    method: 'PATCH',
-    body: JSON.stringify({ author: email }),
-  }
-);
+const evalData = await callApiValidated(`/eval/${id}/author`, api.eval.author.update.res, {
+  method: 'PATCH',
+  body: JSON.stringify({ author: email }),
+});
 // TypeScript knows: { message: string }
 ```
 
@@ -150,11 +146,11 @@ type UserEmail = ApiResponse<typeof api.user.email.get>;
 Reusable atomic schemas:
 
 ```typescript
-Field.id           // z.string().min(1)
-Field.email        // z.string().email()
-Field.message      // z.string()
-Field.boolean      // z.boolean()
-Field.sha256       // z.string().regex(/^[a-f0-9]{64}$/)
+Field.id; // z.string().min(1)
+Field.email; // z.string().email()
+Field.message; // z.string()
+Field.boolean; // z.boolean()
+Field.sha256; // z.string().regex(/^[a-f0-9]{64}$/)
 ```
 
 ### Common Composites (Schema)
@@ -162,15 +158,16 @@ Field.sha256       // z.string().regex(/^[a-f0-9]{64}$/)
 Frequently used object patterns:
 
 ```typescript
-Schema.id          // { id: string }
-Schema.message     // { message: string }
-Schema.success     // { success: boolean, message: string }
-Schema.error       // { error: string }
+Schema.id; // { id: string }
+Schema.message; // { message: string }
+Schema.success; // { success: boolean, message: string }
+Schema.error; // { error: string }
 ```
 
 ### Before/After Comparison
 
 **Before:**
+
 ```typescript
 // Repeated 15+ times across the codebase
 const ParamsSchema = z.object({ id: z.string() });
@@ -178,6 +175,7 @@ const ResponseSchema = z.object({ message: z.string() });
 ```
 
 **After:**
+
 ```typescript
 // Defined once, reused everywhere
 const params = Schema.id;
@@ -189,6 +187,7 @@ const res = Schema.message;
 ### ✅ Discoverability
 
 Type `api.user.` and autocomplete shows:
+
 - email
 - id
 - login
@@ -196,6 +195,7 @@ Type `api.user.` and autocomplete shows:
 - cloudConfig
 
 Type `api.user.email.` and see:
+
 - get
 - update
 - status
@@ -203,6 +203,7 @@ Type `api.user.email.` and see:
 ### ✅ Clear Mapping
 
 The schema path mirrors the HTTP route:
+
 - Route: `GET /api/eval/:id` → Schema: `api.eval.byId.get.params`
 - Route: `PATCH /api/user/email` → Schema: `api.user.email.update.body`
 
@@ -242,7 +243,7 @@ Catch breaking changes immediately:
 // Backend changes response structure
 api.user.email.get.res = z.object({
   email: Field.email.nullable(),
-  verified: Field.boolean,  // NEW FIELD
+  verified: Field.boolean, // NEW FIELD
 });
 
 // Frontend code breaks at runtime with clear error
@@ -316,10 +317,7 @@ app.get('/user/:id/profile', async (req, res) => {
 ### 5. Use in frontend
 
 ```typescript
-const profile = await callApiValidated(
-  `/user/${userId}/profile`,
-  api.user.profile.get.res
-);
+const profile = await callApiValidated(`/user/${userId}/profile`, api.user.profile.get.res);
 // TypeScript knows: { id: string, email: string, username: string }
 ```
 
@@ -351,12 +349,12 @@ const { id } = api.user.id.get.res.parse(...);
 
 ### Examples
 
-| Old | New |
-|-----|-----|
-| `ApiSchemas.User.Get.Response` | `api.user.email.get.res` |
+| Old                                    | New                           |
+| -------------------------------------- | ----------------------------- |
+| `ApiSchemas.User.Get.Response`         | `api.user.email.get.res`      |
 | `ApiSchemas.Eval.UpdateAuthor.Request` | `api.eval.author.update.body` |
-| `ApiSchemas.Results.List.Query` | `api.results.list.query` |
-| `ApiSchemas.Traces.GetById.Params` | `api.traces.byId.params` |
+| `ApiSchemas.Results.List.Query`        | `api.results.list.query`      |
+| `ApiSchemas.Traces.GetById.Params`     | `api.traces.byId.params`      |
 
 ## Best Practices
 
@@ -390,6 +388,7 @@ For a development tool like Promptfoo, this is negligible.
 ### Runtime Performance
 
 Schema validation is fast:
+
 - Simple schema: ~1-10μs
 - Complex nested: ~10-100μs
 - Negligible compared to network latency (50-500ms)

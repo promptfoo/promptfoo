@@ -26,7 +26,7 @@ export const Schema = {
   message: z.object({ message: Field.message }),
   success: z.object({
     success: Field.boolean,
-    message: Field.message
+    message: Field.message,
   }),
   error: z.object({ error: Field.message }),
 } as const;
