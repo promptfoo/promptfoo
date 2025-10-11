@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import logger from '../../logger';
 import { getTraceStore } from '../../tracing/store';
-import { ApiSchemas } from '../apiSchemas';
+import { api } from '../schemas';
 import type { Request, Response } from 'express';
 
 export const tracesRouter = Router();
@@ -11,7 +11,7 @@ export const tracesRouter = Router();
 // Get traces for a specific evaluation
 tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response) => {
   try {
-    const { evaluationId } = ApiSchemas.Traces.GetByEvaluation.Params.parse(req.params);
+    const { evaluationId } = api.traces.byEvaluation.params.parse(req.params);
     logger.info(`[TracesRoute] Fetching traces for evaluation ${evaluationId}`);
 
     const traceStore = getTraceStore();
@@ -32,7 +32,7 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
 // Get a specific trace by ID
 tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
   try {
-    const { traceId } = ApiSchemas.Traces.GetById.Params.parse(req.params);
+    const { traceId } = api.traces.byId.params.parse(req.params);
     logger.debug(`[TracesRoute] Fetching trace ${traceId}`);
 
     const traceStore = getTraceStore();

@@ -11,7 +11,7 @@ import {
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { ApiSchemas } from '../apiSchemas';
+import { api } from '../schemas';
 import type { Request, Response } from 'express';
 
 export const userRouter = Router();
@@ -20,7 +20,7 @@ userRouter.get('/email', async (_req: Request, res: Response): Promise<void> => 
   try {
     const email = getUserEmail();
     // Return 200 with null email instead of 404 to avoid console errors when no email is configured
-    res.json(ApiSchemas.User.Get.Response.parse({ email: email || null }));
+    res.json(api.user.email.get.res.parse({ email: email || null }));
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.error(`Error getting email: ${fromError(error)}`);
@@ -34,7 +34,7 @@ userRouter.get('/email', async (_req: Request, res: Response): Promise<void> => 
 userRouter.get('/id', async (_req: Request, res: Response): Promise<void> => {
   try {
     const id = getUserId();
-    res.json(ApiSchemas.User.GetId.Response.parse({ id }));
+    res.json(api.user.id.get.res.parse({ id }));
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.error(`Error getting user ID: ${fromError(error)}`);
@@ -47,10 +47,10 @@ userRouter.get('/id', async (_req: Request, res: Response): Promise<void> => {
 
 userRouter.post('/email', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email } = ApiSchemas.User.Update.Request.parse(req.body);
+    const { email } = api.user.email.update.body.parse(req.body);
     setUserEmail(email);
     res.json(
-      ApiSchemas.User.Update.Response.parse({
+      api.user.email.update.res.parse({
         success: true,
         message: `Email updated`,
       }),
@@ -78,7 +78,7 @@ userRouter.get('/email/status', async (_req: Request, res: Response): Promise<vo
     const result = await checkEmailStatus();
 
     res.json(
-      ApiSchemas.User.EmailStatus.Response.parse({
+      api.user.email.status.res.parse({
         hasEmail: result.hasEmail,
         email: result.email,
         status: result.status,

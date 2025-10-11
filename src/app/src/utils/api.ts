@@ -38,8 +38,8 @@ export async function callApiValidated<T extends z.ZodType>(
 
 export async function fetchUserEmail(): Promise<string | null> {
   try {
-    const { ApiSchemas } = await import('@promptfoo/server/apiSchemas');
-    const data = await callApiValidated('/user/email', ApiSchemas.User.Get.Response);
+    const { api } = await import('@promptfoo/server/schemas');
+    const data = await callApiValidated('/user/email', api.user.email.get.res);
     return data.email;
   } catch (error) {
     console.error('Error fetching user email:', error);
@@ -49,8 +49,8 @@ export async function fetchUserEmail(): Promise<string | null> {
 
 export async function fetchUserId(): Promise<string | null> {
   try {
-    const { ApiSchemas } = await import('@promptfoo/server/apiSchemas');
-    const data = await callApiValidated('/user/id', ApiSchemas.User.GetId.Response);
+    const { api } = await import('@promptfoo/server/schemas');
+    const data = await callApiValidated('/user/id', api.user.id.get.res);
     return data.id;
   } catch (error) {
     console.error('Error fetching user ID:', error);
@@ -59,8 +59,8 @@ export async function fetchUserId(): Promise<string | null> {
 }
 
 export async function updateEvalAuthor(evalId: string, author: string) {
-  const { ApiSchemas } = await import('@promptfoo/server/apiSchemas');
-  return callApiValidated(`/eval/${evalId}/author`, ApiSchemas.Eval.UpdateAuthor.Response, {
+  const { api } = await import('@promptfoo/server/schemas');
+  return callApiValidated(`/eval/${evalId}/author`, api.eval.author.update.res, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',

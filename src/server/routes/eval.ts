@@ -11,7 +11,7 @@ import EvalResult from '../../models/evalResult';
 import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
-import { ApiSchemas } from '../apiSchemas';
+import { api } from '../schemas';
 import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import type { Request, Response } from 'express';
@@ -85,7 +85,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
 
 evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   try {
-    const { id } = ApiSchemas.Eval.GetJob.Params.parse(req.params);
+    const { id } = api.eval.job.byId.params.parse(req.params);
     const job = evalJobs.get(id);
     if (!job) {
       res.status(404).json({ error: 'Job not found' });
@@ -140,8 +140,8 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
 
 evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.UpdateAuthor.Params.parse(req.params);
-    const { author } = ApiSchemas.Eval.UpdateAuthor.Request.parse(req.body);
+    const { id } = api.eval.author.update.params.parse(req.params);
+    const { author } = api.eval.author.update.body.parse(req.body);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -162,7 +162,7 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     }
 
     res.json(
-      ApiSchemas.Eval.UpdateAuthor.Response.parse({
+      api.eval.author.update.res.parse({
         message: 'Author updated successfully',
       }),
     );
@@ -333,8 +333,8 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.MetadataKeys.Params.parse(req.params);
-    const { comparisonEvalIds = [] } = ApiSchemas.Eval.MetadataKeys.Query.parse(req.query);
+    const { id } = api.eval.metadataKeys.byId.params.parse(req.params);
+    const { comparisonEvalIds = [] } = api.eval.metadataKeys.byId.query.parse(req.query);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -358,7 +358,7 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
 
     const keys = await EvalQueries.getMetadataKeysFromEval(id, comparisonEvalIds);
 
-    const response = ApiSchemas.Eval.MetadataKeys.Response.parse({ keys });
+    const response = api.eval.metadataKeys.byId.res.parse({ keys });
     res.json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -590,9 +590,9 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 
 evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.Delete.Params.parse(req.params);
+    const { id } = api.eval.byId.delete.params.parse(req.params);
     await deleteEval(id);
-    res.json(ApiSchemas.Eval.Delete.Response.parse({ message: 'Eval deleted successfully' }));
+    res.json(api.eval.byId.delete.res.parse({ message: 'Eval deleted successfully' }));
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: fromZodError(error).toString() });

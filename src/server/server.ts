@@ -32,7 +32,7 @@ import {
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, openBrowser } from '../util/server';
-import { ApiSchemas } from './apiSchemas';
+import { api } from './schemas';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
@@ -116,7 +116,7 @@ export function createApp() {
    */
   app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
     try {
-      const query = ApiSchemas.Results.List.Query.parse(req.query);
+      const query = api.results.list.query.parse(req.query);
       const previousResults = await getEvalSummaries(
         query.datasetId,
         query.type,
@@ -135,7 +135,7 @@ export function createApp() {
 
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
     try {
-      const { id } = ApiSchemas.Results.GetById.Params.parse(req.params);
+      const { id } = api.results.byId.params.parse(req.params);
       const file = await readResult(id);
       if (!file) {
         res.status(404).send('Result not found');
@@ -161,7 +161,7 @@ export function createApp() {
 
   app.get('/api/history', async (req: Request, res: Response): Promise<void> => {
     try {
-      const query = ApiSchemas.History.List.Query.parse(req.query);
+      const query = api.history.list.query.parse(req.query);
       const tag =
         query.tagName && query.tagValue ? { key: query.tagName, value: query.tagValue } : undefined;
       const results = await getStandaloneEvals({
@@ -183,7 +183,7 @@ export function createApp() {
 
   app.get('/api/prompts/:sha256hash', async (req: Request, res: Response): Promise<void> => {
     try {
-      const { sha256hash } = ApiSchemas.Prompts.GetByHash.Params.parse(req.params);
+      const { sha256hash } = api.prompts.byHash.params.parse(req.params);
       const prompts = await getPromptsForTestCasesHash(sha256hash);
       res.json({ data: prompts });
     } catch (error) {
@@ -202,7 +202,7 @@ export function createApp() {
 
   app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
     try {
-      const { id } = ApiSchemas.Results.ShareCheckDomain.Query.parse(req.query);
+      const { id } = api.results.share.checkDomain.query.parse(req.query);
 
       const eval_ = await Eval.findById(id);
       if (!eval_) {
