@@ -84,31 +84,40 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
 });
 
 evalRouter.get('/job/:id', (req: Request, res: Response): void => {
-  const id = req.params.id;
-  const job = evalJobs.get(id);
-  if (!job) {
-    res.status(404).json({ error: 'Job not found' });
-    return;
-  }
-  if (job.status === 'complete') {
-    res.json({
-      status: 'complete',
-      result: job.result,
-      evalId: job.evalId,
-      logs: job.logs,
-    });
-  } else if (job.status === 'error') {
-    res.json({
-      status: 'error',
-      logs: job.logs,
-    });
-  } else {
-    res.json({
-      status: 'in-progress',
-      progress: job.progress,
-      total: job.total,
-      logs: job.logs,
-    });
+  try {
+    const { id } = ApiSchemas.Eval.GetJob.Params.parse(req.params);
+    const job = evalJobs.get(id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    if (job.status === 'complete') {
+      res.json({
+        status: 'complete',
+        result: job.result,
+        evalId: job.evalId,
+        logs: job.logs,
+      });
+    } else if (job.status === 'error') {
+      res.json({
+        status: 'error',
+        logs: job.logs,
+      });
+    } else {
+      res.json({
+        status: 'in-progress',
+        progress: job.progress,
+        total: job.total,
+        logs: job.logs,
+      });
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+      return;
+    }
+    logger.error(`Error fetching job: ${error}`);
+    res.status(500).json({ error: 'Failed to fetch job' });
   }
 });
 
@@ -580,11 +589,16 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
   try {
+    const { id } = ApiSchemas.Eval.Delete.Params.parse(req.params);
     await deleteEval(id);
-    res.json({ message: 'Eval deleted successfully' });
-  } catch {
+    res.json(ApiSchemas.Eval.Delete.Response.parse({ message: 'Eval deleted successfully' }));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+      return;
+    }
+    logger.error(`Error deleting eval: ${error}`);
     res.status(500).json({ error: 'Failed to delete eval' });
   }
 });

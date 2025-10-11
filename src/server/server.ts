@@ -9,6 +9,7 @@ import path from 'node:path';
 
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
+import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
@@ -31,6 +32,7 @@ import {
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, openBrowser } from '../util/server';
+import { ApiSchemas } from './apiSchemas';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
@@ -42,7 +44,6 @@ import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary } from '../types/index';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -113,34 +114,42 @@ export function createApp() {
   /**
    * Fetches summaries of all evals, optionally for a given dataset.
    */
-  app.get(
-    '/api/results',
-    async (
-      req: Request<
-        {},
-        {},
-        {},
-        { datasetId?: string; type?: 'redteam' | 'eval'; includeProviders?: boolean }
-      >,
-      res: Response<{ data: EvalSummary[] }>,
-    ): Promise<void> => {
+  app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const query = ApiSchemas.Results.List.Query.parse(req.query);
       const previousResults = await getEvalSummaries(
-        req.query.datasetId,
-        req.query.type,
-        req.query.includeProviders,
+        query.datasetId,
+        query.type,
+        query.includeProviders,
       );
       res.json({ data: previousResults });
-    },
-  );
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: fromError(error).toString() });
+        return;
+      }
+      logger.error(`Error fetching results: ${error}`);
+      res.status(500).json({ error: 'Failed to fetch results' });
+    }
+  });
 
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
-    const file = await readResult(id);
-    if (!file) {
-      res.status(404).send('Result not found');
-      return;
+    try {
+      const { id } = ApiSchemas.Results.GetById.Params.parse(req.params);
+      const file = await readResult(id);
+      if (!file) {
+        res.status(404).send('Result not found');
+        return;
+      }
+      res.json({ data: file.result });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: fromError(error).toString() });
+        return;
+      }
+      logger.error(`Error fetching result: ${error}`);
+      res.status(500).json({ error: 'Failed to fetch result' });
     }
-    res.json({ data: file.result });
   });
 
   app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {
@@ -151,23 +160,40 @@ export function createApp() {
   });
 
   app.get('/api/history', async (req: Request, res: Response): Promise<void> => {
-    const tagName = req.query.tagName as string | undefined;
-    const tagValue = req.query.tagValue as string | undefined;
-    const description = req.query.description as string | undefined;
-    const tag = tagName && tagValue ? { key: tagName, value: tagValue } : undefined;
-    const results = await getStandaloneEvals({
-      tag,
-      description,
-    });
-    res.json({
-      data: results,
-    });
+    try {
+      const query = ApiSchemas.History.List.Query.parse(req.query);
+      const tag =
+        query.tagName && query.tagValue ? { key: query.tagName, value: query.tagValue } : undefined;
+      const results = await getStandaloneEvals({
+        tag,
+        description: query.description,
+      });
+      res.json({
+        data: results,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: fromError(error).toString() });
+        return;
+      }
+      logger.error(`Error fetching history: ${error}`);
+      res.status(500).json({ error: 'Failed to fetch history' });
+    }
   });
 
   app.get('/api/prompts/:sha256hash', async (req: Request, res: Response): Promise<void> => {
-    const sha256hash = req.params.sha256hash;
-    const prompts = await getPromptsForTestCasesHash(sha256hash);
-    res.json({ data: prompts });
+    try {
+      const { sha256hash } = ApiSchemas.Prompts.GetByHash.Params.parse(req.params);
+      const prompts = await getPromptsForTestCasesHash(sha256hash);
+      res.json({ data: prompts });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: fromError(error).toString() });
+        return;
+      }
+      logger.error(`Error fetching prompts: ${error}`);
+      res.status(500).json({ error: 'Failed to fetch prompts' });
+    }
   });
 
   app.get('/api/datasets', async (_req: Request, res: Response): Promise<void> => {
@@ -175,23 +201,27 @@ export function createApp() {
   });
 
   app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
-    const id = req.query.id as string | undefined;
-    if (!id || id === 'undefined') {
-      logger.warn(`Missing or invalid id parameter in ${req.method} ${req.path}`);
-      res.status(400).json({ error: 'Missing id parameter' });
-      return;
-    }
+    try {
+      const { id } = ApiSchemas.Results.ShareCheckDomain.Query.parse(req.query);
 
-    const eval_ = await Eval.findById(id);
-    if (!eval_) {
-      logger.warn(`Eval not found for id: ${id}`);
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
+      const eval_ = await Eval.findById(id);
+      if (!eval_) {
+        logger.warn(`Eval not found for id: ${id}`);
+        res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
 
-    const { domain } = determineShareDomain(eval_);
-    const isCloudEnabled = cloudConfig.isEnabled();
-    res.json({ domain, isCloudEnabled });
+      const { domain } = determineShareDomain(eval_);
+      const isCloudEnabled = cloudConfig.isEnabled();
+      res.json({ domain, isCloudEnabled });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: fromError(error).toString() });
+        return;
+      }
+      logger.error(`Error checking share domain: ${error}`);
+      res.status(500).json({ error: 'Failed to check share domain' });
+    }
   });
 
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {

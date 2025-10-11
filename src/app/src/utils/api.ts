@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import useApiConfig from '@app/stores/apiConfig';
 
 export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
@@ -5,17 +6,40 @@ export async function callApi(path: string, options: RequestInit = {}): Promise<
   return fetch(`${apiBaseUrl}/api${path}`, options);
 }
 
+/**
+ * Makes an API call and validates the response against a Zod schema.
+ * Automatically infers TypeScript types from the schema.
+ *
+ * @param path - API endpoint path (e.g., '/user/email')
+ * @param schema - Zod schema to validate the response
+ * @param options - Fetch options (method, headers, body, etc.)
+ * @returns Promise with validated and typed response data
+ * @throws Error if API call fails or response doesn't match schema
+ *
+ * @example
+ * const userData = await callApiValidated('/user/email', ApiSchemas.User.Get.Response);
+ * // TypeScript knows: { email: string | null }
+ */
+export async function callApiValidated<T extends z.ZodType>(
+  path: string,
+  schema: T,
+  options?: RequestInit,
+): Promise<z.infer<T>> {
+  const response = await callApi(path, options);
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    throw new Error(`API error (${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+  return schema.parse(data);
+}
+
 export async function fetchUserEmail(): Promise<string | null> {
   try {
-    const response = await callApi('/user/email', {
-      method: 'GET',
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch user email');
-    }
-
-    const data = await response.json();
+    const { ApiSchemas } = await import('@promptfoo/server/apiSchemas');
+    const data = await callApiValidated('/user/email', ApiSchemas.User.Get.Response);
     return data.email;
   } catch (error) {
     console.error('Error fetching user email:', error);
@@ -25,15 +49,8 @@ export async function fetchUserEmail(): Promise<string | null> {
 
 export async function fetchUserId(): Promise<string | null> {
   try {
-    const response = await callApi('/user/id', {
-      method: 'GET',
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch user ID');
-    }
-
-    const data = await response.json();
+    const { ApiSchemas } = await import('@promptfoo/server/apiSchemas');
+    const data = await callApiValidated('/user/id', ApiSchemas.User.GetId.Response);
     return data.id;
   } catch (error) {
     console.error('Error fetching user ID:', error);
@@ -42,17 +59,12 @@ export async function fetchUserId(): Promise<string | null> {
 }
 
 export async function updateEvalAuthor(evalId: string, author: string) {
-  const response = await callApi(`/eval/${evalId}/author`, {
+  const { ApiSchemas } = await import('@promptfoo/server/apiSchemas');
+  return callApiValidated(`/eval/${evalId}/author`, ApiSchemas.Eval.UpdateAuthor.Response, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ author }),
   });
-
-  if (!response.ok) {
-    throw new Error('Failed to update eval author');
-  }
-
-  return response.json();
 }

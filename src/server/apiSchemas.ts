@@ -33,6 +33,24 @@ export const ApiSchemas = {
     },
   },
   Eval: {
+    GetById: {
+      Params: z.object({
+        id: z.string(),
+      }),
+    },
+    GetJob: {
+      Params: z.object({
+        id: z.string(),
+      }),
+    },
+    Delete: {
+      Params: z.object({
+        id: z.string(),
+      }),
+      Response: z.object({
+        message: z.string(),
+      }),
+    },
     UpdateAuthor: {
       Params: z.object({
         id: z.string(),
@@ -53,6 +71,92 @@ export const ApiSchemas = {
       }),
       Response: z.object({
         keys: z.array(z.string()),
+      }),
+    },
+  },
+  Results: {
+    GetById: {
+      Params: z.object({
+        id: z.string(),
+      }),
+    },
+    List: {
+      Query: z.object({
+        datasetId: z.string().optional(),
+        type: z.enum(['redteam', 'eval']).optional(),
+        includeProviders: z.coerce.boolean().optional(),
+      }),
+    },
+    ShareCheckDomain: {
+      Query: z.object({
+        id: z.string(),
+      }),
+    },
+  },
+  Prompts: {
+    GetByHash: {
+      Params: z.object({
+        sha256hash: z.string(),
+      }),
+    },
+  },
+  History: {
+    List: {
+      Query: z.object({
+        tagName: z.string().optional(),
+        tagValue: z.string().optional(),
+        description: z.string().optional(),
+      }),
+    },
+  },
+  Traces: {
+    GetById: {
+      Params: z.object({
+        traceId: z.string(),
+      }),
+    },
+    GetByEvaluation: {
+      Params: z.object({
+        evaluationId: z.string(),
+      }),
+    },
+  },
+  ModelAudit: {
+    GetScanById: {
+      Params: z.object({
+        id: z.string(),
+      }),
+    },
+    DeleteScan: {
+      Params: z.object({
+        id: z.string(),
+      }),
+      Response: z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+    },
+    ListScans: {
+      Query: z.object({
+        limit: z.coerce.number().positive().optional(),
+      }),
+    },
+  },
+  Configs: {
+    GetByTypeAndId: {
+      Params: z.object({
+        type: z.string(),
+        id: z.string(),
+      }),
+    },
+    GetByType: {
+      Params: z.object({
+        type: z.string(),
+      }),
+    },
+    List: {
+      Query: z.object({
+        type: z.string().optional(),
       }),
     },
   },

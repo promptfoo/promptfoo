@@ -65,6 +65,7 @@
   "dependencies": {
     "redent": "^4.0.0",
     "reselect": "^5.1.1",
-    "set-cookie-parser": "^2.7.1"
+    "set-cookie-parser": "^2.7.1",
+    "zod": "^3.25.76"
   }
 }
