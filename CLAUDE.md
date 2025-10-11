@@ -329,6 +329,9 @@ find examples -name "package.json" -not -path "*/node_modules/*" -type f
 
 # Apply updates with -u flag, then verify
 npm run build && npm test && npm run lint && npm run format
+
+# Check version consistency across workspaces (required by CI)
+npx check-dependency-version-consistency
 ```
 
 ### Critical Rules
