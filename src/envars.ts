@@ -318,6 +318,10 @@ type EnvVars = {
   // Slack
   SLACK_BOT_TOKEN?: string;
 
+  // Snowflake
+  SNOWFLAKE_ACCOUNT_IDENTIFIER?: string;
+  SNOWFLAKE_API_KEY?: string;
+
   // Together AI
   TOGETHER_API_KEY?: string;
 
