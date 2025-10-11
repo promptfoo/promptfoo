@@ -53,7 +53,7 @@ function TrustBar() {
     'Top 5 global retailer',
     'Tier-1 telecom',
     'Top 3 global strategy consultancy',
-    'Top legal research platform',
+    'Large public legal firm',
     'Top 5 U.S. healthcare company',
     'Nationwide 5G network operator',
     'Top European insurer',
