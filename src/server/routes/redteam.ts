@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
+import { fromError } from 'zod-validation-error';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { REDTEAM_MODEL } from '../../redteam/constants';
@@ -8,6 +10,7 @@ import { redteamProviderManager } from '../../redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { api } from '../schemas';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
@@ -16,12 +19,7 @@ export const redteamRouter = Router();
 // Generate a single test case for a specific plugin
 redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { pluginId, config } = req.body;
-
-    if (!pluginId) {
-      res.status(400).json({ error: 'Plugin ID is required' });
-      return;
-    }
+    const { pluginId, config } = api.redteam.generateTest.post.body.parse(req.body);
 
     // Find the plugin
     const plugin = Plugins.find((p) => p.key === pluginId);
@@ -135,6 +133,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       metadata: testCase.metadata,
     });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromError(error).toString() });
+      return;
+    }
     logger.error(`Error generating test case: ${error}`);
     res.status(500).json({
       error: 'Failed to generate test case',
@@ -148,88 +150,99 @@ let currentJobId: string | null = null;
 let currentAbortController: AbortController | null = null;
 
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
-  // If there's a current job running, abort it
-  if (currentJobId) {
-    if (currentAbortController) {
-      currentAbortController.abort();
+  try {
+    const { config, force, verbose, delay, maxConcurrency } = api.redteam.run.post.body.parse(
+      req.body,
+    );
+
+    // If there's a current job running, abort it
+    if (currentJobId) {
+      if (currentAbortController) {
+        currentAbortController.abort();
+      }
+      const existingJob = evalJobs.get(currentJobId);
+      if (existingJob) {
+        existingJob.status = 'error';
+        existingJob.logs.push('Job cancelled - new job started');
+      }
     }
-    const existingJob = evalJobs.get(currentJobId);
-    if (existingJob) {
-      existingJob.status = 'error';
-      existingJob.logs.push('Job cancelled - new job started');
-    }
-  }
+    const id = uuidv4();
+    currentJobId = id;
+    currentAbortController = new AbortController();
 
-  const { config, force, verbose, delay, maxConcurrency } = req.body;
-  const id = uuidv4();
-  currentJobId = id;
-  currentAbortController = new AbortController();
-
-  // Initialize job status with empty logs array
-  evalJobs.set(id, {
-    evalId: null,
-    status: 'in-progress',
-    progress: 0,
-    total: 0,
-    result: null,
-    logs: [],
-  });
-
-  // Set web UI mode
-  cliState.webUI = true;
-
-  // Validate and normalize maxConcurrency
-  const normalizedMaxConcurrency = Math.max(1, Number(maxConcurrency || '1'));
-
-  // Run redteam in background
-  doRedteamRun({
-    liveRedteamConfig: config,
-    force,
-    verbose,
-    delay: Number(delay || '0'),
-    maxConcurrency: normalizedMaxConcurrency,
-    logCallback: (message: string) => {
-      if (currentJobId === id) {
-        const job = evalJobs.get(id);
-        if (job) {
-          job.logs.push(message);
-        }
-      }
-    },
-    abortSignal: currentAbortController.signal,
-  })
-    .then(async (evalResult) => {
-      const summary = evalResult ? await evalResult.toEvaluateSummary() : null;
-      const job = evalJobs.get(id);
-      if (job && currentJobId === id) {
-        job.status = 'complete';
-        job.result = summary;
-        job.evalId = evalResult?.id ?? null;
-      }
-      if (currentJobId === id) {
-        cliState.webUI = false;
-        currentJobId = null;
-        currentAbortController = null;
-      }
-    })
-    .catch((error) => {
-      logger.error(`Error running red team: ${error}\n${error.stack || ''}`);
-      const job = evalJobs.get(id);
-      if (job && currentJobId === id) {
-        job.status = 'error';
-        job.logs.push(`Error: ${error.message}`);
-        if (error.stack) {
-          job.logs.push(`Stack trace: ${error.stack}`);
-        }
-      }
-      if (currentJobId === id) {
-        cliState.webUI = false;
-        currentJobId = null;
-        currentAbortController = null;
-      }
+    // Initialize job status with empty logs array
+    evalJobs.set(id, {
+      evalId: null,
+      status: 'in-progress',
+      progress: 0,
+      total: 0,
+      result: null,
+      logs: [],
     });
 
-  res.json({ id });
+    // Set web UI mode
+    cliState.webUI = true;
+
+    // Validate and normalize maxConcurrency
+    const normalizedMaxConcurrency = Math.max(1, Number(maxConcurrency || '1'));
+
+    // Run redteam in background
+    doRedteamRun({
+      liveRedteamConfig: config,
+      force,
+      verbose,
+      delay: Number(delay || '0'),
+      maxConcurrency: normalizedMaxConcurrency,
+      logCallback: (message: string) => {
+        if (currentJobId === id) {
+          const job = evalJobs.get(id);
+          if (job) {
+            job.logs.push(message);
+          }
+        }
+      },
+      abortSignal: currentAbortController.signal,
+    })
+      .then(async (evalResult) => {
+        const summary = evalResult ? await evalResult.toEvaluateSummary() : null;
+        const job = evalJobs.get(id);
+        if (job && currentJobId === id) {
+          job.status = 'complete';
+          job.result = summary;
+          job.evalId = evalResult?.id ?? null;
+        }
+        if (currentJobId === id) {
+          cliState.webUI = false;
+          currentJobId = null;
+          currentAbortController = null;
+        }
+      })
+      .catch((error) => {
+        logger.error(`Error running red team: ${error}\n${error.stack || ''}`);
+        const job = evalJobs.get(id);
+        if (job && currentJobId === id) {
+          job.status = 'error';
+          job.logs.push(`Error: ${error.message}`);
+          if (error.stack) {
+            job.logs.push(`Stack trace: ${error.stack}`);
+          }
+        }
+        if (currentJobId === id) {
+          cliState.webUI = false;
+          currentJobId = null;
+          currentAbortController = null;
+        }
+      });
+
+    res.json(api.redteam.run.post.res.parse({ id }));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromError(error).toString() });
+      return;
+    }
+    logger.error(`Error running red team: ${error}`);
+    res.status(500).json({ error: 'Failed to start red team run' });
+  }
 });
 
 redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {

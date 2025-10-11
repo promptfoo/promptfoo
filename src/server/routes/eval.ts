@@ -122,18 +122,18 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
 });
 
 evalRouter.patch('/:id', (req: Request, res: Response): void => {
-  const id = req.params.id;
-  const { table, config } = req.body;
-
-  if (!id) {
-    res.status(400).json({ error: 'Missing id' });
-    return;
-  }
-
   try {
+    const { id } = api.eval.byId.patch.params.parse(req.params);
+    const { table, config } = api.eval.byId.patch.body.parse(req.body);
+
     updateResult(id, config, table);
     res.json({ message: 'Eval updated successfully' });
-  } catch {
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+      return;
+    }
+    logger.error(`Error updating eval: ${error}`);
     res.status(500).json({ error: 'Failed to update eval table' });
   }
 });
@@ -375,37 +375,33 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
 });
 
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const results = req.body as unknown as EvalResult[];
-
-  if (!Array.isArray(results)) {
-    res.status(400).json({ error: 'Results must be an array' });
-    return;
-  }
-  const eval_ = await Eval.findById(id);
-  if (!eval_) {
-    res.status(404).json({ error: 'Eval not found' });
-    return;
-  }
   try {
+    const { id } = api.eval.results.byId.post.params.parse(req.params);
+    const results = api.eval.results.byId.post.body.parse(req.body) as unknown as EvalResult[];
+
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
     await eval_.setResults(results);
+    res.status(204).send();
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+      return;
+    }
     logger.error(`Failed to add results to eval: ${error}`);
     res.status(500).json({ error: 'Failed to add results to eval' });
-    return;
   }
-  res.status(204).send();
 });
 
 evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> => {
-  const { evaluationId, testIndex, prompt, variables } = req.body;
-
-  if (!evaluationId || !prompt) {
-    res.status(400).json({ error: 'Missing required parameters' });
-    return;
-  }
-
   try {
+    const { evaluationId, testIndex, prompt, variables } = api.eval.replay.post.body.parse(
+      req.body,
+    );
     // Load the evaluation to get the provider configuration
     const eval_ = await Eval.findById(evaluationId);
     if (!eval_) {
@@ -478,6 +474,10 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       response: firstResult?.response, // Include full response for debugging
     });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+      return;
+    }
     logger.error(`Failed to replay evaluation: ${error}`);
     res.status(500).json({ error: 'Failed to replay evaluation' });
   }
