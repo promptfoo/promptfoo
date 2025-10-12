@@ -34,19 +34,21 @@ function HeroSection() {
 
 function GuardrailsHeader() {
   return (
-    <header className={clsx('hero hero--primary', styles.heroBanner)}>
+    <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
-        <h1 className={styles.heroTitle}>AI Guardrails that learn & adapt</h1>
-        <p className={styles.heroSubtitle}>
-          Self-improving protection powered by continuous red teaming feedback
-        </p>
-        <div className={styles.buttons}>
-          <Link
-            className={clsx('button button--secondary button--lg', styles.buttonPrimary)}
-            to="/contact/"
-          >
-            Request a demo
-          </Link>
+        <div className={styles.heroContent}>
+          <h1 className={styles.heroTitle}>AI Guardrails that learn & adapt</h1>
+          <p className={styles.heroSubtitle}>
+            Self-improving protection powered by continuous red teaming feedback
+          </p>
+          <div className={styles.heroButtons}>
+            <Link
+              className={clsx('button button--primary button--lg', styles.buttonPrimary)}
+              to="/contact/"
+            >
+              Request a Demo
+            </Link>
+          </div>
         </div>
       </div>
       <HeroSection />
@@ -83,7 +85,11 @@ function BenefitsSection() {
   return (
     <section className={styles.benefitsSection}>
       <div className="container">
-        <h2 className={styles.sectionTitle}>Why choose our adaptive guardrails?</h2>
+        <div className={styles.sectionEyebrow}>THE ADAPTIVE ADVANTAGE</div>
+        <h2 className={styles.sectionTitle}>Why choose adaptive guardrails?</h2>
+        <p className={styles.sectionSubtitle}>
+          Move beyond static rules to guardrails that evolve with emerging threats
+        </p>
         <div className={styles.benefitsList}>
           <div className={styles.benefitItem}>
             <ShieldIcon className={styles.benefitIcon} />
@@ -135,8 +141,9 @@ function ActionOrientedSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>Guardrails that get smarter over time</h2>
-        <p>
+        <div className={styles.sectionEyebrow}>ADAPTIVE LEARNING</div>
+        <h2 className={styles.sectionTitle}>Guardrails that get smarter over time</h2>
+        <p className={styles.sectionSubtitle}>
           Our unique feedback loop between red teaming and guardrails creates a continuously
           improving defense system.
         </p>
@@ -156,8 +163,9 @@ function ContinuousMonitoringSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>Third-Party Guardrail Validation</h2>
-        <p>
+        <div className={styles.sectionEyebrow}>INDEPENDENT VALIDATION</div>
+        <h2 className={styles.sectionTitle}>Third-Party Guardrail Validation</h2>
+        <p className={styles.sectionSubtitle}>
           Already using another guardrail system? Our platform can validate and improve any
           guardrail solution.
         </p>
@@ -176,16 +184,25 @@ function ContinuousMonitoringSection() {
 
 function CallToActionSection() {
   return (
-    <section className={styles.callToActionSection}>
+    <section className={styles.finalCTA}>
       <div className="container">
-        <h2>Upgrade to guardrails that learn and adapt</h2>
-        <div className={styles.buttons}>
+        <h2 className={styles.finalCTATitle}>Upgrade to guardrails that learn and adapt</h2>
+        <p className={styles.finalCTASubtitle}>
+          Join leading enterprises using adaptive AI guardrails to stay ahead of emerging threats.
+        </p>
+        <div className={styles.finalCTAButtons}>
+          <Link className="button button--primary button--lg" to="/contact/">
+            Request Demo
+          </Link>
           <Link
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
-            to="/contact/"
+            to="/docs/guides/prevent-prompt-injection"
           >
-            Request a Demo
+            View Documentation
           </Link>
+        </div>
+        <div className={styles.finalCTATrust}>
+          <p>✓ Self-improving • ✓ Third-party validation • ✓ Cloud or on-premise</p>
         </div>
       </div>
     </section>

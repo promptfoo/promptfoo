@@ -38,19 +38,27 @@ function HeroSection() {
 
 function ModelSecurityHeader() {
   return (
-    <header className={clsx('hero hero--primary', styles.heroBanner)}>
+    <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
-        <h1 className={styles.heroTitle}>Complete AI model security</h1>
-        <p className={styles.heroSubtitle}>
-          End-to-end protection from model files to deployed instances
-        </p>
-        <div className={styles.buttons}>
-          <Link
-            className={clsx('button button--primary button--lg', styles.buttonPrimary)}
-            to="/contact/"
-          >
-            Request Demo
-          </Link>
+        <div className={styles.heroContent}>
+          <h1 className={styles.heroTitle}>Complete AI model security</h1>
+          <p className={styles.heroSubtitle}>
+            End-to-end protection from model files to deployed instances
+          </p>
+          <div className={styles.heroButtons}>
+            <Link
+              className={clsx('button button--primary button--lg', styles.buttonPrimary)}
+              to="/contact/"
+            >
+              Request Demo
+            </Link>
+            <Link
+              className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+              to="/docs/model-audit/"
+            >
+              Try Model Scanner
+            </Link>
+          </div>
         </div>
       </div>
       <HeroSection />
@@ -62,8 +70,11 @@ function ComprehensiveApproachSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>End-to-End AI Security</h2>
-        <p>Our comprehensive model security platform protects your entire AI pipeline</p>
+        <div className={styles.sectionEyebrow}>COMPREHENSIVE PROTECTION</div>
+        <h2 className={styles.sectionTitle}>End-to-End AI Security</h2>
+        <p className={styles.sectionSubtitle}>
+          Our comprehensive model security platform protects your entire AI pipeline
+        </p>
 
         <div className={styles.securityFlowContainer}>
           <div className={styles.securityFlowStep}>
@@ -148,7 +159,11 @@ function ComplianceFrameworksSection() {
   return (
     <section className={styles.featuresSection}>
       <div className="container">
-        <h2>Comprehensive Compliance Framework Coverage</h2>
+        <div className={styles.sectionEyebrow}>COMPLIANCE FRAMEWORKS</div>
+        <h2 className={styles.sectionTitle}>Comprehensive Framework Coverage</h2>
+        <p className={styles.sectionSubtitle}>
+          Built-in support for major security and compliance frameworks
+        </p>
         <div className={styles.features}>
           <div className={styles.featureItem}>
             <h3>OWASP Top 10 for LLMs</h3>
@@ -184,8 +199,9 @@ function SecurityAssessmentSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>Complete AI Model Security Assessment</h2>
-        <p>
+        <div className={styles.sectionEyebrow}>UNIFIED WORKFLOW</div>
+        <h2 className={styles.sectionTitle}>Complete AI Model Security Assessment</h2>
+        <p className={styles.sectionSubtitle}>
           A unified workflow to identify, test, and document all aspects of your AI model security
         </p>
         <div className={styles.securityAssessmentSteps}>
@@ -222,7 +238,11 @@ function BenefitsSection() {
   return (
     <section className={styles.benefitsSection}>
       <div className="container">
+        <div className={styles.sectionEyebrow}>KEY BENEFITS</div>
         <h2 className={styles.sectionTitle}>Why choose our unified security platform?</h2>
+        <p className={styles.sectionSubtitle}>
+          Complete lifecycle protection with seamless integration and compliance mapping
+        </p>
         <div className={styles.benefitsList}>
           <div className={styles.benefitItem}>
             <ShieldIcon className={styles.benefitIcon} />
@@ -274,8 +294,9 @@ function ComparisonSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>Compare and Benchmark Foundation Models</h2>
-        <p>
+        <div className={styles.sectionEyebrow}>MODEL BENCHMARKING</div>
+        <h2 className={styles.sectionTitle}>Compare and Benchmark Foundation Models</h2>
+        <p className={styles.sectionSubtitle}>
           Run side-by-side security assessments of different models to identify the most secure
           option for your requirements.
         </p>
@@ -293,19 +314,26 @@ function ComparisonSection() {
 
 function CallToActionSection() {
   return (
-    <section className={styles.callToActionSection}>
+    <section className={styles.finalCTA}>
       <div className="container">
-        <h2>Get complete AI model security coverage</h2>
-        <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/model-audit/">
-            Try Model Scanner Free
+        <h2 className={styles.finalCTATitle}>Get complete AI model security coverage</h2>
+        <p className={styles.finalCTASubtitle}>
+          Protect your entire AI pipeline with comprehensive security from model files to deployed
+          instances.
+        </p>
+        <div className={styles.finalCTAButtons}>
+          <Link className="button button--primary button--lg" to="/contact/">
+            Request Demo
           </Link>
           <Link
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
-            to="/contact/"
+            to="/docs/model-audit/"
           >
-            Get a Demo
+            Try Model Scanner Free
           </Link>
+        </div>
+        <div className={styles.finalCTATrust}>
+          <p>✓ File-level scanning • ✓ Behavioral testing • ✓ Framework compliance</p>
         </div>
       </div>
     </section>

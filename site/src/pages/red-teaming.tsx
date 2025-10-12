@@ -42,25 +42,28 @@ function HeroSection() {
 
 function RedTeamingHeader() {
   return (
-    <header className={clsx('hero hero--primary', styles.heroBanner)}>
+    <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
-        <h1 className={styles.heroTitle}>Red Teaming for AI Applications</h1>
-        <p className={styles.heroSubtitle}>
-          The most widely adopted platform for LLM security testing
-        </p>
-        <div className={styles.buttons}>
-          <Link
-            className={clsx('button button--primary button--lg', styles.buttonPrimary)}
-            to="/docs/red-team/quickstart"
-          >
-            Get Started
-          </Link>
-          <Link
-            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
-            to="/contact/"
-          >
-            Request a demo
-          </Link>
+        <div className={styles.heroContent}>
+          <h1 className={styles.heroTitle}>Red Teaming for AI Applications</h1>
+          <p className={styles.heroSubtitle}>
+            Application-specific security testing trusted by Fortune 100 companies and 200,000+
+            developers
+          </p>
+          <div className={styles.heroButtons}>
+            <Link
+              className={clsx('button button--primary button--lg', styles.buttonPrimary)}
+              to="/contact/"
+            >
+              Request a Demo
+            </Link>
+            <Link
+              className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+              to="/docs/red-team/quickstart"
+            >
+              Get Started
+            </Link>
+          </div>
         </div>
       </div>
       <HeroSection />
@@ -72,7 +75,12 @@ function FeaturesSection() {
   return (
     <section className={styles.featuresSection}>
       <div className="container">
-        <h2>Comprehensive Coverage of AI Security Risks</h2>
+        <div className={styles.sectionEyebrow}>COMPREHENSIVE SECURITY COVERAGE</div>
+        <h2 className={styles.sectionTitle}>Full spectrum AI vulnerability testing</h2>
+        <p className={styles.sectionSubtitle}>
+          From prompt injections to data exfiltration, we test for 50+ vulnerability types that
+          target your specific application.
+        </p>
         <div className={styles.features}>
           <div className={styles.featureItem}>
             <h3>Prompt Injection & Jailbreaking</h3>
@@ -139,7 +147,11 @@ function DifferentiatorsSection() {
   return (
     <section className={styles.benefitsSection}>
       <div className="container">
-        <h2 className={styles.sectionTitle}>Why choose Promptfoo for red teaming?</h2>
+        <div className={styles.sectionEyebrow}>THE PROMPTFOO ADVANTAGE</div>
+        <h2 className={styles.sectionTitle}>Why teams choose Promptfoo for red teaming</h2>
+        <p className={styles.sectionSubtitle}>
+          Battle-tested technology that scales from startups to Fortune 100 enterprises
+        </p>
         <div className={styles.benefitsList}>
           <div className={styles.benefitItem}>
             <SecurityIcon className={styles.benefitIcon} />
@@ -230,8 +242,11 @@ function ActionOrientedSection() {
   return (
     <section className={`${styles.actionOrientedSection} ${styles.carouselWrapper}`}>
       <div className={`container ${styles.carouselContainer}`}>
-        <h2>We implement the latest ML research so you don't have to</h2>
-        <p>
+        <div className={styles.sectionEyebrow}>HOW IT WORKS</div>
+        <h2 className={styles.sectionTitle}>
+          We implement the latest ML research so you don't have to
+        </h2>
+        <p className={styles.sectionSubtitle}>
           Stay on top of the latest attack vectors and vulnerabilities through our simple interface.
         </p>
 
@@ -292,8 +307,12 @@ function ContinuousMonitoringSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>Continuous Monitoring</h2>
-        <p>Detect and respond to new vulnerabilities as they emerge with real-time monitoring.</p>
+        <div className={styles.sectionEyebrow}>CONTINUOUS PROTECTION</div>
+        <h2 className={styles.sectionTitle}>Real-time threat monitoring</h2>
+        <p className={styles.sectionSubtitle}>
+          Detect and respond to new vulnerabilities as they emerge with continuous security
+          monitoring.
+        </p>
         <div className={styles.screenshotPlaceholder}>
           <img
             loading="lazy"
@@ -310,8 +329,12 @@ function ComplianceSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>Framework Compliance</h2>
-        <p>Enforce compliance with industry frameworks and standards.</p>
+        <div className={styles.sectionEyebrow}>REGULATORY COMPLIANCE</div>
+        <h2 className={styles.sectionTitle}>Built-in framework compliance</h2>
+        <p className={styles.sectionSubtitle}>
+          Automatically map findings to OWASP, NIST, EU AI Act, and custom frameworks for
+          audit-ready reporting.
+        </p>
         <div className={styles.screenshotPlaceholder}>
           <img
             loading="lazy"
@@ -326,19 +349,26 @@ function ComplianceSection() {
 
 function CallToActionSection() {
   return (
-    <section className={styles.callToActionSection}>
+    <section className={styles.finalCTA}>
       <div className="container">
-        <h2>Start securing your AI applications today</h2>
-        <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/red-team/quickstart">
-            Get Started
+        <h2 className={styles.finalCTATitle}>Start securing your AI applications today</h2>
+        <p className={styles.finalCTASubtitle}>
+          Join Fortune 100 companies and 200,000+ developers building secure AI applications from
+          day one.
+        </p>
+        <div className={styles.finalCTAButtons}>
+          <Link className="button button--primary button--lg" to="/contact/">
+            Request Demo
           </Link>
           <Link
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
-            to="/contact/"
+            to="/docs/red-team/quickstart"
           >
-            Contact Us
+            Try Open Source
           </Link>
+        </div>
+        <div className={styles.finalCTATrust}>
+          <p>✓ 200,000+ users • ✓ Fortune 100 trusted • ✓ Open source foundation</p>
         </div>
       </div>
     </section>
