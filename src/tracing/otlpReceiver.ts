@@ -237,16 +237,15 @@ export class OTLPReceiver {
           );
 
           // Parse attributes
-          const attributes = {
+          const spanKindName = SPAN_KIND_MAP[span.kind] ?? 'unspecified';
+          const attributes: Record<string, any> = {
             ...resourceAttributes,
             ...this.parseAttributes(span.attributes),
             'otel.scope.name': scopeSpan.scope?.name,
             'otel.scope.version': scopeSpan.scope?.version,
+            'otel.span.kind': spanKindName,
+            'otel.span.kind_code': span.kind,
           };
-
-          const spanKindName = SPAN_KIND_MAP[span.kind] ?? 'unspecified';
-          attributes['otel.span.kind'] = spanKindName;
-          attributes['otel.span.kind_code'] = span.kind;
 
           traces.push({
             traceId,

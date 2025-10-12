@@ -70,6 +70,12 @@ interface GoatConfig {
   stateful: boolean;
   continueAfterSuccess: boolean;
   tracing?: RawTracingConfig;
+  [key: string]: unknown;
+}
+
+interface GoatProviderResponse extends ProviderResponse {
+  traceContext?: TraceContextData;
+  traceSummary?: string;
 }
 
 export default class GoatProvider implements ApiProvider {
@@ -79,6 +85,7 @@ export default class GoatProvider implements ApiProvider {
     turn: number;
     prompt: string;
     response: string;
+    traceSummary?: string;
   }> = [];
 
   id() {
@@ -317,7 +324,11 @@ export default class GoatProvider implements ApiProvider {
           : JSON.stringify(messages);
         logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
         const iterationStart = Date.now();
-        const targetResponse = await targetProvider.callApi(targetPrompt, context, options);
+        const targetResponse = (await targetProvider.callApi(
+          targetPrompt,
+          context,
+          options,
+        )) as GoatProviderResponse;
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
           logger.debug(`Sleeping for ${targetProvider.delay}ms`);

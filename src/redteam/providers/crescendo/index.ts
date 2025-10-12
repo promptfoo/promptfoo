@@ -70,6 +70,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
+  traceSnapshots?: Record<string, unknown>[];
 }
 
 /**
@@ -90,6 +91,7 @@ interface CrescendoConfig {
   stateful?: boolean;
   continueAfterSuccess?: boolean;
   tracing?: RawTracingConfig;
+  [key: string]: unknown;
 }
 
 export class MemorySystem {

@@ -16,7 +16,6 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const fetch = require('node-fetch');
 
 const app = express();
 app.use(express.json());
@@ -86,6 +85,7 @@ async function emitTraceSpans(spans) {
       ],
     };
 
+    // biome-ignore lint/style/noRestrictedGlobals: This is an example server, using native fetch is appropriate
     const response = await fetch(OTLP_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -252,7 +252,7 @@ app.post('/chat', async (req, res) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 

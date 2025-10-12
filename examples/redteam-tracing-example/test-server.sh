@@ -7,9 +7,9 @@ echo ""
 PORT="${PORT:-3110}"
 
 # Check if server is running
-if ! curl -s http://localhost:${PORT}/health > /dev/null; then
-    echo "❌ Server is not running. Start it with: PORT=${PORT} node server.js"
-    exit 1
+if ! curl -s http://localhost:${PORT}/health >/dev/null; then
+  echo "❌ Server is not running. Start it with: PORT=${PORT} node server.js"
+  exit 1
 fi
 
 echo "✓ Server is healthy"
@@ -26,13 +26,13 @@ echo "Response:"
 echo "$response" | jq .
 
 # Check if response has the expected fields
-if echo "$response" | jq -e '.response' > /dev/null; then
-    echo ""
-    echo "✓ Chat endpoint working correctly"
+if echo "$response" | jq -e '.response' >/dev/null; then
+  echo ""
+  echo "✓ Chat endpoint working correctly"
 else
-    echo ""
-    echo "❌ Chat endpoint returned unexpected response"
-    exit 1
+  echo ""
+  echo "❌ Chat endpoint returned unexpected response"
+  exit 1
 fi
 
 echo ""
