@@ -711,9 +711,7 @@ function PersonaSection() {
     <section className={styles.personaSection}>
       <div className="container">
         <div className={styles.sectionEyebrow}>SOLUTIONS FOR EVERY TEAM</div>
-        <h2 className={styles.sectionTitle}>
-          Security that works for everyone
-        </h2>
+        <h2 className={styles.sectionTitle}>Security that works for everyone</h2>
         <p className={styles.sectionSubtitle}>
           Whether you're building AI security strategy or writing code, Promptfoo meets you where
           you are.
@@ -756,15 +754,17 @@ function PersonaSection() {
 
           <h4>What You Get:</h4>
           <div className={styles.benefitsList}>
-            {currentPersona.benefits.map((benefit: { title: string; description: string }, idx: number) => (
-              <div key={idx} className={styles.benefitItem}>
-                <CheckCircleIcon className={styles.benefitIcon} />
-                <div>
-                  <strong>{benefit.title}</strong>
-                  <p>{benefit.description}</p>
+            {currentPersona.benefits.map(
+              (benefit: { title: string; description: string }, idx: number) => (
+                <div key={idx} className={styles.benefitItem}>
+                  <CheckCircleIcon className={styles.benefitIcon} />
+                  <div>
+                    <strong>{benefit.title}</strong>
+                    <p>{benefit.description}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ),
+            )}
           </div>
 
           <Link to={currentPersona.cta.link} className="button button--primary button--lg">
@@ -857,8 +857,8 @@ function FinalCTA() {
         </div>
         <div className={styles.finalCTATrust}>
           <p>
-            ✓ {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ users • ✓ Fortune 100 trusted • ✓ Zero
-            vendor lock-in
+            ✓ {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ users • ✓ Fortune 100 trusted • ✓ Zero vendor
+            lock-in
           </p>
         </div>
       </div>

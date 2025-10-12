@@ -1088,12 +1088,12 @@
 .trustBar {
   padding: var(--section-spacing-md) 0;
   text-align: center;
-  background: rgba(255, 255, 255, 0.5);
+  background: transparent;
   border-bottom: 1px solid rgba(229, 58, 58, 0.1);
 }
 
 [data-theme='dark'] .trustBar {
-  background: rgba(16, 25, 28, 0.5);
+  background: transparent;
   border-bottom-color: rgba(229, 58, 58, 0.2);
 }
 
@@ -1517,11 +1517,11 @@
 /* Solution Section */
 .solutionSection {
   padding: var(--section-spacing-xl) 0;
-  background: rgba(248, 248, 248, 0.5);
+  background: transparent;
 }
 
 [data-theme='dark'] .solutionSection {
-  background: rgba(23, 37, 43, 0.5);
+  background: transparent;
 }
 
 .solutionGrid {
@@ -1707,11 +1707,11 @@
 /* Community Section */
 .communitySection {
   padding: var(--section-spacing-xl) 0;
-  background: linear-gradient(180deg, rgba(229, 58, 58, 0.03) 0%, transparent 100%);
+  background: transparent;
 }
 
 [data-theme='dark'] .communitySection {
-  background: linear-gradient(180deg, rgba(229, 58, 58, 0.08) 0%, transparent 100%);
+  background: transparent;
 }
 
 .communityStats {
@@ -1892,11 +1892,11 @@
 /* Persona Section */
 .personaSection {
   padding: var(--section-spacing-xl) 0;
-  background: rgba(248, 248, 248, 0.5);
+  background: transparent;
 }
 
 [data-theme='dark'] .personaSection {
-  background: rgba(23, 37, 43, 0.5);
+  background: transparent;
 }
 
 .personaTabs {
@@ -2167,12 +2167,12 @@
   padding: var(--section-spacing-xl) 0;
   margin-bottom: 4rem;
   text-align: center;
-  background: linear-gradient(180deg, transparent 0%, rgba(229, 58, 58, 0.05) 100%);
+  background: transparent;
   position: relative;
 }
 
 [data-theme='dark'] .finalCTA {
-  background: linear-gradient(180deg, transparent 0%, rgba(229, 58, 58, 0.1) 100%);
+  background: transparent;
 }
 
 .finalCTATitle {
