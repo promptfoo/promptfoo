@@ -1,6 +1,18 @@
+/* ========================================
+   SPACING SYSTEM
+   Standard vertical spacing for all sections
+   ======================================== */
+:root {
+  /* Section spacing - use these for consistent vertical rhythm */
+  --section-spacing-xl: 6rem; /* Default for most sections */
+  --section-spacing-lg: 4rem; /* Mobile default & compact sections */
+  --section-spacing-md: 3rem; /* Smaller sections like TrustBar */
+  --section-spacing-sm: 2rem; /* Tight spacing when needed */
+}
+
 /* Page-level gradient - main background for entire page */
 :global(.homepage-wrapper) {
-  background: 
+  background:
     /* Main gradient flow - more subtle and less pink */
     linear-gradient(
       180deg,
@@ -805,7 +817,7 @@
 }
 
 .asSeenOnSection {
-  padding: 4rem 0 6rem;
+  padding: var(--section-spacing-sm) 0 var(--section-spacing-lg) 0;
   /* Removed background-color - using page-level gradient instead */
   background: transparent;
 }
@@ -985,7 +997,7 @@
 
 @media screen and (max-width: 768px) {
   .asSeenOnSection {
-    padding: 3rem 0;
+    padding: var(--section-spacing-md) 0;
   }
 
   .asSeenOnGrid {
@@ -1074,7 +1086,7 @@
 
 /* Trust Bar */
 .trustBar {
-  padding: 3rem 0;
+  padding: var(--section-spacing-md) 0;
   text-align: center;
   background: rgba(255, 255, 255, 0.5);
   border-bottom: 1px solid rgba(229, 58, 58, 0.1);
@@ -1245,7 +1257,7 @@
 
 /* Stats Bar */
 .statsBar {
-  padding: 3rem 0;
+  padding: var(--section-spacing-md) 0;
   background: transparent;
 }
 
@@ -1360,7 +1372,7 @@
 
 /* Problem Section */
 .problemSection {
-  padding: 6rem 0;
+  padding: var(--section-spacing-xl) 0;
   background: transparent;
 }
 
@@ -1474,7 +1486,7 @@
 
 @media screen and (max-width: 768px) {
   .problemSection {
-    padding: 4rem 0;
+    padding: var(--section-spacing-lg) 0;
   }
 
   .challengesGrid {
@@ -1490,9 +1502,21 @@
   }
 }
 
+/* Walkthrough Section */
+.walkthroughSection {
+  padding: var(--section-spacing-xl) 0;
+  background: transparent;
+}
+
+@media screen and (max-width: 768px) {
+  .walkthroughSection {
+    padding: var(--section-spacing-lg) 0;
+  }
+}
+
 /* Solution Section */
 .solutionSection {
-  padding: 6rem 0;
+  padding: var(--section-spacing-xl) 0;
   background: rgba(248, 248, 248, 0.5);
 }
 
@@ -1668,7 +1692,7 @@
 
 @media screen and (max-width: 768px) {
   .solutionSection {
-    padding: 4rem 0;
+    padding: var(--section-spacing-lg) 0;
   }
 
   .solutionGrid {
@@ -1682,7 +1706,7 @@
 
 /* Community Section */
 .communitySection {
-  padding: 6rem 0;
+  padding: var(--section-spacing-xl) 0;
   background: linear-gradient(180deg, rgba(229, 58, 58, 0.03) 0%, transparent 100%);
 }
 
@@ -1853,7 +1877,7 @@
 
 @media screen and (max-width: 768px) {
   .communitySection {
-    padding: 4rem 0;
+    padding: var(--section-spacing-lg) 0;
   }
 
   .communityGrid {
@@ -1867,7 +1891,7 @@
 
 /* Persona Section */
 .personaSection {
-  padding: 6rem 0;
+  padding: var(--section-spacing-xl) 0;
   background: rgba(248, 248, 248, 0.5);
 }
 
@@ -2021,7 +2045,7 @@
 
 @media screen and (max-width: 768px) {
   .personaSection {
-    padding: 4rem 0;
+    padding: var(--section-spacing-lg) 0;
   }
 
   .personaTabs {
@@ -2039,7 +2063,7 @@
 
 /* FAQ Section */
 .faqSection {
-  padding: 6rem 0;
+  padding: var(--section-spacing-xl) 0;
   background: transparent;
 }
 
@@ -2125,7 +2149,7 @@
 
 @media screen and (max-width: 768px) {
   .faqSection {
-    padding: 4rem 0;
+    padding: var(--section-spacing-lg) 0;
   }
 
   .faqQuestion {
@@ -2140,7 +2164,8 @@
 
 /* Final CTA */
 .finalCTA {
-  padding: 6rem 0;
+  padding: var(--section-spacing-xl) 0;
+  margin-bottom: 4rem;
   text-align: center;
   background: linear-gradient(180deg, transparent 0%, rgba(229, 58, 58, 0.05) 100%);
   position: relative;
@@ -2200,7 +2225,7 @@
 
 @media screen and (max-width: 768px) {
   .finalCTA {
-    padding: 4rem 0;
+    padding: var(--section-spacing-lg) 0;
   }
 
   .finalCTATitle {
