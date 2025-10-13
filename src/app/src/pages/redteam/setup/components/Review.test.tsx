@@ -66,6 +66,11 @@ vi.mock('../utils/yamlHelpers', () => ({
   generateOrderedYaml: vi.fn().mockReturnValue('description: Test config\nplugins: []'),
 }));
 
+vi.mock('./strategies/utils', () => ({
+  getEstimatedDuration: vi.fn(() => '~5m'),
+  getEstimatedProbes: vi.fn(() => 150),
+}));
+
 vi.mock('./DefaultTestVariables', () => ({
   default: () => <div data-testid="default-test-variables">Default Test Variables Component</div>,
 }));
