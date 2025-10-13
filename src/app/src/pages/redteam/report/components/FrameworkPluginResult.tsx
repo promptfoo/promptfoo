@@ -1,7 +1,7 @@
 import { useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { riskCategorySeverityMap, Severity } from '@promptfoo/redteam/constants';
-import { getSeverityColor } from './FrameworkComplianceUtils';
+import { getSeverityColor } from '../utils/color';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';

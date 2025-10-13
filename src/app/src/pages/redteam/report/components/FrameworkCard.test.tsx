@@ -8,7 +8,7 @@ import FrameworkCard from './FrameworkCard';
 import { createAppTheme } from '@app/components/PageShell';
 import userEvent from '@testing-library/user-event';
 import { alpha } from '@mui/material/styles';
-import {type CategoryStats} from './FrameworkComplianceUtils';
+import { type CategoryStats } from './FrameworkComplianceUtils';
 
 // Mock react-router-dom
 vi.mock('react-router-dom', () => ({
