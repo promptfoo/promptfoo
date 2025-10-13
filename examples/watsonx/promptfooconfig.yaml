@@ -1,23 +1,26 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'WatsonX Image Analysis'
+description: 'WatsonX Model Comparison'
 
 prompts:
-  - 'Analyze the content of the image located at {{image_url}}.'
+  - 'Answer the following question in 1-2 sentences: {{question}}'
 
 providers:
-  - id: watsonx:meta-llama/llama-3-2-11b-vision-instruct
-    label: 'LLaMA-3 Vision Instruct'
-
-defaultTest:
-  options:
-    transformVars: |
-      return { ...vars, image_markdown: `![image](${vars.image_url})` }
+  - id: watsonx:ibm/granite-3-3-8b-instruct
+    label: 'Granite 3.3 8B'
+  - id: watsonx:meta-llama/llama-3-3-70b-instruct
+    label: 'Llama 3.3 70B'
+  - id: watsonx:mistralai/mistral-large
+    label: 'Mistral Large'
 
 tests:
   - vars:
-      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Great_Wave_off_Kanagawa2.jpg/640px-Great_Wave_off_Kanagawa2.jpg
-      expected_text: Great Wave off Kanagawa
-
+      question: 'What is the capital of France?'
     assert:
-      - type: icontains
-        value: '{{expected_text}}'
+      - type: contains
+        value: 'Paris'
+
+  - vars:
+      question: 'What is 2+2?'
+    assert:
+      - type: contains
+        value: '4'

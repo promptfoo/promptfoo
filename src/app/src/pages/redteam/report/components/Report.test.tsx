@@ -50,7 +50,7 @@ vi.mock('./EnterpriseBanner', () => ({
 }));
 
 vi.mock('./Overview', () => ({
-  default: vi.fn(({ vulnerabilitiesDataGridRef }: any) => null),
+  default: vi.fn(() => null),
 }));
 
 vi.mock('./StrategyStats', () => ({
@@ -62,7 +62,7 @@ vi.mock('./RiskCategories', () => ({
 }));
 
 vi.mock('./TestSuites', () => ({
-  default: vi.fn(({ vulnerabilitiesDataGridRef }: any) => null),
+  default: vi.fn(() => null),
 }));
 
 vi.mock('./FrameworkCompliance', () => ({

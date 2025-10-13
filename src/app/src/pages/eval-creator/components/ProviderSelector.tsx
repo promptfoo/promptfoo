@@ -163,6 +163,11 @@ const defaultProviders: ProviderOptions[] = (
         temperature: 0.5,
       },
     },
+    {
+      id: 'anthropic:claude-agent-sdk',
+      label: 'Anthropic: Claude Agent SDK',
+      config: {},
+    },
   ])
   .concat([
     {
@@ -696,7 +701,7 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
           options={allProviders}
           value={providers}
           groupBy={getProviderGroup}
-          onChange={(event, newValue: (string | ProviderOptions)[]) => {
+          onChange={(_event, newValue: (string | ProviderOptions)[]) => {
             const validValues = newValue.filter((value) => value !== null && value !== undefined);
             onChange(
               validValues.map((value) => (typeof value === 'string' ? { id: value } : value)),

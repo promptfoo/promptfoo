@@ -82,15 +82,14 @@ export async function monkeyPatchFetch(
         requestBody: opts.body,
         requestMethod: opts.method || 'GET',
         response: null,
-        error: true,
       });
       if (isConnectionError(e as Error)) {
-        logger.error(
+        logger.debug(
           `Connection error, please check your network connectivity to the host: ${url} ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY ? `or Proxy: ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY}` : ''}`,
         );
         throw e;
       }
-      logger.error(
+      logger.debug(
         `Error in fetch: ${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`,
       );
     }

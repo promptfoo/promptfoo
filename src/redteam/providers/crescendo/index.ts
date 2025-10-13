@@ -650,7 +650,7 @@ export class CrescendoProvider implements ApiProvider {
     vars: Record<string, string | object>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
-    roundNum: number,
+    _roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<TargetResponse> {
@@ -858,7 +858,7 @@ export class CrescendoProvider implements ApiProvider {
     return this.memory.duplicateConversationExcludingLastTurn(conversationId);
   }
 
-  private logChatHistory(conversationId: string, lastMessageOnly = false): void {
+  private logChatHistory(conversationId: string, _lastMessageOnly = false): void {
     const messages = this.memory.getConversation(conversationId);
     logger.debug(`[Crescendo] Memory for conversation ${conversationId}:`);
     for (const message of messages) {

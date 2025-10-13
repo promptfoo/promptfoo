@@ -66,7 +66,7 @@ export function createTransformResponse(
       finalHtml: string,
     ) => ProviderResponse;
   }
-  return (extracted, finalHtml) => ({ output: finalHtml });
+  return (_extracted, finalHtml) => ({ output: finalHtml });
 }
 
 export class BrowserProvider implements ApiProvider {

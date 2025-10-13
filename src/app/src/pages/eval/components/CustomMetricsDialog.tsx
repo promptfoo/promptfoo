@@ -183,7 +183,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     ];
 
     // Add a column for each prompt
-    table.head.prompts.forEach((prompt, idx) => {
+    table.head.prompts.forEach((_prompt, idx) => {
       const columnId = `prompt_${idx}`;
 
       cols.push({
