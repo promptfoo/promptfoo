@@ -19,14 +19,25 @@ pagination_next: null
 
 # Telemetry
 
-`promptfoo` collects basic anonymous telemetry by default. This telemetry helps us decide how to spend time on development.
+`promptfoo` collects basic telemetry by default to help us improve the product.
 
-An event is recorded when:
+## What We Collect
+
+Telemetry events are recorded when:
 
 - A command is run (e.g. `init`, `eval`, `view`)
 - An assertion is used (along with the type of assertion, e.g. `is-json`, `similar`, `llm-rubric`)
+- A randomly generated anonymous user ID
+- Your email address (if you are logged into Promptfoo Cloud)
 
-No additional information is collected. The above list is exhaustive.
+## What We Don't Collect
+
+- Prompts, test cases, or evaluation content
+- API keys or credentials
+- LLM inputs or outputs
+- Source code
+
+For more details, see our [Privacy Policy](https://www.promptfoo.dev/privacy/).
 
 To disable telemetry, set the following environment variable:
 
