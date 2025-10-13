@@ -19,10 +19,10 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
 import PluginsTab from './PluginsTab';
-import CustomPromptsTab from './CustomPromptsTab';
+import CustomPromptsTab from './CustomIntentsTab';
 import CustomPoliciesTab from './CustomPoliciesTab';
 import type { PluginConfig } from '@promptfoo/redteam/types';
-import { countSelectedCustomPrompts, countSelectedCustomPolicies } from '../utils/plugins';
+import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
 import type { LocalPluginConfig } from '../types';
 
 interface PluginsProps {
@@ -293,7 +293,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return totalSelected >= totalAvailable * 0.8 || totalSelected === totalAvailable;
   }, [selectedPlugins]);
 
-  const customPromptsCount = countSelectedCustomPrompts(config);
+  const customIntentsCount = countSelectedCustomIntents(config);
   const customPoliciesCount = countSelectedCustomPolicies(config);
 
   return (
@@ -367,7 +367,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             aria-controls="plugins-tabpanel-0"
           />
           <Tab
-            label={`Custom Prompts (${customPromptsCount})`}
+            label={`Custom Intents (${customIntentsCount})`}
             id="plugins-tab-1"
             aria-controls="plugins-tabpanel-1"
           />

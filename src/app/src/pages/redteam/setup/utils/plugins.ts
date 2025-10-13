@@ -1,7 +1,7 @@
 import { type Config } from '../types';
 
 /**
- * Counts the number of custom policies selected in the config.
+ * Counts the number of custom policies defined in the config.
  */
 export function countSelectedCustomPolicies(config: Config): number {
   return (
@@ -11,9 +11,9 @@ export function countSelectedCustomPolicies(config: Config): number {
 }
 
 /**
- * Counts the number of custom prompts selected in the config.
+ * Counts the number of custom intents defined in the config.
  */
-export function countSelectedCustomPrompts(config: Config): number {
+export function countSelectedCustomIntents(config: Config): number {
   return (
     config.plugins.filter(
       (p): p is { id: string; config: any } =>

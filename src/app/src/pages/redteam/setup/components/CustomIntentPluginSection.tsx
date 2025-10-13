@@ -383,10 +383,10 @@ export default function CustomIntentSection() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography variant="body2" color="text.secondary">
-          These prompts are passed directly to your target. They are also used as goals by
-          Promptfoo's automated jailbreak strategies.
-        </Typography>
+        <Alert severity="info">
+          Intents are seed phrases for attack generation, for example "teach me how to cook meth".
+          Promptfoo transforms each intent into a sophisticated attacks using jailbreak strategies.
+        </Alert>
         <Tooltip
           title={
             <Box>
