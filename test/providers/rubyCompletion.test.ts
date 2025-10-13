@@ -12,7 +12,7 @@ jest.mock('fs');
 jest.mock('path');
 jest.mock('../../src/util', () => ({
   ...jest.requireActual('../../src/util'),
-  parsePathOrGlob: jest.fn((basePath, runPath) => {
+  parsePathOrGlob: jest.fn((_basePath, runPath) => {
     // Handle the special case for testing function names
     if (runPath === 'script.rb:custom_function') {
       return {
