@@ -1,4 +1,4 @@
-import { AzureFoundryAssistantProvider } from '../../../src/providers/azure/foundry-assistant';
+import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 
 jest.mock('../../../src/cache', () => ({
   getCache: jest.fn(),
@@ -59,26 +59,26 @@ jest.mock('@azure/identity', () => ({
   DefaultAzureCredential: jest.fn(),
 }));
 
-describe('Azure Foundry Assistant Provider', () => {
+describe('Azure Foundry Agent Provider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   describe('instantiation', () => {
     it('should create provider with minimal config', () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
         },
       });
 
       expect(provider).toBeDefined();
-      expect(provider.deploymentName).toBe('test-assistant');
+      expect(provider.deploymentName).toBe('test-agent');
     });
 
     it('should throw error if projectUrl is not provided', () => {
       expect(() => {
-        new AzureFoundryAssistantProvider('test-assistant', {
+        new AzureFoundryAgentProvider('test-agent', {
           config: {},
         });
       }).toThrow('Azure AI Project URL must be provided');
@@ -87,7 +87,7 @@ describe('Azure Foundry Assistant Provider', () => {
     it('should accept projectUrl from environment variable', () => {
       process.env.AZURE_AI_PROJECT_URL = 'https://env.services.ai.azure.com/api/projects/test';
 
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {},
       });
 
@@ -98,7 +98,7 @@ describe('Azure Foundry Assistant Provider', () => {
 
   describe('run options parameters', () => {
     it('should pass max_tokens to run options', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
           max_tokens: 150,
@@ -117,7 +117,7 @@ describe('Azure Foundry Assistant Provider', () => {
     });
 
     it('should pass max_completion_tokens to run options', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
           max_completion_tokens: 200,
@@ -136,7 +136,7 @@ describe('Azure Foundry Assistant Provider', () => {
     });
 
     it('should pass both max_tokens and max_completion_tokens when both are provided', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
           max_tokens: 100,
@@ -157,7 +157,7 @@ describe('Azure Foundry Assistant Provider', () => {
     });
 
     it('should pass frequency_penalty to run options', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
           frequency_penalty: 0.5,
@@ -176,7 +176,7 @@ describe('Azure Foundry Assistant Provider', () => {
     });
 
     it('should pass presence_penalty to run options', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
           presence_penalty: 0.3,
@@ -195,7 +195,7 @@ describe('Azure Foundry Assistant Provider', () => {
     });
 
     it('should pass response_format to run options', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
           response_format: { type: 'json_object' },
@@ -214,7 +214,7 @@ describe('Azure Foundry Assistant Provider', () => {
     });
 
     it('should pass stop sequences to run options', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
           stop: ['END', 'STOP'],
@@ -233,7 +233,7 @@ describe('Azure Foundry Assistant Provider', () => {
     });
 
     it('should pass seed to run options', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
           seed: 12345,
@@ -252,7 +252,7 @@ describe('Azure Foundry Assistant Provider', () => {
     });
 
     it('should pass all parameters together when configured', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
           temperature: 0.7,
@@ -287,7 +287,7 @@ describe('Azure Foundry Assistant Provider', () => {
     });
 
     it('should not include undefined parameters in run options', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
           temperature: 0.5,
@@ -312,7 +312,7 @@ describe('Azure Foundry Assistant Provider', () => {
 
   describe('basic functionality', () => {
     it('should create thread, message, and run', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
         },
@@ -320,7 +320,7 @@ describe('Azure Foundry Assistant Provider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(mockClient.agents.getAgent).toHaveBeenCalledWith('test-assistant');
+      expect(mockClient.agents.getAgent).toHaveBeenCalledWith('test-agent');
       expect(mockClient.agents.threads.create).toHaveBeenCalled();
       expect(mockClient.agents.messages.create).toHaveBeenCalledWith(
         mockThread.id,
@@ -335,7 +335,7 @@ describe('Azure Foundry Assistant Provider', () => {
     });
 
     it('should return formatted output', async () => {
-      const provider = new AzureFoundryAssistantProvider('test-assistant', {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
         config: {
           projectUrl: 'https://test.services.ai.azure.com/api/projects/test-project',
         },

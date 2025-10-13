@@ -22,7 +22,7 @@ import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
 import { AzureEmbeddingProvider } from './azure/embedding';
-import { AzureFoundryAssistantProvider } from './azure/foundry-assistant';
+import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
@@ -78,12 +78,12 @@ import { createPerplexityProvider } from './perplexity';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PromptfooModelProvider } from './promptfooModel';
 import { PythonProvider } from './pythonCompletion';
-import { RubyProvider } from './rubyCompletion';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
 } from './replicate';
+import { RubyProvider } from './rubyCompletion';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
@@ -263,8 +263,8 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'assistant') {
         return new AzureAssistantProvider(deploymentName, providerOptions);
       }
-      if (modelType === 'foundry-assistant') {
-        return new AzureFoundryAssistantProvider(deploymentName, providerOptions);
+      if (modelType === 'foundry-agent') {
+        return new AzureFoundryAgentProvider(deploymentName, providerOptions);
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new AzureEmbeddingProvider(
