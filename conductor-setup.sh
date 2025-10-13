@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e  # Exit on error
+set -e # Exit on error
 
 echo "🚀 Setting up Promptfoo workspace..."
 
@@ -31,7 +31,7 @@ if [ "$CURRENT_MAJOR" -lt "$REQUIRED_MAJOR" ]; then
 fi
 
 # Check if npm is available
-if ! command -v npm &> /dev/null; then
+if ! command -v npm &>/dev/null; then
   echo "❌ Error: npm is not installed"
   echo "   Please install npm (it comes with Node.js)"
   exit 1
