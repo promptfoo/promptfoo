@@ -182,6 +182,22 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) =>
+      providerPath.startsWith('anthropic:claude-agent-sdk') ||
+      providerPath.startsWith('anthropic:claude-code'),
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { ClaudeCodeSDKProvider } = await import('./claude-agent-sdk');
+      return new ClaudeCodeSDKProvider({
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('anthropic:'),
     create: async (
       providerPath: string,
