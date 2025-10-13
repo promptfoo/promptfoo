@@ -638,4 +638,4 @@ end
 
 - [Custom assertions](/docs/configuration/expected-outputs/) - Define expected outputs and validation rules
 - [Python Provider](/docs/providers/python) - Similar scripting provider for Python
-- [JavaScript Provider](/docs/providers/javascript) - JavaScript/TypeScript provider alternative
+- [Custom Script Provider](/docs/providers/custom-script) - JavaScript/TypeScript provider alternative
