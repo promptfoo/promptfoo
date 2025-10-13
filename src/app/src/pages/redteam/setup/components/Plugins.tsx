@@ -23,7 +23,7 @@ import PluginsTab from './PluginsTab';
 import CustomPromptsTab from './CustomPromptsTab';
 import CustomPoliciesTab from './CustomPoliciesTab';
 import type { PluginConfig } from '@promptfoo/redteam/types';
-
+import { countSelectedCustomPrompts, countSelectedCustomPolicies } from '../utils/plugins';
 import type { LocalPluginConfig } from '../types';
 
 interface PluginsProps {
@@ -320,6 +320,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return totalSelected >= totalAvailable * 0.8 || totalSelected === totalAvailable;
   }, [selectedPlugins]);
 
+  const customPromptsCount = countSelectedCustomPrompts(config);
+  const customPoliciesCount = countSelectedCustomPolicies(config);
+
   return (
     <PageWrapper
       title="Plugins"
@@ -385,9 +388,21 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       {/* Tabs component */}
       <Box sx={{ width: '100%', mb: 3 }}>
         <Tabs value={activeTab} onChange={handleTabChange} aria-label="plugin configuration tabs">
-          <Tab label="Plugins" id="plugins-tab-0" aria-controls="plugins-tabpanel-0" />
-          <Tab label="Custom Prompts" id="plugins-tab-1" aria-controls="plugins-tabpanel-1" />
-          <Tab label="Custom Policies" id="plugins-tab-2" aria-controls="plugins-tabpanel-2" />
+          <Tab
+            label={`Plugins (${selectedPlugins.size})`}
+            id="plugins-tab-0"
+            aria-controls="plugins-tabpanel-0"
+          />
+          <Tab
+            label={`Custom Prompts (${customPromptsCount})`}
+            id="plugins-tab-1"
+            aria-controls="plugins-tabpanel-1"
+          />
+          <Tab
+            label={`Custom Policies (${customPoliciesCount})`}
+            id="plugins-tab-2"
+            aria-controls="plugins-tabpanel-2"
+          />
         </Tabs>
         <Divider />
       </Box>

@@ -2,14 +2,13 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { countSelectedCustomPolicies } from '../utils/plugins';
 
 export default function CustomPoliciesTab() {
   const { config } = useRedTeamConfig();
 
   // Calculate the number of custom policies
-  const customPoliciesCount =
-    config.plugins.filter((p) => typeof p === 'object' && 'id' in p && p.id === 'policy').length ||
-    0;
+  const customPoliciesCount = countSelectedCustomPolicies(config);
 
   return (
     <Box sx={{ maxWidth: '100%' }}>
