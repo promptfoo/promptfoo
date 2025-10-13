@@ -142,6 +142,29 @@ The OG image generation process can take several minutes and may cause CI timeou
 - Follow Jest best practices with describe/it blocks
 - Use consistent error handling with proper type checks
 
+### React Hooks
+
+- **`useMemo` vs `useCallback`**: Use `useMemo` when computing a value, and `useCallback` when creating a stable function reference. Specifically:
+  - Use `useMemo` when the hook returns a value that doesn't accept arguments (a non-callable)
+  - Use `useCallback` when the hook returns a function that accepts arguments and will be called later
+
+  ```typescript
+  // ✅ Good - useMemo for computed values
+  const tooltipMessage = useMemo(() => {
+    return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+  }, [apiStatus]);
+
+  // ✅ Good - useCallback for functions that accept arguments
+  const handleClick = useCallback((id: string) => {
+    console.log('Clicked:', id);
+  }, []);
+
+  // ❌ Bad - useCallback for computed values
+  const getTooltipMessage = useCallback(() => {
+    return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+  }, [apiStatus]);
+  ```
+
 ## Logging and Sanitization
 
 **IMPORTANT**: Always sanitize sensitive data before logging to prevent exposing secrets, API keys, passwords, and other credentials in logs.
@@ -288,6 +311,44 @@ Always follow this workflow:
    ```
 
 6. **Wait for review and CI checks** before merging
+
+## Dependency Management
+
+### Safe Update Workflow
+
+When updating dependencies, use `npx npm-check-updates --target minor` for safe minor/patch updates only:
+
+```bash
+# Check all three workspaces
+npx npm-check-updates --target minor              # Root
+npx npm-check-updates --target minor --cwd site   # Site
+npx npm-check-updates --target minor --cwd src/app # App
+
+# Find and check example package.json files
+find examples -name "package.json" -not -path "*/node_modules/*" -type f
+
+# Apply updates with -u flag, then verify
+npm run build && npm test && npm run lint && npm run format
+
+# Check version consistency across workspaces (required by CI)
+npx check-dependency-version-consistency
+```
+
+### Critical Rules
+
+1. **PeerDependencies must match devDependencies** - Always update peerDependencies to match devDependencies versions to prevent "package not found" errors for users
+2. **Update examples/** - 12+ package.json files in examples/ are user-facing; keep them current
+3. **No package-lock.json** - Project intentionally omits lockfile; `npm audit` won't work
+4. **If updates fail** - Revert the problematic package and keep current version until code changes allow upgrade
+
+### Checking for Major Updates
+
+```bash
+# See available major version updates (don't apply automatically)
+npx npm-check-updates --target latest
+
+# Major updates often require code changes - evaluate each carefully
+```
 
 ## Project Conventions
 
