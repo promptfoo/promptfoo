@@ -33,6 +33,7 @@ providers:
 | [Shell Command](./custom-script.md)                 | Custom - script-based providers                              | `exec: python chain.py`                                                   |
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                                    | `ai21:jamba-1.5-mini`                                                     |
 | [AI/ML API](./aimlapi.md)                           | Tap into 300+ cutting-edge AI models with a single API       | `aimlapi:chat:deepseek-r1`                                                |
+| [Alibaba Cloud (Qwen)](./alibaba.md)                | Alibaba Cloud's Qwen models                                  | `alibaba:qwen-max` or `qwen-plus`                                         |
 | [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers                     | `bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0`                      |
 | [AWS Bedrock Agents](./bedrock-agents.md)           | Amazon Bedrock Agents for orchestrating AI workflows         | `bedrock-agent:YOUR_AGENT_ID`                                             |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints                       | `sagemaker:my-endpoint-name`                                              |
@@ -46,6 +47,7 @@ providers:
 | [Databricks](./databricks.md)                       | Databricks Foundation Model APIs                             | `databricks:databricks-meta-llama-3-3-70b-instruct`                       |
 | [DeepSeek](./deepseek.md)                           | DeepSeek's language models                                   | `deepseek:deepseek-r1`                                                    |
 | [Docker Model Runner](./docker.md)                  | Evaluate with local models                                   | `docker:ai/llama3.2:3B-Q4_K_M`                                            |
+| [Envoy AI Gateway](./envoy.md)                      | OpenAI-compatible AI Gateway proxy                           | `envoy:my-model`                                                          |
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface                       | `f5:path-name`                                                            |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                                    | `fal:image:fal-ai/fast-sdxl`                                              |
 | [Fireworks AI](./fireworks.md)                      | Various hosted models                                        | `fireworks:accounts/fireworks/models/qwen-v2p5-7b`                        |
@@ -66,6 +68,7 @@ providers:
 | [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations                         | `perplexity:sonar-pro`                                                    |
 | [Replicate](./replicate.md)                         | Various hosted models                                        | `replicate:stability-ai/sdxl`                                             |
 | [Slack](./slack.md)                                 | Human feedback via Slack channels/DMs                        | `slack:C0123ABCDEF` or `slack:channel:C0123ABCDEF`                        |
+| [Snowflake Cortex](./snowflake.md)                  | Snowflake's AI platform with Claude, GPT, and Llama models   | `snowflake:mistral-large2`                                                |
 | [Together AI](./togetherai.md)                      | Various hosted models                                        | Compatible with OpenAI syntax                                             |
 | [Voyage AI](./voyage.md)                            | Specialized embedding models                                 | `voyage:voyage-3`                                                         |
 | [vLLM](./vllm.md)                                   | Local                                                        | Compatible with OpenAI syntax                                             |
