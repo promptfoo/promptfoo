@@ -1,5 +1,9 @@
 import { clearCache } from '../../src/cache';
-import { TrueFoundryEmbeddingProvider, TrueFoundryProvider } from '../../src/providers/truefoundry';
+import {
+  TrueFoundryEmbeddingProvider,
+  TrueFoundryProvider,
+  createTrueFoundryProvider,
+} from '../../src/providers/truefoundry';
 import * as fetchModule from '../../src/util/fetch/index';
 
 const TRUEFOUNDRY_API_BASE = 'https://llm-gateway.truefoundry.com';
@@ -144,6 +148,20 @@ describe('TrueFoundry', () => {
           enabled: true,
         },
       });
+    });
+
+    it('should use default apiBaseUrl when not specified', () => {
+      const provider = new TrueFoundryProvider('openai/gpt-4', {});
+      expect(provider.toJSON().config.apiBaseUrl).toBe('https://llm-gateway.truefoundry.com');
+    });
+
+    it('should use custom apiBaseUrl when specified', () => {
+      const provider = new TrueFoundryProvider('openai/gpt-4', {
+        config: {
+          apiBaseUrl: 'https://custom-gateway.example.com',
+        },
+      });
+      expect(provider.toJSON().config.apiBaseUrl).toBe('https://custom-gateway.example.com');
     });
 
     describe('callApi', () => {
@@ -546,6 +564,59 @@ describe('TrueFoundry', () => {
 
       const result = await embeddingProvider.callEmbeddingApi('Test text');
       expect(result.error).toBeDefined();
+    });
+
+    it('should use default apiBaseUrl when not specified', () => {
+      const provider = new TrueFoundryEmbeddingProvider('openai/text-embedding-3-large', {});
+      expect(provider.toJSON().config.apiBaseUrl).toBe('https://llm-gateway.truefoundry.com');
+    });
+
+    it('should use custom apiBaseUrl when specified', () => {
+      const provider = new TrueFoundryEmbeddingProvider('openai/text-embedding-3-large', {
+        config: {
+          apiBaseUrl: 'https://custom-gateway.example.com',
+        },
+      });
+      expect(provider.toJSON().config.apiBaseUrl).toBe('https://custom-gateway.example.com');
+    });
+  });
+
+  describe('createTrueFoundryProvider', () => {
+    it('should create chat provider for non-embedding models', () => {
+      const provider = createTrueFoundryProvider('truefoundry:openai/gpt-4', {
+        config: { temperature: 0.5 },
+      });
+      expect(provider).toBeInstanceOf(TrueFoundryProvider);
+      expect((provider as TrueFoundryProvider).modelName).toBe('openai/gpt-4');
+    });
+
+    it('should create embedding provider for embedding models', () => {
+      const provider = createTrueFoundryProvider('truefoundry:openai/text-embedding-3-large', {
+        config: { temperature: 0.5 },
+      });
+      expect(provider).toBeInstanceOf(TrueFoundryEmbeddingProvider);
+      expect((provider as TrueFoundryEmbeddingProvider).modelName).toBe(
+        'openai/text-embedding-3-large',
+      );
+    });
+
+    it('should pass config options correctly to provider', () => {
+      const provider = createTrueFoundryProvider('truefoundry:openai/gpt-4', {
+        config: {
+          temperature: 0.8,
+          apiBaseUrl: 'https://custom.example.com',
+        },
+        env: { CUSTOM_VAR: 'test' },
+      });
+
+      const json = (provider as TrueFoundryProvider).toJSON();
+      expect(json.config.temperature).toBe(0.8);
+      expect(json.config.apiBaseUrl).toBe('https://custom.example.com');
+    });
+
+    it('should handle model names with colons', () => {
+      const provider = createTrueFoundryProvider('truefoundry:provider:model:version', {});
+      expect((provider as TrueFoundryProvider).modelName).toBe('provider:model:version');
     });
   });
 });

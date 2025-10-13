@@ -65,6 +65,21 @@ The TrueFoundry provider supports all standard OpenAI configuration options:
 - `response_format`: Object specifying the format that the model must output (e.g., JSON mode)
 - `seed`: For deterministic sampling (best effort)
 
+### Custom API Base URL
+
+For self-hosted or enterprise deployments, you can specify a custom API base URL:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: truefoundry:openai-main/gpt-5
+    config:
+      apiBaseUrl: 'https://your-custom-gateway.example.com'
+      temperature: 0.7
+```
+
+If not specified, the default URL `https://llm-gateway.truefoundry.com` is used.
+
 ### TrueFoundry-Specific Configuration
 
 TrueFoundry provides additional configuration options for metadata tracking and logging:

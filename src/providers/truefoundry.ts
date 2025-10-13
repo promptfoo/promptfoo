@@ -48,7 +48,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
-        apiBaseUrl: 'https://llm-gateway.truefoundry.com',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://llm-gateway.truefoundry.com',
       },
     });
   }
@@ -155,7 +155,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
-        apiBaseUrl: 'https://llm-gateway.truefoundry.com',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://llm-gateway.truefoundry.com',
       },
     });
   }
@@ -234,7 +234,7 @@ export function createTrueFoundryProvider(
   const isEmbeddingModel = modelName.toLowerCase().includes('embedding');
 
   const providerOptions: TrueFoundryProviderOptions = {
-    ...options.config,
+    config: options.config,
     env: options.env,
   };
 
