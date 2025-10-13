@@ -545,14 +545,14 @@ end
 
 ### Common Issues and Solutions
 
-| Issue                           | Solution                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------- |
-| "Ruby not found" errors         | Set `PROMPTFOO_RUBY` env var or use `rubyExecutable` in config             |
-| "cannot load such file" errors  | Ensure required gems are installed with `gem install` or use bundler       |
-| Script not executing            | Check file path is relative to `promptfooconfig.yaml`                       |
-| No output visible               | Use `LOG_LEVEL=debug` to see print statements                               |
-| JSON parsing errors             | Ensure prompt format matches your parsing logic                             |
-| Timeout errors                  | Optimize initialization code, load resources once                           |
+| Issue                          | Solution                                                             |
+| ------------------------------ | -------------------------------------------------------------------- |
+| "Ruby not found" errors        | Set `PROMPTFOO_RUBY` env var or use `rubyExecutable` in config       |
+| "cannot load such file" errors | Ensure required gems are installed with `gem install` or use bundler |
+| Script not executing           | Check file path is relative to `promptfooconfig.yaml`                |
+| No output visible              | Use `LOG_LEVEL=debug` to see print statements                        |
+| JSON parsing errors            | Ensure prompt format matches your parsing logic                      |
+| Timeout errors                 | Optimize initialization code, load resources once                    |
 
 ### Debugging Tips
 
