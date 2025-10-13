@@ -1,10 +1,13 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+
+import { createAppTheme } from '@app/components/PageShell';
+import { ThemeProvider } from '@mui/material/styles';
 import { Severity } from '@promptfoo/redteam/constants';
-import FrameworkCard from './FrameworkCard';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import FrameworkCard from './FrameworkCard';
+import { alpha } from '@mui/material/styles';
 
 // Mock react-router-dom
 vi.mock('react-router-dom', () => ({
@@ -59,6 +62,10 @@ vi.mock('./FrameworkComplianceUtils', async () => {
 describe('FrameworkCard', () => {
   type FrameworkCardProps = React.ComponentProps<typeof FrameworkCard>;
 
+  interface CategoryStats {
+    [plugin: string]: { pass: number; total: number };
+  }
+
   const defaultProps: FrameworkCardProps = {
     evalId: 'test-eval-id',
     framework: 'test-framework',
@@ -67,13 +74,13 @@ describe('FrameworkCard', () => {
     categoryStats: {
       'plugin-1': { pass: 10, total: 10 },
       'plugin-2': { pass: 9, total: 10 },
-    },
+    } as CategoryStats,
     pluginPassRateThreshold: 0.8,
     nonCompliantPlugins: [],
     sortedNonCompliantPlugins: vi.fn((plugins) => plugins),
     sortedCompliantPlugins: vi.fn((plugins) => plugins),
     getPluginPassRate: vi.fn((plugin) => {
-      const stats = defaultProps.categoryStats[plugin] || { pass: 0, total: 0 };
+      const stats = (defaultProps.categoryStats as CategoryStats)[plugin] || { pass: 0, total: 0 };
       return {
         pass: stats.pass,
         total: stats.total,
@@ -82,9 +89,9 @@ describe('FrameworkCard', () => {
     }),
     idx: 0,
   };
+  const theme = createAppTheme(false);
 
   const renderFrameworkCard = (props: Partial<FrameworkCardProps> = {}) => {
-    const theme = createTheme();
     return render(
       <ThemeProvider theme={theme}>
         <FrameworkCard {...defaultProps} {...props} />
@@ -122,7 +129,7 @@ describe('FrameworkCard', () => {
     expect(summaryChip).toBeInTheDocument();
 
     const chipContainer = summaryChip.parentElement;
-    expect(chipContainer).toHaveStyle('background-color: #4caf50');
+    expect(chipContainer).toHaveStyle(`background-color: ${theme.palette.success.main}`);
   });
 
   it('should display the non-compliant state, including the severity chip and a list of failed plugins, when isCompliant is false and nonCompliantPlugins contains plugin names', () => {
@@ -233,5 +240,95 @@ describe('FrameworkCard', () => {
     );
 
     expect(tooltipText).toBeVisible();
+  });
+
+  it('should set success background color when isCompliant is true', () => {
+    renderFrameworkCard({ isCompliant: true });
+    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    expect(cardElement).toHaveStyle(`background-color: ${alpha(theme.palette.success.main, 0.05)}`);
+  });
+
+  it('should set error background color when isCompliant is false', () => {
+    renderFrameworkCard({ isCompliant: false });
+    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    expect(cardElement).toHaveStyle(`background-color: ${alpha(theme.palette.error.main, 0.05)}`);
+  });
+
+  it('should render the summary chip and severity chip with the correct color prop and use the theme-driven text color for the severity chip', () => {
+    const frameworkSeverity = Severity.High;
+    renderFrameworkCard({
+      isCompliant: false,
+      frameworkSeverity: frameworkSeverity,
+      nonCompliantPlugins: ['plugin-1'],
+      categoryStats: {
+        'plugin-1': { pass: 0, total: 1 },
+      },
+    });
+
+    const summaryChip = screen.getByText('1 / 1 failed');
+    expect(summaryChip).toBeInTheDocument();
+    expect(summaryChip.closest('.MuiChip-root')).toHaveClass('MuiChip-colorError');
+
+    const severityChip = screen.getByText(frameworkSeverity);
+    expect(severityChip).toBeInTheDocument();
+
+    const severityChipElement = severityChip.closest('.MuiChip-root');
+    expect(severityChipElement).toHaveStyle({
+      backgroundColor: theme.palette.custom.severity[frameworkSeverity].main,
+      color: theme.palette.custom.severity[frameworkSeverity].contrastText,
+    });
+  });
+
+  it("should render the failed plugin section with a background color using the theme's error color at 5% opacity, and the passed plugin section with the theme's success color at 5% opacity", () => {
+    renderFrameworkCard({
+      isCompliant: false,
+      nonCompliantPlugins: ['plugin-3'],
+      categoryStats: {
+        'plugin-1': { pass: 10, total: 10 },
+        'plugin-2': { pass: 9, total: 10 },
+        'plugin-3': { pass: 5, total: 10 },
+      },
+    });
+
+    const failedSection = screen.getByText('Failed:').closest('li');
+    const expectedErrorBg = alpha(theme.palette.error.main, 0.05);
+    expect(failedSection).toHaveStyle(`background-color: ${expectedErrorBg}`);
+
+    const passedSection = screen.getByText('Passed:').closest('li');
+    const expectedSuccessBg = alpha(theme.palette.success.main, 0.05);
+    expect(passedSection).toHaveStyle(`background-color: ${expectedSuccessBg}`);
+  });
+
+  it('should verify CheckCircleIcon uses the success color prop when isCompliant is true', () => {
+    renderFrameworkCard({ isCompliant: true });
+    const checkCircleIcons = screen.getAllByTestId('CheckCircleIcon');
+    const checkCircleIcon = checkCircleIcons[0];
+    expect(checkCircleIcon).toHaveClass('MuiSvgIcon-colorSuccess');
+  });
+
+  it('should maintain proper layout and spacing when rendering a large number of non-compliant plugins', () => {
+    const numPlugins = 25;
+    const nonCompliantPlugins = Array.from({ length: numPlugins }, (_, i) => `plugin-${i + 1}`);
+    const categoryStats = nonCompliantPlugins.reduce((acc, plugin) => {
+      acc[plugin] = { pass: 0, total: 10 };
+      return acc;
+    }, {} as CategoryStats);
+
+    renderFrameworkCard({
+      isCompliant: false,
+      frameworkSeverity: Severity.High,
+      nonCompliantPlugins: nonCompliantPlugins,
+      categoryStats: categoryStats,
+    });
+
+    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    expect(cardElement).toHaveClass('non-compliant');
+
+    nonCompliantPlugins.forEach((plugin) => {
+      expect(screen.getByText(plugin)).toBeInTheDocument();
+    });
+
+    const summaryChip = screen.getByText(`${numPlugins} / ${numPlugins} failed`);
+    expect(summaryChip).toBeInTheDocument();
   });
 });

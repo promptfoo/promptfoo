@@ -9,10 +9,9 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useNavigate } from 'react-router-dom';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_NAMES,
@@ -21,13 +20,14 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
+import { useNavigate } from 'react-router-dom';
+import { getSeverityColor, getSeverityContrastText } from '../utils/color';
 import {
   type CategoryStats,
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
   getPluginDisplayName,
-  getSeverityColor,
 } from './FrameworkComplianceUtils';
 
 interface FrameworkCardProps {
@@ -69,7 +69,14 @@ const FrameworkCard = ({
   return (
     <Card
       className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}
-      sx={{ pageBreakInside: breakInside, breakInside }}
+      sx={{
+        pageBreakInside: breakInside,
+        breakInside,
+        backgroundColor: alpha(
+          isCompliant ? theme.palette.success.main : theme.palette.error.main,
+          0.05,
+        ),
+      }}
     >
       <CardContent>
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
@@ -83,7 +90,7 @@ const FrameworkCard = ({
           </Box>
           <Box display="flex" alignItems="center">
             {isCompliant ? (
-              <CheckCircleIcon className="icon-compliant" />
+              <CheckCircleIcon className="icon-compliant" color="success" />
             ) : (
               <Tooltip
                 title={
@@ -102,7 +109,7 @@ const FrameworkCard = ({
                   size="small"
                   sx={{
                     backgroundColor: getSeverityColor(frameworkSeverity, theme),
-                    color: 'white',
+                    color: getSeverityContrastText(frameworkSeverity, theme),
                     fontWeight: 'bold',
                   }}
                 />
@@ -201,10 +208,8 @@ const FrameworkCard = ({
                           <Chip
                             label="No Plugins"
                             size="small"
+                            color={nonCompliantCategoryPlugins.length === 0 ? 'success' : 'default'}
                             sx={{
-                              backgroundColor:
-                                nonCompliantCategoryPlugins.length === 0 ? '#4caf50' : '#9e9e9e',
-                              color: 'white',
                               fontSize: '0.7rem',
                               height: 20,
                             }}
@@ -213,10 +218,8 @@ const FrameworkCard = ({
                           <Chip
                             label={`${nonCompliantCategoryPlugins.length} / ${testedPlugins.length} plugins failed`}
                             size="small"
+                            color={nonCompliantCategoryPlugins.length === 0 ? 'success' : 'error'}
                             sx={{
-                              backgroundColor:
-                                nonCompliantCategoryPlugins.length === 0 ? '#4caf50' : '#f44336',
-                              color: 'white',
                               fontSize: '0.7rem',
                               height: 20,
                             }}
@@ -226,8 +229,6 @@ const FrameworkCard = ({
                             label={`${untestedPlugins.length} Untested`}
                             size="small"
                             sx={{
-                              backgroundColor: '#9e9e9e',
-                              color: 'white',
                               fontSize: '0.7rem',
                               height: 20,
                             }}
@@ -242,7 +243,7 @@ const FrameworkCard = ({
                             sx={{
                               py: 0.5,
                               px: 1,
-                              bgcolor: 'rgba(244, 67, 54, 0.05)',
+                              bgcolor: (theme) => alpha(theme.palette.error.main, 0.05),
                             }}
                           >
                             <Typography variant="caption" fontWeight="bold" color="error.main">
@@ -314,7 +315,7 @@ const FrameworkCard = ({
                             sx={{
                               py: 0.5,
                               px: 1,
-                              bgcolor: 'rgba(76, 175, 80, 0.05)',
+                              bgcolor: alpha(theme.palette.success.main, 0.05),
                               mt: 1,
                             }}
                           >
@@ -478,9 +479,8 @@ const FrameworkCard = ({
                 <Chip
                   label={`${nonCompliantPlugins.length} / ${Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length} failed`}
                   size="small"
+                  color={nonCompliantPlugins.length === 0 ? 'success' : 'error'}
                   sx={{
-                    backgroundColor: nonCompliantPlugins.length === 0 ? '#4caf50' : '#f44336',
-                    color: 'white',
                     fontSize: '0.7rem',
                     height: 20,
                   }}
@@ -489,7 +489,13 @@ const FrameworkCard = ({
               <List dense sx={{ py: 0 }}>
                 {/* Failed plugins first */}
                 {nonCompliantPlugins.length > 0 && (
-                  <ListItem sx={{ py: 0.5, px: 1, bgcolor: 'rgba(244, 67, 54, 0.05)' }}>
+                  <ListItem
+                    sx={{
+                      py: 0.5,
+                      px: 1,
+                      bgcolor: (theme) => alpha(theme.palette.error.main, 0.05),
+                    }}
+                  >
                     <Typography variant="caption" fontWeight="bold" color="error.main">
                       Failed:
                     </Typography>
@@ -554,7 +560,14 @@ const FrameworkCard = ({
                         pluginPassRateThreshold,
                   );
                   return compliantPlugins.length > 0 ? (
-                    <ListItem sx={{ py: 0.5, px: 1, bgcolor: 'rgba(76, 175, 80, 0.05)', mt: 1 }}>
+                    <ListItem
+                      sx={{
+                        py: 0.5,
+                        px: 1,
+                        bgcolor: alpha(theme.palette.success.main, 0.05),
+                        mt: 1,
+                      }}
+                    >
                       <Typography variant="caption" fontWeight="bold" color="success.main">
                         Passed:
                       </Typography>

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Code from '@app/components/Code';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -80,6 +81,7 @@ export default function Review({
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
@@ -182,6 +184,11 @@ export default function Review({
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
 
+  // Check API health on mount
+  useEffect(() => {
+    checkHealth();
+  }, [checkHealth]);
+
   // Sync local maxConcurrency state with config
   useEffect(() => {
     setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
@@ -268,6 +275,27 @@ export default function Review({
 
     return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
   }, [config.strategies]);
+
+  const isRunNowDisabled = useMemo(() => {
+    return isRunning || ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus);
+  }, [isRunning, apiHealthStatus]);
+
+  const runNowTooltipMessage = useMemo((): string | undefined => {
+    if (isRunning) {
+      return undefined;
+    }
+
+    switch (apiHealthStatus) {
+      case 'blocked':
+        return 'Cannot connect to Promptfoo Cloud. Please check your network connection or API settings.';
+      case 'disabled':
+        return 'Remote generation is disabled. Running red team evaluations requires connection to Promptfoo Cloud.';
+      case 'unknown':
+        return 'Checking connection to Promptfoo Cloud...';
+      default:
+        return undefined;
+    }
+  }, [isRunning, apiHealthStatus]);
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
@@ -1072,19 +1100,36 @@ export default function Review({
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
             </Typography>
+            {apiHealthStatus !== 'connected' && apiHealthStatus !== 'loading' && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                {apiHealthStatus === 'blocked'
+                  ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
+                  : apiHealthStatus === 'disabled'
+                    ? 'Remote generation is disabled. The "Run Now" option is not available.'
+                    : 'Checking connection status...'}
+              </Alert>
+            )}
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleRunWithSettings}
-                  disabled={isRunning}
-                  startIcon={
-                    isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
-                  }
-                >
-                  {isRunning ? 'Running...' : 'Run Now'}
-                </Button>
+                <Tooltip title={runNowTooltipMessage} arrow>
+                  <span>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={handleRunWithSettings}
+                      disabled={isRunNowDisabled}
+                      startIcon={
+                        isRunning ? (
+                          <CircularProgress size={20} color="inherit" />
+                        ) : (
+                          <PlayArrowIcon />
+                        )
+                      }
+                    >
+                      {isRunning ? 'Running...' : 'Run Now'}
+                    </Button>
+                  </span>
+                </Tooltip>
                 {isRunning && (
                   <Button
                     variant="contained"

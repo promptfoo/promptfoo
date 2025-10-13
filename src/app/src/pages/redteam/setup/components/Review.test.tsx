@@ -1,13 +1,15 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
-import * as strategiesUtils from './strategies/utils';
+import { useEmailVerification } from '@app/hooks/useEmailVerification';
+import { callApi } from '@app/utils/api';
+import type { ApiHealthStatus } from '@app/hooks/useApiHealth';
 
 // Mock the dependencies
 vi.mock('@app/hooks/useEmailVerification', () => ({
-  useEmailVerification: () => ({
+  useEmailVerification: vi.fn(() => ({
     checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-  }),
+  })),
 }));
 
 vi.mock('@app/hooks/useTelemetry', () => ({
@@ -27,6 +29,23 @@ vi.mock('@app/utils/api', () => ({
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
+
+// Mock the useApiHealth hook
+let apiHealthStatus: {
+  status: ApiHealthStatus;
+  checkHealth: ReturnType<typeof vi.fn>;
+  message: string | null;
+  isChecking: boolean;
+} = {
+  status: 'connected',
+  checkHealth: vi.fn(),
+  message: null,
+  isChecking: false,
+};
+
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: () => apiHealthStatus,
 }));
 
 vi.mock('@app/pages/eval-creator/components/YamlEditor', () => ({
@@ -80,6 +99,12 @@ describe('Review Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    apiHealthStatus = {
+      status: 'connected',
+      checkHealth: vi.fn(),
+      message: null,
+      isChecking: false,
+    };
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultConfig,
       updateConfig: mockUpdateConfig,
@@ -276,17 +301,336 @@ Application Details:
     ).toBeInTheDocument();
   });
 
-  describe('Estimated Probes Display', () => {
-    const mockGetEstimatedProbes = vi.mocked(strategiesUtils.getEstimatedProbes);
-    const mockGetEstimatedDuration = vi.mocked(strategiesUtils.getEstimatedDuration);
+  describe('Run Now Button - API Health Integration', () => {
+    it('should call checkHealth on component mount', () => {
+      const checkHealthMock = vi.fn();
+      apiHealthStatus.checkHealth = checkHealthMock;
 
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      expect(checkHealthMock).toHaveBeenCalled();
+    });
+
+    it('should enable the Run Now button when API status is connected', () => {
+      apiHealthStatus.status = 'connected';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const runButton = screen.getByRole('button', { name: /run now/i });
+      expect(runButton).toBeEnabled();
+    });
+
+    it('should disable the Run Now button when API status is blocked', () => {
+      apiHealthStatus.status = 'blocked';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const runButton = screen.getByRole('button', { name: /run now/i });
+      expect(runButton).toBeDisabled();
+    });
+
+    it('should disable the Run Now button when API status is disabled', () => {
+      apiHealthStatus.status = 'disabled';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const runButton = screen.getByRole('button', { name: /run now/i });
+      expect(runButton).toBeDisabled();
+    });
+
+    it('should disable the Run Now button when API status is unknown', () => {
+      apiHealthStatus.status = 'unknown';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const runButton = screen.getByRole('button', { name: /run now/i });
+      expect(runButton).toBeDisabled();
+    });
+
+    it('should enable the Run Now button when API status is loading', () => {
+      apiHealthStatus.status = 'loading';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const runButton = screen.getByRole('button', { name: /run now/i });
+      expect(runButton).toBeEnabled();
+    });
+
+    it('should show tooltip message when hovering over disabled button due to blocked API', async () => {
+      apiHealthStatus.status = 'blocked';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const buttonWrapper = screen.getByRole('button', { name: /run now/i }).parentElement;
+
+      if (buttonWrapper) {
+        fireEvent.mouseOver(buttonWrapper);
+
+        await waitFor(() => {
+          expect(screen.getByText(/cannot connect to promptfoo cloud/i)).toBeInTheDocument();
+        });
+      }
+    });
+
+    it('should display warning alert when API is blocked', () => {
+      apiHealthStatus.status = 'blocked';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Check for the specific alert text
+      expect(
+        screen.getByText(
+          /Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud./i,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('should display warning alert when API is disabled', () => {
+      apiHealthStatus.status = 'disabled';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Check for the specific alert text
+      expect(
+        screen.getByText(/Remote generation is disabled. The "Run Now" option is not available./),
+      ).toBeInTheDocument();
+    });
+
+    it('should display warning alert when API is unknown', () => {
+      apiHealthStatus.status = 'unknown';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Check for the specific alert text
+      expect(screen.getByText(/Checking connection status.../)).toBeInTheDocument();
+    });
+
+    it('should not display warning alert when API is connected', () => {
+      apiHealthStatus.status = 'connected';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Check that no API health warning alert exists (but other alerts may exist)
+      expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Remote generation is disabled/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Checking connection status/)).not.toBeInTheDocument();
+    });
+
+    it('should not display warning alert when API is loading', () => {
+      apiHealthStatus.status = 'loading';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Check that no API health warning alert exists (but other alerts may exist)
+      expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Remote generation is disabled/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Checking connection status/)).not.toBeInTheDocument();
+    });
+
+    it('should show tooltip message when hovering over disabled button due to disabled API', async () => {
+      apiHealthStatus.status = 'disabled';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const buttonWrapper = screen.getByRole('button', { name: /run now/i }).parentElement;
+
+      if (buttonWrapper) {
+        fireEvent.mouseOver(buttonWrapper);
+
+        await waitFor(() => {
+          expect(screen.getByText(/remote generation is disabled/i)).toBeInTheDocument();
+        });
+      }
+    });
+
+    it('should show tooltip message when hovering over disabled button due to unknown API status', async () => {
+      apiHealthStatus.status = 'unknown';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const buttonWrapper = screen.getByRole('button', { name: /run now/i }).parentElement;
+
+      if (buttonWrapper) {
+        fireEvent.mouseOver(buttonWrapper);
+
+        await waitFor(() => {
+          expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
+        });
+      }
+    });
+
+    it('should not show tooltip when API is connected', async () => {
+      apiHealthStatus.status = 'connected';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const button = screen.getByRole('button', { name: /run now/i });
+      const buttonWrapper = button.parentElement;
+
+      if (buttonWrapper) {
+        fireEvent.mouseOver(buttonWrapper);
+
+        // Wait a bit to ensure tooltip would have time to appear if it was going to
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Check that no tooltip is shown (check for various tooltip text patterns)
+        expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/remote generation is disabled/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/checking connection/i)).not.toBeInTheDocument();
+      }
+    });
+
+    it('should not show tooltip when API is loading', async () => {
+      apiHealthStatus.status = 'loading';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const button = screen.getByRole('button', { name: /run now/i });
+      const buttonWrapper = button.parentElement;
+
+      if (buttonWrapper) {
+        fireEvent.mouseOver(buttonWrapper);
+
+        // Wait a bit to ensure tooltip would have time to appear if it was going to
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Check that no tooltip is shown
+        expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/remote generation is disabled/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/checking connection/i)).not.toBeInTheDocument();
+      }
+    });
+  });
+
+  describe('Run Now Button - isRunning Integration', () => {
     beforeEach(() => {
-      mockGetEstimatedProbes.mockClear();
-      mockGetEstimatedDuration.mockClear();
+      // Mock successful job status check and run API calls
+      vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
+        if (url === '/redteam/status') {
+          return {
+            json: async () => ({ hasRunningJob: false }),
+          } as any;
+        }
+        if (url === '/redteam/run') {
+          return {
+            json: async () => ({ id: 'test-job-id' }),
+          } as any;
+        }
+        if (url.startsWith('/eval/job/')) {
+          return {
+            json: async () => ({
+              status: 'running',
+              logs: ['Running tests...'],
+            }),
+          } as any;
+        }
+        return { json: async () => ({}) } as any;
+      });
     });
 
-    it('renders estimated probes below estimated duration', () => {
-      mockGetEstimatedProbes.mockReturnValue(150);
+    it('should disable button when isRunning is true regardless of API status', async () => {
+      apiHealthStatus.status = 'connected';
+
+      // Mock email verification to proceed
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
 
       render(
         <Review
@@ -296,26 +640,30 @@ Application Details:
         />,
       );
 
-      // Verify the estimated probes label is displayed
-      expect(screen.getByText('Estimated Probes:')).toBeInTheDocument();
+      // Initially button should be enabled
+      const runButton = screen.getByRole('button', { name: /run now/i });
+      expect(runButton).toBeEnabled();
 
-      // Verify the estimated probes value is displayed with proper formatting
-      expect(screen.getByText('150')).toBeInTheDocument();
+      // Click the button to start running
+      fireEvent.click(runButton);
 
-      // Verify it appears after "Estimated Duration"
-      const estimatedDurationLabel = screen.getByText('Estimated Duration:');
-      const estimatedProbesLabel = screen.getByText('Estimated Probes:');
+      // Wait for the button to update to "Running..." state
+      await waitFor(() => {
+        const runningButton = screen.getByRole('button', { name: /running/i });
+        expect(runningButton).toBeDisabled();
+      });
 
-      // Get parent elements to compare their positions
-      const estimatedDurationBox = estimatedDurationLabel.closest('[class*="MuiBox-root"]');
-      const estimatedProbesBox = estimatedProbesLabel.closest('[class*="MuiBox-root"]');
-
-      expect(estimatedDurationBox).toBeInTheDocument();
-      expect(estimatedProbesBox).toBeInTheDocument();
+      // Verify API was called
+      expect(callApi).toHaveBeenCalledWith('/redteam/run', expect.any(Object));
     });
 
-    it('displays formatted estimated probes with commas for large numbers', () => {
-      mockGetEstimatedProbes.mockReturnValue(1234);
+    it('should show "Running..." text when isRunning is true', async () => {
+      apiHealthStatus.status = 'connected';
+
+      // Mock email verification to proceed
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
 
       render(
         <Review
@@ -325,12 +673,26 @@ Application Details:
         />,
       );
 
-      // Check that the number is formatted with a comma
-      expect(screen.getByText('1,234')).toBeInTheDocument();
+      // Initially button should show "Run Now"
+      expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
+
+      // Click the button to start running
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
+
+      // Wait for the button text to change to "Running..."
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /run now/i })).not.toBeInTheDocument();
+      });
     });
 
-    it('formats very large numbers with multiple commas', () => {
-      mockGetEstimatedProbes.mockReturnValue(1234567);
+    it('should show Cancel button when isRunning is true', async () => {
+      apiHealthStatus.status = 'connected';
+
+      // Mock email verification to proceed
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
 
       render(
         <Review
@@ -340,12 +702,68 @@ Application Details:
         />,
       );
 
-      // Check that the number is formatted with multiple commas
-      expect(screen.getByText('1,234,567')).toBeInTheDocument();
+      // Initially Cancel button should not be present
+      expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
+
+      // Click the Run Now button to start running
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
+
+      // Wait for the Cancel button to appear
+      await waitFor(() => {
+        const cancelButton = screen.getByRole('button', { name: /cancel/i });
+        expect(cancelButton).toBeInTheDocument();
+        expect(cancelButton).toBeEnabled(); // Cancel button should always be enabled
+      });
     });
 
-    it('updates estimated probes when configuration changes', () => {
-      mockGetEstimatedProbes.mockReturnValue(100);
+    it('should not show tooltip when button is disabled due to isRunning', async () => {
+      apiHealthStatus.status = 'connected';
+
+      // Mock email verification to proceed
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Click the Run Now button to start running
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
+
+      // Wait for the button to be in running state
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+      });
+
+      const runningButton = screen.getByRole('button', { name: /running/i });
+      const buttonWrapper = runningButton.parentElement;
+
+      if (buttonWrapper) {
+        fireEvent.mouseOver(buttonWrapper);
+
+        // Wait a bit to ensure tooltip would have time to appear if it was going to
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Check that no tooltip is shown
+        expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/remote generation is disabled/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/checking connection/i)).not.toBeInTheDocument();
+      }
+    });
+
+    it('should disable button when both isRunning is true and API is blocked', async () => {
+      // Start with API connected so we can trigger running state
+      apiHealthStatus.status = 'connected';
+
+      // Mock email verification to proceed
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
 
       const { rerender } = render(
         <Review
@@ -355,22 +773,16 @@ Application Details:
         />,
       );
 
-      // Initially shows 100
-      expect(screen.getByText('100')).toBeInTheDocument();
+      // Click the Run Now button to start running
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
 
-      // Update the mock to return a different value
-      mockGetEstimatedProbes.mockReturnValue(500);
-
-      // Update configuration to trigger re-render
-      mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          ...defaultConfig,
-          plugins: ['plugin1', 'plugin2', 'plugin3'],
-          strategies: ['basic', 'jailbreak'],
-          numTests: 20,
-        },
-        updateConfig: mockUpdateConfig,
+      // Wait for running state
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /running/i })).toBeDisabled();
       });
+
+      // Now simulate API becoming blocked while running
+      apiHealthStatus.status = 'blocked';
 
       rerender(
         <Review
@@ -380,102 +792,15 @@ Application Details:
         />,
       );
 
-      // Should now show 500
-      expect(screen.getByText('500')).toBeInTheDocument();
+      // Button should still be disabled (due to isRunning)
+      const runningButton = screen.getByRole('button', { name: /running/i });
+      expect(runningButton).toBeDisabled();
     });
+  });
 
-    it('displays tooltip icon for estimated probes', () => {
-      mockGetEstimatedProbes.mockReturnValue(150);
-
-      render(
-        <Review
-          navigateToPlugins={vi.fn()}
-          navigateToStrategies={vi.fn()}
-          navigateToPurpose={vi.fn()}
-        />,
-      );
-
-      // Verify the Estimated Probes label is present
-      expect(screen.getByText('Estimated Probes:')).toBeInTheDocument();
-
-      // Verify estimated probes value is displayed
-      expect(screen.getByText('150')).toBeInTheDocument();
-
-      // Note: The actual tooltip text testing would require more complex setup with MUI's Tooltip component
-      // For now, we verify the estimated probes display is working correctly
-    });
-
-    it('handles zero estimated probes correctly', () => {
-      mockGetEstimatedProbes.mockReturnValue(0);
-
-      render(
-        <Review
-          navigateToPlugins={vi.fn()}
-          navigateToStrategies={vi.fn()}
-          navigateToPurpose={vi.fn()}
-        />,
-      );
-
-      // Should still display "0"
-      expect(screen.getByText('0')).toBeInTheDocument();
-    });
-
-    it('calls getEstimatedProbes with correct config', () => {
-      const testConfig = {
-        ...defaultConfig,
-        plugins: ['plugin1', 'plugin2'],
-        strategies: ['basic'],
-        numTests: 15,
-      };
-
-      mockUseRedTeamConfig.mockReturnValue({
-        config: testConfig,
-        updateConfig: mockUpdateConfig,
-      });
-
-      mockGetEstimatedProbes.mockReturnValue(30);
-
-      render(
-        <Review
-          navigateToPlugins={vi.fn()}
-          navigateToStrategies={vi.fn()}
-          navigateToPurpose={vi.fn()}
-        />,
-      );
-
-      // Verify getEstimatedProbes was called with the correct config
-      expect(mockGetEstimatedProbes).toHaveBeenCalledWith(testConfig);
-    });
-
-    it('displays estimated probes in the same style as estimated duration', () => {
-      mockGetEstimatedProbes.mockReturnValue(150);
-
-      render(
-        <Review
-          navigateToPlugins={vi.fn()}
-          navigateToStrategies={vi.fn()}
-          navigateToPurpose={vi.fn()}
-        />,
-      );
-
-      // Find both boxes
-      const estimatedDurationLabel = screen.getByText('Estimated Duration:');
-      const estimatedProbesLabel = screen.getByText('Estimated Probes:');
-
-      const estimatedDurationBox = estimatedDurationLabel.closest('[class*="MuiBox-root"]');
-      const estimatedProbesBox = estimatedProbesLabel.closest('[class*="MuiBox-root"]');
-
-      // Both should have similar styling classes (we can't check exact styles in unit tests)
-      expect(estimatedDurationBox?.className).toBeTruthy();
-      expect(estimatedProbesBox?.className).toBeTruthy();
-
-      // Both boxes should exist and be visible
-      expect(estimatedDurationBox).toBeInTheDocument();
-      expect(estimatedProbesBox).toBeInTheDocument();
-    });
-
-    it('memoizes the estimated probes calculation', () => {
-      mockGetEstimatedProbes.mockReturnValue(150);
+  describe('Run Now Button - State Transitions', () => {
+    it('should update button state when API health status changes', () => {
+      apiHealthStatus.status = 'connected';
 
       const { rerender } = render(
         <Review
@@ -485,10 +810,11 @@ Application Details:
         />,
       );
 
-      // Initial call
-      expect(mockGetEstimatedProbes).toHaveBeenCalledTimes(1);
+      // Initially button should be enabled
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
 
-      // Re-render with same config
+      // Change API status to blocked
+      apiHealthStatus.status = 'blocked';
       rerender(
         <Review
           navigateToPlugins={vi.fn()}
@@ -497,18 +823,11 @@ Application Details:
         />,
       );
 
-      // Should not call getEstimatedProbes again due to memoization
-      expect(mockGetEstimatedProbes).toHaveBeenCalledTimes(1);
+      // Button should now be disabled
+      expect(screen.getByRole('button', { name: /run now/i })).toBeDisabled();
 
-      // Now change the config
-      mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          ...defaultConfig,
-          numTests: 20, // Changed value
-        },
-        updateConfig: mockUpdateConfig,
-      });
-
+      // Change API status back to connected
+      apiHealthStatus.status = 'connected';
       rerender(
         <Review
           navigateToPlugins={vi.fn()}
@@ -517,8 +836,131 @@ Application Details:
         />,
       );
 
-      // Should call getEstimatedProbes again with new config
-      expect(mockGetEstimatedProbes).toHaveBeenCalledTimes(2);
+      // Button should be enabled again
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+    });
+
+    it('should update alert visibility when API health status changes', () => {
+      apiHealthStatus.status = 'connected';
+
+      const { rerender } = render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Initially no API health alert should be shown
+      expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Remote generation is disabled/)).not.toBeInTheDocument();
+
+      // Change API status to blocked
+      apiHealthStatus.status = 'blocked';
+      rerender(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Alert should now be visible
+      expect(
+        screen.getByText(
+          /Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud./i,
+        ),
+      ).toBeInTheDocument();
+
+      // Change API status to disabled
+      apiHealthStatus.status = 'disabled';
+      rerender(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Alert should update its message
+      expect(
+        screen.getByText(/Remote generation is disabled. The "Run Now" option is not available./),
+      ).toBeInTheDocument();
+      // Previous message should be gone
+      expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
+
+      // Change API status back to connected
+      apiHealthStatus.status = 'connected';
+      rerender(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Alert should disappear
+      expect(screen.queryByText(/Remote generation is disabled/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
+    });
+
+    it('should update tooltip message when API health status changes', async () => {
+      apiHealthStatus.status = 'blocked';
+
+      const { rerender } = render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const button = screen.getByRole('button', { name: /run now/i });
+      const buttonWrapper = button.parentElement;
+
+      if (buttonWrapper) {
+        // First check tooltip for blocked state
+        fireEvent.mouseOver(buttonWrapper);
+        await waitFor(() => {
+          expect(screen.getByText(/cannot connect to promptfoo cloud/i)).toBeInTheDocument();
+        });
+        fireEvent.mouseOut(buttonWrapper);
+
+        // Change to disabled state
+        apiHealthStatus.status = 'disabled';
+        rerender(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+
+        // Check tooltip for disabled state
+        fireEvent.mouseOver(buttonWrapper);
+        await waitFor(() => {
+          // Check for the tooltip text specifically (not the alert text)
+          const tooltips = screen.getAllByText(/remote generation is disabled/i);
+          expect(tooltips.length).toBeGreaterThan(0);
+        });
+        fireEvent.mouseOut(buttonWrapper);
+
+        // Change to unknown state
+        apiHealthStatus.status = 'unknown';
+        rerender(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+
+        // Check tooltip for unknown state
+        fireEvent.mouseOver(buttonWrapper);
+        await waitFor(() => {
+          expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
+        });
+      }
     });
   });
 });

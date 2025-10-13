@@ -585,6 +585,7 @@
                                               "python",
                                               "regex",
                                               "rouge-n",
+                                              "ruby",
                                               "similar",
                                               "starts-with",
                                               "trace-error-spans",
