@@ -10,18 +10,27 @@ import { safeJsonStringify } from '../util/json';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Global state for Ruby executable path caching.
+ * Ensures consistent Ruby executable usage across multiple provider instances.
+ */
 export const state: {
+  /** The cached validated Ruby executable path */
   cachedRubyPath: string | null;
+  /** Promise for in-progress validation to prevent duplicate validation attempts */
   validationPromise: Promise<string> | null;
+  /** The Ruby path currently being validated to detect path changes */
+  validatingPath: string | null;
 } = {
   cachedRubyPath: null,
   validationPromise: null,
+  validatingPath: null,
 };
 
 /**
- * Search for a Ruby executable on Windows using the `where` command and return the first validated `.exe` path.
- *
- * @returns The validated Ruby executable path if found, `null` otherwise.
+ * Attempts to find Ruby using Windows 'where' command.
+ * Only applicable on Windows platforms.
+ * @returns The validated Ruby executable path, or null if not found
  */
 async function tryWindowsWhere(): Promise<string | null> {
   try {
@@ -63,10 +72,10 @@ async function tryWindowsWhere(): Promise<string | null> {
 }
 
 /**
- * Probe a list of Ruby command names to discover the Ruby interpreter path.
- *
- * @param commands - Candidate Ruby command names to try (for example `"ruby"` or platform-specific variants)
- * @returns The discovered Ruby executable path, or `null` if none of the commands produced a valid path
+ * Attempts to get Ruby executable path by running Ruby commands.
+ * Uses RbConfig.ruby to get the actual Ruby executable path.
+ * @param commands - Array of Ruby command names to try (e.g., ['ruby'])
+ * @returns The Ruby executable path, or null if all commands fail
  */
 async function tryRubyCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
@@ -94,10 +103,10 @@ async function tryRubyCommands(commands: string[]): Promise<string | null> {
 }
 
 /**
- * Attempt to validate each provided command as a Ruby executable and return the first valid path.
- *
- * @param commands - Candidate command names or paths to test as Ruby executables
- * @returns The first command path that validates as Ruby, or `null` if none do
+ * Attempts to validate Ruby commands directly as a final fallback.
+ * Validates each command by running it with --version.
+ * @param commands - Array of Ruby command names to try (e.g., ['ruby'])
+ * @returns The validated Ruby executable path, or null if all commands fail
  */
 async function tryDirectCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
@@ -124,9 +133,8 @@ async function tryDirectCommands(commands: string[]): Promise<string | null> {
 }
 
 /**
- * Locate the Ruby executable on the current system using platform-specific detection.
- *
- * @returns The absolute path to the Ruby executable if found, `null` otherwise.
+ * Attempts to get the Ruby executable path using platform-appropriate strategies.
+ * @returns The Ruby executable path if successful, or null if failed.
  */
 export async function getSysExecutable(): Promise<string | null> {
   if (process.platform === 'win32') {
@@ -191,9 +199,16 @@ export async function tryPath(path: string): Promise<string | null> {
  * @throws {Error} If no valid Ruby executable is found.
  */
 export async function validateRubyPath(rubyPath: string, isExplicit: boolean): Promise<string> {
-  // Return cached result if available
-  if (state.cachedRubyPath) {
+  // Return cached result only if it matches the requested path
+  if (state.cachedRubyPath && state.validatingPath === rubyPath) {
     return state.cachedRubyPath;
+  }
+
+  // If validating a different path, clear cache and promise
+  if (state.validatingPath !== rubyPath) {
+    state.cachedRubyPath = null;
+    state.validationPromise = null;
+    state.validatingPath = rubyPath;
   }
 
   // Create validation promise atomically if it doesn't exist
@@ -248,19 +263,15 @@ export async function validateRubyPath(rubyPath: string, isExplicit: boolean): P
 }
 
 /**
- * Execute a Ruby script's specified method with provided arguments and return its result.
+ * Runs a Ruby script with the specified method and arguments.
  *
- * Writes the arguments to a temporary JSON file, invokes a Ruby wrapper to call the target
- * script/method, reads and parses the wrapper's JSON output, and returns the `data` from a
- * `{ type: 'final_result', data: ... }` response.
- *
- * @param scriptPath - Path to the Ruby script to invoke
- * @param method - Method name to call inside the Ruby script
- * @param args - Arguments to pass to the method; values are serialized to JSON
- * @param options - Optional runtime settings
- * @param options.rubyExecutable - Explicit path to the Ruby executable to use (falls back to env or system lookup if omitted)
- * @returns The `data` value produced by the Ruby script's `final_result` response
- * @throws An error if the Ruby executable cannot be validated, the subprocess fails, the wrapper output is not valid JSON, or the parsed result is not a `final_result`
+ * @param scriptPath - The path to the Ruby script to run.
+ * @param method - The name of the method to call in the Ruby script.
+ * @param args - An array of arguments to pass to the Ruby script.
+ * @param options - Optional settings for running the Ruby script.
+ * @param options.rubyExecutable - Optional path to the Ruby executable.
+ * @returns A promise that resolves to the output of the Ruby script.
+ * @throws An error if there's an issue running the Ruby script or parsing its output.
  */
 export async function runRuby(
   scriptPath: string,
