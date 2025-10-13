@@ -52,6 +52,7 @@ import type { RedteamRunOptions } from '@promptfoo/types';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 import EstimationsDisplay from './EstimationsDisplay';
+import Tooltip from '@mui/material/Tooltip';
 
 interface ReviewProps {
   onBack?: () => void;
