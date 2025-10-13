@@ -587,7 +587,7 @@ export default function Review({
                 <Typography variant="h6" gutterBottom>
                   Custom Policies ({customPolicies.length})
                 </Typography>
-                <Stack spacing={1}>
+                <Stack spacing={1} sx={{ maxHeight: 400, overflowY: 'auto' }}>
                   {customPolicies.map((policy, index) => (
                     <Box
                       key={index}
@@ -627,7 +627,8 @@ export default function Review({
                         sx={{
                           position: 'absolute',
                           right: 4,
-                          top: 4,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
                           padding: '2px',
                         }}
                       >
