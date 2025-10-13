@@ -161,11 +161,11 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
     });
     const emailSchema = z.string().email('Please enter a valid email address');
     try {
-    email = await input({
-      message: 'Redteam evals require email verification. Please enter your work email:',
-      validate: (input: string) => {
-        const result = emailSchema.safeParse(input);
-        return result.success || result.error.errors[0].message;
+      email = await input({
+        message: 'Redteam evals require email verification. Please enter your work email:',
+        validate: (input: string) => {
+          const result = emailSchema.safeParse(input);
+          return result.success || result.error.errors[0].message;
         },
       });
     } catch (err: any) {
@@ -192,7 +192,9 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
   return { emailNeedsValidation };
 }
 
-export async function checkEmailStatusAndMaybeExit(options?: { validate?: boolean }): Promise<"ok" | "bad_email"> {
+export async function checkEmailStatusAndMaybeExit(options?: {
+  validate?: boolean;
+}): Promise<'ok' | 'bad_email'> {
   const result = await checkEmailStatus(options);
 
   if (result.status === 'risky_email' || result.status === 'disposable_email') {

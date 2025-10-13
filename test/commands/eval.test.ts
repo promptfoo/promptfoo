@@ -9,7 +9,10 @@ import {
   showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
 import { evaluate } from '../../src/evaluator';
-import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../../src/globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  promptForEmailUnverified,
+} from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
