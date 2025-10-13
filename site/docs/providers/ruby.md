@@ -634,7 +634,8 @@ def call_api(prompt, options, context)
 end
 ```
 
-## Next Steps
+## See Also
 
-- Learn about [custom assertions](/docs/configuration/expected-outputs/)
-- Set up [CI/CD integration](/docs/integrations/github-action.md)
+- [Custom assertions](/docs/configuration/expected-outputs/) - Define expected outputs and validation rules
+- [Python Provider](/docs/providers/python) - Similar scripting provider for Python
+- [JavaScript Provider](/docs/providers/javascript) - JavaScript/TypeScript provider alternative

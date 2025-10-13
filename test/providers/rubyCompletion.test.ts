@@ -57,6 +57,10 @@ describe('RubyProvider', () => {
     mockResolve.mockReturnValue('/absolute/path/to/script.rb');
   });
 
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
       const provider = new RubyProvider('script.rb', {

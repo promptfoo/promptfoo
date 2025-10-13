@@ -156,10 +156,11 @@ export class RubyProvider implements ApiProvider {
       }
       return parsedResult;
     } else {
-      if (context) {
-        // Remove properties not useful in Ruby
-        delete context.getCache;
-        delete context.logger;
+      // Create a sanitized copy of context for Ruby
+      const sanitizedContext = context ? { ...context } : undefined;
+      if (sanitizedContext) {
+        delete sanitizedContext.getCache;
+        delete sanitizedContext.logger;
       }
 
       // Create a new options object with processed file references included in the config
@@ -175,7 +176,7 @@ export class RubyProvider implements ApiProvider {
       // Prepare arguments for the Ruby script based on API type
       const args =
         apiType === 'call_api'
-          ? [prompt, optionsWithProcessedConfig, context]
+          ? [prompt, optionsWithProcessedConfig, sanitizedContext]
           : [prompt, optionsWithProcessedConfig];
 
       logger.debug(
@@ -284,9 +285,6 @@ export class RubyProvider implements ApiProvider {
    * @returns Provider response with output, token usage, and other metadata
    */
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executeRubyScript(prompt, context, 'call_api');
   }
 
@@ -296,9 +294,6 @@ export class RubyProvider implements ApiProvider {
    * @returns Provider response with embedding array
    */
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executeRubyScript(prompt, undefined, 'call_embedding_api');
   }
 
@@ -308,9 +303,6 @@ export class RubyProvider implements ApiProvider {
    * @returns Provider response with classification results
    */
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executeRubyScript(prompt, undefined, 'call_classification_api');
   }
 }
