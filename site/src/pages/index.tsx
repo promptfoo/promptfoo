@@ -126,21 +126,20 @@ function HomepageWalkthrough() {
       image2x: '/img/riskreport-1@2x.png',
       description: (
         <>
-          <p className={styles.walkthroughHeading}>
-            Adaptive red teaming that targets applications, not just models
-          </p>
+          <p className={styles.walkthroughHeading}>Red teaming that targets agents & RAGs</p>
           <p>Generate customized attacks for your use case:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest redteam setup</code>
           </pre>
-          <p>Our language models probe for specific risks in your system.</p>
+          <p>
+            Attacks dynamically simulate real users to uncover application-specific vulnerabilities:
+          </p>
           <ul>
             <li>Direct and indirect prompt injections</li>
             <li>Jailbreaks tailored to your guardrails</li>
             <li>Data and PII leaks</li>
             <li>Business rule violations</li>
-            <li>Insecure tool use</li>
-            <li>Unauthorized contract creation</li>
+            <li>Insecure tool use in agents</li>
             <li>Toxic content generation</li>
             <li>
               And <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
@@ -456,9 +455,8 @@ function CommunitySection() {
           AI security community
         </h2>
         <p className={styles.sectionSubtitle}>
-          Get real-time threat intelligence and innovation you can't find anywhere
-          else.
-          <br/>
+          Get real-time threat intelligence and innovation you can't find anywhere else.
+          <br />
           Our contributors are from companies like OpenAI, Google, Microsoft, and Amazon.
         </p>
 

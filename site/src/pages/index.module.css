@@ -8,6 +8,135 @@
   --section-spacing-lg: 4rem; /* Mobile default & compact sections */
   --section-spacing-md: 3rem; /* Smaller sections like TrustBar */
   --section-spacing-sm: 2rem; /* Tight spacing when needed */
+
+  /* Animation variables for consistent timing */
+  --animation-speed-slow: 0.8s;
+  --animation-speed-medium: 0.5s;
+  --animation-speed-fast: 0.3s;
+  --animation-ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --animation-ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Smooth scrolling for the entire page */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Disable specific animations that might be problematic */
+  .buttons .button--primary,
+  .personaTabActive,
+  .walkthroughTabActive {
+    animation: none !important;
+  }
+}
+
+/* Scroll-triggered fade-in animation base */
+@keyframes fadeInUpScroll {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInLeftScroll {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeInRightScroll {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Floating animation for continuous subtle motion */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes floatSlow {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-15px) rotate(1deg);
+  }
+}
+
+/* Breathing animation for cards */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+/* Shimmer effect */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* Glow pulse */
+@keyframes glowPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(229, 58, 58, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(229, 58, 58, 0.6);
+  }
 }
 
 /* Page-level gradient - main background for entire page */
@@ -61,6 +190,8 @@
   overflow: hidden;
   /* Removed background gradient - using page-level gradient instead */
   background: transparent;
+  /* Add entrance animation */
+  animation: fadeInUpScroll 0.8s var(--animation-ease-smooth) backwards;
 }
 
 .heroBanner::before {
@@ -95,6 +226,8 @@
   letter-spacing: -0.03em;
   color: var(--ifm-font-color-base);
   line-height: 1.1;
+  /* Staggered entrance animation */
+  animation: fadeInUpScroll 0.8s var(--animation-ease-smooth) 0.2s backwards;
 }
 
 .heroBanner p {
@@ -103,6 +236,8 @@
   margin-bottom: 3rem;
   color: var(--pf-dark-base);
   opacity: 0.9;
+  /* Staggered entrance animation */
+  animation: fadeInUpScroll 0.8s var(--animation-ease-smooth) 0.4s backwards;
 }
 
 [data-theme='dark'] .heroBanner p {
@@ -189,18 +324,23 @@
   flex-wrap: wrap;
   max-width: 100%;
   padding: 0 1rem;
+  /* Staggered entrance animation */
+  animation: fadeInUpScroll 0.8s var(--animation-ease-smooth) 0.6s backwards;
 }
 
 .buttons .button {
   font-weight: 600;
   padding: 0.875rem 2rem;
   border-radius: 12px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--animation-speed-fast) var(--animation-ease-smooth);
   text-transform: none;
   letter-spacing: 0.02em;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   position: relative;
   overflow: hidden;
+  /* Add will-change for better performance */
+  will-change: transform;
+  cursor: pointer;
 }
 
 .buttons .button::before {
@@ -218,29 +358,59 @@
   left: 100%;
 }
 
+/* Add shimmer effect on hover */
+.buttons .button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+}
+
+.buttons .button:hover::after {
+  transform: translateX(100%);
+}
+
 .buttons .button--primary {
   background: linear-gradient(135deg, var(--pf-red-dark) 0%, var(--pf-red-base) 100%);
   border: none;
   color: white;
+  /* Add subtle glow animation */
+  animation: glowPulse 3s ease-in-out infinite;
 }
 
 .buttons .button--primary:hover {
   background: linear-gradient(135deg, var(--pf-red-darker) 0%, var(--pf-red-dark) 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(229, 58, 58, 0.3);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow:
+    0 12px 28px rgba(229, 58, 58, 0.4),
+    0 4px 12px rgba(229, 58, 58, 0.3);
+  animation: none; /* Disable glow on hover */
+}
+
+.buttons .button--primary:active {
+  transform: translateY(-1px) scale(0.98);
+  box-shadow: 0 4px 12px rgba(229, 58, 58, 0.3);
 }
 
 .buttons .button--secondary {
   background: rgba(255, 255, 255, 0.9);
   border: 2px solid var(--pf-red-base);
   color: var(--pf-red-base);
+  backdrop-filter: blur(10px);
 }
 
 .buttons .button--secondary:hover {
   background: var(--pf-red-ultra-light);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(229, 58, 58, 0.2);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 8px 24px rgba(229, 58, 58, 0.25);
   border-color: var(--pf-red-dark);
+  border-width: 2px;
+}
+
+.buttons .button--secondary:active {
+  transform: translateY(-1px) scale(0.98);
 }
 
 [data-theme='dark'] .buttons .button--secondary {
@@ -329,32 +499,60 @@
   font-size: 1.1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--animation-speed-fast) var(--animation-ease-smooth);
   white-space: normal;
   text-align: center;
   border-radius: 12px;
   position: relative;
   color: var(--pf-dark-base);
+  /* Add will-change for smoother tab switching */
+  will-change: transform, background;
 }
 
 [data-theme='dark'] .walkthroughTab {
   color: #e0e0e0;
 }
 
+/* Add subtle underline animation on hover */
+.walkthroughTab::after {
+  content: '';
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: var(--pf-red-base);
+  transform: translateX(-50%);
+  transition: width var(--animation-speed-fast) ease;
+}
+
 .walkthroughTab:hover {
-  background: rgba(229, 58, 58, 0.05);
-  transform: translateY(-2px);
+  background: rgba(229, 58, 58, 0.08);
+  transform: translateY(-2px) scale(1.02);
+}
+
+.walkthroughTab:hover::after {
+  width: 60%;
 }
 
 .walkthroughTabActive {
   background: linear-gradient(135deg, var(--pf-red-darker) 0%, var(--pf-red-dark) 100%);
   color: white;
-  box-shadow: 0 4px 12px rgba(179, 46, 46, 0.3);
+  box-shadow:
+    0 6px 16px rgba(179, 46, 46, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2);
+  /* Add subtle pulse animation */
+  animation: breathe 4s ease-in-out infinite;
+}
+
+.walkthroughTabActive::after {
+  display: none; /* Hide underline for active tab */
 }
 
 .walkthroughTabActive:hover {
   background: linear-gradient(135deg, #991515 0%, var(--pf-red-darker) 100%);
-  transform: translateY(-2px);
+  transform: translateY(-3px) scale(1.03);
+  animation: none; /* Disable breathe on hover */
 }
 
 .walkthroughContent {
@@ -424,8 +622,10 @@
   box-shadow:
     0 20px 40px -10px rgba(0, 0, 0, 0.15),
     0 10px 20px -5px rgba(229, 58, 58, 0.1);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--animation-speed-medium) var(--animation-ease-smooth);
   animation: fadeInScale 0.6s ease-out;
+  position: relative;
+  cursor: pointer;
 }
 
 @keyframes fadeInScale {
@@ -440,10 +640,12 @@
 }
 
 .walkthroughImage:hover {
-  transform: scale(1.02);
-  box-shadow:
-    0 30px 60px -15px rgba(0, 0, 0, 0.2),
-    0 15px 30px -7px rgba(229, 58, 58, 0.15);
+  transform: scale(1.015);
+}
+
+.walkthroughImageContainer {
+  width: 65%;
+  position: relative;
 }
 
 .codeBox {
@@ -848,11 +1050,23 @@
   box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--animation-speed-medium) var(--animation-ease-smooth);
   text-decoration: none;
   color: inherit;
   position: relative;
   overflow: hidden;
+  /* Add entrance animation with stagger */
+  animation: fadeInUpScroll 0.6s var(--animation-ease-smooth) backwards;
+  backdrop-filter: blur(10px);
+}
+
+/* Stagger the AsSeenOn card animations */
+.asSeenOnCard:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.asSeenOnCard:nth-child(2) {
+  animation-delay: 0.2s;
 }
 
 .asSeenOnCard::before {
@@ -862,20 +1076,44 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(229, 58, 58, 0.05) 0%, transparent 50%);
+  background: linear-gradient(135deg, rgba(229, 58, 58, 0.08) 0%, transparent 50%);
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--animation-speed-medium) ease;
+}
+
+/* Add animated border on hover */
+.asSeenOnCard::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  padding: 2px;
+  background: linear-gradient(135deg, var(--pf-red-base), var(--pf-red-light), var(--pf-red-base));
+  background-size: 200% 200%;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--animation-speed-medium) ease;
 }
 
 .asSeenOnCard:hover {
-  transform: translateY(-8px);
+  transform: translateY(-12px) scale(1.02);
   box-shadow:
-    0 12px 40px rgba(229, 58, 58, 0.15),
+    0 20px 60px rgba(229, 58, 58, 0.2),
+    0 8px 24px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .asSeenOnCard:hover::before {
   opacity: 1;
+}
+
+.asSeenOnCard:hover::after {
+  opacity: 0.6;
+  animation: gradientShift 3s ease infinite;
 }
 
 [data-theme='dark'] .asSeenOnCard {
@@ -1233,6 +1471,34 @@
   background: rgba(229, 58, 58, 0.06);
   border-radius: 8px;
   white-space: nowrap;
+  /* Add subtle scale animation on hover */
+  transition: all var(--animation-speed-fast) var(--animation-ease-smooth);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Add shimmer effect to marquee items */
+.marqueeItem::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shimmerMarquee 3s ease-in-out infinite;
+  animation-delay: calc(var(--item-index, 0) * 0.2s);
+}
+
+@keyframes shimmerMarquee {
+  0%,
+  90% {
+    left: -100%;
+  }
+  95%,
+  100% {
+    left: 100%;
+  }
 }
 
 [data-theme='dark'] .marqueeItem {
@@ -1330,10 +1596,45 @@
   text-align: center;
   margin-bottom: 1rem;
   opacity: 0.9;
+  /* Add entrance animation - appears before title */
+  animation: fadeInUpScroll 0.6s var(--animation-ease-smooth) backwards;
+  animation-delay: 0s;
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+/* Add subtle pulse to eyebrow */
+.sectionEyebrow::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 40px;
+  height: 2px;
+  background: var(--pf-red-base);
+  transform: translateX(-50%);
+  animation: expandLine 2s ease-in-out infinite;
+}
+
+@keyframes expandLine {
+  0%,
+  100% {
+    width: 40px;
+    opacity: 0.6;
+  }
+  50% {
+    width: 60px;
+    opacity: 1;
+  }
 }
 
 [data-theme='dark'] .sectionEyebrow {
   color: var(--pf-red-light);
+}
+
+[data-theme='dark'] .sectionEyebrow::after {
+  background: var(--pf-red-light);
 }
 
 .sectionTitle {
@@ -1344,6 +1645,40 @@
   line-height: 1.2;
   letter-spacing: -0.02em;
   color: var(--ifm-font-color-base);
+  /* Add entrance animation */
+  animation: fadeInUpScroll 0.6s var(--animation-ease-smooth) backwards;
+  /* Add subtle text shadow for depth */
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Add gradient shine effect on section titles */
+.sectionTitle::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(229, 58, 58, 0.3), transparent);
+  -webkit-background-clip: text;
+  background-clip: text;
+  opacity: 0;
+  animation: textShine 3s ease-in-out infinite;
+}
+
+@keyframes textShine {
+  0%,
+  90% {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+  95% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(100%);
+  }
 }
 
 .sectionSubtitle {
@@ -1536,14 +1871,52 @@
   background: white;
   border-radius: 16px;
   border: 2px solid rgba(229, 58, 58, 0.1);
-  transition: all 0.3s ease;
+  transition: all var(--animation-speed-medium) var(--animation-ease-smooth);
   position: relative;
+  /* Add entrance animation with stagger */
+  animation: fadeInUpScroll 0.6s var(--animation-ease-smooth) backwards;
+  will-change: transform;
+}
+
+/* Stagger the card animations */
+.solutionCard:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.solutionCard:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.solutionCard:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.solutionCard::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  padding: 2px;
+  background: linear-gradient(135deg, var(--pf-red-base), var(--pf-red-light));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--animation-speed-medium) ease;
 }
 
 .solutionCard:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 40px rgba(229, 58, 58, 0.2);
+  transform: translateY(-12px) scale(1.02);
+  box-shadow:
+    0 20px 60px rgba(229, 58, 58, 0.25),
+    0 8px 24px rgba(0, 0, 0, 0.1);
   border-color: var(--pf-red-base);
+}
+
+.solutionCard:hover::before {
+  opacity: 0.5;
 }
 
 [data-theme='dark'] .solutionCard {
@@ -1566,6 +1939,14 @@
   font-weight: 900;
   color: white;
   box-shadow: 0 4px 12px rgba(229, 58, 58, 0.3);
+  /* Add subtle floating animation */
+  animation: float 3s ease-in-out infinite;
+  transition: all var(--animation-speed-medium) var(--animation-ease-bounce);
+}
+
+.solutionCard:hover .solutionNumber {
+  transform: scale(1.15) rotate(5deg);
+  box-shadow: 0 8px 24px rgba(229, 58, 58, 0.5);
 }
 
 .solutionTitle {
@@ -1727,12 +2108,50 @@
   background: white;
   border-radius: 16px;
   border: 2px solid rgba(229, 58, 58, 0.1);
-  transition: all 0.3s ease;
+  transition: all var(--animation-speed-medium) var(--animation-ease-smooth);
+  /* Add entrance animation with stagger */
+  animation: scaleIn 0.6s var(--animation-ease-bounce) backwards;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Stagger the stat card animations */
+.communityStatCard:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.communityStatCard:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.communityStatCard:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* Add shimmer effect on stat cards */
+.communityStatCard::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent 30%, rgba(229, 58, 58, 0.1) 50%, transparent 70%);
+  transform: rotate(45deg);
+  transition: all 0.6s ease;
+  opacity: 0;
+}
+
+.communityStatCard:hover::before {
+  opacity: 1;
+  animation: shimmer 1.5s ease-in-out;
 }
 
 .communityStatCard:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 30px rgba(229, 58, 58, 0.15);
+  transform: translateY(-8px) scale(1.03);
+  box-shadow:
+    0 16px 40px rgba(229, 58, 58, 0.2),
+    0 8px 16px rgba(0, 0, 0, 0.1);
   border-color: var(--pf-red-base);
 }
 
@@ -1749,6 +2168,14 @@
   background-clip: text;
   color: transparent;
   margin-bottom: 0.5rem;
+  /* Add subtle scale animation on hover */
+  transition: all var(--animation-speed-medium) var(--animation-ease-bounce);
+  display: inline-block;
+}
+
+.communityStatCard:hover .communityStatNumber {
+  transform: scale(1.1);
+  filter: brightness(1.2);
 }
 
 [data-theme='dark'] .communityStatNumber {
@@ -1913,14 +2340,34 @@
   border: 2px solid rgba(229, 58, 58, 0.1);
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--animation-speed-medium) var(--animation-ease-smooth);
   text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Add hover ripple effect */
+.personaTab::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(229, 58, 58, 0.15) 0%, transparent 70%);
+  transform: scale(0);
+  transition: transform 0.5s ease;
+  opacity: 0;
+}
+
+.personaTab:hover::before {
+  transform: scale(2);
+  opacity: 1;
 }
 
 .personaTab:hover {
   border-color: var(--pf-red-base);
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(229, 58, 58, 0.15);
+  transform: translateY(-5px) scale(1.02);
+  box-shadow:
+    0 12px 28px rgba(229, 58, 58, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 [data-theme='dark'] .personaTab {
@@ -1932,11 +2379,17 @@
   background: linear-gradient(135deg, var(--pf-red-dark), var(--pf-red-base));
   border-color: var(--pf-red-dark);
   color: white;
-  box-shadow: 0 8px 24px rgba(229, 58, 58, 0.3);
+  box-shadow:
+    0 12px 32px rgba(229, 58, 58, 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.2);
+  /* Add subtle glow animation */
+  animation: glowPulse 3s ease-in-out infinite;
 }
 
 .personaTabActive:hover {
   background: linear-gradient(135deg, var(--pf-red-darker), var(--pf-red-dark));
+  transform: translateY(-5px) scale(1.02);
+  animation: none; /* Disable glow on hover */
 }
 
 .personaTabTitle {
@@ -2022,6 +2475,14 @@
   color: var(--pf-red-base);
   flex-shrink: 0;
   margin-top: 0.25rem;
+  /* Add subtle bounce animation */
+  transition: all var(--animation-speed-medium) var(--animation-ease-bounce);
+  font-size: 1.5rem;
+}
+
+.benefitItem:hover .benefitIcon {
+  transform: scale(1.2) rotate(5deg);
+  filter: drop-shadow(0 4px 8px rgba(229, 58, 58, 0.3));
 }
 
 .benefitItem strong {
@@ -2078,12 +2539,55 @@
   border-radius: 12px;
   border: 1px solid rgba(229, 58, 58, 0.1);
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: all var(--animation-speed-medium) var(--animation-ease-smooth);
+  /* Add entrance animation with stagger */
+  animation: fadeInLeftScroll 0.5s var(--animation-ease-smooth) backwards;
+  position: relative;
+}
+
+/* Stagger FAQ items */
+.faqItem:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.faqItem:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.faqItem:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.faqItem:nth-child(4) {
+  animation-delay: 0.2s;
+}
+.faqItem:nth-child(5) {
+  animation-delay: 0.25s;
+}
+.faqItem:nth-child(6) {
+  animation-delay: 0.3s;
+}
+
+/* Add subtle left border that expands on hover */
+.faqItem::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: linear-gradient(180deg, var(--pf-red-base), var(--pf-red-light));
+  transition: width var(--animation-speed-medium) ease;
+  border-radius: 12px 0 0 12px;
 }
 
 .faqItem:hover {
   border-color: rgba(229, 58, 58, 0.3);
-  box-shadow: 0 4px 12px rgba(229, 58, 58, 0.1);
+  box-shadow:
+    0 8px 24px rgba(229, 58, 58, 0.15),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+  transform: translateX(4px);
+}
+
+.faqItem:hover::before {
+  width: 4px;
 }
 
 [data-theme='dark'] .faqItem {
