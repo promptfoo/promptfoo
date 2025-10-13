@@ -14,8 +14,8 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import { makeCustomPolicyCloudUrl } from '@promptfoo/redteam/plugins/policy/utils';
+import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import { ellipsize } from '../../../../../util/text';
-import useCloudConfig from '../../../hooks/useCloudConfig';
 
 const isValidUrl = (str: string): boolean => {
   try {
@@ -42,6 +42,7 @@ interface MetadataPanelProps {
   onMetadataClick: (key: string) => void;
   onCopy: (key: string, text: string) => void;
   onApplyFilter: (field: string, value: string, operator?: 'equals' | 'contains') => void;
+  cloudConfig?: CloudConfigData | null;
 }
 
 export function MetadataPanel({
@@ -51,9 +52,8 @@ export function MetadataPanel({
   onMetadataClick,
   onCopy,
   onApplyFilter,
+  cloudConfig,
 }: MetadataPanelProps) {
-  const { data: cloudConfig } = useCloudConfig();
-
   if (!metadata) {
     return null;
   }

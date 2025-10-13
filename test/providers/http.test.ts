@@ -1,8 +1,8 @@
 import crypto from 'crypto';
-import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 
+import dedent from 'dedent';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -2252,7 +2252,7 @@ describe('createTransformRequest', () => {
     const transform = await createTransformRequest('return badVariable.nonexistent');
     await expect(async () => {
       await transform('test', {} as any);
-    }).rejects.toThrow('Error in request transform string template: badVariable is not defined');
+    }).rejects.toThrow('Failed to transform request:');
   });
 
   it('should handle function-based request transform', async () => {
@@ -2309,13 +2309,47 @@ describe('createTransformRequest', () => {
     }).rejects.toThrow('Error in request transform function from specific-file.js: File error');
   });
 
-  it('should handle errors in string template rendering', async () => {
-    const transform = await createTransformRequest('{{ nonexistent | invalid }}');
+  it('should handle errors in JavaScript expression transform', async () => {
+    const transform = await createTransformRequest('throw new Error("Expression error")');
     await expect(async () => {
       await transform('test', {} as any);
-    }).rejects.toThrow(
-      'Error in request transform string template: (unknown path)\n  Error: filter not found: invalid',
+    }).rejects.toThrow('Failed to transform request:');
+  });
+
+  it('should handle arrow function with explicit body', async () => {
+    const transform = await createTransformRequest(
+      '(prompt, vars) => { return { text: prompt.toUpperCase() } }',
     );
+    const result = await transform('hello', {} as any);
+    expect(result).toEqual({ text: 'HELLO' });
+  });
+
+  it('should handle arrow function with implicit return', async () => {
+    const transform = await createTransformRequest('(prompt) => prompt.toUpperCase()');
+    const result = await transform('hello', {} as any);
+    expect(result).toBe('HELLO');
+  });
+
+  it('should handle regular function with explicit body', async () => {
+    const transform = await createTransformRequest(
+      'function(prompt, vars) { return { text: prompt.toUpperCase() } }',
+    );
+    const result = await transform('hello', {} as any);
+    expect(result).toEqual({ text: 'HELLO' });
+  });
+
+  it('should handle simple expression without return', async () => {
+    const transform = await createTransformRequest('prompt.toUpperCase()');
+    const result = await transform('hello', {} as any);
+    expect(result).toBe('HELLO');
+  });
+
+  it('should handle arrow function with context parameter', async () => {
+    const transform = await createTransformRequest(
+      '(prompt, vars, context) => ({ prompt, contextVars: context?.vars })',
+    );
+    const result = await transform('hello', { foo: 'bar' }, { vars: { test: 'value' } } as any);
+    expect(result).toEqual({ prompt: 'hello', contextVars: { test: 'value' } });
   });
 });
 

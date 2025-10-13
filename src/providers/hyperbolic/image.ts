@@ -82,7 +82,7 @@ const HYPERBOLIC_IMAGE_MODELS = [
 
 export function formatHyperbolicImageOutput(
   imageData: string,
-  prompt: string,
+  _prompt: string,
   responseFormat?: string,
 ): string {
   if (responseFormat === 'b64_json') {
@@ -157,7 +157,7 @@ export class HyperbolicImageProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {

@@ -26,12 +26,15 @@ providers:
 | --------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
 | [OpenAI](./openai.md)                               | GPT models including GPT-4.1 and reasoning models            | `openai:gpt-4.1` or `openai:o4-mini`                                            |
 | [Anthropic](./anthropic.md)                         | Claude models                                                | `anthropic:messages:claude-sonnet-4-20250514`                                   |
+| [Claude Agent SDK](./claude-agent-sdk.md)           | Claude Agent SDK                                             | `anthropic:claude-agent-sdk`                                                    |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                                 | `https://api.example.com/v1/chat/completions`                                   |
 | [Javascript](./custom-api.md)                       | Custom - JavaScript file                                     | `file://path/to/custom_provider.js`                                             |
 | [Python](./python.md)                               | Custom - Python file                                         | `file://path/to/custom_provider.py`                                             |
+| [Ruby](./ruby.md)                                   | Custom - Ruby file                                           | `file://path/to/custom_provider.rb`                                             |
 | [Shell Command](./custom-script.md)                 | Custom - script-based providers                              | `exec: python chain.py`                                                         |
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                                    | `ai21:jamba-1.5-mini`                                                           |
 | [AI/ML API](./aimlapi.md)                           | Tap into 300+ cutting-edge AI models with a single API       | `aimlapi:chat:deepseek-r1`                                                      |
+| [Alibaba Cloud (Qwen)](./alibaba.md)                | Alibaba Cloud's Qwen models                                  | `alibaba:qwen-max` or `qwen-plus`                                               |
 | [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers                     | `bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0`                            |
 | [AWS Bedrock Agents](./bedrock-agents.md)           | Amazon Bedrock Agents for orchestrating AI workflows         | `bedrock-agent:YOUR_AGENT_ID`                                                   |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints                       | `sagemaker:my-endpoint-name`                                                    |
@@ -45,6 +48,7 @@ providers:
 | [Databricks](./databricks.md)                       | Databricks Foundation Model APIs                             | `databricks:databricks-meta-llama-3-3-70b-instruct`                             |
 | [DeepSeek](./deepseek.md)                           | DeepSeek's language models                                   | `deepseek:deepseek-r1`                                                          |
 | [Docker Model Runner](./docker.md)                  | Evaluate with local models                                   | `docker:ai/llama3.2:3B-Q4_K_M`                                                  |
+| [Envoy AI Gateway](./envoy.md)                      | OpenAI-compatible AI Gateway proxy                           | `envoy:my-model`                                                                |
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface                       | `f5:path-name`                                                                  |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                                    | `fal:image:fal-ai/fast-sdxl`                                                    |
 | [Fireworks AI](./fireworks.md)                      | Various hosted models                                        | `fireworks:accounts/fireworks/models/qwen-v2p5-7b`                              |
@@ -55,7 +59,6 @@ providers:
 | [Helicone AI Gateway](./helicone.md)                | Self-hosted AI gateway for unified provider access           | `helicone:openai/gpt-4.1`, `helicone:anthropic/claude-sonnet-4`                 |
 | [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider                           | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                  |
 | [Hugging Face](./huggingface.md)                    | Access thousands of models                                   | `huggingface:text-generation:gpt2`                                              |
-| [IBM BAM](./ibm-bam.md)                             | IBM's foundation models                                      | `bam:chat:ibm/granite-13b-chat-v2`                                              |
 | [JFrog ML](./jfrog.md)                              | JFrog's LLM Model Library                                    | `jfrog:llama_3_8b_instruct`                                                     |
 | [LiteLLM](./litellm.md)                             | Unified interface for 400+ LLMs with embedding support       | `litellm:gpt-4.1`, `litellm:embedding:text-embedding-3-small`                   |
 | [Llama API](./llamaApi.md)                          | Meta's hosted Llama models with multimodal capabilities      | `llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8`                               |
@@ -65,6 +68,8 @@ providers:
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                           | `openrouter:mistral/7b-instruct`                                                |
 | [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations                         | `perplexity:sonar-pro`                                                          |
 | [Replicate](./replicate.md)                         | Various hosted models                                        | `replicate:stability-ai/sdxl`                                                   |
+| [Slack](./slack.md)                                 | Human feedback via Slack channels/DMs                        | `slack:C0123ABCDEF` or `slack:channel:C0123ABCDEF`                              |
+| [Snowflake Cortex](./snowflake.md)                  | Snowflake's AI platform with Claude, GPT, and Llama models   | `snowflake:mistral-large2`                                                      |
 | [Together AI](./togetherai.md)                      | Various hosted models                                        | Compatible with OpenAI syntax                                                   |
 | [TrueFoundry](./truefoundry.md)                     | Unified LLM Gateway for 1000+ models                         | `truefoundry:openai-main/gpt-5`, `truefoundry:anthropic-main/claude-sonnet-4.5` |
 | [Voyage AI](./voyage.md)                            | Specialized embedding models                                 | `voyage:voyage-3`                                                               |

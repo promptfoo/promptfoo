@@ -354,7 +354,7 @@ export default function RedTeamSetupPage() {
     });
   };
 
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     updateHash(newValue);
     setValue(newValue);
     window.scrollTo({ top: 0 });
@@ -709,16 +709,12 @@ export default function RedTeamSetupPage() {
           <TabContent>
             <CustomTabPanel value={value} index={0}>
               <ErrorBoundary name="Target Type Selection Page">
-                <TargetTypeSelection onNext={handleNext} setupModalOpen={setupModalOpen} />
+                <TargetTypeSelection onNext={handleNext} />
               </ErrorBoundary>
             </CustomTabPanel>
             <CustomTabPanel value={value} index={1}>
               <ErrorBoundary name="Target Configuration Page">
-                <TargetConfiguration
-                  onNext={handleNext}
-                  onBack={handleBack}
-                  setupModalOpen={setupModalOpen}
-                />
+                <TargetConfiguration onNext={handleNext} onBack={handleBack} />
               </ErrorBoundary>
             </CustomTabPanel>
             <CustomTabPanel value={value} index={2}>

@@ -21,11 +21,6 @@ interface ProviderConfigEditorProps {
   setProvider: (provider: ProviderOptions) => void;
   extensions?: string[];
   onExtensionsChange?: (extensions: string[]) => void;
-  opts?: {
-    defaultRequestTransform?: string;
-    hideErrors?: boolean;
-    disableModelSelection?: boolean;
-  };
   setError?: (error: string | null) => void;
   validateAll?: boolean;
   onValidate?: (isValid: boolean) => void;
@@ -41,7 +36,6 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
       setProvider,
       extensions,
       onExtensionsChange,
-      opts = {},
       setError,
       validateAll = false,
       onValidate,
@@ -139,7 +133,11 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         } else {
           setUrlError('Please enter a valid WebSocket URL (ws:// or wss://)');
         }
-      } else if (field in updatedTarget.config) {
+      } else if (
+        field in updatedTarget.config ||
+        field === 'streamResponse' ||
+        field === 'transformResponse'
+      ) {
         (updatedTarget.config as any)[field] = value;
       } else if (field === 'label') {
         updatedTarget.label = value;
@@ -270,7 +268,6 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
             setBodyError={setBodyError}
             urlError={urlError}
             setUrlError={setUrlError}
-            updateFullTarget={setProvider}
             onTargetTested={onTargetTested}
             onSessionTested={onSessionTested}
           />

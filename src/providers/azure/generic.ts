@@ -169,9 +169,9 @@ Please choose one of the following options:
 
   // @ts-ignore: Params are not used in this implementation
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }

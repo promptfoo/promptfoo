@@ -123,9 +123,9 @@ class ProgressBarManager {
    * Update progress for a specific evaluation
    */
   updateProgress(
-    index: number,
+    _index: number,
     evalStep: RunEvalOptions | undefined,
-    phase: 'serial' | 'concurrent' = 'concurrent',
+    _phase: 'serial' | 'concurrent' = 'concurrent',
   ): void {
     if (this.isWebUI || !evalStep || !this.progressBar) {
       return;
@@ -267,8 +267,6 @@ export async function runEval({
   conversations,
   registers,
   isRedteam,
-  allTests,
-  concurrency,
   abortSignal,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt

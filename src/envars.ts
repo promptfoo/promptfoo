@@ -1,8 +1,9 @@
 import dotenv from 'dotenv';
-dotenv.config({ quiet: true });
 
 import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
+
+dotenv.config({ quiet: true });
 
 // Define the supported environment variables and their types
 type EnvVars = {
@@ -64,7 +65,7 @@ type EnvVars = {
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_TRACING_ENABLED?: boolean;
-  PROMPTFOO_DISABLE_UNBLOCKING?: boolean;
+  PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
 
   //=========================================================================
   // promptfoo configuration options
@@ -90,6 +91,7 @@ type EnvVars = {
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
   PROMPTFOO_PROMPT_SEPARATOR?: string;
   PROMPTFOO_PYTHON?: string;
+  PROMPTFOO_RUBY?: string;
   PROMPTFOO_REMOTE_API_BASE_URL?: string;
   PROMPTFOO_REMOTE_APP_BASE_URL?: string;
   PROMPTFOO_REMOTE_GENERATION_URL?: string;
@@ -313,6 +315,13 @@ type EnvVars = {
   REPLICATE_TEMPERATURE?: number;
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
+
+  // Slack
+  SLACK_BOT_TOKEN?: string;
+
+  // Snowflake
+  SNOWFLAKE_ACCOUNT_IDENTIFIER?: string;
+  SNOWFLAKE_API_KEY?: string;
 
   // Together AI
   TOGETHER_API_KEY?: string;
