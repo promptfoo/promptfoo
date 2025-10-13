@@ -47,6 +47,7 @@ describe('RubyProvider', () => {
     // Reset Ruby state to avoid test interference
     rubyUtils.state.cachedRubyPath = null;
     rubyUtils.state.validationPromise = null;
+    rubyUtils.state.validatingPath = null;
     mockGetCache.mockResolvedValue({
       get: jest.fn(),
       set: jest.fn(),
@@ -137,7 +138,7 @@ describe('RubyProvider', () => {
         mockRunRuby.mockResolvedValue('string result');
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          "Cannot use 'in' operator to search for 'output' in string result",
+          'The Ruby script `call_api` function must return a hash with an `output` string/object or `error` string, instead got: "string result"',
         );
       });
 

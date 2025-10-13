@@ -74,7 +74,7 @@ When Promptfoo evaluates a test case with a Ruby provider:
 3. **Your Code** processes the prompt and returns a response
 4. **Promptfoo** validates the response and continues evaluation
 
-```
+```text
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │ Promptfoo   │────▶│ Your Ruby    │────▶│ Your Logic  │
 │ Evaluation  │     │ Provider     │     │ (API/Model) │
@@ -247,7 +247,9 @@ The types passed into the Ruby script function and the `ProviderResponse` return
 ```
 
 :::tip
+
 Always include the `output` field in your response, even if it's an empty string when an error occurs.
+
 :::
 
 ## Complete Examples

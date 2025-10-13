@@ -10,16 +10,27 @@ import { safeJsonStringify } from '../util/json';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Global state for Ruby executable path caching.
+ * Ensures consistent Ruby executable usage across multiple provider instances.
+ */
 export const state: {
+  /** The cached validated Ruby executable path */
   cachedRubyPath: string | null;
+  /** Promise for in-progress validation to prevent duplicate validation attempts */
   validationPromise: Promise<string> | null;
+  /** The Ruby path currently being validated to detect path changes */
+  validatingPath: string | null;
 } = {
   cachedRubyPath: null,
   validationPromise: null,
+  validatingPath: null,
 };
 
 /**
- * Try to find Ruby using Windows 'where' command.
+ * Attempts to find Ruby using Windows 'where' command.
+ * Only applicable on Windows platforms.
+ * @returns The validated Ruby executable path, or null if not found
  */
 async function tryWindowsWhere(): Promise<string | null> {
   try {
@@ -61,7 +72,10 @@ async function tryWindowsWhere(): Promise<string | null> {
 }
 
 /**
- * Try Ruby commands to get ruby executable path.
+ * Attempts to get Ruby executable path by running Ruby commands.
+ * Uses RbConfig.ruby to get the actual Ruby executable path.
+ * @param commands - Array of Ruby command names to try (e.g., ['ruby'])
+ * @returns The Ruby executable path, or null if all commands fail
  */
 async function tryRubyCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
@@ -89,7 +103,10 @@ async function tryRubyCommands(commands: string[]): Promise<string | null> {
 }
 
 /**
- * Try direct command validation as final fallback.
+ * Attempts to validate Ruby commands directly as a final fallback.
+ * Validates each command by running it with --version.
+ * @param commands - Array of Ruby command names to try (e.g., ['ruby'])
+ * @returns The validated Ruby executable path, or null if all commands fail
  */
 async function tryDirectCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
@@ -182,9 +199,16 @@ export async function tryPath(path: string): Promise<string | null> {
  * @throws {Error} If no valid Ruby executable is found.
  */
 export async function validateRubyPath(rubyPath: string, isExplicit: boolean): Promise<string> {
-  // Return cached result if available
-  if (state.cachedRubyPath) {
+  // Return cached result only if it matches the requested path
+  if (state.cachedRubyPath && state.validatingPath === rubyPath) {
     return state.cachedRubyPath;
+  }
+
+  // If validating a different path, clear cache and promise
+  if (state.validatingPath !== rubyPath) {
+    state.cachedRubyPath = null;
+    state.validationPromise = null;
+    state.validatingPath = rubyPath;
   }
 
   // Create validation promise atomically if it doesn't exist

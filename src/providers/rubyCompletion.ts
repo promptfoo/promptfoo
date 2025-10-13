@@ -22,6 +22,10 @@ interface RubyProviderConfig {
   rubyExecutable?: string;
 }
 
+/**
+ * Ruby provider for executing custom Ruby scripts as API providers.
+ * Supports text generation, embeddings, and classification tasks.
+ */
 export class RubyProvider implements ApiProvider {
   config: RubyProviderConfig;
 
@@ -29,8 +33,14 @@ export class RubyProvider implements ApiProvider {
   private functionName: string | null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
+  public id: () => string;
   public label: string | undefined;
 
+  /**
+   * Creates a new Ruby provider instance.
+   * @param runPath - Path to the Ruby script, optionally with function name (e.g., "script.rb:function_name")
+   * @param options - Provider configuration options
+   */
   constructor(
     runPath: string,
     private options?: ProviderOptions,
@@ -41,13 +51,9 @@ export class RubyProvider implements ApiProvider {
     );
     this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
     this.functionName = functionName || null;
-    this.id = () => options?.id ?? `ruby:${this.scriptPath}:${this.functionName || 'default'}`;
     this.label = options?.label;
     this.config = options?.config ?? {};
-  }
-
-  id() {
-    return `ruby:${this.scriptPath}:${this.functionName || 'default'}`;
+    this.id = () => options?.id ?? `ruby:${this.scriptPath}:${this.functionName || 'default'}`;
   }
 
   /**
@@ -108,9 +114,9 @@ export class RubyProvider implements ApiProvider {
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
 
     // Create cache key including the function name to ensure different functions don't share caches
-    const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
-      this.options,
-    )}:${JSON.stringify(context?.vars)}`;
+    const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${
+      safeJsonStringify(this.options)
+    }:${safeJsonStringify(context?.vars)}`;
     logger.debug(`RubyProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
@@ -187,9 +193,9 @@ export class RubyProvider implements ApiProvider {
 
           // Log result structure for debugging
           logger.debug(
-            `Ruby provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
+            `Ruby provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'none'}`,
           );
-          if (result && 'output' in result) {
+          if (result && typeof result === 'object' && 'output' in result) {
             logger.debug(
               `Ruby provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
             );
@@ -271,6 +277,12 @@ export class RubyProvider implements ApiProvider {
     }
   }
 
+  /**
+   * Calls the Ruby script for text generation.
+   * @param prompt - The input prompt to send to the Ruby script
+   * @param context - Optional context with variables and metadata
+   * @returns Provider response with output, token usage, and other metadata
+   */
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.isInitialized) {
       await this.initialize();
@@ -278,6 +290,11 @@ export class RubyProvider implements ApiProvider {
     return this.executeRubyScript(prompt, context, 'call_api');
   }
 
+  /**
+   * Calls the Ruby script for embedding generation.
+   * @param prompt - The input text to generate embeddings for
+   * @returns Provider response with embedding array
+   */
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
     if (!this.isInitialized) {
       await this.initialize();
@@ -285,6 +302,11 @@ export class RubyProvider implements ApiProvider {
     return this.executeRubyScript(prompt, undefined, 'call_embedding_api');
   }
 
+  /**
+   * Calls the Ruby script for classification tasks.
+   * @param prompt - The input text to classify
+   * @returns Provider response with classification results
+   */
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
     if (!this.isInitialized) {
       await this.initialize();
