@@ -65,7 +65,7 @@ function TrustBar() {
   return (
     <section className={styles.trustBar}>
       <div className="container">
-        <h3 className={styles.trustBarTitle}>SECURING AI FOR LEADING ENTERPRISES</h3>
+        <h3 className={styles.trustBarTitle}>TRUSTED BY 85 OF THE FORTUNE 500</h3>
         <div
           className={styles.marquee}
           role="region"
@@ -654,7 +654,7 @@ function PersonaSection() {
         'You need a solution that actually works at enterprise scale, integrates with your existing tools, and your team will adopt. Promptfoo delivers the depth you need without the complexity.',
       benefits: [
         {
-          title: 'Proven in Fortune 100 environments',
+          title: 'Proven at global scale - 85 of the Fortune 500',
           description:
             'Leading healthcare, telecommunications, retail, and enterprise software companies trust us with their AI security.',
         },
@@ -843,7 +843,7 @@ function FinalCTA() {
       <div className="container">
         <h2 className={styles.finalCTATitle}>Ship AI with confidence</h2>
         <p className={styles.finalCTASubtitle}>
-          Join Fortune 100 companies and {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers building
+          Join 85 of the Fortune 500 and {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers building
           secure AI applications from day one.
         </p>
         <div className={styles.finalCTAButtons}>
@@ -859,7 +859,7 @@ function FinalCTA() {
         </div>
         <div className={styles.finalCTATrust}>
           <p>
-            ✓ {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ users • ✓ Fortune 100 trusted • ✓ Zero vendor
+            ✓ {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers • ✓ Enterprise trusted • ✓ Zero vendor
             lock-in
           </p>
         </div>
@@ -872,7 +872,7 @@ export default function Home(): JSX.Element {
   return (
     <Layout
       title="Build Secure AI Applications"
-      description={`The AI Security Platform that catches vulnerabilities in development. Trusted by Fortune 100 companies and ${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide.`}
+      description={`The AI Security Platform that catches vulnerabilities in development. Trusted by 85 of the Fortune 500 and ${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide.`}
       wrapperClassName="homepage-wrapper"
     >
       <Head>
