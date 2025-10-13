@@ -25,7 +25,7 @@ function HomepageHeader() {
           </div>
           */}
           <h1 className={styles.heroTitle}>
-            Catch AI vulnerabilities
+            Find & fix AI vulnerabilities
             <br />
             in development
           </h1>
@@ -138,7 +138,8 @@ function HomepageWalkthrough() {
             <li>Direct and indirect prompt injections</li>
             <li>Jailbreaks tailored to your guardrails</li>
             <li>Data and PII leaks</li>
-            <li>Insecure tool use vulnerabilities</li>
+            <li>Business rule violations</li>
+            <li>Insecure tool use</li>
             <li>Unauthorized contract creation</li>
             <li>Toxic content generation</li>
             <li>
@@ -455,9 +456,10 @@ function CommunitySection() {
           AI security community
         </h2>
         <p className={styles.sectionSubtitle}>
-          When the teams building AI at OpenAI, Google, Microsoft, and Amazon contribute to
-          Promptfoo, you get real-time threat intelligence and innovation you can't find anywhere
+          Get real-time threat intelligence and innovation you can't find anywhere
           else.
+          <br/>
+          Our contributors are from companies like OpenAI, Google, Microsoft, and Amazon.
         </p>
 
         <div className={styles.communityStats}>
