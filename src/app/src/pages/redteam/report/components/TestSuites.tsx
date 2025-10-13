@@ -44,10 +44,13 @@ import {
   calculatePluginRiskScore,
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { formatASRForDisplay } from '@app/utils/redteam';
+import { type TestResultStats } from './FrameworkComplianceUtils';
 
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  categoryStats: Record<string, Required<TestResultStats>>;
   plugins: RedteamPluginObject[];
   failuresByPlugin?: Record<string, any[]>;
   passesByPlugin?: Record<string, any[]>;
@@ -193,7 +196,7 @@ const TestSuites = ({
             severity,
             passRate: (stats.pass / stats.total) * 100,
             passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-            attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
+            attackSuccessRate: calculateAttackSuccessRate(stats.total, stats.failCount),
             total: stats.total,
             successfulAttacks: stats.total - stats.pass,
             riskScore: riskDetails.riskScore,
@@ -271,7 +274,7 @@ const TestSuites = ({
       subCategory.complexityScore.toFixed(1),
       subCategory.successfulAttacks,
       subCategory.total,
-      subCategory.attackSuccessRate.toFixed(2) + '%',
+      formatASRForDisplay(subCategory.attackSuccessRate) + '%',
       severityDisplayNames[subCategory.severity as Severity],
     ]);
 
@@ -344,7 +347,7 @@ const TestSuites = ({
                     • Base Severity: {params.row.severity}
                   </Typography>
                   <Typography variant="caption" component="div">
-                    • Attack Success Rate: {params.row.attackSuccessRate.toFixed(2)}%
+                    • Attack Success Rate: {formatASRForDisplay(params.row.attackSuccessRate)}%
                   </Typography>
                   <Typography
                     variant="caption"
@@ -433,10 +436,10 @@ const TestSuites = ({
         const passRate = params.row.passRate;
         return (
           <Box>
-            <strong>{value.toFixed(2)}%</strong>
+            <strong>{formatASRForDisplay(value)}%</strong>
             {passRateWithFilter !== passRate && (
               <>
-                <br />({(100 - passRateWithFilter).toFixed(1)}% with mitigation)
+                <br />({formatASRForDisplay(100 - passRateWithFilter)}% with mitigation)
               </>
             )}
           </Box>
