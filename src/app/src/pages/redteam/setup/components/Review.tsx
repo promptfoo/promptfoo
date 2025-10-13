@@ -627,7 +627,8 @@ export default function Review({
                         sx={{
                           position: 'absolute',
                           right: 4,
-                          top: 4,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
                           padding: '2px',
                         }}
                       >
