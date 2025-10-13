@@ -5,7 +5,7 @@ description: Guide for using custom providers with multi-turn attacks
 
 # Multi-Turn Conversations With Custom Provider
 
-When using HTTP or custom providers with multi-turn attacks like GOAT and/or Crescendo, you may need to maintain session IDs between rounds. You can refer to the [session management guide](/docs/providers/http/#session-management) for more details on how session management can be configured for different providers. In the example below, we use client-side session management to create a unique session or conversation ID for each test, and add it in the for each turn in the conversation.
+When using HTTP or custom providers with multi-turn attacks like GOAT and/or Crescendo, you may need to maintain session IDs between rounds. You can refer to the [session management guide](/docs/providers/http/#session-management) for more details on how session management can be configured for different providers.
 
 ## Considerations
 
@@ -34,7 +34,7 @@ When stateful is set to false, Promptfoo will pass the entire conversation histo
 
 Depending on the way your application is written and the request format it expects, you may have to handle parsing this string.
 
-## Walkthrough example:
+## Stateless Example:
 
 In this walkthrough, we'll assume that the application is not stateful, which means we will be sending the entire conversation to the application each time. We will also use client-side session management to create a unique sessionId for each test that will be used throughout each conversation.
 
