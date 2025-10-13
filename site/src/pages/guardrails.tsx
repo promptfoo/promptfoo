@@ -194,12 +194,6 @@ function CallToActionSection() {
           <Link className="button button--primary button--lg" to="/contact/">
             Request Demo
           </Link>
-          <Link
-            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
-            to="/docs/guides/prevent-prompt-injection"
-          >
-            View Documentation
-          </Link>
         </div>
         <div className={styles.finalCTATrust}>
           <p>✓ Self-improving • ✓ Third-party validation • ✓ Cloud or on-premise</p>
