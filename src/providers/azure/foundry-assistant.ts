@@ -289,11 +289,16 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
   ): Promise<ProviderResponse> {
     // Create a simple cache key based on the input and configuration
     const cacheKey = `azure_foundry_assistant:${this.deploymentName}:${JSON.stringify({
+      frequency_penalty: this.assistantConfig.frequency_penalty,
       instructions: this.assistantConfig.instructions,
+      max_completion_tokens: this.assistantConfig.max_completion_tokens,
       max_tokens: this.assistantConfig.max_tokens,
       model: this.assistantConfig.modelName,
+      presence_penalty: this.assistantConfig.presence_penalty,
       prompt,
       response_format: this.assistantConfig.response_format,
+      seed: this.assistantConfig.seed,
+      stop: this.assistantConfig.stop,
       temperature: this.assistantConfig.temperature,
       tool_choice: this.assistantConfig.tool_choice,
       tool_resources: this.assistantConfig.tool_resources,
@@ -346,6 +351,27 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
       }
       if (this.assistantConfig.top_p !== undefined) {
         runOptions.top_p = this.assistantConfig.top_p;
+      }
+      if (this.assistantConfig.frequency_penalty !== undefined) {
+        runOptions.frequency_penalty = this.assistantConfig.frequency_penalty;
+      }
+      if (this.assistantConfig.presence_penalty !== undefined) {
+        runOptions.presence_penalty = this.assistantConfig.presence_penalty;
+      }
+      if (this.assistantConfig.max_completion_tokens !== undefined) {
+        runOptions.max_completion_tokens = this.assistantConfig.max_completion_tokens;
+      }
+      if (this.assistantConfig.max_tokens !== undefined) {
+        runOptions.max_tokens = this.assistantConfig.max_tokens;
+      }
+      if (this.assistantConfig.response_format) {
+        runOptions.response_format = this.assistantConfig.response_format;
+      }
+      if (this.assistantConfig.stop) {
+        runOptions.stop = this.assistantConfig.stop;
+      }
+      if (this.assistantConfig.seed !== undefined) {
+        runOptions.seed = this.assistantConfig.seed;
       }
       if (this.assistantConfig.tool_resources) {
         runOptions.tool_resources = this.assistantConfig.tool_resources;
