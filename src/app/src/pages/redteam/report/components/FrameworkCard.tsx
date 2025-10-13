@@ -28,6 +28,7 @@ import {
 import FrameworkPluginResult from './FrameworkPluginResult';
 import { useCallback, useMemo } from 'react';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { compareByASRDescending } from '../utils/utils';
 
 interface FrameworkCardProps {
   evalId: string;
@@ -77,9 +78,7 @@ const FrameworkCard = ({
   const sortPluginsByASR = useCallback(
     (plugins: string[]): string[] => {
       return [...plugins].sort((a, b) => {
-        const asrA = getPluginASR(a).asr;
-        const asrB = getPluginASR(b).asr;
-        return asrB - asrA;
+        return compareByASRDescending(getPluginASR(a), getPluginASR(b));
       });
     },
     [getPluginASR],

@@ -27,6 +27,7 @@ import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import { type TestResultStats, type CategoryStats } from './FrameworkComplianceUtils';
+import { compareByASRDescending } from '../utils/utils';
 
 interface TestWithMetadata {
   prompt: string;
@@ -154,7 +155,7 @@ const DrawerContent = ({
         ...stats,
         asr: calculateAttackSuccessRate(stats.total, stats.successfulAttacks),
       }))
-      .sort((a, b) => b.asr - a.asr);
+      .sort(compareByASRDescending);
   }, [succeededAttacksByPlugin, failedAttacksByPlugin, selectedStrategy]);
 
   const examplesByStrategy = React.useMemo(() => {
@@ -561,7 +562,7 @@ const StrategyStats = ({
   const strategies = Object.entries(strategyStats).sort((a, b) => {
     const asrA = calculateAttackSuccessRate(a[1].total, a[1].failCount);
     const asrB = calculateAttackSuccessRate(b[1].total, b[1].failCount);
-    return asrB - asrA;
+    return compareByASRDescending({ asr: asrA }, { asr: asrB });
   });
 
   const handleStrategyClick = async (strategy: string) => {
