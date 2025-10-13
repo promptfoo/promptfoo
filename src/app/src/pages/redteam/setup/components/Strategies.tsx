@@ -20,7 +20,6 @@ import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
 import StrategyConfigDialog from './StrategyConfigDialog';
 import { PresetSelector } from './strategies/PresetSelector';
-import EstimatedProbesDisplay from './EstimatedProbesDisplay';
 import { AgenticStrategiesGroup } from './strategies/AgenticStrategiesGroup';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
@@ -28,8 +27,9 @@ import { SystemConfiguration } from './strategies/SystemConfiguration';
 import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
 import { getStrategyId } from './strategies/utils';
 import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
-
+import EstimationsDisplay from './EstimationsDisplay';
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
+import Divider from '@mui/material/Divider';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -438,7 +438,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       )}
 
       <Box>
-        <EstimatedProbesDisplay config={config} />
+        <EstimationsDisplay config={config} />
+
+        <Divider sx={{ my: 4 }} />
 
         {/* Preset Selector */}
         <PresetSelector
