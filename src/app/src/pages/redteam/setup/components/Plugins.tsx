@@ -93,36 +93,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return initialConfig;
   });
 
-  const [debouncedPlugins] = useDebounce(
-    useMemo(
-      () =>
-        Array.from(selectedPlugins)
-          .map((plugin): string | { id: string; config: any } | null => {
-            if (plugin === 'policy') {
-              return null;
-            }
-
-            const config = pluginConfig[plugin];
-            if (config && Object.keys(config).length > 0) {
-              return { id: plugin, config };
-            }
-            return plugin;
-          })
-          .filter((plugin): plugin is string | { id: string; config: any } => plugin !== null),
-      [selectedPlugins, pluginConfig],
-    ),
-    100,
-  );
-
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
   }, []);
-
-  useEffect(() => {
-    if (debouncedPlugins) {
-      updatePlugins(debouncedPlugins);
-    }
-  }, [debouncedPlugins]);
 
   // Sync selectedPlugins from config only on initial load or when user hasn't interacted
   useEffect(() => {
