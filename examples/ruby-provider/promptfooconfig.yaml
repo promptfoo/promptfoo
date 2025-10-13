@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Custom Ruby provider with functions
+
+prompts:
+  - 'Write a very concise funny tweet about {{topic}}'
+
+providers:
+  - id: file://provider.rb
+    config:
+      someOption: foobar
+
+  - id: file://provider.rb:some_other_function
+
+tests:
+  - vars:
+      topic: bananas
+    assert:
+      - type: contains
+        value: Bananamax
+  - vars:
+      topic: fruits
+    assert:
+      - type: llm-rubric
+        value: includes at least one emoji
+  - vars:
+      topic: turtles
+    assert:
+      - type: llm-rubric
+        value: is funny
