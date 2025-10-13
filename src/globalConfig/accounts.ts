@@ -43,7 +43,13 @@ export function isLoggedIntoCloud(): boolean {
 }
 
 interface EmailStatusResult {
-  status: 'ok' | 'exceeded_limit' | 'show_usage_warning' | 'no_email';
+  status:
+    | 'ok'
+    | 'exceeded_limit'
+    | 'show_usage_warning'
+    | 'no_email'
+    | 'risky_email'
+    | 'disposable_email';
   message?: string;
   email?: string;
   hasEmail: boolean;
@@ -53,7 +59,9 @@ interface EmailStatusResult {
  * Shared function to check email status with the promptfoo API
  * Used by both CLI and server routes
  */
-export async function checkEmailStatus(): Promise<EmailStatusResult> {
+export async function checkEmailStatus(options?: {
+  validate?: boolean;
+}): Promise<EmailStatusResult> {
   const userEmail = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
 
   if (!userEmail) {
@@ -65,13 +73,16 @@ export async function checkEmailStatus(): Promise<EmailStatusResult> {
   }
 
   try {
+    const validateParam = options?.validate ? '&validate=true' : '';
+    // Use longer timeout when validation is requested
+    const timeout = options?.validate ? 3000 : 500;
     const resp = await fetchWithTimeout(
-      `https://api.promptfoo.app/api/users/status?email=${encodeURIComponent(userEmail)}`,
+      `https://api.promptfoo.app/api/users/status?email=${encodeURIComponent(userEmail)}${validateParam}`,
       undefined,
-      500,
+      timeout,
     );
     const data = (await resp.json()) as {
-      status: 'ok' | 'exceeded_limit' | 'show_usage_warning';
+      status: 'ok' | 'exceeded_limit' | 'show_usage_warning' | 'risky_email' | 'disposable_email';
       message?: string;
       error?: string;
     };
@@ -94,9 +105,12 @@ export async function checkEmailStatus(): Promise<EmailStatusResult> {
   }
 }
 
-export async function promptForEmailUnverified() {
+export async function promptForEmailUnverified(): Promise<{ isNewEmail: boolean }> {
   const { default: telemetry } = await import('../telemetry');
-  let email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
+  const existingEmail = getUserEmail();
+  let email = isCI() ? 'ci-placeholder@promptfoo.dev' : existingEmail;
+  let isNewEmail = false;
+
   if (!email) {
     await telemetry.record('feature_used', {
       feature: 'promptForEmailUnverified',
@@ -110,6 +124,7 @@ export async function promptForEmailUnverified() {
       },
     });
     setUserEmail(email);
+    isNewEmail = true;
     await telemetry.record('feature_used', {
       feature: 'userCompletedPromptForEmailUnverified',
     });
@@ -117,10 +132,17 @@ export async function promptForEmailUnverified() {
   await telemetry.saveConsent(email, {
     source: 'promptForEmailUnverified',
   });
+
+  return { isNewEmail };
 }
 
-export async function checkEmailStatusOrExit() {
-  const result = await checkEmailStatus();
+export async function checkEmailStatusOrExit(options?: { validate?: boolean }) {
+  const result = await checkEmailStatus(options);
+
+  if (result.status === 'risky_email' || result.status === 'disposable_email') {
+    logger.error('Please use a valid work email.');
+    process.exit(1);
+  }
 
   if (result.status === 'exceeded_limit') {
     logger.error(

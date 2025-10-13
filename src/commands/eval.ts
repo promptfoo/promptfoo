@@ -389,8 +389,8 @@ export async function doEval(
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
-      await promptForEmailUnverified();
-      await checkEmailStatusOrExit();
+      const { isNewEmail } = await promptForEmailUnverified();
+      await checkEmailStatusOrExit({ validate: isNewEmail });
     }
 
     if (!resumeEval) {

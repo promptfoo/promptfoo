@@ -87,6 +87,7 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ isNewEmail: false });
   });
 
   it('should create eval command with correct options', () => {
@@ -362,6 +363,7 @@ describe('checkCloudPermissions', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ isNewEmail: false });
   });
 
   it('should fail when checkCloudPermissions throws an error', async () => {
@@ -641,6 +643,7 @@ describe('doEval with external defaultTest', () => {
       },
       basePath: path.resolve('/'),
     });
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ isNewEmail: false });
   });
 
   it('should handle grader option with string defaultTest', async () => {
