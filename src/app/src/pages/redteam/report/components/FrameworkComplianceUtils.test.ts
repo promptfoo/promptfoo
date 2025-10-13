@@ -1,13 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  expandPluginCollections,
   categorizePlugins,
+  expandPluginCollections,
   getPluginDisplayName,
-  getSeverityColor,
-  getProgressColor,
 } from './FrameworkComplianceUtils';
+
 import type { CategoryStats } from './FrameworkComplianceUtils';
-import { displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
 
 describe('expandPluginCollections', () => {
   it('should return an empty set when the plugins array is empty', () => {
@@ -263,81 +262,5 @@ describe('getPluginDisplayName', () => {
     expect(result).toBe(pluginKey);
 
     delete displayNameOverrides[pluginKey as keyof typeof displayNameOverrides];
-  });
-});
-
-describe('getSeverityColor', () => {
-  const mockTheme = {
-    palette: {
-      error: {
-        main: '#d32f2f',
-      },
-      warning: {
-        main: '#f57c00',
-        light: '#fbc02d',
-      },
-      success: {
-        main: '#7cb342',
-      },
-      grey: {
-        500: '#757575',
-      },
-    },
-  } as any;
-
-  it.each([
-    { severity: Severity.Critical, expectedColor: '#d32f2f' },
-    { severity: Severity.High, expectedColor: '#f57c00' },
-    { severity: Severity.Medium, expectedColor: '#fbc02d' },
-    { severity: Severity.Low, expectedColor: '#7cb342' },
-    { severity: undefined, expectedColor: '#757575' },
-    { severity: 'invalid-severity' as Severity, expectedColor: '#757575' },
-    { severity: null as any, expectedColor: '#757575' },
-    { severity: 5 as unknown as Severity, expectedColor: '#757575' },
-  ])(
-    'should return $expectedColor when given $severity as input',
-    ({ severity, expectedColor }) => {
-      const result = getSeverityColor(severity, mockTheme);
-
-      expect(result).toBe(expectedColor);
-    },
-  );
-});
-
-describe('getProgressColor', () => {
-  describe('when forAttackRate is false (pass rate)', () => {
-    it.each([
-      { percentage: 95, expectedColor: '#4caf50' },
-      { percentage: 80, expectedColor: '#8bc34a' },
-      { percentage: 75, expectedColor: '#8bc34a' },
-      { percentage: 60, expectedColor: '#ffeb3b' },
-      { percentage: 30, expectedColor: '#ff9800' },
-      { percentage: 25, expectedColor: '#ff9800' },
-      { percentage: 10, expectedColor: '#f44336' },
-    ])(
-      'should return $expectedColor for a pass rate percentage of $percentage',
-      ({ percentage, expectedColor }) => {
-        const result = getProgressColor(percentage, false);
-
-        expect(result).toBe(expectedColor);
-      },
-    );
-  });
-
-  describe('when forAttackRate is true (attack success rate)', () => {
-    it.each([
-      { percentage: 80, expectedColor: '#d32f2f' },
-      { percentage: 60, expectedColor: '#f44336' },
-      { percentage: 30, expectedColor: '#ff9800' },
-      { percentage: 15, expectedColor: '#ffc107' },
-      { percentage: 5, expectedColor: '#4caf50' },
-    ])(
-      'should return $expectedColor for an attack success rate percentage of $percentage',
-      ({ percentage, expectedColor }) => {
-        const result = getProgressColor(percentage, true);
-
-        expect(result).toBe(expectedColor);
-      },
-    );
   });
 });

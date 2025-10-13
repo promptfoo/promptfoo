@@ -170,6 +170,9 @@ describe('Groq', () => {
           cached: false,
           cost: undefined,
           logProbs: undefined,
+          guardrails: {
+            flagged: false,
+          },
         });
       });
 
@@ -195,6 +198,9 @@ describe('Groq', () => {
           cached: true,
           cost: undefined,
           logProbs: undefined,
+          guardrails: {
+            flagged: false,
+          },
           tokenUsage: {
             total: 10,
             cached: 10,

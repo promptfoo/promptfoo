@@ -1,6 +1,4 @@
-import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
-import type { Theme } from '@mui/material/styles';
-import { getASRColor, getPassRateColor } from '@promptfoo/app/src/utils/redteam';
+import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 
 export type TestResultStats = {
   // The count of successful defenses (tests that passed)
@@ -96,23 +94,4 @@ export const FRAMEWORK_DESCRIPTIONS: Record<string, string> = {
   'owasp:api': 'OWASP API Top 10 security risks for application programming interfaces',
   'owasp:llm': 'OWASP LLM Top 10 security vulnerabilities for large language models',
   'eu:ai-act': 'EU AI Act for responsible AI development',
-};
-
-export const getSeverityColor = (severity: Severity, theme: Theme): string => {
-  switch (severity) {
-    case Severity.Critical:
-      return theme.palette.error.main;
-    case Severity.High:
-      return theme.palette.warning.main;
-    case Severity.Medium:
-      return theme.palette.warning.light;
-    case Severity.Low:
-      return theme.palette.success.main;
-    default:
-      return theme.palette.grey[500];
-  }
-};
-
-export const getProgressColor = (percentage: number, forAttackRate: boolean = false): string => {
-  return forAttackRate ? getASRColor(percentage) : getPassRateColor(percentage);
 };

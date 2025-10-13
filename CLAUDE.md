@@ -142,6 +142,29 @@ The OG image generation process can take several minutes and may cause CI timeou
 - Follow Jest best practices with describe/it blocks
 - Use consistent error handling with proper type checks
 
+### React Hooks
+
+- **`useMemo` vs `useCallback`**: Use `useMemo` when computing a value, and `useCallback` when creating a stable function reference. Specifically:
+  - Use `useMemo` when the hook returns a value that doesn't accept arguments (a non-callable)
+  - Use `useCallback` when the hook returns a function that accepts arguments and will be called later
+
+  ```typescript
+  // ✅ Good - useMemo for computed values
+  const tooltipMessage = useMemo(() => {
+    return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+  }, [apiStatus]);
+
+  // ✅ Good - useCallback for functions that accept arguments
+  const handleClick = useCallback((id: string) => {
+    console.log('Clicked:', id);
+  }, []);
+
+  // ❌ Bad - useCallback for computed values
+  const getTooltipMessage = useCallback(() => {
+    return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+  }, [apiStatus]);
+  ```
+
 ## Logging and Sanitization
 
 **IMPORTANT**: Always sanitize sensitive data before logging to prevent exposing secrets, API keys, passwords, and other credentials in logs.
@@ -227,23 +250,21 @@ logger.debug('[HTTP Provider]: Calling endpoint', {
 logger.debug(`Calling ${url} with headers: ${JSON.stringify(headers)}`);
 ```
 
-````
-
 ## Git Workflow - CRITICAL
 
-### NEVER COMMIT DIRECTLY TO MAIN BRANCH
+### Rules
 
-### NEVER MERGE BRANCHES INTO MAIN DIRECTLY
-
-### NEVER PUSH TO MAIN BRANCH - EVER
-
-**ABSOLUTELY FORBIDDEN ACTIONS:**
-
-- `git push origin main` or `git push main` - NEVER DO THIS
-- `git merge feature-branch` while on main - NEVER DO THIS
-- Any direct commits to main branch - NEVER DO THIS
+1. NEVER COMMIT DIRECTLY TO MAIN BRANCH
+2. NEVER MERGE BRANCHES INTO MAIN DIRECTLY
+3. NEVER PUSH TO MAIN BRANCH - EVER
+4. **ABSOLUTELY FORBIDDEN ACTIONS:**
+   - `git push origin main` or `git push main` - NEVER DO THIS
+   - `git merge feature-branch` while on main - NEVER DO THIS
+   - Any direct commits to main branch - NEVER DO THIS
 
 All changes to main MUST go through pull requests and code review process.
+
+### Workflow
 
 Always follow this workflow:
 
@@ -253,7 +274,7 @@ Always follow this workflow:
    git checkout main
    git pull origin main
    git checkout -b feature/your-branch-name
-````
+   ```
 
 2. **Make your changes and commit**:
 
@@ -266,14 +287,68 @@ Always follow this workflow:
 
    **NEVER use `git commit --amend` or `git push --force` unless explicitly asked by the user.**
 
-3. **Push and create PR**:
+3. **Lint**:
+
+   ```bash
+   npm run lint
+   ```
+
+   If there are lint errors, fix them.
+
+4. **Format**:
+
+   ```bash
+   npm run format
+   ```
+
+   If there are formatting errors, fix them.
+
+5. **Push and create PR**:
 
    ```bash
    git push -u origin feature/your-branch-name
    gh pr create --title "Your PR Title" --body "PR description"
    ```
 
-4. **Wait for review and CI checks** before merging
+6. **Wait for review and CI checks** before merging
+
+## Dependency Management
+
+### Safe Update Workflow
+
+When updating dependencies, use `npx npm-check-updates --target minor` for safe minor/patch updates only:
+
+```bash
+# Check all three workspaces
+npx npm-check-updates --target minor              # Root
+npx npm-check-updates --target minor --cwd site   # Site
+npx npm-check-updates --target minor --cwd src/app # App
+
+# Find and check example package.json files
+find examples -name "package.json" -not -path "*/node_modules/*" -type f
+
+# Apply updates with -u flag, then verify
+npm run build && npm test && npm run lint && npm run format
+
+# Check version consistency across workspaces (required by CI)
+npx check-dependency-version-consistency
+```
+
+### Critical Rules
+
+1. **PeerDependencies must match devDependencies** - Always update peerDependencies to match devDependencies versions to prevent "package not found" errors for users
+2. **Update examples/** - 12+ package.json files in examples/ are user-facing; keep them current
+3. **No package-lock.json** - Project intentionally omits lockfile; `npm audit` won't work
+4. **If updates fail** - Revert the problematic package and keep current version until code changes allow upgrade
+
+### Checking for Major Updates
+
+```bash
+# See available major version updates (don't apply automatically)
+npx npm-check-updates --target latest
+
+# Major updates often require code changes - evaluate each carefully
+```
 
 ## Project Conventions
 
