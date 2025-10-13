@@ -16,7 +16,6 @@ import {
   riskCategories,
 } from '@promptfoo/redteam/constants';
 import { Link as RouterLink } from 'react-router-dom';
-import { useDebounce } from 'use-debounce';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
 import PluginsTab from './PluginsTab';
@@ -41,21 +40,22 @@ interface TabPanelProps {
 }
 
 function TabPanel({ children, value, index }: TabPanelProps) {
+  const isHidden = value !== index;
   return (
     <Box
       role="tabpanel"
-      hidden={value !== index}
+      hidden={isHidden}
       id={`plugins-tabpanel-${index}`}
       aria-labelledby={`plugins-tab-${index}`}
     >
-      <Box>{children}</Box>
+      {!isHidden && <Box>{children}</Box>}
     </Box>
   );
 }
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const theme = useTheme();
-  const { config, updatePlugins } = useRedTeamConfig();
+  const { config } = useRedTeamConfig();
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
