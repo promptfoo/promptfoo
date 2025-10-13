@@ -200,6 +200,9 @@ describe('TrueFoundry', () => {
           cached: false,
           cost: undefined,
           logProbs: undefined,
+          guardrails: {
+            flagged: false,
+          },
         });
       });
 
@@ -332,6 +335,9 @@ describe('TrueFoundry', () => {
           cached: true,
           cost: undefined,
           logProbs: undefined,
+          guardrails: {
+            flagged: false,
+          },
           tokenUsage: {
             total: 10,
             cached: 10,
