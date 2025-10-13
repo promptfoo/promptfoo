@@ -78,6 +78,7 @@ import { createPerplexityProvider } from './perplexity';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PromptfooModelProvider } from './promptfooModel';
 import { PythonProvider } from './pythonCompletion';
+import { RubyProvider } from './rubyCompletion';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
@@ -112,6 +113,7 @@ export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
   createScriptBasedProviderFactory('python', 'py', PythonProvider),
+  createScriptBasedProviderFactory('ruby', 'rb', RubyProvider),
   {
     test: (providerPath: string) => providerPath === 'agentic:memory-poisoning',
     create: async (
