@@ -1,11 +1,11 @@
-# azure-foundry-assistant (Azure AI Foundry Assistant)
+# azure-foundry-agent (Azure AI Foundry Agent)
 
-This example demonstrates how to use the Azure Foundry Assistant provider with promptfoo. This provider uses the `@azure/ai-projects` SDK instead of direct HTTP calls to the OpenAI-compatible API.
+This example demonstrates how to use the Azure Foundry Agent provider with promptfoo. This provider uses the `@azure/ai-projects` SDK instead of direct HTTP calls to the OpenAI-compatible API.
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example azure-foundry-assistant
+npx promptfoo@latest init --example azure-foundry-agent
 ```
 
 ## Setup
@@ -30,11 +30,11 @@ export AZURE_AI_PROJECT_URL="https://your-project.services.ai.azure.com/api/proj
 
 ## Configuration
 
-The provider uses the `azure:foundry-assistant:assistant-id` format.
+The provider uses the `azure:foundry-agent:agent-id` format.
 
 ```yaml
 providers:
-  - azure:foundry-assistant:asst_uRGMedGFDehLkjJJaq51J9GY:
+  - azure:foundry-agent:asst_uRGMedGFDehLkjJJaq51J9GY:
       projectUrl: 'https://faiza-m92xlckl-swedencentral.services.ai.azure.com/api/projects/faiza-m92xlckl-swedence-project'
       config:
         temperature: 0.7
@@ -58,7 +58,7 @@ All the same configuration options from the regular Azure Assistant provider are
 - `tools`: Function tools configuration
 - `tool_choice`: Tool selection strategy
 - `tool_resources`: Resource configuration (file search, etc.)
-- `instructions`: System instructions for the assistant
+- `instructions`: System instructions for the agent
 - `functionToolCallbacks`: Custom function callbacks
 - `timeoutMs`: Request timeout in milliseconds
 - `maxPollTimeMs`: Maximum time to poll for completion
@@ -70,7 +70,7 @@ You can provide custom function callbacks just like with the regular Azure Assis
 
 ```yaml
 providers:
-  - azure:foundry-assistant:asst_uRGMedGFDehLkjJJaq51J9GY:
+  - azure:foundry-agent:asst_uRGMedGFDehLkjJJaq51J9GY:
       projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
       config:
         functionToolCallbacks:
@@ -88,7 +88,7 @@ The main differences are:
 1. **SDK Usage**: Uses `@azure/ai-projects` SDK instead of direct HTTP calls
 2. **Authentication**: Uses `DefaultAzureCredential` for Azure authentication
 3. **Project URL**: Requires an Azure AI Project URL instead of Azure OpenAI endpoint
-4. **Provider Format**: Uses `azure:foundry-assistant:assistant-id` instead of `azure:assistant:assistant-id`
+4. **Provider Format**: Uses `azure:foundry-agent:agent-id` instead of `azure:assistant:assistant-id`
 
 ## Environment Variables
 

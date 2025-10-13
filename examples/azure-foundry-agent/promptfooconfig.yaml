@@ -1,9 +1,9 @@
-description: 'Azure AI Foundry Assistant evaluation'
+description: 'Azure AI Foundry Agent evaluation'
 
 providers:
-  - id: azure:foundry-assistant:asst_uRGMedGFDehLkjJJaq51J9GY
+  - id: azure:foundry-agent:asst_...
     config:
-      projectUrl: 'https://faiza-m92xlckl-swedencentral.services.ai.azure.com/api/projects/faiza-m92xlckl-swedence-project'
+      projectUrl: 'project.services.ai.azure.com/api/projects/project-id'
       temperature: 0.7
       max_tokens: 150
       instructions: 'You are a helpful assistant that provides clear and concise answers.'
