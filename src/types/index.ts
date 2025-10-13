@@ -466,6 +466,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'python',
   'regex',
   'rouge-n',
+  'ruby',
   'similar',
   'starts-with',
   'trace-error-spans',

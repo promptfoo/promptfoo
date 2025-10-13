@@ -30,6 +30,7 @@ providers:
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                                 | `https://api.example.com/v1/chat/completions`                             |
 | [Javascript](./custom-api.md)                       | Custom - JavaScript file                                     | `file://path/to/custom_provider.js`                                       |
 | [Python](./python.md)                               | Custom - Python file                                         | `file://path/to/custom_provider.py`                                       |
+| [Ruby](./ruby.md)                                   | Custom - Ruby file                                           | `file://path/to/custom_provider.rb`                                       |
 | [Shell Command](./custom-script.md)                 | Custom - script-based providers                              | `exec: python chain.py`                                                   |
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                                    | `ai21:jamba-1.5-mini`                                                     |
 | [AI/ML API](./aimlapi.md)                           | Tap into 300+ cutting-edge AI models with a single API       | `aimlapi:chat:deepseek-r1`                                                |
