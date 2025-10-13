@@ -245,7 +245,7 @@ describe('FrameworkCard', () => {
     expect(summaryChip).toBeInTheDocument();
     expect(summaryChip.closest('.MuiChip-root')).toHaveClass('MuiChip-colorError');
 
-    const severityChip = screen.getByText(frameworkSeverity);
+    const severityChip = screen.getByText(severityDisplayNames[frameworkSeverity]);
     expect(severityChip).toBeInTheDocument();
 
     const severityChipElement = severityChip.closest('.MuiChip-root');
