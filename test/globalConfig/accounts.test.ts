@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { getEnvString, isCI } from '../../src/envars';
 import {
   checkEmailStatus,
-  checkEmailStatusOrExit,
+  checkEmailStatusAndMaybeExit,
   getAuthor,
   getUserEmail,
   getUserId,
@@ -285,7 +285,7 @@ describe('accounts', () => {
     });
   });
 
-  describe('checkEmailStatusOrExit', () => {
+  describe('checkEmailStatusAndMaybeExit', () => {
     const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
     beforeEach(() => {
@@ -301,10 +301,10 @@ describe('accounts', () => {
       });
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
-      await checkEmailStatusOrExit();
+      await checkEmailStatusAndMaybeExit();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=ci-placeholder%40promptfoo.dev',
+        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
         undefined,
         500,
       );
@@ -323,10 +323,10 @@ describe('accounts', () => {
       });
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
-      await checkEmailStatusOrExit();
+      await checkEmailStatusAndMaybeExit();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=test%40example.com',
+        expect.stringContaining('/api/users/status?email=test%40example.com'),
         undefined,
         500,
       );
@@ -345,7 +345,7 @@ describe('accounts', () => {
       });
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
-      await checkEmailStatusOrExit();
+      await checkEmailStatusAndMaybeExit();
 
       expect(mockExit).toHaveBeenCalledWith(1);
       expect(logger.error).toHaveBeenCalledWith(
@@ -370,10 +370,30 @@ describe('accounts', () => {
       );
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
-      await checkEmailStatusOrExit();
+      await checkEmailStatusAndMaybeExit();
 
       expect(logger.info).toHaveBeenCalledTimes(2);
       expect(logger.warn).toHaveBeenCalledWith(chalk.yellow(warningMessage));
+      expect(mockExit).not.toHaveBeenCalled();
+    });
+
+    it('should return bad_email and not exit when status is risky_email or disposable_email', async () => {
+      jest.mocked(isCI).mockReturnValue(false);
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+
+      const mockResponse = new Response(JSON.stringify({ status: 'risky_email' }), {
+        status: 200,
+        statusText: 'OK',
+      });
+      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      const result = await checkEmailStatusAndMaybeExit();
+
+      expect(result).toBe('bad_email');
+      expect(logger.error).toHaveBeenCalledWith('Please use a valid work email.');
       expect(mockExit).not.toHaveBeenCalled();
     });
 
@@ -385,7 +405,7 @@ describe('accounts', () => {
       });
       jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Network error'));
 
-      await checkEmailStatusOrExit();
+      await checkEmailStatusAndMaybeExit();
 
       expect(logger.debug).toHaveBeenCalledWith(
         'Failed to check user status: Error: Network error',
@@ -424,7 +444,7 @@ describe('accounts', () => {
       const result = await checkEmailStatus();
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/users/status?email=ci-placeholder%40promptfoo.dev',
+        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
         undefined,
         500,
       );

@@ -10,7 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -389,8 +389,14 @@ export async function doEval(
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
-      const { isNewEmail } = await promptForEmailUnverified();
-      await checkEmailStatusOrExit({ validate: isNewEmail });
+      // Prompt for email until we get a valid one
+      // Other status problems apart from bad emails (like 'exceeded_limit') just log and exit
+      let hasValidEmail = false;
+      while (!hasValidEmail) {
+        const { emailNeedsValidation } = await promptForEmailUnverified();
+        const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+        hasValidEmail = res === 'ok';
+      }
     }
 
     if (!resumeEval) {

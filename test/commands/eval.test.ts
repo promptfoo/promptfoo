@@ -9,7 +9,7 @@ import {
   showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
 import { evaluate } from '../../src/evaluator';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../../src/globalConfig/accounts';
+import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
@@ -87,7 +87,8 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
-    jest.mocked(promptForEmailUnverified).mockResolvedValue({ isNewEmail: false });
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
 
   it('should create eval command with correct options', () => {
@@ -142,7 +143,7 @@ describe('evalCommand', () => {
     await doEval(cmdObj, config, defaultConfigPath, {});
 
     expect(promptForEmailUnverified).toHaveBeenCalledTimes(1);
-    expect(checkEmailStatusOrExit).toHaveBeenCalledTimes(1);
+    expect(checkEmailStatusAndMaybeExit).toHaveBeenCalledTimes(1);
   });
 
   it('should handle share option when enabled', async () => {
@@ -363,7 +364,8 @@ describe('checkCloudPermissions', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.mocked(promptForEmailUnverified).mockResolvedValue({ isNewEmail: false });
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
 
   it('should fail when checkCloudPermissions throws an error', async () => {
@@ -643,7 +645,8 @@ describe('doEval with external defaultTest', () => {
       },
       basePath: path.resolve('/'),
     });
-    jest.mocked(promptForEmailUnverified).mockResolvedValue({ isNewEmail: false });
+    jest.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    jest.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
 
   it('should handle grader option with string defaultTest', async () => {

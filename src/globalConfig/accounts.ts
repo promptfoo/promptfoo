@@ -29,7 +29,36 @@ export function getUserEmail(): string | null {
 }
 
 export function setUserEmail(email: string) {
-  const config: Partial<GlobalConfig> = { account: { email } };
+  const globalConfig = readGlobalConfig();
+  const account = globalConfig?.account ?? {};
+  account.email = email;
+  const config: Partial<GlobalConfig> = { account };
+  writeGlobalConfigPartial(config);
+}
+
+export function getUserEmailNeedsValidation(): boolean {
+  const globalConfig = readGlobalConfig();
+  return globalConfig?.account?.emailNeedsValidation || false;
+}
+
+export function setUserEmailNeedsValidation(needsValidation: boolean) {
+  const globalConfig = readGlobalConfig();
+  const account = globalConfig?.account ?? {};
+  account.emailNeedsValidation = needsValidation;
+  const config: Partial<GlobalConfig> = { account };
+  writeGlobalConfigPartial(config);
+}
+
+export function getUserEmailValidated(): boolean {
+  const globalConfig = readGlobalConfig();
+  return globalConfig?.account?.emailValidated || false;
+}
+
+export function setUserEmailValidated(validated: boolean) {
+  const globalConfig = readGlobalConfig();
+  const account = globalConfig?.account ?? {};
+  account.emailValidated = validated;
+  const config: Partial<GlobalConfig> = { account };
   writeGlobalConfigPartial(config);
 }
 
@@ -76,8 +105,16 @@ export async function checkEmailStatus(options?: {
     const validateParam = options?.validate ? '&validate=true' : '';
     // Use longer timeout when validation is requested
     const timeout = options?.validate ? 3000 : 500;
+
+    // Log when we're validating the email since it can take a sec
+    if (options?.validate) {
+      logger.info(`Checking email...`);
+    }
+
+    const host = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
+
     const resp = await fetchWithTimeout(
-      `https://api.promptfoo.app/api/users/status?email=${encodeURIComponent(userEmail)}${validateParam}`,
+      `${host}/api/users/status?email=${encodeURIComponent(userEmail)}${validateParam}`,
       undefined,
       timeout,
     );
@@ -86,6 +123,10 @@ export async function checkEmailStatus(options?: {
       message?: string;
       error?: string;
     };
+
+    if (!['risky_email', 'disposable_email'].includes(data.status)) {
+      setUserEmailValidated(true);
+    }
 
     return {
       status: data.status,
@@ -105,26 +146,41 @@ export async function checkEmailStatus(options?: {
   }
 }
 
-export async function promptForEmailUnverified(): Promise<{ isNewEmail: boolean }> {
+export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation: boolean }> {
   const { default: telemetry } = await import('../telemetry');
   const existingEmail = getUserEmail();
   let email = isCI() ? 'ci-placeholder@promptfoo.dev' : existingEmail;
-  let isNewEmail = false;
+  const existingEmailNeedsValidation = !isCI() && getUserEmailNeedsValidation();
+  const existingEmailValidated = isCI() || getUserEmailValidated();
+
+  let emailNeedsValidation = existingEmailNeedsValidation && !existingEmailValidated;
 
   if (!email) {
     await telemetry.record('feature_used', {
       feature: 'promptForEmailUnverified',
     });
     const emailSchema = z.string().email('Please enter a valid email address');
+    try {
     email = await input({
       message: 'Redteam evals require email verification. Please enter your work email:',
       validate: (input: string) => {
         const result = emailSchema.safeParse(input);
         return result.success || result.error.errors[0].message;
-      },
-    });
+        },
+      });
+    } catch (err: any) {
+      if (err?.name === 'AbortPromptError' || err?.name === 'ExitPromptError') {
+        // exit cleanly on interrupt
+        process.exit(1);
+      }
+      // Unknown error: rethrow
+      logger.error('failed to prompt for email:', err);
+      throw err;
+    }
     setUserEmail(email);
-    isNewEmail = true;
+    setUserEmailNeedsValidation(true);
+    setUserEmailValidated(false);
+    emailNeedsValidation = true;
     await telemetry.record('feature_used', {
       feature: 'userCompletedPromptForEmailUnverified',
     });
@@ -133,15 +189,16 @@ export async function promptForEmailUnverified(): Promise<{ isNewEmail: boolean 
     source: 'promptForEmailUnverified',
   });
 
-  return { isNewEmail };
+  return { emailNeedsValidation };
 }
 
-export async function checkEmailStatusOrExit(options?: { validate?: boolean }) {
+export async function checkEmailStatusAndMaybeExit(options?: { validate?: boolean }): Promise<"ok" | "bad_email"> {
   const result = await checkEmailStatus(options);
 
   if (result.status === 'risky_email' || result.status === 'disposable_email') {
     logger.error('Please use a valid work email.');
-    process.exit(1);
+    setUserEmail('');
+    return 'bad_email';
   }
 
   if (result.status === 'exceeded_limit') {
@@ -157,4 +214,6 @@ export async function checkEmailStatusOrExit(options?: { validate?: boolean }) {
     logger.warn(chalk.yellow(result.message));
     logger.info(chalk.yellow(border));
   }
+
+  return 'ok';
 }
