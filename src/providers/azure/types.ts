@@ -150,5 +150,5 @@ export interface AzureAssistantProviderOptions {
   config?: AzureAssistantOptions & { projectUrl?: string };
   id?: string;
   env?: EnvOverrides;
-  /** Azure AI Project URL for Foundry assistant provider */
+  /** Azure AI Project URL for Foundry agent provider */
 }
