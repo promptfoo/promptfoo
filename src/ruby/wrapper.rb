@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'json'
 
 def call_method(script_path, method_name, *args)
