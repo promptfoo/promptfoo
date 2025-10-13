@@ -57,6 +57,19 @@ function sanitizeAttributes(
     return {};
   }
 
+  const sanitizeValue = (value: any): any => {
+    if (typeof value === 'string') {
+      return value.length > 400 ? `${value.slice(0, 400)}…` : value;
+    }
+    if (Array.isArray(value)) {
+      return value.map(sanitizeValue);
+    }
+    if (value && typeof value === 'object') {
+      return sanitizeAttributes(value as Record<string, any>);
+    }
+    return value;
+  };
+
   const sanitized: Record<string, any> = {};
   for (const [key, value] of Object.entries(attributes)) {
     const lowerKey = key.toLowerCase();
@@ -64,13 +77,7 @@ function sanitizeAttributes(
       sanitized[key] = '<redacted>';
       continue;
     }
-
-    if (typeof value === 'string' && value.length > 400) {
-      sanitized[key] = `${value.slice(0, 400)}…`;
-      continue;
-    }
-
-    sanitized[key] = value;
+    sanitized[key] = sanitizeValue(value);
   }
 
   return sanitized;
