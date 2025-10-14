@@ -257,6 +257,8 @@ export class WebSocketProvider implements ApiProvider {
               if (result.error) {
                 logger.error(`[WebSocket Provider]: Error from provider ${result.error}`);
                 reject(new Error(result.error));
+              } else if (result.output === undefined) {
+                reject(new Error('No output from provider'));
               } else {
                 resolve(result);
               }
@@ -265,10 +267,10 @@ export class WebSocketProvider implements ApiProvider {
               logger.debug(
                 `[WebSocket Provider]: Error in transform response: ${(err as Error).message}`,
               );
-              resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
+              reject(new Error(`Failed to process response: ${JSON.stringify(err)}`));
             }
           } catch (err) {
-            resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
+            reject(new Error(`Failed to process response: ${JSON.stringify(err)}`));
           } finally {
             ws.close();
           }
