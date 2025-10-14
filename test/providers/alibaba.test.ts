@@ -53,14 +53,14 @@ describe('Alibaba Cloud Provider', () => {
 
     it('should throw error when no model specified', () => {
       expect(() => new AlibabaChatCompletionProvider('')).toThrow(
-        'Invalid Alibaba Cloud model: . Available models:',
+        'Alibaba modelName is required',
       );
     });
 
-    it('should throw error for unknown model', () => {
-      expect(() => new AlibabaChatCompletionProvider('unknown-model', {})).toThrow(
-        'Invalid Alibaba Cloud model: unknown-model. Available models:',
-      );
+    it('should warn but not throw for unknown model', () => {
+      // Unknown models now only warn, they don't throw errors
+      const provider = new AlibabaChatCompletionProvider('unknown-model', {});
+      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     });
 
     it('should pass through environment variables', () => {
@@ -85,7 +85,7 @@ describe('Alibaba Cloud Provider', () => {
       const customBaseUrl = 'https://dashscope.aliyuncs.com/api/v1';
       const provider = new AlibabaChatCompletionProvider('qwen-max', {
         config: {
-          API_BASE_URL: customBaseUrl,
+          apiBaseUrl: customBaseUrl,
         },
       });
 
@@ -119,14 +119,14 @@ describe('Alibaba Cloud Provider', () => {
 
     it('should throw error when no model specified', () => {
       expect(() => new AlibabaEmbeddingProvider('')).toThrow(
-        'Invalid Alibaba Cloud model: . Available models:',
+        'Alibaba modelName is required',
       );
     });
 
-    it('should throw error for unknown model', () => {
-      expect(() => new AlibabaEmbeddingProvider('unknown-model', {})).toThrow(
-        'Invalid Alibaba Cloud model: unknown-model. Available models:',
-      );
+    it('should warn but not throw for unknown model', () => {
+      // Unknown models now only warn, they don't throw errors
+      const provider = new AlibabaEmbeddingProvider('unknown-model', {});
+      expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
     });
 
     it('should pass through environment variables', () => {
@@ -151,7 +151,7 @@ describe('Alibaba Cloud Provider', () => {
       const customBaseUrl = 'https://dashscope.aliyuncs.com/api/v1';
       const provider = new AlibabaEmbeddingProvider('text-embedding-v3', {
         config: {
-          API_BASE_URL: customBaseUrl,
+          apiBaseUrl: customBaseUrl,
         },
       });
 
