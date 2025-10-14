@@ -94,6 +94,7 @@ interface EmailStatusResult {
 export async function checkEmailStatus(options?: {
   validate?: boolean;
 }): Promise<EmailStatusResult> {
+  const { default: telemetry } = await import('../telemetry');
   const userEmail = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
 
   if (!userEmail) {
@@ -127,13 +128,24 @@ export async function checkEmailStatus(options?: {
       error?: string;
     };
 
-    if (
-      options?.validate &&
-      ![EmailValidationStatus.RISKY_EMAIL, EmailValidationStatus.DISPOSABLE_EMAIL].includes(
-        data.status,
-      )
-    ) {
-      setUserEmailValidated(true);
+    if (options?.validate) {
+      if (
+        [EmailValidationStatus.RISKY_EMAIL, EmailValidationStatus.DISPOSABLE_EMAIL].includes(
+          data.status,
+        )
+      ) {
+        // Tracking filtered emails via this telemetry endpoint for now to guage sensitivity of validation
+        // We should take it out once we're happy with the sensitivity
+        await telemetry.saveConsent(userEmail, {
+          source: 'filteredInvalidEmail',
+        });
+      } else {
+        setUserEmailValidated(true);
+        // Track the validated email via telemetry
+        await telemetry.saveConsent(userEmail, {
+          source: 'promptForEmailValidated',
+        });
+      }
     }
 
     return {
@@ -193,9 +205,6 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
       feature: 'userCompletedPromptForEmailUnverified',
     });
   }
-  await telemetry.saveConsent(email, {
-    source: 'promptForEmailUnverified',
-  });
 
   return { emailNeedsValidation };
 }
@@ -204,7 +213,7 @@ export async function checkEmailStatusAndMaybeExit(options?: {
   validate?: boolean;
 }): Promise<EmailOkStatus | BadEmailResult> {
   const result = await checkEmailStatus(options);
-
+  const email = result.email;
   if (
     result.status === EmailValidationStatus.RISKY_EMAIL ||
     result.status === EmailValidationStatus.DISPOSABLE_EMAIL
