@@ -4,6 +4,14 @@ This example demonstrates how to integrate promptfoo with conversational AI APIs
 
 The example includes a mock HTTP service so you can test the flow end-to-end without external dependencies.
 
+## Quick Start
+
+Initialize this example in your current directory:
+
+```bash
+npx promptfoo@latest init --example session-provider
+```
+
 ## Prerequisites
 
 - Node.js 18+
