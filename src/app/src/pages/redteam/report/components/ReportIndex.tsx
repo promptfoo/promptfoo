@@ -19,9 +19,10 @@ import {
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
+import { getProgressColor } from '@promptfoo/app/src/pages/redteam/report/utils/color';
+import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 import { useNavigate } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
-import { getASRColor, formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 
 function CustomToolbar() {
   return (
@@ -86,19 +87,17 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
         headerName: 'Attack Success Rate',
         type: 'number',
         flex: 1,
-        valueGetter: (value: EvalSummary['passRate']) => 100 - value,
         renderCell: (params: GridRenderCellParams<EvalSummary>) => (
           <>
             <Typography
               variant="body2"
               sx={{
-                color: (theme) => getProgressColor(params.value),
                 height: '100%',
                 display: 'flex',
                 alignItems: 'center',
                 // `type: number` gets overwritten by flex; manually justify content.
                 justifyContent: 'end',
-                color: getASRColor(params.value),
+                color: (theme) => getProgressColor(params.value, theme, true),
                 fontWeight: 500,
               }}
             >

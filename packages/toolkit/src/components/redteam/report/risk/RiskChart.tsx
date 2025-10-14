@@ -24,7 +24,10 @@ export const RiskChart = ({ value }: RiskChartProps) => {
           fill: value ? theme.palette.error.light : theme.palette.success.light,
         },
         [`& .${gaugeClasses.referenceArc}`]: {
-          fill: alpha(theme.palette.error.main, 0.1),
+          fill:
+            theme.palette.mode === 'dark'
+              ? alpha(theme.palette.error.main, 0.2)
+              : alpha(theme.palette.error.main, 0.1),
         },
         width: '100%',
         height: '100%',
