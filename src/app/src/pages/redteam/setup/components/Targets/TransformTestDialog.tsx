@@ -199,7 +199,7 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                     onValueChange={onTransformCodeChange}
                     highlight={highlightJS}
                     padding={10}
-                    placeholder="Enter transform function, or leave empty to see base behavior..."
+                    placeholder="Enter transform function"
                     style={{
                       fontFamily: '"Fira code", "Fira Mono", monospace',
                       fontSize: 14,

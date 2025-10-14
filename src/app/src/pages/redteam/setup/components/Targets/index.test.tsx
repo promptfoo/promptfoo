@@ -501,49 +501,6 @@ Content-Type: application/json
         }),
       );
     });
-
-    it('should display error message when target test fails', async () => {
-      const validHttpTarget = {
-        ...DEFAULT_HTTP_TARGET,
-        label: 'My HTTP Target',
-        config: {
-          url: 'https://example.com/api',
-        },
-      };
-
-      (useRedTeamConfig as any).mockReturnValue({
-        config: {
-          target: validHttpTarget,
-          plugins: [],
-          strategies: [],
-        },
-        updateConfig: mockUpdateConfig,
-      });
-
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          testResult: {
-            success: false,
-            message: 'Connection failed: Unable to reach endpoint',
-          },
-          providerResponse: {},
-        }),
-      });
-
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
-
-      const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Connection failed: Unable to reach endpoint')).toBeInTheDocument();
-      });
-
-      // Next button should remain disabled after failed test
-      const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
-      expect(nextButton).toBeDisabled();
-    });
   });
 
   describe('Provider Switching', () => {

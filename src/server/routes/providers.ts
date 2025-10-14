@@ -61,6 +61,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
 
   res.status(200).json({
     testResult: {
+      success: result.success,
       message: result.message,
       error: result.error,
       changes_needed: result.analysis?.changes_needed,
@@ -261,8 +262,8 @@ providersRouter.post(
         res.json({
           success: false,
           error:
-            'Transform returned empty result. Check your extraction path or transform function.',
-          result: output,
+            'Transform returned empty result. Ensure that your sample response is correct, and check your extraction path or transform function are returning a valid result.',
+          result: JSON.stringify(output),
         });
         return;
       }

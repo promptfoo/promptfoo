@@ -16,24 +16,7 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
   currentTransform,
   onApply,
 }) => {
-  const [testInput, setTestInput] = useState(
-    JSON.stringify(
-      {
-        choices: [
-          {
-            message: {
-              content: 'The capital of France is Paris.',
-            },
-          },
-        ],
-        usage: {
-          total_tokens: 42,
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  const [testInput, setTestInput] = useState('');
   const [editableTransform, setEditableTransform] = useState('');
 
   // Initialize editable transform when opening modal
@@ -85,7 +68,7 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
       testInput={testInput}
       onTestInputChange={setTestInput}
       testInputLabel="Test Response (JSON)"
-      testInputPlaceholder="Enter a test API response..."
+      testInputPlaceholder="Enter the API response from your endpoint"
       testInputRows={8}
       onTest={handleTest}
       onApply={onApply}
