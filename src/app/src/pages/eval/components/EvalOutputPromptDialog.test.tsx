@@ -865,3 +865,58 @@ describe('EvalOutputPromptDialog cloud config', () => {
     expect(screen.queryByText('View policy in Promptfoo Cloud')).not.toBeInTheDocument();
   });
 });
+
+describe('EvalOutputPromptDialog hideTraces prop', () => {
+  it('should show Traces tab when hideTraces is false', () => {
+    const propsWithTracesVisible = {
+      ...defaultProps,
+      hideTraces: false,
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithTracesVisible} />);
+
+    expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
+  });
+
+  it('should show Traces tab when hideTraces is undefined (default behavior)', () => {
+    const propsWithoutHideTraces = {
+      ...defaultProps,
+      hideTraces: undefined,
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutHideTraces} />);
+
+    expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when hideTraces is true', () => {
+    const propsWithTracesHidden = {
+      ...defaultProps,
+      hideTraces: true,
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithTracesHidden} />);
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  it('should hide Traces tab even when traces data exists and hideTraces is true', () => {
+    const propsWithTracesDataButHidden = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      testCaseId: 'test-case-id',
+      fetchTraces: mockFetchTraces,
+      hideTraces: true,
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithTracesDataButHidden} />);
+
+    // Traces tab should not be visible
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+
+    // Other tabs should still be visible
+    expect(screen.getByRole('tab', { name: 'Prompt & Output' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Evaluation' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Metadata' })).toBeInTheDocument();
+  });
+});

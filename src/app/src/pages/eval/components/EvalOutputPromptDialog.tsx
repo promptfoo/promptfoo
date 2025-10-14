@@ -191,6 +191,7 @@ interface EvalOutputPromptDialogProps {
   onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
   fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
   cloudConfig?: CloudConfigData | null;
+  hideTraces?: boolean
 }
 
 export default function EvalOutputPromptDialog({
@@ -211,6 +212,7 @@ export default function EvalOutputPromptDialog({
   onReplay,
   fetchTraces,
   cloudConfig,
+  hideTraces,
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -435,7 +437,7 @@ export default function EvalOutputPromptDialog({
           {hasEvaluationData && <Tab label="Evaluation" />}
           {hasMessagesData && <Tab label="Messages" />}
           {hasMetadata && <Tab label="Metadata" />}
-          {hasTracesData && <Tab label="Traces" />}
+          {hasTracesData && !hideTraces && <Tab label="Traces" />}
         </Tabs>
 
         {/* Tab Panels Container */}
