@@ -234,7 +234,7 @@ export function createTrueFoundryProvider(
   const isEmbeddingModel = modelName.toLowerCase().includes('embedding');
 
   const providerOptions: TrueFoundryProviderOptions = {
-    config: options.config,
+    ...options.config,
     env: options.env,
   };
 

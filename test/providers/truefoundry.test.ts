@@ -584,7 +584,9 @@ describe('TrueFoundry', () => {
   describe('createTrueFoundryProvider', () => {
     it('should create chat provider for non-embedding models', () => {
       const provider = createTrueFoundryProvider('truefoundry:openai/gpt-4', {
-        config: { temperature: 0.5 },
+        config: {
+          config: { temperature: 0.5 },
+        },
       });
       expect(provider).toBeInstanceOf(TrueFoundryProvider);
       expect((provider as TrueFoundryProvider).modelName).toBe('openai/gpt-4');
@@ -592,7 +594,9 @@ describe('TrueFoundry', () => {
 
     it('should create embedding provider for embedding models', () => {
       const provider = createTrueFoundryProvider('truefoundry:openai/text-embedding-3-large', {
-        config: { temperature: 0.5 },
+        config: {
+          config: { temperature: 0.5 },
+        },
       });
       expect(provider).toBeInstanceOf(TrueFoundryEmbeddingProvider);
       expect((provider as TrueFoundryEmbeddingProvider).modelName).toBe(
@@ -603,8 +607,10 @@ describe('TrueFoundry', () => {
     it('should pass config options correctly to provider', () => {
       const provider = createTrueFoundryProvider('truefoundry:openai/gpt-4', {
         config: {
-          temperature: 0.8,
-          apiBaseUrl: 'https://custom.example.com',
+          config: {
+            temperature: 0.8,
+            apiBaseUrl: 'https://custom.example.com',
+          },
         },
         env: { CUSTOM_VAR: 'test' },
       });
