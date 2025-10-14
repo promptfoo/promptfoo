@@ -2,7 +2,7 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 import type { ProviderOptions } from '../types/index';
-import logger from 'src/logger';
+import logger from '../logger';
 
 const KNOWN_MODELS = new Set([
   // Qwen3-Max
@@ -177,7 +177,7 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
       ...options,
       config: {
         ...options.config,
-        apiBaseUrl: options.apiBaseUrl ?? options.config?.apiBaseUrl ?? API_BASE_URL,
+        apiBaseUrl: options.config?.apiBaseUrl ?? API_BASE_URL,
         apiKeyEnvar: 'DASHSCOPE_API_KEY',
       },
     });
@@ -199,7 +199,7 @@ export class AlibabaEmbeddingProvider extends OpenAiEmbeddingProvider {
       ...options,
       config: {
         ...options.config,
-        apiBaseUrl: options.apiBaseUrl ?? options.config?.apiBaseUrl ?? API_BASE_URL,
+        apiBaseUrl: options.config?.apiBaseUrl ?? API_BASE_URL,
         apiKeyEnvar: 'DASHSCOPE_API_KEY',
       },
     });
