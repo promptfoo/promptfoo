@@ -1,5 +1,4 @@
 import type Anthropic from '@anthropic-ai/sdk';
-
 import type { MCPConfig } from '../mcp/types';
 
 // Web fetch tool configuration

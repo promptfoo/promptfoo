@@ -73,7 +73,7 @@ export class GoogleImageProvider implements ApiProvider {
     return await resolveProjectId(this.config, this.env);
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!prompt) {
       return {
         error: 'Prompt is required for image generation',

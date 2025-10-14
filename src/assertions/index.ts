@@ -70,6 +70,7 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
+import { handleRuby } from './ruby';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
@@ -169,6 +170,7 @@ const ASSERTION_HANDLERS: Record<
   pi: handlePiScorer,
   python: handlePython,
   regex: handleRegex,
+  ruby: handleRuby,
   'rouge-n': handleRougeScore,
   similar: handleSimilar,
   'starts-with': handleStartsWith,
@@ -208,7 +210,6 @@ export async function runAssertion({
   test,
   latencyMs,
   providerResponse,
-  assertIndex,
   traceId,
 }: {
   prompt?: string;
@@ -289,6 +290,23 @@ export async function runAssertion({
           ]);
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+        } catch (error) {
+          return {
+            pass: false,
+            score: 0,
+            reason: (error as Error).message,
+            assertion,
+          };
+        }
+      } else if (filePath.endsWith('.rb')) {
+        try {
+          const { runRuby } = await import('../ruby/rubyUtils');
+          const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
+            output,
+            context,
+          ]);
+          valueFromScript = rubyScriptOutput;
+          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
           return {
             pass: false,

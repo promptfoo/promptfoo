@@ -1252,7 +1252,7 @@ function ResultsTable({
           }}
         >
           <tbody>
-            {reactTable.getRowModel().rows.map((row, rowIndex) => {
+            {reactTable.getRowModel().rows.map((row) => {
               let colBorderDrawn = false;
 
               return (

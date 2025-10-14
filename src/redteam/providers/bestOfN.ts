@@ -53,7 +53,7 @@ export default class BestOfNProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {

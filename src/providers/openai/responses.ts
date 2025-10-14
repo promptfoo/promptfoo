@@ -6,7 +6,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, formatOpenAiError } from './util';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 import { ResponsesProcessor } from '../responses';
 
 import type {
@@ -44,6 +44,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5-nano-2025-08-07',
     'gpt-5-mini',
     'gpt-5-mini-2025-08-07',
+    'gpt-5-pro',
+    'gpt-5-pro-2025-10-06',
+    // Audio models
+    'gpt-audio',
+    'gpt-audio-2025-08-28',
+    'gpt-audio-mini',
+    'gpt-audio-mini-2025-10-06',
     // Computer use model
     'computer-use-preview',
     // Image generation model
@@ -115,7 +122,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ) {
     const config = {
       ...this.config,
@@ -308,10 +315,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ));
 
       if (status < 200 || status >= 300) {
+        const errorMessage = `API error: ${status} ${statusText}\n${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`;
+
+        // Check if this is an invalid_prompt error code (indicates refusal)
+        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+          return {
+            output: errorMessage,
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            isRefusal: true,
+          };
+        }
+
         return {
-          error: `API error: ${status} ${statusText}\n${
-            typeof data === 'string' ? data : JSON.stringify(data)
-          }`,
+          error: errorMessage,
         };
       }
     } catch (err) {

@@ -36,6 +36,8 @@ const TestSection: React.FC<TestSectionProps> = ({
   handleTestTarget,
   disabled,
 }) => {
+  const responseHeaders = testResult?.providerResponse?.metadata?.http?.headers;
+
   return (
     <Paper elevation={1} sx={{ mt: 3, p: 3, backgroundColor: 'background.default' }}>
       <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
@@ -276,29 +278,24 @@ const TestSection: React.FC<TestSectionProps> = ({
                   {testResult.providerResponse && testResult.providerResponse.raw !== undefined ? (
                     <>
                       {/* Response Headers */}
-                      {testResult.providerResponse?.metadata?.headers &&
-                        Object.keys(testResult.providerResponse.metadata.headers).length > 0 && (
-                          <>
-                            <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                              Response Headers:
-                            </Typography>
-                            <Box sx={{ mb: 2, maxHeight: '200px', overflow: 'auto' }}>
-                              <pre
-                                style={{
-                                  margin: '4px 0',
-                                  fontSize: '12px',
-                                  overflowWrap: 'anywhere',
-                                }}
-                              >
-                                {JSON.stringify(
-                                  testResult.providerResponse.metadata.headers,
-                                  null,
-                                  2,
-                                )}
-                              </pre>
-                            </Box>
-                          </>
-                        )}
+                      {responseHeaders && Object.keys(responseHeaders).length > 0 && (
+                        <>
+                          <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+                            Response Headers:
+                          </Typography>
+                          <Box sx={{ mb: 2, maxHeight: '200px', overflow: 'auto' }}>
+                            <pre
+                              style={{
+                                margin: '4px 0',
+                                fontSize: '12px',
+                                overflowWrap: 'anywhere',
+                              }}
+                            >
+                              {JSON.stringify(responseHeaders, null, 2)}
+                            </pre>
+                          </Box>
+                        </>
+                      )}
 
                       <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
                         Raw Response:

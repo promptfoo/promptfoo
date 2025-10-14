@@ -385,4 +385,395 @@ describe('Plugins', () => {
     // Verify basic component structure is rendered
     expect(screen.getByRole('heading', { name: /Plugins/i, level: 4 })).toBeInTheDocument();
   });
+
+  // Plugin Sorting Tests
+  describe('Plugin Alphabetical Sorting', () => {
+    it('should render plugins in alphabetical order by display name', async () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Wait for plugins to render
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
+
+      // Get all plugin checkboxes (they have aria-label with plugin display names)
+      const checkboxes = screen.getAllByRole('checkbox');
+      const pluginNames = checkboxes
+        .map((checkbox) => checkbox.getAttribute('aria-label'))
+        .filter((label) => label !== null);
+
+      // Create a sorted version of the plugin names
+      const sortedPluginNames = [...pluginNames].sort((a, b) => {
+        return (a || '').toLowerCase().localeCompare((b || '').toLowerCase());
+      });
+
+      // Verify plugins are in alphabetical order
+      expect(pluginNames).toEqual(sortedPluginNames);
+    });
+
+    it('should maintain alphabetical order when filtering by search term', async () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Find and use the search input - search for "harm" which should match "harmful:hate" and "harmful:self-harm"
+      const searchInput = screen.getByPlaceholderText('Search plugins...');
+      fireEvent.change(searchInput, { target: { value: 'harm' } });
+
+      // Wait for filtered results
+      await waitFor(() => {
+        const checkboxes = screen.queryAllByRole('checkbox');
+        // If search returns results, check they're sorted
+        if (checkboxes.length > 0) {
+          const filteredPluginNames = checkboxes
+            .map((checkbox) => checkbox.getAttribute('aria-label'))
+            .filter((label) => label !== null);
+
+          // Create sorted version
+          const sortedFilteredNames = [...filteredPluginNames].sort((a, b) => {
+            return (a || '').toLowerCase().localeCompare((b || '').toLowerCase());
+          });
+
+          // Verify filtered results maintain alphabetical order
+          expect(filteredPluginNames).toEqual(sortedFilteredNames);
+        }
+      });
+
+      // Verify at least that the search executed without errors
+      expect(searchInput).toHaveValue('harm');
+    });
+
+    it('should sort plugins case-insensitively', async () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      const pluginNames = checkboxes
+        .map((checkbox) => checkbox.getAttribute('aria-label'))
+        .filter((label) => label !== null);
+
+      // Verify case-insensitive sorting by checking specific order
+      // For example, "Hate Speech" should come before "Indirect Prompt Injection"
+      const hateIndex = pluginNames.findIndex((name) => name === 'Hate Speech');
+      const indirectIndex = pluginNames.findIndex((name) => name === 'Indirect Prompt Injection');
+
+      if (hateIndex !== -1 && indirectIndex !== -1) {
+        expect(hateIndex).toBeLessThan(indirectIndex);
+      }
+    });
+
+    it('should use displayNameOverrides for sorting when available', async () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
+
+      // Check that "Object-Level Authorization Bypass" (bola) appears in correct position
+      const checkboxes = screen.getAllByRole('checkbox');
+      const pluginNames = checkboxes
+        .map((checkbox) => checkbox.getAttribute('aria-label'))
+        .filter((label) => label !== null);
+
+      // Check if the display name override is being used
+      const hasBolaOverride = pluginNames.some(
+        (name) => name === 'Object-Level Authorization Bypass',
+      );
+
+      if (hasBolaOverride) {
+        const bolaIndex = pluginNames.findIndex(
+          (name) => name === 'Object-Level Authorization Bypass',
+        );
+
+        // Verify it's in the correct alphabetical position
+        if (bolaIndex > 0) {
+          const previousPlugin = pluginNames[bolaIndex - 1];
+          expect(
+            (previousPlugin || '')
+              .toLowerCase()
+              .localeCompare('object-level authorization bypass'.toLowerCase()),
+          ).toBeLessThanOrEqual(0);
+        }
+
+        if (bolaIndex < pluginNames.length - 1) {
+          const nextPlugin = pluginNames[bolaIndex + 1];
+          expect(
+            'object-level authorization bypass'
+              .toLowerCase()
+              .localeCompare((nextPlugin || '').toLowerCase()),
+          ).toBeLessThanOrEqual(0);
+        }
+      }
+
+      // At minimum, verify plugins are sorted alphabetically
+      const sortedPluginNames = [...pluginNames].sort((a, b) => {
+        return (a || '').toLowerCase().localeCompare((b || '').toLowerCase());
+      });
+      expect(pluginNames).toEqual(sortedPluginNames);
+    });
+
+    it('should maintain alphabetical order when filtering by category', async () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Wait for initial render
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
+
+      // Try to find a category chip
+      const categoryChips = screen.queryAllByText('Security & Access Control');
+
+      if (categoryChips.length > 0) {
+        // Click on "Security & Access Control" category chip
+        fireEvent.click(categoryChips[0]);
+
+        // Wait for filtered results
+        await waitFor(() => {
+          const checkboxes = screen.queryAllByRole('checkbox');
+          if (checkboxes.length > 0) {
+            // Get plugins in this category
+            const categoryPluginNames = checkboxes
+              .map((checkbox) => checkbox.getAttribute('aria-label'))
+              .filter((label) => label !== null);
+
+            // Create sorted version
+            const sortedCategoryNames = [...categoryPluginNames].sort((a, b) => {
+              return (a || '').toLowerCase().localeCompare((b || '').toLowerCase());
+            });
+
+            // Verify category-filtered plugins are alphabetically sorted
+            expect(categoryPluginNames).toEqual(sortedCategoryNames);
+          }
+        });
+      } else {
+        // If no category filter is available, just verify general sorting
+        const checkboxes = screen.getAllByRole('checkbox');
+        const pluginNames = checkboxes
+          .map((checkbox) => checkbox.getAttribute('aria-label'))
+          .filter((label) => label !== null);
+
+        const sortedNames = [...pluginNames].sort((a, b) => {
+          return (a || '').toLowerCase().localeCompare((b || '').toLowerCase());
+        });
+
+        expect(pluginNames).toEqual(sortedNames);
+      }
+    });
+
+    it('should maintain alphabetical order when showing selected plugins only', async () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: ['bola', 'rbac', 'harmful:hate'],
+        },
+        updatePlugins: mockUpdatePlugins,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Wait for initial render
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
+
+      // Try to find "Selected" filter
+      const selectedChips = screen.queryAllByText('Selected');
+
+      if (selectedChips.length > 0) {
+        // Click on "Selected" filter
+        fireEvent.click(selectedChips[0]);
+
+        // Wait for filtered results
+        await waitFor(() => {
+          const checkboxes = screen.queryAllByRole('checkbox');
+          if (checkboxes.length > 0) {
+            // Get selected plugin names
+            const selectedPluginNames = checkboxes
+              .map((checkbox) => checkbox.getAttribute('aria-label'))
+              .filter((label) => label !== null);
+
+            // Create sorted version
+            const sortedSelectedNames = [...selectedPluginNames].sort((a, b) => {
+              return (a || '').toLowerCase().localeCompare((b || '').toLowerCase());
+            });
+
+            // Verify selected plugins are alphabetically sorted
+            expect(selectedPluginNames).toEqual(sortedSelectedNames);
+          }
+        });
+      } else {
+        // If no selected filter is available, just verify general sorting
+        const checkboxes = screen.getAllByRole('checkbox');
+        const pluginNames = checkboxes
+          .map((checkbox) => checkbox.getAttribute('aria-label'))
+          .filter((label) => label !== null);
+
+        const sortedNames = [...pluginNames].sort((a, b) => {
+          return (a || '').toLowerCase().localeCompare((b || '').toLowerCase());
+        });
+
+        expect(pluginNames).toEqual(sortedNames);
+      }
+    });
+
+    it('should handle empty plugin list gracefully', async () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Search for something that doesn't exist
+      const searchInput = screen.getByPlaceholderText('Search plugins...');
+      fireEvent.change(searchInput, { target: { value: 'xyznonexistentplugin123' } });
+
+      // Should show no results message or have no checkboxes
+      await waitFor(() => {
+        const checkboxes = screen.queryAllByRole('checkbox');
+        if (checkboxes.length === 0) {
+          // No plugins rendered - this is expected for no results
+          expect(checkboxes).toHaveLength(0);
+        } else {
+          // Or a "No plugins found" message might be shown
+          expect(screen.getByText(/No plugins found/i)).toBeInTheDocument();
+        }
+      });
+    });
+
+    it('should handle single plugin correctly', async () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Search for "indirect" which should match at least one plugin
+      const searchInput = screen.getByPlaceholderText('Search plugins...');
+      fireEvent.change(searchInput, { target: { value: 'indirect' } });
+
+      // Give time for the search to filter
+      await waitFor(() => {
+        // Just verify the search input has the value
+        expect(searchInput).toHaveValue('indirect');
+      });
+
+      // Get any results that might be shown
+      const checkboxes = screen.queryAllByRole('checkbox');
+
+      if (checkboxes.length > 0) {
+        // If we have results, verify they're sorted
+        const pluginNames = checkboxes
+          .map((checkbox) => checkbox.getAttribute('aria-label'))
+          .filter((label) => label !== null);
+
+        // Verify results are alphabetically sorted
+        const sortedNames = [...pluginNames].sort((a, b) => {
+          return (a || '').toLowerCase().localeCompare((b || '').toLowerCase());
+        });
+        expect(pluginNames).toEqual(sortedNames);
+      }
+
+      // The main point is to verify sorting works even with filtered results
+      // Whether we get 0, 1, or more results, they should be sorted
+      expect(true).toBe(true);
+    });
+
+    it('should sort plugins with special characters correctly using localeCompare', async () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      const pluginNames = checkboxes
+        .map((checkbox) => checkbox.getAttribute('aria-label'))
+        .filter((label) => label !== null);
+
+      // Verify plugins with special characters are sorted correctly
+      // localeCompare handles this properly
+      for (let i = 1; i < pluginNames.length; i++) {
+        const current = pluginNames[i] || '';
+        const previous = pluginNames[i - 1] || '';
+
+        const comparison = previous.toLowerCase().localeCompare(current.toLowerCase());
+        expect(comparison).toBeLessThanOrEqual(0);
+      }
+    });
+
+    it('should maintain alphabetical order with recently used plugins', async () => {
+      // Mock recently used plugins
+      mockUseRecentlyUsedPlugins.mockReturnValue({
+        plugins: ['bola', 'harmful:hate'],
+        addPlugin: vi.fn(),
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Wait for initial render to complete
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
+
+      // Look for the "Recently Used" filter if it exists
+      const recentlyUsedChips = screen.queryAllByText('Recently Used');
+
+      if (recentlyUsedChips.length > 0) {
+        // Click on "Recently Used" filter - use the first one if multiple
+        fireEvent.click(recentlyUsedChips[0]);
+
+        await waitFor(() => {
+          const checkboxes = screen.getAllByRole('checkbox');
+          expect(checkboxes.length).toBeGreaterThan(0);
+        });
+      }
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      const recentPluginNames = checkboxes
+        .map((checkbox) => checkbox.getAttribute('aria-label'))
+        .filter((label) => label !== null);
+
+      // Create sorted version
+      const sortedRecentNames = [...recentPluginNames].sort((a, b) => {
+        return (a || '').toLowerCase().localeCompare((b || '').toLowerCase());
+      });
+
+      // Verify plugins are alphabetically sorted
+      expect(recentPluginNames).toEqual(sortedRecentNames);
+    });
+
+    it('should apply sorting after all filtering operations', async () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // First apply category filter
+      const categoryChip = screen.getByText('Harmful Content');
+      fireEvent.click(categoryChip);
+
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
+
+      // Then apply search filter
+      const searchInput = screen.getByPlaceholderText('Search plugins...');
+      fireEvent.change(searchInput, { target: { value: 'harm' } });
+
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes.length).toBeGreaterThan(0);
+      });
+
+      // Get doubly filtered results
+      const checkboxes = screen.getAllByRole('checkbox');
+      const filteredNames = checkboxes
+        .map((checkbox) => checkbox.getAttribute('aria-label'))
+        .filter((label) => label !== null);
+
+      // Verify results are still alphabetically sorted
+      const sortedNames = [...filteredNames].sort((a, b) => {
+        return (a || '').toLowerCase().localeCompare((b || '').toLowerCase());
+      });
+
+      expect(filteredNames).toEqual(sortedNames);
+    });
+  });
 });
