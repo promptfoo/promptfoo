@@ -205,7 +205,7 @@ function PassRateChart({ table }: ChartProps) {
           tooltip: {
             callbacks: {
               label: function (context) {
-                return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
+                return `${context.dataset.label}: ${(context.parsed.y ?? 0).toFixed(2)}%`;
               },
             },
           },
@@ -448,7 +448,7 @@ function MetricChart({ table }: ChartProps) {
                 return tooltipItem[0].dataset.label;
               },
               label(tooltipItem: TooltipItem<'bar'>) {
-                const value = tooltipItem.parsed.y;
+                const value = tooltipItem.parsed.y ?? 0;
                 return `${labels[tooltipItem.dataIndex]}: ${(value * 100).toFixed(2)}% pass rate`;
               },
             },
