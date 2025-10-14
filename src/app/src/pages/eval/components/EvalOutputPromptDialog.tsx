@@ -191,7 +191,7 @@ interface EvalOutputPromptDialogProps {
   onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
   fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
   cloudConfig?: CloudConfigData | null;
-  hideTraces?: boolean
+  hideTraces?: boolean;
 }
 
 export default function EvalOutputPromptDialog({
