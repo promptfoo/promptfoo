@@ -213,7 +213,6 @@ export async function checkEmailStatusAndMaybeExit(options?: {
   validate?: boolean;
 }): Promise<EmailOkStatus | BadEmailResult> {
   const result = await checkEmailStatus(options);
-  const email = result.email;
   if (
     result.status === EmailValidationStatus.RISKY_EMAIL ||
     result.status === EmailValidationStatus.DISPOSABLE_EMAIL
