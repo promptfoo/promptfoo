@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { createTransformRequest, createTransformResponse } from '../../providers/http';
+import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
 import { loadApiProvider } from '../../providers/index';
 import {
   doTargetPurposeDiscovery,

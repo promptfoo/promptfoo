@@ -9,8 +9,6 @@ import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import {
   createSessionParser,
-  createTransformRequest,
-  createTransformResponse,
   createValidateStatus,
   determineRequestBody,
   escapeJsonVariables,
@@ -20,6 +18,10 @@ import {
   processTextBody,
   urlEncodeRawRequestPath,
 } from '../../src/providers/http';
+import {
+  createTransformRequest,
+  createTransformResponse,
+} from '../../src/providers/httpTransforms';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../src/util/file';
 import { sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
