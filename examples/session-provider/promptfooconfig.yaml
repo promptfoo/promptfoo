@@ -17,8 +17,14 @@ tests:
       conversationId: conv-123
     vars:
       user_message: 'Hello, how are you today?'
+    assert:
+      - type: starts-with
+        value: 'Host reply #1'
   - description: follow-up
     metadata:
       conversationId: conv-123
     vars:
       user_message: 'Thanks for your help!'
+    assert:
+      - type: starts-with
+        value: 'Host reply #2'

@@ -65,7 +65,8 @@ const server = http.createServer(async (req, res) => {
       const userMessage = body?.message || '';
       session.turns.push({ role: 'user', message: userMessage });
 
-      const reply = `Host reply #${session.turns.length}: thanks for asking! (${userMessage.slice(0, 40)})`;
+      const hostReplies = session.turns.filter((turn) => turn.role === 'assistant');
+      const reply = `Host reply #${hostReplies.length + 1}: thanks for asking! (${userMessage.slice(0, 40)})`;
       session.turns.push({ role: 'assistant', message: reply });
 
       sendJson(res, 200, {
