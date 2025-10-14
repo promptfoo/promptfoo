@@ -694,7 +694,7 @@ describe('EvalsDataGrid', () => {
     let resolveSecondRequest: any;
 
     // Mock callApi to simulate delayed responses
-    vi.mocked(callApi).mockImplementation(async (path, options) => {
+    vi.mocked(callApi).mockImplementation(async (_path, options) => {
       callCount++;
 
       if (callCount === 1) {
@@ -805,7 +805,7 @@ describe('EvalsDataGrid', () => {
     };
 
     const mockCall = vi.mocked(callApi);
-    mockCall.mockImplementation((url: string, options?: any) => {
+    mockCall.mockImplementation((_url: string, options?: any) => {
       if (!options || options.method !== 'DELETE') {
         return Promise.resolve(mockResponse as any);
       }
@@ -851,7 +851,7 @@ describe('EvalsDataGrid', () => {
     };
 
     const mockCall = vi.mocked(callApi);
-    mockCall.mockImplementation((url: string, options?: any) => {
+    mockCall.mockImplementation((_url: string, options?: any) => {
       if (!options || options.method !== 'DELETE') {
         return Promise.resolve(mockResponse as any);
       }
@@ -941,7 +941,7 @@ describe('EvalsDataGrid', () => {
 
     const mockCall = vi.mocked(callApi);
     let callCount = 0;
-    mockCall.mockImplementation((url: string, options?: any) => {
+    mockCall.mockImplementation((_url: string, _options?: any) => {
       callCount++;
       if (callCount === 1) {
         return Promise.resolve(mockResponse as any); // Initial fetch
@@ -1028,7 +1028,7 @@ describe('EvalsDataGrid', () => {
 
     const mockCall = vi.mocked(callApi);
     let callCount = 0;
-    mockCall.mockImplementation((url: string, options?: any) => {
+    mockCall.mockImplementation((_url: string, _options?: any) => {
       callCount++;
       if (callCount === 1) {
         return Promise.resolve(mockResponse as any);
@@ -1079,7 +1079,7 @@ describe('EvalsDataGrid', () => {
 
     const mockCall = vi.mocked(callApi);
     let callCount = 0;
-    mockCall.mockImplementation((url: string, options?: any) => {
+    mockCall.mockImplementation((_url: string, _options?: any) => {
       callCount++;
       if (callCount === 1) {
         return Promise.resolve(mockResponse as any);

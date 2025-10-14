@@ -46,7 +46,6 @@ interface RiskCategoryDrawerProps {
   evalId: string;
   numPassed: number;
   numFailed: number;
-  strategyStats: Record<string, { pass: number; total: number }>;
 }
 
 const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'];
@@ -122,7 +121,6 @@ const RiskCategoryDrawer = ({
   evalId,
   numPassed,
   numFailed,
-  strategyStats,
 }: RiskCategoryDrawerProps) => {
   const navigate = useNavigate();
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
@@ -391,11 +389,7 @@ const RiskCategoryDrawer = ({
             >
               Simulated User - Attack Performance
             </Typography>
-            <PluginStrategyFlow
-              failuresByPlugin={failures}
-              passesByPlugin={passes}
-              strategyStats={strategyStats}
-            />
+            <PluginStrategyFlow failuresByPlugin={failures} passesByPlugin={passes} />
           </Box>
         )}
       </Box>

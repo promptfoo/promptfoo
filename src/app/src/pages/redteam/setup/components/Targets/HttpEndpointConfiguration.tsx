@@ -51,7 +51,6 @@ interface HttpEndpointConfigurationProps {
   setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
   setUrlError: (error: string | null) => void;
-  updateFullTarget: (target: ProviderOptions) => void;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
 }
@@ -89,7 +88,6 @@ const HttpEndpointConfiguration = ({
   setBodyError,
   urlError,
   setUrlError,
-  updateFullTarget,
   onTargetTested,
   onSessionTested,
 }: HttpEndpointConfigurationProps): JSX.Element => {
@@ -905,7 +903,6 @@ ${exampleRequest}`;
         selectedTarget={selectedTarget}
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
-        onTargetTested={onTargetTested}
         onSessionTested={onSessionTested}
       />
     </Box>

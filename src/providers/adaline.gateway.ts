@@ -66,7 +66,7 @@ export class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {
   }
 
   // Gateway will never invoke this method
-  async delete(key: string): Promise<void> {
+  async delete(_key: string): Promise<void> {
     throw new Error('Not implemented');
   }
 
@@ -177,9 +177,9 @@ class AdalineGatewayGenericProvider implements ApiProvider {
 
   // @ts-ignore: Params are not used in this implementation
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }

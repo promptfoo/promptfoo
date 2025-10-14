@@ -28,7 +28,7 @@ vi.mock('js-yaml', () => ({
 
 // Mock TestCaseDialog to avoid rendering issues
 vi.mock('./TestCaseDialog', () => ({
-  default: ({ open, onClose }: any) =>
+  default: ({ open }: any) =>
     open ? <div data-testid="test-case-dialog">Test Case Dialog</div> : null,
 }));
 

@@ -80,7 +80,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {

@@ -20,6 +20,22 @@ interface ErrorResponse {
   output?: string;
 }
 
+import { checkModelAuditInstalled } from '../../commands/modelScan';
+import logger from '../../logger';
+import ModelAudit from '../../models/modelAudit';
+import telemetry from '../../telemetry';
+import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
+import type { ModelAuditScanResults } from '../../types/modelAudit';
+import {
+  ZCheckPathRequest,
+  ZCheckPathResponse,
+  ZScanRequest,
+  ZScansQuery,
+  ZScansResponse,
+  ZDeleteResponse,
+  ZCheckInstalledResponse,
+} from './modelAudit.schemas';
+
 // Path normalization helper - expands ~ and converts to absolute paths
 function validateAndNormalizePath(
   inputPath: string,
@@ -45,21 +61,6 @@ function validateAndNormalizePath(
     return { valid: false, normalizedPath: '', error: `Path normalization error: ${error}` };
   }
 }
-import { checkModelAuditInstalled } from '../../commands/modelScan';
-import logger from '../../logger';
-import ModelAudit from '../../models/modelAudit';
-import telemetry from '../../telemetry';
-import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
-import type { ModelAuditScanResults } from '../../types/modelAudit';
-import {
-  ZCheckPathRequest,
-  ZCheckPathResponse,
-  ZScanRequest,
-  ZScansQuery,
-  ZScansResponse,
-  ZDeleteResponse,
-  ZCheckInstalledResponse,
-} from './modelAudit.schemas';
 
 // Helper to conditionally include debug info (only in development or when DEBUG_MODEL_AUDIT is set)
 const includeDebugInfo = (debugInfo: Record<string, any>) => {

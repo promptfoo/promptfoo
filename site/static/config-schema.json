@@ -126,10 +126,10 @@
                             "AZURE_TOKEN_SCOPE": {
                               "type": "string"
                             },
-                            "BAM_API_HOST": {
+                            "CLAUDE_CODE_USE_BEDROCK": {
                               "type": "string"
                             },
-                            "BAM_API_KEY": {
+                            "CLAUDE_CODE_USE_VERTEX": {
                               "type": "string"
                             },
                             "CLOUDFLARE_ACCOUNT_ID": {
@@ -591,6 +591,7 @@
                                               "python",
                                               "regex",
                                               "rouge-n",
+                                              "ruby",
                                               "similar",
                                               "starts-with",
                                               "trace-error-spans",

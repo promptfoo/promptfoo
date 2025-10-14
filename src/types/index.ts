@@ -300,6 +300,7 @@ export interface EvaluateTableOutput {
   testCase: AtomicTestCase;
   text: string;
   tokenUsage?: Partial<TokenUsage>;
+  error?: string | null;
   audio?: {
     id?: string;
     expiresAt?: number;
@@ -465,6 +466,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'python',
   'regex',
   'rouge-n',
+  'ruby',
   'similar',
   'starts-with',
   'trace-error-spans',
@@ -1159,6 +1161,7 @@ export type EvalSummary = ResultLightweightWithLabel & {
     id: string;
     label: string | null;
   }[];
+  attackSuccessRate?: number;
 };
 
 // Pagination and filtering types for evals endpoint

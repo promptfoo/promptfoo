@@ -91,11 +91,11 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
-  app.get('/health', (req, res) => {
+  app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'OK', version: VERSION });
   });
 
-  app.get('/api/remote-health', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {
     const apiUrl = getRemoteHealthUrl();
 
     if (apiUrl === null) {
@@ -195,7 +195,7 @@ export function createApp() {
     res.json({ data: file.result });
   });
 
-  app.get('/api/prompts', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {
     if (allPrompts == null) {
       allPrompts = await getPrompts();
     }
@@ -222,7 +222,7 @@ export function createApp() {
     res.json({ data: prompts });
   });
 
-  app.get('/api/datasets', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/datasets', async (_req: Request, res: Response): Promise<void> => {
     res.json({ data: await getTestCases() });
   });
 
@@ -320,7 +320,7 @@ export function createApp() {
   app.use(express.static(staticDir, { dotfiles: 'allow' }));
 
   // Handle client routing, return all requests to the app
-  app.get('/*splat', (req: Request, res: Response): void => {
+  app.get('/*splat', (_req: Request, res: Response): void => {
     res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
   return app;

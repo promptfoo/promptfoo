@@ -1,7 +1,8 @@
 import React from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { GridLogicOperator, GridFilterModel } from '@mui/x-data-grid';
+import { createAppTheme } from '@app/components/PageShell';
+import { ThemeProvider } from '@mui/material/styles';
+import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,8 +16,7 @@ vi.mock('./store', () => ({
 
 describe('Overview', () => {
   const mockedUseReportStore = vi.mocked(useReportStore);
-  const defaultTheme = createTheme();
-  const darkTheme = createTheme({ palette: { mode: 'dark' } });
+  const defaultTheme = createAppTheme(false);
   const mockSetFilterModel = vi.fn<(filterModel: GridFilterModel) => void>();
   const mockRef: React.MutableRefObject<HTMLDivElement | null> = { current: null };
 
@@ -168,55 +168,6 @@ describe('Overview', () => {
     expect(screen.getByText(severityDisplayNames[Severity.Medium])).toBeInTheDocument();
     expect(screen.getByText(severityDisplayNames[Severity.Low])).toBeInTheDocument();
   });
-
-  it.each([
-    {
-      mode: 'light',
-      theme: defaultTheme,
-      styles: {
-        [Severity.Critical]: { backgroundColor: '#fffafb', color: '#ff1744' },
-        [Severity.High]: { backgroundColor: '#fffcfa', color: '#7a3c00' },
-        [Severity.Medium]: { backgroundColor: '#fffefb', color: '#7a6a00' },
-        [Severity.Low]: { backgroundColor: '#fafffc', color: '#005c2e' },
-      },
-    },
-    {
-      mode: 'dark',
-      theme: darkTheme,
-      styles: {
-        [Severity.Critical]: { backgroundColor: '#2d1b1e', color: '#ff1744' },
-        [Severity.High]: { backgroundColor: '#2d251b', color: '#ff9100' },
-        [Severity.Medium]: { backgroundColor: '#2d2a1b', color: '#ffc400' },
-        [Severity.Low]: { backgroundColor: '#1b2d20', color: '#00e676' },
-      },
-    },
-  ])(
-    'should apply the correct background and text colors for each severity card in $mode mode',
-    ({ theme, styles }) => {
-      const categoryStats = {
-        plugin1: { pass: 0, total: 1 },
-        plugin2: { pass: 0, total: 1 },
-        plugin3: { pass: 0, total: 1 },
-        plugin4: { pass: 0, total: 1 },
-      };
-      const plugins: RedteamPluginObject[] = [
-        { id: 'plugin1', severity: Severity.Critical },
-        { id: 'plugin2', severity: Severity.High },
-        { id: 'plugin3', severity: Severity.Medium },
-        { id: 'plugin4', severity: Severity.Low },
-      ];
-
-      renderOverview(categoryStats, plugins, theme);
-
-      Object.values(Severity).forEach((severity) => {
-        const card = screen
-          .getByText(severityDisplayNames[severity])
-          .closest('.MuiCardContent-root');
-        expect(card).not.toBeNull();
-        expect(card).toHaveStyle(styles[severity]);
-      });
-    },
-  );
 
   it('should handle plugins referencing categories not in categoryStats', () => {
     mockedUseReportStore.mockReturnValue({
@@ -382,6 +333,134 @@ describe('Overview', () => {
         },
       ],
       logicOperator: GridLogicOperator.Or,
+    });
+  });
+
+  it('should pass navigateToIssues callback to SeverityCard and trigger filter update on click', () => {
+    const categoryStats = {
+      plugin1: { pass: 0, total: 1 },
+    };
+
+    const plugins: RedteamPluginObject[] = [{ id: 'plugin1', severity: Severity.Critical }];
+
+    const mockElement = document.createElement('div');
+    mockElement.scrollIntoView = vi.fn();
+    mockRef.current = mockElement;
+
+    renderOverview(categoryStats, plugins);
+
+    const criticalCard = screen
+      .getByText(severityDisplayNames[Severity.Critical])
+      .closest('.MuiCardContent-root');
+
+    fireEvent.click(criticalCard!);
+
+    expect(mockSetFilterModel).toHaveBeenCalledWith({
+      items: [
+        {
+          field: 'severity',
+          operator: 'is',
+          value: Severity.Critical,
+        },
+      ],
+      logicOperator: GridLogicOperator.Or,
+    });
+  });
+
+  it('should display severity cards with correct theme-derived colors in light mode', () => {
+    const lightTheme = createAppTheme(false);
+    const categoryStats = {
+      plugin1: { pass: 0, total: 1 },
+      plugin2: { pass: 0, total: 1 },
+      plugin3: { pass: 0, total: 1 },
+      plugin4: { pass: 0, total: 1 },
+    };
+
+    const plugins: RedteamPluginObject[] = [
+      { id: 'plugin1', severity: Severity.Critical },
+      { id: 'plugin2', severity: Severity.High },
+      { id: 'plugin3', severity: Severity.Medium },
+      { id: 'plugin4', severity: Severity.Low },
+    ];
+
+    renderOverview(categoryStats, plugins, lightTheme);
+
+    Object.values(Severity).forEach((severity) => {
+      const card = screen
+        .getByText(severityDisplayNames[severity])
+        .closest('.MuiCard-root') as HTMLElement;
+      const expectedColor = lightTheme.palette.custom.severity[severity].main;
+      const actualColor = getComputedStyle(card).borderLeftColor;
+
+      const hex = expectedColor.replace('#', '');
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      const expectedRgb = `rgb(${r}, ${g}, ${b})`;
+
+      expect(actualColor).toBe(expectedRgb);
+    });
+  });
+
+  it('should display severity cards with correct theme-derived colors in dark mode', () => {
+    const darkTheme = createAppTheme(true);
+    const categoryStats = {
+      plugin1: { pass: 0, total: 1 },
+      plugin2: { pass: 0, total: 1 },
+      plugin3: { pass: 0, total: 1 },
+      plugin4: { pass: 0, total: 1 },
+    };
+
+    const plugins: RedteamPluginObject[] = [
+      { id: 'plugin1', severity: Severity.Critical },
+      { id: 'plugin2', severity: Severity.High },
+      { id: 'plugin3', severity: Severity.Medium },
+      { id: 'plugin4', severity: Severity.Low },
+    ];
+
+    renderOverview(categoryStats, plugins, darkTheme);
+
+    Object.values(Severity).forEach((severity) => {
+      const card = screen
+        .getByText(severityDisplayNames[severity])
+        .closest('.MuiCard-root') as HTMLElement;
+      const expectedColor = darkTheme.palette.custom.severity[severity].main;
+      const actualColor = getComputedStyle(card).borderLeftColor;
+
+      const hex = expectedColor.replace('#', '');
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      const expectedRgb = `rgb(${r}, ${g}, ${b})`;
+
+      expect(actualColor).toBe(expectedRgb);
+    });
+  });
+
+  it('should display zero issues for all severities when pluginPassRateThreshold is 0', () => {
+    mockedUseReportStore.mockReturnValue({
+      pluginPassRateThreshold: 0,
+      setPluginPassRateThreshold: vi.fn(),
+      showPercentagesOnRiskCards: false,
+      setShowPercentagesOnRiskCards: vi.fn(),
+    });
+
+    const categoryStats = {
+      'critical-fail': { pass: 1, total: 10 },
+      'high-fail': { pass: 5, total: 10 },
+      'medium-fail': { pass: 7, total: 10 },
+    };
+
+    const plugins: RedteamPluginObject[] = [
+      { id: 'critical-fail', severity: Severity.Critical },
+      { id: 'high-fail', severity: Severity.High },
+      { id: 'medium-fail', severity: Severity.Medium },
+    ];
+
+    renderOverview(categoryStats, plugins);
+
+    Object.values(Severity).forEach((severity) => {
+      expectSeverityCardToHaveCount(severity, '0');
     });
   });
 });

@@ -11,7 +11,7 @@ describe('Navigation', () => {
   it('renders the navigation bar', () => {
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
     expect(screen.getByText('Create')).toBeInTheDocument();
@@ -25,7 +25,7 @@ describe('Navigation', () => {
   it('shows the Model Audit item in the Create dropdown', () => {
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByText('Create'));
@@ -37,7 +37,7 @@ describe('Navigation', () => {
   it('activates the Create button when on model audit setup page', () => {
     render(
       <MemoryRouter initialEntries={['/model-audit/setup']}>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
     const createButton = screen.getByText('Create').closest('button');
@@ -49,7 +49,7 @@ describe('Navigation', () => {
     const onToggleDarkMode = vi.fn();
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={onToggleDarkMode} />
+        <Navigation onToggleDarkMode={onToggleDarkMode} />
       </MemoryRouter>,
     );
     const darkModeToggle = screen.getByRole('button', {
@@ -64,7 +64,7 @@ describe('Navigation', () => {
 
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
 
@@ -79,7 +79,7 @@ describe('Navigation', () => {
   it('activates the Model Audit NavLink on /model-audit path', () => {
     render(
       <MemoryRouter initialEntries={['/model-audit']}>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
     const navBar = screen.getByRole('banner');
@@ -90,7 +90,7 @@ describe('Navigation', () => {
   it('activates the Model Audit NavLink on /model-audit/:id path', () => {
     render(
       <MemoryRouter initialEntries={['/model-audit/123']}>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
     const navBar = screen.getByRole('banner');
@@ -101,7 +101,7 @@ describe('Navigation', () => {
   it('does not activate Model Audit NavLink on /model-audit/setup path', () => {
     render(
       <MemoryRouter initialEntries={['/model-audit/setup']}>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
     const navBar = screen.getByRole('banner');
@@ -114,7 +114,7 @@ describe('Navigation', () => {
   it('does not activate Model Audit NavLink on /model-audit/history path', () => {
     render(
       <MemoryRouter initialEntries={['/model-audit/history']}>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
     const navBar = screen.getByRole('banner');
@@ -127,7 +127,7 @@ describe('Navigation', () => {
   it('does not activate Model Audit NavLink on /model-audit/history/:id path', () => {
     render(
       <MemoryRouter initialEntries={['/model-audit/history/123']}>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
     const navBar = screen.getByRole('banner');
@@ -141,7 +141,7 @@ describe('Navigation', () => {
     it('opens dropdown on click and shows Model Audit option', () => {
       render(
         <MemoryRouter>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -159,7 +159,7 @@ describe('Navigation', () => {
     it('closes dropdown when clicking outside', async () => {
       render(
         <MemoryRouter>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -181,7 +181,7 @@ describe('Navigation', () => {
     it('closes dropdown when selecting an item', () => {
       render(
         <MemoryRouter>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -199,7 +199,7 @@ describe('Navigation', () => {
     it('supports keyboard navigation in dropdown', () => {
       render(
         <MemoryRouter>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -223,7 +223,7 @@ describe('Navigation', () => {
     it('shows correct descriptions for all dropdown items', () => {
       render(
         <MemoryRouter>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -249,7 +249,7 @@ describe('Navigation', () => {
     it('activates Model Audit NavLink on /model-audit path', () => {
       render(
         <MemoryRouter initialEntries={['/model-audit']}>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -265,7 +265,7 @@ describe('Navigation', () => {
     it('activates Model Audit NavLink on /model-audit/:id path', () => {
       render(
         <MemoryRouter initialEntries={['/model-audit/123']}>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -280,7 +280,7 @@ describe('Navigation', () => {
     it('does not activate Model Audit NavLink on setup or history paths', () => {
       const { rerender } = render(
         <MemoryRouter initialEntries={['/model-audit/setup']}>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -293,7 +293,7 @@ describe('Navigation', () => {
 
       rerender(
         <MemoryRouter initialEntries={['/model-audit/history']}>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -308,7 +308,7 @@ describe('Navigation', () => {
     it('does not activate Model Audit NavLink on deeply nested paths under excluded routes like /model-audit/history/details/123', () => {
       render(
         <MemoryRouter initialEntries={['/model-audit/history/details/123']}>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -325,7 +325,7 @@ describe('Navigation', () => {
     it('has proper ARIA attributes on dropdown trigger', () => {
       render(
         <MemoryRouter>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -342,7 +342,7 @@ describe('Navigation', () => {
     it('has accessible link labels for Model Audit', () => {
       render(
         <MemoryRouter>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -356,7 +356,7 @@ describe('Navigation', () => {
     it('supports keyboard navigation patterns', () => {
       render(
         <MemoryRouter>
-          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+          <Navigation onToggleDarkMode={() => {}} />
         </MemoryRouter>,
       );
 
@@ -376,7 +376,7 @@ describe('Navigation', () => {
   it("should display the 'Vulnerability Reports' menu item with the correct description when the Results dropdown is open", () => {
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
 
