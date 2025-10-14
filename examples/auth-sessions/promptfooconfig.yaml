@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Session management with HTTP, Javascript, and Python providers
+description: Auth Session management with HTTP, Javascript, and Python providers
 
 extensions:
   - file://hooks.js:extensionHook

@@ -1,8 +1,12 @@
-# Sessions Example
+# Auth Sessions Example
 
-This example demonstrates how to manage sessions using Javascript, Python, and HTTP providers.
+This example demonstrates how to manage authentication sessions (i.e. obtaining and using a session token) using Javascript, Python, and HTTP providers.
 
-## Session Management
+```sh
+npx promptfoo@latest init --example auth-sessions
+```
+
+## Management
 
 ### Creating a session
 
