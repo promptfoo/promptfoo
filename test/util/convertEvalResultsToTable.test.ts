@@ -197,7 +197,7 @@ describe('convertResultsToTable', () => {
     };
 
     const result = convertResultsToTable(resultsFile);
-    expect(result.body[0].outputs[0].text).toBe('Test failed\n---\ntest output');
+    expect(result.body[0].outputs[0].text).toBe('test output');
   });
 
   it('should handle redteam final prompts', () => {
