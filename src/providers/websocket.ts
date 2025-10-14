@@ -8,6 +8,7 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
   ApiProvider,
@@ -169,6 +170,7 @@ export async function createStreamResponse(
 export class WebSocketProvider implements ApiProvider {
   url: string;
   config: WebSocketProviderConfig;
+  timeoutMs: number;
   transformResponse: (data: any) => ProviderResponse;
   streamResponse?: Promise<
     (
@@ -181,6 +183,7 @@ export class WebSocketProvider implements ApiProvider {
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as WebSocketProviderConfig;
     this.url = this.config.url || url;
+    this.timeoutMs = this.config.timeoutMs || REQUEST_TIMEOUT_MS;
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
     );
@@ -213,7 +216,7 @@ export class WebSocketProvider implements ApiProvider {
 
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
-    return new Promise<ProviderResponse>((resolve) => {
+    return new Promise<ProviderResponse>((resolve, reject) => {
       const wsOptions: ClientOptions = {};
       if (this.config.headers) {
         wsOptions.headers = this.config.headers;
@@ -221,10 +224,11 @@ export class WebSocketProvider implements ApiProvider {
       const ws = new WebSocket(this.url, wsOptions);
       const timeout = setTimeout(() => {
         ws.close();
-        resolve({ error: `WebSocket request timed out` });
-      }, this.config.timeoutMs || 10000);
+        logger.error(`[WebSocket Provider] Request timed out`);
+        reject(new Error(`WebSocket request timed out after ${this.timeoutMs}ms`));
+      }, this.timeoutMs);
       ws.on('open', () => {
-        logger.debug(`WebSocket connection opened successfully`);
+        logger.debug(`[WebSocket Provider]: WebSocket connection opened successfully`);
       });
 
       ws.onmessage = (event) => {
@@ -247,7 +251,22 @@ export class WebSocketProvider implements ApiProvider {
                 // If parsing fails, assume it's a text response
               }
             }
-            resolve(processResult(this.transformResponse(data)));
+            try {
+              const result = processResult(this.transformResponse(data));
+              logger.debug(`[WebSocket Provider]: Result ${safeJsonStringify(result)}`);
+              if (result.error) {
+                logger.error(`[WebSocket Provider]: Error from provider ${result.error}`);
+                reject(new Error(result.error));
+              } else {
+                resolve(result);
+              }
+              resolve(result);
+            } catch (err) {
+              logger.debug(
+                `[WebSocket Provider]: Error in transform response: ${(err as Error).message}`,
+              );
+              resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
+            }
           } catch (err) {
             resolve({ error: `Failed to process response: ${JSON.stringify(err)}` });
           } finally {
@@ -258,8 +277,8 @@ export class WebSocketProvider implements ApiProvider {
 
       ws.onerror = (err) => {
         clearTimeout(timeout);
-        logger.error(`WebSocket error: ${JSON.stringify(err)}`);
-        resolve({ error: `WebSocket error: ${JSON.stringify(err)}` });
+        logger.error(`[WebSocket Provider] Error:${JSON.stringify(err)}`);
+        reject(new Error(`WebSocket error: ${JSON.stringify(err)}`));
       };
 
       ws.onopen = () => {

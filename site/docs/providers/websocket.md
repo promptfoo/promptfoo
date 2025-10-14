@@ -5,7 +5,7 @@ description: Configure WebSocket endpoints for real-time LLM inference with cust
 
 # WebSockets
 
-The WebSocket provider allows you to connect to a WebSocket endpoint for inference. This is useful for real-time, bidirectional communication with a server that supports WebSocket connections. WebSockets are often used to stream messages that contain partial responses to improve the perceived performance of LLM applications.
+The WebSocket provider allows you to connect to a WebSocket endpoint for inference. This is useful for real-time, bidirectional communication. WebSockets are often used to stream messages that contain partial responses to improve the perceived performance of LLM applications. Promptfoo supports a range of implementations from servers that respond with a single message containing the full response, to those that stream a series of partial responses.
 
 ## Configuration
 
@@ -17,7 +17,7 @@ providers:
     config:
       messageTemplate: '{"prompt": "{{prompt}}", "model": "{{model}}"}'
       transformResponse: 'data.output'
-      timeoutMs: 10000
+      timeoutMs: 300000
       headers:
         Authorization: 'Bearer your-token-here'
 ```
@@ -28,7 +28,7 @@ providers:
 - `messageTemplate` (required): A template for the message to be sent over the WebSocket connection. You can use placeholders like `{{prompt}}` which will be replaced with the actual prompt.
 - `transformResponse` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire response will be used as the output. If the response is valid JSON, the object will be returned.
 - `streamResponse` (optional): A JavaScript function to extract the desired output from streamed WebSocket messages when the server sends multiple messages per prompt. It receives `(accumulator, data, context?)` and must return `[nextAccumulator, complete]`. When `streamResponse` is provided, it is used instead of `transformResponse`.
-- `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 10000 (10 seconds).
+- `timeoutMs` (optional): The timeout in milliseconds for the WebSocket connection. Default is 20000 (20 seconds).
 - `headers` (optional): A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers.
 
 ## Using Variables
