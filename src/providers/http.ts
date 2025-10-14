@@ -1,17 +1,24 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
+import httpZ from 'http-z';
 import https from 'https';
 import path from 'path';
-
-import httpZ from 'http-z';
 import { Agent } from 'undici';
 import { z } from 'zod';
-import { type FetchWithCacheResult, fetchWithCache } from '../cache';
+
+import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { renderVarsInObject } from '../util/index';
@@ -22,14 +29,6 @@ import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { REQUEST_TIMEOUT_MS } from './shared';
-
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderOptions,
-  ProviderResponse,
-  TokenUsage,
-} from '../types/index';
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -1171,20 +1170,34 @@ export function determineRequestBody(
   configBody: Record<string, any> | any[] | string | undefined,
   vars: Record<string, any>,
 ): Record<string, any> | any[] | string {
+  // Parse stringified JSON body if needed (handles legacy data saved as strings)
+  let actualConfigBody = configBody;
+  if (typeof configBody === 'string' && contentType) {
+    try {
+      actualConfigBody = JSON.parse(configBody);
+      logger.debug('[HTTP Provider] Parsed stringified config body to object');
+    } catch (err) {
+      // If parsing fails, it's probably a template string or non-JSON content, leave as-is
+      logger.debug(
+        `[HTTP Provider] Config body is a string that couldn't be parsed as JSON, treating as template: ${String(err)}`,
+      );
+    }
+  }
+
   if (contentType) {
     // For JSON content type
     if (typeof parsedPrompt === 'object' && parsedPrompt !== null) {
       // If parser returned an object, merge it with config body
-      return Object.assign({}, configBody || {}, parsedPrompt);
+      return Object.assign({}, actualConfigBody || {}, parsedPrompt);
     }
     // Otherwise process the config body with parsed prompt
-    return processJsonBody(configBody as Record<string, any> | any[], {
+    return processJsonBody(actualConfigBody as Record<string, any> | any[], {
       ...vars,
       prompt: parsedPrompt,
     });
   }
   // For non-JSON content type, process as text
-  return processTextBody(configBody as string, {
+  return processTextBody(actualConfigBody as string, {
     ...vars,
     prompt: parsedPrompt,
   });
