@@ -329,4 +329,125 @@ describe('CustomPoliciesSection', () => {
       });
     });
   });
+
+  it("should add a new policy with a default name and empty policy text when the 'Add Policy' button is clicked", async () => {
+    renderComponent();
+
+    const addPolicyButton = screen.getByRole('button', { name: /add policy/i });
+    fireEvent.click(addPolicyButton);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Custom Policy 2')).toBeInTheDocument();
+    });
+
+    const policyTextAreas = screen.getAllByLabelText('Policy Text');
+    expect(policyTextAreas.length).toBeGreaterThanOrEqual(2);
+
+    const newPolicyTextArea = policyTextAreas[policyTextAreas.length - 1] as HTMLTextAreaElement;
+    expect(newPolicyTextArea.value).toBe('');
+  });
+
+  it('should update the displayed policy name and policy text when the user edits the respective input fields for an existing policy', async () => {
+    renderComponent();
+
+    const policyNameInput = screen.getByLabelText('Policy Name');
+    const policyTextInput = screen.getByLabelText('Policy Text');
+
+    fireEvent.change(policyNameInput, { target: { value: 'Updated Policy Name' } });
+    fireEvent.change(policyTextInput, { target: { value: 'Updated policy text.' } });
+
+    expect(policyNameInput).toHaveValue('Updated Policy Name');
+    expect(policyTextInput).toHaveValue('Updated policy text.');
+  });
+
+  it('should remove a policy from the list when the delete icon is clicked for that policy', async () => {
+    renderComponent();
+
+    const deleteButton = screen.getByTestId('DeleteIcon').closest('button');
+
+    if (!deleteButton) {
+      throw new Error('Delete button not found');
+    }
+
+    fireEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue('Custom Policy 1')).toBeNull();
+    });
+  });
+
+  it('should correctly increment policy names after importing a large CSV file', async () => {
+    const initialPolicies = [
+      {
+        id: 'policy-1',
+        name: 'Custom Policy 1',
+        policy: 'Initial policy text',
+        isExpanded: true,
+      },
+      {
+        id: 'policy-2',
+        name: 'Custom Policy 2',
+        policy: 'Another policy text',
+        isExpanded: true,
+      },
+    ];
+
+    (useRedTeamConfig as unknown as Mock).mockReturnValue({
+      config: {
+        plugins: initialPolicies.map((policy) => ({
+          id: 'policy',
+          config: {
+            policy: policy.policy,
+            name: policy.name,
+          },
+        })),
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    renderComponent();
+
+    const numPolicies = 100;
+    let csvContent = 'policy_text\n';
+    for (let i = 0; i < numPolicies; i++) {
+      csvContent += `"Policy from CSV ${i + 1}"\n`;
+    }
+
+    const file = new File([csvContent], 'large_policies.csv', { type: 'text/csv' });
+    Object.defineProperty(file, 'text', {
+      value: () => Promise.resolve(csvContent),
+    });
+
+    const uploadButton = screen.getByRole('button', { name: /upload csv/i });
+    const fileInput = uploadButton.querySelector('input[type="file"]');
+
+    fireEvent.change(fileInput!, {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      for (let i = 0; i < numPolicies; i++) {
+        const policyName = `Custom Policy ${i + 3}`;
+        expect(screen.getByDisplayValue(policyName)).toBeInTheDocument();
+      }
+    });
+  });
+
+  it('should not save policy names to config when user navigates away before debounce', async () => {
+    vi.useFakeTimers();
+    const { unmount } = renderComponent();
+
+    const policyNameInput = screen.getByDisplayValue('Custom Policy 1');
+    fireEvent.change(policyNameInput, { target: { value: 'Unsaved Policy Name' } });
+
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(499);
+
+    unmount();
+
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
 });
