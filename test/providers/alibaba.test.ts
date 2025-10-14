@@ -52,9 +52,7 @@ describe('Alibaba Cloud Provider', () => {
     });
 
     it('should throw error when no model specified', () => {
-      expect(() => new AlibabaChatCompletionProvider('')).toThrow(
-        'Alibaba modelName is required',
-      );
+      expect(() => new AlibabaChatCompletionProvider('')).toThrow('Alibaba modelName is required');
     });
 
     it('should warn but not throw for unknown model', () => {
@@ -118,9 +116,7 @@ describe('Alibaba Cloud Provider', () => {
     });
 
     it('should throw error when no model specified', () => {
-      expect(() => new AlibabaEmbeddingProvider('')).toThrow(
-        'Alibaba modelName is required',
-      );
+      expect(() => new AlibabaEmbeddingProvider('')).toThrow('Alibaba modelName is required');
     });
 
     it('should warn but not throw for unknown model', () => {
