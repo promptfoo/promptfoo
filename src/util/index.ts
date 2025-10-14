@@ -487,7 +487,8 @@ export function parsePathOrGlob(
       if (
         isJavascriptFile(pathWithoutFunction) ||
         pathWithoutFunction.endsWith('.py') ||
-        pathWithoutFunction.endsWith('.go')
+        pathWithoutFunction.endsWith('.go') ||
+        pathWithoutFunction.endsWith('.rb')
       ) {
         functionName = filename.slice(lastColonIndex + 1);
         filename = pathWithoutFunction;
