@@ -1,13 +1,17 @@
 ---
 sidebar_position: 10000
-description: Guide for using custom providers with multi-turn attacks
+description: Guide for multi-turn attacks, focusing on custom providers
 ---
 
-# Multi-Turn Conversations With Custom Provider
+# Multi-Turn Conversations
 
-When using HTTP or custom providers with multi-turn attacks like GOAT and/or Crescendo, you may need to maintain session IDs between rounds. You can refer to the [session management guide](/docs/providers/http/#session-management) for more details on how session management can be configured for different providers.
+Multi-turn conversations create unique attack vectors because the conversation history and memory can significantly impact how AI systems generate responses. Attack strategies like GOAT and Crescendo exploit this by building context over multiple exchanges, where earlier messages can influence the model's behavior in later turns. This creates opportunities for attacks that wouldn't be possible in single-turn scenarios, such as gradually escalating requests, building false premises, or exploiting accumulated context to bypass safety measures. To learn more about each of the multi-turn strategies available in Promptfoo, refer to [the multi-turn strategy documentation](/docs/red-team/strategies/multi-turn/). When using custom providers, additional configuration is necessary to handle multi-turn conversations. The purpose of this document is to provide details on how to manage this.
 
-## Considerations
+## Session Management
+
+When using multi-turn attacks, you may need to maintain session IDs between rounds to preserve conversation state. You can refer to the [session management guide](/docs/providers/http/#session-management) for details on how session management can be configured. Preset providers like OpenAI, Anthropic, and others automatically handle conversation context through their chat completion APIs.
+
+## State Management - Stateful vs Stateless
 
 Some applications store the conversation history internally such that each request only includes the latest message. We refer to these applications as **stateful**. Others require the full conversation history to be submitted in each request. Promptfoo can be configured to support each of these use cases.
 
@@ -29,7 +33,11 @@ When stateful is set to true, Promptfoo will pass only the most recent prompt as
 When stateful is set to false, Promptfoo will pass the entire conversation history as a JSON string:
 
 ```
-'[{"role":"user","message":"What is the weather like today?"},{"role":"assistant","message":"I can't answer that, I only have access to pre-trained data"},{"role":"user","content":"Can you tell me what other people are buying?"}]'
+'[
+  {"role":"user","message":"What is the weather like today?"},
+  {"role":"assistant","message":"I can't answer that, I only have access to pre-trained data"},
+  {"role":"user","content":"Can you tell me what other people are buying?"}
+]'
 ```
 
 Depending on the way your application is written and the request format it expects, you may have to handle parsing this string.
@@ -60,7 +68,7 @@ def call_api(prompt, options, context):
     session_id = context.get("vars", {}).get("sessionId", "")
 ```
 
-**Example promptfooconfig.yaml**
+_Example promptfooconfig.yaml_
 
 ```yaml
 description: Custom application with multi-turn conversations
@@ -100,21 +108,16 @@ redteam:
   numTests: 1
 ```
 
-**Example Custom Python Provider**
+_*Example Custom Python Provider*_
 
 ```python
 import json
-import logging
 import re
 import requests
 import urllib3
 
 # Suppress SSL warnings since we're using verify=False for the example
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 url = "https://customer-service-chatbot-example.promptfoo.app"
 
@@ -138,18 +141,10 @@ def call_api(prompt, options, context):
             - error (str): Error message (if API call failed)
             - tokenUsage (dict): Token usage information (if exposed by the API)
             - metadata (dict): Additional metadata including config options
-
-    Example:
-        >>> prompt = "What is the weather like?"
-        >>> options = {"config": {"temperature": 0.7}}
-        >>> context = {"vars": {"sessionId": "conv_123"}}
-        >>> result = call_api(prompt, options, context)
-        >>> print(result["output"])  # API response message
     """
 
     # Get the session ID from the context
     session_id = context.get("vars", {}).get("sessionId", "")
-    logger.info(f"Using session ID: {session_id}")
 
     payload = {
         "message": prompt,
@@ -171,10 +166,8 @@ def call_api(prompt, options, context):
         response.raise_for_status()  # Raise an exception for bad status codes
         response_data = response.json() if response.content else {}
     except requests.exceptions.HTTPError as e:
-        logger.error(f"HTTP error {e.response.status_code}: {e.response.text}")
         response_data = {"error": f"HTTP {e.response.status_code}", "body": e.response.text}
     except requests.exceptions.RequestException as e:
-        logger.error(f"Request failed: {str(e)}")
         response_data = {"error": str(e)}
 
     # Extract token usage information from the response
