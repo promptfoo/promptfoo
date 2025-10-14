@@ -234,12 +234,28 @@ export class WebSocketProvider implements ApiProvider {
       ws.onmessage = (event) => {
         clearTimeout(timeout);
         if (streamResponse) {
-          const [newAccumulator, isComplete] = streamResponse(accumulator, event, context);
-          accumulator = newAccumulator;
-          if (isComplete) {
-            ws.close();
-            const response = processResult(accumulator);
-            resolve(response);
+          try {
+            logger.debug(`[WebSocket Provider] Data: ${JSON.stringify(event.data)}`);
+          } catch {
+            // ignore
+          }
+          try {
+            const [newAccumulator, isComplete] = streamResponse(accumulator, event, context);
+            accumulator = newAccumulator;
+            if (isComplete) {
+              ws.close();
+              const response = processResult(accumulator);
+              resolve(response);
+            }
+          } catch (err) {
+            logger.debug(
+              `[WebSocket Provider]: Error in stream response: ${JSON.stringify((err as Error).message)}`,
+            );
+            reject(
+              new Error(
+                `Failed to execute streamResponse function: ${JSON.stringify((err as Error).message)}`,
+              ),
+            );
           }
         } else {
           try {
@@ -250,10 +266,11 @@ export class WebSocketProvider implements ApiProvider {
               } catch {
                 // If parsing fails, assume it's a text response
               }
+              logger.debug(`[WebSocket Provider] Data: ${safeJsonStringify(data)}`);
             }
             try {
               const result = processResult(this.transformResponse(data));
-              logger.debug(`[WebSocket Provider]: Result ${safeJsonStringify(result)}`);
+
               if (result.error) {
                 logger.debug(`[WebSocket Provider]: Error from provider ${result.error}`);
                 reject(new Error(result.error));
@@ -288,6 +305,7 @@ export class WebSocketProvider implements ApiProvider {
       };
 
       ws.onopen = () => {
+        logger.debug(`[WebSocket Provider] Message sent: ${safeJsonStringify(message)}`);
         ws.send(message);
       };
     });

@@ -157,7 +157,8 @@ describe('WebSocketProvider', () => {
       return mockWs;
     });
 
-    await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket error');
+    const response = await provider.callApi('test prompt');
+    expect(response.error).toContain('WebSocket error');
   });
 
   it('should handle timeout', async () => {
@@ -168,7 +169,8 @@ describe('WebSocketProvider', () => {
       },
     });
 
-    await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket request timed out');
+    const response = await provider.callApi('test prompt');
+    expect(response).toEqual({ error: 'WebSocket request timed out' });
   });
 
   it('should handle non-JSON response', async () => {
@@ -308,20 +310,167 @@ describe('WebSocketProvider', () => {
       expect(received).not.toBeNull();
       expect(received?.[2]).toEqual(context);
     });
+
+    it('should reject when streamResponse function throws an error', async () => {
+      const streamResponse = (_acc: any, _event: any) => {
+        throw new Error('Stream processing failed');
+      };
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse,
+          transformResponse: (data: any) => ({ output: (data as any).output }),
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'Failed to execute streamResponse function: "Error in stream response function: Stream processing failed"',
+      );
+    });
+
+    it('should reject when streamResponse string transform throws an error', async () => {
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse: '(acc, data, ctx) => { throw new Error("String transform failed"); }',
+          transformResponse: (data: any) => ({ output: (data as any).output }),
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'Failed to execute streamResponse function: "Failed to transform request: Error: Stream response failed: String transform failed"',
+      );
+    });
+
+    it('should reject when streamResponse string transform has syntax error', async () => {
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse: 'invalid syntax here !!!',
+          transformResponse: (data: any) => ({ output: (data as any).output }),
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
+
+      await expect(provider.callApi('test')).rejects.toThrow('Failed to transform request:');
+    });
+
+    it('should reject when streamResponse returns invalid result format', async () => {
+      const streamResponse = (_acc: any, _event: any) => {
+        // Return invalid format - not an array
+        return { invalid: 'format' };
+      };
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse,
+          transformResponse: (data: any) => ({ output: (data as any).output }),
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'Failed to execute streamResponse function:',
+      );
+    });
+
+    it('should reject when streamResponse function throws non-Error object', async () => {
+      const streamResponse = (_acc: any, _event: any) => {
+        throw 'String error instead of Error object';
+      };
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse,
+          transformResponse: (data: any) => ({ output: (data as any).output }),
+        },
+      });
+
+      jest.mocked(WebSocket).mockImplementation(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
+
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'Failed to execute streamResponse function: "Error in stream response function: String error instead of Error object"',
+      );
+    });
   });
 
   describe('timeouts', () => {
-    it('should timeout with streamResponse', async () => {
+    it.each([
+      { caseName: 'without streamResponse (non-streaming path)', useStreaming: false },
+      { caseName: 'with streamResponse (streaming path)', useStreaming: true },
+    ])('should timeout $caseName', async ({ useStreaming }) => {
+      jest.useFakeTimers();
+
       provider = new WebSocketProvider('ws://test.com', {
         config: {
           messageTemplate: '{{ prompt }}',
           timeoutMs: 100,
-          // never signal completion; ensures timeout path is exercised
-          streamResponse: (acc: any, _data: any) => [acc, ''],
+          ...(useStreaming
+            ? {
+                // never signal completion; ensures timeout path is exercised
+                streamResponse: (acc: any, _data: any) => [acc, ''],
+              }
+            : {}),
         },
       });
 
-      await expect(provider.callApi('timeout test')).rejects.toThrow('WebSocket request timed out');
+      jest.mocked(WebSocket).mockImplementation(() => mockWs);
+
+      const promise = provider.callApi('timeout test');
+      await jest.advanceTimersByTimeAsync(100);
+      await expect(promise).resolves.toEqual({ error: 'WebSocket request timed out' });
+      expect(mockWs.close).toHaveBeenCalled();
+
+      jest.useRealTimers();
     });
   });
 });
