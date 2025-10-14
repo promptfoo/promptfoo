@@ -287,32 +287,17 @@ export async function runEval({
 
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
 
-  // Initialize session if this is a new conversation and provider supports sessions
-  const isNewConversation = !conversations?.[conversationKey];
-  if (isNewConversation && provider.startSession && conversations) {
-    try {
-      const sessionResponse = await provider.startSession({
-        conversationId: test.metadata?.conversationId,
-        test,
-        vars,
-      });
+  logger.debug(`Checking conversations (${JSON.stringify(Object.keys(conversations || {}))}) for ${conversationKey}`);
 
-      // Track the active session for cleanup
-      activeSessions?.set(conversationKey, {
-        sessionId: sessionResponse.sessionId,
-        provider,
-        conversationKey,
-      });
-
-      // Make session ID available in vars for use in prompts
-      vars.sessionId = sessionResponse.sessionId;
-
-      logger.debug(
-        `Started session ${sessionResponse.sessionId} for conversation ${conversationKey}`,
-      );
-    } catch (err) {
-      logger.warn(`Failed to start session for ${conversationKey}: ${err}`);
-    }
+  // Check if a session was pre-initialized for this conversation
+  // Sessions are pre-initialized before concurrent execution to avoid race conditions
+  const activeSession = activeSessions?.get(conversationKey);
+  if (activeSession) {
+    // Use the pre-initialized session
+    vars.sessionId = activeSession.sessionId;
+    logger.debug(
+      `Using pre-initialized session ${activeSession.sessionId} for conversation ${conversationKey}`,
+    );
   }
 
   const usesConversation = prompt.raw.includes('_conversation');
@@ -1165,6 +1150,67 @@ class Evaluator {
         logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
         concurrency = 1;
       }
+    }
+
+    // Pre-initialize sessions for all unique conversations before concurrent execution
+    // This prevents race conditions when multiple tests share the same conversationId
+    const sessionInitPromises = new Map<string, Promise<void>>();
+    const conversationKeysToInit = new Set<string>();
+
+    for (const evalStep of runEvalOptions) {
+      const conversationKey = `${evalStep.provider.label || evalStep.provider.id()}:${evalStep.prompt.id}${evalStep.test.metadata?.conversationId ? `:${evalStep.test.metadata.conversationId}` : ''}`;
+      conversationKeysToInit.add(conversationKey);
+    }
+
+    for (const conversationKey of conversationKeysToInit) {
+      // Find the first evalStep with this conversationKey to get provider and test info
+      const evalStep = runEvalOptions.find((step) => {
+        const key = `${step.provider.label || step.provider.id()}:${step.prompt.id}${step.test.metadata?.conversationId ? `:${step.test.metadata.conversationId}` : ''}`;
+        return key === conversationKey;
+      });
+
+      if (evalStep && evalStep.provider.startSession) {
+        const initPromise = (async () => {
+          // Type narrowing: evalStep and startSession are guaranteed to exist here
+          if (!evalStep || !evalStep.provider.startSession) {
+            return;
+          }
+          
+          try {
+            logger.debug(`[Conversation Sessions] Pre-initializing session for conversation ${conversationKey}`);
+            const sessionResponse = await evalStep.provider.startSession({
+              conversationId: evalStep.test.metadata?.conversationId,
+              test: evalStep.test,
+              vars: evalStep.test.vars || {},
+            });
+
+            // Store the session info for later use
+            this.activeSessions.set(conversationKey, {
+              sessionId: sessionResponse.sessionId,
+              provider: evalStep.provider,
+              conversationKey,
+            });
+
+            // Initialize the conversation array
+            this.conversations[conversationKey] = [];
+
+            logger.debug(
+              `[Conversation Sessions] Pre-initialized session ${sessionResponse.sessionId} for conversation ${conversationKey}`,
+            );
+          } catch (err) {
+            logger.warn(`[Conversation Sessions] Failed to pre-initialize session for ${conversationKey}: ${err}`);
+          }
+        })();
+
+        sessionInitPromises.set(conversationKey, initPromise);
+      }
+    }
+
+    // Wait for all sessions to initialize before starting evaluations
+    if (sessionInitPromises.size > 0) {
+      logger.debug(`[Conversation Sessions] Waiting for ${sessionInitPromises.size} session(s) to initialize...`);
+      await Promise.all(sessionInitPromises.values());
+      logger.debug('[Conversation Sessions] All sessions initialized');
     }
 
     // Actually run the eval
