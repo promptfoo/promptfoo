@@ -244,10 +244,8 @@ export class WebSocketProvider implements ApiProvider {
             }
           } catch (err) {
             logger.debug(`[WebSocket Provider]: ${(err as Error).message}`);
-            reject(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
-          } finally {
-            logger.debug(`[WebSocket Provider]: Closing WebSocket connection`);
             ws.close();
+            reject(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
           }
         } else {
           try {
@@ -265,33 +263,34 @@ export class WebSocketProvider implements ApiProvider {
 
               if (result.error) {
                 logger.debug(`[WebSocket Provider]: Error from provider ${result.error}`);
+                ws.close();
                 reject(new Error(result.error));
               } else if (result.output === undefined) {
+                ws.close();
                 reject(new Error('No output from provider'));
-              } else {
-                resolve(result);
               }
+              ws.close();
               resolve(result);
             } catch (err) {
               logger.debug(
                 `[WebSocket Provider]: Error in transform response: ${(err as Error).message}`,
               );
+              ws.close();
               reject(new Error(`Failed to process response: ${(err as Error).message}`));
             }
           } catch (err) {
             logger.debug(
               `[WebSocket Provider]: Error processing response: ${(err as Error).message}`,
             );
-            reject(new Error(`Failed to process response: ${(err as Error).message}`));
-          } finally {
-            logger.debug(`[WebSocket Provider]: Closing WebSocket connection`);
             ws.close();
+            reject(new Error(`Failed to process response: ${(err as Error).message}`));
           }
         }
       };
 
       ws.onerror = (err) => {
         clearTimeout(timeout);
+        ws.close();
         logger.error(`[WebSocket Provider] Error:${JSON.stringify(err)}`);
         reject(new Error(`WebSocket error: ${JSON.stringify(err)}`));
       };

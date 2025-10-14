@@ -143,6 +143,7 @@ describe('WebSocketProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ output: responseData });
+    expect(mockWs.close).toHaveBeenCalled();
   });
 
   it('should handle WebSocket errors', async () => {
@@ -158,6 +159,7 @@ describe('WebSocketProvider', () => {
     });
 
     await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket error');
+    expect(mockWs.close).toHaveBeenCalled();
   });
 
   it('should handle timeout', async () => {
@@ -169,6 +171,7 @@ describe('WebSocketProvider', () => {
     });
 
     await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket request timed out');
+    expect(mockWs.close).toHaveBeenCalled();
   });
 
   it('should handle non-JSON response', async () => {
@@ -184,6 +187,7 @@ describe('WebSocketProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ output: 'plain text response' });
+    expect(mockWs.close).toHaveBeenCalled();
   });
 
   it('should use custom response transformer', async () => {
@@ -206,6 +210,7 @@ describe('WebSocketProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ output: 'transformed-test' });
+    expect(mockWs.close).toHaveBeenCalled();
   });
 
   describe('streamResponse behavior', () => {
@@ -333,8 +338,9 @@ describe('WebSocketProvider', () => {
       });
 
       await expect(provider.callApi('test')).rejects.toThrow(
-        'Failed to execute streamResponse function: "Error in stream response function: Stream processing failed"',
+        'Error executing streamResponse function: Error in stream response function: Stream processing failed',
       );
+      expect(mockWs.close).toHaveBeenCalled();
     });
 
     it('should reject when streamResponse string transform throws an error', async () => {
@@ -357,8 +363,9 @@ describe('WebSocketProvider', () => {
       });
 
       await expect(provider.callApi('test')).rejects.toThrow(
-        'Failed to execute streamResponse function: "Failed to transform request: Error: Stream response failed: String transform failed"',
+        'Error executing streamResponse function: Error executing streamResponse function: String transform failed',
       );
+      expect(mockWs.close).toHaveBeenCalled();
     });
 
     it('should reject when streamResponse string transform has syntax error', async () => {
@@ -380,7 +387,10 @@ describe('WebSocketProvider', () => {
         return mockWs;
       });
 
-      await expect(provider.callApi('test')).rejects.toThrow('Failed to transform request:');
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'Error executing streamResponse function:',
+      );
+      expect(mockWs.close).toHaveBeenCalled();
     });
 
     it('should reject when streamResponse returns invalid result format', async () => {
@@ -408,8 +418,9 @@ describe('WebSocketProvider', () => {
       });
 
       await expect(provider.callApi('test')).rejects.toThrow(
-        'Failed to execute streamResponse function:',
+        'Error executing streamResponse function:',
       );
+      expect(mockWs.close).toHaveBeenCalled();
     });
 
     it('should reject when streamResponse function throws non-Error object', async () => {
@@ -436,8 +447,9 @@ describe('WebSocketProvider', () => {
       });
 
       await expect(provider.callApi('test')).rejects.toThrow(
-        'Failed to execute streamResponse function: "Error in stream response function: String error instead of Error object"',
+        'Error executing streamResponse function: Error in stream response function: String error instead of Error object',
       );
+      expect(mockWs.close).toHaveBeenCalled();
     });
   });
 
@@ -453,6 +465,7 @@ describe('WebSocketProvider', () => {
       });
 
       await expect(provider.callApi('timeout test')).rejects.toThrow('WebSocket request timed out');
+      expect(mockWs.close).toHaveBeenCalled();
     });
   });
 });
