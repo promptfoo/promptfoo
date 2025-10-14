@@ -10,7 +10,15 @@ import { fetchWithTimeout } from '../util/fetch/index';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';
-import { EmailValidationStatus, UserEmailStatus } from '../types/email';
+import {
+  EmailValidationStatus,
+  UserEmailStatus,
+  NO_EMAIL_STATUS,
+  BadEmailResult,
+  EmailOkStatus,
+  EMAIL_OK_STATUS,
+  BAD_EMAIL_RESULT,
+} from '../types/email';
 
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();
@@ -90,7 +98,7 @@ export async function checkEmailStatus(options?: {
 
   if (!userEmail) {
     return {
-      status: 'no_email',
+      status: NO_EMAIL_STATUS,
       hasEmail: false,
       message: 'Redteam evals require email verification. Please enter your work email:',
     };
@@ -119,7 +127,12 @@ export async function checkEmailStatus(options?: {
       error?: string;
     };
 
-    if (options?.validate && !['risky_email', 'disposable_email'].includes(data.status)) {
+    if (
+      options?.validate &&
+      ![EmailValidationStatus.RISKY_EMAIL, EmailValidationStatus.DISPOSABLE_EMAIL].includes(
+        data.status,
+      )
+    ) {
       setUserEmailValidated(true);
     }
 
@@ -133,7 +146,7 @@ export async function checkEmailStatus(options?: {
     logger.debug(`Failed to check user status: ${e}`);
     // If we can't check status, assume it's OK but log the issue
     return {
-      status: 'ok',
+      status: EmailValidationStatus.OK,
       message: 'Unable to verify email status, but proceeding',
       email: userEmail,
       hasEmail: true,
@@ -189,28 +202,31 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
 
 export async function checkEmailStatusAndMaybeExit(options?: {
   validate?: boolean;
-}): Promise<'ok' | 'bad_email'> {
+}): Promise<EmailOkStatus | BadEmailResult> {
   const result = await checkEmailStatus(options);
 
-  if (result.status === 'risky_email' || result.status === 'disposable_email') {
+  if (
+    result.status === EmailValidationStatus.RISKY_EMAIL ||
+    result.status === EmailValidationStatus.DISPOSABLE_EMAIL
+  ) {
     logger.error('Please use a valid work email.');
     setUserEmail('');
-    return 'bad_email';
+    return BAD_EMAIL_RESULT;
   }
 
-  if (result.status === 'exceeded_limit') {
+  if (result.status === EmailValidationStatus.EXCEEDED_LIMIT) {
     logger.error(
       'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
     );
     process.exit(1);
   }
 
-  if (result.status === 'show_usage_warning' && result.message) {
+  if (result.status === EmailValidationStatus.SHOW_USAGE_WARNING && result.message) {
     const border = '='.repeat(TERMINAL_MAX_WIDTH);
     logger.info(chalk.yellow(border));
     logger.warn(chalk.yellow(result.message));
     logger.info(chalk.yellow(border));
   }
 
-  return 'ok';
+  return EMAIL_OK_STATUS;
 }

@@ -1,15 +1,17 @@
-import { z } from 'zod';
+export const EMAIL_OK_STATUS = 'ok';
+export type EmailOkStatus = typeof EMAIL_OK_STATUS;
+export const BAD_EMAIL_RESULT = 'bad_email';
+export type BadEmailResult = typeof BAD_EMAIL_RESULT;
 
-export const EmailValidationStatusSchema = z.enum([
-  'ok',
-  'exceeded_limit',
-  'show_usage_warning',
-  'risky_email',
-  'disposable_email',
-]);
+export enum EmailValidationStatus {
+  OK = EMAIL_OK_STATUS,
+  EXCEEDED_LIMIT = 'exceeded_limit',
+  SHOW_USAGE_WARNING = 'show_usage_warning',
+  RISKY_EMAIL = 'risky_email',
+  DISPOSABLE_EMAIL = 'disposable_email',
+}
 
-export const UserEmailStatusSchema = EmailValidationStatusSchema.or(z.enum(['no_email']));
+export const NO_EMAIL_STATUS = 'no_email';
+export type NoEmailStatus = typeof NO_EMAIL_STATUS;
 
-export type EmailValidationStatus = z.infer<typeof EmailValidationStatusSchema>;
-
-export type UserEmailStatus = z.infer<typeof UserEmailStatusSchema>;
+export type UserEmailStatus = EmailValidationStatus | NoEmailStatus;

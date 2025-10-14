@@ -45,6 +45,7 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types/index';
+import { EMAIL_OK_STATUS } from '../types/email';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -395,7 +396,7 @@ export async function doEval(
       while (!hasValidEmail) {
         const { emailNeedsValidation } = await promptForEmailUnverified();
         const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
-        hasValidEmail = res === 'ok';
+        hasValidEmail = res === EMAIL_OK_STATUS;
       }
     }
 

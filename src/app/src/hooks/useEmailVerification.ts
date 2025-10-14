@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-import { UserEmailStatus } from '../../../types/email';
+import { UserEmailStatus, EmailValidationStatus } from '../../../types/email';
 import { callApi } from '@app/utils/api';
 
 interface EmailStatus {
@@ -37,7 +37,10 @@ export function useEmailVerification() {
           };
         }
 
-        if (status.status === 'risky_email' || status.status === 'disposable_email') {
+        if (
+          status.status === EmailValidationStatus.RISKY_EMAIL ||
+          status.status === EmailValidationStatus.DISPOSABLE_EMAIL
+        ) {
           return {
             canProceed: false,
             needsEmail: false,
@@ -46,7 +49,7 @@ export function useEmailVerification() {
           };
         }
 
-        if (status.status === 'exceeded_limit') {
+        if (status.status === EmailValidationStatus.EXCEEDED_LIMIT) {
           return {
             canProceed: false,
             needsEmail: false,
