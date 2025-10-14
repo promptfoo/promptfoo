@@ -1,8 +1,8 @@
 import crypto from 'crypto';
+import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 
-import dedent from 'dedent';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -2426,6 +2426,89 @@ describe('determineRequestBody', () => {
     });
 
     expect(result).toEqual(['static', 'test prompt']);
+  });
+
+  describe('stringified JSON body handling', () => {
+    it('should parse stringified JSON body when content type is JSON', () => {
+      // This simulates the bug case where body was saved as a string
+      const stringifiedBody = '{"message":"{{prompt}}"}';
+      const result = determineRequestBody(true, 'test prompt', stringifiedBody, {
+        prompt: 'test prompt',
+      });
+
+      expect(result).toEqual({
+        message: 'test prompt',
+      });
+    });
+
+    it('should parse stringified JSON body with nested objects', () => {
+      const stringifiedBody = '{"outer":{"inner":"{{prompt}}"}}';
+      const result = determineRequestBody(true, 'test prompt', stringifiedBody, {
+        prompt: 'test prompt',
+      });
+
+      expect(result).toEqual({
+        outer: {
+          inner: 'test prompt',
+        },
+      });
+    });
+
+    it('should parse stringified JSON array body', () => {
+      const stringifiedBody = '["{{prompt}}", "static"]';
+      const result = determineRequestBody(true, 'test prompt', stringifiedBody, {
+        prompt: 'test prompt',
+      });
+
+      expect(result).toEqual(['test prompt', 'static']);
+    });
+
+    it('should handle stringified JSON body that fails to parse as a template string', () => {
+      // This is a template string that looks like JSON but has invalid syntax after templating
+      const templateString = 'Message: {{prompt}}';
+      const result = determineRequestBody(true, 'test prompt', templateString, {
+        prompt: 'test prompt',
+      });
+
+      expect(result).toBe('Message: test prompt');
+    });
+
+    it('should not parse stringified body when content type is not JSON', () => {
+      const stringifiedBody = '{"message":"{{prompt}}"}';
+      const result = determineRequestBody(false, 'test prompt', stringifiedBody, {
+        prompt: 'test prompt',
+      });
+
+      // Should be treated as a template string, not parsed
+      expect(result).toBe('{"message":"test prompt"}');
+    });
+
+    it('should handle object body normally (backward compatibility)', () => {
+      // Ensure object bodies still work as before
+      const objectBody = { message: '{{prompt}}' };
+      const result = determineRequestBody(true, 'test prompt', objectBody, {
+        prompt: 'test prompt',
+      });
+
+      expect(result).toEqual({
+        message: 'test prompt',
+      });
+    });
+
+    it('should merge parsed prompt with stringified JSON body', () => {
+      const stringifiedBody = '{"configField":"value"}';
+      const result = determineRequestBody(
+        true,
+        { promptField: 'prompt value' },
+        stringifiedBody,
+        {},
+      );
+
+      expect(result).toEqual({
+        configField: 'value',
+        promptField: 'prompt value',
+      });
+    });
   });
 });
 
