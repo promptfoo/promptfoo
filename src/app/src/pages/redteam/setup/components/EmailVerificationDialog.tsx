@@ -60,21 +60,25 @@ export function EmailVerificationDialog({
     setEmailError('');
 
     try {
-      // Validate the email before saving
+      const result = await saveEmail(email);
+
+      // Validate the email after saving
       const statusResult = await checkEmailStatus({ validate: true });
 
       if (statusResult.error) {
+        saveEmail("");
         setEmailError(statusResult.error);
         return;
       }
-      const result = await saveEmail(email);
 
       if (result.error) {
+        saveEmail("");
         setEmailError(result.error || 'Failed to verify email');
         return;
       }
 
       if (!statusResult.canProceed) {
+        saveEmail("");
         setEmailError('Email validation failed. Please use a different email.');
         return;
       }
