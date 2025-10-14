@@ -2,12 +2,14 @@ import React from 'react';
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Paper from '@mui/material/Paper';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 import type { ProviderOptions } from '../../types';
@@ -68,52 +70,57 @@ const TestSection: React.FC<TestSectionProps> = ({
 
       {testResult && (
         <>
-          <Alert
-            severity={
-              testResult.changes_needed ? 'warning' : testResult.success ? 'success' : 'error'
-            }
-            icon={
-              testResult.changes_needed ? (
-                <ErrorIcon />
-              ) : testResult.success ? (
-                <CheckCircleIcon />
-              ) : (
-                <ErrorIcon />
-              )
-            }
-            sx={{ mt: 2 }}
-          >
-            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
-              {testResult.changes_needed
-                ? 'Configuration Changes Needed'
-                : testResult.success
-                  ? 'Test Passed'
-                  : 'Test Failed'}
-            </Typography>
-            <Typography variant="body2">{testResult.message}</Typography>
+          {(testResult.success || testResult.changes_needed) && (
+            <Alert
+              severity={
+                testResult.changes_needed ? 'warning' : testResult.success ? 'success' : 'error'
+              }
+              icon={
+                testResult.changes_needed ? (
+                  <ErrorIcon />
+                ) : testResult.success ? (
+                  <CheckCircleIcon />
+                ) : (
+                  <ErrorIcon />
+                )
+              }
+              sx={{ mt: 2 }}
+            >
+              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                {testResult.changes_needed
+                  ? 'Configuration Changes Needed'
+                  : testResult.success
+                    ? 'Test Passed'
+                    : 'Test Failed'}
+              </Typography>
+              <Typography variant="body2">{testResult.message}</Typography>
 
-            {/* Display configuration suggestions if available */}
-            {testResult.changes_needed_suggestions &&
-              testResult.changes_needed_suggestions.length > 0 && (
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                    Suggested Changes:
-                  </Typography>
-                  <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                    {testResult.changes_needed_suggestions.map(
-                      (suggestion: string, index: number) => (
-                        <li key={index}>
-                          <Typography variant="body2">{suggestion}</Typography>
-                        </li>
-                      ),
-                    )}
-                  </ul>
-                </Box>
-              )}
-          </Alert>
+              {/* Display configuration suggestions if available */}
+              {testResult.changes_needed_suggestions &&
+                testResult.changes_needed_suggestions.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                      Suggested Changes:
+                    </Typography>
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      {testResult.changes_needed_suggestions.map(
+                        (suggestion: string, index: number) => (
+                          <li key={index}>
+                            <Typography variant="body2">{suggestion}</Typography>
+                          </li>
+                        ),
+                      )}
+                    </ul>
+                  </Box>
+                )}
+            </Alert>
+          )}
 
           {/* Request and Response Details */}
-          <details style={{ marginTop: '16px' }} open={testResult.changes_needed}>
+          <details
+            style={{ marginTop: '16px' }}
+            open={testResult.changes_needed || testResult.success === false}
+          >
             <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
               <Typography variant="caption" component="span">
                 View request and response details
@@ -300,7 +307,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                       <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
                         Raw Response:
                       </Typography>
-                      <Box sx={{ mb: 2, maxHeight: '200px', overflow: 'auto' }}>
+                      <Box sx={{ maxHeight: '200px', overflow: 'auto' }}>
                         <pre
                           style={{
                             margin: '4px 0',
@@ -312,25 +319,6 @@ const TestSection: React.FC<TestSectionProps> = ({
                           {typeof testResult.providerResponse?.raw === 'string'
                             ? testResult.providerResponse?.raw
                             : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
-                        </pre>
-                      </Box>
-
-                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-                        Parsed Response:
-                      </Typography>
-                      <Box sx={{ maxHeight: '200px', overflow: 'auto' }}>
-                        <pre
-                          style={{
-                            margin: '4px 0',
-                            fontSize: '12px',
-                            whiteSpace: 'pre-wrap',
-                            overflowWrap: 'anywhere',
-                          }}
-                        >
-                          {typeof testResult.providerResponse?.output === 'string'
-                            ? testResult.providerResponse?.output
-                            : JSON.stringify(testResult.providerResponse?.output, null, 2) ||
-                              'No parsed response'}
                         </pre>
                       </Box>
 
@@ -366,6 +354,47 @@ const TestSection: React.FC<TestSectionProps> = ({
                 </Paper>
               </Box>
             </Box>
+            {testResult.providerResponse && testResult.providerResponse.raw !== undefined && (
+              <Paper
+                elevation={0}
+                sx={{
+                  mt: 2,
+                  p: 2,
+                  backgroundColor: 'rgba(0,0,0,0.03)',
+                  borderRadius: 1,
+                  overflow: 'auto',
+                }}
+              >
+                <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                    Final Response
+                  </Typography>
+                  <Tooltip
+                    title="This is what promptfoo will use for evaluation. Configure the response parser if this isn't the plain text output from your API."
+                    placement="top"
+                  >
+                    <InfoOutlinedIcon
+                      sx={{ fontSize: '1rem', color: 'text.secondary', cursor: 'help' }}
+                    />
+                  </Tooltip>
+                </Box>
+                <Box sx={{ maxHeight: '200px', overflow: 'auto' }}>
+                  <pre
+                    style={{
+                      margin: 0,
+                      fontSize: '12px',
+                      whiteSpace: 'pre-wrap',
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {typeof testResult.providerResponse?.output === 'string'
+                      ? testResult.providerResponse?.output
+                      : JSON.stringify(testResult.providerResponse?.output, null, 2) ||
+                        'No parsed response'}
+                  </pre>
+                </Box>
+              </Paper>
+            )}
           </details>
         </>
       )}

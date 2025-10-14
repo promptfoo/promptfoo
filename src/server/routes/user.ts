@@ -73,9 +73,11 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
-userRouter.get('/email/status', async (_req: Request, res: Response): Promise<void> => {
+userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await checkEmailStatus();
+    // Extract validate query parameter
+    const validate = req.query.validate === 'true';
+    const result = await checkEmailStatus({ validate });
 
     res.json(
       ApiSchemas.User.EmailStatus.Response.parse({

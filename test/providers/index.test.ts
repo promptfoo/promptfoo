@@ -1021,9 +1021,14 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with alibaba unknown model', async () => {
-    await expect(loadApiProvider('alibaba:unknown-model')).rejects.toThrow(
-      'Invalid Alibaba Cloud model: unknown-model',
+    // Unknown models now only warn, they don't throw errors
+    const provider = await loadApiProvider('alibaba:unknown-model');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('unknown-model');
+    expect(provider.config.apiBaseUrl).toBe(
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
     );
+    expect(provider.config.apiKeyEnvar).toBe('DASHSCOPE_API_KEY');
   });
 });
 
