@@ -164,9 +164,12 @@ const API_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
 
 export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, options: ProviderOptions = {}) {
-    if (!modelName || !KNOWN_MODELS.has(modelName)) {
+    if (!modelName) {
+      throw new Error('Alibaba modelName is required');
+    }
+    if (!KNOWN_MODELS.has(modelName)) {
       logger.warn(
-        `Unknown Alibaba Cloud model: ${modelName}', Known models: ${Array.from(KNOWN_MODELS).join(', ')}`,
+        `Unknown Alibaba Cloud model: ${modelName}. Known models: ${Array.from(KNOWN_MODELS).join(', ')}`,
       );
     }
 
@@ -174,7 +177,7 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
       ...options,
       config: {
         ...options.config,
-        apiBaseUrl: options.config?.API_BASE_URL || API_BASE_URL,
+        apiBaseUrl: options.apiBaseUrl ?? options.config?.apiBaseUrl ?? API_BASE_URL,
         apiKeyEnvar: 'DASHSCOPE_API_KEY',
       },
     });
@@ -183,9 +186,12 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
 
 export class AlibabaEmbeddingProvider extends OpenAiEmbeddingProvider {
   constructor(modelName: string, options: ProviderOptions = {}) {
-    if (!modelName || !KNOWN_MODELS.has(modelName)) {
+    if (!modelName) {
+      throw new Error('Alibaba modelName is required');
+    }
+    if (!KNOWN_MODELS.has(modelName)) {
       logger.warn(
-        `Unknown Alibaba Cloud model: ${modelName}. Available models: ${Array.from(KNOWN_MODELS).join(', ')}`,
+        `Unknown Alibaba Cloud model: ${modelName}. Known models: ${Array.from(KNOWN_MODELS).join(', ')}`,
       );
     }
 
@@ -193,7 +199,7 @@ export class AlibabaEmbeddingProvider extends OpenAiEmbeddingProvider {
       ...options,
       config: {
         ...options.config,
-        apiBaseUrl: options.config?.API_BASE_URL || API_BASE_URL,
+        apiBaseUrl: options.apiBaseUrl ?? options.config?.apiBaseUrl ?? API_BASE_URL,
         apiKeyEnvar: 'DASHSCOPE_API_KEY',
       },
     });
