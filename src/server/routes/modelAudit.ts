@@ -85,7 +85,7 @@ const includeDebugInfo = (debugInfo: Record<string, any>) => {
 export const modelAuditRouter = Router();
 
 // Check if modelaudit is installed
-modelAuditRouter.get('/check-installed', async (req: Request, res: Response): Promise<void> => {
+modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): Promise<void> => {
   try {
     // Track the check installation action
     telemetry.record('webui_api', {
@@ -542,7 +542,7 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
 });
 
 // Get latest model scan
-modelAuditRouter.get('/scans/latest', async (req: Request, res: Response): Promise<void> => {
+modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Promise<void> => {
   try {
     // Track the get latest scan action
     telemetry.record('webui_api', {

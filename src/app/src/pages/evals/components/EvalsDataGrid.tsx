@@ -457,7 +457,7 @@ export default function EvalsDataGrid({
                   { value: 'redteam', label: 'Red Team' },
                   { value: 'modelaudit', label: 'Model Audit' },
                 ],
-                valueGetter: (value: Eval['type'], row: Eval) => {
+                valueGetter: (_value: Eval['type'], row: Eval) => {
                   // Use new type field if available, otherwise fall back to isRedteam logic
                   if (row.type) {
                     return row.type;

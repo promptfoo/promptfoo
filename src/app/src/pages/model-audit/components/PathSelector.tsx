@@ -433,9 +433,7 @@ export default function PathSelector({
               >
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   {recentScans
-                    .flatMap((scan) =>
-                      scan.paths.map((path) => ({ ...path, scanId: scan.id })),
-                    )
+                    .flatMap((scan) => scan.paths.map((path) => ({ ...path, scanId: scan.id })))
                     .filter(
                       (path, index: number, self) =>
                         index === self.findIndex((p) => p.path === path.path),

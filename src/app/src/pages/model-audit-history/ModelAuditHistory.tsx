@@ -281,7 +281,7 @@ export default function ModelAuditHistory({
         headerName: 'Created',
         flex: 0.9,
         minWidth: 140,
-        valueGetter: (value: ModelAuditScan['createdAt'], row: ModelAuditScan) => {
+        valueGetter: (value: ModelAuditScan['createdAt'], _row: ModelAuditScan) => {
           return new Date(value);
         },
         valueFormatter: (value: ModelAuditScan['createdAt']) => formatDataGridDate(value),
