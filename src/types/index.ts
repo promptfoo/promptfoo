@@ -153,8 +153,8 @@ export interface RunEvalOptions {
   allTests?: RunEvalOptions[];
   concurrency?: number;
 
-  // Metadata from the test suite (set by hooks like beforeAll)
-  suiteMetadata?: Record<string, any>;
+  // Metadata returned from any extension hooks (beforeAll, beforeEach)
+  extensionHookMetadata?: Record<string, any>;
 
   /**
    * AbortSignal that can be used to cancel the evaluation

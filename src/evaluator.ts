@@ -268,7 +268,7 @@ export async function runEval({
   registers,
   isRedteam,
   abortSignal,
-  suiteMetadata,
+  extensionHookMetadata,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -364,8 +364,8 @@ export async function runEval({
       }
 
       // Add suite metadata if available (set by hooks like beforeAll)
-      if (suiteMetadata) {
-        callApiContext.metadata = suiteMetadata;
+      if (extensionHookMetadata) {
+        callApiContext.metadata = extensionHookMetadata;
       }
 
       response = await activeProvider.callApi(
@@ -1065,7 +1065,7 @@ class Evaluator {
                 allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
-                suiteMetadata: testSuite.metadata,
+                extensionHookMetadata: testSuite.metadata,
               });
               promptIdx++;
             }
