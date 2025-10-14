@@ -1,23 +1,21 @@
-# redteam-websocket (WebSocket red teaming)
+# Websocket Streaming
 
-This example shows how to red team a WebSocket-based application. It includes a small Node.js server that exposes two WebSocket endpoints:
+This example shows how to configure a websocket application that streams its responses. It includes a small Node.js server that exposes two WebSocket endpoints:
 
 - A non-streaming endpoint (`/ws`) that returns a single message when the model finishes.
 - A streaming endpoint (`/ws-stream`) that sends incremental deltas and a final message.
 
-You’ll run the server locally and use promptfoo’s red team flow to probe both endpoints with adversarial test cases.
+You’ll run the server locally and use promptfoo’s eval command to test the quality of the application.
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example redteam-websocket
+npx promptfoo@latest init --example websocket-streaming
 ```
 
 ## What’s in this folder
 
-- `promptfooconfig.yaml` – Configures two targets pointing at the local WebSocket server:
-  - `ws://localhost:3300/ws` (non-streaming), uses `transformResponse` to parse a single reply
-  - `ws://localhost:3300/ws-stream` (streaming), uses `streamResponse` to accumulate/return the final reply
+- `promptfooconfig.yaml` – Configures a target pointing at the local WebSocket server using the streaming endpoint
 - `server/` – Minimal Express + WebSocket server that calls the OpenAI Responses API and exposes the two endpoints
 
 ## Prerequisites
@@ -52,31 +50,37 @@ curl http://localhost:3300/health
 # {"status":"ok"}
 ```
 
-WebSocket upgrade paths:
+WebSocket Endpoints:
 
 - `ws://localhost:3300/ws` – non-streaming
 - `ws://localhost:3300/ws-stream` – streaming (sends `delta` updates and a final `message`)
 
 ## 2) How the WebSocket configuration works
 
-In `promptfooconfig.yaml`, there are two targets configured. The non-streaming target uses a `transformResponse` string to extract a single field from the server’s JSON reply:
+In `promptfooconfig.yaml`, the websocket endpoint is configured under the websocket endpoint id:
 
 ```yaml
-targets:
-  - id: 'ws://localhost:3300/ws'
-    config:
-      messageTemplate: '{"input": {{prompt | dump}}}'
-      transformResponse: 'data.message'
+- id: 'ws://localhost:3300/ws-stream'
 ```
 
-The streaming target uses `streamResponse(accumulator, data, context?)` to decide when to stop and what to return. The server sends messages like:
+The target configuration uses the streamResponse function `streamResponse(accumulator, data, context?)` to decide when to stop and what to return.
+
+## Server Response Format
+
+The server three types of messages:
+
+1. `delta` messages that include a partial response
+2. `message` messages that include the finalized response in full
+3. `error` messages that indicate an error occurred
+
+Example of a successful message stream:
 
 ```json
-{"type":"delta","message":"partial text..."}
-{"type":"message","message":"final text"}
+{"type":"delta","message":"Part of a thought"}
+{"type":"message","message":"Part of a thought, now the thought is completed"}
 ```
 
-The example’s handler returns the final `message` when it sees the terminal frame, or an error if one arrives:
+The streamResponse function includes logic for handling these different cases. Note: the `delta` case is the fallback, which returns false for the second item in the tuple to indicate the response is not yet complete:
 
 ```yaml
 - id: 'ws://localhost:3300/ws-stream'
@@ -91,28 +95,22 @@ The example’s handler returns the final `message` when it sees the terminal fr
       }
 ```
 
-Tip: If you need to concatenate partials for UX, you can build up `accumulator.output` on `delta` frames and only return `true` when you receive the final message.
+Tip: If you need to concatenate partials for UX, you can return an accumulator object with the concatenated value on `delta` frames and only return `true` when you receive the final message.
 
-## 3) Run the red team evaluation
+## 3) Run the evaluation
 
 With the server running, open a new terminal at this example directory and run:
 
 ```bash
-promptfoo redteam run
+promptfoo eval
 ```
 
-This will generate adversarial test cases (based on the `redteam` section in `promptfooconfig.yaml`) and evaluate them against both WebSocket endpoints.
+This will evaluate the test cases against the streaming WebSocket endpoint.
 
 View results in the browser UI:
 
 ```bash
 promptfoo view
-```
-
-Or open the red team report directly:
-
-```bash
-promptfoo redteam report
 ```
 
 ## Troubleshooting
