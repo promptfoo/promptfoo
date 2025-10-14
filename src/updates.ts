@@ -5,12 +5,18 @@ import semverGt from 'semver/functions/gt';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
 import { getEnvBool } from './envars';
 import logger from './logger';
-import { fetchWithTimeout } from './util/fetch';
+import { fetchWithTimeout } from './util/fetch/index';
 
 const execAsync = promisify(exec);
 
 export async function getLatestVersion() {
-  const response = await fetchWithTimeout(`https://api.promptfoo.dev/api/latestVersion`, {}, 10000);
+  const response = await fetchWithTimeout(
+    `https://api.promptfoo.dev/api/latestVersion`,
+    {
+      headers: { 'x-promptfoo-silent': 'true' },
+    },
+    10000,
+  );
   if (!response.ok) {
     throw new Error(`Failed to fetch package information for promptfoo`);
   }
@@ -49,7 +55,13 @@ ${border}\n`,
 
 export async function getModelAuditLatestVersion(): Promise<string | null> {
   try {
-    const response = await fetchWithTimeout('https://pypi.org/pypi/modelaudit/json', {}, 10000);
+    const response = await fetchWithTimeout(
+      'https://pypi.org/pypi/modelaudit/json',
+      {
+        headers: { 'x-promptfoo-silent': 'true' },
+      },
+      10000,
+    );
     if (!response.ok) {
       return null;
     }

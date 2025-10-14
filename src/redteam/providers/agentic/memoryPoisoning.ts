@@ -38,7 +38,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
       const targetProvider: ApiProvider | undefined = context?.originalProvider;

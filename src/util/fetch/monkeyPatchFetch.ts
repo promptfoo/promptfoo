@@ -1,6 +1,13 @@
+import { promisify } from 'util';
+import { gzip } from 'zlib';
+
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
+
+import type { FetchOptions } from './types';
+
+const gzipAsync = promisify(gzip);
 
 function isConnectionError(error: Error) {
   return (
@@ -12,21 +19,37 @@ function isConnectionError(error: Error) {
 }
 
 /**
- * Enhanced fetch wrapper that adds logging, authentication, and error handling
+ * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
  */
 
 export async function monkeyPatchFetch(
   url: string | URL | Request,
-  options?: RequestInit,
+  options?: FetchOptions,
 ): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
   const headers = (options?.headers as Record<string, string>) || {};
   const isSilent = headers['x-promptfoo-silent'] === 'true';
   const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl)) && !isSilent;
 
-  const opts = {
+  const opts: RequestInit = {
     ...options,
   };
+
+  const originalBody = opts.body;
+
+  // Handle compression if requested
+  if (options?.compress && opts.body && typeof opts.body === 'string') {
+    try {
+      const compressed = await gzipAsync(opts.body);
+      opts.body = compressed as BodyInit;
+      opts.headers = {
+        ...(opts.headers || {}),
+        'Content-Encoding': 'gzip',
+      };
+    } catch (e) {
+      logger.warn(`Failed to compress request body: ${e}`);
+    }
+  }
 
   if (
     (typeof url === 'string' && url.startsWith(CLOUD_API_HOST)) ||
@@ -34,7 +57,7 @@ export async function monkeyPatchFetch(
   ) {
     const token = cloudConfig.getApiKey();
     opts.headers = {
-      ...(options?.headers || {}),
+      ...(opts.headers || {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
   }
@@ -45,7 +68,7 @@ export async function monkeyPatchFetch(
     if (logEnabled) {
       logRequestResponse({
         url: url.toString(),
-        requestBody: opts.body,
+        requestBody: originalBody,
         requestMethod: opts.method || 'GET',
         response,
       });
@@ -59,15 +82,14 @@ export async function monkeyPatchFetch(
         requestBody: opts.body,
         requestMethod: opts.method || 'GET',
         response: null,
-        error: true,
       });
       if (isConnectionError(e as Error)) {
-        logger.error(
+        logger.debug(
           `Connection error, please check your network connectivity to the host: ${url} ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY ? `or Proxy: ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY}` : ''}`,
         );
         throw e;
       }
-      logger.error(
+      logger.debug(
         `Error in fetch: ${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`,
       );
     }

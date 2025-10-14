@@ -12,13 +12,13 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { renderVarsInObject } from '../util/index';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { safeResolve } from '../util/pathUtils';
-import { sanitizeUrl } from '../util/sanitizer';
+import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { REQUEST_TIMEOUT_MS } from './shared';
@@ -35,7 +35,7 @@ import type {
  * Escapes string values in variables for safe JSON template substitution.
  * Converts { key: "value\nwith\nnewlines" } to { key: "value\\nwith\\nnewlines" }
  */
-function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
+export function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
   return Object.fromEntries(
     Object.entries(vars).map(([key, value]) => [
       key,
@@ -165,133 +165,6 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
   }
 
   return processedAuth;
-}
-
-/**
- * Sanitizes authentication-related headers in response headers before saving to metadata.
- * This redacts sensitive auth tokens while preserving the header names.
- */
-function sanitizeAuthHeaders(headers: Record<string, string> | undefined): Record<string, string> {
-  if (!headers || typeof headers !== 'object') {
-    return headers || {};
-  }
-
-  const sanitized: Record<string, string> = {};
-  const sensitivePatterns = [
-    'authorization',
-    'x-api-key',
-    'api-key',
-    'x-auth-token',
-    'auth-token',
-    'x-access-token',
-    'access-token',
-    'x-secret',
-    'secret',
-    'token',
-    'apikey',
-    'password',
-    'cookie',
-    'x-csrf-token',
-    'csrf-token',
-    'session',
-  ];
-
-  for (const [key, value] of Object.entries(headers)) {
-    const lowerKey = key.toLowerCase();
-    // Check if the header name contains any sensitive patterns
-    const isSensitive = sensitivePatterns.some((pattern) => lowerKey.includes(pattern));
-
-    if (isSensitive) {
-      sanitized[key] = '[REDACTED]';
-    } else {
-      sanitized[key] = value;
-    }
-  }
-
-  return sanitized;
-}
-
-/**
- * Sanitizes configuration objects by redacting sensitive fields before logging.
- * Prevents passwords and other secrets from appearing in debug logs.
- */
-function sanitizeConfigForLogging(config: any): any {
-  if (!config || typeof config !== 'object') {
-    return config;
-  }
-
-  const sanitized = { ...config };
-
-  // Sanitize signature authentication credentials
-  if (sanitized.signatureAuth) {
-    sanitized.signatureAuth = { ...sanitized.signatureAuth };
-
-    // Redact sensitive fields
-    if (sanitized.signatureAuth.pfxPassword) {
-      sanitized.signatureAuth.pfxPassword = '[REDACTED]';
-    }
-    if (sanitized.signatureAuth.keystorePassword) {
-      sanitized.signatureAuth.keystorePassword = '[REDACTED]';
-    }
-    if (sanitized.signatureAuth.privateKey) {
-      sanitized.signatureAuth.privateKey = '[REDACTED]';
-    }
-    // Redact certificate fields
-    if (sanitized.signatureAuth.certificateContent) {
-      sanitized.signatureAuth.certificateContent = '[REDACTED]';
-    }
-    if (sanitized.signatureAuth.certificatePassword) {
-      sanitized.signatureAuth.certificatePassword = '[REDACTED]';
-    }
-    if (sanitized.signatureAuth.pfxContent) {
-      sanitized.signatureAuth.pfxContent = '[REDACTED]';
-    }
-    if (sanitized.signatureAuth.keystoreContent) {
-      sanitized.signatureAuth.keystoreContent = '[REDACTED]';
-    }
-    if (sanitized.signatureAuth.keyContent) {
-      sanitized.signatureAuth.keyContent = '[REDACTED]';
-    }
-    if (sanitized.signatureAuth.certContent) {
-      sanitized.signatureAuth.certContent = '[REDACTED]';
-    }
-  }
-
-  // Sanitize other potential sensitive fields
-  if (sanitized.password) {
-    sanitized.password = '[REDACTED]';
-  }
-  if (sanitized.apiKey) {
-    sanitized.apiKey = '[REDACTED]';
-  }
-  if (sanitized.token) {
-    sanitized.token = '[REDACTED]';
-  }
-  // Sanitize certificate fields at root level
-  if (sanitized.certificateContent) {
-    sanitized.certificateContent = '[REDACTED]';
-  }
-  if (sanitized.certificatePassword) {
-    sanitized.certificatePassword = '[REDACTED]';
-  }
-
-  // Sanitize headers that might contain sensitive information
-  if (sanitized.headers) {
-    sanitized.headers = { ...sanitized.headers };
-    for (const [key, _value] of Object.entries(sanitized.headers)) {
-      const lowerKey = key.toLowerCase();
-      if (
-        lowerKey.includes('authorization') ||
-        lowerKey.includes('api-key') ||
-        lowerKey.includes('token') ||
-        lowerKey.includes('password')
-      ) {
-        sanitized.headers[key] = '[REDACTED]';
-      }
-    }
-  }
-
-  return sanitized;
 }
 
 /**
@@ -1202,54 +1075,87 @@ export async function createTransformRequest(
     };
   }
 
-  if (typeof transform === 'string') {
-    if (transform.startsWith('file://')) {
-      let filename = transform.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
+  if (typeof transform === 'string' && transform.startsWith('file://')) {
+    let filename = transform.slice('file://'.length);
+    let functionName: string | undefined;
+    if (filename.includes(':')) {
+      const splits = filename.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filename, functionName] = splits;
       }
-      const requiredModule = await importModule(
-        path.resolve(cliState.basePath || '', filename),
-        functionName,
-      );
-      if (typeof requiredModule === 'function') {
-        return async (prompt, vars, context) => {
-          try {
-            return await requiredModule(prompt, vars, context);
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            const wrappedError = new Error(
-              `Error in request transform function from ${filename}: ${errorMessage}`,
-            );
-            logger.error(wrappedError.message);
-            throw wrappedError;
-          }
-        };
-      }
-      throw new Error(
-        `Request transform malformed: ${filename} must export a function or have a default export as a function`,
-      );
     }
-    // Handle string template
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
+    if (typeof requiredModule === 'function') {
+      return async (prompt, vars, context) => {
+        try {
+          return await requiredModule(prompt, vars, context);
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          const wrappedError = new Error(
+            `Error in request transform function from ${filename}: ${errorMessage}`,
+          );
+          logger.error(wrappedError.message);
+          throw wrappedError;
+        }
+      };
+    }
+    throw new Error(
+      `Request transform malformed: ${filename} must export a function or have a default export as a function`,
+    );
+  } else if (typeof transform === 'string') {
     return async (prompt, vars, context) => {
       try {
-        const rendered = getNunjucksEngine().renderString(transform, { prompt, vars, context });
-        return await new Function('prompt', 'vars', 'context', `${rendered}`)(
-          prompt,
-          vars,
-          context,
-        );
+        const trimmedTransform = transform.trim();
+        // Check if it's a function expression (either arrow or regular)
+        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
+
+        let transformFn: Function;
+        if (isFunctionExpression) {
+          // For function expressions, call them with the arguments
+          transformFn = new Function(
+            'prompt',
+            'vars',
+            'context',
+            `try { return (${trimmedTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`,
+          );
+        } else {
+          // Check if it contains a return statement
+          const hasReturn = /\breturn\b/.test(trimmedTransform);
+
+          if (hasReturn) {
+            // Use as function body if it has return statements
+            transformFn = new Function(
+              'prompt',
+              'vars',
+              'context',
+              `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+            );
+          } else {
+            // Wrap simple expressions with return
+            transformFn = new Function(
+              'prompt',
+              'vars',
+              'context',
+              `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+            );
+          }
+        }
+
+        let result: any;
+        if (context) {
+          result = await transformFn(prompt, vars, context);
+        } else {
+          result = await transformFn(prompt, vars);
+        }
+        return result;
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(
-          `Error in request transform string template: ${errorMessage}`,
+        logger.error(
+          `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(sanitizeObject(context, { context: 'request transform' }))}.`,
         );
-        logger.error(wrappedError.message);
-        throw wrappedError;
+        throw new Error(`Failed to transform request: ${String(err)}`);
       }
     };
   }
@@ -1288,7 +1194,7 @@ export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
 ): Promise<(status: number) => boolean> {
   if (!validator) {
-    return (status: number) => true;
+    return (_status: number) => true;
   }
 
   if (typeof validator === 'function') {
@@ -1813,9 +1719,9 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
-    logger.debug(
-      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with config: ${safeJsonStringify(sanitizeConfigForLogging(renderedConfig))}`,
-    );
+    logger.debug(`[HTTP Provider]: Calling ${sanitizeUrl(url)} with config.`, {
+      config: renderedConfig,
+    });
 
     // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
@@ -1861,9 +1767,13 @@ export class HttpProvider implements ApiProvider {
       http: {
         status: response.status,
         statusText: response.statusText,
-        headers: sanitizeAuthHeaders(response.headers),
+        headers: sanitizeObject(response.headers, { context: 'response headers' }),
       },
     };
+    if (context?.debug) {
+      ret.metadata.transformedRequest = transformedPrompt;
+      ret.metadata.finalRequestBody = renderedConfig.body;
+    }
 
     const rawText = response.data as string;
     let parsedData;
@@ -1883,7 +1793,7 @@ export class HttpProvider implements ApiProvider {
       }
     } catch (err) {
       logger.error(
-        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(response.headers)} and parsed body: ${safeJsonStringify(parsedData)}`,
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(response.headers, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
       );
       throw err;
     }
@@ -1912,10 +1822,14 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
-    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, {
+    // JSON-escape all string variables for safe substitution in raw request body
+    // This prevents control characters and quotes from breaking JSON strings
+    const escapedVars = escapeJsonVariables({
       ...vars,
       prompt: transformedPrompt,
     });
+
+    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
@@ -1928,7 +1842,10 @@ export class HttpProvider implements ApiProvider {
     delete parsedRequest.headers['content-length'];
 
     logger.debug(
-      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(sanitizeConfigForLogging({ headers: parsedRequest.headers }).headers)}`,
+      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
+      {
+        request: parsedRequest,
+      },
     );
 
     // Prepare fetch options with dispatcher if HTTPS agent is configured
@@ -1973,7 +1890,13 @@ export class HttpProvider implements ApiProvider {
     if (context?.debug) {
       ret.raw = response.data;
       ret.metadata = {
-        headers: sanitizeAuthHeaders(response.headers),
+        headers: sanitizeObject(response.headers, { context: 'response headers' }),
+        // If no transform was applied, show the final raw request body with nunjucks applied
+        // Otherwise show the transformed prompt
+        transformedRequest: this.config.transformRequest
+          ? transformedPrompt
+          : parsedRequest.body?.text || renderedRequest.trim(),
+        finalRequestBody: parsedRequest.body?.text,
       };
     }
 

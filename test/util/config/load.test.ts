@@ -11,7 +11,6 @@ import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
 import { type UnifiedConfig } from '../../../src/types';
-import { isRunningUnderNpx } from '../../../src/util/index';
 import {
   combineConfigs,
   dereferenceConfig,
@@ -29,6 +28,10 @@ jest.mock('fs');
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 
 jest.mock('proxy-agent', () => ({
@@ -57,8 +60,27 @@ jest.mock('../../../src/logger', () => ({
 
 jest.mock('../../../src/util', () => ({
   ...jest.requireActual('../../../src/util'),
-  isRunningUnderNpx: jest.fn(),
 }));
+
+jest.mock('../../../src/util/promptfooCommand', () => {
+  const mockPromptfooCommand = jest.fn();
+  const mockIsRunningUnderNpx = jest.fn();
+
+  // Set up the mock to return appropriate values based on isRunningUnderNpx
+  mockPromptfooCommand.mockImplementation((cmd) => {
+    const isNpx = mockIsRunningUnderNpx();
+    if (cmd === '') {
+      return isNpx ? 'npx promptfoo@latest' : 'promptfoo';
+    }
+    return isNpx ? `npx promptfoo@latest ${cmd}` : `promptfoo ${cmd}`;
+  });
+
+  return {
+    promptfooCommand: mockPromptfooCommand,
+    detectInstaller: jest.fn().mockReturnValue('unknown'),
+    isRunningUnderNpx: mockIsRunningUnderNpx,
+  };
+});
 
 jest.mock('../../../src/util/file', () => ({
   ...jest.requireActual('../../../src/util/file'),
@@ -1420,6 +1442,7 @@ describe('resolveConfigs', () => {
       throw new Error(`Process exited with code ${code}`);
     });
     jest.mocked(isCI).mockReturnValue(false);
+    const { isRunningUnderNpx } = require('../../../src/util/promptfooCommand');
     jest.mocked(isRunningUnderNpx).mockReturnValue(true);
 
     const cmdObj = {};
@@ -1430,8 +1453,10 @@ describe('resolveConfigs', () => {
     );
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo eval -c'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo init'));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('npx promptfoo@latest eval -c'),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest init'));
   });
 
   it('should throw an error if no providers are provided', async () => {

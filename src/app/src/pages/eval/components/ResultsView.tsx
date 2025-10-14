@@ -56,6 +56,7 @@ import './ResultsView.css';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -471,7 +472,23 @@ export default function ResultsView({
   );
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
-  const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
+  const resultsChartsScores = React.useMemo(() => {
+    if (!table?.body) {
+      return [];
+    }
+    return table?.body
+      .flatMap((row) => row.outputs.map((output) => output?.score))
+      .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+  }, [table]);
+
+  const canRenderResultsCharts =
+    table &&
+    config &&
+    table.head.prompts.length > 1 &&
+    // No valid scores available
+    resultsChartsScores.length > 0 &&
+    // All scores are the same, charts not useful.
+    new Set(resultsChartsScores).size > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
@@ -645,6 +662,11 @@ export default function ResultsView({
                         const severityDisplay =
                           filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
                         label = `Severity: ${severityDisplay}`;
+                      } else if (filter.type === 'policy') {
+                        // For policy filters, use the policy name from the mapping
+                        // This should match the display format used in the dropdown
+                        const policyName = filters.policyIdToNameMap?.[filter.value];
+                        label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
                       } else {
                         // metadata type
                         label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
@@ -788,7 +810,10 @@ export default function ResultsView({
             </Box>
           </ResponsiveStack>
           {canRenderResultsCharts && renderResultsCharts && (
-            <ResultsCharts handleHideCharts={() => setRenderResultsCharts(false)} />
+            <ResultsCharts
+              handleHideCharts={() => setRenderResultsCharts(false)}
+              scores={resultsChartsScores}
+            />
           )}
         </Box>
         <ResultsTable
@@ -800,7 +825,6 @@ export default function ResultsView({
           failureFilter={failureFilter}
           debouncedSearchText={debouncedSearchValue}
           onFailureFilterToggle={handleFailureFilterToggle}
-          onSearchTextChange={handleSearchTextChange}
           zoom={resultsTableZoom}
         />
       </Box>

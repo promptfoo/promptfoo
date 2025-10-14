@@ -1,7 +1,7 @@
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 
@@ -100,7 +100,7 @@ export function handleApiError(err: any, data?: any): ProviderModerationResponse
   return { error: err.message || 'Unknown error', flags: [] };
 }
 
-export function getModerationCacheKey(modelName: string, config: any, content: string): string {
+export function getModerationCacheKey(modelName: string, _config: any, content: string): string {
   return `azure-moderation:${modelName}:${JSON.stringify(content)}`;
 }
 
@@ -157,7 +157,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   }
 
   async callModerationApi(
-    userPrompt: string,
+    _userPrompt: string,
     assistantResponse: string,
   ): Promise<ProviderModerationResponse> {
     await this.ensureInitialized();

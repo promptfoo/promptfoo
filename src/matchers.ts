@@ -18,7 +18,7 @@ import {
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
-} from './prompts';
+} from './prompts/index';
 import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
@@ -444,7 +444,7 @@ export async function renderLlmRubricPrompt(
   try {
     // Render every string scalar within the JSON
     // Does not render object keys (only values)
-    const parsed = JSON.parse(rubricPrompt, (k, v) =>
+    const parsed = JSON.parse(rubricPrompt, (_k, v) =>
       typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
     );
     return JSON.stringify(parsed);
@@ -462,7 +462,7 @@ export async function matchesLlmRubric(
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-  assertion?: Assertion | null,
+  assertion?: Assertion,
   options?: {
     throwOnError?: boolean;
   },
@@ -601,7 +601,7 @@ export async function matchesPiScore(
   renderedValue: string,
   llmInput: string,
   llmOutput: string,
-  assertion?: Assertion | null,
+  assertion?: Assertion,
 ): Promise<GradingResult> {
   return {
     ...(await doRemoteScoringWithPi(
@@ -1348,7 +1348,7 @@ export async function matchesSelectBest(
       rejectedPrediction: 0,
     },
   };
-  return outputs.map((output, index) => {
+  return outputs.map((_output, index) => {
     if (index === verdict) {
       return {
         pass: true,

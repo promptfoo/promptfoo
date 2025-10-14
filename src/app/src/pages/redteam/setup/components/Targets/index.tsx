@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
@@ -11,36 +10,30 @@ import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
 import Prompts from '../Prompts';
 import ProviderEditor from './ProviderEditor';
-import TestTargetConfiguration from './TestTargetConfiguration';
-import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 
 import type { ProviderOptions } from '../../types';
 
 interface TargetsProps {
   onNext?: () => void;
   onBack?: () => void;
-  setupModalOpen?: boolean;
 }
 
 const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
+export default function Targets({ onNext, onBack }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
-  const [testingTarget, setTestingTarget] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success?: boolean;
-    message?: string;
-    suggestions?: string[];
-    providerResponse?: ProviderResponse;
-  } | null>(null);
+
   const [providerError, setProviderError] = useState<string | null>(null);
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
-  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
+
+  // Track test states for HTTP providers
+  const [isTargetTested, setIsTargetTested] = useState(false);
+  const [isSessionTested, setIsSessionTested] = useState(false);
 
   const { recordEvent } = useTelemetry();
 
@@ -51,86 +44,35 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   useEffect(() => {
     updateConfig('target', selectedTarget);
     setPromptRequired(requiresPrompt(selectedTarget));
-    setTestingEnabled(selectedTarget.id === 'http');
+    // Reset test states when provider changes
+    if (selectedTarget.id === 'http') {
+      // Don't reset test states for HTTP providers when config changes
+    } else {
+      // For non-HTTP providers, reset test states
+      setIsTargetTested(false);
+      setIsSessionTested(false);
+    }
   }, [selectedTarget, updateConfig]);
 
   const handleProviderChange = (provider: ProviderOptions) => {
-    setSelectedTarget(provider);
+    setSelectedTarget((prev) => {
+      if (prev.id !== provider.id) {
+        // Reset test states when provider changes
+        setIsTargetTested(false);
+        setIsSessionTested(false);
+        return provider;
+      }
+      return prev;
+    });
     recordEvent('feature_used', { feature: 'redteam_config_target_changed', target: provider.id });
   };
 
-  const handleTestTarget = async () => {
-    setTestingTarget(true);
-    setTestResult(null);
-    recordEvent('feature_used', { feature: 'redteam_config_target_test' });
-    try {
-      const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), 30000);
+  const handleTargetTested = (success: boolean) => {
+    setIsTargetTested(success);
+  };
 
-      const response = await callApi('/providers/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(selectedTarget),
-        signal: abortController.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      // Handle PF Server Errors:
-      if (!response.ok) {
-        let errorMessage = 'Network response was not ok';
-        try {
-          const errorData = (await response.json()) as { error?: string };
-          if (errorData.error) {
-            errorMessage = errorData.error;
-          }
-        } catch {
-          // ignore json parsing errors
-        }
-        throw new Error(errorMessage);
-      }
-
-      const data = (await response.json()) as ProviderTestResponse;
-
-      const result = data.testResult;
-
-      if (result.error) {
-        setTestResult({
-          providerResponse: data.providerResponse,
-        });
-      } else if (result.changes_needed) {
-        setTestResult({
-          success: false,
-          message: result.changes_needed_reason,
-          suggestions: result.changes_needed_suggestions,
-          providerResponse: data.providerResponse,
-        });
-      } else {
-        setTestResult({
-          success: true,
-          message: 'Target configuration is valid!',
-          providerResponse: data.providerResponse,
-        });
-      }
-    } catch (error) {
-      console.error('Error testing target:', error);
-      let message: string;
-
-      if (error instanceof Error && error.name === 'AbortError') {
-        message = 'Request timed out after 30 seconds';
-      } else {
-        message = error instanceof Error ? error.message : String(error);
-      }
-
-      setTestResult({
-        success: false,
-        message,
-      });
-    } finally {
-      setTestingTarget(false);
-    }
+  const handleSessionTested = (success: boolean) => {
+    setIsSessionTested(success);
   };
 
   const isProviderValid = () => {
@@ -142,11 +84,13 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     // Additional validation for HTTP and WebSocket providers
     if (selectedTarget.id === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
-      if (selectedTarget.config.request !== undefined) {
-        return selectedTarget.config.request?.trim() !== '';
-      } else {
-        return !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
-      }
+      const hasConfig =
+        selectedTarget.config.request !== undefined
+          ? selectedTarget.config.request?.trim() !== ''
+          : !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
+
+      // For HTTP providers, require both tests to be completed
+      return hasConfig && isTargetTested && isSessionTested;
     }
 
     if (selectedTarget.id === 'websocket') {
@@ -172,6 +116,15 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         if (!selectedTarget.config.url || !selectedTarget.config.url.trim()) {
           return 'Valid URL is required';
         }
+      }
+
+      // Check test requirements for HTTP providers
+      if (!isTargetTested && !isSessionTested) {
+        return 'Please test both your target configuration and session settings before proceeding';
+      } else if (!isTargetTested) {
+        return 'Please test your target configuration before proceeding';
+      } else if (!isSessionTested) {
+        return 'Please test your session settings before proceeding';
       }
     }
 
@@ -229,16 +182,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             actionButtonText: 'Next',
           }}
           setError={setProviderError}
+          onTargetTested={handleTargetTested}
+          onSessionTested={handleSessionTested}
         />
-
-        {testingEnabled && (
-          <TestTargetConfiguration
-            testingTarget={testingTarget}
-            handleTestTarget={handleTestTarget}
-            selectedTarget={selectedTarget}
-            testResult={testResult}
-          />
-        )}
 
         {promptRequired && <Prompts />}
       </Stack>

@@ -24,8 +24,8 @@ import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Modal from '@mui/material/Modal';
-import Paper from '@mui/material/Paper';
 import OutlinedInput from '@mui/material/OutlinedInput';
+import Paper from '@mui/material/Paper';
 import Select, { type SelectChangeEvent } from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -47,6 +47,7 @@ import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import './Report.css';
 
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -54,8 +55,7 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-
-import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import { type TestResultStats, type CategoryStats } from './FrameworkComplianceUtils';
 
 const App = () => {
   const navigate = useNavigate();
@@ -161,6 +161,8 @@ const App = () => {
       }
 
       // Exclude results with errors from being counted as failures
+      // TODO: Errors which arise while grading may be mis-classified as ResultFailureReason.ASSERT
+      // and leak past this check. Check `result.gradingResult.reason` for errors e.g. "API call error: *".
       if (result.error && result.failureReason === ResultFailureReason.ERROR) {
         return;
       }
@@ -238,7 +240,7 @@ const App = () => {
           return acc;
         }
 
-        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
         acc[pluginId].total++;
 
         // Check if moderation tests failed but other tests passed - this indicates content was
@@ -253,9 +255,15 @@ const App = () => {
         } else if (moderationPassed) {
           acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
         }
+
+        // Increment for grader-originated failures
+        if (row.failureReason === ResultFailureReason.ASSERT) {
+          acc[pluginId].failCount++;
+        }
+
         return acc;
       },
-      {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
+      {} as Record<string, Required<TestResultStats>>,
     );
   }, [evalData]);
 
@@ -264,32 +272,31 @@ const App = () => {
       return {};
     }
 
-    const stats: Record<string, { pass: number; total: number }> = {};
+    const stats: CategoryStats = {};
 
-    // Process tests in failuresByPlugin (attack successes)
     Object.values(failuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const strategyId = getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
-        stats[strategyId].pass += 1;
         stats[strategyId].total += 1;
+        stats[strategyId].failCount += 1;
       });
     });
 
-    // Process tests in passesByPlugin (attack failures)
     Object.values(passesByPlugin).forEach((tests) => {
       tests.forEach((test) => {
         const strategyId = getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
         stats[strategyId].total += 1;
+        stats[strategyId].pass += 1;
       });
     });
 
@@ -394,16 +401,22 @@ const App = () => {
     return filtered;
   }, [passesByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
 
+  /**
+   * Recalculates category (plugin) stats given the filtered failures and passes.
+   */
   const filteredCategoryStats = React.useMemo(() => {
-    const stats: Record<string, { pass: number; total: number; passWithFilter: number }> = {};
+    const stats: Record<string, Required<TestResultStats>> = {};
 
     Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
-      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      // Initialize the stats for the plugin
+      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
       stats[pluginId].total += tests.length;
+      stats[pluginId].failCount += tests.length;
     });
 
     Object.entries(filteredPassesByPlugin).forEach(([pluginId, tests]) => {
-      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
+      // Initialize the stats for the plugin if it doesn't already exist
+      stats[pluginId] = stats[pluginId] || { pass: 0, total: 0, passWithFilter: 0, failCount: 0 };
       stats[pluginId].pass += tests.length;
       stats[pluginId].passWithFilter += tests.length;
       stats[pluginId].total += tests.length;
@@ -413,7 +426,7 @@ const App = () => {
   }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
 
   const filteredStrategyStats = React.useMemo(() => {
-    const stats: Record<string, { pass: number; total: number }> = {};
+    const stats: CategoryStats = {};
 
     Object.values(filteredFailuresByPlugin).forEach((tests) => {
       tests.forEach((test) => {
@@ -421,10 +434,10 @@ const App = () => {
           test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
-        stats[strategyId].pass += 1;
+        stats[strategyId].failCount += 1;
         stats[strategyId].total += 1;
       });
     });
@@ -435,15 +448,58 @@ const App = () => {
           test?.result?.testCase?.metadata?.strategyId || getStrategyIdFromTest(test);
 
         if (!stats[strategyId]) {
-          stats[strategyId] = { pass: 0, total: 0 };
+          stats[strategyId] = { pass: 0, total: 0, failCount: 0 };
         }
 
         stats[strategyId].total += 1;
+        stats[strategyId].pass += 1;
       });
     });
 
     return stats;
   }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
+
+  const hasActiveFilters =
+    selectedCategories.length > 0 ||
+    selectedStrategies.length > 0 ||
+    statusFilter !== 'all' ||
+    Boolean(searchQuery);
+
+  /**
+   * Extracts custom policy IDs from the results in order to then
+   * filter policies from the categories stats for the framework compliance section.
+   */
+  const customPolicyIds = React.useMemo(() => {
+    const ids = new Set();
+    if (!evalData) {
+      return ids;
+    }
+
+    evalData.results.results.forEach((row) => {
+      if (row.metadata?.pluginId === 'policy') {
+        ids.add(getPluginIdFromResult(row));
+      }
+    });
+
+    return ids;
+  }, [evalData]);
+
+  /**
+   * Constructs category stats for the framework compliance section.
+   *
+   * - Determines whether to use filtered or unfiltered category stats based on the presence of active filters.
+   * - Removes custom policies; they do not belong to any framework.
+   */
+  const categoryStatsForFrameworkCompliance = React.useMemo(() => {
+    const stats = { ...(hasActiveFilters ? filteredCategoryStats : categoryStats) };
+    // Remove custom policies; they do not belong to any framework.
+    Object.keys(stats).forEach((pluginId) => {
+      if (customPolicyIds.has(pluginId)) {
+        delete stats[pluginId];
+      }
+    });
+    return stats;
+  }, [hasActiveFilters, filteredCategoryStats, categoryStats, customPolicyIds]);
 
   usePageMeta({
     title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
@@ -528,12 +584,6 @@ const App = () => {
     setStatusFilter('all');
     setSearchQuery('');
   };
-
-  const hasActiveFilters =
-    selectedCategories.length > 0 ||
-    selectedStrategies.length > 0 ||
-    statusFilter !== 'all' ||
-    Boolean(searchQuery);
 
   const ActionButtons = () => (
     <>
@@ -823,7 +873,6 @@ const App = () => {
           />
           <RiskCategories
             categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
-            strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
             evalId={evalId}
             failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
             passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
@@ -840,8 +889,7 @@ const App = () => {
           />
           <FrameworkCompliance
             evalId={evalId}
-            categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
-            strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
+            categoryStats={categoryStatsForFrameworkCompliance}
           />
         </Stack>
         <Modal

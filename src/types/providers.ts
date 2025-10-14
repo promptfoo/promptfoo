@@ -207,6 +207,7 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
 
 export interface ProviderTestResponse {
   testResult: {
+    message?: string;
     error?: string;
     changes_needed?: boolean;
     changes_needed_reason?: string;
@@ -215,6 +216,7 @@ export interface ProviderTestResponse {
   providerResponse: ProviderResponse;
   unalignedProviderResult?: ProviderResponse;
   redteamProviderResult?: ProviderResponse;
+  transformedRequest?: any;
 }
 
 /**

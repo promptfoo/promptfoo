@@ -44,6 +44,7 @@ import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerforma
 import EvalResult from './evalResult';
 
 import type { EvalResultsFilterMode } from '../types/index';
+import { calculateAttackSuccessRate } from '../redteam/metrics';
 
 interface FilteredCountRow {
   count: number | null;
@@ -177,6 +178,7 @@ export default class Eval {
   vars: string[];
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+  _shared: boolean = false;
 
   static async latest() {
     const db = getDb();
@@ -273,6 +275,7 @@ export default class Eval {
       results?: EvalResult[];
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      completedPrompts?: CompletedPrompt[];
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -293,6 +296,7 @@ export default class Eval {
           results: {},
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+          prompts: opts?.completedPrompts || [],
         })
         .run();
 
@@ -522,6 +526,8 @@ export default class Eval {
       conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
     } else if (mode === 'passes') {
       conditions.push(`success = 1`);
+    } else if (mode === 'highlights') {
+      conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
     }
 
     // Add filters
@@ -530,25 +536,32 @@ export default class Eval {
       // Helper function to sanitize SQL string values
       const sanitizeValue = (val: string) => val.replace(/'/g, "''");
 
+      // Helper function to escape JSON path keys (quotes & backslashes) for safe SQLite json_extract() usage
+      const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
       opts.filters.forEach((filter) => {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
         if (type === 'metric' && operator === 'equals') {
-          const sanitizedValue = sanitizeValue(value);
+          const escapedValue = escapeJsonPathKey(value);
           // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
           // in double quotes.
-          condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
+          condition = `json_extract(named_scores, '$."${escapedValue}"') IS NOT NULL`;
         } else if (type === 'metadata' && field) {
           const sanitizedValue = sanitizeValue(value);
-          const sanitizedField = sanitizeValue(field);
+          const escapedField = escapeJsonPathKey(field);
 
           if (operator === 'equals') {
-            condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
+            condition = `json_extract(metadata, '$."${escapedField}"') = '${sanitizedValue}'`;
           } else if (operator === 'contains') {
-            condition = `json_extract(metadata, '$."${sanitizedField}"') LIKE '%${sanitizedValue}%'`;
+            condition = `json_extract(metadata, '$."${escapedField}"') LIKE '%${sanitizedValue}%'`;
           } else if (operator === 'not_contains') {
-            condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
+            condition = `(json_extract(metadata, '$."${escapedField}"') IS NULL OR json_extract(metadata, '$."${escapedField}"') NOT LIKE '%${sanitizedValue}%')`;
+          } else if (operator === 'exists') {
+            // For exists, check if the field is present AND not empty (not null, not empty string, not just whitespace)
+            // Use a single json_extract call with LENGTH(TRIM()) for better performance
+            condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${escapedField}"'), ''))) > 0`;
           }
         } else if (type === 'plugin' && operator === 'equals') {
           const sanitizedValue = sanitizeValue(value);
@@ -606,6 +619,9 @@ export default class Eval {
           } else {
             condition = `(${explicit})`;
           }
+        } else if (type === 'policy' && operator === 'equals') {
+          const sanitizedValue = sanitizeValue(value);
+          condition = `(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE '%${sanitizedValue}%')`;
         }
 
         if (condition) {
@@ -888,6 +904,14 @@ export default class Eval {
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
+
+  get shared() {
+    return this._shared;
+  }
+
+  set shared(shared: boolean) {
+    this._shared = shared;
+  }
 }
 
 /**
@@ -945,6 +969,11 @@ export async function getEvalSummaries(
     const passCount =
       result.prompts?.reduce((memo, prompt) => {
         return memo + (prompt.metrics?.testPassCount ?? 0);
+      }, 0) ?? 0;
+
+    const failCount =
+      result.prompts?.reduce((memo, prompt) => {
+        return memo + (prompt.metrics?.testFailCount ?? 0);
       }, 0) ?? 0;
 
     // All prompts should have the same number of test cases:
@@ -1012,9 +1041,11 @@ export async function getEvalSummaries(
       numTests: testCount,
       datasetId: result.datasetId,
       isRedteam: result.isRedteam,
-      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0, // ASR
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,
+      attackSuccessRate:
+        type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
     };
   });
 }

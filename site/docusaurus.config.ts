@@ -1,8 +1,9 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { themes } from 'prism-react-renderer';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config } from '@docusaurus/types';
-import * as fs from 'fs';
-import * as path from 'path';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
@@ -26,7 +27,6 @@ const config: Config = {
   projectName: 'promptfoo', // Usually your repo name.
 
   onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'throw',
   onBrokenAnchors: 'throw',
   // Even if you don't use internalization, you can use this field to set useful
   // metadata like html lang. For example, if your site is Chinese, you may want
@@ -79,6 +79,9 @@ const config: Config = {
           sidebarCollapsed: false,
           showLastUpdateAuthor: true,
           showLastUpdateTime: true,
+          exclude: [
+            '**/CLAUDE.md', // Exclude Claude Code context files
+          ],
         },
         blog: {
           showReadingTime: false,
@@ -213,10 +216,8 @@ const config: Config = {
           label: 'Log in',
         },
         {
-          href: 'https://github.com/promptfoo/promptfoo',
+          type: 'custom-githubStars',
           position: 'right',
-          className: 'header-github-link',
-          'aria-label': 'GitHub repository',
         },
         {
           href: 'https://discord.gg/promptfoo',
@@ -524,6 +525,9 @@ const config: Config = {
   // Mermaid diagram support
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: 'throw',
+    },
   },
   themes: ['@docusaurus/theme-mermaid'],
 };

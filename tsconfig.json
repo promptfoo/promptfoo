@@ -26,5 +26,12 @@
     "test/**/*.json",
     "src/types/globals.d.ts"
   ],
-  "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*", "test/site/"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/workers/**/*",
+    "src/app/**/*",
+    "test/app/**/*",
+    "test/site/"
+  ]
 }
