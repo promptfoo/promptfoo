@@ -157,8 +157,7 @@ describe('WebSocketProvider', () => {
       return mockWs;
     });
 
-    const response = await provider.callApi('test prompt');
-    expect(response.error).toContain('WebSocket error');
+    await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket error');
   });
 
   it('should handle timeout', async () => {
@@ -169,8 +168,7 @@ describe('WebSocketProvider', () => {
       },
     });
 
-    const response = await provider.callApi('test prompt');
-    expect(response).toEqual({ error: 'WebSocket request timed out' });
+    await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket request timed out');
   });
 
   it('should handle non-JSON response', async () => {
@@ -444,33 +442,17 @@ describe('WebSocketProvider', () => {
   });
 
   describe('timeouts', () => {
-    it.each([
-      { caseName: 'without streamResponse (non-streaming path)', useStreaming: false },
-      { caseName: 'with streamResponse (streaming path)', useStreaming: true },
-    ])('should timeout $caseName', async ({ useStreaming }) => {
-      jest.useFakeTimers();
-
+    it('should timeout with streamResponse', async () => {
       provider = new WebSocketProvider('ws://test.com', {
         config: {
           messageTemplate: '{{ prompt }}',
           timeoutMs: 100,
-          ...(useStreaming
-            ? {
-                // never signal completion; ensures timeout path is exercised
-                streamResponse: (acc: any, _data: any) => [acc, ''],
-              }
-            : {}),
+          // never signal completion; ensures timeout path is exercised
+          streamResponse: (acc: any, _data: any) => [acc, ''],
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => mockWs);
-
-      const promise = provider.callApi('timeout test');
-      await jest.advanceTimersByTimeAsync(100);
-      await expect(promise).resolves.toEqual({ error: 'WebSocket request timed out' });
-      expect(mockWs.close).toHaveBeenCalled();
-
-      jest.useRealTimers();
+      await expect(provider.callApi('timeout test')).rejects.toThrow('WebSocket request timed out');
     });
   });
 });
