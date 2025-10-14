@@ -82,6 +82,57 @@ export function handleServerError(error: NodeJS.ErrnoException, port: number): v
   process.exit(1);
 }
 
+/**
+ * Attempts to start server on an available port, trying sequential ports if needed.
+ * Returns a promise that resolves with the actual port used.
+ */
+async function listenOnAvailablePort(
+  httpServer: http.Server,
+  startPort: number,
+  maxAttempts: number = 10,
+): Promise<number> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const port = startPort + attempt;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: NodeJS.ErrnoException) => {
+          if (error.code === 'EADDRINUSE') {
+            reject(error);
+          } else {
+            reject(error);
+          }
+        };
+
+        const onListening = () => {
+          httpServer.removeListener('error', onError);
+          resolve();
+        };
+
+        httpServer.once('error', onError);
+        httpServer.listen(port, () => {
+          onListening();
+        });
+      });
+
+      // Successfully bound to port
+      return port;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+        if (attempt > 0) {
+          logger.debug(`Port ${port} is in use, trying ${port + 1}...`);
+        }
+        continue;
+      }
+      // Non-port-conflict error, throw it
+      throw error;
+    }
+  }
+
+  throw new Error(
+    `Could not find available port after trying ${maxAttempts} ports starting from ${startPort}`,
+  );
+}
+
 export function createApp() {
   const app = express();
 
@@ -306,17 +357,23 @@ export async function startServer(
     socket.emit('init', await Eval.latest());
   });
 
-  httpServer
-    .listen(port, () => {
-      const url = `http://localhost:${port}`;
-      logger.info(`Server running at ${url} and monitoring for new evals.`);
-      openBrowser(browserBehavior, port).catch((error) => {
-        logger.error(
-          `Failed to handle browser behavior (${BrowserBehavior[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
-        );
-      });
-    })
-    .on('error', (error: NodeJS.ErrnoException) => {
-      handleServerError(error, port);
+  try {
+    const actualPort = await listenOnAvailablePort(httpServer, port);
+    const url = `http://localhost:${actualPort}`;
+
+    if (actualPort !== port) {
+      logger.info(`Port ${port} was in use, using port ${actualPort} instead`);
+    }
+
+    logger.info(`Server running at ${url} and monitoring for new evals.`);
+
+    openBrowser(browserBehavior, actualPort).catch((error) => {
+      logger.error(
+        `Failed to handle browser behavior (${BrowserBehavior[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
+      );
     });
+  } catch (error) {
+    logger.error(`Failed to start server: ${error instanceof Error ? error.message : error}`);
+    process.exit(1);
+  }
 }

@@ -1,16 +1,11 @@
 import { getDefaultPort } from '../constants';
 import logger from '../logger';
-import { BrowserBehavior, checkServerRunning } from '../util/server';
+import { BrowserBehavior } from '../util/server';
 import { startServer } from './server';
 
 async function main() {
   const port = getDefaultPort();
-  const isRunning = await checkServerRunning(port);
-  if (isRunning) {
-    logger.info(`Promptfoo server already running at http://localhost:${port}`);
-    process.exitCode = 1;
-    return;
-  }
+  // Server will automatically find next available port if default is taken
   await startServer(port, BrowserBehavior.SKIP);
 }
 

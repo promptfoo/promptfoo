@@ -47,7 +47,7 @@
     "db:studio": "npx drizzle-kit studio",
     "dev:app": "npm run dev --prefix src/app",
     "dev:server": "nodemon -P 1000 src/server/index.ts",
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\"",
+    "dev": "concurrently -n server,app \"npm run dev:server\" \"npm run dev:app\"",
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json)$' | xargs npx @biomejs/biome format --write && git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(css|scss|html|md|mdc|mdx|yaml|yml)$' | xargs prettier --write",
     "format:check": "npx @biomejs/biome format && prettier --check '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
     "format": "npx @biomejs/biome format --write . && prettier --write '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",

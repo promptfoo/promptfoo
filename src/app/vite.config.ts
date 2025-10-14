@@ -25,7 +25,7 @@ if (process.env.NODE_ENV === 'development') {
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
-    port: 3000,
+    port: process.env.VITE_PORT ? Number(process.env.VITE_PORT) : 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
