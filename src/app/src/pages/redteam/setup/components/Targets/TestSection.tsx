@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
@@ -21,6 +21,7 @@ export interface TestResult {
   transformedRequest?: string | Record<string, any>;
   changes_needed?: boolean;
   changes_needed_suggestions?: string[];
+  configuration_change_suggestion?: Record<string, any>;
 }
 
 interface TestSectionProps {
@@ -29,6 +30,7 @@ interface TestSectionProps {
   testResult: TestResult | null;
   handleTestTarget: () => void;
   disabled: boolean;
+  onApplyConfigSuggestion?: (field: string, value: any) => void;
 }
 
 const TestSection: React.FC<TestSectionProps> = ({
@@ -37,8 +39,31 @@ const TestSection: React.FC<TestSectionProps> = ({
   testResult,
   handleTestTarget,
   disabled,
+  onApplyConfigSuggestion,
 }) => {
   const responseHeaders = testResult?.providerResponse?.metadata?.http?.headers;
+  const [appliedFields, setAppliedFields] = useState<Set<string>>(new Set());
+
+  // Reset applied fields when test result changes (new test run)
+  useEffect(() => {
+    setAppliedFields(new Set());
+  }, [testResult]);
+
+  const handleApplySuggestion = (field: string, value: any) => {
+    if (onApplyConfigSuggestion) {
+      onApplyConfigSuggestion(field, value);
+      setAppliedFields((prev) => new Set(prev).add(field));
+    }
+  };
+
+  const handleApplyAll = () => {
+    if (onApplyConfigSuggestion && testResult?.configuration_change_suggestion) {
+      Object.entries(testResult.configuration_change_suggestion).forEach(([field, value]) => {
+        onApplyConfigSuggestion(field, value);
+      });
+      setAppliedFields(new Set(Object.keys(testResult.configuration_change_suggestion)));
+    }
+  };
 
   return (
     <Paper elevation={1} sx={{ mt: 3, p: 3, backgroundColor: 'background.default' }}>
@@ -111,6 +136,112 @@ const TestSection: React.FC<TestSectionProps> = ({
                         ),
                       )}
                     </ul>
+                  </Box>
+                )}
+
+              {/* Display configuration change suggestions with apply buttons */}
+              {testResult.configuration_change_suggestion &&
+                Object.keys(testResult.configuration_change_suggestion).length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                      Configuration Changes:
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {Object.entries(testResult.configuration_change_suggestion).map(
+                        ([field, value]) => {
+                          const isApplied = appliedFields.has(field);
+                          return (
+                            <Box
+                              key={field}
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                p: 1,
+                                backgroundColor: isApplied
+                                  ? 'rgba(76, 175, 80, 0.1)'
+                                  : 'rgba(255, 255, 255, 0.5)',
+                                borderRadius: 1,
+                                gap: 2,
+                                border: isApplied ? '1px solid rgba(76, 175, 80, 0.3)' : 'none',
+                                transition: 'all 0.3s ease',
+                              }}
+                            >
+                              <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                                <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+                                  {field}:
+                                </Typography>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.875rem',
+                                    wordBreak: 'break-word',
+                                  }}
+                                >
+                                  {typeof value === 'string'
+                                    ? value
+                                    : JSON.stringify(value, null, 2)}
+                                </Typography>
+                              </Box>
+                              {onApplyConfigSuggestion && (
+                                <Button
+                                  size="small"
+                                  variant={isApplied ? 'outlined' : 'outlined'}
+                                  color={isApplied ? 'success' : 'primary'}
+                                  onClick={
+                                    isApplied
+                                      ? handleTestTarget
+                                      : () => handleApplySuggestion(field, value)
+                                  }
+                                  startIcon={isApplied ? <PlayArrowIcon /> : undefined}
+                                >
+                                  {isApplied ? 'Test' : 'Apply'}
+                                </Button>
+                              )}
+                            </Box>
+                          );
+                        },
+                      )}
+                    </Box>
+                    {onApplyConfigSuggestion &&
+                      testResult.configuration_change_suggestion &&
+                      Object.keys(testResult.configuration_change_suggestion).length > 1 && (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color={
+                            appliedFields.size ===
+                            Object.keys(testResult.configuration_change_suggestion).length
+                              ? 'success'
+                              : 'primary'
+                          }
+                          sx={{ mt: 1 }}
+                          startIcon={
+                            appliedFields.size ===
+                            Object.keys(testResult.configuration_change_suggestion).length ? (
+                              <PlayArrowIcon />
+                            ) : undefined
+                          }
+                          onClick={() => {
+                            if (
+                              testResult.configuration_change_suggestion &&
+                              appliedFields.size ===
+                                Object.keys(testResult.configuration_change_suggestion).length
+                            ) {
+                              handleTestTarget();
+                            } else {
+                              handleApplyAll();
+                            }
+                          }}
+                        >
+                          {testResult.configuration_change_suggestion &&
+                          appliedFields.size ===
+                            Object.keys(testResult.configuration_change_suggestion).length
+                            ? 'Test'
+                            : 'Apply All'}
+                        </Button>
+                      )}
                   </Box>
                 )}
             </Alert>

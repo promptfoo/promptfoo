@@ -8,6 +8,7 @@ interface ResponseParserTestModalProps {
   onClose: () => void;
   currentTransform: string;
   onApply: (code: string) => void;
+  initialTestInput?: string;
 }
 
 const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
@@ -15,16 +16,20 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
   onClose,
   currentTransform,
   onApply,
+  initialTestInput,
 }) => {
   const [testInput, setTestInput] = useState('');
   const [editableTransform, setEditableTransform] = useState('');
 
-  // Initialize editable transform when opening modal
+  // Initialize editable transform and test input when opening modal
   useEffect(() => {
     if (open) {
       setEditableTransform(currentTransform);
+      if (initialTestInput) {
+        setTestInput(initialTestInput);
+      }
     }
-  }, [open, currentTransform]);
+  }, [open, currentTransform, initialTestInput]);
 
   // Test handler function for response transform
   const handleTest = async (transformCode: string, testInput: string) => {
