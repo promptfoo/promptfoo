@@ -4,6 +4,7 @@ import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constan
 import RiskCard from './RiskCard';
 import type { TopLevelCategory } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';
+import { type CategoryStats } from './FrameworkComplianceUtils';
 
 const RiskCategories = ({
   categoryStats,
@@ -11,7 +12,7 @@ const RiskCategories = ({
   failuresByPlugin,
   passesByPlugin,
 }: {
-  categoryStats: Record<string, { pass: number; total: number }>;
+  categoryStats: CategoryStats;
   evalId: string;
   failuresByPlugin: Record<
     string,
