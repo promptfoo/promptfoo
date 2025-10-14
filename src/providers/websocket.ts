@@ -116,49 +116,44 @@ export async function createStreamResponse(
     );
   } else if (typeof transform === 'string') {
     return (accumulator, data, context) => {
-      try {
-        const trimmedTransform = transform.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
+      const trimmedTransform = transform.trim();
+      // Check if it's a function expression (either arrow or regular)
+      const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
 
-        let transformFn: Function;
-        if (isFunctionExpression) {
-          // For function expressions, call them with the arguments
+      let transformFn: Function;
+      if (isFunctionExpression) {
+        // For function expressions, call them with the arguments
+        transformFn = new Function(
+          'accumulator',
+          'data',
+          'context',
+          `try { return (${trimmedTransform})(accumulator, data, context); } catch(e) { throw new Error('Error executing streamResponse function: ' + e.message) }`,
+        );
+      } else {
+        // Check if it contains a return statement
+        const hasReturn = /\breturn\b/.test(trimmedTransform);
+
+        if (hasReturn) {
+          // Use as function body if it has return statements
           transformFn = new Function(
             'accumulator',
             'data',
             'context',
-            `try { return (${trimmedTransform})(accumulator, data, context); } catch(e) { throw new Error('Stream response failed: ' + e.message) }`,
+            `try { ${trimmedTransform} } catch(e) { throw new Error('Error executing streamResponse function: ' + e.message); }`,
           );
         } else {
-          // Check if it contains a return statement
-          const hasReturn = /\breturn\b/.test(trimmedTransform);
-
-          if (hasReturn) {
-            // Use as function body if it has return statements
-            transformFn = new Function(
-              'accumulator',
-              'data',
-              'context',
-              `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
-            );
-          } else {
-            // Wrap simple expressions with return
-            transformFn = new Function(
-              'accumulator',
-              'data',
-              'context',
-              `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
-            );
-          }
+          // Wrap simple expressions with return
+          transformFn = new Function(
+            'accumulator',
+            'data',
+            'context',
+            `try { return (${trimmedTransform}); } catch(e) { throw new Error('Error executing streamResponse function: ' + e.message); }`,
+          );
         }
-
-        const result: [ProviderResponse, boolean] = transformFn(accumulator, data, context);
-        return result;
-      } catch (err) {
-        logger.error(`[Websocket Provider] Error in stream response: ${String(err)}.`);
-        throw new Error(`Failed to transform request: ${String(err)}`);
       }
+
+      const result: [ProviderResponse, boolean] = transformFn(accumulator, data, context);
+      return result;
     };
   }
 
@@ -235,7 +230,7 @@ export class WebSocketProvider implements ApiProvider {
         clearTimeout(timeout);
         if (streamResponse) {
           try {
-            logger.debug(`[WebSocket Provider] Data: ${JSON.stringify(event.data)}`);
+            logger.debug(`[WebSocket Provider] Data Received: ${JSON.stringify(event.data)}`);
           } catch {
             // ignore
           }
@@ -248,14 +243,11 @@ export class WebSocketProvider implements ApiProvider {
               resolve(response);
             }
           } catch (err) {
-            logger.debug(
-              `[WebSocket Provider]: Error in stream response: ${JSON.stringify((err as Error).message)}`,
-            );
-            reject(
-              new Error(
-                `Failed to execute streamResponse function: ${JSON.stringify((err as Error).message)}`,
-              ),
-            );
+            logger.debug(`[WebSocket Provider]: ${(err as Error).message}`);
+            reject(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
+          } finally {
+            logger.debug(`[WebSocket Provider]: Closing WebSocket connection`);
+            ws.close();
           }
         } else {
           try {
@@ -266,7 +258,7 @@ export class WebSocketProvider implements ApiProvider {
               } catch {
                 // If parsing fails, assume it's a text response
               }
-              logger.debug(`[WebSocket Provider] Data: ${safeJsonStringify(data)}`);
+              logger.debug(`[WebSocket Provider] Data Received: ${safeJsonStringify(data)}`);
             }
             try {
               const result = processResult(this.transformResponse(data));
@@ -284,15 +276,15 @@ export class WebSocketProvider implements ApiProvider {
               logger.debug(
                 `[WebSocket Provider]: Error in transform response: ${(err as Error).message}`,
               );
-              reject(
-                new Error(`Failed to process response: ${JSON.stringify((err as Error).message)}`),
-              );
+              reject(new Error(`Failed to process response: ${(err as Error).message}`));
             }
           } catch (err) {
-            reject(
-              new Error(`Failed to process response: ${JSON.stringify((err as Error).message)}`),
+            logger.debug(
+              `[WebSocket Provider]: Error processing response: ${(err as Error).message}`,
             );
+            reject(new Error(`Failed to process response: ${(err as Error).message}`));
           } finally {
+            logger.debug(`[WebSocket Provider]: Closing WebSocket connection`);
             ws.close();
           }
         }
