@@ -72,9 +72,6 @@ wss.on('connection', (ws, request) => {
         model: CHATBOT_MODEL,
         input,
       });
-      if (!response.output.length && !response.output[0]?.content.length) {
-        console.error(response);
-      }
       const text = response.output[0].content[0].text;
       ws.send(JSON.stringify({ type: 'message', message: text, raw: response }));
     } catch (err) {
@@ -105,7 +102,7 @@ wssStream.on('connection', (ws, request) => {
     try {
       payload = JSON.parse(raw.toString());
     } catch {
-      console.error(raw);
+      console.error('Invalid JSON payload', raw);
       ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON payload' }));
       return;
     }
