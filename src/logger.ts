@@ -250,6 +250,9 @@ function createRunLogFile(): string {
 // Create a file transport for the current run
 let runLogTransport: winston.transports.FileTransportInstance | null = null;
 
+// Create a file transport for a custom log file specified by the user
+let customLogTransport: winston.transports.FileTransportInstance | null = null;
+
 /**
  * Initialize per-run logging
  */
@@ -271,6 +274,39 @@ export function initializeRunLogging(): void {
     logger.warn(`Error creating run log file: ${error}`);
 
     runLogTransport = null;
+  }
+}
+
+/**
+ * Sets up logging to a custom file path specified by the user.
+ * This is in addition to the default logging behavior.
+ * @param filePath - The file path where logs should be written
+ */
+export function setCustomLogFile(filePath: string): void {
+  if (customLogTransport) {
+    // Remove existing custom log transport if one was already set
+    winstonLogger.remove(customLogTransport);
+    customLogTransport = null;
+  }
+
+  try {
+    // Ensure the directory exists
+    const logDir = path.dirname(filePath);
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+
+    customLogTransport = new winston.transports.File({
+      filename: filePath,
+      level: 'debug', // Capture all levels in the custom file
+      format: winston.format.combine(winston.format.simple(), fileFormatter),
+    });
+
+    winstonLogger.add(customLogTransport);
+    logger.info(`Logging to custom file: ${filePath}`);
+  } catch (error) {
+    logger.warn(`Error setting up custom log file: ${error}`);
+    customLogTransport = null;
   }
 }
 

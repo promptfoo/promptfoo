@@ -23,7 +23,7 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
-import logger, { initializeRunLogging, setLogLevel } from './logger';
+import logger, { initializeRunLogging, setCustomLogFile, setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
@@ -39,7 +39,7 @@ import { loadDefaultConfig } from './util/config/default';
 import { setupEnv } from './util/index';
 
 /**
- * Adds verbose and env-file options to all commands recursively
+ * Adds verbose, env-file, and log-file options to all commands recursively
  */
 export function addCommonOptionsRecursively(command: Command) {
   const hasVerboseOption = command.options.some(
@@ -56,6 +56,11 @@ export function addCommonOptionsRecursively(command: Command) {
     command.option('--env-file, --env-path <path>', 'Path to .env file');
   }
 
+  const hasLogFileOption = command.options.some((option) => option.long === '--log-file');
+  if (!hasLogFileOption) {
+    command.option('--log-file <path>', 'Write logs to specified file (in addition to console)');
+  }
+
   command.hook('preAction', (thisCommand) => {
     if (thisCommand.opts().verbose) {
       setLogLevel('debug');
@@ -66,6 +71,11 @@ export function addCommonOptionsRecursively(command: Command) {
     if (envPath) {
       setupEnv(envPath);
       logger.debug(`Loading environment from ${envPath}`);
+    }
+
+    const logFile = thisCommand.opts().logFile;
+    if (logFile) {
+      setCustomLogFile(logFile);
     }
   });
 
