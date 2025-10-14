@@ -12,7 +12,6 @@ import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { Gauge } from '@mui/x-charts/Gauge';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -22,6 +21,8 @@ import { type GradingResult } from '@promptfoo/types';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import { useReportStore } from './store';
 import './RiskCard.css';
+
+import { RiskChart } from 'promptfoo-toolkit';
 
 const RiskCard = ({
   title,
@@ -106,22 +107,7 @@ const RiskCard = ({
                 height: 100,
               }}
             >
-              <Gauge
-                value={progressValue}
-                // @ts-ignore
-                max={100}
-                thickness={10}
-                arc={{
-                  startAngle: -90,
-                  endAngle: 90,
-                  color: 'primary.main',
-                }}
-                text={Number.isNaN(progressValue) ? '-' : `${Math.round(progressValue)}%`}
-                sx={{
-                  width: '100%',
-                  height: '100%',
-                }}
-              />
+              <RiskChart value={progressValue} />
             </Box>
             <Typography
               variant="h6"
@@ -129,14 +115,14 @@ const RiskCard = ({
                 color: numTestsFailed === 0 ? 'text.secondary' : 'error.main',
               }}
             >
-              {numTestsFailed} failed probes
+              {numTestsFailed} attacks succeeded
             </Typography>
             <Typography
               variant="subtitle1"
               color="textSecondary"
               className="risk-card-tests-passed"
             >
-              {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
+              {numTestsPassed}/{numTestsPassed + numTestsFailed} tests passed
             </Typography>
           </Grid>
           <Grid size={{ xs: 6, md: 4 }}>

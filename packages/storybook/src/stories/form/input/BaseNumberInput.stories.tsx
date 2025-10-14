@@ -1,17 +1,18 @@
+import { useEffect, useState } from 'react';
+import type { ComponentProps } from 'react';
+
 import { BaseNumberInput } from 'promptfoo-toolkit';
 import { fn } from 'storybook/test';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState, useEffect } from 'react';
-import type { ComponentProps } from 'react';
 
 // Wrapper component that manages value state internally
 const BaseNumberInputWrapper = (props: ComponentProps<typeof BaseNumberInput>) => {
   const { value: propValue, onChange, ...otherProps } = props;
-  const [value, setValue] = useState<number | undefined>(propValue);
+  const [value, setValue] = useState<number | undefined>(propValue as number | undefined);
 
   // Update internal value when prop value changes
   useEffect(() => {
-    setValue(propValue);
+    setValue(propValue as number | undefined);
   }, [propValue]);
 
   const handleChange = (newValue: number | undefined) => {
@@ -19,13 +20,7 @@ const BaseNumberInputWrapper = (props: ComponentProps<typeof BaseNumberInput>) =
     onChange?.(newValue);
   };
 
-  return (
-    <BaseNumberInput
-      {...otherProps}
-      value={value}
-      onChange={handleChange}
-    />
-  );
+  return <BaseNumberInput {...otherProps} value={value} onChange={handleChange} />;
 };
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories#default-export

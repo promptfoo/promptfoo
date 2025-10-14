@@ -42,13 +42,14 @@
     "@mui/icons-material": "^7.3.2",
     "@mui/material": "^7.3.2",
     "@mui/system": "^7.3.2",
+    "@mui/x-charts": "^7.29.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
     "react": "^18.3.1",
-    "react-hook-form": "^7.64.0",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.64.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
@@ -58,7 +59,7 @@
     "react-dom": "^18.3.1",
     "typescript": "^5.9.2",
     "vite": "^4.4.0",
-    "vitest": "^3.2.4",
-    "vite-plugin-dts": "^3.5.0"
+    "vite-plugin-dts": "^3.5.0",
+    "vitest": "^3.2.4"
   }
 }

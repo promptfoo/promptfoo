@@ -36,6 +36,7 @@ function CustomToolbar() {
 
 function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: boolean }) {
   const navigate = useNavigate();
+  console.log(data);
 
   const columns: GridColDef<EvalSummary>[] = useMemo(
     () => [
@@ -84,12 +85,13 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
         headerName: 'Attack Success Rate',
         type: 'number',
         flex: 1,
+        valueGetter: (value: EvalSummary['passRate']) => 100 - value,
         renderCell: (params: GridRenderCellParams<EvalSummary>) => (
           <>
             <Typography
               variant="body2"
-              color="success.main"
               sx={{
+                color: (theme) => getProgressColor(params.value),
                 height: '100%',
                 display: 'flex',
                 alignItems: 'center',
