@@ -1,17 +1,12 @@
 import { useCallback, useState } from 'react';
 
+import { UserEmailStatus } from '../../../types/email';
 import { callApi } from '@app/utils/api';
 
 interface EmailStatus {
   hasEmail: boolean;
   email?: string;
-  status:
-    | 'ok'
-    | 'exceeded_limit'
-    | 'show_usage_warning'
-    | 'no_email'
-    | 'risky_email'
-    | 'disposable_email';
+  status: UserEmailStatus;
   message?: string;
 }
 

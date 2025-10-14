@@ -10,6 +10,7 @@ import { fetchWithTimeout } from '../util/fetch/index';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';
+import { EmailValidationStatus, UserEmailStatus } from '../types/email';
 
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();
@@ -72,13 +73,7 @@ export function isLoggedIntoCloud(): boolean {
 }
 
 interface EmailStatusResult {
-  status:
-    | 'ok'
-    | 'exceeded_limit'
-    | 'show_usage_warning'
-    | 'no_email'
-    | 'risky_email'
-    | 'disposable_email';
+  status: UserEmailStatus;
   message?: string;
   email?: string;
   hasEmail: boolean;
@@ -119,7 +114,7 @@ export async function checkEmailStatus(options?: {
       timeout,
     );
     const data = (await resp.json()) as {
-      status: 'ok' | 'exceeded_limit' | 'show_usage_warning' | 'risky_email' | 'disposable_email';
+      status: EmailValidationStatus;
       message?: string;
       error?: string;
     };
