@@ -312,6 +312,44 @@ Always follow this workflow:
 
 6. **Wait for review and CI checks** before merging
 
+## Dependency Management
+
+### Safe Update Workflow
+
+When updating dependencies, use `npx npm-check-updates --target minor` for safe minor/patch updates only:
+
+```bash
+# Check all three workspaces
+npx npm-check-updates --target minor              # Root
+npx npm-check-updates --target minor --cwd site   # Site
+npx npm-check-updates --target minor --cwd src/app # App
+
+# Find and check example package.json files
+find examples -name "package.json" -not -path "*/node_modules/*" -type f
+
+# Apply updates with -u flag, then verify
+npm run build && npm test && npm run lint && npm run format
+
+# Check version consistency across workspaces (required by CI)
+npx check-dependency-version-consistency
+```
+
+### Critical Rules
+
+1. **PeerDependencies must match devDependencies** - Always update peerDependencies to match devDependencies versions to prevent "package not found" errors for users
+2. **Update examples/** - 12+ package.json files in examples/ are user-facing; keep them current
+3. **No package-lock.json** - Project intentionally omits lockfile; `npm audit` won't work
+4. **If updates fail** - Revert the problematic package and keep current version until code changes allow upgrade
+
+### Checking for Major Updates
+
+```bash
+# See available major version updates (don't apply automatically)
+npx npm-check-updates --target latest
+
+# Major updates often require code changes - evaluate each carefully
+```
+
 ## Project Conventions
 
 - Use CommonJS modules (type: "commonjs" in package.json)

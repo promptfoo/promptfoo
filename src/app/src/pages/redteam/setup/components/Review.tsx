@@ -35,7 +35,6 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { isFoundationModelProvider } from '@promptfoo/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
@@ -49,9 +48,11 @@ import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
 import type { RedteamRunOptions } from '@promptfoo/types';
-import { getEstimatedDuration } from './strategies/utils';
+
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
+import EstimationsDisplay from './EstimationsDisplay';
+import Tooltip from '@mui/material/Tooltip';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -586,7 +587,7 @@ export default function Review({
                 <Typography variant="h6" gutterBottom>
                   Custom Policies ({customPolicies.length})
                 </Typography>
-                <Stack spacing={1}>
+                <Stack spacing={1} sx={{ maxHeight: 400, overflowY: 'auto' }}>
                   {customPolicies.map((policy, index) => (
                     <Box
                       key={index}
@@ -626,7 +627,8 @@ export default function Review({
                         sx={{
                           position: 'absolute',
                           right: 4,
-                          top: 4,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
                           padding: '2px',
                         }}
                       >
@@ -1055,30 +1057,7 @@ export default function Review({
           Run Your Scan
         </Typography>
 
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            mb: 3,
-            p: 2,
-            borderRadius: 1,
-            backgroundColor: theme.palette.background.paper,
-            border: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography variant="body1" color="text.secondary">
-              Estimated Duration:
-            </Typography>
-          </Box>
-          <Typography variant="body1" fontWeight="bold" color="primary.main">
-            {getEstimatedDuration(config)}
-          </Typography>
-          <Tooltip title="Estimated time includes test generation and probe execution. Actual time may vary based on target response times and network conditions.">
-            <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
-          </Tooltip>
-        </Box>
+        <EstimationsDisplay config={config} />
 
         <Paper elevation={2} sx={{ p: 3 }}>
           <Box sx={{ mb: 4 }}>

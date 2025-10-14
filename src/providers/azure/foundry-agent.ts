@@ -81,7 +81,7 @@ interface ToolOutput {
   output: string;
 }
 
-export class AzureFoundryAssistantProvider extends AzureGenericProvider {
+export class AzureFoundryAgentProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private projectClient: AIProjectClient | null = null;
@@ -288,12 +288,17 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Create a simple cache key based on the input and configuration
-    const cacheKey = `azure_foundry_assistant:${this.deploymentName}:${JSON.stringify({
+    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${JSON.stringify({
+      frequency_penalty: this.assistantConfig.frequency_penalty,
       instructions: this.assistantConfig.instructions,
+      max_completion_tokens: this.assistantConfig.max_completion_tokens,
       max_tokens: this.assistantConfig.max_tokens,
       model: this.assistantConfig.modelName,
+      presence_penalty: this.assistantConfig.presence_penalty,
       prompt,
       response_format: this.assistantConfig.response_format,
+      seed: this.assistantConfig.seed,
+      stop: this.assistantConfig.stop,
       temperature: this.assistantConfig.temperature,
       tool_choice: this.assistantConfig.tool_choice,
       tool_resources: this.assistantConfig.tool_resources,
@@ -310,7 +315,7 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
         const cachedResult = await cache.get<ProviderResponse>(cacheKey);
 
         if (cachedResult) {
-          logger.debug(`Cache hit for assistant prompt: ${prompt.substring(0, 50)}...`);
+          logger.debug(`Cache hit for agent prompt: ${prompt.substring(0, 50)}...`);
           return { ...cachedResult, cached: true };
         }
       } catch (err) {
@@ -346,6 +351,27 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
       }
       if (this.assistantConfig.top_p !== undefined) {
         runOptions.top_p = this.assistantConfig.top_p;
+      }
+      if (this.assistantConfig.frequency_penalty !== undefined) {
+        runOptions.frequency_penalty = this.assistantConfig.frequency_penalty;
+      }
+      if (this.assistantConfig.presence_penalty !== undefined) {
+        runOptions.presence_penalty = this.assistantConfig.presence_penalty;
+      }
+      if (this.assistantConfig.max_completion_tokens !== undefined) {
+        runOptions.max_completion_tokens = this.assistantConfig.max_completion_tokens;
+      }
+      if (this.assistantConfig.max_tokens !== undefined) {
+        runOptions.max_tokens = this.assistantConfig.max_tokens;
+      }
+      if (this.assistantConfig.response_format) {
+        runOptions.response_format = this.assistantConfig.response_format;
+      }
+      if (this.assistantConfig.stop) {
+        runOptions.stop = this.assistantConfig.stop;
+      }
+      if (this.assistantConfig.seed !== undefined) {
+        runOptions.seed = this.assistantConfig.seed;
       }
       if (this.assistantConfig.tool_resources) {
         runOptions.tool_resources = this.assistantConfig.tool_resources;
@@ -428,7 +454,7 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
         try {
           const cache = await getCache();
           await cache.set(cacheKey, result);
-          logger.debug(`Cached assistant response for prompt: ${prompt.substring(0, 50)}...`);
+          logger.debug(`Cached agent response for prompt: ${prompt.substring(0, 50)}...`);
         } catch (err) {
           logger.warn(`Error caching result: ${err}`);
           // Continue even if caching fails
@@ -437,7 +463,7 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
 
       return result;
     } catch (err: any) {
-      logger.error(`Error in Azure Foundry Assistant API call: ${err}`);
+      logger.error(`Error in Azure Foundry Agent API call: ${err}`);
       return this.formatError(err);
     }
   }
@@ -472,7 +498,7 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
       errorMessage.includes("Can't add messages to thread") &&
       errorMessage.includes('while a run')
     ) {
-      return { error: `Error in Azure Foundry Assistant API call: ${errorMessage}` };
+      return { error: `Error in Azure Foundry Agent API call: ${errorMessage}` };
     }
     if (this.isRateLimitError(errorMessage)) {
       return { error: `Rate limit exceeded: ${errorMessage}` };
@@ -481,7 +507,7 @@ export class AzureFoundryAssistantProvider extends AzureGenericProvider {
       return { error: `Service error: ${errorMessage}` };
     }
 
-    return { error: `Error in Azure Foundry Assistant API call: ${errorMessage}` };
+    return { error: `Error in Azure Foundry Agent API call: ${errorMessage}` };
   }
 
   /**
