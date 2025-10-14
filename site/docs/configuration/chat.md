@@ -261,11 +261,15 @@ Each unique `conversationId` maintains its own separate conversation history. If
 
 For conversational AI providers that maintain server-side session state, promptfoo supports automatic session lifecycle management. When a custom provider implements `startSession` and `closeSession` methods, promptfoo automatically:
 
-1. **Starts the session** before the first message (calls `startSession()`)
+1. **Initializes sessions** before any tests run - sessions are pre-initialized during setup
 2. **Passes the session ID** to each message (via `context.sessionId`)
-3. **Closes the session** after all messages complete (calls `closeSession()`)
+3. **Closes the session** after all tests complete (calls `closeSession()`)
 
 This is useful for APIs that require explicit session initialization and cleanup, such as chatbot services that maintain conversation state server-side.
+
+:::info
+Sessions are initialized before test execution begins. Multiple tests with the same `conversationId` can run concurrently, all using the same session ID. If your API requires strictly sequential calls within a session, consider using the `_conversation` variable approach instead, which forces sequential execution.
+:::
 
 ### Example: Session-Based Provider
 
@@ -290,9 +294,13 @@ tests:
 
 When tests with the same `conversationId` run:
 
-1. Before the first test: Provider's `startSession()` is called
-2. Both tests: Provider's `callApi()` receives `context.sessionId`
-3. After all tests: Provider's `closeSession()` is called automatically
+1. During initialization: Provider's `startSession()` is called (before any tests execute)
+2. During test execution: Provider's `callApi()` receives `context.sessionId`
+3. After all tests complete: Provider's `closeSession()` is called automatically
+
+:::tip
+Even a single test with a `conversationId` will trigger the full session lifecycle (initialization and cleanup). This adds some overhead, so only use `conversationId` when you actually need session management or are grouping multiple related tests.
+:::
 
 ### Implementing Session Lifecycle
 

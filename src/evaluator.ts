@@ -287,7 +287,9 @@ export async function runEval({
 
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
 
-  logger.debug(`Checking conversations (${JSON.stringify(Object.keys(conversations || {}))}) for ${conversationKey}`);
+  logger.debug(
+    `Checking conversations (${JSON.stringify(Object.keys(conversations || {}))}) for ${conversationKey}`,
+  );
 
   // Check if a session was pre-initialized for this conversation
   // Sessions are pre-initialized before concurrent execution to avoid race conditions
@@ -1175,9 +1177,11 @@ class Evaluator {
           if (!evalStep || !evalStep.provider.startSession) {
             return;
           }
-          
+
           try {
-            logger.debug(`[Conversation Sessions] Pre-initializing session for conversation ${conversationKey}`);
+            logger.debug(
+              `[Conversation Sessions] Pre-initializing session for conversation ${conversationKey}`,
+            );
             const sessionResponse = await evalStep.provider.startSession({
               conversationId: evalStep.test.metadata?.conversationId,
               test: evalStep.test,
@@ -1198,7 +1202,12 @@ class Evaluator {
               `[Conversation Sessions] Pre-initialized session ${sessionResponse.sessionId} for conversation ${conversationKey}`,
             );
           } catch (err) {
-            logger.warn(`[Conversation Sessions] Failed to pre-initialize session for ${conversationKey}: ${err}`);
+            logger.error(
+              `[Conversation Sessions] Failed to pre-initialize session for ${conversationKey}: ${err}`,
+            );
+            throw new Error(
+              `Failed to initialize session for conversation ${conversationKey}: ${err}`,
+            );
           }
         })();
 
@@ -1206,10 +1215,15 @@ class Evaluator {
       }
     }
 
-    // Wait for all sessions to initialize before starting evaluations
+    // Wait for all sessions to initialize before starting evaluations.
+    // Sessions are initialized sequentially to avoid rate limiting and allow for predictable ordering e.g. monotonically increasing ids.
     if (sessionInitPromises.size > 0) {
-      logger.debug(`[Conversation Sessions] Waiting for ${sessionInitPromises.size} session(s) to initialize...`);
-      await Promise.all(sessionInitPromises.values());
+      logger.debug(
+        `[Conversation Sessions] Initializing ${sessionInitPromises.size} session(s)...`,
+      );
+      for (const initPromise of sessionInitPromises.values()) {
+        await initPromise;
+      }
       logger.debug('[Conversation Sessions] All sessions initialized');
     }
 
@@ -1964,18 +1978,29 @@ class Evaluator {
         const closePromises: Promise<void>[] = [];
 
         for (const [conversationKey, session] of this.activeSessions.entries()) {
-          if (session.provider.closeSession) {
-            closePromises.push(
-              session.provider
-                .closeSession(session.sessionId)
-                .then(() => {
-                  logger.debug(`Closed session ${session.sessionId} for ${conversationKey}`);
-                })
-                .catch((err: unknown) => {
-                  logger.warn(`Failed to close session ${session.sessionId}: ${err}`);
-                }),
+          if (!session.provider.closeSession) {
+            logger.debug(
+              `[Conversation Sessions] Skipping cleanup for ${conversationKey} - provider does not implement closeSession()`,
             );
+            continue;
           }
+          logger.debug(
+            `[Conversation Sessions] Closing session ${session.sessionId} for ${conversationKey}`,
+          );
+          closePromises.push(
+            session.provider
+              .closeSession(session.sessionId)
+              .then(() => {
+                logger.debug(
+                  `[Conversation Sessions] Closed session ${session.sessionId} for ${conversationKey}`,
+                );
+              })
+              .catch((err: unknown) => {
+                logger.warn(
+                  `[Conversation Sessions] Failed to close session ${session.sessionId}: ${err}`,
+                );
+              }),
+          );
         }
 
         // Wait for all sessions to close
