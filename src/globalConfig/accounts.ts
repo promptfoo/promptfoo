@@ -124,7 +124,7 @@ export async function checkEmailStatus(options?: {
       error?: string;
     };
 
-    if (!['risky_email', 'disposable_email'].includes(data.status)) {
+    if (options?.validate && !['risky_email', 'disposable_email'].includes(data.status)) {
       setUserEmailValidated(true);
     }
 
