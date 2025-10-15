@@ -1,13 +1,18 @@
+import * as fs from 'fs';
+
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import * as fs from 'fs';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
-import logger, { getLogLevel } from '../logger';
-import type { TestCase, TestCaseWithPlugin } from '../types/index';
+import logger, {
+  disableConsoleLogging,
+  enableConsoleLogging,
+  errorLogPath,
+  getLogLevel,
+} from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
@@ -33,8 +38,10 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import { pluginMatchesStrategyTargets } from './strategies/util';
-import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 import { extractGoalFromPrompt, getShortPluginId } from './util';
+
+import type { TestCase, TestCaseWithPlugin } from '../types/index';
+import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 
 const MAX_MAX_CONCURRENCY = 20;
 
@@ -760,13 +767,16 @@ export async function synthesize({
   if (showProgressBar) {
     progressBar = new cliProgress.SingleBar(
       {
-        format: 'Generating | {bar} | {percentage}% | {value}/{total} | {task}',
+        format: 'Generating | {bar} | {percentage}% | {value}/{total} ({failed} failed) | {task}',
         gracefulExit: true,
       },
       cliProgress.Presets.shades_classic,
     );
-    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing' });
+    progressBar.start(totalPluginTests + 2, 0, { task: 'Initializing', failed: 0 });
+    disableConsoleLogging();
   }
+
+  let failed = 0;
 
   // Replace progress bar updates with logger calls when in web UI
   if (showProgressBar) {
@@ -821,6 +831,8 @@ export async function synthesize({
       if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
         logger.warn(`Failed to generate tests for ${plugin.id}`);
         pluginTests = [];
+        failed++;
+        progressBar?.update({ failed });
       } else {
         // Add metadata to each test case
         const testCasesWithMetadata = pluginTests.map((t) => ({
@@ -921,6 +933,8 @@ export async function synthesize({
     }
   });
 
+  enableConsoleLogging();
+
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
 
@@ -976,6 +990,16 @@ export async function synthesize({
   }
 
   logger.info(generateReport(pluginResults, strategyResults));
+  if (
+    Object.values(pluginResults).some((p) => p.generated === 0) ||
+    Object.values(strategyResults).some((s) => s.generated === 0)
+  ) {
+    logger.info(
+      chalk.red.bold(
+        `See ${chalk.greenBright.bold(errorLogPath)} for more details on failed generations`,
+      ),
+    );
+  }
 
   return { purpose, entities, testCases: finalTestCases, injectVar };
 }

@@ -5,23 +5,45 @@ import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
+import { getDateTimeForFilename } from './util/dateTime';
 import { safeJsonStringify } from './util/json';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
 
 type LogCallback = (message: string) => void;
+
 export let globalLogCallback: LogCallback | null = null;
 
 export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
 }
 
+export let errorLogPath = '';
+
+export let debugLogPath = '';
+
 // Global configuration for structured logging
 let useStructuredLogging = false;
 
 export function setStructuredLogging(enabled: boolean) {
   useStructuredLogging = enabled;
+}
+
+export function disableConsoleLogging() {
+  winstonLogger.transports.forEach((transport) => {
+    if (transport instanceof winston.transports.Console) {
+      transport.silent = true;
+    }
+  });
+}
+
+export function enableConsoleLogging() {
+  winstonLogger.transports.forEach((transport) => {
+    if (transport instanceof winston.transports.Console) {
+      transport.silent = false;
+    }
+  });
 }
 
 export const LOG_LEVELS = {
@@ -161,11 +183,13 @@ if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
   winstonLogger.on('data', (chunk) => {
     if (
       chunk.level === 'error' &&
-      !winstonLogger.transports.some((t) => t instanceof winston.transports.File)
+      !winstonLogger.transports.some(
+        (t) => t instanceof winston.transports.File && t.filename.includes('promptfoo-errors'),
+      )
     ) {
       // Only create the errors file if there are any errors
       const fileTransport = new winston.transports.File({
-        filename: path.join(getEnvString('PROMPTFOO_LOG_DIR', '.'), 'promptfoo-errors.log'),
+        filename: errorLogPath,
         level: 'error',
         format: winston.format.combine(winston.format.simple(), fileFormatter),
       });
@@ -197,22 +221,30 @@ export function isDebugEnabled(): boolean {
   return getLogLevel() === 'debug';
 }
 
+function getLogDirectory(): string {
+  if (getEnvString('PROMPTFOO_LOG_DIR', '')) {
+    return getEnvString('PROMPTFOO_LOG_DIR', '');
+  }
+
+  const configDir = getConfigDirectoryPath(true);
+  const logDir = path.join(configDir, 'logs');
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+  return logDir;
+}
+
 /**
  * Creates log directory and cleans up old log files
  */
 function setupLogDirectory(): string {
-  const configDir = getConfigDirectoryPath(true);
-  const logDir = path.join(configDir, 'logs');
-
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
-  }
+  const logDir = getLogDirectory();
 
   // Clean up old log files
   try {
     const logFiles = fs
       .readdirSync(logDir)
-      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
+      .filter((file) => file.includes('promptfoo-') && file.endsWith('.log'))
       .map((file) => ({
         name: file,
         path: path.join(logDir, file),
@@ -240,10 +272,9 @@ function setupLogDirectory(): string {
 /**
  * Creates a new log file for the current CLI run
  */
-function createRunLogFile(): string {
+function createRunLogFile(timestamp: string): string {
   const logDir = setupLogDirectory();
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
-  const logFile = path.join(logDir, `promptfoo-${timestamp}.log`);
+  const logFile = path.join(logDir, `promptfoo-debug-${timestamp}.log`);
   return logFile;
 }
 
@@ -258,8 +289,13 @@ export function initializeRunLogging(): void {
     return;
   }
 
+  const timestamp = getDateTimeForFilename();
+
+  errorLogPath = path.join(getLogDirectory(), `promptfoo-errors-${timestamp}.log`);
+
   try {
-    const logFile = createRunLogFile();
+    const logFile = createRunLogFile(timestamp);
+    debugLogPath = logFile;
     runLogTransport = new winston.transports.File({
       filename: logFile,
       level: 'debug', // Capture all levels in the file
