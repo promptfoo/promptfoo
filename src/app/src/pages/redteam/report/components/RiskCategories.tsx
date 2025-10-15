@@ -51,7 +51,7 @@ const RiskCategories = ({
             key={index}
             title={category.name}
             subtitle={categoryDescriptions[categoryName as keyof typeof categoryDescriptions]}
-            progressValue={totalTests > 0 ? ((totalTests - totalPasses) / totalTests) * 100 : 0}
+            progressValue={totalTests > 0 ? (totalPasses / totalTests) * 100 : 0}
             numTestsPassed={totalPasses}
             numTestsFailed={totalTests - totalPasses}
             testTypes={subCategories.map((subCategory) => {

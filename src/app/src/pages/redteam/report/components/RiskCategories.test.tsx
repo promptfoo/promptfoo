@@ -75,7 +75,7 @@ describe('RiskCategories', () => {
 
     const totalPasses = 8 + 5;
     const totalTests = 10 + 5;
-    const expectedProgress = ((totalTests - totalPasses) / totalTests) * 100;
+    const expectedProgress = (totalPasses / totalTests) * 100;
 
     expectRiskCardProps('Security & Access Control', {
       subtitle: categoryDescriptions['Security & Access Control'],
@@ -187,7 +187,7 @@ describe('RiskCategories', () => {
         { name: 'rbac', categoryPassed: false, numPassed: 0, numFailed: 0 },
         { name: 'bfla', categoryPassed: false, numPassed: 0, numFailed: 0 },
       ],
-      expectedProgress: 0,
+      expectedProgress: 100,
       expectedPasses: 5,
       expectedFails: 0,
     },
@@ -283,7 +283,7 @@ describe('RiskCategories', () => {
 
     render(<RiskCategories {...mockProps} />);
 
-    const expectedProgress = ((totalTests - totalPasses) / totalTests) * 100;
+    const expectedProgress = (totalPasses / totalTests) * 100;
     expectRiskCardProps(Object.keys(riskCategories)[0], {
       progressValue: expectedProgress,
     });

@@ -8,9 +8,11 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { Gauge } from '@mui/x-charts/Gauge';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -20,9 +22,6 @@ import { type GradingResult } from '@promptfoo/types';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import { useReportStore } from './store';
 import './RiskCard.css';
-
-import ListItemButton from '@mui/material/ListItemButton';
-import { RiskChart } from 'promptfoo-toolkit';
 
 const RiskCard = ({
   title,
@@ -105,7 +104,22 @@ const RiskCard = ({
                 height: 100,
               }}
             >
-              <RiskChart value={progressValue} />
+              <Gauge
+                value={progressValue}
+                // @ts-ignore
+                max={100}
+                thickness={10}
+                arc={{
+                  startAngle: -90,
+                  endAngle: 90,
+                  color: 'primary.main',
+                }}
+                text={Number.isNaN(progressValue) ? '-' : `${Math.round(progressValue)}%`}
+                sx={{
+                  width: '100%',
+                  height: '100%',
+                }}
+              />
             </Box>
             <Typography
               variant="h6"
@@ -113,14 +127,14 @@ const RiskCard = ({
                 color: numTestsFailed === 0 ? 'text.secondary' : 'error.main',
               }}
             >
-              {numTestsFailed} attacks succeeded
+              {numTestsFailed} failed probes
             </Typography>
             <Typography
               variant="subtitle1"
               color="textSecondary"
               className="risk-card-tests-passed"
             >
-              {numTestsPassed}/{numTestsPassed + numTestsFailed} tests passed
+              {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
             </Typography>
           </Grid>
           <Grid size={{ xs: 6, md: 4 }}>
@@ -137,27 +151,13 @@ const RiskCard = ({
                     placement="left"
                     arrow
                   >
-                    <ListItemButton
+                    <ListItem
                       className="risk-card-list-item"
                       onClick={() => {
                         setSelectedCategory(test.name);
                         setDrawerOpen(true);
                       }}
-                      sx={{
-                        cursor: 'pointer',
-                        width: '100%',
-                        borderRadius: '4px',
-                        border: '1px solid transparent;',
-                        transition: 'box-shadow 0.3s ease',
-                        '&:hover': {
-                          border: (theme) => `1px solid ${theme.palette.divider}`,
-                          boxShadow: (theme) => theme.shadows[4],
-                        },
-                        '&.Mui-focusVisible': {
-                          border: (theme) => `1px solid ${theme.palette.divider}`,
-                          boxShadow: (theme) => theme.shadows[4],
-                        },
-                      }}
+                      style={{ cursor: 'pointer' }}
                     >
                       <ListItemText
                         primary={
@@ -190,7 +190,7 @@ const RiskCard = ({
                           fontSize="small"
                         />
                       </Box>
-                    </ListItemButton>
+                    </ListItem>
                   </Tooltip>
                 );
               })}
