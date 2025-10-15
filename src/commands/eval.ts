@@ -12,7 +12,7 @@ import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
-import logger, { debugLogPath, errorLogPath, getLogLevel } from '../logger';
+import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers/index';
@@ -775,7 +775,7 @@ export async function doEval(
       logger.info(
         '\n' +
           chalk.red.bold(
-            `See ${chalk.greenBright.bold(errorLogPath)} for detailed error logs or ${chalk.greenBright.bold(debugLogPath)} for verbose logs`,
+            `See ${chalk.greenBright.bold(cliState.errorLogPath)} for detailed error logs or ${chalk.greenBright.bold(cliState.debugLogPath)} for verbose logs`,
           ),
       );
     printBorder();

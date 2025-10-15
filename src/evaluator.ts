@@ -194,6 +194,7 @@ class ProgressBarManager {
    * Stop the progress bar
    */
   stop(): void {
+    enableConsoleLogging();
     if (this.progressBar) {
       this.progressBar.stop();
     }
@@ -1421,7 +1422,7 @@ class Evaluator {
         // CI progress reporter update
         ciProgressReporter.update(numComplete);
       } else {
-        logger.info(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
+        logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
       }
     };
 

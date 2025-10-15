@@ -7,12 +7,7 @@ import Table from 'cli-table3';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
-import logger, {
-  disableConsoleLogging,
-  enableConsoleLogging,
-  errorLogPath,
-  getLogLevel,
-} from '../logger';
+import logger, { disableConsoleLogging, enableConsoleLogging, getLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
@@ -996,7 +991,7 @@ export async function synthesize({
   ) {
     logger.info(
       chalk.red.bold(
-        `See ${chalk.greenBright.bold(errorLogPath)} for more details on failed generations`,
+        `See ${chalk.greenBright.bold(cliState.errorLogPath)} for more details on failed generations`,
       ),
     );
   }

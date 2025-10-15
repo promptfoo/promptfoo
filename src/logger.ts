@@ -3,11 +3,12 @@ import path from 'path';
 
 import chalk from 'chalk';
 import winston from 'winston';
+import cliState from './cliState';
 import { getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
-import { getDateTimeForFilename } from './util/dateTime';
 import { safeJsonStringify } from './util/json';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
+import { getDateTimeForFilename } from './util/time';
 
 const MAX_LOG_FILES = 50;
 
@@ -18,10 +19,6 @@ export let globalLogCallback: LogCallback | null = null;
 export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
 }
-
-export let errorLogPath = '';
-
-export let debugLogPath = '';
 
 // Global configuration for structured logging
 let useStructuredLogging = false;
@@ -189,7 +186,7 @@ if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
     ) {
       // Only create the errors file if there are any errors
       const fileTransport = new winston.transports.File({
-        filename: errorLogPath,
+        filename: cliState.errorLogPath,
         level: 'error',
         format: winston.format.combine(winston.format.simple(), fileFormatter),
       });
@@ -222,8 +219,19 @@ export function isDebugEnabled(): boolean {
 }
 
 function getLogDirectory(): string {
-  if (getEnvString('PROMPTFOO_LOG_DIR', '')) {
-    return getEnvString('PROMPTFOO_LOG_DIR', '');
+  const envVarOverride = getEnvString('PROMPTFOO_LOG_DIR', '');
+
+  if (envVarOverride !== '') {
+    try {
+      if (!fs.existsSync(envVarOverride)) {
+        fs.mkdirSync(envVarOverride, { recursive: true });
+      }
+      return envVarOverride;
+    } catch (error) {
+      logger.error(
+        `Error creating or accessing  log directory set by PROMPTFOO_LOG_DIR (${envVarOverride}), reverting to default: ${error}`,
+      );
+    }
   }
 
   const configDir = getConfigDirectoryPath(true);
@@ -291,11 +299,11 @@ export function initializeRunLogging(): void {
 
   const timestamp = getDateTimeForFilename();
 
-  errorLogPath = path.join(getLogDirectory(), `promptfoo-errors-${timestamp}.log`);
+  cliState.errorLogPath = path.join(getLogDirectory(), `promptfoo-errors-${timestamp}.log`);
 
   try {
     const logFile = createRunLogFile(timestamp);
-    debugLogPath = logFile;
+    cliState.debugLogPath = logFile;
     runLogTransport = new winston.transports.File({
       filename: logFile,
       level: 'debug', // Capture all levels in the file
