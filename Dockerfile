@@ -34,9 +34,9 @@ RUN --mount=type=cache,target=/root/.npm \
     case "${BUILDPLATFORM}" in \
       "linux/amd64") SWC_PACKAGE="@swc/core-linux-x64-musl@^1.13.20" ;; \
       "linux/arm64") SWC_PACKAGE="@swc/core-linux-arm64-musl@^1.13.20" ;; \
-      *) SWC_PACKAGE="" ;; \
+      *) SWC_PACKAGE="@swc/core-linux-x64-musl@^1.13.20" ;; \
     esac && \
-    if [ -n "$SWC_PACKAGE" ]; then npm install $SWC_PACKAGE; fi && \
+    npm install $SWC_PACKAGE && \
     npm ci --install-links --include=peer
 
 # Copy the rest of the application code
