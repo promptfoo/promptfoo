@@ -38,7 +38,6 @@ function CustomToolbar() {
 
 function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: boolean }) {
   const navigate = useNavigate();
-  console.log(data);
 
   const columns: GridColDef<EvalSummary>[] = useMemo(
     () => [

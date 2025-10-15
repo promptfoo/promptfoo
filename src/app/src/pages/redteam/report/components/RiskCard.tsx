@@ -8,7 +8,6 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -22,6 +21,7 @@ import RiskCategoryDrawer from './RiskCategoryDrawer';
 import { useReportStore } from './store';
 import './RiskCard.css';
 
+import ListItemButton from '@mui/material/ListItemButton';
 import { RiskChart } from 'promptfoo-toolkit';
 
 const RiskCard = ({
@@ -137,13 +137,27 @@ const RiskCard = ({
                     placement="left"
                     arrow
                   >
-                    <ListItem
+                    <ListItemButton
                       className="risk-card-list-item"
                       onClick={() => {
                         setSelectedCategory(test.name);
                         setDrawerOpen(true);
                       }}
-                      style={{ cursor: 'pointer' }}
+                      sx={{
+                        cursor: 'pointer',
+                        width: '100%',
+                        borderRadius: '4px',
+                        border: '1px solid transparent;',
+                        transition: 'box-shadow 0.3s ease',
+                        '&:hover': {
+                          border: (theme) => `1px solid ${theme.palette.divider}`,
+                          boxShadow: (theme) => theme.shadows[4],
+                        },
+                        '&.Mui-focusVisible': {
+                          border: (theme) => `1px solid ${theme.palette.divider}`,
+                          boxShadow: (theme) => theme.shadows[4],
+                        },
+                      }}
                     >
                       <ListItemText
                         primary={
@@ -176,7 +190,7 @@ const RiskCard = ({
                           fontSize="small"
                         />
                       </Box>
-                    </ListItem>
+                    </ListItemButton>
                   </Tooltip>
                 );
               })}

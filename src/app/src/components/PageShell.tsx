@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
 import UpdateBanner from '@app/components/UpdateBanner';
-import { red } from '@mui/material/colors';
+import { orange, red, yellow } from '@mui/material/colors';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { Severity } from '@promptfoo/redteam/constants';
@@ -59,7 +59,11 @@ export const createAppTheme = (darkMode: boolean) => {
           },
           // @ts-expect-error - full colors will be added in the actual theme below
           high: {
-            main: red[500],
+            main: orange[700],
+          },
+          // @ts-expect-error - full colors will be added in the actual theme below
+          medium: {
+            main: yellow[700],
           },
         },
       },
@@ -135,7 +139,7 @@ export const createAppTheme = (darkMode: boolean) => {
           }),
           medium: theme.palette.augmentColor({
             color: {
-              main: theme.palette.warning.main,
+              main: theme.palette.custom.severity.medium.main,
             },
             name: 'custom.severity.medium',
           }),

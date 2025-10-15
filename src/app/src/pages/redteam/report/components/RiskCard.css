@@ -17,28 +17,7 @@
 
 .risk-card-list-item {
   padding: 4px 8px;
-  transition:
-    background-color 0.3s,
-    box-shadow 0.3s,
-    transform 0.15s;
-  border-radius: 4px;
   margin-bottom: 4px;
-  border: 1px solid transparent;
-}
-
-.risk-card-list-item:hover {
-  background-color: #f0f8ff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-  border: 1px solid #add8e6;
-  transform: translateX(2px);
-}
-
-[data-theme='dark'] .risk-card-list-item:hover {
-  background-color: #2a2a2a;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
-  border: 1px solid #555555;
 }
 
 .risk-card-icon-passed {
@@ -66,7 +45,6 @@
 
 .risk-card-list-item:hover .risk-card-expand-icon {
   opacity: 1;
-  transform: translateX(2px);
 }
 
 .risk-card-percentage {

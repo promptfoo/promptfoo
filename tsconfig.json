@@ -20,6 +20,8 @@
   },
   "include": [
     "src/",
+    "packages/toolkit/src/",
+    "packages/storybook/src/",
     "test/",
     "./package.json",
     "src/**/*.json",

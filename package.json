@@ -18,7 +18,9 @@
   },
   "workspaces": [
     "src/app",
-    "site"
+    "site",
+    "packages/toolkit",
+    "packages/storybook"
   ],
   "types": "dist/src/index.d.ts",
   "typings": "dist/src/index.d.ts",
@@ -48,6 +50,9 @@
     "db:studio": "npx drizzle-kit studio",
     "dev:app": "npm run dev --prefix src/app",
     "dev:server": "nodemon -P 1000 src/server/index.ts",
+    "dev:storybook-site": "npm run storybook --prefix packages/storybook",
+    "dev:toolkit": "npm run dev --prefix packages/toolkit",
+    "dev:storybook": "concurrently \"npm run dev:toolkit\" \"npm run dev:storybook-site\"",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\"",
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json)$' | xargs npx @biomejs/biome format --write && git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(css|scss|html|md|mdc|mdx|yaml|yml)$' | xargs prettier --write",
     "format:check": "npx @biomejs/biome format && prettier --check '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
@@ -66,6 +71,7 @@
     "postversion": "npm run citation:generate && git add CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
     "test:app": "npm run test --prefix src/app",
+    "test:toolkit": "npm run test --prefix packages/toolkit",
     "test:integration": "jest --config jest.integration.config.ts integration",
     "test:watch": "jest --watch",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",

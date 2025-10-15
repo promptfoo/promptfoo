@@ -21,13 +21,14 @@ export const RiskChart = ({ value }: RiskChartProps) => {
       text={Number.isNaN(value) ? '-' : `${Math.round(value)}%`}
       sx={(theme) => ({
         [`& .${gaugeClasses.valueArc}`]: {
-          fill: value ? theme.palette.error.light : theme.palette.success.light,
+          fill: theme.palette.error.light,
         },
         [`& .${gaugeClasses.referenceArc}`]: {
-          fill:
-            theme.palette.mode === 'dark'
+          fill: value
+            ? theme.palette.mode === 'dark'
               ? alpha(theme.palette.error.main, 0.2)
-              : alpha(theme.palette.error.main, 0.1),
+              : alpha(theme.palette.error.main, 0.1)
+            : theme.palette.action.disabledBackground,
         },
         width: '100%',
         height: '100%',
