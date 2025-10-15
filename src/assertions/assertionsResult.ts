@@ -1,7 +1,7 @@
 import { getEnvBool } from '../envars';
-import { isGradingResult } from '../types';
+import { isGradingResult } from '../types/index';
 
-import type { AssertionSet, GradingResult, ScoringFunction } from '../types';
+import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
 export const DEFAULT_TOKENS_USED = {
   total: 0,
@@ -23,7 +23,6 @@ export class AssertionsResult {
       score: 1,
       reason: 'No assertions',
       tokensUsed: { ...DEFAULT_TOKENS_USED },
-      assertion: null,
     };
   }
 
@@ -156,7 +155,6 @@ export class AssertionsResult {
       namedScores: this.namedScores,
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      assertion: null,
     };
 
     if (scoringFunction) {

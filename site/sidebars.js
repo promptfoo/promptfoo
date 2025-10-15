@@ -35,6 +35,14 @@ const redTeamSidebar = [
     id: 'red-team/owasp-llm-top-10',
   },
   {
+    type: 'doc',
+    id: 'red-team/iso-42001',
+  },
+  {
+    type: 'doc',
+    id: 'red-team/risk-scoring',
+  },
+  {
     type: 'category',
     label: 'Plugins',
     collapsed: true,
@@ -103,6 +111,7 @@ const redTeamSidebar = [
           'red-team/plugins/religion',
           'red-team/plugins/toxic-chat',
           'red-team/plugins/unsafebench',
+          'red-team/plugins/vlguard',
           'red-team/plugins/xstest',
         ],
       },
@@ -198,7 +207,11 @@ const redTeamSidebar = [
         type: 'category',
         label: 'Custom',
         collapsed: true,
-        items: ['red-team/strategies/custom-strategy', 'red-team/strategies/custom'],
+        items: [
+          'red-team/strategies/layer',
+          'red-team/strategies/custom-strategy',
+          'red-team/strategies/custom',
+        ],
       },
       {
         type: 'category',
@@ -216,10 +229,6 @@ const redTeamSidebar = [
       {
         type: 'doc',
         id: 'red-team/discovery',
-      },
-      {
-        type: 'doc',
-        id: 'red-team/guardrails',
       },
       {
         type: 'category',

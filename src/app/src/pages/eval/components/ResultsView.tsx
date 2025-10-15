@@ -49,15 +49,14 @@ import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import type { StackProps } from '@mui/material/Stack';
+import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
-
-import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 import BarChartIcon from '@mui/icons-material/BarChart';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -65,7 +64,7 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
   [theme.breakpoints.down('sm')]: {
     flexDirection: 'column',
   },
-})) as React.FC<StackProps>;
+}));
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
@@ -182,6 +181,8 @@ export default function ResultsView({
     highlightedResultsCount,
     filters,
     removeFilter,
+    filterMode,
+    setFilterMode,
   } = useTableStore();
 
   const {
@@ -220,10 +221,8 @@ export default function ResultsView({
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
 
-  const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
-
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
-    const mode = event.target.value as FilterMode;
+    const mode = event.target.value as EvalResultsFilterMode;
     setFilterMode(mode);
 
     const newFailureFilter: { [key: string]: boolean } = {};
@@ -473,7 +472,23 @@ export default function ResultsView({
   );
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
-  const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
+  const resultsChartsScores = React.useMemo(() => {
+    if (!table?.body) {
+      return [];
+    }
+    return table?.body
+      .flatMap((row) => row.outputs.map((output) => output?.score))
+      .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+  }, [table]);
+
+  const canRenderResultsCharts =
+    table &&
+    config &&
+    table.head.prompts.length > 1 &&
+    // No valid scores available
+    resultsChartsScores.length > 0 &&
+    // All scores are the same, charts not useful.
+    new Set(resultsChartsScores).size > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
@@ -647,6 +662,11 @@ export default function ResultsView({
                         const severityDisplay =
                           filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
                         label = `Severity: ${severityDisplay}`;
+                      } else if (filter.type === 'policy') {
+                        // For policy filters, use the policy name from the mapping
+                        // This should match the display format used in the dropdown
+                        const policyName = filters.policyIdToNameMap?.[filter.value];
+                        label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
                       } else {
                         // metadata type
                         label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
@@ -751,23 +771,18 @@ export default function ResultsView({
                       </MenuItem>
                     </Tooltip>
                     <DownloadMenu />
-                    {config?.sharing && (
-                      <Tooltip
-                        title="Generate a unique URL that others can access"
-                        placement="left"
-                      >
-                        <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-                          <ListItemIcon>
-                            {shareLoading ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <ShareIcon fontSize="small" />
-                            )}
-                          </ListItemIcon>
-                          Share
-                        </MenuItem>
-                      </Tooltip>
-                    )}
+                    <Tooltip title="Generate a unique URL that others can access" placement="left">
+                      <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+                        <ListItemIcon>
+                          {shareLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <ShareIcon fontSize="small" />
+                          )}
+                        </ListItemIcon>
+                        Share
+                      </MenuItem>
+                    </Tooltip>
                     <Tooltip title="Delete this eval" placement="left">
                       <MenuItem onClick={handleDeleteEvalClick}>
                         <ListItemIcon>
@@ -795,7 +810,10 @@ export default function ResultsView({
             </Box>
           </ResponsiveStack>
           {canRenderResultsCharts && renderResultsCharts && (
-            <ResultsCharts handleHideCharts={() => setRenderResultsCharts(false)} />
+            <ResultsCharts
+              handleHideCharts={() => setRenderResultsCharts(false)}
+              scores={resultsChartsScores}
+            />
           )}
         </Box>
         <ResultsTable
@@ -807,8 +825,6 @@ export default function ResultsView({
           failureFilter={failureFilter}
           debouncedSearchText={debouncedSearchValue}
           onFailureFilterToggle={handleFailureFilterToggle}
-          onSearchTextChange={handleSearchTextChange}
-          setFilterMode={setFilterMode}
           zoom={resultsTableZoom}
         />
       </Box>

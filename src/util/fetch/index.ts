@@ -14,8 +14,7 @@ import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
 
-// Override global fetch
-global.fetch = monkeyPatchFetch;
+import type { FetchOptions } from './types';
 
 /**
  * Options for configuring TLS in proxy connections
@@ -28,14 +27,6 @@ interface ProxyTlsOptions {
 }
 
 /**
- * Extended options for fetch requests with promptfoo-specific headers
- */
-interface PromptfooRequestInit extends RequestInit {
-  // Make headers type compatible with standard HeadersInit
-  headers?: HeadersInit;
-}
-
-/**
  * Error with additional system information
  */
 interface SystemError extends Error {
@@ -45,7 +36,7 @@ interface SystemError extends Error {
 
 export async function fetchWithProxy(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: FetchOptions = {},
 ): Promise<Response> {
   let finalUrl = url;
   let finalUrlString: string | undefined;
@@ -58,7 +49,12 @@ export async function fetchWithProxy(
     finalUrlString = url.url;
   }
 
-  const finalOptions: PromptfooRequestInit = {
+  if (!finalUrlString) {
+    throw new Error('Invalid URL');
+  }
+
+  // This is overridden globally but Node v20 is still complaining so we need to add it here too
+  const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...options,
     headers: {
       ...(options.headers as Record<string, string>),
@@ -131,12 +127,12 @@ export async function fetchWithProxy(
     setGlobalDispatcher(agent);
   }
 
-  return await fetch(finalUrl, finalOptions);
+  return await monkeyPatchFetch(finalUrl, finalOptions);
 }
 
 export function fetchWithTimeout(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: FetchOptions = {},
   timeout: number,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
@@ -209,13 +205,15 @@ export async function handleRateLimit(response: Response): Promise<void> {
 /**
  * Fetch with automatic retries and rate limit handling
  */
+export type { FetchOptions } from './types';
+
 export async function fetchWithRetries(
   url: RequestInfo,
-  options: PromptfooRequestInit = {},
+  options: FetchOptions = {},
   timeout: number,
-  retries: number = 4,
+  maxRetries?: number,
 ): Promise<Response> {
-  const maxRetries = Math.max(0, retries);
+  maxRetries = Math.max(0, maxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);

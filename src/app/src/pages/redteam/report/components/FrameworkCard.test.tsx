@@ -1,10 +1,19 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { Severity } from '@promptfoo/redteam/constants';
+import { ThemeProvider } from '@mui/material/styles';
+import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 import FrameworkCard from './FrameworkCard';
+
+import { createAppTheme } from '@app/components/PageShell';
 import userEvent from '@testing-library/user-event';
+import { alpha } from '@mui/material/styles';
+import { type CategoryStats } from './FrameworkComplianceUtils';
+
+// Mock react-router-dom
+vi.mock('react-router-dom', () => ({
+  useNavigate: vi.fn(),
+}));
 
 vi.mock('@promptfoo/redteam/constants', async () => {
   const original = await vi.importActual<typeof import('@promptfoo/redteam/constants')>(
@@ -55,29 +64,21 @@ describe('FrameworkCard', () => {
   type FrameworkCardProps = React.ComponentProps<typeof FrameworkCard>;
 
   const defaultProps: FrameworkCardProps = {
+    evalId: 'test-eval-id',
     framework: 'test-framework',
     isCompliant: true,
     frameworkSeverity: Severity.Low,
     categoryStats: {
-      'plugin-1': { pass: 10, total: 10 },
-      'plugin-2': { pass: 9, total: 10 },
+      'plugin-1': { pass: 10, total: 10, failCount: 0 },
+      'plugin-2': { pass: 9, total: 10, failCount: 1 },
     },
     pluginPassRateThreshold: 0.8,
     nonCompliantPlugins: [],
-    sortedNonCompliantPlugins: vi.fn((plugins) => plugins),
-    getPluginPassRate: vi.fn((plugin) => {
-      const stats = defaultProps.categoryStats[plugin] || { pass: 0, total: 0 };
-      return {
-        pass: stats.pass,
-        total: stats.total,
-        rate: stats.total > 0 ? (stats.pass / stats.total) * 100 : 0,
-      };
-    }),
     idx: 0,
   };
+  const theme = createAppTheme(false);
 
   const renderFrameworkCard = (props: Partial<FrameworkCardProps> = {}) => {
-    const theme = createTheme();
     return render(
       <ThemeProvider theme={theme}>
         <FrameworkCard {...defaultProps} {...props} />
@@ -94,8 +95,8 @@ describe('FrameworkCard', () => {
       isCompliant: true,
       nonCompliantPlugins: [],
       categoryStats: {
-        'plugin-1': { pass: 10, total: 10 },
-        'plugin-2': { pass: 9, total: 10 },
+        'plugin-1': { pass: 10, total: 10, failCount: 0 },
+        'plugin-2': { pass: 9, total: 10, failCount: 1 },
       },
     });
 
@@ -108,14 +109,14 @@ describe('FrameworkCard', () => {
     );
     expect(mainCompliantIcon).toBeInTheDocument();
 
-    expect(screen.queryByText(Severity.Low)).not.toBeInTheDocument();
-    expect(screen.queryByText(Severity.High)).not.toBeInTheDocument();
+    expect(screen.queryByText(severityDisplayNames[Severity.Low])).not.toBeInTheDocument();
+    expect(screen.queryByText(severityDisplayNames[Severity.High])).not.toBeInTheDocument();
 
     const summaryChip = screen.getByText('0 / 2 failed');
     expect(summaryChip).toBeInTheDocument();
 
     const chipContainer = summaryChip.parentElement;
-    expect(chipContainer).toHaveStyle('background-color: #4caf50');
+    expect(chipContainer).toHaveStyle(`background-color: ${theme.palette.success.main}`);
   });
 
   it('should display the non-compliant state, including the severity chip and a list of failed plugins, when isCompliant is false and nonCompliantPlugins contains plugin names', () => {
@@ -125,16 +126,16 @@ describe('FrameworkCard', () => {
       frameworkSeverity: Severity.High,
       nonCompliantPlugins: nonCompliantPlugins,
       categoryStats: {
-        'plugin-1': { pass: 10, total: 10 },
-        'plugin-2': { pass: 5, total: 10 },
-        'plugin-3': { pass: 0, total: 10 },
+        'plugin-1': { pass: 10, total: 10, failCount: 0 },
+        'plugin-2': { pass: 5, total: 10, failCount: 5 },
+        'plugin-3': { pass: 0, total: 10, failCount: 10 },
       },
     });
 
     const cardElement = screen.getByText('Test Framework').closest('.framework-item');
     expect(cardElement).toHaveClass('non-compliant');
 
-    expect(screen.getByText(Severity.High)).toBeInTheDocument();
+    expect(screen.getByText(severityDisplayNames[Severity.High])).toBeInTheDocument();
 
     const summaryChip = screen.getByText('2 / 3 failed');
     expect(summaryChip).toBeInTheDocument();
@@ -148,11 +149,11 @@ describe('FrameworkCard', () => {
   });
 
   it('should render categorized plugin lists with correct category names, chips, and plugin status for an OWASP framework with plugins in multiple categories', () => {
-    const categoryStats: Record<string, { pass: number; total: number }> = {
-      'plugin-1': { pass: 10, total: 10 },
-      'plugin-2': { pass: 0, total: 10 },
-      'plugin-3': { pass: 5, total: 10 },
-      'plugin-4': { pass: 10, total: 10 },
+    const categoryStats: Record<string, { pass: number; total: number; failCount: number }> = {
+      'plugin-1': { pass: 10, total: 10, failCount: 0 },
+      'plugin-2': { pass: 0, total: 10, failCount: 10 },
+      'plugin-3': { pass: 5, total: 10, failCount: 5 },
+      'plugin-4': { pass: 10, total: 10, failCount: 0 },
     };
 
     renderFrameworkCard({
@@ -162,15 +163,6 @@ describe('FrameworkCard', () => {
       categoryStats: categoryStats,
       pluginPassRateThreshold: 0.8,
       nonCompliantPlugins: ['plugin-2', 'plugin-3'],
-      sortedNonCompliantPlugins: vi.fn((plugins) => plugins),
-      getPluginPassRate: vi.fn((plugin: string) => {
-        const stats = categoryStats[plugin] || { pass: 0, total: 0 };
-        return {
-          pass: stats.pass,
-          total: stats.total,
-          rate: stats.total > 0 ? (stats.pass / stats.total) * 100 : 0,
-        };
-      }),
     });
 
     expect(screen.getByText('1. API1:2023 Broken Object Level Authorization')).toBeInTheDocument();
@@ -190,16 +182,14 @@ describe('FrameworkCard', () => {
     const pass = 7;
     const total = 10;
     const failureRate = ((total - pass) / total) * 100;
-    const failureRateFormatted = failureRate.toFixed(0);
+    const failureRateFormatted = failureRate.toFixed(2);
     const tooltipText = `${total - pass}/${total} attacks successful`;
 
     renderFrameworkCard({
       categoryStats: {
-        [pluginName]: { pass, total },
+        [pluginName]: { pass, total, failCount: total - pass },
       },
-      getPluginPassRate: vi.fn(() => ({ pass, total, rate: (pass / total) * 100 })),
       nonCompliantPlugins: [pluginName],
-      sortedNonCompliantPlugins: vi.fn((plugins) => plugins),
     });
 
     screen.getByText(pluginName);
@@ -217,7 +207,7 @@ describe('FrameworkCard', () => {
       frameworkSeverity: Severity.Critical,
     });
 
-    const severityChip = screen.getByText(Severity.Critical);
+    const severityChip = screen.getByText(severityDisplayNames[Severity.Critical]);
 
     await userEvent.hover(severityChip);
 
@@ -226,5 +216,95 @@ describe('FrameworkCard', () => {
     );
 
     expect(tooltipText).toBeVisible();
+  });
+
+  it('should set success background color when isCompliant is true', () => {
+    renderFrameworkCard({ isCompliant: true });
+    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    expect(cardElement).toHaveStyle(`background-color: ${alpha(theme.palette.success.main, 0.05)}`);
+  });
+
+  it('should set error background color when isCompliant is false', () => {
+    renderFrameworkCard({ isCompliant: false });
+    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    expect(cardElement).toHaveStyle(`background-color: ${alpha(theme.palette.error.main, 0.05)}`);
+  });
+
+  it('should render the summary chip and severity chip with the correct color prop and use the theme-driven text color for the severity chip', () => {
+    const frameworkSeverity = Severity.High;
+    renderFrameworkCard({
+      isCompliant: false,
+      frameworkSeverity: frameworkSeverity,
+      nonCompliantPlugins: ['plugin-1'],
+      categoryStats: {
+        'plugin-1': { pass: 0, total: 1, failCount: 1 },
+      },
+    });
+
+    const summaryChip = screen.getByText('1 / 1 failed');
+    expect(summaryChip).toBeInTheDocument();
+    expect(summaryChip.closest('.MuiChip-root')).toHaveClass('MuiChip-colorError');
+
+    const severityChip = screen.getByText(severityDisplayNames[frameworkSeverity]);
+    expect(severityChip).toBeInTheDocument();
+
+    const severityChipElement = severityChip.closest('.MuiChip-root');
+    expect(severityChipElement).toHaveStyle({
+      backgroundColor: theme.palette.custom.severity[frameworkSeverity].main,
+      color: theme.palette.custom.severity[frameworkSeverity].contrastText,
+    });
+  });
+
+  it("should render the failed plugin section with a background color using the theme's error color at 5% opacity, and the passed plugin section with the theme's success color at 5% opacity", () => {
+    renderFrameworkCard({
+      isCompliant: false,
+      nonCompliantPlugins: ['plugin-3'],
+      categoryStats: {
+        'plugin-1': { pass: 10, total: 10, failCount: 0 },
+        'plugin-2': { pass: 9, total: 10, failCount: 0 },
+        'plugin-3': { pass: 5, total: 10, failCount: 0 },
+      },
+    });
+
+    const failedSection = screen.getByText('Failed:').closest('li');
+    const expectedErrorBg = alpha(theme.palette.error.main, 0.05);
+    expect(failedSection).toHaveStyle(`background-color: ${expectedErrorBg}`);
+
+    const passedSection = screen.getByText('Passed:').closest('li');
+    const expectedSuccessBg = alpha(theme.palette.success.main, 0.05);
+    expect(passedSection).toHaveStyle(`background-color: ${expectedSuccessBg}`);
+  });
+
+  it('should verify CheckCircleIcon uses the success color prop when isCompliant is true', () => {
+    renderFrameworkCard({ isCompliant: true });
+    const checkCircleIcons = screen.getAllByTestId('CheckCircleIcon');
+    const checkCircleIcon = checkCircleIcons[0];
+    expect(checkCircleIcon).toHaveClass('MuiSvgIcon-colorSuccess');
+  });
+
+  it('should maintain proper layout and spacing when rendering a large number of non-compliant plugins', () => {
+    const numPlugins = 25;
+    const nonCompliantPlugins = Array.from({ length: numPlugins }, (_, i) => `plugin-${i + 1}`);
+    const categoryStats = nonCompliantPlugins.reduce((acc, plugin) => {
+      acc[plugin] = { pass: 0, total: 10, failCount: 0 };
+      return acc;
+    }, {} as CategoryStats);
+
+    renderFrameworkCard({
+      isCompliant: false,
+      frameworkSeverity: Severity.High,
+      nonCompliantPlugins: nonCompliantPlugins,
+      categoryStats: categoryStats,
+    });
+
+    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    expect(cardElement).toHaveClass('non-compliant');
+
+    nonCompliantPlugins.forEach((plugin) => {
+      expect(screen.getByText(plugin)).toBeInTheDocument();
+    });
+
+    const summaryChip = screen.getByText(`${numPlugins} / ${numPlugins} failed`);
+    expect(summaryChip).toBeInTheDocument();
   });
 });

@@ -5,6 +5,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
+import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
@@ -23,17 +24,36 @@ import {
   displayNameOverrides,
   type Plugin,
   Severity,
+  severityDisplayNames,
+  severityRiskScores,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
+import { getSeverityColor } from '../utils/color';
+import { getStrategyIdFromTest } from './shared';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
+import {
+  formatPolicyIdentifierAsMetric,
+  isValidPolicyObject,
+  makeInlinePolicyId,
+} from '@promptfoo/redteam/plugins/policy/utils';
+import {
+  calculatePluginRiskScore,
+  prepareTestResultsFromStats,
+} from '@promptfoo/redteam/riskScoring';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { formatASRForDisplay } from '@app/utils/redteam';
+import { type TestResultStats } from './FrameworkComplianceUtils';
+
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  categoryStats: Record<string, Required<TestResultStats>>;
   plugins: RedteamPluginObject[];
+  failuresByPlugin?: Record<string, any[]>;
+  passesByPlugin?: Record<string, any[]>;
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
   vulnerabilitiesDataGridFilterModel: GridFilterModel;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
@@ -50,80 +70,212 @@ function CustomToolbar() {
   );
 }
 
-const TestSuites: React.FC<TestSuitesProps> = ({
+const getRiskScoreColor = (riskScore: number, theme: any): string => {
+  if (riskScore >= severityRiskScores[Severity.Critical]) {
+    return getSeverityColor(Severity.Critical, theme);
+  } else if (riskScore >= severityRiskScores[Severity.High]) {
+    return getSeverityColor(Severity.High, theme);
+  } else if (riskScore >= severityRiskScores[Severity.Medium]) {
+    return getSeverityColor(Severity.Medium, theme);
+  } else {
+    return getSeverityColor(Severity.Low, theme);
+  }
+};
+
+const TestSuites = ({
   evalId,
   categoryStats,
   plugins,
+  failuresByPlugin,
+  passesByPlugin,
   vulnerabilitiesDataGridRef,
   vulnerabilitiesDataGridFilterModel,
   setVulnerabilitiesDataGridFilterModel,
-}) => {
+}: TestSuitesProps) => {
   const navigate = useNavigate();
+  const theme = useTheme();
   const { recordEvent } = useTelemetry();
   const [sortModel, setSortModel] = React.useState<GridSortModel>([
-    { field: 'attackSuccessRate', sort: 'desc' },
+    { field: 'riskScore', sort: 'desc' },
   ]);
 
+  const pluginSeverityMap = React.useMemo(() => getRiskCategorySeverityMap(plugins), [plugins]);
+
+  const pluginsById = React.useMemo(() => {
+    return plugins.reduce(
+      (acc, plugin) => {
+        let pluginId: string;
+        if (plugin.id === 'policy' && plugin.config?.policy) {
+          // Use the policy id as the plugin id in order to differentiate custom policies from each other.
+          // Either get the policy id from the metadata or construct it by hashing the policy text.
+          pluginId = isValidPolicyObject(plugin.config.policy)
+            ? plugin.config.policy.id
+            : makeInlinePolicyId(plugin.config.policy as string);
+        } else {
+          pluginId = plugin.id;
+        }
+
+        acc[pluginId] = {
+          ...plugin,
+          // If the plugin does not have a severity defined, assign it here. Use original `plugin.id`
+          // for `pluginSeverityMap` lookups.
+          severity: plugin.severity ?? pluginSeverityMap[plugin.id as Plugin],
+        };
+        return acc;
+      },
+      {} as Record<string, RedteamPluginObject>,
+    );
+  }, [plugins, pluginSeverityMap]);
+
   const rows = React.useMemo(() => {
-    return Object.entries(categoryStats)
-      .filter(([_, stats]) => stats.total > 0)
-      .map(([pluginName, stats]) => ({
-        id: pluginName,
-        pluginName,
-        type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
-        description:
-          subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
-        severity: getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown',
-        passRate: (stats.pass / stats.total) * 100,
-        passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-        attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
-        total: stats.total,
-        successfulAttacks: stats.total - stats.pass,
-      }));
-  }, [categoryStats, plugins]);
+    return (
+      Object.entries(categoryStats)
+        .filter(([_, stats]) => stats.total > 0)
+        .map(([pluginName, stats]) => {
+          const plugin = pluginsById[pluginName];
+
+          // Handle case where plugin is not found (e.g., when plugins array is empty)
+          // Use the severity map directly or default to 'Unknown'
+          const severity =
+            plugin?.severity || pluginSeverityMap[pluginName as Plugin] || ('Unknown' as Severity);
+
+          // Calculate risk score with details
+          const riskDetails = (() => {
+            // Prepare test results using the helper function
+            const testResults = prepareTestResultsFromStats(
+              failuresByPlugin,
+              passesByPlugin,
+              pluginName,
+              categoryStats,
+              getStrategyIdFromTest,
+            );
+
+            if (testResults.length === 0) {
+              return {
+                riskScore: 0,
+                complexityScore: 0,
+                worstStrategy: 'none',
+              };
+            }
+
+            // Calculate risk score once and extract values
+            const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
+            return {
+              riskScore: riskScoreResult.score,
+              complexityScore: riskScoreResult.complexityScore,
+              worstStrategy: riskScoreResult.worstStrategy,
+            };
+          })();
+
+          let type = categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName;
+          let description =
+            subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '';
+
+          // Read custom policy metadata from `pluginsById`.
+          if (plugin?.id === 'policy' && plugin?.config?.policy) {
+            if (isValidPolicyObject(plugin.config.policy)) {
+              type = formatPolicyIdentifierAsMetric(
+                plugin.config.policy.name ?? plugin.config.policy.id,
+              );
+              if (plugin.config.policy.text) {
+                description = plugin.config.policy.text;
+              }
+            } else {
+              type = formatPolicyIdentifierAsMetric(
+                makeInlinePolicyId(plugin.config?.policy as string),
+              );
+              description = plugin.config?.policy as string;
+            }
+          }
+
+          return {
+            id: pluginName,
+            pluginName,
+            type,
+            description,
+            severity,
+            passRate: (stats.pass / stats.total) * 100,
+            passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
+            attackSuccessRate: calculateAttackSuccessRate(stats.total, stats.failCount),
+            total: stats.total,
+            successfulAttacks: stats.total - stats.pass,
+            riskScore: riskDetails.riskScore,
+            complexityScore: riskDetails.complexityScore,
+            worstStrategy: riskDetails.worstStrategy,
+          };
+        })
+        // Filter out rows where ASR = 0
+        .filter((row) => row.successfulAttacks > 0)
+    );
+  }, [categoryStats, plugins, failuresByPlugin, passesByPlugin, pluginsById, pluginSeverityMap]);
 
   const exportToCSV = React.useCallback(() => {
     // Format data for CSV
     const headers = [
       'Type',
       'Description',
+      'Risk Score',
+      'Complexity',
       'Successful Attacks',
       'Total Tests',
       'Attack Success Rate',
       'Severity',
     ];
 
-    // Get the sorted data based on current sort model
-    const sortedData = [...rows].sort((a, b) => {
+    const compareRows = (a: (typeof rows)[number], b: (typeof rows)[number]) => {
       if (sortModel.length > 0 && sortModel[0].field === 'attackSuccessRate') {
         return sortModel[0].sort === 'asc'
           ? a.attackSuccessRate - b.attackSuccessRate
           : b.attackSuccessRate - a.attackSuccessRate;
-      } else if (sortModel.length > 0 && sortModel[0].field === 'severity') {
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'severity') {
         const severityOrder = {
           [Severity.Critical]: 4,
           [Severity.High]: 3,
           [Severity.Medium]: 2,
           [Severity.Low]: 1,
-        };
+        } as const;
+
         return sortModel[0].sort === 'asc'
-          ? severityOrder[a.severity] - severityOrder[b.severity]
-          : severityOrder[b.severity] - severityOrder[a.severity];
-      } else {
-        // Default sort
-        return b.attackSuccessRate - a.attackSuccessRate;
+          ? severityOrder[a.severity as Severity] - severityOrder[b.severity as Severity]
+          : severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity];
       }
-    });
+
+      if (sortModel.length > 0 && sortModel[0].field === 'riskScore') {
+        return sortModel[0].sort === 'asc' ? a.riskScore - b.riskScore : b.riskScore - a.riskScore;
+      }
+
+      if (sortModel.length > 0 && sortModel[0].field === 'complexityScore') {
+        return sortModel[0].sort === 'asc'
+          ? a.complexityScore - b.complexityScore
+          : b.complexityScore - a.complexityScore;
+      }
+
+      return b.riskScore - a.riskScore;
+    };
+
+    const sortedData = rows.reduce<Array<(typeof rows)[number]>>((acc, current) => {
+      const insertIndex = acc.findIndex((item) => compareRows(current, item) < 0);
+      if (insertIndex === -1) {
+        acc.push(current);
+      } else {
+        acc.splice(insertIndex, 0, current);
+      }
+      return acc;
+    }, []);
 
     // Serialize the rows to CSV
     const csvData = sortedData.map((subCategory) => [
       displayNameOverrides[subCategory.pluginName as keyof typeof displayNameOverrides] ||
         subCategory.type,
       subCategory.description,
+      subCategory.riskScore.toFixed(2),
+      subCategory.complexityScore.toFixed(1),
       subCategory.successfulAttacks,
       subCategory.total,
-      subCategory.attackSuccessRate.toFixed(2) + '%',
-      subCategory.severity,
+      formatASRForDisplay(subCategory.attackSuccessRate) + '%',
+      severityDisplayNames[subCategory.severity as Severity],
     ]);
 
     // Combine headers and data with proper escaping for CSV
@@ -159,7 +311,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
       field: 'type',
       headerName: 'Type',
       flex: 1,
-      valueGetter: (value, row) =>
+      valueGetter: (_, row) =>
         displayNameOverrides[row.pluginName as keyof typeof displayNameOverrides] || row.type,
       renderCell: (params: GridRenderCellParams) => (
         <span style={{ fontWeight: 500 }}>{params.value}</span>
@@ -174,6 +326,106 @@ const TestSuites: React.FC<TestSuitesProps> = ({
       ),
     },
     {
+      field: 'riskScore',
+      headerName: 'Risk Score',
+      type: 'number',
+      flex: 0.5,
+      renderCell: (params: GridRenderCellParams) => {
+        const value = params.row.riskScore;
+        return (
+          <Tooltip
+            title={
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Risk Score
+                </Typography>
+                <Typography variant="caption" component="div">
+                  Risk = Impact + Exploitability + Human Factor + Complexity
+                </Typography>
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="caption" component="div">
+                    • Base Severity: {params.row.severity}
+                  </Typography>
+                  <Typography variant="caption" component="div">
+                    • Attack Success Rate: {formatASRForDisplay(params.row.attackSuccessRate)}%
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    component="div"
+                    sx={{ mt: 0.5, fontStyle: 'italic' }}
+                  >
+                    Higher exploitability increases risk exponentially
+                  </Typography>
+                </Box>
+              </Box>
+            }
+            placement="top"
+            arrow
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'help' }}>
+              <Box
+                sx={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  backgroundColor: getRiskScoreColor(value, theme),
+                }}
+              />
+              {value.toFixed(2)}
+            </Box>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      field: 'complexityScore',
+      headerName: 'Complexity',
+      type: 'number',
+      flex: 0.5,
+      renderCell: (params: GridRenderCellParams) => {
+        const value = params.row.complexityScore;
+        return (
+          <Tooltip
+            title={
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Attack Complexity
+                </Typography>
+                <Typography variant="caption" component="div">
+                  How difficult this attack is to execute
+                </Typography>
+                <Typography variant="caption" component="div" sx={{ mt: 1 }}>
+                  Strategy: {params.row.worstStrategy}
+                </Typography>
+                <Typography variant="caption" component="div">
+                  • Score: {value.toFixed(0)}/10
+                </Typography>
+                <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
+                  {value >= 7
+                    ? 'Very Hard - Requires automation/tools'
+                    : value >= 5
+                      ? 'Hard - Requires expertise'
+                      : value >= 3
+                        ? 'Medium - Requires some skill'
+                        : 'Easy - Average user could exploit'}
+                </Typography>
+              </Box>
+            }
+            placement="top"
+            arrow
+          >
+            <Box sx={{ cursor: 'help' }}>{value.toFixed(0)}</Box>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      field: 'successfulAttacks',
+      headerName: 'Successful Attacks',
+      type: 'number',
+      flex: 0.75,
+    },
+    {
       field: 'attackSuccessRate',
       headerName: 'Attack Success Rate',
       type: 'number',
@@ -183,11 +435,11 @@ const TestSuites: React.FC<TestSuitesProps> = ({
         const passRateWithFilter = params.row.passRateWithFilter;
         const passRate = params.row.passRate;
         return (
-          <Box className={value >= 75 ? 'asr-high' : value >= 50 ? 'asr-medium' : 'asr-low'}>
-            <strong>{value.toFixed(2)}%</strong>
+          <Box>
+            <strong>{formatASRForDisplay(value)}%</strong>
             {passRateWithFilter !== passRate && (
               <>
-                <br />({(100 - passRateWithFilter).toFixed(1)}% with mitigation)
+                <br />({formatASRForDisplay(100 - passRateWithFilter)}% with mitigation)
               </>
             )}
           </Box>
@@ -199,10 +451,13 @@ const TestSuites: React.FC<TestSuitesProps> = ({
       headerName: 'Severity',
       type: 'singleSelect',
       flex: 0.5,
-      valueOptions: Object.values(Severity),
-      renderCell: (params: GridRenderCellParams) => (
-        <Box className={`vuln-${params.value.toLowerCase()} vuln`}>{params.value}</Box>
-      ),
+      valueFormatter: (value: Severity) => severityDisplayNames[value],
+      valueOptions: [
+        ...Object.values(Severity).map((severity) => ({
+          value: severity,
+          label: severityDisplayNames[severity],
+        })),
+      ],
       sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
@@ -227,7 +482,9 @@ const TestSuites: React.FC<TestSuitesProps> = ({
             size="small"
             onClick={() => {
               const pluginId = params.row.pluginName;
-              navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
+              const plugin = pluginsById[pluginId];
+              const key = plugin?.id === 'policy' ? 'policy' : 'plugin';
+              navigate(`/eval/${evalId}?${key}=${encodeURIComponent(pluginId)}&mode=failures`);
             }}
           >
             View logs

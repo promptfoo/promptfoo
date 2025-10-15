@@ -1,7 +1,10 @@
-import { jest } from '@jest/globals';
 import { v4 as uuidv4 } from 'uuid';
+
+import { jest } from '@jest/globals';
+
+import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import {
-  checkIfOnTopic,
   createTreeNode,
   evaluateResponse,
   getNewPrompt,
@@ -14,13 +17,8 @@ import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
-import { getNunjucksEngine } from '../../../src/util/templates';
-
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -28,6 +26,7 @@ import type {
   CallApiOptionsParams,
   GradingResult,
 } from '../../../src/types';
+import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/providers/openai');
 jest.mock('../../../src/util/templates');
@@ -43,7 +42,6 @@ describe('RedteamIterativeProvider', () => {
       const nunjucksEng = getNunjucksEngine();
       const attackerPrompt = nunjucksEng.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
       expect(result.redteamSystemPrompt).toBe(attackerPrompt);
-      expect(result.onTopicSystemPrompt).toBe(ON_TOPIC_SYSTEM_PROMPT);
       expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
     });
 
@@ -53,7 +51,6 @@ describe('RedteamIterativeProvider', () => {
       const nunjucksEng = getNunjucksEngine();
       const attackerPrompt = nunjucksEng.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal });
       expect(result.redteamSystemPrompt).toBe(attackerPrompt);
-      expect(result.onTopicSystemPrompt).toBe(ON_TOPIC_SYSTEM_PROMPT);
       expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
     });
   });
@@ -205,15 +202,38 @@ describe('RedteamIterativeProvider', () => {
       );
     });
 
-    it('should throw an error for invalid API response', async () => {
+    it('should gracefully handle invalid API response by skipping the turn', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid json' });
 
       const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
         { role: 'system', content: 'System prompt' },
       ];
-      await expect(getNewPrompt(mockRedteamProvider, redteamHistory)).rejects.toThrow(
-        'Expected a JSON object',
-      );
+
+      const result = await getNewPrompt(mockRedteamProvider, redteamHistory);
+
+      expect(result).toEqual({
+        improvement: 'parse failure – skipping turn',
+        prompt: '',
+        tokenUsage: undefined,
+      });
+    });
+
+    it('should parse JSON object embedded in fenced prose', async () => {
+      const mockResponse = {
+        improvement: 'Fenced improvement',
+        prompt: 'Fenced prompt',
+      };
+      const proseWithFencedJson = `Here is the result you asked for.\n\n\`\`\`json\n${JSON.stringify(
+        mockResponse,
+      )}\n\`\`\`\n\nThanks!`;
+      mockRedteamProvider.callApi.mockResolvedValue({ output: proseWithFencedJson });
+
+      const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+        { role: 'system', content: 'System prompt' },
+      ];
+
+      const result = await getNewPrompt(mockRedteamProvider, redteamHistory);
+      expect(result).toEqual(mockResponse);
     });
 
     it('should handle empty history correctly', async () => {
@@ -238,75 +258,11 @@ describe('RedteamIterativeProvider', () => {
     });
   });
 
-  describe('checkIfOnTopic', () => {
-    let mockRedteamProvider: jest.Mocked<OpenAiChatCompletionProvider>;
-
-    beforeEach(() => {
-      mockRedteamProvider = {
-        id: jest.fn().mockReturnValue('mock-provider'),
-        callApi: jest.fn(),
-      } as unknown as jest.Mocked<OpenAiChatCompletionProvider>;
-    });
-
-    it('should return true for on-topic prompt', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: JSON.stringify({ onTopic: true }) });
-
-      const result = await checkIfOnTopic(
-        mockRedteamProvider,
-        'On-topic system prompt',
-        'Target prompt',
-      );
-
-      expect(result).toMatchObject({ isOnTopic: true });
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(1);
-      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
-        '[{"role":"system","content":"On-topic system prompt"},{"role":"user","content":"Target prompt"}]',
-        expect.objectContaining({
-          prompt: expect.objectContaining({
-            label: 'on-topic',
-            raw: '[{"role":"system","content":"On-topic system prompt"},{"role":"user","content":"Target prompt"}]',
-          }),
-        }),
-      );
-    });
-
-    it('should return false for off-topic prompt', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: JSON.stringify({ onTopic: false }) });
-
-      const result = await checkIfOnTopic(
-        mockRedteamProvider,
-        'On-topic system prompt',
-        'Off-topic prompt',
-      );
-
-      expect(result).toMatchObject({ isOnTopic: false });
-    });
-
-    it('should throw an error for invalid API response', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid json' });
-
-      await expect(
-        checkIfOnTopic(mockRedteamProvider, 'On-topic system prompt', 'Target prompt'),
-      ).rejects.toThrow('Expected a JSON object');
-    });
-
-    it('should throw an error for unexpected API response format', async () => {
-      mockRedteamProvider.callApi.mockResolvedValue({
-        output: JSON.stringify({ unexpectedKey: true }),
-      });
-
-      await expect(
-        checkIfOnTopic(mockRedteamProvider, 'On-topic system prompt', 'Target prompt'),
-      ).rejects.toThrow('Invariant failed: Expected onTopic to be a boolean');
-    });
-  });
-
   describe('updateRedteamHistory', () => {
     it('should create a new history entry with correct content', () => {
       const targetResponse = 'Test response';
       const goal = 'Test goal';
       const score = 7;
-      const isOnTopic = true;
       const containsPenalizedPhrase = false;
       const excludeTargetOutput = false;
 
@@ -314,7 +270,6 @@ describe('RedteamIterativeProvider', () => {
         targetResponse,
         goal,
         score,
-        isOnTopic,
         containsPenalizedPhrase,
         excludeTargetOutput,
       );
@@ -329,11 +284,10 @@ describe('RedteamIterativeProvider', () => {
       expect(result.content).not.toContain('(contains penalized phrase)');
     });
 
-    it('should handle off-topic and penalized responses', () => {
+    it('should handle penalized responses', () => {
       const targetResponse = 'Off-topic response';
       const goal = 'Test goal';
       const score = 3;
-      const isOnTopic = false;
       const containsPenalizedPhrase = true;
       const excludeTargetOutput = false;
 
@@ -341,7 +295,6 @@ describe('RedteamIterativeProvider', () => {
         targetResponse,
         goal,
         score,
-        isOnTopic,
         containsPenalizedPhrase,
         excludeTargetOutput,
       );
@@ -351,16 +304,13 @@ describe('RedteamIterativeProvider', () => {
         content: expect.stringContaining('LANGUAGE MODEL OUTPUT: Off-topic response'),
       });
       expect(result.content).toContain(`OBJECTIVE: ${goal}`);
-      expect(result.content).toContain(
-        `SCORE: ${score} (your prompt was off-topic) (contains penalized phrase)`,
-      );
+      expect(result.content).toContain(`SCORE: ${score} (contains penalized phrase)`);
     });
 
     it('should handle edge case scores', () => {
       const targetResponse = 'Edge case response';
       const goal = 'Test goal';
       const score = 10; // Maximum score
-      const isOnTopic = true;
       const containsPenalizedPhrase = false;
       const excludeTargetOutput = false;
 
@@ -368,7 +318,6 @@ describe('RedteamIterativeProvider', () => {
         targetResponse,
         goal,
         score,
-        isOnTopic,
         containsPenalizedPhrase,
         excludeTargetOutput,
       );
@@ -384,7 +333,6 @@ describe('RedteamIterativeProvider', () => {
       const targetResponse = 'Minimum score response';
       const goal = 'Test goal';
       const score = 0; // Minimum score
-      const isOnTopic = true;
       const containsPenalizedPhrase = false;
       const excludeTargetOutput = false;
 
@@ -392,7 +340,6 @@ describe('RedteamIterativeProvider', () => {
         targetResponse,
         goal,
         score,
-        isOnTopic,
         containsPenalizedPhrase,
         excludeTargetOutput,
       );
@@ -408,7 +355,6 @@ describe('RedteamIterativeProvider', () => {
       const targetResponse = 'Target response';
       const goal = 'Test goal';
       const score = 7;
-      const isOnTopic = true;
       const containsPenalizedPhrase = false;
       const excludeTargetOutput = true;
 
@@ -416,7 +362,6 @@ describe('RedteamIterativeProvider', () => {
         targetResponse,
         goal,
         score,
-        isOnTopic,
         containsPenalizedPhrase,
         excludeTargetOutput,
       );
@@ -516,7 +461,6 @@ describe('Tree Structure', () => {
     treeOutputs.push({
       depth: 0,
       id: parentNode.id,
-      isOnTopic: true,
       output: 'parent output',
       prompt: 'parent prompt',
       score: 5,
@@ -527,7 +471,6 @@ describe('Tree Structure', () => {
       depth: 1,
       id: childNode.id,
       improvement: 'test improvement',
-      isOnTopic: true,
       output: 'child output',
       parentId: parentNode.id,
       prompt: 'child prompt',
@@ -542,17 +485,6 @@ describe('Tree Structure', () => {
   });
 
   describe('selectNodes', () => {
-    let mockRedteamProvider: jest.Mocked<ApiProvider>;
-
-    beforeEach(() => {
-      mockRedteamProvider = {
-        id: jest.fn().mockReturnValue('mock-provider'),
-        callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
-          output: JSON.stringify({ onTopic: true }),
-        }),
-      } as jest.Mocked<ApiProvider>;
-    });
-
     it('should mark selected nodes in treeOutputs', async () => {
       const nodes = [
         createTreeNode('node1', 3, 0),
@@ -563,19 +495,13 @@ describe('Tree Structure', () => {
       const treeOutputs: TreeSearchOutput[] = nodes.map((node) => ({
         depth: node.depth,
         id: node.id,
-        isOnTopic: true,
         output: 'test output',
         prompt: node.prompt,
         score: node.score,
         wasSelected: false,
       }));
 
-      const selectedNodes = await selectNodes(
-        nodes,
-        mockRedteamProvider,
-        'test prompt',
-        'test goal',
-      );
+      const selectedNodes = await selectNodes(nodes);
 
       selectedNodes.forEach((node) => {
         const output = treeOutputs.find((o) => o.id === node.id);
@@ -603,7 +529,6 @@ describe('Tree Structure', () => {
         {
           depth: 0,
           id: 'root',
-          isOnTopic: true,
           output: 'root output',
           prompt: 'root prompt',
           score: 5,
@@ -613,7 +538,6 @@ describe('Tree Structure', () => {
           depth: 1,
           id: 'child1',
           improvement: 'improvement1',
-          isOnTopic: true,
           output: 'child1 output',
           parentId: 'root',
           prompt: 'child1 prompt',
@@ -624,7 +548,6 @@ describe('Tree Structure', () => {
           depth: 1,
           id: 'child2',
           improvement: 'improvement2',
-          isOnTopic: true,
           output: 'child2 output',
           parentId: 'root',
           prompt: 'child2 prompt',
@@ -696,7 +619,6 @@ describe('Tree Structure and Metadata', () => {
     treeOutputs.push({
       depth: 0,
       id: parentNode.id,
-      isOnTopic: true,
       output: 'parent output',
       prompt: parentPrompt,
       score: 5,
@@ -707,7 +629,6 @@ describe('Tree Structure and Metadata', () => {
       depth: 1,
       id: childNode.id,
       improvement,
-      isOnTopic: true,
       output: 'child output',
       parentId: parentNode.id,
       prompt: childPrompt,
@@ -721,6 +642,27 @@ describe('Tree Structure and Metadata', () => {
     expect(childOutput?.improvement).toBe(improvement);
   });
 
+  it('should not throw on target error and allow error-bearing output to be recorded', async () => {
+    // This test validates the non-throwing behavior at a unit level by calling shared.getTargetResponse directly
+    const mockTargetProvider: jest.Mocked<ApiProvider> = {
+      id: jest.fn().mockReturnValue('mock-target'),
+      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: 'This is 504',
+        error: 'HTTP 504',
+      }),
+    } as jest.Mocked<ApiProvider>;
+
+    const result = await getTargetResponse(
+      mockTargetProvider,
+      'prompt',
+      { prompt: { label: 'test', raw: 'prompt' }, vars: {} } as CallApiContextParams,
+      {} as CallApiOptionsParams,
+    );
+
+    expect(result.output).toBe('This is 504');
+    expect(result.error).toBe('HTTP 504');
+  });
+
   it('should track tree structure across multiple depths', () => {
     const rootId = uuidv4();
     const child1Id = uuidv4();
@@ -731,7 +673,6 @@ describe('Tree Structure and Metadata', () => {
       {
         depth: 0,
         id: rootId,
-        isOnTopic: true,
         output: 'root output',
         prompt: 'root prompt',
         score: 5,
@@ -741,7 +682,6 @@ describe('Tree Structure and Metadata', () => {
         depth: 1,
         id: child1Id,
         improvement: 'improvement1',
-        isOnTopic: true,
         output: 'child1 output',
         parentId: rootId,
         prompt: 'child1 prompt',
@@ -752,7 +692,6 @@ describe('Tree Structure and Metadata', () => {
         depth: 1,
         id: child2Id,
         improvement: 'improvement2',
-        isOnTopic: true,
         output: 'child2 output',
         parentId: rootId,
         prompt: 'child2 prompt',
@@ -763,7 +702,6 @@ describe('Tree Structure and Metadata', () => {
         depth: 2,
         id: grandchild1Id,
         improvement: 'improvement3',
-        isOnTopic: true,
         output: 'grandchild1 output',
         parentId: child1Id,
         prompt: 'grandchild1 prompt',
@@ -820,7 +758,6 @@ describe('Tree Structure and Metadata', () => {
         {
           depth: 0,
           id: 'root',
-          isOnTopic: true,
           output: 'root output',
           prompt: 'root prompt',
           score: 5,
@@ -831,7 +768,6 @@ describe('Tree Structure and Metadata', () => {
           depth: 1,
           id: 'child',
           improvement: 'improvement',
-          isOnTopic: true,
           output: 'child output',
           parentId: 'root',
           prompt: 'child prompt',
@@ -854,7 +790,7 @@ describe('Tree Structure and Metadata', () => {
     expect(treeOutputs[0]).toHaveProperty('prompt');
     expect(treeOutputs[0]).toHaveProperty('output');
     expect(treeOutputs[0]).toHaveProperty('score');
-    expect(treeOutputs[0]).toHaveProperty('isOnTopic');
+    // isOnTopic removed
     expect(treeOutputs[0]).toHaveProperty('depth');
     expect(treeOutputs[0]).toHaveProperty('wasSelected');
     expect(treeOutputs[0]).toHaveProperty('graderPassed');
@@ -1102,7 +1038,6 @@ describe('Metadata Validation with New Fields', () => {
           graderPassed: undefined,
           id: 'root-id',
           improvement: 'Initial improvement',
-          isOnTopic: true,
           output: 'Root output',
           prompt: 'Root prompt',
           score: 5,
@@ -1278,27 +1213,7 @@ describe('Token Counting', () => {
     expect(mockJudgeProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('should track token usage from on-topic check calls', async () => {
-    const mockOnTopicProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-ontopic'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
-        output: JSON.stringify({ onTopic: true }),
-        tokenUsage: { total: 25, prompt: 15, completion: 10, numRequests: 1 },
-      }),
-    } as jest.Mocked<ApiProvider>;
-
-    const result = await checkIfOnTopic(
-      mockOnTopicProvider,
-      'On-topic system prompt',
-      'Target prompt',
-    );
-
-    expect(result).toEqual({
-      isOnTopic: true,
-      tokenUsage: { total: 25, prompt: 15, completion: 10, numRequests: 1 },
-    });
-    expect(mockOnTopicProvider.callApi).toHaveBeenCalledTimes(1);
-  });
+  // removed on-topic token usage test
 
   it('should handle incomplete token usage data gracefully', async () => {
     const mockProvider: jest.Mocked<ApiProvider> = {
@@ -1336,10 +1251,6 @@ describe('Token Counting', () => {
           tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
         })
         .mockResolvedValueOnce({
-          output: JSON.stringify({ onTopic: true }),
-          tokenUsage: { total: 25, prompt: 15, completion: 10, numRequests: 1 },
-        })
-        .mockResolvedValueOnce({
           output: JSON.stringify({
             currentResponse: { rating: 7, explanation: 'test' },
             previousBestResponse: { rating: 0, explanation: 'none' },
@@ -1362,13 +1273,6 @@ describe('Token Counting', () => {
     ]);
     expect(promptResult.tokenUsage?.total).toBe(50);
 
-    const onTopicResult = await checkIfOnTopic(
-      mockRedteamProvider,
-      'ontopic prompt',
-      'target prompt',
-    );
-    expect(onTopicResult.tokenUsage?.total).toBe(25);
-
     const targetResult = await getTargetResponse(
       mockTargetProvider,
       'target prompt',
@@ -1387,9 +1291,9 @@ describe('Token Counting', () => {
     expect(judgeResult).toBeDefined();
 
     // In the actual provider, these would all be accumulated using accumulateResponseTokenUsage
-    // Total would be: 50 + 25 + 100 + 75 = 250
-    const expectedTotal = 50 + 25 + 100 + 75;
-    expect(expectedTotal).toBe(250);
+    // Total would be: 50 + 100 + 75 = 225
+    const expectedTotal = 50 + 100 + 75;
+    expect(expectedTotal).toBe(225);
   });
 
   it('should handle provider delay settings during token tracking', async () => {

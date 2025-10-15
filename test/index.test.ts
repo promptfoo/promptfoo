@@ -3,9 +3,9 @@ import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
 import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
-import { readProviderPromptMap } from '../src/prompts';
-import * as providers from '../src/providers';
-import { writeMultipleOutputs, writeOutput } from '../src/util';
+import { readProviderPromptMap } from '../src/prompts/index';
+import * as providers from '../src/providers/index';
+import { writeMultipleOutputs, writeOutput } from '../src/util/index';
 import * as fileUtils from '../src/util/file';
 
 jest.mock('../src/cache');
@@ -94,6 +94,7 @@ describe('index.ts exports', () => {
     'CompletedPromptSchema',
     'CompletionTokenDetailsSchema',
     'DerivedMetricSchema',
+    'EvalResultsFilterMode',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',

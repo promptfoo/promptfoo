@@ -10,7 +10,11 @@ import {
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions } from './types';
 
@@ -88,6 +92,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         REQUEST_TIMEOUT_MS,
         'json',
         context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);

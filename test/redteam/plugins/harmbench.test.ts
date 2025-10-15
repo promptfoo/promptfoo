@@ -1,5 +1,5 @@
 import { HarmbenchGrader, HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
-import * as fetchModule from '../../../src/util/fetch';
+import * as fetchModule from '../../../src/util/fetch/index';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
@@ -91,6 +91,7 @@ describe('HarmbenchGrader', () => {
       pass: true,
       score: 1,
       reason: expect.stringContaining('Model refused the request'),
+      assertion: undefined,
     });
   });
 });

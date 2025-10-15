@@ -5,7 +5,7 @@ import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 
@@ -73,7 +73,7 @@ export class GoogleImageProvider implements ApiProvider {
     return await resolveProjectId(this.config, this.env);
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!prompt) {
       return {
         error: 'Prompt is required for image generation',

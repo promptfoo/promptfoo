@@ -25,7 +25,7 @@ prompts:
   - Tell me a funny joke about {{topic}}
 
 providers:
-  - id: cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
+  - id: cloudflare-ai:chat:@cf/openai/gpt-oss-120b
     config:
       accountId: your_account_id_here
       # API key is loaded from CLOUDFLARE_API_KEY environment variable
@@ -59,7 +59,7 @@ This provider leverages Cloudflare's OpenAI-compatible endpoints:
 - **Text completions**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/completions`
 - **Embeddings**: `https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/embeddings`
 
-All standard OpenAI parameters work with Cloudflare AI models: `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, and `presence_penalty`.
+All standard OpenAI parameters work with Cloudflare AI models: `temperature`, `max_tokens`, `top_p`, `frequency_penalty`, and `presence_penalty`. Many newer models also support advanced capabilities like function calling, batch processing, and multimodal inputs.
 
 ## Provider Types
 
@@ -71,9 +71,9 @@ For conversational AI and instruction-following models:
 
 ```yaml
 providers:
-  - cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
-  - cloudflare-ai:chat:@cf/google/gemma-3-12b-it
-  - cloudflare-ai:chat:@hf/nousresearch/hermes-2-pro-mistral-7b
+  - cloudflare-ai:chat:@cf/openai/gpt-oss-120b
+  - cloudflare-ai:chat:@cf/meta/llama-4-scout-17b-16e-instruct
+  - cloudflare-ai:chat:@cf/mistralai/mistral-small-3.1-24b-instruct
 ```
 
 ### Text Completion
@@ -92,17 +92,28 @@ For generating text embeddings:
 
 ```yaml
 providers:
+  - cloudflare-ai:embedding:@cf/google/embeddinggemma-300m
   - cloudflare-ai:embedding:@cf/baai/bge-large-en-v1.5
-  - cloudflare-ai:embedding:@cf/baai/bge-base-en-v1.5
 ```
 
 ## Current Model Examples
 
 Here are some of the latest models available on Cloudflare Workers AI:
 
-### State-of-the-Art Models
+### State-of-the-Art Models (2025)
 
-**Reasoning & Problem Solving:**
+**Latest OpenAI Models:**
+
+- `@cf/openai/gpt-oss-120b` - OpenAI's production, general purpose, high reasoning model
+- `@cf/openai/gpt-oss-20b` - OpenAI's lower latency model for specialized use-cases
+
+**Advanced Multimodal Models:**
+
+- `@cf/meta/llama-4-scout-17b-16e-instruct` - Meta's Llama 4 Scout with native multimodal capabilities and mixture-of-experts architecture
+- `@cf/meta/llama-3.3-70b-instruct-fp8-fast` - Llama 3.3 70B optimized for speed with fp8 quantization
+- `@cf/meta/llama-3.2-11b-vision-instruct` - Optimized for visual recognition and image reasoning
+
+**Enhanced Reasoning & Problem Solving:**
 
 - `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` - Advanced reasoning model distilled from DeepSeek R1
 - `@cf/qwen/qwq-32b` - Medium-sized reasoning model competitive with o1-mini
@@ -110,12 +121,16 @@ Here are some of the latest models available on Cloudflare Workers AI:
 **Code Generation:**
 
 - `@cf/qwen/qwen2.5-coder-32b-instruct` - Current state-of-the-art open-source code model
-- `@hf/thebloke/deepseek-coder-6.7b-instruct-awq` - Efficient coding model
 
-**General Purpose:**
+**Advanced Language Models:**
 
+- `@cf/mistralai/mistral-small-3.1-24b-instruct` - MistralAI's model with enhanced vision understanding and 128K context
 - `@cf/google/gemma-3-12b-it` - Latest Gemma model with 128K context and multilingual support
 - `@hf/nousresearch/hermes-2-pro-mistral-7b` - Function calling and JSON mode support
+
+**High-Quality Embeddings:**
+
+- `@cf/google/embeddinggemma-300m` - Google's state-of-the-art embedding model trained on 100+ languages
 
 :::tip
 
@@ -140,7 +155,7 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: cloudflare-ai:chat:@cf/google/gemma-3-12b-it
+  - id: cloudflare-ai:chat:@cf/meta/llama-4-scout-17b-16e-instruct
     config:
       accountId: your_account_id_here
       temperature: 0.8
@@ -160,7 +175,7 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: cloudflare-ai:embedding:@cf/baai/bge-large-en-v1.5
+  - id: cloudflare-ai:embedding:@cf/google/embeddinggemma-300m
     config:
       accountId: your_account_id_here
 ```
@@ -171,7 +186,7 @@ Override the default API base URL for custom deployments or specific regions:
 
 ```yaml
 providers:
-  - id: cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
+  - id: cloudflare-ai:chat:@cf/openai/gpt-oss-120b
     config:
       accountId: your_account_id_here
       apiBaseUrl: https://api.cloudflare.com/client/v4/accounts/your_account_id/ai/v1

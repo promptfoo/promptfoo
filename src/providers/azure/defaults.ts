@@ -3,6 +3,49 @@ import type { AzureModelCost } from './types';
 export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
 
 export const AZURE_MODELS: AzureModelCost[] = [
+  // GPT-5 models
+  {
+    id: 'gpt-5-2025-08-07',
+    cost: {
+      input: 1.25 / 1000000,
+      output: 10 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-5',
+    cost: {
+      input: 1.25 / 1000000,
+      output: 10 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-5-mini-2025-08-07',
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-5-mini',
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-5-nano-2025-08-07',
+    cost: {
+      input: 0.05 / 1000000,
+      output: 0.2 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-5-nano',
+    cost: {
+      input: 0.05 / 1000000,
+      output: 0.2 / 1000000,
+    },
+  },
   // GPT-4.1 models
   {
     id: 'gpt-4.1-2025-04-14',

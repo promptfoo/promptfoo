@@ -284,9 +284,12 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
+- `google:gemini-2.5-flash-preview-09-2025` - Newest Gemini 2.5 Flash preview release featuring enhanced quality improvements
+- `google:gemini-2.5-flash-lite-preview-09-2025` - Latest Flash Lite preview release with further cost and latency optimizations
+- `google:gemini-flash-latest` - Alias for `google:gemini-2.5-flash-preview-09-2025`
+- `google:gemini-flash-lite-latest` - Alias for `google:gemini-2.5-flash-lite-preview-09-2025`
 - `google:gemini-2.5-pro-preview-06-05` - Previous Gemini 2.5 Pro preview with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-pro-preview-05-06` - Previous Gemini 2.5 Pro preview with advanced thinking capabilities
-- `google:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.0-pro` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-exp` - Experimental multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window

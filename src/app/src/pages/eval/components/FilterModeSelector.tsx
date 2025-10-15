@@ -1,13 +1,12 @@
-import React from 'react';
-
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
+import type { EvalResultsFilterMode } from '@promptfoo/types';
 
 interface FilterModeSelectorProps {
-  filterMode: string;
+  filterMode: EvalResultsFilterMode;
   onChange: (event: SelectChangeEvent) => void;
   showDifferentOption?: boolean;
 }
@@ -15,16 +14,17 @@ interface FilterModeSelectorProps {
 const BASE_OPTIONS = [
   { value: 'all', label: 'Show all results' },
   { value: 'failures', label: 'Show failures only' },
+  { value: 'passes', label: 'Show passes only' },
   { value: 'errors', label: 'Show errors only' },
   { value: 'different', label: 'Show different outputs' },
   { value: 'highlights', label: 'Show highlights only' },
 ];
 
-export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({
+export const FilterModeSelector = ({
   filterMode,
   onChange,
   showDifferentOption = true,
-}) => {
+}: FilterModeSelectorProps) => {
   const options = showDifferentOption
     ? BASE_OPTIONS
     : BASE_OPTIONS.filter((o) => o.value !== 'different');

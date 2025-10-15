@@ -1,5 +1,3 @@
-import React from 'react';
-
 import DownloadIcon from '@mui/icons-material/Download';
 import Button from '@mui/material/Button';
 import {
@@ -17,13 +15,15 @@ import {
   expandPluginCollections,
   getPluginDisplayName,
 } from './FrameworkComplianceUtils';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 
 interface CSVExporterProps {
   categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
 }
 
-const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRateThreshold }) => {
+const CSVExporter = ({ categoryStats, pluginPassRateThreshold }: CSVExporterProps) => {
   // Function to export framework compliance data to CSV
   const exportToCSV = () => {
     // Collect data for all frameworks
@@ -76,8 +76,10 @@ const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRate
                 riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
                 Severity.Low;
               const pluginName = getPluginDisplayName(plugin);
-              const attacksSuccessful = stats.total - stats.pass;
-              const asr = ((attacksSuccessful / stats.total) * 100).toFixed(2);
+              const attacksSuccessful = stats.failCount;
+              const asr = formatASRForDisplay(
+                calculateAttackSuccessRate(stats.total, stats.failCount),
+              );
               const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
 
               csvRows.push([
@@ -138,8 +140,8 @@ const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRate
           const pluginSeverity =
             riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
           const pluginName = getPluginDisplayName(plugin);
-          const attacksSuccessful = stats.total - stats.pass;
-          const asr = ((attacksSuccessful / stats.total) * 100).toFixed(2);
+          const attacksSuccessful = stats.failCount;
+          const asr = formatASRForDisplay(calculateAttackSuccessRate(stats.total, stats.failCount));
           const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
 
           csvRows.push([

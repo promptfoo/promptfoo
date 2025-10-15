@@ -3,16 +3,9 @@ import path from 'path';
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
-import {
-  CONSENT_ENDPOINT,
-  EVENTS_ENDPOINT,
-  KA_ENDPOINT,
-  R_ENDPOINT,
-  VERSION,
-} from '../src/constants';
+import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
-import { CLOUD_API_HOST, cloudConfig } from '../src/globalConfig/cloud';
-import logger, { logRequestResponse } from '../src/logger';
+import logger from '../src/logger';
 import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
   fetchWithProxy,
@@ -20,7 +13,7 @@ import {
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
-} from '../src/util/fetch';
+} from '../src/util/fetch/index';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 

@@ -6,6 +6,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
+  layer: 'Applies multiple strategies in a defined order',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
@@ -143,6 +144,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
+  vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
@@ -157,6 +159,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
+  layer: 'Strategy Layer',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
   beavertails: 'BeaverTails Dataset',
@@ -280,6 +283,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   'unverifiable-claims': 'Unverifiable Claims',
+  vlguard: 'VLGuard Dataset',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
 };
@@ -296,6 +300,13 @@ export const severityDisplayNames: Record<Severity, string> = {
   [Severity.High]: 'High',
   [Severity.Medium]: 'Medium',
   [Severity.Low]: 'Low',
+};
+
+export const severityRiskScores: Record<Severity, number> = {
+  [Severity.Critical]: 8.0,
+  [Severity.High]: 6.0,
+  [Severity.Medium]: 4.0,
+  [Severity.Low]: 2.0,
 };
 
 /*
@@ -402,6 +413,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'system-prompt-override': Severity.High,
   unsafebench: Severity.Medium,
   'unverifiable-claims': Severity.Medium,
+  vlguard: Severity.Medium,
   xstest: Severity.Low,
 };
 
@@ -411,14 +423,17 @@ export const riskCategories: Record<string, Plugin[]> = {
     'ascii-smuggling',
     'bfla',
     'bola',
+    'cca',
     'debug-access',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
+    'reasoning-dos',
     'shell-injection',
     'special-token-injection',
     'sql-injection',
     'ssrf',
+    'system-prompt-override',
     'tool-discovery',
     'mcp',
 
@@ -432,6 +447,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pii:social',
     'pii',
     'prompt-extraction',
+    'rag-document-exfiltration',
+    'rag-poisoning',
 
     'agentic:memory-poisoning',
   ],
@@ -479,10 +496,12 @@ export const riskCategories: Record<string, Plugin[]> = {
     'hijacking',
     'imitation',
     'intent',
+    'off-topic',
     'overreliance',
     'policy',
     'politics',
     'religion',
+    'unverifiable-claims',
   ],
 
   'Domain-Specific Risks': [
@@ -513,6 +532,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'toxic-chat',
     'pliny',
     'unsafebench',
+    'vlguard',
     'xstest',
   ],
 };
@@ -642,6 +662,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
   'unverifiable-claims': 'Unverifiable Claims',
+  vlguard: 'VLGuard',
   xstest: 'XSTest',
 };
 
@@ -781,12 +802,14 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   'unverifiable-claims':
     'Tests whether an AI system makes claims that cannot be verified, including future predictions, unsourced statistics, and unknowable information',
+  vlguard: 'Tests handling of potentially unsafe image content using the VLGuard dataset',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
+  layer: 'Composes multiple strategies and applies them sequentially',
   audio: 'Tests detection and handling of audio-based malicious payloads',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
@@ -822,6 +845,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
+  layer: 'Layer',
   audio: 'Audio',
   base64: 'Base64 Encoding',
   basic: 'Basic',
@@ -860,6 +884,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
   'Guardrails Evaluation': 'Evaluate guardrail effectiveness against common risks',
   Harmful: 'Harmful content assessment using MLCommons and HarmBench taxonomies',
+  'ISO 42001': 'Plugins mapped to ISO/IEC 42001 AI management system requirements',
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
   NIST: 'NIST AI Risk Management Framework',
@@ -869,6 +894,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
   RAG: 'Recommended plugins plus tests for RAG-specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
+  MCP: 'A set of plugins for testing MCP-based systems',
 } as const;
 
 export const DEFAULT_OUTPUT_PATH = 'redteam.yaml';

@@ -126,16 +126,19 @@
                             "AZURE_TOKEN_SCOPE": {
                               "type": "string"
                             },
-                            "BAM_API_HOST": {
+                            "CLAUDE_CODE_USE_BEDROCK": {
                               "type": "string"
                             },
-                            "BAM_API_KEY": {
+                            "CLAUDE_CODE_USE_VERTEX": {
                               "type": "string"
                             },
                             "CLOUDFLARE_ACCOUNT_ID": {
                               "type": "string"
                             },
                             "CLOUDFLARE_API_KEY": {
+                              "type": "string"
+                            },
+                            "COMETAPI_KEY": {
                               "type": "string"
                             },
                             "COHERE_API_KEY": {
@@ -204,9 +207,6 @@
                             "JFROG_API_KEY": {
                               "type": "string"
                             },
-                            "LAMBDA_API_KEY": {
-                              "type": "string"
-                            },
                             "LANGFUSE_HOST": {
                               "type": "string"
                             },
@@ -232,6 +232,12 @@
                               "type": "string"
                             },
                             "MISTRAL_API_KEY": {
+                              "type": "string"
+                            },
+                            "NSCALE_SERVICE_TOKEN": {
+                              "type": "string"
+                            },
+                            "NSCALE_API_KEY": {
                               "type": "string"
                             },
                             "OLLAMA_API_KEY": {
@@ -585,6 +591,7 @@
                                               "python",
                                               "regex",
                                               "rouge-n",
+                                              "ruby",
                                               "similar",
                                               "starts-with",
                                               "trace-error-spans",
@@ -1186,6 +1193,14 @@
                           "imitation",
                           "indirect-prompt-injection",
                           "intent",
+                          "iso:42001",
+                          "iso:42001:accountability",
+                          "iso:42001:fairness",
+                          "iso:42001:privacy",
+                          "iso:42001:robustness",
+                          "iso:42001:safety",
+                          "iso:42001:security",
+                          "iso:42001:transparency",
                           "mcp",
                           "medical",
                           "medical:anchoring-bias",
@@ -1280,6 +1295,7 @@
                           "toxicity",
                           "unsafebench",
                           "unverifiable-claims",
+                          "vlguard",
                           "xstest"
                         ]
                       },
@@ -1379,6 +1395,14 @@
                               "imitation",
                               "indirect-prompt-injection",
                               "intent",
+                              "iso:42001",
+                              "iso:42001:accountability",
+                              "iso:42001:fairness",
+                              "iso:42001:privacy",
+                              "iso:42001:robustness",
+                              "iso:42001:safety",
+                              "iso:42001:security",
+                              "iso:42001:transparency",
                               "mcp",
                               "medical",
                               "medical:anchoring-bias",
@@ -1473,6 +1497,7 @@
                               "toxicity",
                               "unsafebench",
                               "unverifiable-claims",
+                              "vlguard",
                               "xstest"
                             ]
                           },
@@ -1535,6 +1560,7 @@
                           "jailbreak:composite",
                           "jailbreak:likert",
                           "jailbreak:tree",
+                          "layer",
                           "leetspeak",
                           "math-prompt",
                           "mischievous-user",
@@ -1573,7 +1599,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
               "default": ["default"]
             },
             "maxConcurrency": {
@@ -1852,6 +1878,9 @@
             },
             "promptSuffix": {
               "type": "string"
+            },
+            "retryErrors": {
+              "type": "boolean"
             },
             "envPath": {
               "type": "string"

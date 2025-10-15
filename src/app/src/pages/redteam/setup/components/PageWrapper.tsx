@@ -22,13 +22,13 @@ interface PageWrapperProps {
   warningMessage?: string;
 }
 
-const Root = styled(Box)(({ theme }) => ({
+const Root = styled(Box)({
   display: 'flex',
   flexDirection: 'column',
   height: '100vh',
   width: '100%',
   overflow: 'hidden',
-}));
+});
 
 const ContentContainer = styled(Box)({
   flex: 1,
@@ -117,21 +117,58 @@ export default function PageWrapper({
 }: PageWrapperProps) {
   const [isMinimized, setIsMinimized] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const lastToggleTimeRef = useRef<number>(0);
+
+  // Scroll behavior configuration
+  // Minimize when user has scrolled down a bit; expand only when at the very top
+  const MINIMIZE_SCROLLTOP = 24;
+  const EXPAND_AT_TOP_SCROLLTOP = 1; // treat 0–1px as top
+  const TOGGLE_COOLDOWN_MS = 250; // brief cooldown to absorb layout changes and transitions
 
   useEffect(() => {
-    const handleScroll = () => {
-      if (contentRef.current) {
-        const scrollTop = contentRef.current.scrollTop;
-        // Minimize header after scrolling 50px
-        setIsMinimized(scrollTop > 50);
+    const contentElement = contentRef.current;
+    if (!contentElement) {
+      return;
+    }
+
+    const applyStateFromMetrics = () => {
+      const scrollTop = contentElement.scrollTop;
+      const now = performance.now();
+
+      // Cooldown to avoid immediate re-toggling due to layout shift
+      if (now - lastToggleTimeRef.current < TOGGLE_COOLDOWN_MS) {
+        return;
       }
+
+      setIsMinimized((prev) => {
+        // Expand only at top
+        if (scrollTop <= EXPAND_AT_TOP_SCROLLTOP) {
+          if (prev) {
+            lastToggleTimeRef.current = now;
+          }
+          return false;
+        }
+        // Minimize when user has scrolled away from top a bit
+        if (!prev && scrollTop >= MINIMIZE_SCROLLTOP) {
+          lastToggleTimeRef.current = now;
+          return true;
+        }
+        return prev;
+      });
     };
 
-    const contentElement = contentRef.current;
-    if (contentElement) {
-      contentElement.addEventListener('scroll', handleScroll);
-      return () => contentElement.removeEventListener('scroll', handleScroll);
-    }
+    // Initial evaluation in case the container is already scrolled
+    applyStateFromMetrics();
+
+    const onScroll = () => applyStateFromMetrics();
+    const onResize = () => applyStateFromMetrics();
+
+    contentElement.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize);
+    return () => {
+      contentElement.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+    };
   }, []);
 
   return (

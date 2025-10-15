@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, cleanup } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Navigation from './Navigation';
@@ -33,7 +33,7 @@ describe('Navigation', () => {
   it('renders links and opens modals', () => {
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
 
@@ -64,7 +64,7 @@ describe('EvalsDropdown', () => {
   it('should open the dropdown and set activeMenu to "evals" when the Results button is clicked', () => {
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
 
@@ -78,7 +78,7 @@ describe('EvalsDropdown', () => {
   it('should keep the dropdown open for 150ms after mouse leaves, and then close it', async () => {
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
 
@@ -104,7 +104,7 @@ describe('EvalsDropdown', () => {
   it('should keep the dropdown open if the mouse re-enters the menu area before the close delay expires', async () => {
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
 
@@ -130,7 +130,7 @@ describe('EvalsDropdown', () => {
   it('should close the dropdown when a menu item is clicked', () => {
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
 
@@ -152,7 +152,7 @@ describe('EvalsDropdown', () => {
 
     render(
       <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        <Navigation onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
 
@@ -164,5 +164,19 @@ describe('EvalsDropdown', () => {
     cleanup();
 
     expect(clearTimeoutSpy).toHaveBeenCalled();
+  });
+
+  it("should display the 'Vulnerability Reports' menu item with the correct description when the Results dropdown is open", () => {
+    render(
+      <MemoryRouter>
+        <Navigation onToggleDarkMode={() => {}} />
+      </MemoryRouter>,
+    );
+
+    const evalsButton = screen.getByRole('button', { name: /Results/i });
+    fireEvent.click(evalsButton);
+
+    expect(screen.getByText('Red Team Vulnerability Reports')).toBeInTheDocument();
+    expect(screen.getByText('View findings from red teams')).toBeInTheDocument();
   });
 });

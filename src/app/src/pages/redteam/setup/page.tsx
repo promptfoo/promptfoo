@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-import PylonChat from '@app/components/PylonChat';
 import ErrorBoundary from '@app/components/ErrorBoundary';
+import PylonChat from '@app/components/PylonChat';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
 import AppIcon from '@mui/icons-material/Apps';
 import DownloadIcon from '@mui/icons-material/Download';
 import PluginIcon from '@mui/icons-material/Extension';
@@ -48,8 +49,9 @@ import { useSetupState } from './hooks/useSetupState';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
-import type { Config, RedteamUITarget } from './types';
 import './page.css';
+
+import type { Config, RedteamUITarget } from './types';
 
 export const SIDEBAR_WIDTH = 240;
 
@@ -352,7 +354,7 @@ export default function RedTeamSetupPage() {
     });
   };
 
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     updateHash(newValue);
     setValue(newValue);
     window.scrollTo({ top: 0 });
@@ -471,6 +473,8 @@ export default function RedTeamSetupPage() {
 
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
+      // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
+      window.location.reload();
     } catch (error) {
       console.error('Failed to load configuration', error);
       toast.showToast(
@@ -621,7 +625,7 @@ export default function RedTeamSetupPage() {
                 ) : (
                   configDate && (
                     <Typography className="dateText" color="text.secondary" variant="body2">
-                      {new Date(configDate).toLocaleString()}
+                      {formatDataGridDate(configDate)}
                     </Typography>
                   )
                 )}
@@ -705,16 +709,12 @@ export default function RedTeamSetupPage() {
           <TabContent>
             <CustomTabPanel value={value} index={0}>
               <ErrorBoundary name="Target Type Selection Page">
-                <TargetTypeSelection onNext={handleNext} setupModalOpen={setupModalOpen} />
+                <TargetTypeSelection onNext={handleNext} />
               </ErrorBoundary>
             </CustomTabPanel>
             <CustomTabPanel value={value} index={1}>
               <ErrorBoundary name="Target Configuration Page">
-                <TargetConfiguration
-                  onNext={handleNext}
-                  onBack={handleBack}
-                  setupModalOpen={setupModalOpen}
-                />
+                <TargetConfiguration onNext={handleNext} onBack={handleBack} />
               </ErrorBoundary>
             </CustomTabPanel>
             <CustomTabPanel value={value} index={2}>
@@ -840,7 +840,7 @@ export default function RedTeamSetupPage() {
                     >
                       <ListItemText
                         primary={config.name}
-                        secondary={new Date(config.updatedAt).toLocaleString()}
+                        secondary={formatDataGridDate(config.updatedAt)}
                       />
                     </ListItemButton>
                   ))}

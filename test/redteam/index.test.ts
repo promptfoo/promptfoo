@@ -3,8 +3,8 @@ import * as fs from 'fs';
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
 import logger from '../../src/logger';
-import { loadApiProvider } from '../../src/providers';
-import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
+import { loadApiProvider } from '../../src/providers/index';
+import { HARM_PLUGINS, PII_PLUGINS, getDefaultNFanout } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
@@ -21,7 +21,8 @@ import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 
-import type { TestCaseWithPlugin } from '../../src/types';
+import type { TestCaseWithPlugin } from '../../src/types/index';
+import { stripAnsi } from '../util/utils';
 
 jest.mock('cli-progress');
 jest.mock('../../src/logger');
@@ -304,6 +305,117 @@ describe('synthesize', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Generation Report:'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('test-plugin'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('mockStrategy'));
+    });
+
+    it('should use default fan-out values when strategy config omits n', async () => {
+      const pluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      const pluginFindSpy = jest
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'mockPlugin' });
+
+      const strategyAction = jest
+        .fn()
+        .mockImplementation(async () =>
+          Array.from({ length: 5 }, (_, idx) => ({ vars: { query: `fanout-${idx}` } })),
+        );
+      const strategyFindSpy = jest.spyOn(Strategies, 'find').mockImplementation((predicate) => {
+        if (typeof predicate === 'function') {
+          const strategies = [{ action: strategyAction, id: 'jailbreak:composite' }];
+          return strategies.find(predicate);
+        }
+        return undefined;
+      });
+
+      try {
+        await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'jailbreak:composite' }],
+          targetLabels: ['test-provider'],
+        });
+
+        const reportMessage = jest
+          .mocked(logger.info)
+          .mock.calls.map(([arg]) => arg)
+          .find(
+            (arg): arg is string =>
+              typeof arg === 'string' && arg.includes('Test Generation Report'),
+          );
+
+        expect(reportMessage).toBeDefined();
+
+        const stripped = stripAnsi(reportMessage!);
+        const lines = stripped.split('\n');
+
+        // Find header row and parse column indexes
+        const headerRow = lines.find(
+          (line) => line.includes('Requested') && line.includes('Generated'),
+        );
+        expect(headerRow).toBeDefined();
+
+        const headerColumns = headerRow!
+          .split('│')
+          .map((col) => col.trim())
+          .filter((col) => col.length > 0);
+
+        const requestedIndex = headerColumns.indexOf('Requested');
+        const generatedIndex = headerColumns.indexOf('Generated');
+        expect(requestedIndex).toBeGreaterThan(-1);
+        expect(generatedIndex).toBeGreaterThan(-1);
+
+        // Find the jailbreak:composite row
+        const row = lines.find((line) => line.includes('jailbreak:composite'));
+        expect(row).toBeDefined();
+
+        const columns = row!
+          .split('│')
+          .map((col) => col.trim())
+          .filter((col) => col.length > 0);
+
+        // Requested = default fan-out * 1 base test
+        expect(columns[requestedIndex]).toBe(getDefaultNFanout('jailbreak:composite').toString());
+        // Generated = what our mock strategy returned
+        expect(columns[generatedIndex]).toBe(getDefaultNFanout('jailbreak:composite').toString());
+
+        // Verify the "Using strategies:" summary shows correct fan-out
+        const summaryMessage = jest
+          .mocked(logger.info)
+          .mock.calls.map(([arg]) => arg)
+          .find(
+            (arg): arg is string => typeof arg === 'string' && arg.includes('Using strategies:'),
+          );
+
+        expect(summaryMessage).toBeDefined();
+        const summaryStripped = stripAnsi(summaryMessage!);
+        const summaryLine = summaryStripped
+          .split('\n')
+          .find((line) => line.includes('jailbreak:composite'));
+        expect(summaryLine).toBeDefined();
+        expect(summaryLine).toContain(
+          `(${getDefaultNFanout('jailbreak:composite')} additional tests)`,
+        );
+
+        // Verify the "Test Generation Summary:" shows correct total
+        const totalSummaryMessage = jest
+          .mocked(logger.info)
+          .mock.calls.map(([arg]) => arg)
+          .find(
+            (arg): arg is string =>
+              typeof arg === 'string' && arg.includes('Test Generation Summary:'),
+          );
+
+        expect(totalSummaryMessage).toBeDefined();
+        const totalStripped = stripAnsi(totalSummaryMessage!);
+        // 1 base + default fan-out
+        expect(totalStripped).toContain(
+          `• Total tests: ${1 + getDefaultNFanout('jailbreak:composite')}`,
+        );
+      } finally {
+        pluginFindSpy.mockRestore();
+        strategyFindSpy.mockRestore();
+      }
     });
 
     it('should expand strategy collections into individual strategies', async () => {
@@ -1330,6 +1442,26 @@ describe('getTestCount', () => {
 
   it('should return totalPluginTests for other strategies', () => {
     const strategy = { id: 'morse' };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(10);
+  });
+  it('should multiply by language count for layer strategy with multilingual step', () => {
+    const strategy = {
+      id: 'layer',
+      config: {
+        steps: ['base64', { id: 'multilingual', config: { languages: ['es', 'fr'] } }, 'rot13'],
+      },
+    };
+    const result = getTestCount(strategy, 10, []);
+    expect(result).toBe(20); // 10 * 2 languages
+  });
+  it('should return totalPluginTests for layer strategy without multilingual', () => {
+    const strategy = {
+      id: 'layer',
+      config: {
+        steps: ['base64', 'rot13'],
+      },
+    };
     const result = getTestCount(strategy, 10, []);
     expect(result).toBe(10);
   });

@@ -2,7 +2,7 @@ import { PorterStemmer, WordNet } from 'natural';
 import invariant from '../util/invariant';
 import type { DataRecord, Stemmer } from 'natural';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 type WordPair = [number, string];
 type MatchPair = [number, number];
@@ -230,7 +230,6 @@ export async function handleMeteorAssertion({
   inverse,
   outputString,
   renderedValue,
-  test,
 }: AssertionParams): Promise<GradingResult> {
   // Validate inputs
   invariant(

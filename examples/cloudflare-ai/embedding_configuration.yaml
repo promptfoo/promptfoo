@@ -6,12 +6,12 @@ defaultTest:
   options:
     provider:
       embedding:
-        id: cloudflare-ai:embedding:@cf/baai/bge-large-en-v1.5
+        id: cloudflare-ai:embedding:@cf/google/embeddinggemma-300m
         config:
           accountId: your_account_id_here
 
 providers:
-  - id: cloudflare-ai:chat:@cf/hf/nousresearch/hermes-2-pro-mistral-7b
+  - id: cloudflare-ai:chat:@cf/meta/llama-3.3-70b-instruct-fp8-fast
     config:
       accountId: your_account_id_here
       # ===============

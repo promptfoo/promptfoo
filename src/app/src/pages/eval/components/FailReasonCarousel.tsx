@@ -9,7 +9,7 @@ interface FailReasonCarouselProps {
   failReasons: string[];
 }
 
-const FailReasonCarousel: React.FC<FailReasonCarouselProps> = ({ failReasons }) => {
+const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const handlePrev = () => {

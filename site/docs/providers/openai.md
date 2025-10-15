@@ -88,6 +88,7 @@ Supported parameters include:
 | `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                              |
 | `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                     |
 | `max_tokens`            | Controls the maximum length of the output in tokens. Not valid for reasoning models (o1, o3, o3-pro, o3-mini, o4-mini).                                                                                                                                                                           |
+| `maxRetries`            | Maximum number of retry attempts for failed API requests. Defaults to 4. Set to 0 to disable retries.                                                                                                                                                                                             |
 | `metadata`              | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                             |
 | `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                     |
 | `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings. |
@@ -145,6 +146,7 @@ interface OpenAiConfig {
   apiBaseUrl?: string;
   organization?: string;
   headers?: { [key: string]: string };
+  maxRetries?: number;
 }
 ```
 
@@ -749,7 +751,14 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
 
 ## Audio capabilities
 
-OpenAI models with audio support (like `gpt-4o-audio-preview` and `gpt-5-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+OpenAI models with audio support (like `gpt-audio`, `gpt-audio-mini`, `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+
+**Available audio models:**
+
+- `gpt-audio` - Latest audio model ($2.50/$10 per 1M text tokens, $40/$80 per 1M audio tokens)
+- `gpt-audio-mini` - Cost-efficient audio model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
+- `gpt-4o-audio-preview` - Preview audio model
+- `gpt-4o-mini-audio-preview` - Preview mini audio model
 
 ### Using audio inputs
 
@@ -821,6 +830,8 @@ The Realtime API allows for real-time communication with GPT-4o class models usi
 
 ### Supported Realtime Models
 
+- `gpt-realtime` - Latest realtime model ($4/$16 per 1M text tokens, $40/$80 per 1M audio tokens)
+- `gpt-realtime-mini` - Cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-4o-realtime-preview-2024-12-17`
 - `gpt-5-mini-realtime-preview-2024-12-17`
 
@@ -959,6 +970,8 @@ The Responses API supports a wide range of models, including:
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Latest fast, cost-effective reasoning model
 - `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
+- `gpt-5-codex` - GPT-5 based coding model optimized for code generation
+- `gpt-5-pro` - Premium GPT-5 model with highest reasoning capability ($15/$120 per 1M tokens)
 
 ### Using the Responses API
 
@@ -1333,6 +1346,23 @@ providers:
               required: ['location']
       tool_choice: 'auto'
 ```
+
+### Using with Azure
+
+The Responses API can also be used with Azure OpenAI endpoints by configuring the `apiHost`:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      apiKey: '${AZURE_API_KEY}'
+      temperature: 0.7
+      instructions: 'You are a helpful assistant.'
+      response_format: file://./response-schema.json
+```
+
+For comprehensive Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
 
 ### Complete Example
 
