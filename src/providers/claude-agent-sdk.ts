@@ -64,7 +64,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
     const require = createRequire(path.resolve(cliState.basePath || ''));
     const claudeCodePath = require.resolve('@anthropic-ai/claude-agent-sdk');
     return importModule(claudeCodePath);
-  } catch (error) {
+  } catch {
     throw new Error(
       dedent`The @anthropic-ai/claude-agent-sdk package is required but not installed.
 
