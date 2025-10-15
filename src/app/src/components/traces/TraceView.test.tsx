@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import TraceView, { type Trace } from './TraceView';
 
@@ -10,13 +10,7 @@ vi.mock('./TraceTimeline', () => ({
 }));
 
 describe('TraceView', () => {
-  let mockFetchTraces: ReturnType<typeof vi.fn>;
-
-  beforeEach(() => {
-    mockFetchTraces = vi.fn();
-  });
-
-  it('should render a TraceTimeline for each filtered trace that contains spans', async () => {
+  it('should render a TraceTimeline for each filtered trace that contains spans', () => {
     const mockTraces: Trace[] = [
       {
         traceId: 'trace-abc-123',
@@ -28,42 +22,22 @@ describe('TraceView', () => {
       },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
+    render(<TraceView evaluationId="eval-xyz-789" traces={mockTraces} />);
 
-    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
-
-    const timelines = await screen.findAllByTestId('trace-timeline');
+    const timelines = screen.getAllByTestId('trace-timeline');
 
     expect(timelines).toHaveLength(2);
-
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-
     expect(screen.getByText('Trace ID: trace-abc-123')).toBeInTheDocument();
     expect(screen.getByText('Trace ID: trace-def-456')).toBeInTheDocument();
   });
 
-  it('should render an Alert with the error message if the API call fails', async () => {
-    const errorMessage = 'Failed to fetch traces';
-    mockFetchTraces.mockRejectedValue(new Error(errorMessage));
+  it('should render a Typography message "No traces available for this evaluation" if the traces array is empty', () => {
+    render(<TraceView evaluationId="eval-xyz-789" traces={[]} />);
 
-    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(errorMessage);
-    });
+    expect(screen.getByText('No traces available for this evaluation')).toBeInTheDocument();
   });
 
-  it('should render a Typography message "No traces available for this evaluation" if the traces array is empty after fetching', async () => {
-    mockFetchTraces.mockResolvedValue([]);
-
-    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('No traces available for this evaluation')).toBeInTheDocument();
-    });
-  });
-
-  it('should render a Typography message when no traces match the provided testCaseId', async () => {
+  it('should render a Typography message when no traces match the provided testCaseId', () => {
     const mockTraces = [
       {
         traceId: 'trace-abc-123',
@@ -77,81 +51,43 @@ describe('TraceView', () => {
       },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
-
     render(
-      <TraceView
-        evaluationId="eval-xyz-789"
-        testCaseId="test-case-123"
-        fetchTraces={mockFetchTraces}
-      />,
+      <TraceView evaluationId="eval-xyz-789" testCaseId="test-case-123" traces={mockTraces} />,
     );
 
-    const message = await screen.findByText('No traces available for this test case');
-
-    expect(message).toBeInTheDocument();
+    expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
   });
 
-  it('should render an info Alert with instructions if traces exist but none have spans', async () => {
+  it('should render an info Alert with instructions if traces exist but none have spans', () => {
     const mockTraces = [
       { traceId: 'trace-1', spans: [] },
       { traceId: 'trace-2', spans: [] },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
+    render(<TraceView evaluationId="eval-id" traces={mockTraces} />);
 
-    render(<TraceView evaluationId="eval-id" fetchTraces={mockFetchTraces} />);
-
-    const alert = await screen.findByRole('alert');
+    const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent(/traces were created but no spans were received/i);
   });
 
-  it('should render an error message when the API returns malformed JSON', async () => {
-    mockFetchTraces.mockRejectedValue(new Error('Unexpected token < in JSON at position 0'));
-
-    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('Unexpected token < in JSON at position 0')).toBeInTheDocument();
-  });
-
-  it('should handle network errors when fetching traces', async () => {
-    mockFetchTraces.mockRejectedValue(new Error('Network error'));
-
-    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('Network error')).toBeInTheDocument();
-
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-  });
-
-  it('should handle traces with non-array spans property gracefully', async () => {
+  it('should handle traces with non-array spans property gracefully', () => {
     const mockTraces = [
       {
         traceId: 'trace-abc-123',
-        spans: null,
+        spans: null as any,
       },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
-
-    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
+    render(<TraceView evaluationId="eval-xyz-789" traces={mockTraces} />);
 
     expect(
-      await screen.findByText(
+      screen.getByText(
         /Traces were created but no spans were received. Make sure your provider is:/,
       ),
     ).toBeInTheDocument();
   });
 
-  it('should filter traces correctly when some traces do not have testCaseId property', async () => {
+  it('should filter traces correctly when some traces do not have testCaseId property', () => {
     const mockTraces = [
       {
         traceId: 'trace-1',
@@ -174,13 +110,9 @@ describe('TraceView', () => {
       },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
+    render(<TraceView evaluationId="eval-123" testCaseId="test-case-1" traces={mockTraces} />);
 
-    render(
-      <TraceView evaluationId="eval-123" testCaseId="test-case-1" fetchTraces={mockFetchTraces} />,
-    );
-
-    const timelines = await screen.findAllByTestId('trace-timeline');
+    const timelines = screen.getAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(2);
     expect(screen.getByText('Trace ID: trace-1')).toBeInTheDocument();
     expect(screen.getByText('Trace ID: trace-3')).toBeInTheDocument();
@@ -188,7 +120,7 @@ describe('TraceView', () => {
     expect(screen.queryByText('Trace ID: trace-4')).not.toBeInTheDocument();
   });
 
-  it('should reconcile testCaseId formats using indices when traces use composed IDs', async () => {
+  it('should reconcile testCaseId formats using indices when traces use composed IDs', () => {
     const mockTraces = [
       {
         traceId: 't-0',
@@ -207,171 +139,24 @@ describe('TraceView', () => {
       },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
-
     render(
       <TraceView
         evaluationId="eval-xyz-789"
         testCaseId="550e8400-e29b-41d4-a716-446655440000"
         testIndex={3}
         promptIndex={1}
-        fetchTraces={mockFetchTraces}
+        traces={mockTraces}
       />,
     );
 
-    const timelines = await screen.findAllByTestId('trace-timeline');
+    const timelines = screen.getAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(1);
     expect(screen.getByText('Trace ID: t-0')).toBeInTheDocument();
     expect(screen.queryByText('Trace ID: t-1')).not.toBeInTheDocument();
     expect(screen.queryByText('Trace ID: t-2')).not.toBeInTheDocument();
   });
 
-  it('should display an error message when the API call returns a non-OK response', async () => {
-    const mockStatus = 500;
-    mockFetchTraces.mockRejectedValue(new Error(`HTTP error! status: ${mockStatus}`));
-
-    render(<TraceView evaluationId="eval-xyz-789" fetchTraces={mockFetchTraces} />);
-
-    const alert = await screen.findByRole('alert');
-    expect(alert).toBeInTheDocument();
-    expect(alert.textContent).toContain(`HTTP error! status: ${mockStatus}`);
-  });
-
-  describe('Visibility Callback', () => {
-    it('should call onVisibilityChange with false when no evaluationId is provided', async () => {
-      const onVisibilityChange = vi.fn();
-
-      render(<TraceView onVisibilityChange={onVisibilityChange} fetchTraces={mockFetchTraces} />);
-
-      await waitFor(() => {
-        expect(onVisibilityChange).toHaveBeenCalledWith(false);
-      });
-    });
-
-    it('should call onVisibilityChange with true when loading', async () => {
-      const onVisibilityChange = vi.fn();
-
-      mockFetchTraces.mockImplementation(
-        () => new Promise(() => {}), // Never resolves to keep loading state
-      );
-
-      render(
-        <TraceView
-          evaluationId="eval-123"
-          onVisibilityChange={onVisibilityChange}
-          fetchTraces={mockFetchTraces}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(onVisibilityChange).toHaveBeenCalledWith(true);
-      });
-    });
-
-    it('should call onVisibilityChange with true when there is an error', async () => {
-      const onVisibilityChange = vi.fn();
-
-      mockFetchTraces.mockRejectedValue(new Error('Network error'));
-
-      render(
-        <TraceView
-          evaluationId="eval-123"
-          onVisibilityChange={onVisibilityChange}
-          fetchTraces={mockFetchTraces}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(onVisibilityChange).toHaveBeenCalledWith(true);
-      });
-    });
-
-    it('should call onVisibilityChange with true when traces exist', async () => {
-      const onVisibilityChange = vi.fn();
-
-      mockFetchTraces.mockResolvedValue([{ traceId: 'trace-1', spans: [] }]);
-
-      render(
-        <TraceView
-          evaluationId="eval-123"
-          onVisibilityChange={onVisibilityChange}
-          fetchTraces={mockFetchTraces}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(onVisibilityChange).toHaveBeenCalledWith(true);
-      });
-    });
-
-    it('should call onVisibilityChange with false when no traces are returned', async () => {
-      const onVisibilityChange = vi.fn();
-
-      mockFetchTraces.mockResolvedValue([]);
-
-      render(
-        <TraceView
-          evaluationId="eval-123"
-          onVisibilityChange={onVisibilityChange}
-          fetchTraces={mockFetchTraces}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(onVisibilityChange).toHaveBeenCalledWith(false);
-      });
-    });
-
-    it('should call onVisibilityChange with false when traces is null/undefined in response', async () => {
-      const onVisibilityChange = vi.fn();
-
-      mockFetchTraces.mockResolvedValue(null as any);
-
-      render(
-        <TraceView
-          evaluationId="eval-123"
-          onVisibilityChange={onVisibilityChange}
-          fetchTraces={mockFetchTraces}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(onVisibilityChange).toHaveBeenCalledWith(false);
-      });
-    });
-
-    it('should update visibility when evaluationId changes', async () => {
-      const onVisibilityChange = vi.fn();
-
-      mockFetchTraces.mockResolvedValue([]);
-
-      const { rerender } = render(
-        <TraceView
-          evaluationId="eval-123"
-          onVisibilityChange={onVisibilityChange}
-          fetchTraces={mockFetchTraces}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(onVisibilityChange).toHaveBeenCalledWith(false);
-      });
-
-      onVisibilityChange.mockClear();
-
-      rerender(
-        <TraceView
-          evaluationId="eval-456"
-          onVisibilityChange={onVisibilityChange}
-          fetchTraces={mockFetchTraces}
-        />,
-      );
-
-      expect(onVisibilityChange).toHaveBeenCalledWith(true); // Should be true during loading
-    });
-  });
-
-  it('should handle mixed arrays with index fallback when testCaseId (UUID) is provided and indices are present', async () => {
+  it('should handle mixed arrays with index fallback when testCaseId (UUID) is provided and indices are present', () => {
     const mockTraces = [
       {
         traceId: 'trace-1',
@@ -395,8 +180,6 @@ describe('TraceView', () => {
       },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
-
     // Test with UUID testCaseId that won't match directly, but we have indices for fallback
     render(
       <TraceView
@@ -404,12 +187,12 @@ describe('TraceView', () => {
         testCaseId="different-uuid-12345678-1234-1234-1234-123456789abc"
         testIndex={3}
         promptIndex={1}
-        fetchTraces={mockFetchTraces}
+        traces={mockTraces}
       />,
     );
 
     // Should fall back to index-based matching and find traces with testCaseId "3-1"
-    const timelines = await screen.findAllByTestId('trace-timeline');
+    const timelines = screen.getAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(2);
     expect(screen.getByText('Trace ID: trace-2')).toBeInTheDocument();
     expect(screen.getByText('Trace ID: trace-4')).toBeInTheDocument();
@@ -417,31 +200,19 @@ describe('TraceView', () => {
     expect(screen.queryByText('Trace ID: trace-3')).not.toBeInTheDocument();
   });
 
-  it('should not call the API and render null when evaluationId is an empty string', () => {
-    const { container } = render(<TraceView evaluationId="" fetchTraces={mockFetchTraces} />);
+  it('should render null when evaluationId is not provided', () => {
+    const { container } = render(<TraceView traces={[]} />);
 
-    expect(mockFetchTraces).not.toHaveBeenCalled();
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(container.firstChild).toBeNull();
   });
 
-  it('should call onVisibilityChange with false when evaluationId is an empty string', async () => {
-    const onVisibilityChange = vi.fn();
+  it('should render null when evaluationId is an empty string', () => {
+    const { container } = render(<TraceView evaluationId="" traces={[]} />);
 
-    render(
-      <TraceView
-        evaluationId=""
-        onVisibilityChange={onVisibilityChange}
-        fetchTraces={mockFetchTraces}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(onVisibilityChange).toHaveBeenCalledWith(false);
-    });
+    expect(container.firstChild).toBeNull();
   });
 
-  it('should display only traces whose testCaseId matches the provided testIndex and promptIndex when testCaseId is not provided but both indices are specified', async () => {
+  it('should display only traces whose testCaseId matches the provided testIndex and promptIndex when testCaseId is not provided but both indices are specified', () => {
     const mockTraces = [
       {
         traceId: 'trace-1',
@@ -460,25 +231,18 @@ describe('TraceView', () => {
       },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
-
     render(
-      <TraceView
-        evaluationId="eval-xyz-789"
-        testIndex={1}
-        promptIndex={1}
-        fetchTraces={mockFetchTraces}
-      />,
+      <TraceView evaluationId="eval-xyz-789" testIndex={1} promptIndex={1} traces={mockTraces} />,
     );
 
-    const timelines = await screen.findAllByTestId('trace-timeline');
+    const timelines = screen.getAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(1);
     expect(screen.getByText('Trace ID: trace-1')).toBeInTheDocument();
     expect(screen.queryByText('Trace ID: trace-2')).not.toBeInTheDocument();
     expect(screen.queryByText('Trace ID: trace-3')).not.toBeInTheDocument();
   });
 
-  it('should not render traces where testCaseId is a number', async () => {
+  it('should not render traces where testCaseId is a number', () => {
     const mockTraces = [
       {
         traceId: 'trace-1',
@@ -492,24 +256,20 @@ describe('TraceView', () => {
       },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
-
     render(
       <TraceView
         evaluationId="eval-xyz-789"
         testCaseId="test-case-1"
         testIndex={1}
         promptIndex={1}
-        fetchTraces={mockFetchTraces}
+        traces={mockTraces}
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.queryByText('Trace ID: trace-1')).not.toBeInTheDocument();
-    });
+    expect(screen.queryByText('Trace ID: trace-1')).not.toBeInTheDocument();
   });
 
-  it('should render a message indicating no traces are available when testCaseId is malformed', async () => {
+  it('should render a message indicating no traces are available when testCaseId is malformed', () => {
     const mockTraces = [
       {
         traceId: 'trace-abc-123',
@@ -523,23 +283,20 @@ describe('TraceView', () => {
       },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
-
     render(
       <TraceView
         evaluationId="eval-xyz-789"
         testCaseId="test-case-123"
         testIndex={1}
         promptIndex={2}
-        fetchTraces={mockFetchTraces}
+        traces={mockTraces}
       />,
     );
 
-    const message = await screen.findByText('No traces available for this test case');
-    expect(message).toBeInTheDocument();
+    expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
   });
 
-  it('should render "No traces available for this test case" when testIndex is negative', async () => {
+  it('should render "No traces available for this test case" when testIndex is negative', () => {
     const mockTraces = [
       {
         traceId: 'trace-1',
@@ -547,8 +304,6 @@ describe('TraceView', () => {
         spans: [{ spanId: 'span-1', name: 'span-name-1', startTime: 1, endTime: 2 }],
       },
     ];
-
-    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -556,16 +311,14 @@ describe('TraceView', () => {
         testCaseId="some-uuid"
         testIndex={-1}
         promptIndex={0}
-        fetchTraces={mockFetchTraces}
+        traces={mockTraces}
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
-    });
+    expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
   });
 
-  it('should render "No traces available for this test case" when testIndex is NaN', async () => {
+  it('should render "No traces available for this test case" when testIndex is NaN', () => {
     const mockTraces = [
       {
         traceId: 'trace-1',
@@ -573,8 +326,6 @@ describe('TraceView', () => {
         spans: [{ spanId: 'span-1', name: 'span-name-1', startTime: 1, endTime: 2 }],
       },
     ];
-
-    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -582,16 +333,14 @@ describe('TraceView', () => {
         testCaseId="some-uuid"
         testIndex={NaN}
         promptIndex={0}
-        fetchTraces={mockFetchTraces}
+        traces={mockTraces}
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
-    });
+    expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
   });
 
-  it('should render "No traces available for this test case" when promptIndex is negative', async () => {
+  it('should render "No traces available for this test case" when promptIndex is negative', () => {
     const mockTraces = [
       {
         traceId: 'trace-1',
@@ -599,8 +348,6 @@ describe('TraceView', () => {
         spans: [{ spanId: 'span-1', name: 'span-name-1', startTime: 1, endTime: 2 }],
       },
     ];
-
-    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -608,16 +355,14 @@ describe('TraceView', () => {
         testCaseId="some-uuid"
         testIndex={0}
         promptIndex={-1}
-        fetchTraces={mockFetchTraces}
+        traces={mockTraces}
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
-    });
+    expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
   });
 
-  it('should render "No traces available for this test case" when promptIndex is NaN', async () => {
+  it('should render "No traces available for this test case" when promptIndex is NaN', () => {
     const mockTraces = [
       {
         traceId: 'trace-1',
@@ -626,50 +371,37 @@ describe('TraceView', () => {
       },
     ];
 
-    mockFetchTraces.mockResolvedValue(mockTraces);
-
     render(
       <TraceView
         evaluationId="eval-xyz-789"
         testCaseId="some-uuid"
         testIndex={0}
         promptIndex={NaN}
-        fetchTraces={mockFetchTraces}
+        traces={mockTraces}
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
-    });
+    expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
   });
 
-  it('filters by indices when no testCaseId is provided', async () => {
+  it('filters by indices when no testCaseId is provided', () => {
     const mockTraces = [
       { traceId: 't-a', testCaseId: '1-2', spans: [{ spanId: 's1' }] },
       { traceId: 't-b', testCaseId: '3-1', spans: [{ spanId: 's2' }] },
     ];
-    mockFetchTraces.mockResolvedValue(mockTraces);
 
-    render(
-      <TraceView
-        evaluationId="eval-1"
-        testIndex={3}
-        promptIndex={1}
-        fetchTraces={mockFetchTraces}
-      />,
-    );
+    render(<TraceView evaluationId="eval-1" testIndex={3} promptIndex={1} traces={mockTraces} />);
 
-    const timelines = await screen.findAllByTestId('trace-timeline');
+    const timelines = screen.getAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(1);
     expect(screen.getByText('Trace ID: t-b')).toBeInTheDocument();
   });
 
-  it('prefers direct testCaseId match over index fallback', async () => {
+  it('prefers direct testCaseId match over index fallback', () => {
     const mockTraces = [
       { traceId: 't-direct', testCaseId: 'uuid-123', spans: [{ spanId: 's1' }] },
       { traceId: 't-fallback', testCaseId: '3-1', spans: [{ spanId: 's2' }] },
     ];
-    mockFetchTraces.mockResolvedValue(mockTraces);
 
     render(
       <TraceView
@@ -677,13 +409,29 @@ describe('TraceView', () => {
         testCaseId="uuid-123"
         testIndex={3}
         promptIndex={1}
-        fetchTraces={mockFetchTraces}
+        traces={mockTraces}
       />,
     );
 
-    const timelines = await screen.findAllByTestId('trace-timeline');
+    const timelines = screen.getAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(1);
     expect(screen.getByText('Trace ID: t-direct')).toBeInTheDocument();
     expect(screen.queryByText('Trace ID: t-fallback')).not.toBeInTheDocument();
+  });
+
+  it('should show all traces for an evaluation when no filtering is specified', () => {
+    const mockTraces = [
+      { traceId: 't-1', testCaseId: 'test-1', spans: [{ spanId: 's1' }] },
+      { traceId: 't-2', testCaseId: 'test-2', spans: [{ spanId: 's2' }] },
+      { traceId: 't-3', testCaseId: 'test-3', spans: [{ spanId: 's3' }] },
+    ];
+
+    render(<TraceView evaluationId="eval-1" traces={mockTraces} />);
+
+    const timelines = screen.getAllByTestId('trace-timeline');
+    expect(timelines).toHaveLength(3);
+    expect(screen.getByText('Trace ID: t-1')).toBeInTheDocument();
+    expect(screen.getByText('Trace ID: t-2')).toBeInTheDocument();
+    expect(screen.getByText('Trace ID: t-3')).toBeInTheDocument();
   });
 });
