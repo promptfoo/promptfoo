@@ -1,6 +1,7 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 
@@ -26,13 +27,13 @@ vi.mock('@app/hooks/useToast', () => ({
 describe('EmailVerificationDialog', () => {
   const theme = createTheme();
 
-  const mockProps = {
+  const mockProps: ComponentProps<typeof EmailVerificationDialog> = {
     open: true,
     onClose: vi.fn(),
     onSuccess: vi.fn(),
   };
 
-  const renderComponent = (props = mockProps) => {
+  const renderComponent = (props: ComponentProps<typeof EmailVerificationDialog> = mockProps) => {
     return render(
       <ThemeProvider theme={theme}>
         <EmailVerificationDialog {...props} />
@@ -62,7 +63,12 @@ describe('EmailVerificationDialog', () => {
 
   it('displays custom message when provided', () => {
     const customMessage = 'Custom verification message';
-    renderComponent({ ...mockProps, message: customMessage });
+    renderComponent({
+      open: true,
+      onClose: vi.fn(),
+      onSuccess: vi.fn(),
+      message: customMessage,
+    });
 
     expect(screen.getByText(customMessage)).toBeInTheDocument();
   });
