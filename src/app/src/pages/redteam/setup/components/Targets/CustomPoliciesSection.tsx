@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -20,30 +20,23 @@ import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseDialog, TestCaseGenerateButton } from '../TestCaseDialog';
 
-interface PolicyInstance {
-  id: string;
-  name: string;
-  policy: string;
-  isExpanded: boolean;
-}
-
 const PolicyInput = memo(
   ({
-    id,
+    index,
     value,
     onChange,
   }: {
-    id: string;
+    index: number;
     value: string;
-    onChange: (id: string, value: string) => void;
+    onChange: (index: number, value: string) => void;
   }) => {
     const [debouncedChange] = useDebounce(onChange, 300);
 
     const handleChange = useCallback(
       (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        debouncedChange(id, e.target.value);
+        debouncedChange(index, e.target.value);
       },
-      [id, debouncedChange],
+      [index, debouncedChange],
     );
 
     return (
@@ -66,95 +59,119 @@ export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const toast = useToast();
-  const [isInitialMount, setIsInitialMount] = useState(true);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
-  const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
+  const [generatingPolicyIndex, setGeneratingPolicyIndex] = useState<number | null>(null);
   const [generatedTestCase, setGeneratedTestCase] = useState<{
     prompt: string;
     context?: string;
   } | null>(null);
   const [generatingTestCase, setGeneratingTestCase] = useState(false);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
-  const [policies, setPolicies] = useState<PolicyInstance[]>(() => {
-    // Initialize from existing config or create a default empty policy
-    const existingPolicies = config.plugins
-      .filter((p) => typeof p === 'object' && p.id === 'policy')
-      .map((p, index) => ({
-        id: `policy-${Date.now()}-${index}`,
-        name: `Custom Policy ${index + 1}`,
-        policy: (p as { config: { policy: string } }).config.policy,
-        isExpanded: true,
-      }));
+  
+  // Track which policies are expanded (by index)
+  const [expandedPolicies, setExpandedPolicies] = useState<Set<number>>(() => new Set([0]));
+  
+  // Track custom names for policies (by index)
+  const [policyNames, setPolicyNames] = useState<Record<number, string>>({});
 
-    return existingPolicies.length
-      ? existingPolicies
-      : [
-          {
-            id: `policy-${Date.now()}`,
-            name: 'Custom Policy 1',
-            policy: '',
-            isExpanded: true,
-          },
-        ];
-  });
+  // Get policy plugins from config
+  const policyPlugins = config.plugins.filter(
+    (p) => typeof p === 'object' && p.id === 'policy',
+  ) as Array<{ id: string; config: { policy: string } }>;
 
-  const [debouncedPolicies] = useDebounce(policies, 500);
+  // Always show at least one empty policy if none exist
+  const policies =
+    policyPlugins.length > 0
+      ? policyPlugins.map((p) => p.config.policy)
+      : [''];
 
-  // Sync policies to config - immediate on mount, debounced on changes
-  const syncPolicies = useCallback(
-    (policiesToSync: PolicyInstance[]) => {
-      const policyPlugins = policiesToSync
-        .filter((policy) => policy.policy.trim() !== '')
-        .map((policy) => ({
-          id: 'policy',
-          config: {
-            policy: policy.policy,
-          },
-        }));
-
+  const handlePolicyChange = useCallback(
+    (index: number, newValue: string) => {
       const otherPlugins = config.plugins.filter((p) =>
         typeof p === 'string' ? true : p.id !== 'policy',
       );
 
-      const currentPolicies = JSON.stringify(
-        config.plugins.filter((p) => typeof p === 'object' && p.id === 'policy'),
-      );
-      const newPolicies = JSON.stringify(policyPlugins);
+      const updatedPolicies = [...policies];
+      updatedPolicies[index] = newValue;
 
-      if (currentPolicies !== newPolicies) {
-        updateConfig('plugins', [...otherPlugins, ...policyPlugins]);
-      }
+      // Filter out empty policies for storage
+      const nonEmptyPolicies = updatedPolicies
+        .filter((policy) => policy.trim() !== '')
+        .map((policy) => ({
+          id: 'policy',
+          config: { policy },
+        }));
+
+      updateConfig('plugins', [...otherPlugins, ...nonEmptyPolicies]);
     },
-    [config.plugins, updateConfig],
+    [config.plugins, policies, updateConfig],
   );
 
-  // Immediate sync on initial mount
-  useEffect(() => {
-    if (isInitialMount) {
-      syncPolicies(policies);
-      setIsInitialMount(false);
-    }
-  }, [isInitialMount, policies, syncPolicies]);
-
-  // Debounced sync for subsequent changes
-  useEffect(() => {
-    if (!isInitialMount) {
-      syncPolicies(debouncedPolicies);
-    }
-  }, [debouncedPolicies, isInitialMount, syncPolicies]);
-
-  const handlePolicyChange = useCallback((policyId: string, newValue: string) => {
-    setPolicies((prev) => prev.map((p) => (p.id === policyId ? { ...p, policy: newValue } : p)));
-  }, []);
-
   const handleAddPolicy = () => {
-    const newPolicy: PolicyInstance = {
-      id: `policy-${Date.now()}`,
-      name: `Custom Policy ${policies.length + 1}`,
-      policy: '',
-      isExpanded: true,
-    };
-    setPolicies([...policies, newPolicy]);
+    const otherPlugins = config.plugins.filter((p) =>
+      typeof p === 'string' ? true : p.id !== 'policy',
+    );
+
+    const newPolicies = [
+      ...policyPlugins.map((p) => ({
+        id: 'policy',
+        config: { policy: p.config.policy },
+      })),
+      {
+        id: 'policy',
+        config: { policy: '' },
+      },
+    ];
+
+    updateConfig('plugins', [...otherPlugins, ...newPolicies]);
+    
+    // Expand the newly added policy
+    setExpandedPolicies((prev) => new Set([...prev, newPolicies.length - 1]));
+  };
+
+  const handleRemovePolicy = (index: number) => {
+    const otherPlugins = config.plugins.filter((p) =>
+      typeof p === 'string' ? true : p.id !== 'policy',
+    );
+
+    const updatedPolicies = policies
+      .filter((_, i) => i !== index)
+      .filter((policy) => policy.trim() !== '')
+      .map((policy) => ({
+        id: 'policy',
+        config: { policy },
+      }));
+
+    updateConfig('plugins', [...otherPlugins, ...updatedPolicies]);
+    
+    // Clean up UI state for removed policy
+    setPolicyNames((prev) => {
+      const newNames = { ...prev };
+      delete newNames[index];
+      // Adjust indices for policies after the removed one
+      const adjusted: Record<number, string> = {};
+      Object.entries(newNames).forEach(([key, value]) => {
+        const oldIndex = Number.parseInt(key);
+        if (oldIndex > index) {
+          adjusted[oldIndex - 1] = value;
+        } else {
+          adjusted[oldIndex] = value;
+        }
+      });
+      return adjusted;
+    });
+    
+    setExpandedPolicies((prev) => {
+      const newExpanded = new Set<number>();
+      prev.forEach((i) => {
+        if (i < index) {
+          newExpanded.add(i);
+        } else if (i > index) {
+          newExpanded.add(i - 1);
+        }
+      });
+      return newExpanded;
+    });
   };
 
   const handleCsvUpload = useCallback(
@@ -179,17 +196,26 @@ export const CustomPoliciesSection = () => {
         // Extract policies from the first column
         const newPolicies = records
           .map((record: any) => Object.values(record)[0] as string)
-          .filter((policy: string) => policy && policy.trim() !== '')
-          .map((policy: string, index: number) => ({
-            id: `policy-${Date.now()}-${index}`,
-            name: `Custom Policy ${policies.length + index + 1}`,
-            policy: policy.trim(),
-            isExpanded: false,
-          }));
+          .filter((policy: string) => policy && policy.trim() !== '');
 
         if (newPolicies.length > 0) {
-          // Append new policies to existing ones
-          setPolicies([...policies, ...newPolicies]);
+          const otherPlugins = config.plugins.filter((p) =>
+            typeof p === 'string' ? true : p.id !== 'policy',
+          );
+
+          const allPolicies = [
+            ...policyPlugins.map((p) => ({
+              id: 'policy',
+              config: { policy: p.config.policy },
+            })),
+            ...newPolicies.map((policy) => ({
+              id: 'policy',
+              config: { policy: policy.trim() },
+            })),
+          ];
+
+          updateConfig('plugins', [...otherPlugins, ...allPolicies]);
+          
           toast.showToast(
             `Successfully imported ${newPolicies.length} policies from CSV`,
             'success',
@@ -204,17 +230,17 @@ export const CustomPoliciesSection = () => {
         setIsUploadingCsv(false);
       }
     },
-    [policies, toast],
+    [config.plugins, policyPlugins, toast, updateConfig],
   );
 
-  const handleGenerateTestCase = async (policyId: string) => {
-    const policy = policies.find((p) => p.id === policyId);
-    if (!policy || !policy.policy.trim()) {
+  const handleGenerateTestCase = async (index: number) => {
+    const policy = policies[index];
+    if (!policy || !policy.trim()) {
       toast.showToast('Please enter a policy before generating a test case', 'warning');
       return;
     }
 
-    setGeneratingPolicyId(policyId);
+    setGeneratingPolicyIndex(index);
     setGeneratedTestCase(null);
     setGeneratingTestCase(true);
     setTestCaseDialogOpen(true);
@@ -233,7 +259,7 @@ export const CustomPoliciesSection = () => {
         body: JSON.stringify({
           pluginId: 'policy',
           config: {
-            policy: policy.policy,
+            policy: policy,
           },
         }),
       });
@@ -246,7 +272,7 @@ export const CustomPoliciesSection = () => {
       const data = await response.json();
       setGeneratedTestCase({
         prompt: data.prompt || '',
-        context: data.context || policy.policy,
+        context: data.context || policy,
       });
     } catch (error) {
       console.error('Error generating test case:', error);
@@ -262,9 +288,29 @@ export const CustomPoliciesSection = () => {
 
   const handleCloseTestCaseDialog = () => {
     setTestCaseDialogOpen(false);
-    setGeneratingPolicyId(null);
+    setGeneratingPolicyIndex(null);
     setGeneratedTestCase(null);
     setGeneratingTestCase(false);
+  };
+
+  const toggleExpanded = (index: number) => {
+    setExpandedPolicies((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
+
+  const getPolicyName = (index: number) => {
+    return policyNames[index] || `Custom Policy ${index + 1}`;
+  };
+
+  const setPolicyName = (index: number, name: string) => {
+    setPolicyNames((prev) => ({ ...prev, [index]: name }));
   };
 
   return (
@@ -312,9 +358,9 @@ export const CustomPoliciesSection = () => {
       </Box>
 
       <Stack spacing={2}>
-        {policies.map((policy) => (
+        {policies.map((policy, index) => (
           <Box
-            key={policy.id}
+            key={index}
             sx={{
               border: 1,
               borderColor: 'divider',
@@ -325,40 +371,31 @@ export const CustomPoliciesSection = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <TextField
                 label="Policy Name"
-                value={policy.name}
-                onChange={(e) => {
-                  setPolicies((prev) =>
-                    prev.map((p) => (p.id === policy.id ? { ...p, name: e.target.value } : p)),
-                  );
-                }}
+                value={getPolicyName(index)}
+                onChange={(e) => setPolicyName(index, e.target.value)}
                 size="small"
                 fullWidth
               />
               <TestCaseGenerateButton
-                onClick={() => handleGenerateTestCase(policy.id)}
-                disabled={generatingTestCase && generatingPolicyId === policy.id}
-                isGenerating={generatingTestCase && generatingPolicyId === policy.id}
+                onClick={() => handleGenerateTestCase(index)}
+                disabled={generatingTestCase && generatingPolicyIndex === index}
+                isGenerating={generatingTestCase && generatingPolicyIndex === index}
               />
               <IconButton
-                onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}
+                onClick={() => handleRemovePolicy(index)}
                 color="error"
+                disabled={policies.length === 1 && !policy.trim()}
               >
                 <DeleteIcon />
               </IconButton>
-              <IconButton
-                onClick={() => {
-                  setPolicies((prev) =>
-                    prev.map((p) => (p.id === policy.id ? { ...p, isExpanded: !p.isExpanded } : p)),
-                  );
-                }}
-              >
-                {policy.isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              <IconButton onClick={() => toggleExpanded(index)}>
+                {expandedPolicies.has(index) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
               </IconButton>
             </Box>
 
-            <Collapse in={policy.isExpanded}>
+            <Collapse in={expandedPolicies.has(index)}>
               <Box sx={{ mt: 2 }}>
-                <PolicyInput id={policy.id} value={policy.policy} onChange={handlePolicyChange} />
+                <PolicyInput index={index} value={policy} onChange={handlePolicyChange} />
               </Box>
             </Collapse>
           </Box>
