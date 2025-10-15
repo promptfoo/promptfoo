@@ -31,7 +31,7 @@ COPY package.json package-lock.json ./
 
 # Leverage BuildKit cache and pre-install platform-specific SWC binary
 RUN npm install @swc/core@^1.13.20 && \
-    npm ci --install-links --include=peer
+    npm install --install-links --include=peer
 
 # Copy the rest of the application code
 COPY . .
