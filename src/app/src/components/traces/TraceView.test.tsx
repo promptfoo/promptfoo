@@ -81,7 +81,9 @@ describe('TraceView', () => {
     render(<TraceView evaluationId="eval-xyz-789" traces={mockTraces} />);
 
     expect(
-      screen.getByText(/Traces were created but no spans were received. Make sure your provider is:/),
+      screen.getByText(
+        /Traces were created but no spans were received. Make sure your provider is:/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -388,9 +390,7 @@ describe('TraceView', () => {
       { traceId: 't-b', testCaseId: '3-1', spans: [{ spanId: 's2' }] },
     ];
 
-    render(
-      <TraceView evaluationId="eval-1" testIndex={3} promptIndex={1} traces={mockTraces} />,
-    );
+    render(<TraceView evaluationId="eval-1" testIndex={3} promptIndex={1} traces={mockTraces} />);
 
     const timelines = screen.getAllByTestId('trace-timeline');
     expect(timelines).toHaveLength(1);
