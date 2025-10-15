@@ -164,14 +164,6 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'anthropic:messages:claude-3-5-haiku-20241022',
-      label: 'Anthropic: Claude 3.5 Haiku',
-      config: {
-        max_tokens: 1024,
-        temperature: 0.5,
-      },
-    },
-    {
       id: 'anthropic:claude-agent-sdk',
       label: 'Anthropic: Claude Agent SDK',
       config: {},

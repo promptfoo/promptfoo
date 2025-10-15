@@ -26,8 +26,15 @@ npx promptfoo@latest init --example claude-thinking
 
 This example requires:
 
+### For Anthropic API
+
 - `ANTHROPIC_API_KEY` - Your Anthropic API key from [console.anthropic.com](https://console.anthropic.com/)
-- AWS credentials configured (for Bedrock provider): `aws configure`
+
+### For AWS Bedrock
+
+- `AWS_ACCESS_KEY_ID` - Your AWS access key
+- `AWS_SECRET_ACCESS_KEY` - Your AWS secret key
+- Or configure credentials via the AWS CLI: `aws configure`
 
 ## Running the Example
 
@@ -73,4 +80,5 @@ Final answer: We need exactly 2 weighings to find the heavier ball.
 ## Additional Resources
 
 - [Claude Thinking Documentation](https://docs.anthropic.com/claude/docs/extended-thinking)
+- [AWS Bedrock Claude Guide](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-claude.html)
 - [Promptfoo Documentation on Claude Providers](https://promptfoo.dev/docs/providers/anthropic)
