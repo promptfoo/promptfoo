@@ -32,6 +32,6 @@
     "src/workers/**/*",
     "src/app/**/*",
     "test/app/**/*",
-    "test/site/",
+    "test/site/"
   ]
 }
