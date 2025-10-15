@@ -4,7 +4,8 @@ import { Severity } from '@promptfoo/redteam/constants';
 import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SeverityCard from './SeverityCard';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
+import { createAppTheme } from '@app/components/PageShell';
 
 describe('SeverityCard', () => {
   const mockNavigateToIssues = vi.fn();
@@ -12,31 +13,32 @@ describe('SeverityCard', () => {
   beforeEach(() => {
     mockNavigateToIssues.mockClear();
   });
+  const theme = createAppTheme(false);
 
   describe('Styles and Colors', () => {
     it.each([
       {
         severity: Severity.Critical,
-        severityColor: red[900],
-        backgroundColor: 'rgba(183, 28, 28, 0.05)',
+        severityColor: theme.palette.custom.severity.critical.main,
+        backgroundColor: alpha(theme.palette.custom.severity.critical.main, 0.05),
         displayName: 'Critical',
       },
       {
         severity: Severity.High,
-        severityColor: red[500],
-        backgroundColor: 'rgba(244, 67, 54, 0.05)',
+        severityColor: theme.palette.custom.severity.high.main,
+        backgroundColor: alpha(theme.palette.custom.severity.high.main, 0.05),
         displayName: 'High',
       },
       {
         severity: Severity.Medium,
-        severityColor: '#ed6c02', // warning.main color
-        backgroundColor: 'rgba(237, 108, 2, 0.05)',
+        severityColor: theme.palette.custom.severity.medium.main,
+        backgroundColor: alpha(theme.palette.custom.severity.medium.main, 0.05),
         displayName: 'Medium',
       },
       {
         severity: Severity.Low,
-        severityColor: '#2e7d32', // success.main color
-        backgroundColor: 'rgba(46, 125, 50, 0.05)',
+        severityColor: theme.palette.custom.severity.low.main,
+        backgroundColor: alpha(theme.palette.custom.severity.low.main, 0.05),
         displayName: 'Low',
       },
     ])(

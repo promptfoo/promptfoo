@@ -10,7 +10,7 @@ You’ll run the server locally and use promptfoo’s eval command to test the q
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example websocket-streaming
+npx promptfoo@latest init --example websockets-streaming
 ```
 
 ## What’s in this folder

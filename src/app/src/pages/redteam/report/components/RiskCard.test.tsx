@@ -120,9 +120,9 @@ describe('RiskCard', () => {
     });
     render(<RiskCard {...props} />);
 
-    expect(screen.getByText(`${numTestsFailed} failed probes`)).toBeInTheDocument();
+    expect(screen.getByText(`${numTestsFailed} attacks succeeded`)).toBeInTheDocument();
     expect(
-      screen.getByText(`${numTestsPassed}/${numTestsPassed + numTestsFailed} passed`),
+      screen.getByText(`${numTestsPassed}/${numTestsPassed + numTestsFailed} tests passed`),
     ).toBeInTheDocument();
   });
 
@@ -259,7 +259,7 @@ describe('RiskCard', () => {
     });
     render(<RiskCard {...props} />);
 
-    const listItem = screen.getByText('No Failures Test').closest('li');
+    const listItem = screen.getByText('No Failures Test').closest('[role="button"]');
     fireEvent.click(listItem as Element);
 
     expect(screen.getByTestId('mock-risk-category-drawer')).toBeInTheDocument();
