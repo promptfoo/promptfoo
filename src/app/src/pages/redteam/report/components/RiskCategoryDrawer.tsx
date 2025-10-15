@@ -179,7 +179,9 @@ const RiskCategoryDrawer = ({
         </Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Box sx={{ textAlign: 'center', flex: 1 }}>
-            <Typography variant="h4">{numPassed.toString()}</Typography>
+            <Typography variant="h4" color="primary">
+              {numPassed.toString()}
+            </Typography>
             <Typography variant="body2">Passed</Typography>
           </Box>
           <Box sx={{ textAlign: 'center', flex: 1 }}>
@@ -187,10 +189,7 @@ const RiskCategoryDrawer = ({
             <Typography variant="body2">Total</Typography>
           </Box>
           <Box sx={{ textAlign: 'center', flex: 1 }}>
-            <Typography
-              variant="h4"
-              color={numPassed === totalTests ? 'success.main' : 'error.main'}
-            >
+            <Typography variant="h4" color={passPercentage >= 70 ? 'success.main' : 'error.main'}>
               {`${passPercentage}%`}
             </Typography>
             <Typography variant="body2">Pass Rate</Typography>
@@ -225,7 +224,7 @@ const RiskCategoryDrawer = ({
           onChange={(_, newValue) => setActiveTab(newValue)}
           sx={{ borderBottom: 1, borderColor: 'divider', mt: 2 }}
         >
-          <Tab label={`Failed Tests (${failures.length})`} />
+          <Tab label={`Flagged Tests (${failures.length})`} />
           <Tab label={`Passed Tests (${passes.length})`} />
           <Tab label="Flow Diagram" />
         </Tabs>
