@@ -119,7 +119,25 @@ export async function getGradingProvider(
       );
     }
   } else {
-    finalProvider = defaultProvider;
+    // No provider specified - check defaultTest.options.provider as fallback
+    const defaultTestIsObject = typeof cliState.config?.defaultTest === 'object';
+    const cfg =
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.provider) ||
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider) ||
+      undefined;
+
+    if (cfg) {
+      // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
+      finalProvider = await getGradingProvider(type, cfg, defaultProvider);
+      if (finalProvider) {
+        logger.debug(
+          `[Grading] Using provider from defaultTest.options.provider: ${finalProvider.id()}`,
+        );
+      }
+    } else {
+      finalProvider = defaultProvider;
+    }
   }
   return finalProvider;
 }
