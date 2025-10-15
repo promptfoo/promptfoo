@@ -484,6 +484,16 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
+      id: 'vertex:claude-4-5-haiku@20251001',
+      label: 'Vertex: Claude 3.5 Haiku',
+      config: {
+        region: 'us-east5',
+        anthropic_version: 'vertex-2023-10-16',
+        max_tokens: 1024,
+        temperature: 0.5,
+      },
+    },
+    {
       id: 'vertex:claude-3-5-haiku@20241022',
       label: 'Vertex: Claude 3.5 Haiku',
       config: {
