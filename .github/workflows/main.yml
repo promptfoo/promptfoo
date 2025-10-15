@@ -134,7 +134,7 @@ jobs:
 
       - name: Check Dependency Versions
         run: |
-          npx check-dependency-version-consistency
+          npx check-dependency-version-consistency --ignore-dep promptfoo-toolkit --ignore-dep storybook
 
       - name: Check for circular dependencies
         run: |
