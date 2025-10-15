@@ -32,6 +32,7 @@ import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 interface ResultsChartsProps {
   handleHideCharts: () => void;
+  scores: number[];
 }
 
 interface ChartProps {
@@ -204,7 +205,7 @@ function PassRateChart({ table }: ChartProps) {
           tooltip: {
             callbacks: {
               label: function (context) {
-                return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
+                return `${context.dataset.label}: ${(context.parsed.y ?? 0).toFixed(2)}%`;
               },
             },
           },
@@ -358,7 +359,7 @@ function ScatterChart({ table }: ChartProps) {
         <DialogContent>
           <FormControl sx={{ m: 1, minWidth: 120 }}>
             <Select value={xAxisPrompt} onChange={(e) => setXAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((prompt, idx) => (
+              {table.head.prompts.map((_prompt, idx) => (
                 <MenuItem key={idx} value={idx}>
                   Prompt {idx + 1}
                 </MenuItem>
@@ -367,7 +368,7 @@ function ScatterChart({ table }: ChartProps) {
           </FormControl>
           <FormControl sx={{ m: 1, minWidth: 120 }}>
             <Select value={yAxisPrompt} onChange={(e) => setYAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((prompt, idx) => (
+              {table.head.prompts.map((_prompt, idx) => (
                 <MenuItem key={idx} value={idx}>
                   Prompt {idx + 1}
                 </MenuItem>
@@ -447,7 +448,7 @@ function MetricChart({ table }: ChartProps) {
                 return tooltipItem[0].dataset.label;
               },
               label(tooltipItem: TooltipItem<'bar'>) {
-                const value = tooltipItem.parsed.y;
+                const value = tooltipItem.parsed.y ?? 0;
                 return `${labels[tooltipItem.dataIndex]}: ${(value * 100).toFixed(2)}% pass rate`;
               },
             },
@@ -599,7 +600,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
           },
         },
       },
-      onClick: (event: any, elements: any) => {
+      onClick: (_event: any, elements: any) => {
         if (elements.length > 0) {
           const index = elements[0].index;
           window.open(`/eval/?evalId=${chartData[index].evalData.evalId}`, '_blank');
@@ -634,7 +635,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
+function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [
@@ -679,22 +680,9 @@ function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
   //   );
   // }
 
-  const scores = table!.body
-    .flatMap((row) => row.outputs.map((output) => output?.score))
-    .filter((score) => typeof score === 'number' && !Number.isNaN(score));
-
-  if (scores.length === 0) {
-    // No valid scores available
-    return null;
-  }
+  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 
   const scoreSet = new Set(scores);
-  if (scoreSet.size === 1) {
-    // All scores are the same, charts not useful.
-    return null;
-  }
-
-  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 
   return (
     <ErrorBoundary fallback={null}>

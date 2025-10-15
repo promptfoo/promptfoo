@@ -26,7 +26,7 @@ export function calculatePerplexityCost(
   modelName: string,
   promptTokens?: number,
   completionTokens?: number,
-  usageTier: 'high' | 'medium' | 'low' = 'medium',
+  _usageTier: 'high' | 'medium' | 'low' = 'medium',
 ): number {
   if (!promptTokens && !completionTokens) {
     return 0;

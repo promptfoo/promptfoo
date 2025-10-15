@@ -92,7 +92,7 @@ export class ShellInjectionPlugin extends RedteamPluginBase {
   `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

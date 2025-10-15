@@ -141,7 +141,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   }, []);
 
   const handleTestModeChange = (
-    event: React.MouseEvent<HTMLElement>,
+    _event: React.MouseEvent<HTMLElement>,
     newMode: 'application' | 'model',
   ) => {
     if (newMode !== null) {

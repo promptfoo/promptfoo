@@ -81,6 +81,33 @@ npm run local -- eval -c path/to/config.yaml
 
 This ensures you're testing with your current changes instead of the installed version.
 
+**Important:** Always use `--` before additional flags when using `npm run local`:
+
+```bash
+# Correct - use -- to separate npm script from CLI flags
+npm run local -- eval --max-concurrency 1 --filter-first-n 1
+
+# Incorrect - flags will be passed to npm instead of promptfoo
+npm run local eval --max-concurrency 1
+```
+
+### Using Environment Variables
+
+The repository includes a `.env` file at `~/projects/promptfoo/.env` with API keys for testing. To use it with the local build:
+
+```bash
+# Use --env-file flag to load environment variables
+npm run local -- eval -c examples/tau-simulated-user/promptfooconfig.yaml --env-file ~/projects/promptfoo/.env
+
+# Or set specific variables inline
+OPENAI_API_KEY=sk-... npm run local -- eval -c path/to/config.yaml
+
+# For testing with remote generation disabled
+PROMPTFOO_DISABLE_REMOTE_GENERATION=true npm run local -- eval -c path/to/config.yaml
+```
+
+**Never commit the `.env` file or expose API keys in code or commit messages.**
+
 ## Documentation Testing
 
 When testing documentation changes that require building the site, you can speed up the process by skipping OG (Open Graph) image generation:
@@ -115,9 +142,129 @@ The OG image generation process can take several minutes and may cause CI timeou
 - Follow Jest best practices with describe/it blocks
 - Use consistent error handling with proper type checks
 
+### React Hooks
+
+- **`useMemo` vs `useCallback`**: Use `useMemo` when computing a value, and `useCallback` when creating a stable function reference. Specifically:
+  - Use `useMemo` when the hook returns a value that doesn't accept arguments (a non-callable)
+  - Use `useCallback` when the hook returns a function that accepts arguments and will be called later
+
+  ```typescript
+  // ✅ Good - useMemo for computed values
+  const tooltipMessage = useMemo(() => {
+    return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+  }, [apiStatus]);
+
+  // ✅ Good - useCallback for functions that accept arguments
+  const handleClick = useCallback((id: string) => {
+    console.log('Clicked:', id);
+  }, []);
+
+  // ❌ Bad - useCallback for computed values
+  const getTooltipMessage = useCallback(() => {
+    return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+  }, [apiStatus]);
+  ```
+
+## Logging and Sanitization
+
+**IMPORTANT**: Always sanitize sensitive data before logging to prevent exposing secrets, API keys, passwords, and other credentials in logs.
+
+### Sanitized Logging
+
+All logger methods (`debug`, `info`, `warn`, `error`) accept an optional second parameter for context objects that will be automatically sanitized:
+
+```typescript
+import logger from './logger';
+
+// For logging with structured context (headers, body, URLs, etc.)
+logger.debug('[Provider]: Making API request', {
+  url: 'https://api.example.com',
+  method: 'POST',
+  headers: { Authorization: 'Bearer secret-token' },
+  body: { apiKey: 'secret-key', data: 'value' },
+  queryParams: { token: 'secret-token' },
+});
+// Output: All sensitive fields automatically redacted as [REDACTED]
+
+// Works with all log levels
+logger.error('Request failed', {
+  headers: response.headers,
+  body: errorResponse,
+});
+```
+
+### Manual Sanitization
+
+For cases where you need to sanitize data before using it in non-logging contexts:
+
+```typescript
+import { sanitizeObject } from './util/sanitizer';
+
+// Sanitize any object - works recursively up to 4 levels deep
+const sanitizedConfig = sanitizeObject(providerConfig, {
+  context: 'provider config', // optional context for error messages
+});
+
+// Sanitize response metadata before saving
+const metadata = {
+  headers: sanitizeObject(response.headers, { context: 'response headers' }),
+  // ... other metadata
+};
+```
+
+### What Gets Sanitized
+
+The sanitizer automatically redacts these sensitive field names (case-insensitive, works with `-`, `_`, camelCase):
+
+- **Passwords**: password, passwd, pwd, pass, passphrase
+- **API Keys & Tokens**: apiKey, api_key, token, accessToken, refreshToken, bearerToken, etc.
+- **Secrets**: secret, clientSecret, webhookSecret
+- **Headers**: authorization, cookie, x-api-key, x-auth-token, x-access-token
+- **Certificates**: privateKey, certificatePassword, pfxPassword, keystorePassword, certificateContent, etc.
+- **Signatures**: signature, sig, signingKey
+
+### When to Use Sanitization
+
+**ALWAYS sanitize objects when logging:**
+
+Our logging methods take in an object as the second argument and will automatically sanitize them. So anything that may contain secrets needs to be sanitized:
+
+- HTTP request/response headers
+- Request/response bodies
+- Configuration objects
+- Query parameters
+- Error details that may contain request data
+
+**Example - HTTP Provider:**
+
+```typescript
+// ✅ Good - uses sanitized logging (context object is automatically sanitized)
+logger.debug('[HTTP Provider]: Calling endpoint', {
+  url,
+  method: 'POST',
+  headers: requestHeaders,
+  body: requestBody,
+});
+
+// ❌ Bad - exposes secrets in logs
+logger.debug(`Calling ${url} with headers: ${JSON.stringify(headers)}`);
+```
+
 ## Git Workflow - CRITICAL
 
-### NEVER COMMIT DIRECTLY TO MAIN BRANCH
+### Rules
+
+1. NEVER COMMIT DIRECTLY TO MAIN BRANCH
+2. NEVER MERGE BRANCHES INTO MAIN DIRECTLY
+3. NEVER PUSH TO MAIN BRANCH - EVER
+4. **ABSOLUTELY FORBIDDEN ACTIONS:**
+   - `git push origin main` or `git push main` - NEVER DO THIS
+   - `git merge feature-branch` while on main - NEVER DO THIS
+   - Any direct commits to main branch - NEVER DO THIS
+
+All changes to main MUST go through pull requests and code review process.
+
+### Workflow
 
 Always follow this workflow:
 
@@ -138,14 +285,70 @@ Always follow this workflow:
 
    NEVER blindly `git add` everything - there might be other unrelated files lying around.
 
-3. **Push and create PR**:
+   **NEVER use `git commit --amend` or `git push --force` unless explicitly asked by the user.**
+
+3. **Lint**:
+
+   ```bash
+   npm run lint
+   ```
+
+   If there are lint errors, fix them.
+
+4. **Format**:
+
+   ```bash
+   npm run format
+   ```
+
+   If there are formatting errors, fix them.
+
+5. **Push and create PR**:
 
    ```bash
    git push -u origin feature/your-branch-name
    gh pr create --title "Your PR Title" --body "PR description"
    ```
 
-4. **Wait for review and CI checks** before merging
+6. **Wait for review and CI checks** before merging
+
+## Dependency Management
+
+### Safe Update Workflow
+
+When updating dependencies, use `npx npm-check-updates --target minor` for safe minor/patch updates only:
+
+```bash
+# Check all three workspaces
+npx npm-check-updates --target minor              # Root
+npx npm-check-updates --target minor --cwd site   # Site
+npx npm-check-updates --target minor --cwd src/app # App
+
+# Find and check example package.json files
+find examples -name "package.json" -not -path "*/node_modules/*" -type f
+
+# Apply updates with -u flag, then verify
+npm run build && npm test && npm run lint && npm run format
+
+# Check version consistency across workspaces (required by CI)
+npx check-dependency-version-consistency
+```
+
+### Critical Rules
+
+1. **PeerDependencies must match devDependencies** - Always update peerDependencies to match devDependencies versions to prevent "package not found" errors for users
+2. **Update examples/** - 12+ package.json files in examples/ are user-facing; keep them current
+3. **No package-lock.json** - Project intentionally omits lockfile; `npm audit` won't work
+4. **If updates fail** - Revert the problematic package and keep current version until code changes allow upgrade
+
+### Checking for Major Updates
+
+```bash
+# See available major version updates (don't apply automatically)
+npx npm-check-updates --target latest
+
+# Major updates often require code changes - evaluate each carefully
+```
 
 ## Project Conventions
 

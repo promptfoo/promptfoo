@@ -42,6 +42,7 @@ import {
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   HUGGINGFACE_GATED_PLUGINS,
+  ISO_42001_MAPPING,
   MCP_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
@@ -339,7 +340,17 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       });
     }
 
-    return plugins;
+    // Sort plugins alphabetically by display name (case-insensitive)
+    const getDisplayName = (plugin: Plugin) => {
+      return (displayNameOverrides[plugin] || categoryAliases[plugin] || plugin).toLowerCase();
+    };
+
+    return plugins.sort((a, b) => {
+      const displayNameA = getDisplayName(a.plugin);
+      const displayNameB = getDisplayName(b.plugin);
+
+      return displayNameA.localeCompare(displayNameB);
+    });
   }, [searchTerm, allPluginsWithCategories]);
 
   const presets: {
@@ -397,6 +408,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'EU AI Act',
       plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
+    },
+    {
+      name: 'ISO 42001',
+      plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
     },
   ];
 

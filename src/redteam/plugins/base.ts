@@ -1,15 +1,7 @@
 import dedent from 'dedent';
-import cliState from '../../cliState';
+
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import { retryWithDeduplication, sampleArray } from '../../util/generation';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import invariant from '../../util/invariant';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
-
 import type {
   ApiProvider,
   Assertion,
@@ -20,6 +12,13 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import invariant from '../../util/invariant';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { redteamProviderManager } from '../providers/shared';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
@@ -397,11 +396,7 @@ export abstract class RedteamGraderBase {
     }
   }
 
-  getSuggestions({
-    test,
-    rawPrompt,
-    renderedValue,
-  }: {
+  getSuggestions({}: {
     test: AtomicTestCase;
     rawPrompt: string;
     renderedValue?: AssertionValue;
@@ -417,7 +412,11 @@ export abstract class RedteamGraderBase {
     renderedValue: AssertionValue | undefined,
     additionalRubric?: string,
     skipRefusalCheck?: boolean,
-  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
+  ): Promise<{
+    grade: GradingResult;
+    rubric: string;
+    suggestions?: ResultSuggestion[];
+  }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
     const vars = {
@@ -453,21 +452,11 @@ export abstract class RedteamGraderBase {
       };
     }
 
-    const grade = await matchesLlmRubric(finalRubric, llmOutput, {
+    const grade = (await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
-      provider: await redteamProviderManager.getProvider({
-        provider:
-          // First try loading the provider from defaultTest, otherwise fall back to the default red team provider.
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.provider) ||
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.options?.provider?.text) ||
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.options?.provider) ||
-          undefined,
-        jsonOnly: true,
-      }),
-    });
+      provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
+    })) as GradingResult;
+
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 
     let suggestions: ResultSuggestion[] | undefined;

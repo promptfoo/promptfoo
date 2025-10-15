@@ -230,7 +230,6 @@ export async function handleMeteorAssertion({
   inverse,
   outputString,
   renderedValue,
-  test,
 }: AssertionParams): Promise<GradingResult> {
   // Validate inputs
   invariant(

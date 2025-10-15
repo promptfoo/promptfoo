@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
@@ -38,7 +40,6 @@ export interface EvalOutputCellProps {
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
-  onMetricFilter?: (metric: string | null) => void;
   isRedteam?: boolean;
 }
 
@@ -73,7 +74,6 @@ function EvalOutputCell({
   showStats,
   evaluationId,
   testCaseId,
-  onMetricFilter,
   isRedteam,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
@@ -83,7 +83,9 @@ function EvalOutputCell({
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText } = useTableStore();
+  const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
+  const { data: cloudConfig } = useCloudConfig();
+  const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -141,7 +143,7 @@ function EvalOutputCell({
     setCommentText(newCommentText);
   };
 
-  let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
@@ -153,18 +155,9 @@ function EvalOutputCell({
       .filter((reason) => reason); // Filter out empty/undefined reasons
   }
 
-  // Handle failure messages by splitting the text at '---' if present
-  if (text && text.includes('---')) {
-    text = text.split('---').slice(1).join('---');
-  }
-
   if (showDiffs && firstOutput) {
-    let firstOutputText =
+    const firstOutputText =
       typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
-
-    if (firstOutputText.includes('---')) {
-      firstOutputText = firstOutputText.split('---').slice(1).join('---');
-    }
 
     let diffResult;
     try {
@@ -635,6 +628,11 @@ function EvalOutputCell({
               testIndex={rowIndex}
               promptIndex={promptIndex}
               variables={output.testCase?.vars}
+              onAddFilter={addFilter}
+              onResetFilters={resetFilters}
+              onReplay={replayEvaluation}
+              fetchTraces={fetchTraces}
+              cloudConfig={cloudConfig}
             />
           )}
         </>
@@ -679,7 +677,7 @@ function EvalOutputCell({
             </div>
             {providerOverride}
           </div>
-          <CustomMetrics lookup={output.namedScores} onMetricFilter={onMetricFilter} />
+          <CustomMetrics lookup={output.namedScores} />
           {failReasons.length > 0 && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />

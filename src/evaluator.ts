@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import * as path from 'path';
 
 import async from 'async';
 import chalk from 'chalk';
@@ -19,11 +18,11 @@ import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluator
 import logger from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
+import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
-import { CIProgressReporter } from './progress/ciProgressReporter';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,
@@ -124,9 +123,9 @@ class ProgressBarManager {
    * Update progress for a specific evaluation
    */
   updateProgress(
-    index: number,
+    _index: number,
     evalStep: RunEvalOptions | undefined,
-    phase: 'serial' | 'concurrent' = 'concurrent',
+    _phase: 'serial' | 'concurrent' = 'concurrent',
   ): void {
     if (this.isWebUI || !evalStep || !this.progressBar) {
       return;
@@ -268,8 +267,6 @@ export async function runEval({
   conversations,
   registers,
   isRedteam,
-  allTests,
-  concurrency,
   abortSignal,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
@@ -619,14 +616,20 @@ export function generateVarCombinations(
 
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+
+      // For glob patterns, we need to resolve the base directory and use relative patterns
+      const basePath = cliState.basePath || '';
       const filePaths =
-        globSync(resolvedPath.replace(/\\/g, '/'), {
+        globSync(filePath, {
+          cwd: basePath || process.cwd(),
           windowsPathsNoEscape: true,
         }) || [];
+
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
-        throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
+        throw new Error(
+          `No files found for variable ${key} at path ${filePath} in directory ${basePath || process.cwd()}`,
+        );
       }
     } else {
       values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
