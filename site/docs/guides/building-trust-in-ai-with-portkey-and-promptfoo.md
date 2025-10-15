@@ -57,7 +57,7 @@ When evaluation suites include adversarial test cases (like prompt injection att
 
 ## Run Promptfoo on 1600+ models (including private/local)
 
-Portkey's AI gateway for Promptfoo allows you to run the same evaluation suite across 1,600+ models from OpenAI and Anthropic to AWS Bedrock, Vertex AI, and even private or self-hosted deployments.
+Portkey's [AI gateway](https://portkey.ai/features/ai-gateway) for Promptfoo allows you to run the same evaluation suite across 1,600+ models from OpenAI and Anthropic to AWS Bedrock, Vertex AI, and even private or self-hosted deployments.
 
 ![Portkey Model Catalog](/img/blog/building-trust-in-ai-with-portkey-and-promptfoo/portkey_model_catalog.png)
 
@@ -107,7 +107,7 @@ With Portkey in the loop, red-teaming becomes even more powerful:
 
 - **Unified orchestration**: run red-team suites against any model through the same Portkey endpoint.
 - **Complete observability**: Portkey logs every adversarial request and response, including latency, tokens, and cost.
-- **Better diagnostics**: segment results by commit, suite, or scenario and trace failures in Portkey's logging UI.
+- **Better diagnostics**: filter results by metadata, workspaces, or trace failures in Portkey's logging UI.
 
 Together, Promptfoo and Portkey turn red-teaming from a one-off exercise into a repeatable, production-grade security practice.
 
