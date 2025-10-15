@@ -28,7 +28,7 @@ npm install @anthropic-ai/claude-agent-sdk
 ```
 
 :::note
-This is an optional dependency and only needs to be installed if you want to use the Claude Agent SDK provider. Note that Anthropic has released it with a [proprietary license](https://github.com/anthropics/claude-agent-sdk-typescript/blob/9f51899c3e04f15951949ceac81849265d545579/LICENSE.md).
+This is an optional dependency and only needs to be installed if you want to use the Claude Agent SDK provider. Note that Anthropic has released the claude-agent-sdk library with a [proprietary license](https://github.com/anthropics/claude-agent-sdk-typescript/blob/9f51899c3e04f15951949ceac81849265d545579/LICENSE.md).
 :::
 
 ## Setup
