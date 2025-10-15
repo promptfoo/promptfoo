@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.118.15",
+  "version": "0.118.17",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -104,7 +104,6 @@
     "@adaline/together-ai": "1.5.1",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.1",
-    "@anthropic-ai/claude-agent-sdk": "^0.1.11",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.908.0",
     "@aws-sdk/client-bedrock-runtime": "^3.908.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.908.0",
@@ -141,6 +140,7 @@
     "@adaline/together-ai": "1.5.1",
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.1",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.11",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.908.0",
     "@aws-sdk/client-bedrock-runtime": "^3.908.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.908.0",
@@ -207,6 +207,7 @@
     "zod-to-json-schema": "^3.24.6"
   },
   "optionalDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.11",
     "@biomejs/cli-darwin-arm64": "2.2.6",
     "@biomejs/cli-darwin-x64": "2.2.6",
     "@biomejs/cli-linux-x64": "2.2.6",
