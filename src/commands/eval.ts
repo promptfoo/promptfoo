@@ -776,6 +776,15 @@ export async function doEval(
     if (!Number.isNaN(passRate)) {
       logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     }
+
+    !Number.isNaN(errors) &&
+      errors > 0 &&
+      logger.info(
+        '\n' +
+          chalk.red.bold(
+            `See ${chalk.greenBright.bold(cliState.errorLogPath)} for detailed error logs or ${chalk.greenBright.bold(cliState.debugLogPath)} for verbose logs`,
+          ),
+      );
     printBorder();
 
     telemetry.record('command_used', {
