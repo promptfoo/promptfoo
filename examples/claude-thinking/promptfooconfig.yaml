@@ -17,10 +17,8 @@ providers:
         type: 'enabled'
         budget_tokens: 16000
       max_tokens: 32000
-  # For comparison with AWS Bedrock (optional)
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: anthropic:messages:claude-haiku-4-5-20251001
     config:
-      temperature: 1 # Required when thinking is enabled
       stream: true # Required for thinking operations
       thinking:
         type: 'enabled'

@@ -148,6 +148,14 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
+      id: 'anthropic:messages:claude-haiku-4-5-20251001',
+      label: 'Anthropic: Claude 4.5 Haiku',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
       id: 'anthropic:messages:claude-3-5-sonnet-20241022',
       label: 'Anthropic: Claude 3.5 Sonnet',
       config: {
