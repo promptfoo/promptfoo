@@ -17,8 +17,11 @@ providers:
         type: 'enabled'
         budget_tokens: 16000
       max_tokens: 32000
-  - id: anthropic:messages:claude-haiku-4-5-20251001
+  # Claude Haiku 4.5 via AWS Bedrock (requires us-west-2 region)
+  - id: bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0
     config:
+      region: us-west-2
+      temperature: 1 # Required when thinking is enabled on Bedrock
       stream: true # Required for thinking operations
       thinking:
         type: 'enabled'
