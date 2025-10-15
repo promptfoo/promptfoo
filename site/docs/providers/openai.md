@@ -751,7 +751,14 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
 
 ## Audio capabilities
 
-OpenAI models with audio support (like `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+OpenAI models with audio support (like `gpt-audio`, `gpt-audio-mini`, `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+
+**Available audio models:**
+
+- `gpt-audio` - Latest audio model ($2.50/$10 per 1M text tokens, $40/$80 per 1M audio tokens)
+- `gpt-audio-mini` - Cost-efficient audio model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
+- `gpt-4o-audio-preview` - Preview audio model
+- `gpt-4o-mini-audio-preview` - Preview mini audio model
 
 ### Using audio inputs
 
@@ -823,6 +830,8 @@ The Realtime API allows for real-time communication with GPT-4o class models usi
 
 ### Supported Realtime Models
 
+- `gpt-realtime` - Latest realtime model ($4/$16 per 1M text tokens, $40/$80 per 1M audio tokens)
+- `gpt-realtime-mini` - Cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-4o-realtime-preview-2024-12-17`
 - `gpt-4.1-mini-realtime-preview-2024-12-17`
 
@@ -962,6 +971,7 @@ The Responses API supports a wide range of models, including:
 - `o4-mini` - Latest fast, cost-effective reasoning model
 - `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
 - `gpt-5-codex` - GPT-5 based coding model optimized for code generation
+- `gpt-5-pro` - Premium GPT-5 model with highest reasoning capability ($15/$120 per 1M tokens)
 
 ### Using the Responses API
 

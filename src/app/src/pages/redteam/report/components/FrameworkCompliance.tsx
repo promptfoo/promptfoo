@@ -12,19 +12,19 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
+import { getProgressColor } from '../utils/color';
 import FrameworkCard from './FrameworkCard';
-import {
-  categorizePlugins,
-  expandPluginCollections,
-  getProgressColor,
-} from './FrameworkComplianceUtils';
+import { categorizePlugins, expandPluginCollections } from './FrameworkComplianceUtils';
 import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
 import './FrameworkCompliance.css';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { formatASRForDisplay } from '@app/utils/redteam';
+import { type TestResultStats } from './FrameworkComplianceUtils';
 
 interface FrameworkComplianceProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  categoryStats: Record<string, Required<TestResultStats>>;
 }
 
 const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps) => {
@@ -53,18 +53,6 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
       return nonCompliant;
     },
     [categoryStats, pluginPassRateThreshold],
-  );
-
-  const getPluginPassRate = React.useCallback(
-    (plugin: string): { pass: number; total: number; rate: number } => {
-      const stats = categoryStats[plugin] || { pass: 0, total: 0 };
-      return {
-        pass: stats.pass,
-        total: stats.total,
-        rate: stats.total > 0 ? (stats.pass / stats.total) * 100 : 0,
-      };
-    },
-    [categoryStats],
   );
 
   const getFrameworkSeverity = React.useCallback(
@@ -136,49 +124,20 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
     const compliantPlugins = pluginsWithData.filter((plugin) => {
       const stats = categoryStats[plugin];
       totalTests += stats.total;
-      totalFailedTests += stats.total - stats.pass;
+      totalFailedTests += stats.failCount;
       return stats.pass / stats.total >= pluginPassRateThreshold;
     }).length;
-
-    // Calculate the true attack success rate based on all test runs
-    const attackSuccessRate = totalTests > 0 ? (totalFailedTests / totalTests) * 100 : 0;
 
     return {
       total: pluginsWithData.length,
       compliant: compliantPlugins,
       percentage:
         pluginsWithData.length > 0 ? (compliantPlugins / pluginsWithData.length) * 100 : 0,
-      attackSuccessRate,
+      attackSuccessRate: calculateAttackSuccessRate(totalTests, totalFailedTests),
       failedTests: totalFailedTests,
       totalTests,
     };
   }, [categoryStats, pluginPassRateThreshold]);
-
-  const sortedNonCompliantPlugins = React.useCallback(
-    (plugins: string[]): string[] => {
-      return [...plugins].sort((a, b) => {
-        // Sort by pass rate (highest first)
-        const passRateA = getPluginPassRate(a).rate;
-        const passRateB = getPluginPassRate(b).rate;
-
-        return passRateB - passRateA;
-      });
-    },
-    [getPluginPassRate],
-  );
-
-  const sortedCompliantPlugins = React.useCallback(
-    (plugins: string[]): string[] => {
-      return [...plugins].sort((a, b) => {
-        // Sort by pass rate (highest first)
-        const passRateA = getPluginPassRate(a).rate;
-        const passRateB = getPluginPassRate(b).rate;
-
-        return passRateB - passRateA;
-      });
-    },
-    [getPluginPassRate],
-  );
 
   return (
     <Box sx={{ pageBreakBefore: 'always', breakBefore: 'always' }}>
@@ -196,7 +155,7 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
         <CardContent>
           <Box display="flex" alignItems="center" sx={{ mb: 1 }}>
             <Typography variant="subtitle1" color="textSecondary">
-              {pluginComplianceStats.attackSuccessRate.toFixed(1)}% Attack Success Rate (
+              {formatASRForDisplay(pluginComplianceStats.attackSuccessRate)}% Attack Success Rate (
               {pluginComplianceStats.failedTests}/{pluginComplianceStats.totalTests} tests failed
               across {pluginComplianceStats.total} plugins)
             </Typography>
@@ -211,7 +170,8 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
               backgroundColor: 'rgba(0, 0, 0, 0.1)',
               '& .MuiLinearProgress-bar': {
                 borderRadius: 4,
-                backgroundColor: getProgressColor(pluginComplianceStats.attackSuccessRate, true), // Invert color scale
+                backgroundColor: (theme) =>
+                  getProgressColor(pluginComplianceStats.attackSuccessRate, theme, true), // Invert color scale
               },
             }}
           />
@@ -238,9 +198,6 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
                     categoryStats={categoryStats}
                     pluginPassRateThreshold={pluginPassRateThreshold}
                     nonCompliantPlugins={nonCompliantPlugins}
-                    sortedNonCompliantPlugins={sortedNonCompliantPlugins}
-                    sortedCompliantPlugins={sortedCompliantPlugins}
-                    getPluginPassRate={getPluginPassRate}
                     idx={idx}
                   />
                 </Grid>

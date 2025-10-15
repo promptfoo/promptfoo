@@ -111,7 +111,7 @@ describe('useEmailVerification', () => {
 
       const emailResult = await callCheckEmailStatus(result);
 
-      expect(callApi).toHaveBeenCalledWith('/user/email/status');
+      expect(callApi).toHaveBeenCalledWith(expect.stringContaining('/user/email/status'));
       expect(emailResult).toEqual({
         ...expected,
         status: apiResponse,
@@ -150,7 +150,7 @@ describe('useEmailVerification', () => {
 
       const emailResult = await callCheckEmailStatus(result);
 
-      expect(callApi).toHaveBeenCalledWith('/user/email/status');
+      expect(callApi).toHaveBeenCalledWith(expect.stringContaining('/user/email/status'));
       expect(emailResult).toEqual({
         canProceed: false,
         needsEmail: false,

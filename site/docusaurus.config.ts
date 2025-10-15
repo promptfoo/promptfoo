@@ -1,8 +1,9 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { themes } from 'prism-react-renderer';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config } from '@docusaurus/types';
-import * as fs from 'fs';
-import * as path from 'path';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
@@ -291,7 +292,7 @@ const config: Config = {
             },
             {
               label: 'Minimizing Hallucinations',
-              to: '/docs/guides/prevent-llm-hallucations',
+              to: '/docs/guides/prevent-llm-hallucinations',
             },
             {
               label: 'Config Validator',
@@ -423,6 +424,10 @@ const config: Config = {
           {
             from: '/vegas-contact',
             to: 'https://triangular-manchego-867.notion.site/2395ae153a138028a8bef35f6889f6e6?pvs=105',
+          },
+          {
+            from: '/docs/guides/prevent-llm-hallucations',
+            to: '/docs/guides/prevent-llm-hallucinations',
           },
         ],
       },

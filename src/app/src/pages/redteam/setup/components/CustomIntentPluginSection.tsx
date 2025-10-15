@@ -150,12 +150,6 @@ export default function CustomIntentSection() {
     };
   }, [updateTimeout, draftTimeout]);
 
-  useEffect(() => {
-    if (localConfig?.intent) {
-      debouncedUpdatePlugins(localConfig.intent as (string | string[])[]);
-    }
-  }, [localConfig, debouncedUpdatePlugins]);
-
   const handleArrayInputChange = useCallback(
     (key: string, index: number, value: string) => {
       const actualIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
@@ -175,28 +169,40 @@ export default function CustomIntentSection() {
             ? [...(prev[key as keyof PluginConfig] as string[])]
             : [''];
           currentArray[actualIndex] = value;
-          return {
+          const newConfig = {
             ...prev,
             [key]: currentArray,
           };
+
+          // Update plugins directly after state update
+          debouncedUpdatePlugins(currentArray as (string | string[])[]);
+
+          return newConfig;
         });
       }, UPDATE_DRAFT_MS);
 
       setDraftTimeout(timeout);
     },
-    [currentPage, draftTimeout],
+    [currentPage, draftTimeout, debouncedUpdatePlugins],
   );
 
   const addArrayItem = (key: string) => {
-    setLocalConfig((prev) => ({
-      ...prev,
-      [key]: [
+    setLocalConfig((prev) => {
+      const newArray = [
         ...(Array.isArray(prev[key as keyof PluginConfig])
           ? (prev[key as keyof PluginConfig] as string[])
           : []),
         '',
-      ],
-    }));
+      ];
+
+      // Update plugins directly after state update
+      debouncedUpdatePlugins(newArray as (string | string[])[]);
+
+      return {
+        ...prev,
+        [key]: newArray,
+      };
+    });
     const newTotalPages = Math.ceil(((localConfig.intent?.length || 0) + 1) / ITEMS_PER_PAGE);
     setCurrentPage(newTotalPages);
   };
@@ -218,6 +224,10 @@ export default function CustomIntentSection() {
       if (currentArray.length === 0) {
         currentArray.push('');
       }
+
+      // Update plugins directly after state update
+      debouncedUpdatePlugins(currentArray as (string | string[])[]);
+
       return {
         ...prev,
         [key]: currentArray,
@@ -306,10 +316,16 @@ export default function CustomIntentSection() {
       typeof intent === 'string' ? intent.trim() !== '' : true,
     );
 
+    const combinedIntents = [...nonEmptyExisting, ...newIntents];
+
     setLocalConfig((prev) => ({
       ...prev,
-      intent: [...nonEmptyExisting, ...newIntents],
+      intent: combinedIntents,
     }));
+
+    // Update plugins directly after state update
+    debouncedUpdatePlugins(combinedIntents);
+
     setCurrentPage(1);
     setPreviewDialog(null);
   };
@@ -351,6 +367,10 @@ export default function CustomIntentSection() {
       ...prev,
       intent: [''],
     }));
+
+    // Update plugins directly after state update
+    debouncedUpdatePlugins(['']);
+
     setCurrentPage(1);
     setShowClearConfirm(false);
   };

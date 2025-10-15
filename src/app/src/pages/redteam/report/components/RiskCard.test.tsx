@@ -264,4 +264,79 @@ describe('RiskCard', () => {
 
     expect(screen.getByTestId('mock-risk-category-drawer')).toBeInTheDocument();
   });
+
+  it('should render CheckCircleIcon with success color when showPercentagesOnRiskCards is false and pass rate is above pluginPassRateThreshold', () => {
+    mockUseReportStore.mockReturnValue({
+      showPercentagesOnRiskCards: false,
+      pluginPassRateThreshold: 0.6,
+      setShowPercentagesOnRiskCards: vi.fn(),
+      setPluginPassRateThreshold: vi.fn(),
+    });
+
+    const props = createTestProps({
+      testTypes: [{ name: 'sql-injection', categoryPassed: true, numPassed: 7, numFailed: 3 }],
+    });
+
+    render(<RiskCard {...props} />);
+
+    const checkCircleIcon = screen.getByTestId('CheckCircleIcon');
+    expect(checkCircleIcon).toBeInTheDocument();
+    expect(checkCircleIcon).toHaveClass('MuiSvgIcon-colorSuccess');
+  });
+
+  it('should render CancelIcon with error color when showPercentagesOnRiskCards is false and pass rate is below pluginPassRateThreshold', () => {
+    mockUseReportStore.mockReturnValue({
+      showPercentagesOnRiskCards: false,
+      pluginPassRateThreshold: 0.8,
+      setShowPercentagesOnRiskCards: vi.fn(),
+      setPluginPassRateThreshold: vi.fn(),
+    });
+
+    const props = createTestProps({
+      testTypes: [{ name: 'sql-injection', categoryPassed: false, numPassed: 4, numFailed: 6 }],
+    });
+
+    render(<RiskCard {...props} />);
+
+    const cancelIcon = screen.getByTestId('CancelIcon');
+    expect(cancelIcon).toBeInTheDocument();
+    expect(cancelIcon).toHaveClass('MuiSvgIcon-colorError');
+  });
+
+  it('should display CheckCircleIcon when test pass rate equals pluginPassRateThreshold', () => {
+    const threshold = 0.75;
+    mockUseReportStore.mockReturnValue({
+      showPercentagesOnRiskCards: false,
+      pluginPassRateThreshold: threshold,
+      setShowPercentagesOnRiskCards: vi.fn(),
+      setPluginPassRateThreshold: vi.fn(),
+    });
+
+    const testTypes = [
+      { name: 'threshold-test', categoryPassed: true, numPassed: 3, numFailed: 1 },
+    ];
+
+    render(<RiskCard {...createTestProps({ testTypes })} />);
+
+    const checkCircleIcon = screen.getByTestId('CheckCircleIcon');
+    expect(checkCircleIcon).toBeInTheDocument();
+    expect(checkCircleIcon).toHaveClass('risk-card-icon-passed');
+  });
+
+  it('should display CheckCircleIcon with color="success" when pluginPassRateThreshold is 0.5 and pass rate is between 0.5 and 1.0', () => {
+    mockUseReportStore.mockReturnValue({
+      showPercentagesOnRiskCards: false,
+      pluginPassRateThreshold: 0.5,
+      setShowPercentagesOnRiskCards: vi.fn(),
+      setPluginPassRateThreshold: vi.fn(),
+    });
+
+    const testTypes = [{ name: 'test-type', categoryPassed: true, numPassed: 3, numFailed: 1 }];
+
+    render(<RiskCard {...createTestProps({ testTypes })} />);
+
+    const checkCircleIcon = screen.getByTestId('CheckCircleIcon');
+    expect(checkCircleIcon).toBeInTheDocument();
+    expect(checkCircleIcon).toHaveClass('MuiSvgIcon-colorSuccess');
+  });
 });
