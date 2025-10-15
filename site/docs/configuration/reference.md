@@ -226,22 +226,44 @@ Promptfoo supports extension hooks that allow you to run custom code that modifi
 | beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
 | afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
 
-#### Session Management in Hooks
+### Session Management in Hooks
 
-For multi-turn conversations or stateful interactions, the `sessionId` is made available in the `afterEach` hook context at:
+For multi-turn conversations or stateful interactions, hooks can be used to manage per-test sessions (i.e. "conversation threads").
+
+#### Pre-Test Session Definition
+
+A common pattern is to create session on your server in the `beforeEach` hook and clean them up in the `afterEach` hook:
+
+```javascript
+export async function extensionHook(hookName, context) {
+  if (hookName === 'beforeEach') {
+    const res = await fetch('http://localhost:8080/session');
+    const sessionId = await res.text();
+    return { test: { ...context.test, vars: { ...context.test.vars, sessionId } } }; // Scope the session id to the current test case
+  }
+
+  if (hookName === 'afterEach') {
+    const id = context.test.vars.sessionId; // Read the session id from the test case scope
+    await fetch(`http://localhost:8080/session/${id}`, { method: 'DELETE' });
+  }
+}
+```
+
+See the working [dynamic-session-ids example](https://github.com/promptfoo/promptfoo/tree/main/examples/dynamic-session-ids) for a complete implementation.
+
+#### Test-Time Session Definition
+
+Session ids returned by your provider in `response.sessionId` will be used as the session id for the test case. If the provider does not return a session id, the test variables (`vars.sessionId`) will be used as fallback.
+
+It is made available in the `afterEach` hook context at:
 
 ```javascript
 context.result.metadata.sessionId;
 ```
 
-This sessionId comes from either:
+**Note:** For regular providers, the sessionId comes from either `response.sessionId` (provider-generated) or `vars.sessionId` (set in beforeEach hook or test config). The priority is: `response.sessionId` > `vars.sessionId`.
 
-1. The provider's response (`response.sessionId`) - takes priority
-2. The test variables (`vars.sessionId`) - used as fallback for client-generated session IDs
-
-**Note:** The provider's `response.sessionId` takes precedence over `vars.sessionId`. The session ID from vars is only used if the provider doesn't return one.
-
-Example usage in an extension:
+For example:
 
 ```javascript
 async function extensionHook(hookName, context) {
