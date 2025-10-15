@@ -14,7 +14,8 @@ RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl &&
 # Install dependencies only when needed
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+# Add build tools needed for @swc/core and other native dependencies
+RUN apk add --no-cache libc6-compat build-base g++ python3-dev
 WORKDIR /app
 
 ARG VITE_PUBLIC_BASENAME
