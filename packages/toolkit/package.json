@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A React component library for promptfoo",
   "private": true,
+  "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
