@@ -25,18 +25,12 @@ ENV VITE_IS_HOSTED=1 \
     VITE_TELEMETRY_DISABLED=1 \
     VITE_PUBLIC_BASENAME=${VITE_PUBLIC_BASENAME} \
     PROMPTFOO_REMOTE_API_BASE_URL=${PROMPTFOO_REMOTE_API_BASE_URL}
-RUN echo "BUILDPLATFORM: ${BUILDPLATFORM}"
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
+
 # Leverage BuildKit cache and pre-install platform-specific SWC binary
-RUN --mount=type=cache,target=/root/.npm \
-    case "${BUILDPLATFORM}" in \
-      "linux/amd64") SWC_PACKAGE="@swc/core-linux-x64-musl@^1.13.20" ;; \
-      "linux/arm64") SWC_PACKAGE="@swc/core-linux-arm64-musl@^1.13.20" ;; \
-      *) SWC_PACKAGE="@swc/core-linux-x64-musl@^1.13.20" ;; \
-    esac && \
-    npm install $SWC_PACKAGE && \
+RUN npm install @swc/core@^1.13.20 && \
     npm ci --install-links --include=peer
 
 # Copy the rest of the application code
