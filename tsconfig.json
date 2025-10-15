@@ -33,6 +33,5 @@
     "src/app/**/*",
     "test/app/**/*",
     "test/site/",
-    "packages/toolkit/src/**/*.test.*"
   ]
 }
