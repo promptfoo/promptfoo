@@ -43,6 +43,16 @@ export function enableConsoleLogging() {
   });
 }
 
+function getErrorLogPath(): string {
+  if (!cliState.errorLogPath) {
+    cliState.errorLogPath = path.join(
+      getLogDirectory(),
+      `promptfoo-errors-${getDateTimeForFilename()}.log`,
+    );
+  }
+  return cliState.errorLogPath;
+}
+
 export const LOG_LEVELS = {
   error: 0,
   warn: 1,
@@ -186,7 +196,7 @@ if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
     ) {
       // Only create the errors file if there are any errors
       const fileTransport = new winston.transports.File({
-        filename: cliState.errorLogPath,
+        filename: getErrorLogPath(),
         level: 'error',
         format: winston.format.combine(winston.format.simple(), fileFormatter),
       });
