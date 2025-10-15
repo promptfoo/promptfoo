@@ -74,7 +74,7 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
-userRouter.put('/email/clear', async (req: Request, res: Response): Promise<void> => {
+userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<void> => {
   try {
     clearUserEmail();
     res.json({ success: true, message: 'Email cleared' });
