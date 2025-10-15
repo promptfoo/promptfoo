@@ -103,9 +103,28 @@ export function useEmailVerification() {
     }
   }, []);
 
+  const clearEmail = useCallback(async (): Promise<{ error?: string }> => {
+    try {
+      const emailResponse = await callApi('/user/email/clear', {
+        method: 'PUT',
+      });
+
+      if (!emailResponse.ok) {
+        const errorData = await emailResponse.json();
+        return { error: errorData.error || 'Failed to clear email' };
+      }
+
+      return {};
+    } catch (error) {
+      console.error('Error clearing email:', error);
+      return { error: `Failed to clear email: ${error}` };
+    }
+  }, []);
+
   return {
     checkEmailStatus,
     saveEmail,
+    clearEmail,
     isChecking,
   };
 }
