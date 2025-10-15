@@ -29,8 +29,7 @@ ENV VITE_IS_HOSTED=1 \
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
 # Leverage BuildKit cache
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --install-links --include=peer
+RUN npm ci --install-links --include=peer
 
 # Copy the rest of the application code
 COPY . .
