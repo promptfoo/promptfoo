@@ -14,7 +14,7 @@ RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl &&
 # Install dependencies only when needed
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat build-base g++ make
 WORKDIR /app
 
 ARG VITE_PUBLIC_BASENAME
@@ -28,10 +28,9 @@ ENV VITE_IS_HOSTED=1 \
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
-
-# Leverage BuildKit cache and pre-install platform-specific SWC binary
-RUN npm install @swc/core@^1.13.20 && \
-    npm install --install-links --include=peer
+# Leverage BuildKit cache
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --install-links --include=peer
 
 # Copy the rest of the application code
 COPY . .
