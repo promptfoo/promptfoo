@@ -37,7 +37,6 @@ ENV VITE_IS_HOSTED=1 \
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
 # Pre-install platform-specific SWC binaries for Alpine (musl)
-# This ensures the correct binaries are available when @swc/core postinstall runs
 RUN npm install --no-save @swc/core-linux-musl-x64
 # Install all dependencies - postinstall scripts will run but with correct binaries in place
 RUN npm install --install-links --include=peer
