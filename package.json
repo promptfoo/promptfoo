@@ -214,6 +214,8 @@
     "@biomejs/cli-linux-x64-musl": "2.2.6",
     "@biomejs/cli-win32-x64": "2.2.6",
     "@rollup/rollup-linux-x64-gnu": "^4.52.4",
+    "@rollup/rollup-linux-arm64-musl": "^4.52.4",
+    "@rollup/rollup-linux-x64-musl": "^4.52.4",
     "@slack/web-api": "^7.11.0",
     "@swc/core-darwin-arm64": "^1.13.20",
     "@swc/core-darwin-x64": "^1.13.20",
