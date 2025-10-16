@@ -29,16 +29,17 @@ ENV VITE_IS_HOSTED=1 \
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
+RUN echo "TARGETARCH: $TARGETARCH"
 # Leverage BuildKit cache and install architecture-specific binaries
 RUN --mount=type=cache,target=/root/.npm \
-    # Set npm config for the target architecture
+    # Set architecture for npm using environment variables (Alpine uses musl)
     if [ "$TARGETARCH" = "arm64" ]; then \
-      npm config set arch arm64 && \
-      npm config set platform linux; \
+      export npm_config_arch=arm64; \
     elif [ "$TARGETARCH" = "amd64" ]; then \
-      npm config set arch x64 && \
-      npm config set platform linux; \
+      export npm_config_arch=x64; \
     fi && \
+    export npm_config_platform=linux && \
+    export npm_config_libc=musl && \
     # Remove platform-specific entries from lock file and reinstall
     rm -f package-lock.json && \
     npm install --install-links --include=peer --omit=dev --package-lock-only && \
