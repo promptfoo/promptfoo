@@ -31,9 +31,7 @@ ENV VITE_IS_HOSTED=1 \
 COPY package.json package-lock.json ./
 RUN echo "TARGETARCH: $TARGETARCH"
 # Leverage BuildKit cache and install architecture-specific binaries
-RUN --mount=type=cache,target=/root/.npm \
-    # Set architecture for npm using environment variables (Alpine uses musl)
-    if [ "$TARGETARCH" = "arm64" ]; then \
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
       export npm_config_arch=arm64; \
     elif [ "$TARGETARCH" = "amd64" ]; then \
       export npm_config_arch=x64; \
