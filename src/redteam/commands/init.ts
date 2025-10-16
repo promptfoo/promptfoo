@@ -206,6 +206,7 @@ export function renderRedteamConfig({
 
 export async function redteamInit(directory: string | undefined) {
   telemetry.record('command_used', { name: 'redteam init - started' });
+  telemetry.record('redteam init', { phase: 'started' });
   recordOnboardingStep('start');
 
   const projectDir = directory || '.';
@@ -621,6 +622,7 @@ export async function redteamInit(directory: string | undefined) {
   );
 
   telemetry.record('command_used', { name: 'redteam init' });
+  telemetry.record('redteam init', { phase: 'completed' });
   await recordOnboardingStep('finish');
 
   if (deferGeneration) {

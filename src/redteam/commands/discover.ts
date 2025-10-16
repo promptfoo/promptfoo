@@ -307,6 +307,7 @@ export function discoverCommand(
       telemetry.record('command_used', {
         name: `redteam ${COMMAND}`,
       });
+      telemetry.record('redteam discover', {});
 
       let config: UnifiedConfig | null = null;
       // Although the providers/targets property supports multiple values, Redteaming only supports

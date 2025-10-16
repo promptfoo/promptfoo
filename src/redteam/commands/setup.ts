@@ -28,6 +28,7 @@ export function redteamSetupCommand(program: Command) {
         telemetry.record('command_used', {
           name: 'redteam setup',
         });
+        telemetry.record('redteam setup', {});
 
         if (directory) {
           setConfigDirectoryPath(directory);

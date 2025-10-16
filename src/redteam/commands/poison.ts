@@ -188,6 +188,7 @@ export function poisonCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'redteam poison',
       });
+      telemetry.record('redteam poison', {});
 
       try {
         await doPoisonDocuments({
