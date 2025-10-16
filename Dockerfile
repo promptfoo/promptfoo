@@ -29,7 +29,8 @@ ENV VITE_IS_HOSTED=1 \
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
-RUN npm install @swc/core-linux-musl -d
+# Pre-install platform-specific SWC binaries for Alpine (musl) to update package-lock.json
+RUN npm install --save-optional @swc/core-linux-musl-x64 @swc/core-linux-musl-arm64
 # Leverage BuildKit cache
 RUN npm install --install-links --include=peer
 
