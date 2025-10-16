@@ -44,7 +44,7 @@ export interface CaseResult {
   // Detailed grading result (mirrors top-level summary)
   gradingResult?: GradingResult;
 
-  // Only set for infra/runtime/validation/timeout failures.
+  // Only for infra/runtime/validation/timeout failures.
   // Assertion failures appear via pass=false (+ gradingResult.details).
   error?: EvalErrorInfo;
 

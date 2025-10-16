@@ -1,0 +1,13 @@
+providers:
+  - id: openai:chat
+    config:
+      model: gpt-4o-mini
+
+prompts:
+  - "Say 'hello world'"
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: "hello world"
