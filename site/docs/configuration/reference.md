@@ -255,13 +255,29 @@ See the working [stateful-session-management example](https://github.com/promptf
 
 Session ids returned by your provider in `response.sessionId` will be used as the session id for the test case. If the provider does not return a session id, the test variables (`vars.sessionId`) will be used as fallback.
 
+**For HTTP providers**, you extract session IDs from server responses using a `sessionParser` configuration. The session parser tells promptfoo how to extract the session ID from response headers or body, which then becomes `response.sessionId`. For example:
+
+```yaml
+providers:
+  - id: http
+    config:
+      url: 'https://example.com/api'
+      # Session parser extracts ID from response → becomes response.sessionId
+      sessionParser: 'data.headers["x-session-id"]'
+      headers:
+        # Use the extracted session ID in subsequent requests
+        'x-session-id': '{{sessionId}}'
+```
+
+See the [HTTP provider session management documentation](/docs/providers/http#session-management) for complete details on configuring session parsers.
+
 It is made available in the `afterEach` hook context at:
 
 ```javascript
 context.result.metadata.sessionId;
 ```
 
-**Note:** For regular providers, the sessionId comes from either `response.sessionId` (provider-generated) or `vars.sessionId` (set in beforeEach hook or test config). The priority is: `response.sessionId` > `vars.sessionId`.
+**Note:** For regular providers, the sessionId comes from either `response.sessionId` (provider-generated via session parser or direct provider support) or `vars.sessionId` (set in beforeEach hook or test config). The priority is: `response.sessionId` > `vars.sessionId`.
 
 For example:
 
