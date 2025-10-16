@@ -65,6 +65,7 @@ interface PolicyPlugin {
   id: 'policy';
   config: {
     policy: string;
+    name?: string;
   };
 }
 
@@ -599,7 +600,18 @@ export default function Review({
                       }}
                     >
                       <Typography
+                        variant="subtitle2"
+                        sx={{
+                          fontWeight: 600,
+                          marginBottom: 0.5,
+                          paddingRight: '24px',
+                        }}
+                      >
+                        {policy.config.name || 'Custom Policy'}
+                      </Typography>
+                      <Typography
                         variant="body2"
+                        color="text.secondary"
                         sx={{
                           display: '-webkit-box',
                           WebkitLineClamp: 2,
@@ -614,15 +626,24 @@ export default function Review({
                       <IconButton
                         size="small"
                         onClick={() => {
-                          const newPlugins = config.plugins.filter(
-                            (p, _i) =>
-                              !(
-                                typeof p === 'object' &&
-                                p.id === 'policy' &&
-                                p.config?.policy === policy.config.policy
-                              ),
-                          );
-                          updateConfig('plugins', newPlugins);
+                          // Find the index of the Nth policy plugin (matching this rendered item)
+                          let count = 0;
+                          const removeIdx = config.plugins.findIndex((p) => {
+                            if (typeof p === 'object' && p.id === 'policy') {
+                              if (count === index) {
+                                return true;
+                              }
+                              count += 1;
+                            }
+                            return false;
+                          });
+                          if (removeIdx !== -1) {
+                            const newPlugins = [
+                              ...config.plugins.slice(0, removeIdx),
+                              ...config.plugins.slice(removeIdx + 1),
+                            ];
+                            updateConfig('plugins', newPlugins);
+                          }
                         }}
                         sx={{
                           position: 'absolute',
