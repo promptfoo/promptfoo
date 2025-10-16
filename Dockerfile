@@ -37,6 +37,8 @@ ENV VITE_IS_HOSTED=1 \
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
+
+RUN echo "TARGETARCH: $TARGETARCH"
 # Pre-install platform-specific SWC binaries for Alpine (musl)
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
       npm install --no-save @swc/core-linux-x64-musl; \
