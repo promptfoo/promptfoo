@@ -27,6 +27,7 @@ WORKDIR /app
 
 ARG VITE_PUBLIC_BASENAME
 ARG PROMPTFOO_REMOTE_API_BASE_URL
+ARG TARGETARCH
 
 # Set environment variables for the build
 ENV VITE_IS_HOSTED=1 \
@@ -37,7 +38,11 @@ ENV VITE_IS_HOSTED=1 \
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
 # Pre-install platform-specific SWC binaries for Alpine (musl)
-RUN npm install --no-save @swc/core-linux-musl-x64
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+      npm install --no-save @swc/core-linux-x64-musl; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+      npm install --no-save @swc/core-linux-arm64-musl; \
+    fi
 # Install all dependencies - postinstall scripts will run but with correct binaries in place
 RUN npm install --install-links --include=peer
 
