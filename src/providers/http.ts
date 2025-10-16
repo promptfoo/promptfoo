@@ -1636,6 +1636,9 @@ export class HttpProvider implements ApiProvider {
         status: response.status,
         statusText: response.statusText,
         headers: sanitizeObject(response.headers, { context: 'response headers' }),
+        ...(context?.debug && {
+          requestHeaders: sanitizeObject(headers, { context: 'request headers' }),
+        }),
       },
     };
     if (context?.debug) {
@@ -1765,6 +1768,12 @@ export class HttpProvider implements ApiProvider {
           ? transformedPrompt
           : parsedRequest.body?.text || renderedRequest.trim(),
         finalRequestBody: parsedRequest.body?.text,
+        http: {
+          status: response.status,
+          statusText: response.statusText,
+          headers: sanitizeObject(response.headers, { context: 'response headers' }),
+          requestHeaders: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
+        },
       };
     }
 
