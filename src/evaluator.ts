@@ -377,7 +377,7 @@ export async function runEval({
             renderedPrompt,
             callApiContext,
             abortSignal ? { abortSignal } : undefined,
-            concurrency,
+            evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
           );
 
           // Update results with proper indices for Simba
