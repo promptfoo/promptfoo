@@ -250,4 +250,98 @@ describe('ProviderResponse', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'Header with spaces' })).toBeInTheDocument();
   });
+
+  it("should render the 'Request Body Sent:' section and display the JSON-stringified value of providerResponse.metadata.requestBody when it is present and an object", () => {
+    const mockProviderResponse = {
+      metadata: {
+        requestBody: {
+          key1: 'value1',
+          key2: 123,
+        },
+      },
+      raw: '{"status": "ok"}',
+      output: { status: 'ok' },
+      sessionId: 'session-id-456',
+    };
+
+    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+
+    expect(screen.getByText('Request Body Sent:')).toBeInTheDocument();
+    expect(
+      screen.getByText((content, element) => {
+        return (
+          element?.tagName?.toLowerCase() === 'pre' &&
+          content.includes('"key1": "value1"') &&
+          content.includes('"key2": 123')
+        );
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('should render the Request Body Sent: section and display the string value of providerResponse.metadata.requestBody when it is present and a string', () => {
+    const mockProviderResponse = {
+      metadata: {
+        requestBody: 'This is a test request body.',
+      },
+      raw: '{"status": "ok"}',
+      output: { status: 'ok' },
+      sessionId: 'session-id-456',
+    };
+
+    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+
+    expect(screen.getByText('Request Body Sent:')).toBeInTheDocument();
+    const requestBodyHeader = screen.getByText('Request Body Sent:');
+    const requestBodyContainer = requestBodyHeader.nextElementSibling as HTMLElement;
+    expect(
+      within(requestBodyContainer).getByText('This is a test request body.'),
+    ).toBeInTheDocument();
+  });
+
+  it('should not render the Request Body section when providerResponse.metadata.requestBody is null', () => {
+    const mockProviderResponse = {
+      metadata: {
+        requestBody: null,
+      },
+      raw: '{"status": "ok"}',
+      output: { status: 'ok' },
+      sessionId: 'session-id-456',
+    };
+
+    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+
+    expect(screen.queryByText('Request Body Sent:')).toBeNull();
+  });
+
+  it('should render the Request Method section and display the method value when providerResponse.metadata.requestMethod is present', () => {
+    const mockProviderResponse = {
+      metadata: {
+        requestMethod: 'GET',
+      },
+      raw: 'test raw',
+      output: 'test output',
+      sessionId: 'test session',
+    };
+
+    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+
+    expect(screen.getByText('Request Method:')).toBeInTheDocument();
+    expect(screen.getByText('GET')).toBeInTheDocument();
+  });
+
+  it('should render the request method even if it is an unusual or non-standard value', () => {
+    const mockProviderResponse = {
+      metadata: {
+        requestMethod: 'CUSTOM-METHOD',
+      },
+      raw: 'test raw output',
+      output: 'test parsed output',
+      sessionId: 'test-session-id',
+    };
+
+    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+
+    expect(screen.getByText('Request Method:')).toBeInTheDocument();
+    expect(screen.getByText('CUSTOM-METHOD')).toBeInTheDocument();
+  });
 });

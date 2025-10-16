@@ -55,6 +55,7 @@ import './page.css';
 import type { Config, RedteamUITarget } from './types';
 
 export const SIDEBAR_WIDTH = 240;
+const NAVBAR_HEIGHT = 64;
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
   '& .MuiTabs-indicator': {
@@ -170,8 +171,8 @@ const OuterSidebarContainer = styled(Box)(({ theme }) => ({
 
 const InnerSidebarContainer = styled(Box)({
   position: 'sticky',
-  top: 64, // Account for navbar
-  height: 'calc(100vh - 64px)',
+  top: `calc(${NAVBAR_HEIGHT}px + var(--update-banner-height, 0px))`,
+  height: `calc(100vh - ${NAVBAR_HEIGHT}px - var(--update-banner-height, 0px))`,
   display: 'flex',
   flexDirection: 'column',
 });

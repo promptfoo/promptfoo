@@ -7,7 +7,7 @@ import path from 'path';
 import httpZ from 'http-z';
 import { Agent } from 'undici';
 import { z } from 'zod';
-import { type FetchWithCacheResult, fetchWithCache } from '../cache';
+import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -21,6 +21,11 @@ import { safeResolve } from '../util/pathUtils';
 import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  createTransformRequest,
+  createTransformResponse,
+  type TransformResponseContext,
+} from './httpTransforms';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -839,91 +844,6 @@ export async function createSessionParser(
   );
 }
 
-interface TransformResponseContext {
-  response: FetchWithCacheResult<any>;
-}
-
-export async function createTransformResponse(
-  parser: string | Function | undefined,
-): Promise<(data: any, text: string, context?: TransformResponseContext) => ProviderResponse> {
-  if (!parser) {
-    return (data, text) => ({ output: data || text });
-  }
-
-  if (typeof parser === 'function') {
-    return (data, text, context) => {
-      try {
-        const result = parser(data, text, context);
-        if (typeof result === 'object') {
-          return result;
-        } else {
-          return { output: result };
-        }
-      } catch (err) {
-        logger.error(
-          `[Http Provider] Error in response transform function: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
-        );
-        throw err;
-      }
-    };
-  }
-  if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = parser.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return requiredModule;
-    }
-    throw new Error(
-      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
-    );
-  } else if (typeof parser === 'string') {
-    return (data, text, context) => {
-      try {
-        const trimmedParser = parser.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
-        const transformFn = new Function(
-          'json',
-          'text',
-          'context',
-          isFunctionExpression
-            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
-            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
-        );
-        let resp: ProviderResponse | string;
-        if (context) {
-          resp = transformFn(data || null, text, context);
-        } else {
-          resp = transformFn(data || null, text);
-        }
-
-        if (typeof resp === 'string') {
-          return { output: resp };
-        }
-        return resp;
-      } catch (err) {
-        logger.error(
-          `[Http Provider] Error in response transform: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
-        );
-        throw new Error(`Failed to transform response: ${String(err)}`);
-      }
-    };
-  }
-  throw new Error(
-    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
-  );
-}
-
 /**
  * Substitutes template variables in a JSON object or array.
  *
@@ -1054,137 +974,40 @@ function parseRawRequest(input: string) {
   }
 }
 
-export async function createTransformRequest(
-  transform: string | Function | undefined,
-): Promise<(prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any> {
-  if (!transform) {
-    return (prompt) => prompt;
-  }
-
-  if (typeof transform === 'function') {
-    return async (prompt, vars, context) => {
-      try {
-        // Pass prompt, vars, and context to user-provided function (extra args are safe)
-        return await (transform as any)(prompt, vars, context);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
-        logger.error(wrappedError.message);
-        throw wrappedError;
-      }
-    };
-  }
-
-  if (typeof transform === 'string' && transform.startsWith('file://')) {
-    let filename = transform.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return async (prompt, vars, context) => {
-        try {
-          return await requiredModule(prompt, vars, context);
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          const wrappedError = new Error(
-            `Error in request transform function from ${filename}: ${errorMessage}`,
-          );
-          logger.error(wrappedError.message);
-          throw wrappedError;
-        }
-      };
-    }
-    throw new Error(
-      `Request transform malformed: ${filename} must export a function or have a default export as a function`,
-    );
-  } else if (typeof transform === 'string') {
-    return async (prompt, vars, context) => {
-      try {
-        const trimmedTransform = transform.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
-
-        let transformFn: Function;
-        if (isFunctionExpression) {
-          // For function expressions, call them with the arguments
-          transformFn = new Function(
-            'prompt',
-            'vars',
-            'context',
-            `try { return (${trimmedTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`,
-          );
-        } else {
-          // Check if it contains a return statement
-          const hasReturn = /\breturn\b/.test(trimmedTransform);
-
-          if (hasReturn) {
-            // Use as function body if it has return statements
-            transformFn = new Function(
-              'prompt',
-              'vars',
-              'context',
-              `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
-            );
-          } else {
-            // Wrap simple expressions with return
-            transformFn = new Function(
-              'prompt',
-              'vars',
-              'context',
-              `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
-            );
-          }
-        }
-
-        let result: any;
-        if (context) {
-          result = await transformFn(prompt, vars, context);
-        } else {
-          result = await transformFn(prompt, vars);
-        }
-        return result;
-      } catch (err) {
-        logger.error(
-          `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(sanitizeObject(context, { context: 'request transform' }))}.`,
-        );
-        throw new Error(`Failed to transform request: ${String(err)}`);
-      }
-    };
-  }
-
-  throw new Error(
-    `Unsupported request transform type: ${typeof transform}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
-  );
-}
-
 export function determineRequestBody(
   contentType: boolean,
   parsedPrompt: any,
   configBody: Record<string, any> | any[] | string | undefined,
   vars: Record<string, any>,
 ): Record<string, any> | any[] | string {
+  // Parse stringified JSON body if needed (handles legacy data saved as strings)
+  let actualConfigBody = configBody;
+  if (typeof configBody === 'string' && contentType) {
+    try {
+      actualConfigBody = JSON.parse(configBody);
+      logger.debug('[HTTP Provider] Parsed stringified config body to object');
+    } catch (err) {
+      // If parsing fails, it's probably a template string or non-JSON content, leave as-is
+      logger.debug(
+        `[HTTP Provider] Config body is a string that couldn't be parsed as JSON, treating as template: ${String(err)}`,
+      );
+    }
+  }
+
   if (contentType) {
     // For JSON content type
     if (typeof parsedPrompt === 'object' && parsedPrompt !== null) {
       // If parser returned an object, merge it with config body
-      return Object.assign({}, configBody || {}, parsedPrompt);
+      return Object.assign({}, actualConfigBody || {}, parsedPrompt);
     }
     // Otherwise process the config body with parsed prompt
-    return processJsonBody(configBody as Record<string, any> | any[], {
+    return processJsonBody(actualConfigBody as Record<string, any> | any[], {
       ...vars,
       prompt: parsedPrompt,
     });
   }
   // For non-JSON content type, process as text
-  return processTextBody(configBody as string, {
+  return processTextBody(actualConfigBody as string, {
     ...vars,
     prompt: parsedPrompt,
   });

@@ -70,6 +70,7 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
+import { handleRuby } from './ruby';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
@@ -149,12 +150,16 @@ const ASSERTION_HANDLERS: Record<
       const { handleMeteorAssertion } = await import('./meteor');
       return handleMeteorAssertion(params);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Cannot find module')) {
+      if (
+        error instanceof Error &&
+        (error.message.includes('Cannot find module') ||
+          error.message.includes('natural" package is required'))
+      ) {
         return {
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
           assertion: params.assertion,
         };
       }
@@ -169,6 +174,7 @@ const ASSERTION_HANDLERS: Record<
   pi: handlePiScorer,
   python: handlePython,
   regex: handleRegex,
+  ruby: handleRuby,
   'rouge-n': handleRougeScore,
   similar: handleSimilar,
   'starts-with': handleStartsWith,
@@ -288,6 +294,23 @@ export async function runAssertion({
           ]);
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+        } catch (error) {
+          return {
+            pass: false,
+            score: 0,
+            reason: (error as Error).message,
+            assertion,
+          };
+        }
+      } else if (filePath.endsWith('.rb')) {
+        try {
+          const { runRuby } = await import('../ruby/rubyUtils');
+          const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
+            output,
+            context,
+          ]);
+          valueFromScript = rubyScriptOutput;
+          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
           return {
             pass: false,

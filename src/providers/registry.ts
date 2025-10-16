@@ -22,16 +22,18 @@ import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
 import { AzureEmbeddingProvider } from './azure/embedding';
+import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
-import { createEnvoyProvider } from './envoy';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
+import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
+import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
@@ -51,6 +53,7 @@ import {
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
 import { LlamaProvider } from './llama';
+import { createLlamaApiProvider } from './llamaApi';
 import {
   LocalAiChatProvider,
   LocalAiCompletionProvider,
@@ -59,6 +62,7 @@ import {
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
+import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -79,20 +83,20 @@ import {
   ReplicateModerationProvider,
   ReplicateProvider,
 } from './replicate';
+import { RubyProvider } from './rubyCompletion';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
+import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
+import { createTrueFoundryProvider } from './truefoundry';
 import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
-import { createLlamaApiProvider } from './llamaApi';
-import { createNscaleProvider } from './nscale';
-import { createDeepSeekProvider } from './deepseek';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -110,6 +114,7 @@ export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
   createScriptBasedProviderFactory('python', 'py', PythonProvider),
+  createScriptBasedProviderFactory('ruby', 'rb', RubyProvider),
   {
     test: (providerPath: string) => providerPath === 'agentic:memory-poisoning',
     create: async (
@@ -178,6 +183,22 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) =>
+      providerPath.startsWith('anthropic:claude-agent-sdk') ||
+      providerPath.startsWith('anthropic:claude-code'),
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { ClaudeCodeSDKProvider } = await import('./claude-agent-sdk');
+      return new ClaudeCodeSDKProvider({
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('anthropic:'),
     create: async (
       providerPath: string,
@@ -242,6 +263,9 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'assistant') {
         return new AzureAssistantProvider(deploymentName, providerOptions);
+      }
+      if (modelType === 'foundry-agent') {
+        return new AzureFoundryAgentProvider(deploymentName, providerOptions);
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new AzureEmbeddingProvider(
@@ -843,6 +867,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('truefoundry:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createTrueFoundryProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('llamaapi:'),
     create: async (
       providerPath: string,
@@ -1332,6 +1369,19 @@ export const providerMap: ProviderFactory[] = [
         }
         throw error;
       }
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('snowflake:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createSnowflakeProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
 ];
