@@ -9,8 +9,9 @@ import {
   type ProviderOptions,
   type ProviderResponse,
   ResultFailureReason,
-  type TokenUsage,
+  TokenUsage,
 } from '../../types';
+import { fetchWithProxy } from '../../util/fetch';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { buildRemoteUrl } from '../remoteGeneration';
 import { Message } from './shared';
@@ -105,9 +106,9 @@ export default class SimbaProvider implements ApiProvider {
   }
 
   callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throw new Error('Simba provider does not support callApi');
   }
@@ -120,7 +121,7 @@ export default class SimbaProvider implements ApiProvider {
     const url =
       buildRemoteUrl('/api/v1/simba', 'https://api.promptfoo.app/api/v1/simba') + endpoint;
 
-    const response = await fetch(url, {
+    const response = await fetchWithProxy(url, {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -129,7 +130,6 @@ export default class SimbaProvider implements ApiProvider {
     });
 
     if (!response.ok) {
-      logRequestResponse({ url, requestMethod: 'POST', requestBody: body, response });
       throw new Error(`Simba API request failed: ${response.status} ${response.statusText}`);
     }
 
@@ -174,135 +174,113 @@ export default class SimbaProvider implements ApiProvider {
     concurrency?: number,
   ): Promise<EvaluateResult[]> {
     try {
-      // if (!this.config.purpose) {
-      //   this.config.purpose = context?.test?.metadata?.purpose;
-      // }
-      // // Initialize session if not already done
-      // if (!this.sessionId) {
-      //   this.sessionId = await this.startSession();
-      // }
-      // const attacks: Record<string, { messages: Message[]; tokenUsage: TokenUsage }> = {};
-      // console.error(`[Simba] Starting session with ID: ${this.sessionId}`);
+      if (!this.config.purpose) {
+        this.config.purpose = context?.test?.metadata?.purpose;
+      }
+      // Initialize session if not already done
+      if (!this.sessionId) {
+        this.sessionId = await this.startSession();
+      }
+      const attacks: Record<string, { messages: Message[]; tokenUsage: TokenUsage }> = {};
+      console.error(`[Simba] Starting session with ID: ${this.sessionId}`);
 
-      // // Get the target provider to interact with
-      // const targetProvider = context?.originalProvider;
-      // if (!targetProvider) {
-      //   throw new Error('Simba provider requires originalProvider in context');
-      // }
+      // Get the target provider to interact with
+      const targetProvider = context?.originalProvider;
+      if (!targetProvider) {
+        throw new Error('Simba provider requires originalProvider in context');
+      }
 
-      // const email = (await getUserEmail()) || 'demo@promptfoo.dev';
-      // const responses: Record<string, string> = {};
+      const email = (await getUserEmail()) || 'demo@promptfoo.dev';
+      const responses: Record<string, string> = {};
 
-      // // Main conversation loop - similar to the existing Simba command
-      // while (true) {
-      //   // Request next operations from Simba
-      //   const nextRequest: SimbaNextRequest = {
-      //     requestedCount: concurrency || 1,
-      //     responses,
-      //     email,
-      //   };
+      // Main conversation loop - similar to the existing Simba command
+      while (true) {
+        // Request next operations from Simba
+        const nextRequest: SimbaNextRequest = {
+          requestedCount: concurrency || 1,
+          responses,
+          email,
+        };
 
-      //   const batchResponse: SimbaBatchResponse = await this.callSimbaApi(
-      //     `/sessions/${this.sessionId}/next`,
-      //     nextRequest,
-      //   );
-      //   console.error(`[Simba] Batch response: ${JSON.stringify(batchResponse)}`);
-      //   if (batchResponse.completed) {
-      //     logger.debug('[Simba] Session completed');
-      //     break;
-      //   }
+        const batchResponse: SimbaBatchResponse = await this.callSimbaApi(
+          `/sessions/${this.sessionId}/next`,
+          nextRequest,
+        );
+        console.error(`[Simba] Batch response: ${JSON.stringify(batchResponse)}`);
+        if (batchResponse.completed) {
+          logger.debug('[Simba] Session completed');
+          break;
+        }
 
-      //   if (batchResponse.operations.length === 0) {
-      //     logger.debug('[Simba] No more operations available');
-      //     break;
-      //   }
+        if (batchResponse.operations.length === 0) {
+          logger.debug('[Simba] No more operations available');
+          break;
+        }
 
-      //   // process each operation
-      //   await Promise.all(
-      //     batchResponse.operations.map(async (operation) => {
-      //       logger.debug(`[Simba] ${operation.logMessage}`);
+        // process each operation
+        await Promise.all(
+          batchResponse.operations.map(async (operation) => {
+            logger.debug(`[Simba] ${operation.logMessage}`);
 
-      //       if (operation.stage === 'attack') {
-      //         if (attacks[operation.conversationId]) {
-      //           attacks[operation.conversationId].messages.push({
-      //             role: 'user',
-      //             content: operation.nextQuestion,
-      //           });
-      //         } else {
-      //           attacks[operation.conversationId] = {
-      //             messages: [
-      //               {
-      //                 role: 'user',
-      //                 content: operation.nextQuestion,
-      //               },
-      //             ],
-      //             tokenUsage: createEmptyTokenUsage(),
-      //           };
-      //         }
-      //       }
+            if (operation.stage === 'attack') {
+              if (attacks[operation.conversationId]) {
+                attacks[operation.conversationId].messages.push({
+                  role: 'user',
+                  content: operation.nextQuestion,
+                });
+              } else {
+                attacks[operation.conversationId] = {
+                  messages: [
+                    {
+                      role: 'user',
+                      content: operation.nextQuestion,
+                    },
+                  ],
+                  tokenUsage: createEmptyTokenUsage(),
+                };
+              }
+            }
 
-      //       // Send Simba's question to the target provider
-      //       const targetResponse = await targetProvider.callApi(
-      //         operation.nextQuestion,
-      //         context,
-      //         options,
-      //       );
+            // Send Simba's question to the target provider
+            const targetResponse = await targetProvider.callApi(
+              operation.nextQuestion,
+              context,
+              options,
+            );
 
-      //       if (attacks[operation.conversationId]) {
-      //         accumulateResponseTokenUsage(
-      //           attacks[operation.conversationId].tokenUsage,
-      //           targetResponse,
-      //         );
-      //       }
+            if (attacks[operation.conversationId]) {
+              accumulateResponseTokenUsage(
+                attacks[operation.conversationId].tokenUsage,
+                targetResponse,
+              );
+            }
 
-      //       if (targetResponse.error) {
-      //         logger.error(`[Simba] Target provider error: ${targetResponse.error}`);
-      //         return;
-      //       }
+            if (targetResponse.error) {
+              logger.error(`[Simba] Target provider error: ${targetResponse.error}`);
+              return;
+            }
 
-      //       const responseContent =
-      //         typeof targetResponse.output === 'string'
-      //           ? targetResponse.output
-      //           : JSON.stringify(targetResponse.output);
+            const responseContent =
+              typeof targetResponse.output === 'string'
+                ? targetResponse.output
+                : JSON.stringify(targetResponse.output);
 
-      //       if (operation.stage === 'attack') {
-      //         attacks[operation.conversationId].messages.push({
-      //           role: 'assistant',
-      //           content: responseContent,
-      //         });
-      //       }
+            if (operation.stage === 'attack') {
+              attacks[operation.conversationId].messages.push({
+                role: 'assistant',
+                content: responseContent,
+              });
+            }
 
-      //       logger.debug(`[Simba] Target response: ${responseContent}`);
+            logger.debug(`[Simba] Target response: ${responseContent}`);
 
-      //       // Store the response to send back to Simba in the next round
-      //       responses[operation.conversationId] = responseContent;
-      //     }),
-      //   );
-      // }
+            // Store the response to send back to Simba in the next round
+            responses[operation.conversationId] = responseContent;
+          }),
+        );
+      }
 
-      const finalOutput = await this.getFinalOutput(`5501c726-0409-4192-b7cd-7457e6649788`);
-
-      // // Aggregate token usage from all attacks
-      // const aggregatedTokenUsage = Object.values(attacks).reduce(
-      //   (total, attack) => ({
-      //     total: total.total + attack.tokenUsage.total,
-      //     prompt: total.prompt + attack.tokenUsage.prompt,
-      //     completion: total.completion + attack.tokenUsage.completion,
-      //     cached: total.cached + (attack.tokenUsage.cached || 0),
-      //     numRequests: total.numRequests + (attack.tokenUsage.numRequests || 0),
-      //     completionDetails: attack.tokenUsage.completionDetails || total.completionDetails,
-      //     assertions: attack.tokenUsage.assertions || total.assertions,
-      //   }),
-      //   {
-      //     total: 0,
-      //     prompt: 0,
-      //     completion: 0,
-      //     cached: 0,
-      //     numRequests: 0,
-      //     completionDetails: undefined,
-      //     assertions: undefined,
-      //   },
-      // );
+      const finalOutput = await this.getFinalOutput(this.sessionId);
 
       return finalOutput.map((output, index) => {
         const lastUserMessage = output.messages.filter((message) => message.role === 'user').pop();
@@ -378,17 +356,9 @@ export default class SimbaProvider implements ApiProvider {
           success: false,
           score: 0,
           latencyMs: 0,
-          failureReason: 'provider_error',
+          failureReason: ResultFailureReason.ERROR,
           namedScores: {},
-          tokenUsage: {
-            total: 0,
-            prompt: 0,
-            completion: 0,
-            cached: 0,
-            numRequests: 0,
-            completionDetails: undefined,
-            assertions: undefined,
-          },
+          tokenUsage: createEmptyTokenUsage(),
         },
       ];
     }
