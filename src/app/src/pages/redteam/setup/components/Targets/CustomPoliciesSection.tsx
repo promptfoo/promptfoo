@@ -1,8 +1,7 @@
 import React, { memo, useCallback, useEffect, useState } from 'react';
 
-import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -18,7 +17,8 @@ import Typography from '@mui/material/Typography';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import { TestCaseDialog, TestCaseGenerateButton } from '../TestCaseDialog';
+import { TestCaseGenerateButton } from '../TestCaseDialog';
+import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 
 interface PolicyInstance {
   id: string;
@@ -64,17 +64,14 @@ PolicyInput.displayName = 'PolicyInput';
 
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
-  const { recordEvent } = useTelemetry();
   const toast = useToast();
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [isInitialMount, setIsInitialMount] = useState(true);
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
-  const [generatedTestCase, setGeneratedTestCase] = useState<{
-    prompt: string;
-    context?: string;
-  } | null>(null);
-  const [generatingTestCase, setGeneratingTestCase] = useState(false);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
+
+  // Test case generation state - now from context
+  const { generateTestCase, isGenerating: generatingTestCase } = useTestCaseGeneration();
   const [policies, setPolicies] = useState<PolicyInstance[]>(() => {
     // Initialize from existing config or create a default empty policy
     const existingPolicies = config.plugins
@@ -99,6 +96,11 @@ export const CustomPoliciesSection = () => {
   });
 
   const [debouncedPolicies] = useDebounce(policies, 500);
+
+  // Check API health on mount
+  useEffect(() => {
+    checkHealth();
+  }, [checkHealth]);
 
   // Sync policies to config - immediate on mount, debounced on changes
   const syncPolicies = useCallback(
@@ -215,56 +217,23 @@ export const CustomPoliciesSection = () => {
     }
 
     setGeneratingPolicyId(policyId);
-    setGeneratedTestCase(null);
-    setGeneratingTestCase(true);
-    setTestCaseDialogOpen(true);
 
-    try {
-      recordEvent('feature_used', {
-        feature: 'redteam_policy_generate_test_case',
-        plugin: 'policy',
-      });
-
-      const response = await callApi('/redteam/generate-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    await generateTestCase(
+      'policy',
+      {
+        policy: policy.policy,
+      },
+      {
+        telemetryFeature: 'redteam_policy_generate_test_case',
+        mode: 'result',
+        onSuccess: () => {
+          setGeneratingPolicyId(null);
         },
-        body: JSON.stringify({
-          pluginId: 'policy',
-          config: {
-            policy: policy.policy,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate test case');
-      }
-
-      const data = await response.json();
-      setGeneratedTestCase({
-        prompt: data.prompt || '',
-        context: data.context || policy.policy,
-      });
-    } catch (error) {
-      console.error('Error generating test case:', error);
-      toast.showToast(
-        `Failed to generate test case: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
-      );
-      setTestCaseDialogOpen(false);
-    } finally {
-      setGeneratingTestCase(false);
-    }
-  };
-
-  const handleCloseTestCaseDialog = () => {
-    setTestCaseDialogOpen(false);
-    setGeneratingPolicyId(null);
-    setGeneratedTestCase(null);
-    setGeneratingTestCase(false);
+        onError: () => {
+          setGeneratingPolicyId(null);
+        },
+      },
+    );
   };
 
   return (
@@ -336,8 +305,16 @@ export const CustomPoliciesSection = () => {
               />
               <TestCaseGenerateButton
                 onClick={() => handleGenerateTestCase(policy.id)}
-                disabled={generatingTestCase && generatingPolicyId === policy.id}
+                disabled={
+                  apiHealthStatus !== 'connected' ||
+                  (generatingTestCase && generatingPolicyId === policy.id)
+                }
                 isGenerating={generatingTestCase && generatingPolicyId === policy.id}
+                tooltipTitle={
+                  apiHealthStatus === 'connected'
+                    ? undefined
+                    : 'Promptfoo Cloud connection is required for test generation'
+                }
               />
               <IconButton
                 onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}
@@ -364,15 +341,6 @@ export const CustomPoliciesSection = () => {
           </Box>
         ))}
       </Stack>
-
-      <TestCaseDialog
-        open={testCaseDialogOpen}
-        onClose={handleCloseTestCaseDialog}
-        plugin="policy"
-        isGenerating={generatingTestCase}
-        generatedTestCase={generatedTestCase}
-        mode="result"
-      />
     </Box>
   );
 };

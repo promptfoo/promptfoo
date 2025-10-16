@@ -106,13 +106,13 @@ describe('Provider Test Functions', () => {
           testCase: {} as any,
           promptId: 'test-prompt-id',
           provider: { id: 'test-provider' },
-          prompt: { raw: 'Hello, world!', label: 'Connectivity Test' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
           response: {
             output: 'Hello! How can I help you today?',
             raw: 'Hello! How can I help you today?',
             metadata: {
-              transformedRequest: { body: { message: 'Hello, world!' } },
+              transformedRequest: { body: { message: 'Hello World!' } },
               http: {
                 status: 200,
                 statusText: 'OK',
@@ -150,7 +150,7 @@ describe('Provider Test Functions', () => {
         expect(evaluate).toHaveBeenCalledWith(
           expect.objectContaining({
             providers: [mockProvider],
-            prompts: [{ raw: 'Hello, world!', label: 'Connectivity Test' }],
+            prompts: [{ raw: 'Hello World!', label: 'Connectivity Test' }],
             tests: [
               expect.objectContaining({
                 vars: { sessionId: 'test-uuid-1234' },
@@ -188,7 +188,7 @@ describe('Provider Test Functions', () => {
           message: 'Provider is working correctly',
           error: undefined,
           providerResponse: mockResult.response,
-          transformedRequest: { body: { message: 'Hello, world!' } },
+          transformedRequest: { body: { message: 'Hello World!' } },
           sessionId: 'session-123',
           analysis: undefined,
         });
@@ -207,12 +207,12 @@ describe('Provider Test Functions', () => {
           testCase: {} as any,
           promptId: 'test-prompt-id',
           provider: { id: 'test-provider' },
-          prompt: { raw: 'Hello, world!', label: 'Connectivity Test' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
           response: {
             output: 'Hello! How can I help you today?',
             metadata: {
-              transformedRequest: { body: { message: 'Hello, world!' } },
+              transformedRequest: { body: { message: 'Hello World!' } },
             },
           },
           error: null,
@@ -251,7 +251,7 @@ describe('Provider Test Functions', () => {
             'Provider test completed. Remote grading disabled - please review the response manually.',
           error: undefined,
           providerResponse: mockResult.response,
-          transformedRequest: { body: { message: 'Hello, world!' } },
+          transformedRequest: { body: { message: 'Hello World!' } },
           sessionId: 'test-uuid-1234',
         });
       });
@@ -265,7 +265,7 @@ describe('Provider Test Functions', () => {
           testCase: {} as any,
           promptId: 'test-prompt-id',
           provider: { id: 'test-provider' },
-          prompt: { raw: 'Hello, world!', label: 'Connectivity Test' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
           response: {
             output: 'Hello!',
@@ -306,7 +306,7 @@ describe('Provider Test Functions', () => {
           testCase: {} as any,
           promptId: 'test-prompt-id',
           provider: { id: 'test-provider' },
-          prompt: { raw: 'Hello, world!', label: 'Connectivity Test' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
           response: {
             output: 'Hello!',
@@ -348,7 +348,7 @@ describe('Provider Test Functions', () => {
           testCase: {} as any,
           promptId: 'test-prompt-id',
           provider: { id: 'test-provider' },
-          prompt: { raw: 'Hello, world!', label: 'Connectivity Test' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
           response: {
             output: 'Hello!',
@@ -389,7 +389,7 @@ describe('Provider Test Functions', () => {
           testCase: {} as any,
           promptId: 'test-prompt-id',
           provider: { id: 'test-provider' },
-          prompt: { raw: 'Hello, world!', label: 'Connectivity Test' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
           response: {
             error: 'Connection timeout',
@@ -453,7 +453,7 @@ describe('Provider Test Functions', () => {
           testCase: {} as any,
           promptId: 'test-prompt-id',
           provider: { id: 'test-provider' },
-          prompt: { raw: 'Hello, world!', label: 'Connectivity Test' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
           response: {
             output: 'Error: Internal server error',
@@ -512,13 +512,13 @@ describe('Provider Test Functions', () => {
           testCase: {} as any,
           promptId: 'test-prompt-id',
           provider: { id: 'test-provider' },
-          prompt: { raw: 'Hello, world!', label: 'Connectivity Test' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
           response: {
             output: 'Hello!',
             raw: 'Hello!',
             metadata: {
-              transformedRequest: { body: { message: 'Hello, world!' } },
+              transformedRequest: { body: { message: 'Hello World!' } },
             },
           },
           error: null,
@@ -546,7 +546,7 @@ describe('Provider Test Functions', () => {
           message: 'Error evaluating the results. Please review the provider response manually.',
           error: 'Remote evaluation failed',
           providerResponse: mockResult.response,
-          transformedRequest: { body: { message: 'Hello, world!' } },
+          transformedRequest: { body: { message: 'Hello World!' } },
           sessionId: 'test-uuid-1234',
         });
 
@@ -566,13 +566,13 @@ describe('Provider Test Functions', () => {
           testCase: {} as any,
           promptId: 'test-prompt-id',
           provider: { id: 'test-provider' },
-          prompt: { raw: 'Hello, world!', label: 'Connectivity Test' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
           response: {
             output: 'Hello!',
             raw: 'Hello!',
             metadata: {
-              transformedRequest: { body: { message: 'Hello, world!' } },
+              transformedRequest: { body: { message: 'Hello World!' } },
             },
           },
           error: null,
@@ -597,7 +597,7 @@ describe('Provider Test Functions', () => {
           message: 'Error evaluating the results. Please review the provider response manually.',
           error: 'Network error',
           providerResponse: mockResult.response,
-          transformedRequest: { body: { message: 'Hello, world!' } },
+          transformedRequest: { body: { message: 'Hello World!' } },
           sessionId: 'test-uuid-1234',
         });
 
@@ -617,7 +617,7 @@ describe('Provider Test Functions', () => {
           testCase: {} as any,
           promptId: 'test-prompt-id',
           provider: { id: 'test-provider' },
-          prompt: { raw: 'Hello, world!', label: 'Connectivity Test' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
           vars: { sessionId: 'test-uuid-1234' },
           response: {
             output: 'Hello!',

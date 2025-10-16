@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
-import AddIcon from '@mui/icons-material/Add';
-import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -16,11 +13,6 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -62,13 +54,14 @@ import CustomIntentSection from './CustomIntentPluginSection';
 import PageWrapper from './PageWrapper';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
+import { useTestCaseGeneration } from './TestCaseGenerationProvider';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
 import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
 import type { PluginConfig } from '@promptfoo/redteam/types';
-
+import { TestCaseGenerateButton } from './TestCaseDialog';
 import type { LocalPluginConfig } from '../types';
 
 interface PluginsProps {
@@ -92,7 +85,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
-  const toast = useToast();
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [isCustomMode, setIsCustomMode] = useState(true);
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
@@ -119,18 +112,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
 
-  // Test case generation state
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
-  const [generatingPlugin, setGeneratingPlugin] = useState<Plugin | null>(null);
-  const [generatedTestCase, setGeneratedTestCase] = useState<{
-    prompt: string;
-    context: string;
-    metadata?: any;
-  } | null>(null);
-  const [generatingTestCase, setGeneratingTestCase] = useState(false);
-  // Add new state for dialog mode and temporary config
-  const [testCaseDialogMode, setTestCaseDialogMode] = useState<'config' | 'result'>('config');
-  const [tempTestCaseConfig, setTempTestCaseConfig] = useState<any>({});
+  // Test case generation state - now from context
+  const {
+    generateTestCase,
+    isGenerating: generatingTestCase,
+    currentPlugin: generatingPlugin,
+  } = useTestCaseGeneration();
 
   // Category filter options based on riskCategories
   const categoryFilters = Object.keys(riskCategories).map((category) => ({
@@ -170,7 +157,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
-  }, []);
+    checkHealth();
+  }, [checkHealth]);
 
   useEffect(() => {
     if (debouncedPlugins) {
@@ -457,24 +445,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return true;
   }, [selectedPlugins, pluginConfig]);
 
-  const isTestCaseConfigValid = useCallback((plugin: Plugin, config: any) => {
-    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-      // For plugins that don't require config or only support optional config, always allow generation
-      return true;
-    }
-    if (!config) {
-      return false;
-    }
-    if (plugin === 'indirect-prompt-injection') {
-      return config.indirectInjectionVar && config.indirectInjectionVar.trim() !== '';
-    }
-    if (plugin === 'prompt-extraction') {
-      return config.systemPrompt && config.systemPrompt.trim() !== '';
-    }
-    // Note: bfla, bola, ssrf are not in PLUGINS_REQUIRING_CONFIG, so they will return true above
-    return true;
-  }, []);
-
   const hasAnyPluginsConfigured = useCallback(() => {
     // Check regular plugins
     if (selectedPlugins.size > 0) {
@@ -539,73 +509,17 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const handleGenerateTestCase = async (plugin: Plugin) => {
     const supportsConfig = PLUGINS_SUPPORTING_CONFIG.includes(plugin);
 
-    setGeneratingPlugin(plugin);
-    setGeneratedTestCase(null);
-    setGeneratingTestCase(false);
-
-    if (supportsConfig) {
-      // Initialize temp config with existing plugin config if available
-      setTempTestCaseConfig(pluginConfig[plugin] || {});
-      setTestCaseDialogMode('config');
-      setTestCaseDialogOpen(true);
+    if (supportsConfig && PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      // For plugins that require config, we need to show config dialog first
+      // This is handled by the config dialog flow
+      setSelectedConfigPlugin(plugin);
+      setConfigDialogOpen(true);
     } else {
-      // Directly generate test case for plugins that don't support config
-      await generateTestCaseWithConfig(plugin, {});
-    }
-  };
-
-  const generateTestCaseWithConfig = async (plugin: Plugin, configForGeneration: any) => {
-    setGeneratingTestCase(true);
-    setTestCaseDialogMode('result');
-
-    try {
-      recordEvent('feature_used', {
-        feature: 'redteam_plugin_generate_test_case',
-        plugin: plugin,
+      // Directly generate test case
+      await generateTestCase(plugin, pluginConfig[plugin] || {}, {
+        telemetryFeature: 'redteam_plugin_generate_test_case',
+        mode: 'result',
       });
-
-      const response = await callApi('/redteam/generate-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
-        },
-        body: JSON.stringify({
-          pluginId: plugin,
-          config: {
-            applicationDefinition: config.applicationDefinition,
-            ...configForGeneration,
-          },
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setGeneratedTestCase({
-        prompt: data.prompt,
-        context: data.context,
-        metadata: data.metadata,
-      });
-
-      if (!testCaseDialogOpen) {
-        setTestCaseDialogOpen(true);
-      }
-    } catch (error) {
-      console.error('Failed to generate test case:', error);
-      toast.showToast(
-        error instanceof Error ? error.message : 'Failed to generate test case',
-        'error',
-      );
-      // Close dialog on error
-      setTestCaseDialogOpen(false);
-      setGeneratingPlugin(null);
-    } finally {
-      setGeneratingTestCase(false);
     }
   };
 
@@ -943,26 +857,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       size="small"
                       aria-label={displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
                     />
-                    {/* Generate test case button */}
-                    <Tooltip
-                      title={`Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
-                    >
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleGenerateTestCase(plugin);
-                        }}
-                        disabled={generatingTestCase && generatingPlugin === plugin}
-                        sx={{ color: 'text.secondary', ml: 0.5 }}
-                      >
-                        {generatingTestCase && generatingPlugin === plugin ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <MagicWandIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    </Tooltip>
+                    <TestCaseGenerateButton
+                      onClick={() => handleGenerateTestCase(plugin)}
+                      disabled={
+                        apiHealthStatus !== 'connected' ||
+                        (generatingTestCase && generatingPlugin === plugin)
+                      }
+                      isGenerating={generatingTestCase && generatingPlugin === plugin}
+                      tooltipTitle={
+                        apiHealthStatus === 'connected'
+                          ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
+                          : 'Promptfoo Cloud connection is required for test generation'
+                      }
+                    />
                   </Box>
 
                   <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -1159,436 +1066,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 updatePluginConfig(plugin, newConfig);
               }}
             />
-
-            {/* Test Case Generation Dialog */}
-            <Dialog
-              open={testCaseDialogOpen}
-              onClose={() => {
-                setTestCaseDialogOpen(false);
-                setGeneratedTestCase(null);
-                setGeneratingPlugin(null);
-                setTestCaseDialogMode('config');
-                setTempTestCaseConfig({});
-              }}
-              maxWidth="md"
-              fullWidth
-            >
-              <DialogTitle>
-                {testCaseDialogMode === 'config' ? 'Configure Test Generation' : 'Test Case Sample'}{' '}
-                -{' '}
-                {generatingPlugin &&
-                  (displayNameOverrides[generatingPlugin] ||
-                    categoryAliases[generatingPlugin] ||
-                    generatingPlugin)}
-              </DialogTitle>
-              <DialogContent>
-                {testCaseDialogMode === 'config' &&
-                generatingPlugin &&
-                PLUGINS_SUPPORTING_CONFIG.includes(generatingPlugin) ? (
-                  <Box sx={{ pt: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                      {PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin)
-                        ? 'This plugin requires configuration to generate relevant test cases.'
-                        : 'This plugin supports configuration to generate more targeted test cases. Configuration is optional.'}
-                    </Typography>
-
-                    {/* Render configuration fields based on plugin */}
-                    {generatingPlugin === 'indirect-prompt-injection' && (
-                      <TextField
-                        fullWidth
-                        required
-                        label="Indirect Injection Variable"
-                        value={tempTestCaseConfig.indirectInjectionVar || ''}
-                        onChange={(e) =>
-                          setTempTestCaseConfig({
-                            ...tempTestCaseConfig,
-                            indirectInjectionVar: e.target.value,
-                          })
-                        }
-                        placeholder="e.g., name, userContent, document"
-                        helperText="Specify the variable name in your prompt that contains untrusted data"
-                        sx={{ mb: 2 }}
-                      />
-                    )}
-
-                    {generatingPlugin === 'prompt-extraction' && (
-                      <TextField
-                        fullWidth
-                        required
-                        label="System Prompt"
-                        multiline
-                        rows={4}
-                        value={tempTestCaseConfig.systemPrompt || ''}
-                        onChange={(e) =>
-                          setTempTestCaseConfig({
-                            ...tempTestCaseConfig,
-                            systemPrompt: e.target.value,
-                          })
-                        }
-                        placeholder="Enter your actual system prompt here..."
-                        helperText="Provide your system prompt so the plugin can test if it can be extracted"
-                        sx={{ mb: 2 }}
-                      />
-                    )}
-
-                    {generatingPlugin === 'bfla' && (
-                      <Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          BFLA tests whether users can access functions they shouldn't. Leave empty
-                          for general testing.
-                        </Typography>
-                        {((tempTestCaseConfig.targetIdentifiers as string[]) || ['']).map(
-                          (item: string, index: number) => {
-                            return (
-                              <Box
-                                key={index}
-                                sx={{ display: 'flex', alignItems: 'center', mb: 1 }}
-                              >
-                                <TextField
-                                  fullWidth
-                                  label={`Target Identifier ${index + 1}`}
-                                  variant="outlined"
-                                  value={item}
-                                  onChange={(e) => {
-                                    const newArray = [
-                                      ...((tempTestCaseConfig.targetIdentifiers as string[]) || [
-                                        '',
-                                      ]),
-                                    ];
-                                    newArray[index] = e.target.value;
-                                    setTempTestCaseConfig({
-                                      ...tempTestCaseConfig,
-                                      targetIdentifiers: newArray,
-                                    });
-                                  }}
-                                  placeholder="e.g., getUserData, /api/admin/users, deleteUser"
-                                  sx={{ mr: 1 }}
-                                />
-                                {((tempTestCaseConfig.targetIdentifiers as string[]) || [''])
-                                  .length > 1 && (
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => {
-                                      const newArray = [
-                                        ...((tempTestCaseConfig.targetIdentifiers as string[]) || [
-                                          '',
-                                        ]),
-                                      ];
-                                      newArray.splice(index, 1);
-                                      if (newArray.length === 0) {
-                                        newArray.push('');
-                                      }
-                                      setTempTestCaseConfig({
-                                        ...tempTestCaseConfig,
-                                        targetIdentifiers: newArray,
-                                      });
-                                    }}
-                                  >
-                                    <RemoveIcon />
-                                  </IconButton>
-                                )}
-                              </Box>
-                            );
-                          },
-                        )}
-                        <Button
-                          startIcon={<AddIcon />}
-                          onClick={() => {
-                            const currentArray =
-                              (tempTestCaseConfig.targetIdentifiers as string[]) || [''];
-                            setTempTestCaseConfig({
-                              ...tempTestCaseConfig,
-                              targetIdentifiers: [...currentArray, ''],
-                            });
-                          }}
-                          variant="outlined"
-                          size="small"
-                          sx={{ mt: 1 }}
-                          disabled={(
-                            (tempTestCaseConfig.targetIdentifiers as string[]) || ['']
-                          ).some((item) => {
-                            return item.trim() === '';
-                          })}
-                        >
-                          Add
-                        </Button>
-                      </Box>
-                    )}
-
-                    {generatingPlugin === 'bola' && (
-                      <Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          BOLA tests whether users can access objects they shouldn't own. Leave
-                          empty for general testing.
-                        </Typography>
-                        {((tempTestCaseConfig.targetSystems as string[]) || ['']).map(
-                          (item: string, index: number) => {
-                            return (
-                              <Box
-                                key={index}
-                                sx={{ display: 'flex', alignItems: 'center', mb: 1 }}
-                              >
-                                <TextField
-                                  fullWidth
-                                  label={`Target System ${index + 1}`}
-                                  variant="outlined"
-                                  value={item}
-                                  onChange={(e) => {
-                                    const newArray = [
-                                      ...((tempTestCaseConfig.targetSystems as string[]) || ['']),
-                                    ];
-                                    newArray[index] = e.target.value;
-                                    setTempTestCaseConfig({
-                                      ...tempTestCaseConfig,
-                                      targetSystems: newArray,
-                                    });
-                                  }}
-                                  placeholder="e.g., user_123, order_456, document_789"
-                                  sx={{ mr: 1 }}
-                                />
-                                {((tempTestCaseConfig.targetSystems as string[]) || ['']).length >
-                                  1 && (
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => {
-                                      const newArray = [
-                                        ...((tempTestCaseConfig.targetSystems as string[]) || ['']),
-                                      ];
-                                      newArray.splice(index, 1);
-                                      if (newArray.length === 0) {
-                                        newArray.push('');
-                                      }
-                                      setTempTestCaseConfig({
-                                        ...tempTestCaseConfig,
-                                        targetSystems: newArray,
-                                      });
-                                    }}
-                                  >
-                                    <RemoveIcon />
-                                  </IconButton>
-                                )}
-                              </Box>
-                            );
-                          },
-                        )}
-                        <Button
-                          startIcon={<AddIcon />}
-                          onClick={() => {
-                            const currentArray = (tempTestCaseConfig.targetSystems as string[]) || [
-                              '',
-                            ];
-                            setTempTestCaseConfig({
-                              ...tempTestCaseConfig,
-                              targetSystems: [...currentArray, ''],
-                            });
-                          }}
-                          variant="outlined"
-                          size="small"
-                          sx={{ mt: 1 }}
-                          disabled={((tempTestCaseConfig.targetSystems as string[]) || ['']).some(
-                            (item) => item.trim() === '',
-                          )}
-                        >
-                          Add
-                        </Button>
-                      </Box>
-                    )}
-
-                    {generatingPlugin === 'ssrf' && (
-                      <Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          SSRF tests whether your application can be tricked into making requests to
-                          unintended destinations. Leave empty for general testing.
-                        </Typography>
-                        {((tempTestCaseConfig.targetUrls as string[]) || ['']).map(
-                          (item: string, index: number) => {
-                            return (
-                              <Box
-                                key={index}
-                                sx={{ display: 'flex', alignItems: 'center', mb: 1 }}
-                              >
-                                <TextField
-                                  fullWidth
-                                  label={`Target URL ${index + 1}`}
-                                  variant="outlined"
-                                  value={item}
-                                  onChange={(e) => {
-                                    const newArray = [
-                                      ...((tempTestCaseConfig.targetUrls as string[]) || ['']),
-                                    ];
-                                    newArray[index] = e.target.value;
-                                    setTempTestCaseConfig({
-                                      ...tempTestCaseConfig,
-                                      targetUrls: newArray,
-                                    });
-                                  }}
-                                  placeholder="e.g., http://internal-api.company.com, file:///etc/passwd"
-                                  sx={{ mr: 1 }}
-                                />
-                                {((tempTestCaseConfig.targetUrls as string[]) || ['']).length >
-                                  1 && (
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => {
-                                      const newArray = [
-                                        ...((tempTestCaseConfig.targetUrls as string[]) || ['']),
-                                      ];
-                                      newArray.splice(index, 1);
-                                      if (newArray.length === 0) {
-                                        newArray.push('');
-                                      }
-                                      setTempTestCaseConfig({
-                                        ...tempTestCaseConfig,
-                                        targetUrls: newArray,
-                                      });
-                                    }}
-                                  >
-                                    <RemoveIcon />
-                                  </IconButton>
-                                )}
-                              </Box>
-                            );
-                          },
-                        )}
-                        <Button
-                          startIcon={<AddIcon />}
-                          onClick={() => {
-                            const currentArray = (tempTestCaseConfig.targetUrls as string[]) || [
-                              '',
-                            ];
-                            setTempTestCaseConfig({
-                              ...tempTestCaseConfig,
-                              targetUrls: [...currentArray, ''],
-                            });
-                          }}
-                          variant="outlined"
-                          size="small"
-                          sx={{ mt: 1 }}
-                          disabled={((tempTestCaseConfig.targetUrls as string[]) || ['']).some(
-                            (item) => item.trim() === '',
-                          )}
-                        >
-                          Add
-                        </Button>
-                      </Box>
-                    )}
-                  </Box>
-                ) : generatingTestCase ? (
-                  <Box
-                    sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}
-                  >
-                    <CircularProgress sx={{ mb: 2 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Generating test case...
-                    </Typography>
-                  </Box>
-                ) : generatedTestCase && testCaseDialogMode === 'result' ? (
-                  <Box sx={{ pt: 2 }}>
-                    <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
-                      <Typography variant="body2">
-                        This is a sample test case generated for the <code>{generatingPlugin}</code>{' '}
-                        plugin. Fine tune it by adjusting your application details.
-                      </Typography>
-                    </Alert>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Test Case:
-                    </Typography>
-                    <Box
-                      sx={{
-                        p: 2,
-                        backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
-                        borderRadius: 1,
-                        border: '1px solid',
-                        borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-                        fontFamily: 'monospace',
-                        fontSize: '0.875rem',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      {generatedTestCase.prompt}
-                    </Box>
-                  </Box>
-                ) : null}
-              </DialogContent>
-              <DialogActions>
-                {/* Documentation link in footer */}
-                {generatingPlugin && hasSpecificPluginDocumentation(generatingPlugin) && (
-                  <Box sx={{ flex: 1, mr: 2 }}>
-                    <Link
-                      href={getPluginDocumentationUrl(generatingPlugin)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        fontSize: '0.875rem',
-                        textDecoration: 'none',
-                        '&:hover': {
-                          textDecoration: 'underline',
-                        },
-                        paddingLeft: 2,
-                      }}
-                    >
-                      Learn more about{' '}
-                      {displayNameOverrides[generatingPlugin] ||
-                        categoryAliases[generatingPlugin] ||
-                        generatingPlugin}
-                      <Box component="span" sx={{ fontSize: '0.75rem' }}>
-                        ↗
-                      </Box>
-                    </Link>
-                  </Box>
-                )}
-                <Button
-                  onClick={() => {
-                    setTestCaseDialogOpen(false);
-                    setGeneratedTestCase(null);
-                    setGeneratingPlugin(null);
-                    setTestCaseDialogMode('config');
-                    setTempTestCaseConfig({});
-                  }}
-                >
-                  {testCaseDialogMode === 'config' ? 'Cancel' : 'Close'}
-                </Button>
-
-                {testCaseDialogMode === 'config' &&
-                  generatingPlugin &&
-                  PLUGINS_SUPPORTING_CONFIG.includes(generatingPlugin) && (
-                    <>
-                      {/* Show Skip button for optional config plugins */}
-                      {!PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin) && (
-                        <Button
-                          onClick={() => {
-                            if (generatingPlugin) {
-                              generateTestCaseWithConfig(generatingPlugin, {});
-                            }
-                          }}
-                          disabled={generatingTestCase}
-                        >
-                          Skip Configuration
-                        </Button>
-                      )}
-
-                      <Button
-                        variant="contained"
-                        onClick={() => {
-                          if (generatingPlugin) {
-                            generateTestCaseWithConfig(generatingPlugin, tempTestCaseConfig);
-                          }
-                        }}
-                        disabled={
-                          generatingTestCase ||
-                          !isTestCaseConfigValid(generatingPlugin, tempTestCaseConfig)
-                        }
-                      >
-                        Generate Test Case
-                      </Button>
-                    </>
-                  )}
-              </DialogActions>
-            </Dialog>
           </Box>
 
           {/* Selected Plugins Sidebar */}
