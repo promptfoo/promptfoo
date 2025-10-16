@@ -3,6 +3,7 @@ import { renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
+import { withRetries, type GuardrailConfig } from '../../lib/guardrails';
 
 import type { TokenUsage } from '../../types/index';
 import type { ProviderConfig } from '../shared';
@@ -616,4 +617,41 @@ export function formatOpenAiError(data: {
   }
   errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
   return errorMessage;
+}
+
+export async function fetchWithRetries(
+  url: string,
+  init: RequestInit,
+  cfg: GuardrailConfig = {},
+): Promise<Response> {
+  return withRetries<null, Response>(
+    async (_args, signal) => {
+      const res = await withRetries<null, Response>(
+        async (_args, signal) => {
+          const r = await fetch(url, { ...init, signal });
+          if (!r.ok) {
+            const e: any = new Error(`HTTP ${r.status}`);
+            e.status = r.status;
+            const ra = r.headers.get('retry-after');
+            e.retryAfterSeconds = ra ? Number(ra) : undefined;
+            throw e;
+          }
+          return r;
+        },
+        null,
+        'openai',
+        {
+          retryBudget: 2,
+          baseDelayMs: 250,
+          maxDelayMs: 4000,
+          timeoutMs: 60_000,
+          respectRetryAfter: true,
+        },
+      );
+      return res;
+    },
+    null,
+    'openai',
+    cfg,
+  );
 }
