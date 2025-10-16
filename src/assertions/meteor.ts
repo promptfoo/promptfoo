@@ -24,7 +24,7 @@ function ensureNaturalPackage() {
     WordNet = natural.WordNet;
   } catch (_err) {
     throw new Error(
-      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@latest',
+      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.0',
     );
   }
 }
