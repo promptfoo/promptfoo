@@ -28,22 +28,22 @@ ENV VITE_IS_HOSTED=1 \
     PROMPTFOO_REMOTE_API_BASE_URL=${PROMPTFOO_REMOTE_API_BASE_URL}
 
 # Install dependencies (deterministic + cached)
-COPY package.json package-lock.json ./
+COPY package.json ./
 RUN echo "TARGETARCH: $TARGETARCH"
 # Leverage BuildKit cache and install architecture-specific binaries
 RUN --mount=type=cache,target=/root/.npm \
     # Set architecture for npm using environment variables (Alpine uses musl)
     if [ "$TARGETARCH" = "arm64" ]; then \
-      export npm_config_arch=arm64; \
+      export npm_config_arch=arm64 && \
+      export SWC_PACKAGE="@swc/core-linux-arm64-musl"; \
     elif [ "$TARGETARCH" = "amd64" ]; then \
-      export npm_config_arch=x64; \
+      export npm_config_arch=x64 && \
+      export SWC_PACKAGE="@swc/core-linux-x64-musl"; \
     fi && \
     export npm_config_platform=linux && \
     export npm_config_libc=musl && \
-    # Remove platform-specific entries from lock file and reinstall
-    rm -f package-lock.json && \
-    npm install --install-links --include=peer --omit=dev --package-lock-only && \
-    npm ci --install-links --include=peer
+    # Install dependencies with correct architecture
+    npm install --install-links --include=peer
 
 # Copy the rest of the application code
 COPY . .
