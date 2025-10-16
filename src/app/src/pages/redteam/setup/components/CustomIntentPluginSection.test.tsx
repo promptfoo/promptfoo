@@ -55,12 +55,12 @@ describe('CustomIntentPluginSection', () => {
       // Check for drag & drop zone
       expect(screen.getByText('Drop files here or click to upload')).toBeInTheDocument();
       expect(screen.getByText('Supports .csv and .json files')).toBeInTheDocument();
-      
+
       // Check for action buttons
       expect(screen.getByText('Add prompt')).toBeInTheDocument();
       expect(screen.getByText('Upload File')).toBeInTheDocument();
       expect(screen.getByText('Clear All')).toBeInTheDocument();
-      
+
       // Check for at least one text field (the empty intent)
       expect(screen.getByRole('textbox')).toBeInTheDocument();
     });
