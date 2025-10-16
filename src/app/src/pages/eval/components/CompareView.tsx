@@ -1,4 +1,3 @@
-import * as React from 'react';
 import type { RunDiff } from '../../../../../diff/types';
 
 export default function CompareView({

@@ -17,11 +17,19 @@ export default function EvalPage() {
       baselineId={baselineId}
       onBaselineChange={(id: string | null) => {
         const next = new URLSearchParams(searchParams);
-        if (id) next.set('baseline', id);
-        else next.delete('baseline');
+        if (id) {
+          next.set('baseline', id);
+        } else {
+          next.delete('baseline');
+        }
+
         setSearchParams(next, { replace: false });
-        if (id) localStorage.setItem('baselineRunId', id);
-        else localStorage.removeItem('baselineRunId');
+
+        if (id) {
+          localStorage.setItem('baselineRunId', id);
+        } else {
+          localStorage.removeItem('baselineRunId');
+        }
       }}
     />
   );

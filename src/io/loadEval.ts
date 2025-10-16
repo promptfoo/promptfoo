@@ -8,7 +8,9 @@ async function readJson(p: string) {
 }
 
 function stableId(r: any) {
-  if (r.id) return r.id;
+  if (r.id) {
+    return r.id;
+  }
   const data = JSON.stringify([r.prompt ?? '', r.vars ?? {}, r.provider ?? r.model ?? '']);
   return crypto.createHash('sha1').update(data).digest('hex').slice(0, 16);
 }

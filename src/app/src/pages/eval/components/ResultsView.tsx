@@ -516,10 +516,13 @@ React.useEffect(() => {
 // use parent's setter if provided; otherwise use local
 const setBaselineId = React.useCallback(
   (id: string | null) => {
-    if (onBaselineChange) onBaselineChange(id);
-    else setBaselineLocal(id);
+    if (onBaselineChange) {
+      onBaselineChange(id);
+    } else {
+      setBaselineLocal(id);
+    }
   },
-  [onBaselineChange],
+  [onBaselineChange, setBaselineLocal]
 );
 
 // this is the value the page should use everywhere
@@ -555,10 +558,14 @@ React.useEffect(() => {
         fetchRunJson(effectiveBaselineId!),
         fetchRunJson(evalId!),
       ]);
-      if (!cancelled) setDiff(computeDiff(fromRun, toRun, {}));
+      if (!cancelled) {
+        setDiff(computeDiff(fromRun, toRun, {}));
+      }
     } catch (e) {
       console.error('Failed to compute baseline diff:', e);
-      if (!cancelled) setDiff(null);
+      if (!cancelled) {
+        setDiff(null);
+      }
     }
   })();
     return () => {
