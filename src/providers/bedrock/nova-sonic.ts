@@ -3,10 +3,8 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   BedrockRuntimeClient,
-  InvokeModelWithBidirectionalStreamCommand,
   InvokeModelWithBidirectionalStreamInput,
 } from '@aws-sdk/client-bedrock-runtime';
-import type { NodeHttp2Handler } from '@smithy/node-http-handler';
 import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import logger from '../../logger';

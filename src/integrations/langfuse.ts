@@ -21,7 +21,7 @@ export async function getPrompt(
     try {
       const { Langfuse } = await import('langfuse');
       langfuse = new Langfuse(langfuseParams);
-    } catch (err) {
+    } catch (_err) {
       throw new Error(
         'The langfuse package is required for Langfuse integration. Please install it with: npm install langfuse',
       );
