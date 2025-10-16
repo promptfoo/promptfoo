@@ -4,6 +4,7 @@ import { fromError } from 'zod-validation-error';
 import { getEnvBool } from '../../envars';
 import {
   checkEmailStatus,
+  clearUserEmail,
   getUserEmail,
   getUserId,
   setUserEmail,
@@ -70,6 +71,16 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
     } else {
       res.status(500).json({ error: String(error) });
     }
+  }
+});
+
+userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    clearUserEmail();
+    res.json({ success: true, message: 'Email cleared' });
+  } catch (error) {
+    logger.error(`Error clearing email: ${error}`);
+    res.status(500).json({ error: 'Failed to clear email' });
   }
 });
 
