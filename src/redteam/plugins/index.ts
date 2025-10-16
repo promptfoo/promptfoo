@@ -44,6 +44,7 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
+import { SycophancyPlugin } from './sycophancy';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
@@ -197,6 +198,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  createPluginFactory(SycophancyPlugin, 'sycophancy'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
   createPluginFactory(VLGuardPlugin, 'vlguard'),

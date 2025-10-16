@@ -19,6 +19,7 @@ WORKDIR /app
 
 ARG VITE_PUBLIC_BASENAME
 ARG PROMPTFOO_REMOTE_API_BASE_URL
+ARG TARGETARCH
 
 # Set environment variables for the build
 ENV VITE_IS_HOSTED=1 \
@@ -28,19 +29,34 @@ ENV VITE_IS_HOSTED=1 \
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
-# Leverage BuildKit cache
+# Leverage BuildKit cache and install architecture-specific binaries
 RUN --mount=type=cache,target=/root/.npm \
+    # Set npm config for the target architecture
+    if [ "$TARGETARCH" = "arm64" ]; then \
+      npm config set arch arm64 && \
+      npm config set platform linux; \
+    elif [ "$TARGETARCH" = "amd64" ]; then \
+      npm config set arch x64 && \
+      npm config set platform linux; \
+    fi && \
+    # Remove platform-specific entries from lock file and reinstall
+    rm -f package-lock.json && \
+    npm install --install-links --include=peer --omit=dev --package-lock-only && \
     npm ci --install-links --include=peer
 
 # Copy the rest of the application code
 COPY . .
+
+WORKDIR /app/packages/toolkit
+RUN npm install
 
 # Run npm install for the react app
 WORKDIR /app/src/app
 RUN npm install
 
 WORKDIR /app
-RUN npm run build
+
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 FROM base AS server
 WORKDIR /app
