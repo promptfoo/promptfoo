@@ -1,31 +1,13 @@
-import path from 'path';
-
-import { importModule } from '../../src/esm';
 import {
   createTransformRequest,
   createTransformResponse,
 } from '../../src/providers/httpTransforms';
 
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(),
-}));
-
-jest.mock('../../src/cliState', () => ({
-  basePath: '/mock/base/path',
-}));
-
 describe('createTransformResponse', () => {
-  it('should handle file:// parser with JavaScript file', async () => {
-    const mockParser = jest.fn((data, text) => text.toUpperCase());
-    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
-
-    const parser = await createTransformResponse('file://custom-parser.js');
-    const result = parser({ customField: 'parsed' }, 'parsed');
-    expect(importModule).toHaveBeenCalledWith(
-      path.resolve('/mock/base/path', 'custom-parser.js'),
-      undefined,
+  it('should throw error if file:// reference is passed (should be pre-loaded)', async () => {
+    await expect(createTransformResponse('file://custom-parser.js')).rejects.toThrow(
+      /should be pre-loaded before calling createTransformResponse/,
     );
-    expect(result).toBe('PARSED');
   });
 
   it('should throw error for unsupported parser type', async () => {
@@ -34,45 +16,10 @@ describe('createTransformResponse', () => {
     );
   });
 
-  it('should handle file:// parser with specific function name', async () => {
-    const mockParser = jest.fn((data, text) => data.specificField);
-    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
-
-    const parser = await createTransformResponse('file://custom-parser.js:parseResponse');
-    const result = parser({ specificField: 'parsed' }, '');
-    expect(importModule).toHaveBeenCalledWith(
-      path.resolve('/mock/base/path', 'custom-parser.js'),
-      'parseResponse',
-    );
-    expect(result).toBe('parsed');
-  });
-
-  it('should throw error for malformed file:// parser', async () => {
-    jest.mocked(importModule).mockResolvedValueOnce({});
-
-    await expect(createTransformResponse('file://invalid-parser.js')).rejects.toThrow(
-      /Response transform malformed/,
-    );
-  });
-
   it('should return default parser when no parser is provided', async () => {
     const parser = await createTransformResponse(undefined);
     const result = parser({ key: 'value' }, 'raw text');
     expect(result.output).toEqual({ key: 'value' });
-  });
-
-  it('should handle response transform file with default export', async () => {
-    const mockParser = jest.fn((data) => data.defaultField);
-    jest.mocked(importModule).mockResolvedValueOnce(mockParser);
-
-    const parser = await createTransformResponse('file://default-parser.js');
-    const result = parser({ defaultField: 'parsed' }, '');
-
-    expect(result).toBe('parsed');
-    expect(importModule).toHaveBeenCalledWith(
-      path.resolve('/mock/base/path', 'default-parser.js'),
-      undefined,
-    );
   });
 
   it('should handle function parser returning an object', async () => {
@@ -167,17 +114,9 @@ describe('createTransformRequest', () => {
     }).rejects.toThrow('Error in request transform function: Transform function error');
   });
 
-  it('should handle errors in file-based transform', async () => {
-    const mockErrorFn = jest.fn(() => {
-      throw new Error('File transform error');
-    });
-    jest.mocked(importModule).mockResolvedValueOnce(mockErrorFn);
-
-    const transform = await createTransformRequest('file://error-transform.js');
-    await expect(async () => {
-      await transform('test', {} as any);
-    }).rejects.toThrow(
-      'Error in request transform function from error-transform.js: File transform error',
+  it('should throw error if file:// reference is passed (should be pre-loaded)', async () => {
+    await expect(createTransformRequest('file://error-transform.js')).rejects.toThrow(
+      /should be pre-loaded before calling createTransformRequest/,
     );
   });
 
@@ -192,18 +131,6 @@ describe('createTransformRequest', () => {
     await expect(createTransformRequest(123 as any)).rejects.toThrow(
       'Unsupported request transform type: number',
     );
-  });
-
-  it('should include filename in error for file-based transform errors', async () => {
-    const mockErrorFn = jest.fn(() => {
-      throw new Error('File error');
-    });
-    jest.mocked(importModule).mockResolvedValueOnce(mockErrorFn);
-
-    const transform = await createTransformRequest('file://specific-file.js');
-    await expect(async () => {
-      await transform('test', {} as any);
-    }).rejects.toThrow('Error in request transform function from specific-file.js: File error');
   });
 
   it('should handle errors in JavaScript expression transform', async () => {
@@ -249,42 +176,6 @@ describe('createTransformRequest', () => {
     expect(result).toEqual({ prompt: 'hello', contextVars: { test: 'value' } });
   });
 
-  it('should handle file:// transform with default export', async () => {
-    const mockTransform = jest.fn((prompt) => prompt.toUpperCase());
-    jest.mocked(importModule).mockResolvedValueOnce(mockTransform);
-
-    const transform = await createTransformRequest('file://transform.js');
-    const result = await transform('hello', {} as any);
-
-    expect(result).toBe('HELLO');
-    expect(importModule).toHaveBeenCalledWith(
-      path.resolve('/mock/base/path', 'transform.js'),
-      undefined,
-    );
-  });
-
-  it('should handle file:// transform with specific function name', async () => {
-    const mockTransform = jest.fn((prompt) => ({ transformed: prompt }));
-    jest.mocked(importModule).mockResolvedValueOnce(mockTransform);
-
-    const transform = await createTransformRequest('file://transform.js:myTransform');
-    const result = await transform('hello', {} as any);
-
-    expect(result).toEqual({ transformed: 'hello' });
-    expect(importModule).toHaveBeenCalledWith(
-      path.resolve('/mock/base/path', 'transform.js'),
-      'myTransform',
-    );
-  });
-
-  it('should throw error for malformed file:// transform', async () => {
-    jest.mocked(importModule).mockResolvedValueOnce({});
-
-    await expect(createTransformRequest('file://invalid-transform.js')).rejects.toThrow(
-      /Request transform malformed/,
-    );
-  });
-
   it('should handle function-based transform', async () => {
     const transform = await createTransformRequest((prompt: string) => ({
       transformed: prompt.toUpperCase(),
@@ -316,13 +207,5 @@ describe('createTransformRequest', () => {
     const transform = await createTransformRequest('({ text: prompt, extra: vars.extra })');
     const result = await transform('hello', { extra: 'data' } as any);
     expect(result).toEqual({ text: 'hello', extra: 'data' });
-  });
-
-  it('should throw error for malformed file-based request transform', async () => {
-    jest.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
-
-    await expect(createTransformRequest('file://invalid-transform.js')).rejects.toThrow(
-      'Module not found',
-    );
   });
 });
