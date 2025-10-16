@@ -39,7 +39,7 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     export npm_config_platform=linux && \
     export npm_config_libc=musl && \
     # Install without running scripts to avoid architecture mismatches
-    npm ci --install-links --include=peer --ignore-scripts && \
+    npm install --install-links --include=peer --ignore-scripts && \
     # Rebuild all native modules for the correct architecture
     npm rebuild
 
