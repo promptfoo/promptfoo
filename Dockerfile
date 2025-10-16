@@ -29,7 +29,6 @@ ENV VITE_IS_HOSTED=1 \
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
-RUN echo "TARGETARCH: $TARGETARCH"
 # Leverage BuildKit cache and install architecture-specific binaries
 RUN if [ "$TARGETARCH" = "arm64" ]; then \
       export npm_config_arch=arm64; \
