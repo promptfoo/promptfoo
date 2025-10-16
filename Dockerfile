@@ -29,7 +29,7 @@ ENV VITE_IS_HOSTED=1 \
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
-RUN npm install @swc/core
+RUN npm install @swc/core-linux-musl -d
 # Leverage BuildKit cache
 RUN npm install --install-links --include=peer
 
