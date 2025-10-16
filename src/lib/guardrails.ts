@@ -61,7 +61,6 @@ export async function withRetries<TArgs, TResp>(
 
       if (!retryable || attempt > retryBudget) {
         clearTimeout(timeout);
-        // map final failure to provider_error
         throw providerError(
           `Provider request failed after ${attempt} attempt(s)`,
           {
@@ -75,14 +74,12 @@ export async function withRetries<TArgs, TResp>(
         );
       }
 
-      // Backoff with optional Retry-After
       let delay = Math.min(max, base * 2 ** (attempt - 1));
       if (respectRetryAfter && Number.isFinite(retryAfter) && retryAfter! > 0) {
         delay = Math.max(delay, retryAfter! * 1000);
       }
       await sleep(jitter(delay));
       clearTimeout(timeout);
-      // loop to retry
     }
   }
 }
