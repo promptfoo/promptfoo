@@ -191,6 +191,7 @@ interface EvalOutputPromptDialogProps {
   onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
   fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
   cloudConfig?: CloudConfigData | null;
+  readOnly?: boolean;
 }
 
 export default function EvalOutputPromptDialog({
@@ -211,6 +212,7 @@ export default function EvalOutputPromptDialog({
   onReplay,
   fetchTraces,
   cloudConfig,
+  readOnly = false,
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -492,7 +494,7 @@ export default function EvalOutputPromptDialog({
                 onMouseLeave={() => setHoveredElement(null)}
                 CodeDisplay={CodeDisplay}
                 subtitleTypographySx={subtitleTypographySx}
-                readOnly={!evaluationId}
+                readOnly={readOnly}
               />
               {hasOutputContent && (
                 <OutputsPanel
