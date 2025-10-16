@@ -225,7 +225,17 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   async getAuth(): Promise<IamAuthenticator | BearerTokenAuthenticator> {
-    const { IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core');
+    let IamAuthenticator: any;
+    let BearerTokenAuthenticator: any;
+
+    try {
+      ({ IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core'));
+    } catch (err) {
+      logger.error(`Error loading ibm-cloud-sdk-core: ${err}`);
+      throw new Error(
+        'The ibm-cloud-sdk-core package is required as a peer dependency. Please install it in your project or globally.',
+      );
+    }
 
     const apiKey =
       this.config.apiKey ||
@@ -306,13 +316,21 @@ export class WatsonXProvider implements ApiProvider {
     }
 
     const authenticator = await this.getAuth();
-    const { WatsonXAI } = await import('@ibm-cloud/watsonx-ai');
-    this.client = WatsonXAI.newInstance({
-      version: this.options.config.version || '2023-05-29',
-      serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
-      authenticator,
-    });
-    return this.client!;
+
+    try {
+      const { WatsonXAI } = await import('@ibm-cloud/watsonx-ai');
+      this.client = WatsonXAI.newInstance({
+        version: this.options.config.version || '2023-05-29',
+        serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
+        authenticator,
+      });
+      return this.client!;
+    } catch (err) {
+      logger.error(`Error loading @ibm-cloud/watsonx-ai: ${err}`);
+      throw new Error(
+        'The @ibm-cloud/watsonx-ai package is required as a peer dependency. Please install it in your project or globally.',
+      );
+    }
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {

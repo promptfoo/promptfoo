@@ -1,12 +1,12 @@
 import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 
-import {
+import type {
   BedrockRuntimeClient,
   InvokeModelWithBidirectionalStreamCommand,
-  type InvokeModelWithBidirectionalStreamInput,
+  InvokeModelWithBidirectionalStreamInput,
 } from '@aws-sdk/client-bedrock-runtime';
-import { NodeHttp2Handler } from '@smithy/node-http-handler';
+import type { NodeHttp2Handler } from '@smithy/node-http-handler';
 import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import logger from '../../logger';
@@ -63,21 +63,40 @@ const DEFAULT_CONFIG = {
 
 export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private sessions = new Map<string, SessionState>();
-  private bedrockClient: BedrockRuntimeClient;
+  private bedrockClient?: BedrockRuntimeClient;
   config: BedrockAmazonNovaSonicGenerationOptions;
 
   constructor(modelName: string = 'amazon.nova-sonic-v1:0', options: ProviderOptions = {}) {
     super(modelName, options);
     this.config = options.config;
-    this.bedrockClient = new BedrockRuntimeClient({
-      region: this.getRegion(),
-      requestHandler: new NodeHttp2Handler({
-        requestTimeout: 300000,
-        sessionTimeout: 300000,
-        disableConcurrentStreams: false,
-        maxConcurrentStreams: 20,
-      }),
-    });
+  }
+
+  private async getBedrockClient(): Promise<BedrockRuntimeClient> {
+    if (this.bedrockClient) {
+      return this.bedrockClient;
+    }
+
+    try {
+      const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
+      const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
+
+      this.bedrockClient = new BedrockRuntimeClient({
+        region: this.getRegion(),
+        requestHandler: new NodeHttp2Handler({
+          requestTimeout: 300000,
+          sessionTimeout: 300000,
+          disableConcurrentStreams: false,
+          maxConcurrentStreams: 20,
+        }),
+      });
+
+      return this.bedrockClient;
+    } catch (err) {
+      logger.error(`Error loading AWS SDK packages: ${err}`);
+      throw new Error(
+        'The @aws-sdk/client-bedrock-runtime and @smithy/node-http-handler packages are required for Nova Sonic provider. Please install them: npm install @aws-sdk/client-bedrock-runtime @smithy/node-http-handler',
+      );
+    }
   }
 
   private createSession(sessionId: string = randomUUID()): SessionState {
@@ -277,8 +296,14 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     });
 
     try {
+      // Get the Bedrock client and command class
+      const bedrockClient = await this.getBedrockClient();
+      const { InvokeModelWithBidirectionalStreamCommand } = await import(
+        '@aws-sdk/client-bedrock-runtime'
+      );
+
       // Process response stream
-      const request = this.bedrockClient.send(
+      const request = bedrockClient.send(
         new InvokeModelWithBidirectionalStreamCommand({
           modelId: this.modelName,
           body: this.createAsyncIterable(sessionId),
