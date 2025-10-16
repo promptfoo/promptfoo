@@ -39,14 +39,20 @@ ENV VITE_IS_HOSTED=1 \
 COPY package.json package-lock.json ./
 
 RUN echo "TARGETARCH: $TARGETARCH"
-# Pre-install platform-specific SWC binaries for Alpine (musl)
+
+# Install dependencies without running postinstall scripts to avoid SWC segfault
+RUN npm install --install-links --include=peer --ignore-scripts
+
+# Explicitly install the correct platform-specific SWC binary for Alpine/musl
+# These packages contain pre-built .node binary files in their npm tarballs
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
       npm install --no-save @swc/core-linux-x64-musl; \
     elif [ "$TARGETARCH" = "arm64" ]; then \
       npm install --no-save @swc/core-linux-arm64-musl; \
     fi
-# Install all dependencies - postinstall scripts will run but with correct binaries in place
-RUN npm install --install-links --include=peer
+
+# Now run postinstall scripts - SWC will find the correct binary already in node_modules
+RUN npm rebuild
 
 # Copy the rest of the application code
 COPY . .
