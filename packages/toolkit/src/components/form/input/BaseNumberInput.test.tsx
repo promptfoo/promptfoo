@@ -1,8 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BaseNumberInput } from './BaseNumberInput';
 
 const renderWithTheme = (component: React.ReactNode) => {
@@ -40,7 +41,7 @@ describe('BaseNumberInput', () => {
   it('provides undefined to onChange when the input is cleared', () => {
     const handleChange = vi.fn();
 
-    renderWithTheme(<BaseNumberInput label="Count" onChange={handleChange} />);
+    renderWithTheme(<BaseNumberInput label="Count" onChange={handleChange} value={2} />);
 
     const input = screen.getByLabelText('Count');
 
@@ -67,7 +68,7 @@ describe('BaseNumberInput', () => {
     const handleChange = vi.fn();
     const user = userEvent.setup();
 
-    renderWithTheme(<BaseNumberInput label="Amount" defaultValue={2} onChange={handleChange} />);
+    renderWithTheme(<BaseNumberInput label="Amount" value={2} onChange={handleChange} />);
 
     const input = screen.getByLabelText('Amount');
 
@@ -81,7 +82,7 @@ describe('BaseNumberInput', () => {
     const handleChange = vi.fn();
     const user = userEvent.setup();
 
-    renderWithTheme(<BaseNumberInput label="Score" defaultValue={10} onChange={handleChange} />);
+    renderWithTheme(<BaseNumberInput label="Score" value={10} onChange={handleChange} />);
 
     const input = screen.getByLabelText('Score');
 
@@ -96,7 +97,7 @@ describe('BaseNumberInput', () => {
     const user = userEvent.setup();
 
     renderWithTheme(
-      <BaseNumberInput label="Non-negative" defaultValue={1} min={0} onChange={handleChange} />,
+      <BaseNumberInput label="Non-negative" value={1} min={0} onChange={handleChange} />,
     );
 
     const input = screen.getByLabelText('Non-negative');
@@ -130,7 +131,7 @@ describe('BaseNumberInput', () => {
     const handleChange = vi.fn();
     const user = userEvent.setup();
 
-    renderWithTheme(<BaseNumberInput label="Integer" defaultValue={4} onChange={handleChange} />);
+    renderWithTheme(<BaseNumberInput label="Integer" value={4} onChange={handleChange} />);
 
     const input = screen.getByLabelText('Integer');
 

@@ -17,7 +17,7 @@ export interface BaseNumberInputProps extends Omit<TextFieldProps, 'onChange'> {
 export function BaseNumberInput({
   type = 'number',
   onChange,
-  value,
+  value = '',
   slotProps,
   min,
   max,

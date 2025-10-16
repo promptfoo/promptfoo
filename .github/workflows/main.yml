@@ -134,7 +134,7 @@ jobs:
 
       - name: Check Dependency Versions
         run: |
-          npx check-dependency-version-consistency
+          npx check-dependency-version-consistency --ignore-dep promptfoo-toolkit --ignore-dep storybook
 
       - name: Check for circular dependencies
         run: |
@@ -243,6 +243,29 @@ jobs:
         working-directory: site
         run: npm run build
 
+  toolkit:
+    name: toolkit tests
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Use Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build deps
+        run: npm run build:toolkit
+
+      - name: Run Toolkit Tests
+        run: npm run test:toolkit
+
   webui:
     name: webui tests
     timeout-minutes: 5
@@ -259,6 +282,9 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
+
+      - name: Build deps
+        run: npm run build:toolkit
 
       - name: Run App Tests
         run: npm run test:app

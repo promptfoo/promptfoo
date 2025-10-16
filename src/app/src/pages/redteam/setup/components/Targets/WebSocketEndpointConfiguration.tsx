@@ -1,6 +1,5 @@
 import { useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import { Switch } from '@mui/material';
 import Box from '@mui/material/Box';
 import FormHelperText from '@mui/material/FormHelperText';
@@ -9,6 +8,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
 import Prism from 'prismjs';
+import { BaseNumberInput } from 'promptfoo-toolkit';
 import Editor from 'react-simple-code-editor';
 import {
   DEFAULT_WEBSOCKET_STREAM_RESPONSE,

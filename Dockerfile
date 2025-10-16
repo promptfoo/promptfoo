@@ -14,11 +14,12 @@ RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl &&
 # Install dependencies only when needed
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat build-base
 WORKDIR /app
 
 ARG VITE_PUBLIC_BASENAME
 ARG PROMPTFOO_REMOTE_API_BASE_URL
+ARG TARGETARCH
 
 # Set environment variables for the build
 ENV VITE_IS_HOSTED=1 \
@@ -28,19 +29,32 @@ ENV VITE_IS_HOSTED=1 \
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
-# Leverage BuildKit cache
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --install-links --include=peer
+# Leverage BuildKit cache and install architecture-specific binaries
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+      export npm_config_arch=arm64; \
+    elif [ "$TARGETARCH" = "amd64" ]; then \
+      export npm_config_arch=x64; \
+    fi && \
+    export npm_config_platform=linux && \
+    export npm_config_libc=musl && \
+    # Install without running scripts to avoid architecture mismatches
+    npm install --install-links --include=peer --ignore-scripts && \
+    # Rebuild all native modules for the correct architecture
+    npm rebuild
 
 # Copy the rest of the application code
 COPY . .
+
+WORKDIR /app/packages/toolkit
+RUN npm install
 
 # Run npm install for the react app
 WORKDIR /app/src/app
 RUN npm install
 
 WORKDIR /app
-RUN npm run build
+
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 FROM base AS server
 WORKDIR /app

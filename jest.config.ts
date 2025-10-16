@@ -17,6 +17,7 @@ const config: Config = {
     '<rootDir>/examples',
     '<rootDir>/node_modules',
     '<rootDir>/src/app',
+    '<rootDir>/packages/toolkit',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
