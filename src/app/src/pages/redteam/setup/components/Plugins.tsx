@@ -24,6 +24,10 @@ import CustomPoliciesTab from './CustomPoliciesTab';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
 import type { LocalPluginConfig } from '../types';
+import Stack from '@mui/material/Stack';
+import Tooltip from '@mui/material/Tooltip';
+import IconButton from '@mui/material/IconButton';
+import InfoIcon from '@mui/icons-material/Info';
 
 interface PluginsProps {
   onNext: () => void;
@@ -31,6 +35,81 @@ interface PluginsProps {
 }
 
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
+
+const TITLE_BY_TAB: Record<number, string> = {
+  0: 'Plugins',
+  1: 'Custom Intents',
+  2: 'Custom Policies',
+};
+
+const DESCRIPTIONS_BY_TAB: Record<number, React.ReactNode> = {
+  // plugins:
+  0: (
+    <Stack spacing={2}>
+      <Typography variant="body1">
+        Plugins are Promptfoo's modular system for testing a variety of risks and vulnerabilities in
+        LLM models and LLM-powered applications. Each plugin is a trained model that produces
+        malicious payloads targeting specific weaknesses.{' '}
+        <RouterLink
+          style={{ textDecoration: 'underline' }}
+          to="https://www.promptfoo.dev/docs/red-team/plugins/"
+          target="_blank"
+        >
+          Learn More
+        </RouterLink>
+      </Typography>
+
+      <Typography variant="body1">
+        Select the red-team plugins that align with your security testing objectives.
+      </Typography>
+    </Stack>
+  ),
+  // custom intents
+  1: (
+    <Typography variant="body1">
+      <span>
+        Intents are seed phrases for attack generation, for example "teach me how to cook meth".
+        Promptfoo transforms each intent into a sophisticated attacks using jailbreak strategies.
+      </span>{' '}
+      <Tooltip
+        title={
+          <Box>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Supported file formats:</strong>
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              • <strong>CSV:</strong> First column used, requires header row
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              • <strong>JSON:</strong> Array of strings or nested arrays for multi-step intents
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              <strong>JSON examples:</strong>
+            </Typography>
+            <Typography variant="body2" component="pre" sx={{ fontSize: '0.7rem', mt: 0.5 }}>
+              {`["intent1", "intent2"]
+[["step1", "step2"], "single_intent"]`}
+            </Typography>
+          </Box>
+        }
+        arrow
+        placement="top"
+      >
+        <IconButton size="small">
+          <InfoIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Typography>
+  ),
+  // custom policies
+  2: (
+    <Typography variant="body1">
+      Custom policies define rules that the AI should follow. These are used to test if the AI
+      adheres to your specific guidelines and constraints. You can add policies manually or upload a
+      CSV file (first column will be used as policies).
+    </Typography>
+  ),
+};
 
 // TabPanel component for conditional rendering
 interface TabPanelProps {
@@ -298,27 +377,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   return (
     <PageWrapper
-      title="Plugins"
-      description={
-        <Box sx={{ maxWidth: '1200px' }}>
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            Plugins are Promptfoo's modular system for testing a variety of risks and
-            vulnerabilities in LLM models and LLM-powered applications. Each plugin is a trained
-            model that produces malicious payloads targeting specific weaknesses.{' '}
-            <RouterLink
-              style={{ textDecoration: 'underline' }}
-              to="https://www.promptfoo.dev/docs/red-team/plugins/"
-              target="_blank"
-            >
-              Learn More
-            </RouterLink>
-          </Typography>
-
-          <Typography variant="body1">
-            Select the red-team plugins that align with your security testing objectives.
-          </Typography>
-        </Box>
-      }
+      title={TITLE_BY_TAB[activeTab]}
+      description={<Box sx={{ maxWidth: '1200px' }}>{DESCRIPTIONS_BY_TAB[activeTab]}</Box>}
       onNext={onNext}
       onBack={onBack}
       nextDisabled={!isConfigValid() || !hasAnyPluginsConfigured()}

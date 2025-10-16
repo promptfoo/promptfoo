@@ -382,41 +382,6 @@ export default function CustomIntentSection() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Alert severity="info">
-          Intents are seed phrases for attack generation, for example "teach me how to cook meth".
-          Promptfoo transforms each intent into a sophisticated attacks using jailbreak strategies.
-        </Alert>
-        <Tooltip
-          title={
-            <Box>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                <strong>Supported file formats:</strong>
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                • <strong>CSV:</strong> First column used, requires header row
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                • <strong>JSON:</strong> Array of strings or nested arrays for multi-step intents
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                <strong>JSON examples:</strong>
-              </Typography>
-              <Typography variant="body2" component="pre" sx={{ fontSize: '0.7rem', mt: 0.5 }}>
-                {`["intent1", "intent2"]
-[["step1", "step2"], "single_intent"]`}
-              </Typography>
-            </Box>
-          }
-          arrow
-          placement="top"
-        >
-          <IconButton size="small">
-            <InfoIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Box>
-
       {uploadError && (
         <Alert severity="error" onClose={() => setUploadError(null)}>
           {uploadError}
