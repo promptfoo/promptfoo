@@ -249,7 +249,7 @@ export async function extensionHook(hookName, context) {
 }
 ```
 
-See the working [dynamic-session-ids example](https://github.com/promptfoo/promptfoo/tree/main/examples/dynamic-session-ids) for a complete implementation.
+See the working [stateful-session-management example](https://github.com/promptfoo/promptfoo/tree/main/examples/stateful-session-management) for a complete implementation.
 
 #### Test-Time Session Definition
 

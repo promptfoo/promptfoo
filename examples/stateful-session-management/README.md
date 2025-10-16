@@ -1,11 +1,11 @@
-# dynamic-session-ids
+# stateful-session-management
 
 This example demonstrates how to use server-generated UUIDs to identify test cases and maintain server-side conversation history when a test case has multiple turns. It is useful when your provider/target generates unique identifiers to stitch together messages into a conversation "threads".
 
 ## Quick Start
 
 ```sh
-npx promptfoo@latest init --example dynamic-session-ids
+npx promptfoo@latest init --example stateful-session-management
 ```
 
 ## Requirements
