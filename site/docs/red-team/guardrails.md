@@ -40,7 +40,7 @@ Adaptive guardrails operate as **input guardrails**, validating user prompts bef
 - **Custom Learning**: Generates policies from YOUR red team findings, not generic categories
 - **Self-Improving Protection**: Automatically updates as new vulnerabilities are discovered
 - **Target-Specific Policies**: Each guardrail tailored to one application's unique attack surface
-- **AI-Powered Analysis**: Uses GPT-4o-mini to analyze jailbreak patterns and generate targeted policies
+- **AI-Powered Analysis**: Uses Claude 4.5 Sonnet to analyze jailbreak patterns and generate targeted policies
 - **Real-Time Validation**: REST API endpoint validates prompts in 200-500ms
 - **Manual Policy Control**: Add custom business policies that persist across automated updates
 
@@ -909,9 +909,7 @@ Ready to implement adaptive guardrails? Here are your next steps:
 **Enterprise Features:**
 
 - [Enterprise Overview](/docs/enterprise/)
-- [Team Management](/docs/guides/teams/)
-- [Custom Deployment](/docs/deployment/)
-- [Evaluation Analytics](/docs/guides/analytics/)
+- [Team Management](/docs/enterprise/teams/)
 
 ### Need Help?
 
