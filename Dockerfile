@@ -15,7 +15,14 @@ RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl &&
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 # Add build tools needed for @swc/core and other native dependencies
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache \
+    libc6-compat \
+    build-base \
+    g++ \
+    make \
+    python3-dev \
+    linux-headers \
+    libstdc++
 WORKDIR /app
 
 ARG VITE_PUBLIC_BASENAME
@@ -29,9 +36,10 @@ ENV VITE_IS_HOSTED=1 \
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
-# Pre-install platform-specific SWC binaries for Alpine (musl) to update package-lock.json
-RUN npm install --save-optional @swc/core-linux-musl-x64 @swc/core-linux-musl-arm64
-# Leverage BuildKit cache
+# Pre-install platform-specific SWC binaries for Alpine (musl)
+# This ensures the correct binaries are available when @swc/core postinstall runs
+RUN npm install --no-save @swc/core-linux-musl-x64
+# Install all dependencies - postinstall scripts will run but with correct binaries in place
 RUN npm install --install-links --include=peer
 
 # Copy the rest of the application code
