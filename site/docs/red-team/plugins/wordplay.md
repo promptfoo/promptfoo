@@ -74,7 +74,7 @@ By incorporating the Wordplay plugin in your LLM red teaming strategy, you can i
 ## Related Concepts
 
 - [Harmful Content](harmful.md)
-- [Prompt Injection](prompt-injection.md)
+- [Prompt Injection](/docs/red-team/strategies/prompt-injection/)
 - [Hijacking](hijacking.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
