@@ -153,7 +153,7 @@ describe('CustomPoliciesSection', () => {
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalled();
-        
+
         expect(mockShowToast).toHaveBeenCalledWith(
           'Successfully imported 2 policies from CSV',
           'success',
@@ -204,7 +204,10 @@ describe('CustomPoliciesSection', () => {
       });
 
       await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith('No valid policies found in CSV file', 'warning');
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'No valid policies found in CSV file',
+          'warning',
+        );
       });
     });
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -18,7 +18,6 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import {
   DataGrid,
   type GridColDef,
@@ -165,7 +164,7 @@ export const CustomPoliciesSection = () => {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [editingRowId, setEditingRowId] = useState<number | null>(null);
   const [autoEditRowId, setAutoEditRowId] = useState<number | null>(null);
-  
+
   // Track custom names for policies (by index)
   const [policyNames, setPolicyNames] = useState<Record<number, string>>({});
 
@@ -188,7 +187,7 @@ export const CustomPoliciesSection = () => {
 
   // Auto-edit newly added rows
   useEffect(() => {
-    if (autoEditRowId !== null && rows.some(row => row.id === autoEditRowId)) {
+    if (autoEditRowId !== null && rows.some((row) => row.id === autoEditRowId)) {
       // Row has been rendered, start edit mode
       apiRef.current.startRowEditMode({ id: autoEditRowId });
       setEditingRowId(autoEditRowId);
@@ -214,7 +213,7 @@ export const CustomPoliciesSection = () => {
 
     // Update the config state
     updateConfig('plugins', [...otherPlugins, ...newPolicies]);
-    
+
     // Set the new row to be auto-edited (id will be the current length)
     setAutoEditRowId(policyPlugins.length);
   };
@@ -334,7 +333,7 @@ export const CustomPoliciesSection = () => {
           ];
 
           updateConfig('plugins', [...otherPlugins, ...allPolicies]);
-          
+
           toast.showToast(
             `Successfully imported ${newPolicies.length} policies from CSV`,
             'success',
@@ -352,57 +351,60 @@ export const CustomPoliciesSection = () => {
     [config.plugins, policyPlugins, toast, updateConfig],
   );
 
-  const handleGenerateTestCase = useCallback(async (row: PolicyRow) => {
-    if (!row.policyText || !row.policyText.trim()) {
-      toast.showToast('Please enter a policy before generating a test case', 'warning');
-      return;
-    }
-
-    setGeneratingPolicyIndex(row.id);
-    setGeneratedTestCase(null);
-    setGeneratingTestCase(true);
-    setTestCaseDialogOpen(true);
-
-    try {
-      recordEvent('feature_used', {
-        feature: 'redteam_policy_generate_test_case',
-        plugin: 'policy',
-      });
-
-      const response = await callApi('/redteam/generate-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          pluginId: 'policy',
-          config: {
-            policy: row.policyText,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate test case');
+  const handleGenerateTestCase = useCallback(
+    async (row: PolicyRow) => {
+      if (!row.policyText || !row.policyText.trim()) {
+        toast.showToast('Please enter a policy before generating a test case', 'warning');
+        return;
       }
 
-      const data = await response.json();
-      setGeneratedTestCase({
-        prompt: data.prompt || '',
-        context: data.context || row.policyText,
-      });
-    } catch (error) {
-      console.error('Error generating test case:', error);
-      toast.showToast(
-        `Failed to generate test case: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
-      );
-      setTestCaseDialogOpen(false);
-    } finally {
-      setGeneratingTestCase(false);
-    }
-  }, [toast, recordEvent]);
+      setGeneratingPolicyIndex(row.id);
+      setGeneratedTestCase(null);
+      setGeneratingTestCase(true);
+      setTestCaseDialogOpen(true);
+
+      try {
+        recordEvent('feature_used', {
+          feature: 'redteam_policy_generate_test_case',
+          plugin: 'policy',
+        });
+
+        const response = await callApi('/redteam/generate-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            pluginId: 'policy',
+            config: {
+              policy: row.policyText,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to generate test case');
+        }
+
+        const data = await response.json();
+        setGeneratedTestCase({
+          prompt: data.prompt || '',
+          context: data.context || row.policyText,
+        });
+      } catch (error) {
+        console.error('Error generating test case:', error);
+        toast.showToast(
+          `Failed to generate test case: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          'error',
+        );
+        setTestCaseDialogOpen(false);
+      } finally {
+        setGeneratingTestCase(false);
+      }
+    },
+    [toast, recordEvent],
+  );
 
   const handleCloseTestCaseDialog = () => {
     setTestCaseDialogOpen(false);
@@ -411,20 +413,29 @@ export const CustomPoliciesSection = () => {
     setGeneratingTestCase(false);
   };
 
-  const handleEditClick = useCallback((row: PolicyRow) => {
-    setEditingRowId(row.id);
-    apiRef.current.startRowEditMode({ id: row.id });
-  }, [apiRef]);
+  const handleEditClick = useCallback(
+    (row: PolicyRow) => {
+      setEditingRowId(row.id);
+      apiRef.current.startRowEditMode({ id: row.id });
+    },
+    [apiRef],
+  );
 
-  const handleSaveClick = useCallback((row: PolicyRow) => {
-    apiRef.current.stopRowEditMode({ id: row.id });
-    setEditingRowId(null);
-  }, [apiRef]);
+  const handleSaveClick = useCallback(
+    (row: PolicyRow) => {
+      apiRef.current.stopRowEditMode({ id: row.id });
+      setEditingRowId(null);
+    },
+    [apiRef],
+  );
 
-  const handleCancelClick = useCallback((row: PolicyRow) => {
-    apiRef.current.stopRowEditMode({ id: row.id, ignoreModifications: true });
-    setEditingRowId(null);
-  }, [apiRef]);
+  const handleCancelClick = useCallback(
+    (row: PolicyRow) => {
+      apiRef.current.stopRowEditMode({ id: row.id, ignoreModifications: true });
+      setEditingRowId(null);
+    },
+    [apiRef],
+  );
 
   const handleRowEditStart = useCallback((params: GridRowEditStartParams) => {
     setEditingRowId(params.id as number);
@@ -474,12 +485,12 @@ export const CustomPoliciesSection = () => {
         filterable: false,
         renderCell: (params: GridRenderCellParams<PolicyRow>) => {
           const isEditing = editingRowId === params.row.id;
-          
+
           return (
-            <Box 
-              sx={{ 
-                display: 'flex', 
-                gap: 0.5, 
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 0.5,
                 alignItems: 'center',
                 height: '100%',
                 py: 1,
@@ -488,12 +499,20 @@ export const CustomPoliciesSection = () => {
               {isEditing ? (
                 <>
                   <Tooltip title="Save">
-                    <IconButton size="small" onClick={() => handleSaveClick(params.row)} color="primary">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleSaveClick(params.row)}
+                      color="primary"
+                    >
                       <CheckIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Cancel">
-                    <IconButton size="small" onClick={() => handleCancelClick(params.row)} color="error">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleCancelClick(params.row)}
+                      color="error"
+                    >
                       <CloseIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -517,41 +536,47 @@ export const CustomPoliciesSection = () => {
         },
       },
     ],
-    [generatingTestCase, generatingPolicyIndex, editingRowId, handleEditClick, handleSaveClick, handleCancelClick, handleGenerateTestCase],
+    [
+      generatingTestCase,
+      generatingPolicyIndex,
+      editingRowId,
+      handleEditClick,
+      handleSaveClick,
+      handleCancelClick,
+      handleGenerateTestCase,
+    ],
   );
 
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="body2" color="text.secondary">
-        Custom policies define rules that the AI should follow. These are used to test if the AI
-        adheres to your specific guidelines and constraints. You can add policies manually or upload
-        a CSV file (first column will be used as policies).
-      </Typography>
+  const containerRef = useRef<HTMLDivElement>(null);
 
-      <DataGrid
-        apiRef={apiRef}
-        rows={rows}
-        columns={columns}
-        checkboxSelection
-        disableRowSelectionOnClick
-        processRowUpdate={processRowUpdate}
-        slots={{ toolbar: CustomToolbar }}
-        slotProps={{
-          toolbar: {
-            selectedCount: rowSelectionModel.length,
-            onDeleteSelected: handleDeleteSelected,
-            onAddPolicy: handleAddPolicy,
-            onUploadCsv: handleCsvUpload,
-            isUploadingCsv,
-          },
-        }}
-        onRowSelectionModelChange={setRowSelectionModel}
-        rowSelectionModel={rowSelectionModel}
-        onRowEditStart={handleRowEditStart}
-        onRowEditStop={handleRowEditStop}
-        editMode="row"
-        getRowHeight={(params) => (params.id === editingRowId ? 'auto' : 52)}
-      />
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} ref={containerRef}>
+      <Box sx={{ height: containerRef.current?.clientHeight ?? 500 }}>
+        <DataGrid
+          apiRef={apiRef}
+          rows={rows}
+          columns={columns}
+          checkboxSelection
+          disableRowSelectionOnClick
+          processRowUpdate={processRowUpdate}
+          slots={{ toolbar: CustomToolbar }}
+          slotProps={{
+            toolbar: {
+              selectedCount: rowSelectionModel.length,
+              onDeleteSelected: handleDeleteSelected,
+              onAddPolicy: handleAddPolicy,
+              onUploadCsv: handleCsvUpload,
+              isUploadingCsv,
+            },
+          }}
+          onRowSelectionModelChange={setRowSelectionModel}
+          rowSelectionModel={rowSelectionModel}
+          onRowEditStart={handleRowEditStart}
+          onRowEditStop={handleRowEditStop}
+          editMode="row"
+          getRowHeight={(params) => (params.id === editingRowId ? 'auto' : 52)}
+        />
+      </Box>
 
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
