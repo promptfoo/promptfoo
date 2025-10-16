@@ -1486,6 +1486,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Dataset',
