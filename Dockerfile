@@ -14,15 +14,7 @@ RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl &&
 # Install dependencies only when needed
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-# Add build tools needed for @swc/core and other native dependencies
-RUN apk add --no-cache \
-    libc6-compat \
-    build-base \
-    g++ \
-    make \
-    python3-dev \
-    linux-headers \
-    libstdc++
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 ARG VITE_PUBLIC_BASENAME
@@ -37,22 +29,20 @@ ENV VITE_IS_HOSTED=1 \
 
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
-
-RUN echo "TARGETARCH: $TARGETARCH"
-
-# Install dependencies without running postinstall scripts to avoid SWC segfault
-RUN npm install --install-links --include=peer --ignore-scripts
-
-# Explicitly install the correct platform-specific SWC binary for Alpine/musl
-# These packages contain pre-built .node binary files in their npm tarballs
-RUN if [ "$TARGETARCH" = "amd64" ]; then \
-      npm install --no-save @swc/core-linux-x64-musl; \
-    elif [ "$TARGETARCH" = "arm64" ]; then \
-      npm install --no-save @swc/core-linux-arm64-musl; \
-    fi
-
-# Now run postinstall scripts - SWC will find the correct binary already in node_modules
-RUN npm rebuild
+# Leverage BuildKit cache and install architecture-specific binaries
+RUN --mount=type=cache,target=/root/.npm \
+    # Set npm config for the target architecture
+    if [ "$TARGETARCH" = "arm64" ]; then \
+      npm config set arch arm64 && \
+      npm config set platform linux; \
+    elif [ "$TARGETARCH" = "amd64" ]; then \
+      npm config set arch x64 && \
+      npm config set platform linux; \
+    fi && \
+    # Remove platform-specific entries from lock file and reinstall
+    rm -f package-lock.json && \
+    npm install --install-links --include=peer --omit=dev --package-lock-only && \
+    npm ci --install-links --include=peer
 
 # Copy the rest of the application code
 COPY . .
