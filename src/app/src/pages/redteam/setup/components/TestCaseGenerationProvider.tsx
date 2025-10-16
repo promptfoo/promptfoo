@@ -173,11 +173,14 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
     [redTeamConfig, recordEvent, toast],
   );
 
-  const openDialog = useCallback((pluginId: string | Plugin, mode: 'config' | 'result' = 'result') => {
-    setCurrentPlugin(pluginId);
-    setDialogMode(mode);
-    setIsDialogOpen(true);
-  }, []);
+  const openDialog = useCallback(
+    (pluginId: string | Plugin, mode: 'config' | 'result' = 'result') => {
+      setCurrentPlugin(pluginId);
+      setDialogMode(mode);
+      setIsDialogOpen(true);
+    },
+    [],
+  );
 
   const closeDialog = useCallback(() => {
     setIsDialogOpen(false);
@@ -226,4 +229,3 @@ export const useTestCaseGeneration = () => {
   }
   return context;
 };
-

@@ -69,12 +69,9 @@ export const CustomPoliciesSection = () => {
   const [isInitialMount, setIsInitialMount] = useState(true);
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
-  
+
   // Test case generation state - now from context
-  const {
-    generateTestCase,
-    isGenerating: generatingTestCase,
-  } = useTestCaseGeneration();
+  const { generateTestCase, isGenerating: generatingTestCase } = useTestCaseGeneration();
   const [policies, setPolicies] = useState<PolicyInstance[]>(() => {
     // Initialize from existing config or create a default empty policy
     const existingPolicies = config.plugins
