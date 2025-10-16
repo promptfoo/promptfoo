@@ -113,7 +113,6 @@
     "google-auth-library": "^10.3.0",
     "ibm-cloud-sdk-core": "^5.4.3",
     "langfuse": "^3.38.5",
-    "natural": "^8.1.0",
     "node-sql-parser": "^5.3.12",
     "pdf-parse": "^1.1.1",
     "playwright": "^1.56.0",
@@ -180,7 +179,6 @@
     "knip": "^5.65.0",
     "langfuse": "^3.38.5",
     "madge": "^8.0.0",
-    "natural": "^8.1.0",
     "nock": "^14.0.10",
     "node-sql-parser": "^5.3.12",
     "nodemon": "^3.1.10",
@@ -212,7 +210,8 @@
     "@swc/core-darwin-x64": "^1.13.20",
     "@swc/core-linux-x64-gnu": "^1.13.20",
     "@swc/core-linux-x64-musl": "^1.13.20",
-    "@swc/core-win32-x64-msvc": "^1.13.20"
+    "@swc/core-win32-x64-msvc": "^1.13.20",
+    "natural": "^8.1.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",

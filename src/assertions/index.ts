@@ -150,12 +150,16 @@ const ASSERTION_HANDLERS: Record<
       const { handleMeteorAssertion } = await import('./meteor');
       return handleMeteorAssertion(params);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Cannot find module')) {
+      if (
+        error instanceof Error &&
+        (error.message.includes('Cannot find module') ||
+          error.message.includes('natural" package is required'))
+      ) {
         return {
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@latest',
           assertion: params.assertion,
         };
       }
