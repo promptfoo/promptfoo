@@ -43,7 +43,7 @@ jest.mock('../../src/util/file', () => ({
 }));
 
 jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(async (modulePath: string, functionName?: string) => {
+  importModule: jest.fn(async (_modulePath: string, functionName?: string) => {
     const mockModule = {
       default: jest.fn((data) => data.defaultField),
       parseResponse: jest.fn((data) => data.specificField),
@@ -1244,7 +1244,7 @@ describe('HttpProvider', () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         body: { key: 'value' },
-        transformResponse: (json: any, text: string) => ({ custom: json.result }),
+        transformResponse: (json: any, _text: string) => ({ custom: json.result }),
       },
     });
 
@@ -2091,8 +2091,8 @@ describe('HttpProvider', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: { key: '{{ prompt }}' },
-          responseParser: (data: any) => ({ chat_history: 'from responseParser' }),
-          transformResponse: (data: any) => ({ chat_history: 'from transformResponse' }),
+          responseParser: (_data: any) => ({ chat_history: 'from responseParser' }),
+          transformResponse: (_data: any) => ({ chat_history: 'from transformResponse' }),
         },
       });
       const mockResponse = {
@@ -2657,6 +2657,7 @@ describe('response handling', () => {
     expect(result.metadata).toEqual({
       http: {
         headers: mockHeaders,
+        requestHeaders: {},
         status: 200,
         statusText: 'OK',
       },
@@ -2719,6 +2720,7 @@ describe('response handling', () => {
     expect(result.raw).toEqual(mockData);
     expect(result.metadata).toHaveProperty('http', {
       headers: mockHeaders,
+      requestHeaders: {},
       status: 200,
       statusText: 'OK',
     });
@@ -2788,6 +2790,7 @@ describe('response handling', () => {
     expect(result.raw).toEqual(mockData);
     expect(result.metadata).toHaveProperty('http', {
       headers: mockHeaders,
+      requestHeaders: {},
       status: 200,
       statusText: 'OK',
     });
