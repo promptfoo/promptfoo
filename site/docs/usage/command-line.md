@@ -53,11 +53,12 @@ The `promptfoo` command line utility supports the following subcommands:
 
 Most commands support the following common options:
 
-| Option                          | Description       |
-| ------------------------------- | ----------------- |
-| `--env-file, --env-path <path>` | Path to .env file |
-| `-v, --verbose`                 | Show debug logs   |
-| `--help`                        | Display help      |
+| Option                          | Description                                                           |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `--env-file, --env-path <path>` | Path to .env file                                                     |
+| `--log-file <path>`             | Write logs to specified file (in addition to console and default log) |
+| `-v, --verbose`                 | Show debug logs                                                       |
+| `--help`                        | Display help                                                          |
 
 ## `promptfoo eval`
 
