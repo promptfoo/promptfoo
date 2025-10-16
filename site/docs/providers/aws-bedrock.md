@@ -493,7 +493,7 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
 ```yaml
 config:
