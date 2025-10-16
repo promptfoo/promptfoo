@@ -1,6 +1,5 @@
 import path from 'path';
 
-import { DefaultAzureCredential } from '@azure/identity';
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
@@ -117,6 +116,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     try {
       // Dynamic import to avoid bundling issues
       const { AIProjectClient } = await import('@azure/ai-projects');
+      const { DefaultAzureCredential } = await import('@azure/identity');
 
       // Patch: Ensure type compatibility for Agent.name (string | null -> string)
       // @ts-expect-error: Suppress type incompatibility due to upstream SDK types

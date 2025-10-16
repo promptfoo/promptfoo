@@ -129,6 +129,7 @@ export interface ProviderResponse {
       status: number;
       statusText: string;
       headers: Record<string, string>;
+      requestHeaders?: Record<string, string>;
     };
     [key: string]: any;
   };

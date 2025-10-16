@@ -16,11 +16,6 @@ vi.mock('./Citations', () => ({
 
 vi.mock('./DebuggingPanel', () => {
   const MockDebuggingPanel = vi.fn((props) => {
-    if (props.onTraceSectionVisibilityChange) {
-      queueMicrotask(() => {
-        props.onTraceSectionVisibilityChange(false);
-      });
-    }
     return (
       <div data-testid="mock-debugging-panel" data-prompt-index={props.promptIndex}>
         Mock DebuggingPanel
@@ -36,7 +31,13 @@ const mockOnClose = vi.fn();
 const mockAddFilter = vi.fn();
 const mockResetFilters = vi.fn();
 const mockReplayEvaluation = vi.fn();
-const mockFetchTraces = vi.fn();
+const mockFetchTraces = vi.fn().mockResolvedValue([
+  {
+    traceId: 'trace-1',
+    testCaseId: 'test-case-id',
+    spans: [{ spanId: 'span-1', name: 'test-span' }],
+  },
+]);
 
 const mockCloudConfig = {
   appUrl: 'https://cloud.example.com',
@@ -329,6 +330,11 @@ describe('EvalOutputPromptDialog', () => {
     const promptIndex = 5;
     render(<EvalOutputPromptDialog {...defaultProps} promptIndex={promptIndex} />);
 
+    // Wait for traces to be fetched
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
     const tracesTab = screen.getByText('Traces');
     await userEvent.click(tracesTab);
 
@@ -340,8 +346,13 @@ describe('EvalOutputPromptDialog', () => {
     );
   });
 
-  it('passes undefined promptIndex to DebuggingPanel when promptIndex is not provided', () => {
+  it('passes undefined promptIndex to DebuggingPanel when promptIndex is not provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} promptIndex={undefined} />);
+
+    // Wait for traces to be fetched
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
 
     const tracesTab = screen.getByRole('tab', { name: /traces/i });
     fireEvent.click(tracesTab);
@@ -350,11 +361,16 @@ describe('EvalOutputPromptDialog', () => {
     expect(debuggingPanel.getAttribute('data-prompt-index')).toBeNull();
   });
 
-  it('passes promptIndex to DebuggingPanel when testIndex is undefined', () => {
+  it('passes promptIndex to DebuggingPanel when testIndex is undefined', async () => {
     const promptIndex = 1;
     render(
       <EvalOutputPromptDialog {...defaultProps} testIndex={undefined} promptIndex={promptIndex} />,
     );
+
+    // Wait for traces to be fetched
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
 
     const tracesTab = screen.getByText('Traces');
     fireEvent.click(tracesTab);
@@ -365,16 +381,6 @@ describe('EvalOutputPromptDialog', () => {
       }),
       expect.anything(),
     );
-  });
-
-  it('hides trace section but keeps Traces tab visible when onTraceSectionVisibilityChange is called with false', async () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    expect(screen.queryByTestId('mock-debugging-panel')).not.toBeInTheDocument();
-
-    expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
   });
 
   it('displays the main tab label as "Prompt" when there is no output content', () => {
@@ -873,5 +879,91 @@ describe('EvalOutputPromptDialog cloud config', () => {
     // Should just show the policy name without link
     expect(screen.getByText('Test Policy')).toBeInTheDocument();
     expect(screen.queryByText('View policy in Promptfoo Cloud')).not.toBeInTheDocument();
+  });
+});
+
+describe('EvalOutputPromptDialog traces tab visibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should show Traces tab when fetchTraces returns trace data', async () => {
+    const propsWithTraces = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: vi.fn().mockResolvedValue([
+        {
+          traceId: 'trace-1',
+          testCaseId: 'test-case-id',
+          spans: [{ spanId: 'span-1', name: 'test-span' }],
+        },
+      ]),
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithTraces} />);
+
+    // Wait for traces to be fetched
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when fetchTraces returns empty array', async () => {
+    const propsWithoutTraces = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: vi.fn().mockResolvedValue([]),
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutTraces} />);
+
+    // Wait for traces to be fetched
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when fetchTraces is not provided', () => {
+    const propsWithoutFetchTraces = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: undefined,
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutFetchTraces} />);
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when evaluationId is not provided', () => {
+    const propsWithoutEvaluationId = {
+      ...defaultProps,
+      evaluationId: undefined,
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutEvaluationId} />);
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when fetchTraces fails', async () => {
+    const propsWithFailedFetch = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: vi.fn().mockRejectedValue(new Error('Fetch failed')),
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithFailedFetch} />);
+
+    // Wait for traces fetch to fail
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
   });
 });

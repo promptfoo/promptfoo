@@ -13,10 +13,10 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a comm
 
 1. Ensure you have access to the desired models under the [Providers](https://console.aws.amazon.com/bedrock/home) page in Amazon Bedrock.
 
-2. Install `@aws-sdk/client-bedrock-runtime`:
+2. Install the `@aws-sdk/client-bedrock-runtime` package:
 
    ```sh
-   npm install -g @aws-sdk/client-bedrock-runtime
+   npm install @aws-sdk/client-bedrock-runtime
    ```
 
 3. The AWS SDK will automatically pull credentials from the following locations:
@@ -493,7 +493,7 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
 ```yaml
 config:
@@ -1039,10 +1039,10 @@ AWS Bedrock Knowledge Bases provide Retrieval Augmented Generation (RAG) functio
 To use the Knowledge Base provider, you need:
 
 1. An existing Knowledge Base created in AWS Bedrock
-2. Install the required SDK:
+2. Install the `@aws-sdk/client-bedrock-agent-runtime` package:
 
    ```sh
-   npm install -g @aws-sdk/client-bedrock-agent-runtime
+   npm install @aws-sdk/client-bedrock-agent-runtime
    ```
 
 ### Configuration

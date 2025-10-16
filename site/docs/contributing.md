@@ -241,7 +241,7 @@ Providers are defined in TypeScript. We also provide language bindings for Pytho
 
 1. Ensure your provider doesn't already exist in promptfoo and fits its scope. For OpenAI-compatible providers, you may be able to re-use the openai provider and override the base URL and other settings. If your provider is OpenAI compatible, feel free to skip to step 4.
 
-2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as a peer dependency with `npm install --save-peer`.
+2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as an optional dependency.
 
 3. Write unit tests in `test/providers/yourProviderName.test.ts` and create an example in the `examples/` directory.
 
