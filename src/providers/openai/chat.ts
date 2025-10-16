@@ -14,6 +14,7 @@ import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { fetchWithRetries } from './util';
 
 import type {
   CallApiContextParams,
