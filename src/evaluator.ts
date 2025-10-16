@@ -42,7 +42,7 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types/index';
-import { isApiProvider } from './types/providers';
+import { type ApiProvider, isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
@@ -271,6 +271,7 @@ export async function runEval({
   promptIdx,
   conversations,
   registers,
+  activeSessions,
   isRedteam,
   abortSignal,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
@@ -290,6 +291,22 @@ export async function runEval({
   const fileMetadata = collectFileMetadata(test.vars || vars);
 
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
+
+  logger.debug(
+    `Checking conversations (${JSON.stringify(Object.keys(conversations || {}))}) for ${conversationKey}`,
+  );
+
+  // Check if a session was pre-initialized for this conversation
+  // Sessions are pre-initialized before concurrent execution to avoid race conditions
+  const activeSession = activeSessions?.get(conversationKey);
+  if (activeSession) {
+    // Use the pre-initialized session
+    vars.sessionId = activeSession.sessionId;
+    logger.debug(
+      `Using pre-initialized session ${activeSession.sessionId} for conversation ${conversationKey}`,
+    );
+  }
+
   const usesConversation = prompt.raw.includes('_conversation');
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
@@ -365,6 +382,12 @@ export async function runEval({
         callApiContext.traceparent = traceContext.traceparent;
         callApiContext.evaluationId = traceContext.evaluationId;
         callApiContext.testCaseId = traceContext.testCaseId;
+      }
+
+      // Add session ID if an active session exists for this conversation
+      const activeSession = activeSessions?.get(conversationKey);
+      if (activeSession) {
+        callApiContext.sessionId = activeSession.sessionId;
       }
 
       response = await activeProvider.callApi(
@@ -668,6 +691,18 @@ class Evaluator {
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
+  /**
+   * Tracks active provider sessions for cleanup.
+   * Maps conversationKey to session info for providers that implement session lifecycle.
+   */
+  activeSessions: Map<
+    string,
+    {
+      sessionId: string;
+      provider: ApiProvider;
+      conversationKey: string;
+    }
+  >;
 
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -681,6 +716,7 @@ class Evaluator {
     };
     this.conversations = {};
     this.registers = {};
+    this.activeSessions = new Map();
 
     const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
       ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
@@ -1060,6 +1096,7 @@ class Evaluator {
                 evaluateOptions: options,
                 conversations: this.conversations,
                 registers: this.registers,
+                activeSessions: this.activeSessions,
                 isRedteam: testSuite.redteam != null,
                 allTests: runEvalOptions,
                 concurrency,
@@ -1120,6 +1157,79 @@ class Evaluator {
         logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
         concurrency = 1;
       }
+    }
+
+    // Pre-initialize sessions for all unique conversations before concurrent execution
+    // This prevents race conditions when multiple tests share the same conversationId
+    const sessionInitPromises = new Map<string, Promise<void>>();
+    const conversationKeysToInit = new Set<string>();
+
+    for (const evalStep of runEvalOptions) {
+      const conversationKey = `${evalStep.provider.label || evalStep.provider.id()}:${evalStep.prompt.id}${evalStep.test.metadata?.conversationId ? `:${evalStep.test.metadata.conversationId}` : ''}`;
+      conversationKeysToInit.add(conversationKey);
+    }
+
+    for (const conversationKey of conversationKeysToInit) {
+      // Find the first evalStep with this conversationKey to get provider and test info
+      const evalStep = runEvalOptions.find((step) => {
+        const key = `${step.provider.label || step.provider.id()}:${step.prompt.id}${step.test.metadata?.conversationId ? `:${step.test.metadata.conversationId}` : ''}`;
+        return key === conversationKey;
+      });
+
+      if (evalStep && evalStep.provider.startSession) {
+        const initPromise = (async () => {
+          // Type narrowing: evalStep and startSession are guaranteed to exist here
+          if (!evalStep || !evalStep.provider.startSession) {
+            return;
+          }
+
+          try {
+            logger.debug(
+              `[Conversation Sessions] Pre-initializing session for conversation ${conversationKey}`,
+            );
+            const sessionResponse = await evalStep.provider.startSession({
+              conversationId: evalStep.test.metadata?.conversationId,
+              test: evalStep.test,
+              vars: evalStep.test.vars || {},
+            });
+
+            // Store the session info for later use
+            this.activeSessions.set(conversationKey, {
+              sessionId: sessionResponse.sessionId,
+              provider: evalStep.provider,
+              conversationKey,
+            });
+
+            // Initialize the conversation array
+            this.conversations[conversationKey] = [];
+
+            logger.debug(
+              `[Conversation Sessions] Pre-initialized session ${sessionResponse.sessionId} for conversation ${conversationKey}`,
+            );
+          } catch (err) {
+            logger.error(
+              `[Conversation Sessions] Failed to pre-initialize session for ${conversationKey}: ${err}`,
+            );
+            throw new Error(
+              `Failed to initialize session for conversation ${conversationKey}: ${err}`,
+            );
+          }
+        })();
+
+        sessionInitPromises.set(conversationKey, initPromise);
+      }
+    }
+
+    // Wait for all sessions to initialize before starting evaluations.
+    // Sessions are initialized sequentially to avoid rate limiting and allow for predictable ordering e.g. monotonically increasing ids.
+    if (sessionInitPromises.size > 0) {
+      logger.debug(
+        `[Conversation Sessions] Initializing ${sessionInitPromises.size} session(s)...`,
+      );
+      for (const initPromise of sessionInitPromises.values()) {
+        await initPromise;
+      }
+      logger.debug('[Conversation Sessions] All sessions initialized');
     }
 
     // Actually run the eval
@@ -1867,6 +1977,42 @@ class Evaluator {
     try {
       return await this._runEvaluation();
     } finally {
+      // Close all active sessions
+      if (this.activeSessions.size > 0) {
+        logger.debug(`[Evaluator] Closing ${this.activeSessions.size} active session(s)...`);
+        const closePromises: Promise<void>[] = [];
+
+        for (const [conversationKey, session] of this.activeSessions.entries()) {
+          if (!session.provider.closeSession) {
+            logger.debug(
+              `[Conversation Sessions] Skipping cleanup for ${conversationKey} - provider does not implement closeSession()`,
+            );
+            continue;
+          }
+          logger.debug(
+            `[Conversation Sessions] Closing session ${session.sessionId} for ${conversationKey}`,
+          );
+          closePromises.push(
+            session.provider
+              .closeSession(session.sessionId)
+              .then(() => {
+                logger.debug(
+                  `[Conversation Sessions] Closed session ${session.sessionId} for ${conversationKey}`,
+                );
+              })
+              .catch((err: unknown) => {
+                logger.warn(
+                  `[Conversation Sessions] Failed to close session ${session.sessionId}: ${err}`,
+                );
+              }),
+          );
+        }
+
+        // Wait for all sessions to close
+        await Promise.allSettled(closePromises);
+        this.activeSessions.clear();
+      }
+
       if (isOtlpReceiverStarted()) {
         // Add a delay to allow providers to finish exporting spans
         logger.debug('[Evaluator] Waiting for span exports to complete...');
