@@ -19,14 +19,14 @@ app.get('/session', (req, res) => {
   const sessionId = uuidv4();
   console.log(`Session started: ${sessionId}`);
   conversationHistories.set(sessionId, []);
-  res.send(sessionId).status(201);
+  res.status(201).send(sessionId);
 });
 
 app.delete('/session/:sessionId', (req, res) => {
   const { sessionId } = req.params;
   console.log(`Session ended: ${sessionId}`);
   conversationHistories.delete(sessionId);
-  res.send(sessionId).status(204);
+  res.status(204).send(sessionId);
 });
 
 // Inference endpoint
@@ -49,7 +49,7 @@ app.post('/inference', async (req, res) => {
 
     // Make inference request with full conversation history
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4o-2024-08-06',
       messages: history,
     });
 
