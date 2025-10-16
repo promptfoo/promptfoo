@@ -1127,15 +1127,9 @@ function ResultsTable({
     }
   }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
 
-  const tableWidth = React.useMemo(() => {
-    let width = 0;
-    if (descriptionColumn) {
-      width += DESCRIPTION_COLUMN_SIZE_PX;
-    }
-    width += head.vars.length * VARIABLE_COLUMN_SIZE_PX;
-    width += head.prompts.length * PROMPT_COLUMN_SIZE_PX;
-    return width;
-  }, [descriptionColumn, head.vars.length, head.prompts.length]);
+  // Use TanStack Table's built-in method to calculate total width of visible columns.
+  // This automatically handles both column visibility changes and user-initiated column resizing.
+  const tableWidth = reactTable.getTotalSize();
 
   // Listen for scroll events on the table container and sync the header horizontally
   const tableRef = useRef<HTMLDivElement>(null);
