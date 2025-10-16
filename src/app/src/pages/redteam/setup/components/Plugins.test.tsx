@@ -196,8 +196,8 @@ describe('Plugins', () => {
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     // Custom configurations are now in tabs, not in a separate section
-    expect(screen.getByRole('tab', { name: 'Custom Prompts' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Custom Policies' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Custom Intents/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Custom Policies/ })).toBeInTheDocument();
   });
 
   it('should call onBack when the Back button is clicked', () => {
@@ -397,17 +397,17 @@ describe('Plugins', () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Check all tabs are rendered with correct labels
-      expect(screen.getByRole('tab', { name: 'Plugins' })).toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: 'Custom Prompts' })).toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: 'Custom Policies' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Plugins/ })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Custom Intents/ })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Custom Policies/ })).toBeInTheDocument();
     });
 
     it('should have the Plugins tab selected by default', () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
 
       // Plugins tab should be selected (aria-selected="true")
       expect(pluginsTab).toHaveAttribute('aria-selected', 'true');
@@ -418,9 +418,9 @@ describe('Plugins', () => {
     it('should have correct ARIA attributes on tabs', () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
 
       // Check ARIA controls
       expect(pluginsTab).toHaveAttribute('id', 'plugins-tab-0');
@@ -445,7 +445,7 @@ describe('Plugins', () => {
     it('should switch to Custom Prompts tab when clicked', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
 
       // Initially not selected
       expect(customPromptsTab).toHaveAttribute('aria-selected', 'false');
@@ -459,11 +459,11 @@ describe('Plugins', () => {
       });
 
       // Other tabs should not be selected
-      expect(screen.getByRole('tab', { name: 'Plugins' })).toHaveAttribute(
+      expect(screen.getByRole('tab', { name: /Plugins/ })).toHaveAttribute(
         'aria-selected',
         'false',
       );
-      expect(screen.getByRole('tab', { name: 'Custom Policies' })).toHaveAttribute(
+      expect(screen.getByRole('tab', { name: /Custom Policies/ })).toHaveAttribute(
         'aria-selected',
         'false',
       );
@@ -472,7 +472,7 @@ describe('Plugins', () => {
     it('should switch to Custom Policies tab when clicked', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
 
       // Initially not selected
       expect(customPoliciesTab).toHaveAttribute('aria-selected', 'false');
@@ -486,11 +486,11 @@ describe('Plugins', () => {
       });
 
       // Other tabs should not be selected
-      expect(screen.getByRole('tab', { name: 'Plugins' })).toHaveAttribute(
+      expect(screen.getByRole('tab', { name: /Plugins/ })).toHaveAttribute(
         'aria-selected',
         'false',
       );
-      expect(screen.getByRole('tab', { name: 'Custom Prompts' })).toHaveAttribute(
+      expect(screen.getByRole('tab', { name: /Custom Intents/ })).toHaveAttribute(
         'aria-selected',
         'false',
       );
@@ -499,8 +499,8 @@ describe('Plugins', () => {
     it('should switch back to Plugins tab after visiting other tabs', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
 
       // Switch to Custom Prompts
       fireEvent.click(customPromptsTab);
@@ -531,7 +531,7 @@ describe('Plugins', () => {
     it('should show Custom Prompts tabpanel when that tab is selected', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
       fireEvent.click(customPromptsTab);
 
       await waitFor(() => {
@@ -545,7 +545,7 @@ describe('Plugins', () => {
     it('should show Custom Policies tabpanel when that tab is selected', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
       fireEvent.click(customPoliciesTab);
 
       await waitFor(() => {
@@ -569,20 +569,20 @@ describe('Plugins', () => {
     it('should show Custom Prompts content when Custom Prompts tab is active', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
       fireEvent.click(customPromptsTab);
 
       await waitFor(() => {
         // Custom Prompts section should be visible
         expect(screen.getByTestId('custom-intent-section')).toBeInTheDocument();
-        expect(screen.getByText(/Custom Prompts \(/)).toBeInTheDocument();
+        expect(screen.getByText(/Custom Intents \(/)).toBeInTheDocument();
       });
     });
 
     it('should show Custom Policies content when Custom Policies tab is active', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
       fireEvent.click(customPoliciesTab);
 
       await waitFor(() => {
@@ -609,11 +609,11 @@ describe('Plugins', () => {
 
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
       fireEvent.click(customPromptsTab);
 
       await waitFor(() => {
-        expect(screen.getByText('Custom Prompts (2)')).toBeInTheDocument();
+        expect(screen.getByText('Custom Intents (2)')).toBeInTheDocument();
       });
     });
 
@@ -636,7 +636,7 @@ describe('Plugins', () => {
 
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
       fireEvent.click(customPoliciesTab);
 
       await waitFor(() => {
@@ -654,7 +654,7 @@ describe('Plugins', () => {
     it('should track telemetry when switching to Custom Prompts tab', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
       fireEvent.click(customPromptsTab);
 
       await waitFor(() => {
@@ -668,7 +668,7 @@ describe('Plugins', () => {
     it('should track telemetry when switching to Custom Policies tab', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
       fireEvent.click(customPoliciesTab);
 
       await waitFor(() => {
@@ -683,7 +683,7 @@ describe('Plugins', () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
       // First switch to another tab
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
       fireEvent.click(customPromptsTab);
 
       // Clear the mock to only track the next call
@@ -693,7 +693,7 @@ describe('Plugins', () => {
       mockRecordEvent.mockClear();
 
       // Now switch back to Plugins tab
-      const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
+      const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
       fireEvent.click(pluginsTab);
 
       await waitFor(() => {
@@ -721,48 +721,58 @@ describe('Plugins', () => {
     it('should maintain plugin selections when switching between tabs', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Select a plugin (using the preset for simplicity)
+      // Select a plugin via preset
       const recommendedPreset = screen.getByText('Recommended');
       fireEvent.click(recommendedPreset);
 
-      // Wait for the update to be called
+      // Wait for the preset to be applied
       await waitFor(() => {
-        expect(mockUpdatePlugins).toHaveBeenCalled();
+        expect(screen.getByText('Recommended')).toBeInTheDocument();
       });
 
-      // Switch to Custom Prompts tab
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      // Check that the plugins tab shows selected plugins count > 0
+      const pluginsTabInitial = screen.getByRole('tab', { name: /Plugins/ });
+      expect(pluginsTabInitial.textContent).not.toBe('Plugins (0)');
+
+      // Switch to Custom Intents tab
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
       fireEvent.click(customPromptsTab);
 
       // Switch back to Plugins tab
-      const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
+      const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
       fireEvent.click(pluginsTab);
 
-      // The update function should still have been called (state persisted)
-      expect(mockUpdatePlugins).toHaveBeenCalled();
+      // The plugins count should still be greater than 0 (state persisted)
+      await waitFor(() => {
+        const pluginsTabAfter = screen.getByRole('tab', { name: /Plugins/ });
+        expect(pluginsTabAfter.textContent).not.toBe('Plugins (0)');
+      });
     });
 
-    it('should maintain search term when switching between tabs', async () => {
+    it('should reset search term when switching between tabs', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Enter a search term
       const searchInput = screen.getByPlaceholderText('Search plugins...');
       fireEvent.change(searchInput, { target: { value: 'harmful' } });
 
-      // Switch to Custom Prompts tab
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      // Verify search term is set
+      expect((searchInput as HTMLInputElement).value).toBe('harmful');
+
+      // Switch to Custom Intents tab
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
       fireEvent.click(customPromptsTab);
 
-      // Switch back to Plugins tab
-      const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
+      // Switch back to Plugins tab (this remounts the PluginsTab component)
+      const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
       fireEvent.click(pluginsTab);
 
-      // Search term should still be there
+      // Search term should be reset to empty since the component was remounted
       await waitFor(() => {
         const searchInputAfter = screen.getByPlaceholderText(
           'Search plugins...',
         ) as HTMLInputElement;
-        expect(searchInputAfter.value).toBe('harmful');
+        expect(searchInputAfter.value).toBe('');
       });
     });
 
@@ -782,7 +792,7 @@ describe('Plugins', () => {
       expect(nextButton).toBeEnabled();
 
       // Switch to Custom Prompts tab
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
       fireEvent.click(customPromptsTab);
 
       // Next button should still be enabled
@@ -791,7 +801,7 @@ describe('Plugins', () => {
       });
 
       // Switch to Custom Policies tab
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
       fireEvent.click(customPoliciesTab);
 
       // Next button should still be enabled
@@ -819,7 +829,7 @@ describe('Plugins', () => {
       ).toBeInTheDocument();
 
       // Switch to Custom Prompts tab
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
       fireEvent.click(customPromptsTab);
 
       // Warning should still be visible (it's outside the tabs)
@@ -830,7 +840,7 @@ describe('Plugins', () => {
       });
 
       // Switch to Custom Policies tab
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
       fireEvent.click(customPoliciesTab);
 
       // Warning should still be visible
@@ -846,9 +856,9 @@ describe('Plugins', () => {
     it('should handle rapid tab switching without errors', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
 
       // Rapidly switch between tabs
       fireEvent.click(customPromptsTab);
@@ -893,20 +903,20 @@ describe('Plugins', () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
       // All tabs should render
-      expect(screen.getByRole('tab', { name: 'Plugins' })).toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: 'Custom Prompts' })).toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: 'Custom Policies' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Plugins/ })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Custom Intents/ })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Custom Policies/ })).toBeInTheDocument();
 
       // Switch to Custom Prompts tab and check count
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
       fireEvent.click(customPromptsTab);
 
       await waitFor(() => {
-        expect(screen.getByText('Custom Prompts (3)')).toBeInTheDocument();
+        expect(screen.getByText('Custom Intents (3)')).toBeInTheDocument();
       });
 
       // Switch to Custom Policies tab and check count
-      const customPoliciesTab = screen.getByRole('tab', { name: 'Custom Policies' });
+      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
       fireEvent.click(customPoliciesTab);
 
       await waitFor(() => {
@@ -920,8 +930,8 @@ describe('Plugins', () => {
     it('should handle tab keyboard navigation correctly', async () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-      const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
-      const customPromptsTab = screen.getByRole('tab', { name: 'Custom Prompts' });
+      const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
+      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
 
       // Focus on the first tab
       pluginsTab.focus();

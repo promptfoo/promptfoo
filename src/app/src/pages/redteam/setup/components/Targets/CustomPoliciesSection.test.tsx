@@ -46,7 +46,7 @@ describe('CustomPoliciesSection', () => {
   });
 
   describe('Config Reset', () => {
-    it('should show empty policy when config.plugins is empty', async () => {
+    it('should show empty grid when config.plugins is empty', async () => {
       // Start with empty config
       const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
       mockUseRedTeamConfig.mockReturnValue({
@@ -58,9 +58,12 @@ describe('CustomPoliciesSection', () => {
 
       renderComponent();
 
-      // Verify a default empty policy input is shown
+      // Verify the DataGrid is rendered but empty
       await waitFor(() => {
-        expect(screen.getByDisplayValue('Custom Policy 1')).toBeInTheDocument();
+        const grid = screen.getByRole('grid');
+        expect(grid).toBeInTheDocument();
+        // No policy rows should be visible
+        expect(screen.queryByDisplayValue(/Custom Policy/)).not.toBeInTheDocument();
       });
     });
 
@@ -78,10 +81,10 @@ describe('CustomPoliciesSection', () => {
 
       renderComponent();
 
-      // Verify the custom policies are displayed
+      // Verify the custom policies are displayed in the DataGrid
       await waitFor(() => {
-        expect(screen.getByDisplayValue('Custom Policy Text 1')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('Custom Policy Text 2')).toBeInTheDocument();
+        expect(screen.getByText('Custom Policy Text 1')).toBeInTheDocument();
+        expect(screen.getByText('Custom Policy Text 2')).toBeInTheDocument();
       });
     });
 
@@ -100,10 +103,10 @@ describe('CustomPoliciesSection', () => {
 
       const { rerender } = renderComponent();
 
-      // Verify the custom policies are displayed
+      // Verify the custom policies are displayed in the DataGrid
       await waitFor(() => {
-        expect(screen.getByDisplayValue('Custom Policy Text 1')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('Custom Policy Text 2')).toBeInTheDocument();
+        expect(screen.getByText('Custom Policy Text 1')).toBeInTheDocument();
+        expect(screen.getByText('Custom Policy Text 2')).toBeInTheDocument();
       });
 
       // Simulate config reset (plugins becomes empty)
@@ -122,11 +125,13 @@ describe('CustomPoliciesSection', () => {
         </ThemeProvider>,
       );
 
-      // Verify policies are reset to a single empty policy
+      // Verify policies are reset to empty grid
       await waitFor(() => {
-        expect(screen.queryByDisplayValue('Custom Policy Text 1')).not.toBeInTheDocument();
-        expect(screen.queryByDisplayValue('Custom Policy Text 2')).not.toBeInTheDocument();
-        expect(screen.getByDisplayValue('Custom Policy 1')).toBeInTheDocument();
+        expect(screen.queryByText('Custom Policy Text 1')).not.toBeInTheDocument();
+        expect(screen.queryByText('Custom Policy Text 2')).not.toBeInTheDocument();
+        // Grid should be empty
+        const grid = screen.getByRole('grid');
+        expect(grid).toBeInTheDocument();
       });
     });
   });
@@ -135,7 +140,10 @@ describe('CustomPoliciesSection', () => {
     it('should append new policies and show a success toast for a valid CSV upload', async () => {
       renderComponent();
 
-      expect(screen.getByDisplayValue('Custom Policy 1')).toBeInTheDocument();
+      // Wait for component to be ready
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /upload csv/i })).toBeInTheDocument();
+      });
 
       const csvContent = 'policy_text\n"Policy from CSV 1"\n"Policy from CSV 2"';
       const file = new File([csvContent], 'policies.csv', { type: 'text/csv' });

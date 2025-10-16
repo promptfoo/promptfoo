@@ -441,7 +441,7 @@ export const CustomPoliciesSection = () => {
     setEditingRowId(params.id as number);
   }, []);
 
-  const handleRowEditStop = useCallback((params: GridRowEditStopParams) => {
+  const handleRowEditStop = useCallback((_params: GridRowEditStopParams) => {
     setEditingRowId(null);
   }, []);
 
