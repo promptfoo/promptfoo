@@ -6,7 +6,9 @@ if (typeof globalThis.File === 'undefined') {
       this.name = String(name);
       this.lastModified = opts.lastModified ?? Date.now();
     }
-    get [Symbol.toStringTag]() { return 'File'; }
+    get [Symbol.toStringTag]() {
+      return 'File';
+    }
   }
   globalThis.File = NodeFile;
 }

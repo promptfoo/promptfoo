@@ -7,10 +7,10 @@ export async function resolveInputAlias(arg?: string): Promise<string | undefine
     return undefined;
   }
   if (arg === '@baseline') {
-    return await getBaselinePointer('global') ?? undefined;
+    return (await getBaselinePointer('global')) ?? undefined;
   }
   if (arg === '@last') {
-    return await getLastRunPointer() ?? undefined;
+    return (await getLastRunPointer()) ?? undefined;
   }
   return arg; // plain file/dir path
 }

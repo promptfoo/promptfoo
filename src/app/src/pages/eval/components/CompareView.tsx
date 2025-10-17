@@ -18,8 +18,12 @@ export default function CompareView({
           Compared {diff.summary.totalCompared}; changed {diff.summary.changedCount}
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
-          <span>Baseline: <code>{baselineId}</code></span>
-          <span>Candidate: <code>{currentEvalId}</code></span>
+          <span>
+            Baseline: <code>{baselineId}</code>
+          </span>
+          <span>
+            Candidate: <code>{currentEvalId}</code>
+          </span>
           {onClearBaseline && (
             <button onClick={onClearBaseline} style={{ marginLeft: 8 }}>
               Clear baseline

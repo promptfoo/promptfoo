@@ -33,11 +33,7 @@ interface EvalOptions {
   onBaselineChange?: (id: string | null) => void;
 }
 
-export default function Eval({ 
-  fetchId,
-  baselineId = null,
-  onBaselineChange, 
-}: EvalOptions) {
+export default function Eval({ fetchId, baselineId = null, onBaselineChange }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
   const [searchParams] = useSearchParams();
@@ -362,10 +358,9 @@ export default function Eval({
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}
         onRecentEvalSelected={handleRecentEvalSelection}
-
         // new: pass baseline props down to the viewer surface
         baselineId={baselineId}
-        onBaselineChange={onBaselineChange?? (()=> {})}
+        onBaselineChange={onBaselineChange ?? (() => {})}
       />
     </ShiftKeyProvider>
   );

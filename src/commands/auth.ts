@@ -107,9 +107,7 @@ export function authCommand(program: Command) {
               'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
             );
             logger.info(`Manual login URL: ${chalk.green(`${BASE}/`)}`);
-            logger.info(
-              `After login, get your API token at: ${chalk.green(`${BASE}/welcome`)}`,
-            );
+            logger.info(`After login, get your API token at: ${chalk.green(`${BASE}/welcome`)}`);
             process.exitCode = 1;
             return;
           }

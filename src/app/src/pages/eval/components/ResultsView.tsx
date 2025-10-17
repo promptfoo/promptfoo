@@ -12,7 +12,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
-import EyeIcon from '@mui/icons-material/Visibility'; 
+import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -62,7 +62,6 @@ import { computeDiff } from '../../../diff/computeDiff';
 import type { RunDiff } from '../../../diff/types';
 import CompareView from './CompareView';
 
-
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
   flexWrap: 'wrap',
@@ -75,12 +74,11 @@ interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (file: string) => void;
   defaultEvalId?: string;
-  
+
   // New baseline comparison props
   baselineId?: string | null;
   onBaselineChange?: (id: string | null) => void;
 }
-
 
 const SearchInputField = React.memo(
   ({
@@ -506,72 +504,72 @@ export default function ResultsView({
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   // --- Compare mode wiring (baseline bridge) ---
-const [baselineLocal, setBaselineLocal] = React.useState<string | null>(baselineId ?? null);
+  const [baselineLocal, setBaselineLocal] = React.useState<string | null>(baselineId ?? null);
 
-// keep local in sync if parent prop changes
-React.useEffect(() => {
-  setBaselineLocal(baselineId ?? null);
-}, [baselineId]);
+  // keep local in sync if parent prop changes
+  React.useEffect(() => {
+    setBaselineLocal(baselineId ?? null);
+  }, [baselineId]);
 
-// use parent's setter if provided; otherwise use local
-const setBaselineId = React.useCallback(
-  (id: string | null) => {
-    if (onBaselineChange) {
-      onBaselineChange(id);
-    } else {
-      setBaselineLocal(id);
-    }
-  },
-  [onBaselineChange, setBaselineLocal]
-);
-
-// this is the value the page should use everywhere
-const effectiveBaselineId = baselineId ?? baselineLocal;
-
-// --- Baseline diff state ---
-const [diff, setDiff] = React.useState<RunDiff | null>(null);
-
-React.useEffect(() => {
-  // If there’s no baseline selected, show the regular table
-  if (!effectiveBaselineId || !evalId) {
-    setDiff(null);
-    return;
-  }
-
-  async function fetchRunJson(id: string) {
-    // Try the explicit results endpoint first; fall back to /eval/:id if needed
-    const tryEndpoints = [`/eval/${id}/results`, `/eval/${id}`];
-    for (const ep of tryEndpoints) {
-      const res = await callApi(ep, { cache: 'no-store' });
-      if (res.ok) {
-        const body = await res.json();
-        // Some routes return {data: ...}, others return the plain object
-        return body?.data ?? body;
+  // use parent's setter if provided; otherwise use local
+  const setBaselineId = React.useCallback(
+    (id: string | null) => {
+      if (onBaselineChange) {
+        onBaselineChange(id);
+      } else {
+        setBaselineLocal(id);
       }
+    },
+    [onBaselineChange, setBaselineLocal],
+  );
+
+  // this is the value the page should use everywhere
+  const effectiveBaselineId = baselineId ?? baselineLocal;
+
+  // --- Baseline diff state ---
+  const [diff, setDiff] = React.useState<RunDiff | null>(null);
+
+  React.useEffect(() => {
+    // If there’s no baseline selected, show the regular table
+    if (!effectiveBaselineId || !evalId) {
+      setDiff(null);
+      return;
     }
-    throw new Error(`Failed to fetch eval ${id}`);
-  }
-  let cancelled = false;
-  (async () => {
-    try {
-      const [fromRun, toRun] = await Promise.all([
-        fetchRunJson(effectiveBaselineId!),
-        fetchRunJson(evalId!),
-      ]);
-      if (!cancelled) {
-        setDiff(computeDiff(fromRun, toRun, {}));
+
+    async function fetchRunJson(id: string) {
+      // Try the explicit results endpoint first; fall back to /eval/:id if needed
+      const tryEndpoints = [`/eval/${id}/results`, `/eval/${id}`];
+      for (const ep of tryEndpoints) {
+        const res = await callApi(ep, { cache: 'no-store' });
+        if (res.ok) {
+          const body = await res.json();
+          // Some routes return {data: ...}, others return the plain object
+          return body?.data ?? body;
+        }
       }
-    } catch (e) {
-      console.error('Failed to compute baseline diff:', e);
-      if (!cancelled) {
-        setDiff(null);
-      }
+      throw new Error(`Failed to fetch eval ${id}`);
     }
-  })();
+    let cancelled = false;
+    (async () => {
+      try {
+        const [fromRun, toRun] = await Promise.all([
+          fetchRunJson(effectiveBaselineId!),
+          fetchRunJson(evalId!),
+        ]);
+        if (!cancelled) {
+          setDiff(computeDiff(fromRun, toRun, {}));
+        }
+      } catch (e) {
+        console.error('Failed to compute baseline diff:', e);
+        if (!cancelled) {
+          setDiff(null);
+        }
+      }
+    })();
     return () => {
-    cancelled = true;
-  };
-}, [effectiveBaselineId, evalId]);
+      cancelled = true;
+    };
+  }, [effectiveBaselineId, evalId]);
 
   return (
     <>
@@ -644,13 +642,13 @@ React.useEffect(() => {
                   }}
                   sx={{ minWidth: 100 }}
                 >
-                  <MenuItem value={"0.5"}>50%</MenuItem>
-                  <MenuItem value={"0.75"}>75%</MenuItem>
-                  <MenuItem value={"0.9"}>90%</MenuItem>
-                  <MenuItem value={"1"}>100%</MenuItem>
-                  <MenuItem value={"1.25"}>125%</MenuItem>
-                  <MenuItem value={"1.5"}>150%</MenuItem>
-                  <MenuItem value={"2"}>200%</MenuItem>
+                  <MenuItem value={'0.5'}>50%</MenuItem>
+                  <MenuItem value={'0.75'}>75%</MenuItem>
+                  <MenuItem value={'0.9'}>90%</MenuItem>
+                  <MenuItem value={'1'}>100%</MenuItem>
+                  <MenuItem value={'1.25'}>125%</MenuItem>
+                  <MenuItem value={'1.5'}>150%</MenuItem>
+                  <MenuItem value={'2'}>200%</MenuItem>
                 </Select>
               </FormControl>
             </Box>
@@ -689,7 +687,7 @@ React.useEffect(() => {
                   label="Baseline"
                   value={effectiveBaselineId ?? ''}
                   onChange={(e: SelectChangeEvent) =>
-                    setBaselineId(((e.target.value as string) || '') || null)
+                    setBaselineId((e.target.value as string) || '' || null)
                   }
                 >
                   <MenuItem value="">None</MenuItem>

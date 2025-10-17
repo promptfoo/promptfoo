@@ -31,7 +31,11 @@ function toEvalRun(obj: any): EvalRun {
     createdAt: obj.createdAt || obj.meta?.createdAt,
     configName: obj.configName || obj.meta?.configName,
     rows,
-    summary: { passRate: obj.summary?.passRate, avgScore: obj.summary?.avgScore ?? null, total: rows.length },
+    summary: {
+      passRate: obj.summary?.passRate,
+      avgScore: obj.summary?.avgScore ?? null,
+      total: rows.length,
+    },
   };
 }
 
@@ -39,7 +43,9 @@ export async function loadEval(inputPath: string): Promise<EvalRun> {
   const stat = await fs.stat(inputPath);
   if (stat.isDirectory()) {
     for (const f of ['results.json', 'run.json']) {
-      try { return toEvalRun(await readJson(path.join(inputPath, f))); } catch {}
+      try {
+        return toEvalRun(await readJson(path.join(inputPath, f)));
+      } catch {}
     }
     throw new Error(`No results.json or run.json in ${inputPath}`);
   }

@@ -33,11 +33,11 @@ export class AppError extends Error {
 }
 
 // Helper constructors (sugar) for common categories
-export const providerError   = (message: string, extras: Partial<EvalErrorInfo> = {}) =>
-  new AppError({ type: 'provider_error',   message, ...extras });
+export const providerError = (message: string, extras: Partial<EvalErrorInfo> = {}) =>
+  new AppError({ type: 'provider_error', message, ...extras });
 export const validationError = (message: string, extras: Partial<EvalErrorInfo> = {}) =>
   new AppError({ type: 'validation_error', message, ...extras });
-export const toolError       = (message: string, extras: Partial<EvalErrorInfo> = {}) =>
-  new AppError({ type: 'tool_error',       message, ...extras });
-export const timeoutError    = (message: string, extras: Partial<EvalErrorInfo> = {}) =>
-  new AppError({ type: 'timeout',          message, ...extras });
+export const toolError = (message: string, extras: Partial<EvalErrorInfo> = {}) =>
+  new AppError({ type: 'tool_error', message, ...extras });
+export const timeoutError = (message: string, extras: Partial<EvalErrorInfo> = {}) =>
+  new AppError({ type: 'timeout', message, ...extras });

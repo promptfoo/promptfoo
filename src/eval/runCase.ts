@@ -55,10 +55,7 @@ export async function runCase(ctx: any): Promise<R.CaseResult> {
 }
 
 /** Convert assertion rules into a GradingResult. */
-async function evaluateAssertionsToGrading(
-  output: string,
-  rules: any[],
-): Promise<R.GradingResult> {
+async function evaluateAssertionsToGrading(output: string, rules: any[]): Promise<R.GradingResult> {
   const details: R.AssertionDetail[] = [];
   let failed = 0;
   let passed = 0;

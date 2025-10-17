@@ -51,7 +51,7 @@ async function persistent500() {
       null,
       'openai',
       {
-        retryBudget: 1,   // 1 retry then fail
+        retryBudget: 1, // 1 retry then fail
         baseDelayMs: 10,
         maxDelayMs: 20,
         timeoutMs: 5_000,

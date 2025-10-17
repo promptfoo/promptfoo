@@ -10,4 +10,4 @@ tests:
   - vars: {}
     assert:
       - type: contains
-        value: "hello world"
+        value: 'hello world'

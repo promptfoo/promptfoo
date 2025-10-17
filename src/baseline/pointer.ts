@@ -15,9 +15,14 @@ export async function setBaselinePointer(filePath: string, scope = 'global') {
   await fs.writeFile(p, JSON.stringify({ scope, path: filePath }), 'utf8');
 }
 export async function getBaselinePointer(scope = 'global') {
-  try { return JSON.parse(await fs.readFile(pointerPath(scope), 'utf8')).path as string; }
-  catch { return null; }
+  try {
+    return JSON.parse(await fs.readFile(pointerPath(scope), 'utf8')).path as string;
+  } catch {
+    return null;
+  }
 }
 export async function clearBaselinePointer(scope = 'global') {
-  try { await fs.unlink(pointerPath(scope)); } catch {}
+  try {
+    await fs.unlink(pointerPath(scope));
+  } catch {}
 }

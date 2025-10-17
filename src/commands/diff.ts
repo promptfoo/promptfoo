@@ -28,7 +28,7 @@ export function diffCommand(program: Command) {
       if (!fromPath) {
         throw new Error(
           'No baseline provided and no pinned baseline found.\n' +
-          'Pass --from <path|@last> or run: promptfoo baseline set <path>'
+            'Pass --from <path|@last> or run: promptfoo baseline set <path>',
         );
       }
 
@@ -37,7 +37,7 @@ export function diffCommand(program: Command) {
       }
 
       const from = await loadEval(fromPath);
-      const to   = await loadEval(toPath);
+      const to = await loadEval(toPath);
 
       const diff = computeDiff(from, to, {});
       if (opts.json) {
