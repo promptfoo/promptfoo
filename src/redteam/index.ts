@@ -802,41 +802,85 @@ export async function synthesize({
 
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
-      let pluginTests = await action({
-        provider: redteamProvider,
-        purpose,
-        injectVar,
-        n: plugin.numTests,
-        delayMs: delay || 0,
-        config: {
-          language,
-          modifiers: {
-            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-            ...(plugin.config?.modifiers || {}),
-          },
-          ...resolvePluginConfig(plugin.config),
-        },
-      });
 
-      if (!Array.isArray(pluginTests) || pluginTests.length === 0) {
-        logger.warn(`Failed to generate tests for ${plugin.id}`);
-        pluginTests = [];
-      } else {
-        // Add metadata to each test case
-        const testCasesWithMetadata = pluginTests.map((t) => ({
-          ...t,
-          metadata: {
-            pluginId: plugin.id,
-            pluginConfig: resolvePluginConfig(plugin.config),
-            severity:
-              plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+      // Check if plugin has its own language config override
+      const pluginLanguage = plugin.config?.language;
+
+      // If plugin has its own language, use that; otherwise use global language
+      const languages = pluginLanguage
+        ? (Array.isArray(pluginLanguage) ? pluginLanguage : [pluginLanguage])
+        : (Array.isArray(language) ? language : (language ? [language] : [undefined]));
+
+      logger.debug(`[Language Processing] Plugin: ${plugin.id}, Languages: ${JSON.stringify(languages)}, NumTests per language: ${plugin.numTests}${pluginLanguage ? ' (plugin override)' : ''}`);
+
+      // Generate tests for each language
+      const allPluginTests: TestCase[] = [];
+      for (const lang of languages) {
+        const pluginTests = await action({
+          provider: redteamProvider,
+          purpose,
+          injectVar,
+          n: plugin.numTests,
+          delayMs: delay || 0,
+          config: {
+            language: lang,
             modifiers: {
               ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
               ...(plugin.config?.modifiers || {}),
             },
-            ...(t?.metadata || {}),
+            ...resolvePluginConfig(plugin.config),
           },
-        }));
+        });
+
+        if (Array.isArray(pluginTests) && pluginTests.length > 0) {
+          // Immediately add language to each test's metadata so strategies can access it
+          const testsWithLanguage = pluginTests.map((test) => ({
+            ...test,
+            metadata: {
+              ...test.metadata,
+              modifiers: {
+                ...test.metadata?.modifiers,
+                // Add language to modifiers if not already present (respect existing)
+                ...(lang && !test.metadata?.modifiers?.language ? { language: lang } : {}),
+              },
+            },
+          }));
+
+          allPluginTests.push(...testsWithLanguage);
+        } else {
+          logger.warn(`[Language Processing] No tests generated for ${plugin.id} in language: ${lang || 'default'}`);
+        }
+      }
+
+      logger.debug(`[Language Processing] Total tests generated for ${plugin.id}: ${allPluginTests.length} (across ${languages.length} language(s))`);
+
+      if (!Array.isArray(allPluginTests) || allPluginTests.length === 0) {
+        logger.warn(`Failed to generate tests for ${plugin.id}`);
+      } else {
+        // Add metadata to each test case (language already added in the loop above)
+        const testCasesWithMetadata = allPluginTests.map((t) => {
+          // Destructure to separate modifiers from other metadata
+          const { modifiers: existingModifiers, ...restMetadata } = t?.metadata || {};
+
+          return {
+            ...t,
+            metadata: {
+              pluginId: plugin.id,
+              pluginConfig: resolvePluginConfig(plugin.config),
+              severity:
+                plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+              // Merge ALL modifiers together in correct priority order
+              modifiers: {
+                ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
+                ...(plugin.config?.modifiers || {}),
+                // existingModifiers already includes language from the loop above
+                ...existingModifiers,
+              },
+              // Spread other metadata fields (without modifiers)
+              ...restMetadata,
+            },
+          };
+        });
 
         // Extract goal for this plugin's tests
         logger.debug(
@@ -856,16 +900,15 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
       }
 
-      pluginTests = Array.isArray(pluginTests) ? pluginTests : [];
       if (showProgressBar) {
-        progressBar?.increment(plugin.numTests);
+        progressBar?.increment(plugin.numTests * languages.length);
       } else {
-        logger.info(`Generated ${pluginTests.length} tests for ${plugin.id}`);
+        logger.info(`Generated ${allPluginTests.length} tests for ${plugin.id}`);
       }
-      logger.debug(`Added ${pluginTests.length} ${plugin.id} test cases`);
+      logger.debug(`Added ${allPluginTests.length} ${plugin.id} test cases`);
       pluginResults[plugin.id] = {
-        requested: plugin.id === 'intent' ? pluginTests.length : plugin.numTests,
-        generated: pluginTests.length,
+        requested: plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length,
+        generated: allPluginTests.length,
       };
     } else if (plugin.id.startsWith('file://')) {
       try {

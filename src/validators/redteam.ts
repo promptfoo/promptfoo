@@ -160,7 +160,10 @@ export const RedteamGenerateOptionsSchema = z.object({
   envFile: z.string().optional().describe('Path to the environment file'),
   force: z.boolean().describe('Whether to force generation').default(false),
   injectVar: z.string().optional().describe('Variable to inject'),
-  language: z.string().optional().describe('Language of tests to generate'),
+  language: z.union([z.string(), z.array(z.string())])
+    .transform((val) => Array.isArray(val) ? val : [val])
+    .optional()
+    .describe('Language(s) of tests to generate'),
   maxConcurrency: z
     .number()
     .int()
@@ -200,7 +203,10 @@ export const RedteamConfigSchema = z
       .describe('Additional instructions for test generation applied to each plugin'),
     provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
-    language: z.string().optional().describe('Language of tests ot generate for this plugin'),
+    language: z.union([z.string(), z.array(z.string())])
+      .transform((val) => Array.isArray(val) ? val : [val])
+      .optional()
+      .describe('Language(s) of tests to generate for this plugin'),
     entities: z
       .array(z.string())
       .optional()
@@ -240,6 +246,31 @@ export const RedteamConfigSchema = z
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
     const strategySet = new Set<Strategy>();
+
+    // MIGRATION: Extract languages from multilingual strategy and merge into global language config
+    // This allows plugin-level language generation to work with multilingual strategy
+    const multilingualStrategy = data.strategies?.find(
+      (s) => (typeof s === 'string' ? s : s.id) === 'multilingual'
+    );
+
+    if (multilingualStrategy && typeof multilingualStrategy !== 'string') {
+      const strategyLanguages = multilingualStrategy.config?.languages;
+
+      if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
+        // Include undefined to represent original English tests (no language modifier)
+        // [undefined, 'hi', 'fr'] means: generate English (no modifier) + Hindi + French
+        const languagesWithOriginal = [undefined, ...strategyLanguages];
+
+        if (!data.language) {
+          // No global language set, use multilingual strategy languages
+          data.language = languagesWithOriginal;
+        } else {
+          // Global language exists, merge and deduplicate
+          const existingLanguages = Array.isArray(data.language) ? data.language : [data.language];
+          data.language = [...new Set([...existingLanguages, ...languagesWithOriginal])];
+        }
+      }
+    }
 
     const addPlugin = (
       id: string,
