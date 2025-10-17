@@ -6,7 +6,7 @@ description: AI-powered adaptive guardrails that learn from your red team findin
 
 # Adaptive Guardrails
 
-Adaptive Guardrails are an enterprise-grade input validation system that learns from your red team testing to create custom security policies specific to your AI application. Unlike generic content moderation services that use one-size-fits-all rules, adaptive guardrails analyze your actual vulnerabilities to generate targeted protection that evolves with each testing cycle—creating a living defense layer tailored to your application's unique attack surface.
+Adaptive guardrails learn from your red team tests to generate custom input validation policies. Unlike generic content moderation (AWS Bedrock, Azure AI Content Safety), they protect against vulnerabilities discovered in your specific application.
 
 ## Overview
 
@@ -23,36 +23,35 @@ Each target has a unique identifier (label) used to track vulnerabilities and ge
 
 ### 1:1 Guardrail Mapping
 
-Promptfoo's Adaptive Guardrails provide **1:1 mapping** for each target. Every guardrail is unique to a specific target, containing only policies derived from that target's discovered vulnerabilities. This means:
+Each guardrail maps 1:1 to a target. Policies are generated only from that target's test failures:
 
-- Your chatbot guardrail blocks patterns found in chatbot testing
-- Your code assistant guardrail blocks patterns found in code assistant testing
-- No generic rules applied across all applications
+- Chatbot guardrail blocks patterns from chatbot testing
+- Code assistant guardrail blocks patterns from code assistant testing
+- No generic rules shared across targets
 
-This target-specific approach minimizes false positives and maximizes protection relevance.
+This minimizes false positives.
 
 ### Input Validation
 
-Adaptive guardrails operate as **input guardrails**, validating user prompts before they reach your LLM. This pre-processing approach prevents malicious inputs from ever reaching your model, protecting against prompt injection, jailbreaks, and policy violations discovered through red team testing.
+Adaptive guardrails validate user prompts before they reach your LLM, blocking prompt injections and jailbreaks discovered during testing.
 
-**Key capabilities:**
+**Capabilities:**
 
-- **Custom Learning**: Generates policies from YOUR red team findings, not generic categories
-- **Self-Improving Protection**: Automatically updates as new vulnerabilities are discovered
-- **Target-Specific Policies**: Each guardrail tailored to one application's unique attack surface
-- **AI-Powered Analysis**: Uses Claude 4.5 Sonnet to analyze jailbreak patterns and generate targeted policies
-- **Real-Time Validation**: REST API endpoint validates prompts in 200-500ms
-- **Manual Policy Control**: Add custom business policies that persist across automated updates
+- Generates policies from your red team findings, not generic categories
+- Updates automatically as new vulnerabilities are discovered
+- Each guardrail is specific to one target
+- REST API validates prompts in 200-500ms
+- Manual policies persist across automated updates
 
 :::tip Enterprise-Only Feature
 
-Adaptive guardrails are exclusively available in [Promptfoo Enterprise](/docs/enterprise/). Unlike generic content moderation services (Azure AI Content Safety, AWS Bedrock Guardrails), adaptive guardrails learn from YOUR red team findings to create custom policies specific to your application's vulnerabilities.
+Adaptive guardrails are available in [Promptfoo Enterprise](/docs/enterprise/). Unlike Azure AI Content Safety or AWS Bedrock Guardrails, they generate policies from your red team findings.
 
 :::
 
 ## How It Works
 
-Adaptive guardrails create a continuous security feedback loop that strengthens your AI application's defenses:
+Adaptive guardrails use a feedback loop to update protection policies:
 
 ```
 Red Team Tests → Discover Vulnerabilities → Update Guardrail Policies → Block New Attacks
@@ -91,54 +90,82 @@ Each policy is:
 
 ### 3. Continuous Updates
 
-As you run more tests and discover new vulnerabilities, regenerating the guardrail automatically incorporates these findings:
+Regenerating the guardrail incorporates new test failures:
 
-- **Automated Policies**: Generated from red team test failures, updated on regeneration
-- **Manual Policies**: Added by you, never removed during regeneration
-
-This creates a living defense that adapts to your evolving security needs.
+- **Automated Policies**: Generated from test failures, updated on regeneration
+- **Manual Policies**: Added by you, preserved during regeneration
 
 ## Architecture
 
 ```
-┌─────────────────┐
-│   User Input    │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  Adaptive Guardrail API │
-│  /guardrails/{id}/analyze│
-└────────┬────────────────┘
-         │
-         ├─ Policies (e.g., "Block role-playing attacks")
-         ├─ Examples (jailbreak attempts with reasons)
-         └─ Few-shot Learning (uses up to 10 examples)
-         │
-         ▼
-┌─────────────────┐
-│    Response     │
-│  {              │
-│   allowed: bool │
-│   reason: str   │
-│  }              │
-└─────────────────┘
+┌──────────────────────────────────────────────────┐
+│                      User                        │
+└───────────────────────┬──────────────────────────┘
+                        │
+                        │ "Ignore previous instructions..."
+                        ▼
+┌──────────────────────────────────────────────────┐
+│             Your Application                     │
+├──────────────────────────────────────────────────┤
+│                                                  │
+│  Step 1: Call Guardrail API                     │
+│  POST /guardrails/{targetId}/analyze             │
+│                        │                         │
+│                        ▼                         │
+│  ┌────────────────────────────────────────────┐ │
+│  │   Promptfoo Adaptive Guardrail             │ │
+│  │                                            │ │
+│  │   • Target-specific policies               │ │
+│  │   • 10 jailbreak examples (few-shot)       │ │
+│  │   • AI pattern analysis                    │ │
+│  └────────────────────────────────────────────┘ │
+│                        │                         │
+│                        ▼                         │
+│  Response: { allowed: false,                    │
+│             reason: "Role-play attempt" }       │
+│                        │                         │
+│                        ▼                         │
+│  Step 2: Decision Logic                         │
+│  ┌─────────────────┬─────────────────┐          │
+│  │  allowed=true   │  allowed=false  │          │
+│  │  → Send to LLM  │  → Block & log  │          │
+│  └────────┬────────┴─────────────────┘          │
+│           │                                      │
+└───────────┼──────────────────────────────────────┘
+            │
+            │ (if allowed)
+            ▼
+┌──────────────────────────────────────────────────┐
+│                   Your LLM                       │
+│              (GPT-5, Claude, etc)                │
+└───────────────────────┬──────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────┐
+│              Response to User                    │
+└──────────────────────────────────────────────────┘
 ```
 
-This architecture diagram shows how an application uses adaptive guardrails to protect an LLM. The data flow works as follows:
+### How It Works
 
-1. **User submits a prompt** to your application
-2. **Guardrail validates the prompt** against target-specific policies learned from red team testing
-3. **Prompt is processed** based on validation result:
-   - If `allowed: true`, the prompt proceeds to your LLM
-   - If `allowed: false`, the request is blocked with a reason
-4. **Application receives the response** and can take appropriate action (proceed or reject)
+The architecture shows the complete flow of adaptive guardrails protecting your LLM:
 
-Unlike output guardrails (which filter LLM responses), adaptive guardrails operate as input validation only, preventing malicious prompts from ever reaching your model.
+1. **User Input** - User submits a prompt to your application
+2. **Guardrail Validation** - Your app calls the Promptfoo Guardrail API with the prompt
+3. **AI Analysis** - Guardrail evaluates the prompt against:
+   - Target-specific policies learned from red team testing
+   - Few-shot examples (up to 10 jailbreak attempts)
+   - Pattern matching using AI analysis
+4. **Validation Response** - API returns `{ allowed: boolean, reason: string }`
+5. **Decision Point** - Your application decides:
+   - If `allowed: true` → Forward prompt to your LLM
+   - If `allowed: false` → Block request and return error to user
+6. **LLM Processing** - Only safe, validated prompts reach your LLM
+7. **User Response** - Return LLM output or rejection message
+
+**Key principle**: Adaptive guardrails operate as **input validation only**, preventing malicious prompts from ever reaching your model. For output validation (filtering LLM responses), consider combining with cloud provider guardrails.
 
 ## Use Cases
-
-Adaptive guardrails address security and safety challenges specific to your AI applications across multiple industries:
 
 ### Security
 
@@ -187,8 +214,6 @@ Adaptive guardrails address security and safety challenges specific to your AI a
 - Block prompts that generated policy-violating content
 - Prevent techniques that bypassed content moderation
 - Stop brand impersonation attempts discovered in testing
-
-Unlike generic content moderation, each use case is protected by policies derived from YOUR specific vulnerabilities, not general categories.
 
 ## Using Adaptive Guardrails
 
@@ -245,14 +270,11 @@ Use the Promptfoo Adaptive Guardrails UI to verify that your policies are being 
 
 ### 4. Update Guardrails
 
-When additional scans are run against the target, update the guardrail policies based on those scan results:
+After running new red team tests:
 
-1. Run new red team tests to discover additional vulnerabilities
-2. Click "Update Guardrail" to regenerate policies
-3. Review new automated policies
-4. Manual policies are preserved automatically
-
-This continuous cycle keeps your guardrails current with your security posture.
+1. Click "Update Guardrail" to regenerate policies
+2. Review new automated policies
+3. Manual policies are preserved
 
 ## Prompt Analysis API
 
@@ -504,7 +526,7 @@ User: [Actual user input to validate]
 Assistant: { allowed: false, reason: "..." }
 ```
 
-This approach helps the AI recognize subtle variations of known attacks.
+Examples improve detection of attack variations.
 
 ## Technical Specifications
 
@@ -852,8 +874,6 @@ if (!GUARDRAIL_API || !API_KEY) {
 
 ## Comparison to Cloud Provider Guardrails
 
-Adaptive guardrails differ fundamentally from generic cloud provider content moderation services:
-
 ### Promptfoo Adaptive Guardrails vs. Competitors
 
 | Feature                    | Promptfoo Adaptive Guardrails                 | AWS Bedrock Guardrails                | Azure AI Content Safety                    |
@@ -885,11 +905,7 @@ Adaptive guardrails differ fundamentally from generic cloud provider content mod
 - You need output validation (post-LLM response filtering)
 - You want plug-and-play without testing
 
-Adaptive guardrails complement cloud provider services by adding a custom security layer learned from your specific security posture.
-
 ## What's Next
-
-Ready to implement adaptive guardrails? Here are your next steps:
 
 ### Get Started
 
