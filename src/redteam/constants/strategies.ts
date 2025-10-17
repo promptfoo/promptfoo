@@ -49,6 +49,7 @@ export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 export const ADDITIONAL_STRATEGIES = [
   'layer',
   'audio',
+  'authoritative-markup-injection',
   'base64',
   'best-of-n',
   'camelcase',

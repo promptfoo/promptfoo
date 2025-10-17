@@ -47,6 +47,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    strategy: 'authoritative-markup-injection',
+    displayName: 'Authoritative Markup Injection',
+    description: 'Structured format authority',
+    longDescription:
+      'Tests vulnerability to authoritative formatting by embedding prompts in structured markup that exploits trust in formatted content',
+    cost: 'Medium',
+    asrIncrease: '40-60%',
+    link: '/docs/red-team/strategies/authoritative-markup-injection/',
+  },
+  {
+    category: 'Dynamic (Single-Turn)',
     strategy: 'jailbreak:composite',
     displayName: 'Composite Jailbreaks',
     description: 'Combined techniques',
