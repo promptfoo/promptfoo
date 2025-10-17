@@ -29,6 +29,7 @@ export interface ProviderTestResult {
     changes_needed?: boolean;
     changes_needed_reason?: string;
     changes_needed_suggestions?: string[];
+    configuration_change_suggestion?: Record<string, any>;
   };
 }
 
@@ -182,6 +183,8 @@ export async function testHTTPProviderConnectivity(
               changes_needed: testAnalyzerResponseObj.changes_needed,
               changes_needed_reason: testAnalyzerResponseObj.changes_needed_reason,
               changes_needed_suggestions: testAnalyzerResponseObj.changes_needed_suggestions,
+              configuration_change_suggestion:
+                testAnalyzerResponseObj.configuration_change_suggestion,
             }
           : undefined,
       };
