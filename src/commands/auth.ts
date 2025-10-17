@@ -99,15 +99,16 @@ export function authCommand(program: Command) {
           const appUrl = cmdObj.host || cloudConfig.getAppUrl();
           const authUrl = new URL(appUrl);
           const welcomeUrl = new URL('/welcome', appUrl);
+          const BASE = 'https://www.promptfoo.app';
 
           if (isNonInteractive()) {
             // CI Environment or non-interactive: Exit with error but show manual URLs
             logger.error(
               'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
             );
-            logger.info(`Manual login URL: ${chalk.green(authUrl.toString())}`);
+            logger.info(`Manual login URL: ${chalk.green(`${BASE}/`)}`);
             logger.info(
-              `After login, get your API token at: ${chalk.green(welcomeUrl.toString())}`,
+              `After login, get your API token at: ${chalk.green(`${BASE}/welcome`)}`,
             );
             process.exitCode = 1;
             return;
