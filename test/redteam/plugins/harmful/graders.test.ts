@@ -93,6 +93,9 @@ describe('HarmfulGrader', () => {
         mockTest,
         mockProvider as ApiProvider,
         undefined,
+        undefined, // additionalRubric
+        undefined, // skipRefusalCheck
+        undefined, // gradingContext
       );
 
       expect(result).toEqual({
