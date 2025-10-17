@@ -1,19 +1,15 @@
-export type ErrorCategory = 
+export type ErrorCategory =
   | 'invalid_api_key'
   | 'quota_exceeded'
-  | 'rate_limit'
-  | 'model_not_enabled'
-  | 'permission_denied'
-  | 'malformed_request'
+  | 'rate_limited'
+  | 'not_found'
   | 'timeout'
-  | 'network'
-  | 'provider_unavailable'
-  | 'unknown';
+  | 'internal'
+  | 'network';
 
-export interface ClassifiedError {
-  category: ErrorCategory;
+export interface EvalErrorInfo {
+  type: string;
   message: string;
-  httpStatus?: number;
   code?: string;
   providerId?: string;
 }

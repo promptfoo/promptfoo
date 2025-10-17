@@ -14,7 +14,6 @@ export interface EvalErrorInfo {
   cause?: string;
 }
 
-
 // Optional fine-grained assertion detail (for UI/debug)
 export interface AssertionDetail {
   name?: string;
@@ -32,7 +31,6 @@ export interface GradingResult {
   namedScores?: Record<string, number>; // “metrics” in UI
   details?: AssertionDetail[]; // per-assertion info
 }
-
 
 // Unified per-case shape — aligns with Promptfoo
 export interface CaseResult {
