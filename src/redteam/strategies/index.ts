@@ -12,7 +12,7 @@ import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
-import { addAuthoritativeMarkupInjectionTestCases } from './authoritative-markup-injection';
+import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
