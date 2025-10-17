@@ -238,6 +238,14 @@ export async function doGenerateRedteam(
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
+  telemetry.record('redteam generate', {
+    phase: 'started',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
+    strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
+    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+  });
 
   let plugins: RedteamPluginObject[] = [];
 
@@ -600,6 +608,16 @@ export async function doGenerateRedteam(
   telemetry.record('command_used', {
     duration: Math.round((Date.now() - startTime) / 1000),
     name: 'generate redteam',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+    numTestsGenerated: redteamTests.length,
+    plugins: plugins.map((p) => p.id),
+    strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
+    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+  });
+  telemetry.record('redteam generate', {
+    phase: 'completed',
+    duration: Math.round((Date.now() - startTime) / 1000),
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
     numTestsGenerated: redteamTests.length,

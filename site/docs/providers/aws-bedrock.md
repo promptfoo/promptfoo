@@ -11,12 +11,16 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a comm
 
 ## Setup
 
-1. Ensure you have access to the desired models under the [Providers](https://console.aws.amazon.com/bedrock/home) page in Amazon Bedrock.
+1. **Model Access**: Amazon Bedrock provides automatic access to serverless foundation models with no manual approval required.
+   - **Most models**: Amazon, DeepSeek, Mistral, Meta, Qwen, and OpenAI models (including GPT-OSS and Qwen3) are available immediately - just start using them
+   - **Anthropic models**: Require one-time use case submission through the model catalog (access granted immediately after submission)
+   - **AWS Marketplace models**: Some third-party models require IAM permissions with `aws-marketplace:Subscribe`
+   - **Access control**: Organizations maintain control through IAM policies and Service Control Policies (SCPs)
 
-2. Install `@aws-sdk/client-bedrock-runtime`:
+2. Install the `@aws-sdk/client-bedrock-runtime` package:
 
    ```sh
-   npm install -g @aws-sdk/client-bedrock-runtime
+   npm install @aws-sdk/client-bedrock-runtime
    ```
 
 3. The AWS SDK will automatically pull credentials from the following locations:
@@ -1022,13 +1026,24 @@ Make sure to:
 
 ### AccessDeniedException: You don't have access to the model with the specified model ID
 
-If you see this error. Make sure you have access to the model in the region you're using:
+If you see this error, the cause depends on which model provider you're using:
 
-1. Verify model access in AWS Console:
-   - Go to AWS Bedrock Console
-   - Navigate to "Model access"
-   - Enable access for the specific model
-2. Check your region configuration matches the model's region.
+**For most serverless models** (Amazon, DeepSeek, Mistral, Meta, Qwen, OpenAI):
+
+- These models have instant access with no approval required
+- Verify your IAM permissions include `bedrock:InvokeModel`
+- Check your region configuration matches the model's region
+
+**For Anthropic models (Claude)**:
+
+- First-time use requires submitting use case details in the Bedrock console
+- Access is granted immediately after submission
+- This is a one-time step per AWS account or organization
+
+**For AWS Marketplace models**:
+
+- Ensure your IAM permissions include `aws-marketplace:Subscribe`
+- Subscribe to the model through AWS Marketplace
 
 ## Knowledge Base
 
@@ -1039,10 +1054,10 @@ AWS Bedrock Knowledge Bases provide Retrieval Augmented Generation (RAG) functio
 To use the Knowledge Base provider, you need:
 
 1. An existing Knowledge Base created in AWS Bedrock
-2. Install the required SDK:
+2. Install the `@aws-sdk/client-bedrock-agent-runtime` package:
 
    ```sh
-   npm install -g @aws-sdk/client-bedrock-agent-runtime
+   npm install @aws-sdk/client-bedrock-agent-runtime
    ```
 
 ### Configuration

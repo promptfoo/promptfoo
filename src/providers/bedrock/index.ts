@@ -1824,8 +1824,15 @@ export abstract class AwsBedrockGenericProvider {
     // 3. SSO profile as third priority
     if (this.config.profile) {
       logger.debug(`Using SSO profile: ${this.config.profile}`);
-      const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
-      return fromSSO({ profile: this.config.profile });
+      try {
+        const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
+        return fromSSO({ profile: this.config.profile });
+      } catch (err) {
+        logger.error(`Error loading @aws-sdk/credential-provider-sso: ${err}`);
+        throw new Error(
+          'The @aws-sdk/credential-provider-sso package is required for SSO profiles. Please install it: npm install @aws-sdk/credential-provider-sso',
+        );
+      }
     }
 
     // 4. AWS default credential chain (lowest priority)

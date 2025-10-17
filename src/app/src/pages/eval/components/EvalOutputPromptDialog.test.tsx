@@ -440,15 +440,25 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.getByText('Original Output')).toBeInTheDocument();
   });
 
-  it('should transition PromptEditor from read-only to editable when evaluationId is updated', async () => {
-    const { rerender } = render(
-      <EvalOutputPromptDialog {...defaultProps} evaluationId={undefined} />,
-    );
+  it('should show Edit & Replay button when readOnly is false (default)', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+
+    expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
+  });
+
+  it('should hide Edit & Replay button when readOnly is true', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} readOnly={true} />);
+
+    expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
+  });
+
+  it('should transition PromptEditor from read-only to editable when readOnly prop changes', async () => {
+    const { rerender } = render(<EvalOutputPromptDialog {...defaultProps} readOnly={true} />);
 
     expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
 
     await act(async () => {
-      rerender(<EvalOutputPromptDialog {...defaultProps} evaluationId="test-eval-id" />);
+      rerender(<EvalOutputPromptDialog {...defaultProps} readOnly={false} />);
     });
 
     expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
