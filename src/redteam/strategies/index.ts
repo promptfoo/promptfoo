@@ -136,9 +136,7 @@ export const Strategies: Strategy[] = [
   {
     id: 'authoritative-markup-injection',
     action: async (testCases, injectVar, config) => {
-      logger.debug(
-        `Adding Authoritative Markup Injection to ${testCases.length} test cases`,
-      );
+      logger.debug(`Adding Authoritative Markup Injection to ${testCases.length} test cases`);
       const newTestCases = await addAuthoritativeMarkupInjectionTestCases(
         testCases,
         injectVar,
