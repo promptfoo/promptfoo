@@ -1,9 +1,5 @@
 // Error categories (infra/runtime vs. logical assertion)
-export type ErrorType =
-  | 'provider_error'
-  | 'tool_error'
-  | 'validation_error'
-  | 'timeout';
+export type ErrorType = 'provider_error' | 'tool_error' | 'validation_error' | 'timeout';
 
 // Rich error info for infra/runtime/validation/timeout
 export interface EvalErrorInfo {
@@ -13,8 +9,11 @@ export interface EvalErrorInfo {
   hint?: string;
   provider?: string;
   requestId?: string;
-  raw?: unknown; // keep 'unknown' for safety
+  raw?: unknown;
+  stack?: string;
+  cause?: string;
 }
+
 
 // Optional fine-grained assertion detail (for UI/debug)
 export interface AssertionDetail {
@@ -27,12 +26,13 @@ export interface AssertionDetail {
 // Promptfoo-aligned grading block
 export interface GradingResult {
   pass: boolean;
-  score?: number;                        // 0..1 typical
+  score?: number; // 0..1 typical
   reason?: string;
-  componentResults?: GradingResult[];    // nested/compound checks
-  namedScores?: Record<string, number>;  // “metrics” in UI
-  details?: AssertionDetail[];           // per-assertion info
+  componentResults?: GradingResult[]; // nested/compound checks
+  namedScores?: Record<string, number>; // “metrics” in UI
+  details?: AssertionDetail[]; // per-assertion info
 }
+
 
 // Unified per-case shape — aligns with Promptfoo
 export interface CaseResult {
