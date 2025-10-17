@@ -302,6 +302,7 @@ export const ADDITIONAL_PLUGINS = [
   'special-token-injection',
   'sql-injection',
   'ssrf',
+  'sycophancy',
   'system-prompt-override',
   'tool-discovery',
   'unsafebench',

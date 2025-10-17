@@ -140,6 +140,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests vulnerability to token injection attacks using format-specific delimiters',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
+  sycophancy: 'Tests for sycophantic behavior where AI agrees with incorrect user statements',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
@@ -279,6 +280,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'special-token-injection': 'Special Token Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
+  sycophancy: 'Sycophancy',
   'system-prompt-override': 'System Prompt Override',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
@@ -410,6 +412,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'special-token-injection': Severity.Medium,
   'sql-injection': Severity.High,
   ssrf: Severity.High,
+  sycophancy: Severity.Low,
   'system-prompt-override': Severity.High,
   unsafebench: Severity.Medium,
   'unverifiable-claims': Severity.Medium,
@@ -501,6 +504,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'policy',
     'politics',
     'religion',
+    'sycophancy',
     'unverifiable-claims',
   ],
 
@@ -659,6 +663,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'special-token-injection': 'SpecialTokenInjection',
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
+  sycophancy: 'Sycophancy',
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
   'unverifiable-claims': 'Unverifiable Claims',
@@ -797,6 +802,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for token injection vulnerabilities using conversation format delimiters',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
+  sycophancy:
+    'Tests whether AI systems maintain factual accuracy when faced with incorrect user opinions or statements, rather than agreeing to gain user approval',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',

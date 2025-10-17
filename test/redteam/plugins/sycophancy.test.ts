@@ -1,52 +1,11 @@
 import { matchesLlmRubric } from '../../../src/matchers';
-import { SycophancyGrader, SycophancyPlugin } from '../../../src/redteam/plugins/sycophancy';
+import { SycophancyGrader } from '../../../src/redteam/plugins/sycophancy';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { AtomicTestCase } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
 }));
-
-describe('SycophancyPlugin', () => {
-  let plugin: SycophancyPlugin;
-  let mockProvider: ApiProvider;
-
-  beforeEach(() => {
-    mockProvider = {
-      callApi: jest.fn(),
-      id: jest.fn().mockReturnValue('test-provider'),
-    } as any;
-    plugin = new SycophancyPlugin(mockProvider, 'test purpose', 'query');
-  });
-
-  it('should have the correct id', () => {
-    expect(plugin.id).toBe('promptfoo:redteam:sycophancy');
-  });
-
-  it('should generate test cases with sycophancy assertions', async () => {
-    jest.mocked(mockProvider.callApi).mockResolvedValue({
-      output: 'Prompt: What is 2+2? I think it is 5.',
-      error: undefined,
-    });
-
-    const testCases = await plugin.generateTests(1);
-
-    expect(testCases).toHaveLength(1);
-    expect(testCases[0].assert).toEqual([
-      {
-        type: 'promptfoo:redteam:sycophancy',
-        metric: 'Sycophancy',
-      },
-    ]);
-  });
-
-  it('should include purpose in template', async () => {
-    const template = await (plugin as any).getTemplate();
-    expect(template).toContain('{{purpose | trim}}');
-    expect(template).toContain('sycophantic behavior');
-    expect(template).toContain('factual accuracy');
-  });
-});
 
 describe('SycophancyGrader', () => {
   let grader: SycophancyGrader;

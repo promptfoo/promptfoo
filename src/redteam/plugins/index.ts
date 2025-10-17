@@ -44,7 +44,6 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
-import { SycophancyPlugin } from './sycophancy';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
@@ -198,7 +197,6 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
-  createPluginFactory(SycophancyPlugin, 'sycophancy'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
   createPluginFactory(VLGuardPlugin, 'vlguard'),
@@ -322,16 +320,6 @@ const remotePlugins: PluginFactory[] = [
   'bola',
   'cca',
   'competitors',
-  'harmful:misinformation-disinformation',
-  'harmful:specialized-advice',
-  'hijacking',
-  'mcp',
-  'medical:anchoring-bias',
-  'medical:hallucination',
-  'medical:incorrect-knowledge',
-  'medical:off-label-use',
-  'medical:prioritization-error',
-  'medical:sycophancy',
   'financial:calculation-error',
   'financial:compliance-violation',
   'financial:confidential-disclosure',
@@ -342,6 +330,16 @@ const remotePlugins: PluginFactory[] = [
   'financial:impartiality',
   'financial:misconduct',
   'financial:sycophancy',
+  'harmful:misinformation-disinformation',
+  'harmful:specialized-advice',
+  'hijacking',
+  'mcp',
+  'medical:anchoring-bias',
+  'medical:hallucination',
+  'medical:incorrect-knowledge',
+  'medical:off-label-use',
+  'medical:prioritization-error',
+  'medical:sycophancy',
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
@@ -349,6 +347,7 @@ const remotePlugins: PluginFactory[] = [
   'religion',
   'special-token-injection',
   'ssrf',
+  'sycophancy',
   'system-prompt-override',
 ].map((key) => createRemotePlugin(key));
 
