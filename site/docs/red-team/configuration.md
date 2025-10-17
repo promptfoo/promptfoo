@@ -612,6 +612,40 @@ Disabling remote generation may result in lower quality adversarial inputs. For 
 
 If you need to use a custom provider for generation, you can still benefit from our remote service by leaving `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` set to `false` (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
 
+### Provider for Grading
+
+The `redteam.provider` configuration controls both attack generation and grading. When you configure a local provider (e.g., Ollama), promptfoo will use it for both generating attacks and grading the results.
+
+```yaml
+redteam:
+  provider: ollama:chat:llama3.2
+  plugins:
+    - harmful:hate
+    - excessive-agency
+```
+
+With this configuration:
+
+- **Attack generation**: Uses `ollama:chat:llama3.2` to create adversarial inputs
+- **Grading**: Uses the same provider to evaluate if attacks succeeded
+
+:::tip Fully Local Testing
+
+To run redteam tests entirely locally without remote API calls:
+
+1. Configure a local provider in `redteam.provider` (e.g., Ollama)
+2. Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`
+
+This ensures both generation and grading use your local model.
+
+:::
+
+:::warning
+
+When using `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`, this disables both remote attack generation and remote grading. If you only want to disable grading but keep remote attack generation, configure a local provider in `redteam.provider` and leave the environment variable unset.
+
+:::
+
 ### Custom Providers/Targets
 
 Promptfoo is very flexible and allows you to configure almost any code or API, with dozens of [providers](/docs/providers) supported out of the box.
