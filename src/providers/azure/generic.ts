@@ -99,18 +99,25 @@ export class AzureGenericProvider implements ApiProvider {
       this.env?.AZURE_AUTHORITY_HOST ||
       getEnvString('AZURE_AUTHORITY_HOST');
 
-    const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
+    try {
+      const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
 
-    if (clientSecret && clientId && tenantId) {
-      const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
-        authorityHost: authorityHost || 'https://login.microsoftonline.com',
-      });
+      if (clientSecret && clientId && tenantId) {
+        const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
+          authorityHost: authorityHost || 'https://login.microsoftonline.com',
+        });
+        return credential;
+      }
+
+      // Fallback to Azure CLI
+      const credential = new AzureCliCredential();
       return credential;
+    } catch (err) {
+      logger.error(`Error loading @azure/identity: ${err}`);
+      throw new Error(
+        'The @azure/identity package is required for Azure authentication. Please install it with: npm install @azure/identity',
+      );
     }
-
-    // Fallback to Azure CLI
-    const credential = new AzureCliCredential();
-    return credential;
   }
 
   async getAccessToken() {

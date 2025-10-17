@@ -1,17 +1,23 @@
 import React from 'react';
 
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import IconButton from '@mui/material/IconButton';
 import LinearProgress from '@mui/material/LinearProgress';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
@@ -93,6 +99,20 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
     error?: string;
     noTransform?: boolean;
   } | null>(null);
+  const [testInputExpanded, setTestInputExpanded] = React.useState(true);
+  const [formatError, setFormatError] = React.useState<string | null>(null);
+
+  const formatJson = () => {
+    try {
+      const parsed = JSON.parse(testInput);
+      const formatted = JSON.stringify(parsed, null, 2);
+      onTestInputChange(formatted);
+      setFormatError(null);
+    } catch (error) {
+      setFormatError(error instanceof Error ? error.message : 'Invalid JSON');
+      setTimeout(() => setFormatError(null), 3000);
+    }
+  };
 
   const testTransform = async () => {
     if (!testInput || !testInput.trim()) {
@@ -160,32 +180,132 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
           {/* Left side - Input */}
           <Box sx={{ display: 'flex', flexDirection: 'column', flex: '0 0 58%' }}>
             <Stack spacing={2} sx={{ flex: 1 }}>
+              {/* Test Input */}
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  {testInputLabel}
+                </Typography>
+                <Accordion
+                  expanded={testInputExpanded}
+                  onChange={(_, isExpanded) => setTestInputExpanded(isExpanded)}
+                  sx={{
+                    mb: 2,
+                    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                  }}
+                >
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        width: '100%',
+                        pr: 1,
+                      }}
+                    >
+                      <Typography variant="body2">Test input</Typography>
+                      <Tooltip title="Format JSON">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            formatJson();
+                          }}
+                        >
+                          <FormatAlignLeftIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    {formatError && (
+                      <Alert severity="error" sx={{ mb: 1 }}>
+                        {formatError}
+                      </Alert>
+                    )}
+                    <Box
+                      sx={{
+                        border: 1,
+                        borderColor: 'grey.300',
+                        borderRadius: 1,
+                        backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+                      }}
+                    >
+                      <Editor
+                        value={testInput}
+                        onValueChange={onTestInputChange}
+                        highlight={highlightJSON}
+                        padding={10}
+                        placeholder={testInputPlaceholder}
+                        style={{
+                          fontFamily: '"Fira code", "Fira Mono", monospace',
+                          fontSize: 14,
+                          minHeight: `${testInputRows * 20}px`,
+                        }}
+                      />
+                    </Box>
+                  </AccordionDetails>
+                </Accordion>
+              </Box>
+
               {/* Transform Code Editor */}
               <Box>
                 <Typography variant="subtitle2" gutterBottom>
-                  Transform Function (Optional)
+                  Transform Function
                 </Typography>
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    <strong>Function signature:</strong>
+                <Box
+                  component="details"
+                  sx={{
+                    mb: 1,
+                    p: 1.5,
+                    borderRadius: 1,
+                    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                    '& > summary': {
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    },
+                  }}
+                >
+                  <Typography component="summary" variant="body2" sx={{ fontWeight: 500 }}>
+                    View expected response format
                   </Typography>
-                  <Typography
-                    variant="body2"
-                    component="pre"
-                    sx={{
-                      fontFamily: 'monospace',
-                      fontSize: '0.75rem',
-                      mb: 1,
-                      whiteSpace: 'pre-wrap',
-                    }}
-                  >
-                    {functionDocumentation.signature}
+                  <Box sx={{ mt: 1.5 }}>
+                    <Typography variant="body2">{functionDocumentation.description}</Typography>
+                  </Box>
+                </Box>
+                <Box
+                  component="details"
+                  sx={{
+                    mb: 2,
+                    p: 1.5,
+                    borderRadius: 1,
+                    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                    '& > summary': {
+                      cursor: 'pointer',
+                    },
+                  }}
+                >
+                  <Typography component="summary" variant="body2" sx={{ fontWeight: 500 }}>
+                    View function signature
                   </Typography>
-                  <Typography variant="body2">{functionDocumentation.description}</Typography>
-                  <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
-                    Leave empty to test the base behavior without any transformation.
-                  </Typography>
-                </Alert>
+                  <Box sx={{ mt: 1.5 }}>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Function signature:</strong>
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      component="pre"
+                      sx={{
+                        fontFamily: 'monospace',
+                        fontSize: '0.75rem',
+                        mb: 0,
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {functionDocumentation.signature}
+                    </Typography>
+                  </Box>
+                </Box>
                 <Box
                   sx={{
                     border: 1,
@@ -207,30 +327,6 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                     }}
                   />
                 </Box>
-              </Box>
-
-              {/* Test Input */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  {testInputLabel}
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={testInputRows}
-                  value={testInput}
-                  onChange={(e) => onTestInputChange(e.target.value)}
-                  placeholder={testInputPlaceholder}
-                  variant="outlined"
-                  sx={{
-                    fontFamily: testInputRows > 3 ? 'monospace' : undefined,
-                    '& textarea': {
-                      fontFamily:
-                        testInputRows > 3 ? '"Fira code", "Fira Mono", monospace' : undefined,
-                      fontSize: testInputRows > 3 ? '0.875rem' : undefined,
-                    },
-                  }}
-                />
               </Box>
 
               {/* Test Button */}
