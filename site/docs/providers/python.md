@@ -61,6 +61,128 @@ npx promptfoo@latest eval
 
 That's it! You've created your first custom Python provider.
 
+## Performance: State Persistence
+
+**New in v0.x.x**: Python providers now use persistent worker processes for massive performance improvements.
+
+### How It Works
+
+Instead of creating a fresh Python process for each call, Promptfoo now:
+
+1. **Starts a worker pool** when the provider initializes
+2. **Loads your script once** per worker (heavy imports happen here)
+3. **Reuses the same worker** for multiple calls
+4. **Persists global state** across calls within the same worker
+
+**Impact**: Scripts with heavy imports (ML models, large libraries) see 10-100x speedup.
+
+### Example
+
+```python
+import torch
+from transformers import AutoModel
+
+# ✅ Model loaded ONCE when worker starts (not per call!)
+model = AutoModel.from_pretrained("bert-base-uncased")
+
+def call_api(prompt, options, context):
+    # Model already in memory, just use it
+    return {"output": model.generate(prompt)}
+```
+
+**Before (ephemeral)**:
+- Call 1: 10s (load model) + 0.1s (inference) = 10.1s
+- Call 2: 10s (load model) + 0.1s (inference) = 10.1s
+- **Total: 20.2s for 2 calls**
+
+**After (persistent)**:
+- Startup: 10s (load model once)
+- Call 1: 0.1s (inference)
+- Call 2: 0.1s (inference)
+- **Total: 10.2s for 2 calls** (2x faster!)
+
+For 100 calls: **50x faster!**
+
+### Global State Behavior
+
+**Global variables now persist** across calls within the same worker:
+
+```python
+# This counter persists!
+counter = 0
+
+def call_api(prompt, options, context):
+    global counter
+    counter += 1
+    return {"output": f"Call #{counter}"}
+```
+
+Results:
+- Call 1: "Call #1"
+- Call 2: "Call #2"  ← Counter persisted!
+- Call 3: "Call #3"
+
+**If you need fresh state for each call**, move initialization into the function:
+
+```python
+def call_api(prompt, options, context):
+    # Fresh counter every call
+    counter = 0
+    counter += 1
+    return {"output": f"Call #{counter}"}  # Always "Call #1"
+```
+
+### Configuring Worker Count
+
+Control parallelism per provider:
+
+```yaml
+providers:
+  # Default: 1 worker (memory-efficient, perfect for ML models)
+  - id: file://gpu_model.py
+
+  # Opt-in to parallel workers for CPU-bound tasks
+  - id: file://api_wrapper.py
+    config:
+      workers: 4  # Spawn 4 parallel workers
+```
+
+Or set globally via environment:
+
+```bash
+export PROMPTFOO_PYTHON_WORKERS=4
+npx promptfoo@latest eval
+```
+
+**Default**: 1 worker (memory-efficient, ideal for GPU-bound ML models)
+
+**When to use multiple workers**:
+- CPU-bound tasks (not GPU-limited)
+- Lightweight API wrappers (no heavy imports)
+- You have memory to spare (each worker = separate copy of imports)
+
+**When to use 1 worker** (default):
+- ML models (GPU-bound, only 1 can run at a time)
+- Heavy imports (avoid memory duplication)
+- Memory-constrained environments
+
+### Timeout Configuration
+
+Configure timeout per provider (default: 2 minutes):
+
+```yaml
+providers:
+  - id: file://slow_model.py
+    config:
+      timeout: 300000  # 5 minutes in milliseconds
+```
+
+### Backward Compatibility
+
+All existing Python providers work without changes. This is a performance improvement, not a breaking change.
+
+**Edge case**: Scripts relying on globals being reset each call will see different behavior. This is rare and easily fixed by moving state into the function.
+
 ## How It Works
 
 When Promptfoo evaluates a test case with a Python provider:
