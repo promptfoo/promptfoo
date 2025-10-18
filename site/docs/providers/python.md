@@ -63,11 +63,11 @@ That's it! You've created your first custom Python provider.
 
 ## Performance: State Persistence
 
-**New in v0.x.x**: Python providers now use persistent worker processes for massive performance improvements.
+Python providers use persistent worker processes for massive performance improvements.
 
 ### How It Works
 
-Instead of creating a fresh Python process for each call, Promptfoo now:
+Instead of creating a fresh Python process for each call, Promptfoo:
 
 1. **Starts a worker pool** when the provider initializes
 2. **Loads your script once** per worker (heavy imports happen here)
@@ -107,7 +107,7 @@ For 100 calls: **50x faster!**
 
 ### Global State Behavior
 
-**Global variables now persist** across calls within the same worker:
+**Global variables persist** across calls within the same worker:
 
 ```python
 # This counter persists!
