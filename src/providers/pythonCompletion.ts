@@ -3,7 +3,8 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import { runPython } from '../python/pythonUtils';
+import { getEnvInt } from '../python/pythonUtils';
+import { PythonWorkerPool } from '../python/workerPool';
 import { parsePathOrGlob } from '../util/index';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
@@ -20,6 +21,8 @@ import type {
 
 interface PythonProviderConfig {
   pythonExecutable?: string;
+  workers?: number;
+  timeout?: number;
 }
 
 export class PythonProvider implements ApiProvider {
@@ -30,6 +33,7 @@ export class PythonProvider implements ApiProvider {
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
   public label: string | undefined;
+  private pool: PythonWorkerPool | null = null;
 
   constructor(
     runPath: string,
@@ -51,7 +55,7 @@ export class PythonProvider implements ApiProvider {
   }
 
   /**
-   * Process any file:// references in the configuration
+   * Process any file:// references in the configuration and initialize worker pool
    * This should be called after initialization
    * @returns A promise that resolves when all file references have been processed
    */
@@ -73,8 +77,25 @@ export class PythonProvider implements ApiProvider {
           this.config,
           this.options?.config.basePath || '',
         );
+
+        // Initialize worker pool
+        const workerCount = this.getWorkerCount();
+        const absPath = path.resolve(
+          path.join(this.options?.config.basePath || '', this.scriptPath),
+        );
+
+        this.pool = new PythonWorkerPool(
+          absPath,
+          this.functionName || 'call_api',
+          workerCount,
+          this.config.pythonExecutable,
+          this.config.timeout,
+        );
+
+        await this.pool.initialize();
+
         this.isInitialized = true;
-        logger.debug(`Initialized Python provider ${this.id()}`);
+        logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
       } catch (error) {
         // Reset the initialization promise so future calls can retry
         this.initializationPromise = null;
@@ -83,6 +104,26 @@ export class PythonProvider implements ApiProvider {
     })();
 
     return this.initializationPromise;
+  }
+
+  /**
+   * Determine worker count based on config and environment
+   * Priority: config.workers > PROMPTFOO_PYTHON_WORKERS env > default 1
+   */
+  private getWorkerCount(): number {
+    // 1. Explicit config.workers
+    if (this.config.workers !== undefined) {
+      return this.config.workers;
+    }
+
+    // 2. Environment variable
+    const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
+    if (envWorkers !== undefined) {
+      return envWorkers;
+    }
+
+    // 3. Default: 1 worker (memory-efficient)
+    return 1;
   }
 
   /**
@@ -99,7 +140,7 @@ export class PythonProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
-    if (!this.isInitialized) {
+    if (!this.isInitialized || !this.pool) {
       await this.initialize();
     }
 
@@ -173,18 +214,18 @@ export class PythonProvider implements ApiProvider {
           : [prompt, optionsWithProcessedConfig];
 
       logger.debug(
-        `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
+        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
       );
 
       const functionName = this.functionName || apiType;
       let result;
 
+      // Use worker pool instead of runPython
+      result = await this.pool!.execute(functionName, args);
+
+      // Validation logic based on API type
       switch (apiType) {
         case 'call_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
           // Log result structure for debugging
           logger.debug(
             `Python provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
@@ -208,10 +249,6 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_embedding_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
           if (
             !result ||
             typeof result !== 'object' ||
@@ -225,10 +262,6 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_classification_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
           if (
             !result ||
             typeof result !== 'object' ||
