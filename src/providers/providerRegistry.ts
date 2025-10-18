@@ -1,15 +1,21 @@
 import logger from '../logger';
-import { PythonProvider } from './pythonCompletion';
+
+/**
+ * Interface for providers that need cleanup on process exit.
+ */
+interface CleanupProvider {
+  shutdown(): Promise<void>;
+}
 
 /**
  * Global registry of Python providers for cleanup on process exit.
  * Ensures no zombie Python processes are left running.
  */
 class ProviderRegistry {
-  private providers: Set<PythonProvider> = new Set();
+  private providers: Set<CleanupProvider> = new Set();
   private shutdownRegistered: boolean = false;
 
-  register(provider: PythonProvider): void {
+  register(provider: CleanupProvider): void {
     this.providers.add(provider);
 
     if (!this.shutdownRegistered) {
@@ -18,7 +24,7 @@ class ProviderRegistry {
     }
   }
 
-  unregister(provider: PythonProvider): void {
+  unregister(provider: CleanupProvider): void {
     this.providers.delete(provider);
   }
 
