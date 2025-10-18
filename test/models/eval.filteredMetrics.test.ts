@@ -488,10 +488,12 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
       expect(passMetrics[0].namedScores).toHaveProperty('accuracy');
       expect(passMetrics[0].namedScores).toHaveProperty('relevance');
 
-      // Pass metrics should have higher accuracy (all 1.0) vs all metrics (mixed)
-      expect(passMetrics[0].namedScores.accuracy).toBeGreaterThan(
-        allMetrics[0].namedScores.accuracy,
-      );
+      // Pass metrics should have LOWER accuracy sum than all metrics
+      // (5 passes at 1.0 each = 5.0 total) < (5 passes at 1.0 + 5 failures at 0.2 = 6.0 total)
+      expect(passMetrics[0].namedScores.accuracy).toBeLessThan(allMetrics[0].namedScores.accuracy);
+
+      // But the pass metrics should have non-zero accuracy
+      expect(passMetrics[0].namedScores.accuracy).toBeGreaterThan(0);
     });
   });
 });
