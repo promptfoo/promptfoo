@@ -1,0 +1,25 @@
+description: Test error recovery - worker survives exceptions
+
+providers:
+  - id: file://error_recovery_test.py
+
+prompts:
+  - "{{prompt}}"
+
+tests:
+  - description: "First call succeeds"
+    vars: { prompt: "Good prompt" }
+    assert:
+      - type: contains
+        value: "Success"
+
+  - description: "Second call errors (intentional)"
+    vars: { prompt: "ERROR please" }
+    assert:
+      - type: is-json  # Should return error object
+
+  - description: "Third call succeeds (worker survived)"
+    vars: { prompt: "Another good prompt" }
+    assert:
+      - type: contains
+        value: "Success"

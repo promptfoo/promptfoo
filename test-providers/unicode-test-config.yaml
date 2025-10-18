@@ -1,0 +1,19 @@
+description: Test Unicode handling across platforms
+
+providers:
+  - id: file://unicode_test.py
+
+prompts:
+  - "Test with emoji: 😀 and CJK: 測試 and Arabic: مرحبا"
+
+tests:
+  - description: "Unicode characters preserved end-to-end"
+    assert:
+      - type: contains
+        value: "😀"
+      - type: contains
+        value: "測試"
+      - type: contains
+        value: "مرحبا"
+      - type: contains
+        value: "Echo:"

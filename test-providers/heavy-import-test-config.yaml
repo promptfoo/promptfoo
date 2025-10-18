@@ -1,0 +1,38 @@
+description: Test heavy import performance with persistence
+
+providers:
+  - id: file://heavy_import_simulation.py
+
+prompts:
+  - "Test {{n}}"
+
+tests:
+  - description: "Call 1 - Module loads with 300ms import"
+    vars: { n: 1 }
+    assert:
+      - type: contains
+        value: "Response to: Test 1"
+
+  - description: "Call 2 - Module already loaded (no import delay)"
+    vars: { n: 2 }
+    assert:
+      - type: contains
+        value: "Response to: Test 2"
+
+  - description: "Call 3 - Module already loaded"
+    vars: { n: 3 }
+    assert:
+      - type: contains
+        value: "Response to: Test 3"
+
+  - description: "Call 4 - Module already loaded"
+    vars: { n: 4 }
+    assert:
+      - type: contains
+        value: "Response to: Test 4"
+
+  - description: "Call 5 - Module already loaded"
+    vars: { n: 5 }
+    assert:
+      - type: contains
+        value: "Response to: Test 5"
