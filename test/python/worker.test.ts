@@ -57,4 +57,46 @@ def call_api(prompt, options, context):
     expect(result2.output).toBe('Echo: Second');
     // Same process should be used (we'll verify in implementation)
   });
+
+  it('should call different function names dynamically per request', async () => {
+    // Create a provider with multiple API functions
+    const multiApiPath = path.join(__dirname, 'fixtures', 'multi_api_provider.py');
+    fs.writeFileSync(
+      multiApiPath,
+      `
+def call_api(prompt, options, context):
+    return {"output": f"text: {prompt}", "type": "text"}
+
+def call_embedding_api(prompt, options, context):
+    return {"output": [0.1, 0.2, 0.3], "type": "embedding"}
+
+def call_classification_api(prompt, options, context):
+    return {"output": "positive", "type": "classification"}
+`,
+    );
+
+    try {
+      worker = new PythonWorker(multiApiPath, 'call_api');
+      await worker.initialize();
+
+      // Call different functions in the same worker
+      const textResult = await worker.call('call_api', ['hello', {}, {}]);
+      const embeddingResult = await worker.call('call_embedding_api', ['hello', {}, {}]);
+      const classResult = await worker.call('call_classification_api', ['hello', {}, {}]);
+
+      // Verify each function was called correctly
+      expect(textResult.type).toBe('text');
+      expect(textResult.output).toBe('text: hello');
+
+      expect(embeddingResult.type).toBe('embedding');
+      expect(embeddingResult.output).toEqual([0.1, 0.2, 0.3]);
+
+      expect(classResult.type).toBe('classification');
+      expect(classResult.output).toBe('positive');
+    } finally {
+      if (fs.existsSync(multiApiPath)) {
+        fs.unlinkSync(multiApiPath);
+      }
+    }
+  });
 });
