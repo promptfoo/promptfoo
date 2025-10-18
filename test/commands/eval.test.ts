@@ -5,7 +5,6 @@ import { disableCache } from '../../src/cache';
 import {
   doEval,
   evalCommand,
-  formatTokenUsage,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
 import { evaluate } from '../../src/evaluator';
@@ -480,41 +479,6 @@ describe('checkCloudPermissions', () => {
 
     // Verify that evaluate was called
     expect(evaluate).toHaveBeenCalled();
-  });
-});
-
-describe('formatTokenUsage', () => {
-  it('should format complete token usage data', () => {
-    const usage = {
-      total: 1000,
-      prompt: 400,
-      completion: 600,
-      cached: 200,
-      completionDetails: {
-        reasoning: 300,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    };
-
-    const result = formatTokenUsage(usage);
-    expect(result).toBe('1,000 total / 400 prompt / 600 completion / 200 cached / 300 reasoning');
-  });
-
-  it('should handle partial token usage data', () => {
-    const usage = {
-      total: 1000,
-    };
-
-    const result = formatTokenUsage(usage);
-    expect(result).toBe('1,000 total');
-  });
-
-  it('should handle empty token usage', () => {
-    const usage = {};
-
-    const result = formatTokenUsage(usage);
-    expect(result).toBe('');
   });
 });
 
