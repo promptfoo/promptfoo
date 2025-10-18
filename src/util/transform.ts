@@ -5,7 +5,7 @@ import { runPython } from '../python/pythonUtils';
 import { safeJoin } from './pathUtils';
 import { isJavascriptFile } from './fileExtensions';
 
-import type { Vars } from '../types/index';
+import type { TransformReturn, Vars } from '../types/index';
 
 export type TransformContext = object;
 
@@ -142,7 +142,8 @@ async function getTransformFunction(
  * @param transformInput - The output to be transformed. Can be a string or an object.
  * @param context - A context object that will be passed to the transform function.
  * @param validateReturn - Optional. If true, throws an error if the transform function doesn't return a value.
- * @returns A promise that resolves to the transformed output.
+ * @returns A promise that resolves to the transformed output, or a TransformReturnWithTestResult
+ * object if the transform wants to control the test outcome.
  * @throws Error if the file format is unsupported or if the transform function
  * doesn't return a value (unless validateReturn is false).
  */
@@ -152,7 +153,7 @@ export async function transform(
   context: TransformContext,
   validateReturn: boolean = true,
   inputType: TransformInputType = TransformInputType.OUTPUT,
-): Promise<any> {
+): Promise<TransformReturn> {
   const postprocessFn = await getTransformFunction(codeOrFilepath, inputType);
   if (!postprocessFn) {
     throw new Error(`Invalid transform function for ${codeOrFilepath}`);
