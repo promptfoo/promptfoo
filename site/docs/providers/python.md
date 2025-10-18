@@ -63,16 +63,16 @@ That's it! You've created your first custom Python provider.
 
 ## Performance: State Persistence
 
-Persistent worker processes deliver massive performance improvements.
+Python providers use persistent worker processes for massive performance improvements.
 
 ### How It Works
 
-Instead of creating a fresh Python process for each call, Promptfoo:
+Promptfoo maintains a pool of persistent Python workers that:
 
-1. **Starts a worker pool** when the provider initializes
-2. **Loads your script once** per worker (heavy imports happen here)
-3. **Reuses the same worker** for multiple calls
-4. **Persists global state** across calls within the same worker
+1. **Start when the provider initializes**
+2. **Load your script once** per worker (heavy imports happen here)
+3. **Reuse the same process** for multiple calls
+4. **Persist global state** across calls within the same worker
 
 **Impact**: Scripts with heavy imports (ML models, large libraries) see 10-100x speedup.
 
@@ -82,7 +82,7 @@ Instead of creating a fresh Python process for each call, Promptfoo:
 import torch
 from transformers import AutoModel
 
-# ✅ Model loaded ONCE when worker starts (not per call!)
+# Model loaded ONCE when worker starts (not per call!)
 model = AutoModel.from_pretrained("bert-base-uncased")
 
 def call_api(prompt, options, context):
@@ -90,20 +90,18 @@ def call_api(prompt, options, context):
     return {"output": model.generate(prompt)}
 ```
 
-**Before (ephemeral)**:
+**Performance characteristics:**
 
-- Call 1: 10s (load model) + 0.1s (inference) = 10.1s
-- Call 2: 10s (load model) + 0.1s (inference) = 10.1s
-- **Total: 20.2s for 2 calls**
+Heavy imports (like loading a BERT model) happen once when the worker starts, not on every call:
 
-**After (persistent)**:
+- Worker startup: 10s (load model once)
+- Call 1: 0.1s (inference only)
+- Call 2: 0.1s (inference only)
+- Call 100: 0.1s (inference only)
 
-- Startup: 10s (load model once)
-- Call 1: 0.1s (inference)
-- Call 2: 0.1s (inference)
-- **Total: 10.2s for 2 calls** (2x faster!)
+**Total for 100 calls**: 10s startup + 10s inference = **20 seconds**
 
-For 100 calls: **50x faster!**
+Without persistent workers, you'd reload the model 100 times (1,010 seconds), making persistence **50x faster** for this workload.
 
 ### Global State Behavior
 
@@ -181,12 +179,6 @@ providers:
     config:
       timeout: 300000 # 5 minutes in milliseconds
 ```
-
-### Backward Compatibility
-
-All existing Python providers work without changes. This is a performance improvement, not a breaking change.
-
-**Edge case**: Scripts relying on globals being reset each call will see different behavior. This is rare and easily fixed by moving state into the function.
 
 ## How It Works
 
