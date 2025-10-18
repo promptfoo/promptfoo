@@ -24,6 +24,7 @@ interface PythonProviderConfig {
   pythonExecutable?: string;
   workers?: number;
   timeout?: number;
+  [key: string]: any; // Allow arbitrary config properties for user scripts
 }
 
 export class PythonProvider implements ApiProvider {
