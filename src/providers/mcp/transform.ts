@@ -15,12 +15,24 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
     const schema: MCPToolInputSchema = tool.inputSchema;
     let properties: Record<string, any> = {};
     let required: string[] | undefined = undefined;
+    let additionalProperties: boolean | Record<string, any> | undefined = undefined;
 
     if (schema && typeof schema === 'object' && 'properties' in schema) {
+      // Extract properties and required fields from the schema
       properties = schema.properties ?? {};
       required = schema.required;
+
+      // Preserve additionalProperties if it exists
+      if ('additionalProperties' in schema) {
+        additionalProperties = schema.additionalProperties;
+      }
+    } else if (schema && typeof schema === 'object') {
+      // Schema exists but doesn't have properties field
+      // This shouldn't normally happen with MCP SDK, but handle it gracefully
+      properties = {};
     } else {
-      properties = (schema as Record<string, any>) || {};
+      // No schema or invalid schema
+      properties = {};
     }
 
     return {
@@ -31,7 +43,8 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
         parameters: {
           type: 'object',
           properties,
-          ...(required ? { required } : {}),
+          ...(required && required.length > 0 ? { required } : {}),
+          ...(additionalProperties !== undefined ? { additionalProperties } : {}),
         },
       },
     };

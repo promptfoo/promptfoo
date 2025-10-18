@@ -57,6 +57,8 @@ describe('transformMCPToolsToOpenAi', () => {
       },
     ];
 
+    // When inputSchema has type but no properties field, we should return empty properties
+    // This is a malformed schema - MCP tools should have proper JSON Schema format
     const expected: OpenAiTool[] = [
       {
         type: 'function',
@@ -65,9 +67,7 @@ describe('transformMCPToolsToOpenAi', () => {
           description: 'A simple tool',
           parameters: {
             type: 'object',
-            properties: {
-              type: 'string',
-            },
+            properties: {},
           },
         },
       },
@@ -130,6 +130,118 @@ describe('transformMCPToolsToOpenAi', () => {
     expect(result).toHaveLength(2);
     expect(result[0].function.name).toBe('tool1');
     expect(result[1].function.name).toBe('tool2');
+  });
+
+  it('should remove $schema field from inputSchema', () => {
+    const mcpTools: MCPTool[] = [
+      {
+        name: 'tool_with_schema',
+        description: 'Tool with $schema field',
+        inputSchema: {
+          $schema: 'http://json-schema.org/draft-07/schema#',
+          type: 'object',
+          properties: {
+            param: { type: 'string' },
+          },
+        },
+      },
+    ];
+
+    const result = transformMCPToolsToOpenAi(mcpTools);
+    expect(result[0].function.parameters).not.toHaveProperty('$schema');
+    expect(result[0].function.parameters).toEqual({
+      type: 'object',
+      properties: {
+        param: { type: 'string' },
+      },
+    });
+  });
+
+  it('should preserve additionalProperties when present', () => {
+    const mcpTools: MCPTool[] = [
+      {
+        name: 'tool_with_additional_props',
+        description: 'Tool with additionalProperties',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          additionalProperties: false,
+        },
+      },
+    ];
+
+    const result = transformMCPToolsToOpenAi(mcpTools);
+    expect(result[0].function.parameters).toEqual({
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    });
+  });
+
+  it('should handle schema from MCP SDK with all metadata fields', () => {
+    const mcpTools: MCPTool[] = [
+      {
+        name: 'mcp_sdk_tool',
+        description: 'Tool with MCP SDK generated schema',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          additionalProperties: false,
+          $schema: 'http://json-schema.org/draft-07/schema#',
+        },
+      },
+    ];
+
+    const result = transformMCPToolsToOpenAi(mcpTools);
+    // Should not include $schema but should include additionalProperties
+    expect(result[0].function.parameters).toEqual({
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    });
+    expect(result[0].function.parameters).not.toHaveProperty('$schema');
+  });
+
+  it('should not include required field when empty', () => {
+    const mcpTools: MCPTool[] = [
+      {
+        name: 'tool_empty_required',
+        description: 'Tool with empty required array',
+        inputSchema: {
+          properties: {
+            param: { type: 'string' },
+          },
+          required: [],
+        },
+      },
+    ];
+
+    const result = transformMCPToolsToOpenAi(mcpTools);
+    expect(result[0].function.parameters).not.toHaveProperty('required');
+    expect(result[0].function.parameters).toEqual({
+      type: 'object',
+      properties: {
+        param: { type: 'string' },
+      },
+    });
+  });
+
+  it('should handle schema without properties field', () => {
+    const mcpTools: MCPTool[] = [
+      {
+        name: 'tool_no_properties',
+        description: 'Tool without properties field',
+        inputSchema: {
+          type: 'object',
+        },
+      },
+    ];
+
+    const result = transformMCPToolsToOpenAi(mcpTools);
+    expect(result[0].function.parameters).toEqual({
+      type: 'object',
+      properties: {},
+    });
   });
 });
 
