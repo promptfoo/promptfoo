@@ -556,6 +556,50 @@ tests:
    - Both receive the provider-transformed output directly
 3. **Assertion Transform**: Applied to already-transformed output for specific assertions
 
+### Transform-Controlled Test Outcomes
+
+Transforms can control test pass/fail without running assertions by returning a special `testResult` object. This is useful when you need **inverted logic** or **complex conditional pass/fail rules** that assertions can't handle.
+
+:::tip When to Use This Pattern
+
+Use transform-controlled outcomes when you need **conditional logic** that assertions don't support:
+
+- **Inverted logic**: Pass when guardrails DON'T trigger (red team/jailbreak testing)
+- **Multi-field validation**: Pass/fail based on combination of vars + response metadata
+- **Fail-fast on errors**: Skip expensive assertions if infrastructure failed
+- **State-dependent logic**: Different success criteria based on test type/category
+
+For standard pass/fail checks, use [assertions](/docs/configuration/expected-outputs) instead (e.g., `type: guardrails`, `type: cost`).
+
+:::
+
+#### Return Object Structure
+
+```javascript
+return {
+  testResult: {
+    pass: boolean,              // Whether test passes
+    score: number,              // Score (typically 0-1)
+    reason: string,             // Explanation for pass/fail
+    namedScores?: {             // Optional named metrics
+      metric_name: number
+    },
+    metadata?: object           // Optional additional data
+  },
+  output?: string | object      // Optional output for display
+};
+```
+
+#### Behavior
+
+When a transform returns a `testResult` object:
+
+1. **Assertions are skipped** - More efficient, no LLM grading calls
+2. **Test outcome is determined by transform** - `pass` and `score` from `testResult` are used
+3. **Provider transform takes precedence** - If both provider and test transforms set results, provider wins
+
+For a complete working example, see [transform-test-control example](https://github.com/promptfoo/promptfoo/tree/main/examples/transform-test-control).
+
 ### ProviderFunction
 
 A ProviderFunction is a function that takes a prompt as an argument and returns a Promise that resolves to a ProviderResponse. It allows you to define custom logic for calling an API.

@@ -36,11 +36,14 @@ import {
   type EvaluateOptions,
   type EvaluateResult,
   type EvaluateStats,
+  type GradingResult,
   type Prompt,
   type ProviderResponse,
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
+  type TransformReturnWithTestResult,
+  type TransformTestResult,
 } from './types/index';
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
@@ -215,6 +218,24 @@ function updateAssertionMetrics(
     // Accumulate assertion tokens using the specialized assertion function
     accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, assertionTokens);
   }
+}
+
+/**
+ * Type guard to check if a transform return value contains a test result.
+ * @param value - The value returned by a transform function
+ * @returns True if the value contains a testResult field that controls test outcome
+ */
+function isTransformReturnWithTestResult(value: any): value is TransformReturnWithTestResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'testResult' in value &&
+    typeof value.testResult === 'object' &&
+    value.testResult !== null &&
+    typeof value.testResult.pass === 'boolean' &&
+    typeof value.testResult.score === 'number' &&
+    typeof value.testResult.reason === 'string'
+  );
 }
 
 /**
@@ -475,26 +496,72 @@ export async function runEval({
     } else {
       // Create a copy of response so we can potentially mutate it.
       const processedResponse = { ...response };
+      let transformTestResult: TransformTestResult | null = null;
 
       // Apply provider transform first (if exists)
-      if (provider.transform) {
-        processedResponse.output = await transform(provider.transform, processedResponse.output, {
+      if (provider.config?.transform) {
+        const transformContext: TransformContext = {
           vars,
           prompt,
-        });
+        };
+        // Add metadata if it exists
+        if (response.metadata) {
+          transformContext.metadata = response.metadata;
+        }
+        // Add guardrails if they exist (commonly used for safety testing)
+        if (response.guardrails) {
+          if (!transformContext.metadata) {
+            transformContext.metadata = {};
+          }
+          transformContext.metadata.guardrails = response.guardrails;
+        }
+
+        const transformed = await transform(
+          provider.config.transform,
+          processedResponse.output,
+          transformContext,
+        );
+
+        // Check if transform returned test result
+        if (isTransformReturnWithTestResult(transformed)) {
+          transformTestResult = transformed.testResult;
+          processedResponse.output = transformed.output ?? processedResponse.output;
+          logger.debug('Provider transform set test result', {
+            pass: transformTestResult.pass,
+            score: transformTestResult.score,
+            reason: transformTestResult.reason,
+          });
+        } else {
+          processedResponse.output = transformed;
+        }
       }
 
       // Store the provider-transformed output for assertions (contextTransform)
       const providerTransformedOutput = processedResponse.output;
 
-      // Apply test transform (if exists)
-      const testTransform = test.options?.transform || test.options?.postprocess;
-      if (testTransform) {
-        processedResponse.output = await transform(testTransform, processedResponse.output, {
-          vars,
-          prompt,
-          ...(response && response.metadata && { metadata: response.metadata }),
-        });
+      // Apply test transform (if exists) - ONLY if provider transform didn't set result
+      if (!transformTestResult) {
+        const testTransform = test.options?.transform || test.options?.postprocess;
+        if (testTransform) {
+          const transformed = await transform(testTransform, processedResponse.output, {
+            vars,
+            prompt,
+            ...(response && response.metadata && { metadata: response.metadata }),
+          });
+
+          // Check if transform returned test result
+          if (isTransformReturnWithTestResult(transformed)) {
+            transformTestResult = transformed.testResult;
+            processedResponse.output = transformed.output ?? processedResponse.output;
+            logger.debug('Test transform set test result', {
+              pass: transformTestResult.pass,
+              score: transformTestResult.score,
+              reason: transformTestResult.reason,
+            });
+          } else {
+            processedResponse.output = transformed;
+          }
+        }
       }
 
       invariant(processedResponse.output != null, 'Response output should not be null');
@@ -509,20 +576,41 @@ export async function runEval({
         }
       }
 
-      // Pass providerTransformedOutput for contextTransform to use
-      const checkResult = await runAssertions({
-        prompt: renderedPrompt,
-        provider,
-        providerResponse: {
-          ...processedResponse,
-          // Add provider-transformed output for contextTransform
-          providerTransformedOutput,
-        },
-        test,
-        latencyMs: response.cached ? undefined : latencyMs,
-        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-        traceId,
-      });
+      // If transform set the test result, use it; otherwise run assertions
+      let checkResult: GradingResult;
+
+      if (transformTestResult) {
+        // Transform determined the outcome
+        checkResult = {
+          pass: transformTestResult.pass,
+          score: transformTestResult.score,
+          reason: transformTestResult.reason,
+          namedScores: transformTestResult.namedScores || {},
+          componentResults: [],
+          metadata: transformTestResult.metadata,
+        };
+
+        logger.info('Transform controlled test outcome', {
+          pass: checkResult.pass,
+          score: checkResult.score,
+          reason: checkResult.reason,
+        });
+      } else {
+        // Normal path: run assertions
+        checkResult = await runAssertions({
+          prompt: renderedPrompt,
+          provider,
+          providerResponse: {
+            ...processedResponse,
+            // Add provider-transformed output for contextTransform
+            providerTransformedOutput,
+          },
+          test,
+          latencyMs: response.cached ? undefined : latencyMs,
+          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+          traceId,
+        });
+      }
 
       if (!checkResult.pass) {
         ret.error = checkResult.reason;
@@ -531,16 +619,20 @@ export async function runEval({
       ret.success = checkResult.pass;
       ret.score = checkResult.score;
       ret.namedScores = checkResult.namedScores || {};
-      // Track assertion request count
-      if (!ret.tokenUsage.assertions) {
-        ret.tokenUsage.assertions = createEmptyAssertions();
-      }
-      ret.tokenUsage.assertions.numRequests = (ret.tokenUsage.assertions.numRequests ?? 0) + 1;
 
-      // Track assertion token usage if provided
-      if (checkResult.tokensUsed) {
-        accumulateAssertionTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
+      // Track assertion request count (only if assertions were run)
+      if (!transformTestResult) {
+        if (!ret.tokenUsage.assertions) {
+          ret.tokenUsage.assertions = createEmptyAssertions();
+        }
+        ret.tokenUsage.assertions.numRequests = (ret.tokenUsage.assertions.numRequests ?? 0) + 1;
+
+        // Track assertion token usage if provided
+        if (checkResult.tokensUsed) {
+          accumulateAssertionTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
+        }
       }
+
       ret.response = processedResponse;
       ret.gradingResult = checkResult;
     }

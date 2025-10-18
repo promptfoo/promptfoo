@@ -126,6 +126,65 @@ export const OutputConfigSchema = z.object({
 
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
+/**
+ * Transform functions can return this special object to control test outcomes.
+ * This allows transforms to auto-pass or auto-fail tests based on response characteristics.
+ *
+ * @example
+ * ```javascript
+ * module.exports = (output, context) => {
+ *   if (!context.metadata?.guardrails?.flagged) {
+ *     return {
+ *       testResult: {
+ *         pass: false,
+ *         score: 0,
+ *         reason: 'Guardrails did not block harmful input'
+ *       },
+ *       output: output
+ *     };
+ *   }
+ *   return output;
+ * };
+ * ```
+ */
+export interface TransformTestResult {
+  /** Whether the test should pass */
+  pass: boolean;
+
+  /** Test score (typically 0-1) */
+  score: number;
+
+  /** Reason for the pass/fail decision */
+  reason: string;
+
+  /** Optional named scores for metrics */
+  namedScores?: Record<string, number>;
+
+  /** Optional metadata */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Special return type for transforms that want to control test outcomes.
+ * When a transform returns this object, the test result is determined by
+ * the testResult field instead of running assertions.
+ */
+export interface TransformReturnWithTestResult {
+  /** Special key that signals transform is controlling test outcome */
+  testResult: TransformTestResult;
+
+  /** Optional output for display purposes */
+  output?: string | object;
+}
+
+/**
+ * Union type for all possible transform return values.
+ * Can be a string, any object, or specifically a TransformReturnWithTestResult.
+ * Using `any` here maintains backwards compatibility with existing transform code
+ * while still allowing type checking for the testResult pattern.
+ */
+export type TransformReturn = any;
+
 export type EvalConversations = Record<
   string,
   { prompt: string | object; input: string; output: string | object; metadata?: object }[]
