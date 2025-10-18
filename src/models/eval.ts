@@ -42,6 +42,7 @@ import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
+import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 
 import type { EvalResultsFilterMode } from '../types/index';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
@@ -723,8 +724,6 @@ export default class Eval {
     searchQuery?: string;
     filters?: string[];
   }): Promise<import('../types').PromptMetrics[]> {
-    const { calculateFilteredMetrics } = await import('../util/calculateFilteredMetrics');
-
     // CRITICAL: Use the SAME WHERE clause as queryTestIndices
     const whereSql = this.buildFilterWhereSql(opts);
 
