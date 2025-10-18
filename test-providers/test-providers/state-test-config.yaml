@@ -1,0 +1,26 @@
+description: Test state persistence across calls
+
+providers:
+  - id: file://state_persistence_test.py
+
+prompts:
+  - "Test {{n}}"
+
+tests:
+  - description: "First call should be #1"
+    vars: { n: 1 }
+    assert:
+      - type: equals
+        value: "Call #1"
+
+  - description: "Second call should be #2 (state persists)"
+    vars: { n: 2 }
+    assert:
+      - type: equals
+        value: "Call #2"
+
+  - description: "Third call should be #3 (state persists)"
+    vars: { n: 3 }
+    assert:
+      - type: equals
+        value: "Call #3"

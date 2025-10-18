@@ -1,0 +1,12 @@
+description: Debug output format
+
+providers:
+  - id: file://state_persistence_test.py
+
+prompts:
+  - "Debug test"
+
+tests:
+  - description: "See output structure"
+    assert:
+      - type: is-json

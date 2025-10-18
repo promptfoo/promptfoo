@@ -1,0 +1,15 @@
+description: Test how to access response fields
+
+providers:
+  - id: file://state_persistence_test.py
+
+prompts:
+  - "Test 1"
+
+tests:
+  - description: "Test output access"
+    assert:
+      - type: javascript
+        value: "typeof output"
+      - type: javascript
+        value: "JSON.stringify(context.vars || {})"
