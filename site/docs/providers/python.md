@@ -1,17 +1,17 @@
 ---
 sidebar_label: Custom Python
-description: 'Create custom Python scripts for advanced model integrations, evals, and complex testing logic with full flexibility'
+description: 'Create custom Python scripts for advanced model integrations, evaluations, and complex testing logic with full flexibility'
 ---
 
 # Python Provider
 
-The Python provider enables you to create custom eval logic using Python scripts. This allows you to integrate Promptfoo with any Python-based model, API, or custom logic.
+The Python provider enables you to create custom evaluation logic using Python scripts. This allows you to integrate Promptfoo with any Python-based model, API, or custom logic.
 
 **Common use cases:**
 
 - Integrating proprietary or local models
 - Adding custom preprocessing/postprocessing logic
-- Implementing complex eval workflows
+- Implementing complex evaluation workflows
 - Using Python-specific ML libraries
 - Creating mock providers for testing
 
@@ -53,7 +53,7 @@ prompts:
   - 'What is 2+2?'
 ```
 
-### Step 3: Run the eval
+### Step 3: Run the evaluation
 
 ```bash
 npx promptfoo@latest eval
@@ -198,12 +198,12 @@ When Promptfoo evaluates a test case with a Python provider:
    - `options`: Provider configuration from your YAML
    - `context`: Variables and metadata for the current test
 3. **Your Code** processes the prompt and returns a response
-4. **Promptfoo** validates the response and continues the eval
+4. **Promptfoo** validates the response and continues evaluation
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │ Promptfoo   │────▶│ Your Python  │────▶│ Your Logic  │
-│ Eval        │     │ Provider     │     │ (API/Model) │
+│ Evaluation  │     │ Provider     │     │ (API/Model) │
 └─────────────┘     └──────────────┘     └─────────────┘
        ▲                    │
        │                    ▼
@@ -470,7 +470,7 @@ import time
 import random
 
 def call_api(prompt, options, context):
-    """Mock provider for testing eval pipelines."""
+    """Mock provider for testing evaluation pipelines."""
     config = options.get('config', {})
 
     # Simulate processing time
@@ -602,7 +602,7 @@ export PYTHONPATH=/path/to/my/modules:$PYTHONPATH
 # Enable Python debugging with pdb
 export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
 
-# Run eval
+# Run evaluation
 npx promptfoo@latest eval
 ```
 
@@ -741,7 +741,7 @@ def call_api(prompt, options, context):
        return {"output": result}
    ```
 
-   This allows interactive debugging directly in your terminal during eval runs.
+   This allows interactive debugging directly in your terminal during evaluation runs.
 
 ## Migration Guide
 
