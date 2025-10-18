@@ -14,10 +14,13 @@ describe('PythonWorker', () => {
       fs.mkdirSync(fixturesDir, { recursive: true });
     }
 
-    fs.writeFileSync(testScriptPath, `
+    fs.writeFileSync(
+      testScriptPath,
+      `
 def call_api(prompt, options, context):
     return {"output": f"Echo: {prompt}"}
-`);
+`,
+    );
   });
 
   afterAll(() => {

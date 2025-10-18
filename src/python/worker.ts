@@ -82,10 +82,7 @@ export class PythonWorker {
     this.busy = true;
 
     try {
-      return await Promise.race([
-        this.executeCall(functionName, args),
-        this.createTimeout(),
-      ]);
+      return await Promise.race([this.executeCall(functionName, args), this.createTimeout()]);
     } finally {
       this.busy = false;
       if (this.requestTimeout) {

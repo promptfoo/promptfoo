@@ -30,11 +30,13 @@ export class PythonWorkerPool {
     if (this.workerCount > 8) {
       logger.warn(
         `Spawning ${this.workerCount} Python workers for ${this.scriptPath}. ` +
-        `This may use significant memory if your script has heavy imports.`,
+          `This may use significant memory if your script has heavy imports.`,
       );
     }
 
-    logger.debug(`Initializing Python worker pool with ${this.workerCount} workers for ${this.scriptPath}`);
+    logger.debug(
+      `Initializing Python worker pool with ${this.workerCount} workers for ${this.scriptPath}`,
+    );
 
     // Start all workers in parallel
     const initPromises = [];
@@ -116,9 +118,7 @@ export class PythonWorkerPool {
 
     logger.debug(`Processing queued request (${this.queue.length} remaining)`);
 
-    worker.call(request.functionName, request.args)
-      .then(request.resolve)
-      .catch(request.reject);
+    worker.call(request.functionName, request.args).then(request.resolve).catch(request.reject);
   }
 
   private getAvailableWorkerForQueue(): PythonWorker | null {
@@ -139,7 +139,7 @@ export class PythonWorkerPool {
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);
 
     // Shutdown all workers in parallel
-    await Promise.all(this.workers.map(w => w.shutdown()));
+    await Promise.all(this.workers.map((w) => w.shutdown()));
 
     this.workers = [];
     this.queue = [];

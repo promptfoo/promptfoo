@@ -8,7 +8,9 @@ describe('PythonWorkerPool', () => {
 
   beforeAll(() => {
     // Create test fixture with global state
-    fs.writeFileSync(testScriptPath, `
+    fs.writeFileSync(
+      testScriptPath,
+      `
 # Global counter - persists across calls within same worker
 call_count = 0
 
@@ -16,7 +18,8 @@ def call_api(prompt, options, context):
     global call_count
     call_count += 1
     return {"output": f"Call #{call_count}: {prompt}", "count": call_count}
-`);
+`,
+    );
   });
 
   afterAll(() => {
@@ -65,7 +68,7 @@ def call_api(prompt, options, context):
 
     // Each worker maintains its own counter
     // With 2 workers, we should see counters go to 2
-    const counts = results.map(r => r.count);
+    const counts = results.map((r) => r.count);
     expect(Math.max(...counts)).toBe(2); // Each worker called twice
   });
 
