@@ -80,7 +80,7 @@ export async function calculateFilteredMetrics(
 /**
  * Get count of filtered results (for OOM protection)
  */
-async function getResultCount(whereSql: string, params: any[]): Promise<number> {
+async function getResultCount(whereSql: string, _params: any[]): Promise<number> {
   const db = getDb();
   const query = sql.raw(`
     SELECT COUNT(*) as count
@@ -88,7 +88,7 @@ async function getResultCount(whereSql: string, params: any[]): Promise<number> 
     WHERE ${whereSql}
   `);
 
-  const result = (await db.get(query, ...params)) as { count: number } | undefined;
+  const result = (await db.get(query)) as { count: number } | undefined;
   return result?.count || 0;
 }
 
@@ -126,7 +126,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     ORDER BY prompt_idx
   `);
 
-  const basicResults = (await db.all(basicMetricsQuery, ...whereParams)) as Array<{
+  const basicResults = (await db.all(basicMetricsQuery)) as Array<{
     prompt_idx: number;
     total_count: number;
     pass_count: number;
@@ -195,7 +195,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 async function aggregateNamedScores(
   metrics: PromptMetrics[],
   whereSql: string,
-  params: any[],
+  _params: any[],
 ): Promise<void> {
   const db = getDb();
 
@@ -214,7 +214,7 @@ async function aggregateNamedScores(
     GROUP BY prompt_idx, json_each.key
   `);
 
-  const results = (await db.all(query, ...params)) as Array<{
+  const results = (await db.all(query)) as Array<{
     prompt_idx: number;
     metric_name: string;
     metric_sum: number;
@@ -248,7 +248,7 @@ async function aggregateNamedScores(
 async function aggregateAssertions(
   metrics: PromptMetrics[],
   whereSql: string,
-  params: any[],
+  _params: any[],
 ): Promise<void> {
   const db = getDb();
 
@@ -285,7 +285,7 @@ async function aggregateAssertions(
     GROUP BY prompt_idx
   `);
 
-  const results = (await db.all(query, ...params)) as Array<{
+  const results = (await db.all(query)) as Array<{
     prompt_idx: number;
     assert_pass_count: number;
     assert_fail_count: number;
