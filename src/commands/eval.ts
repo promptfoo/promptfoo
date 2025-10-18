@@ -525,7 +525,7 @@ export async function doEval(
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
       logger.info(
-        `» Resume with: ${chalk.greenBright.bold('promptfoo eval --resume ' + evalRecord.id)}`,
+        `» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`,
       );
       printBorder();
       return ret;
@@ -602,48 +602,56 @@ export async function doEval(
       logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
 
-    printBorder();
-    if (cmdObj.write) {
-      if (shareableUrl) {
-        logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
-      } else if (wantsToShare && !isSharingEnabled(evalRecord)) {
+    const isRedteam = Boolean(config.redteam);
+    const completionType = isRedteam ? 'Red team' : 'Eval';
+
+    // Combine completion message and ID on one line when applicable
+    const completionMessage =
+      cmdObj.write && shareableUrl
+        ? `${chalk.green('✓')} ${completionType} complete: ${shareableUrl}`
+        : cmdObj.write && !(wantsToShare && !isSharingEnabled(evalRecord))
+          ? `${chalk.green('✓')} ${completionType} complete (ID: ${chalk.cyan(evalRecord.id)})`
+          : `${chalk.green('✓')} ${completionType} complete`;
+
+    logger.info(completionMessage);
+
+    if (cmdObj.write && !shareableUrl) {
+      if (wantsToShare && !isSharingEnabled(evalRecord)) {
         notCloudEnabledShareInstructions();
       } else {
-        logger.info(`${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`);
-        logger.info(
-          `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
-        );
-        if (cloudConfig.isEnabled()) {
-          logger.info(
-            `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
-          );
-        } else {
-          logger.info(
-            `» Do you want to share this with your team? Sign up for free at ${chalk.greenBright.bold('https://promptfoo.app')}`,
-          );
+        logger.info('');
+        // Stronger, more action-oriented recommendation for view
+        logger.info(`» View results: ${chalk.green.bold('promptfoo view')}`);
+
+        // Only show share guidance if user didn't explicitly disable sharing
+        if (!hasExplicitDisable) {
+          if (cloudConfig.isEnabled()) {
+            logger.info(`» Create shareable URL: ${chalk.green.bold('promptfoo share')}`);
+          } else {
+            logger.info(
+              `» Share with your team: ${chalk.green.bold('https://promptfoo.app')}`,
+            );
+          }
         }
 
-        logger.info(
-          `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
-            'https://promptfoo.dev/feedback',
-          )}`,
-        );
+        // Simplified feedback line
+        logger.info(`» Feedback: ${chalk.green.bold('https://promptfoo.dev/feedback')}`);
       }
-    } else {
-      logger.info(`${chalk.green('✔')} Evaluation complete`);
     }
 
-    printBorder();
+    logger.info('');
 
     // Format and display duration
     const duration = Math.round((Date.now() - startTime) / 1000);
     const durationDisplay = formatDuration(duration);
 
-    const isRedteam = Boolean(config.redteam);
     const tracker = TokenUsageTracker.getInstance();
 
-    // Handle token usage display
-    if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
+    // Handle token usage display - show if there are ANY tokens (eval or grading)
+    const hasEvalTokens = tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
+    const hasGradingTokens = tokenUsage.assertions && tokenUsage.assertions.total > 0;
+
+    if (hasEvalTokens || hasGradingTokens) {
       const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
       const evalTokens = {
         prompt: tokenUsage.prompt || 0,
@@ -657,39 +665,81 @@ export async function doEval(
         },
       };
 
-      logger.info(chalk.bold('Token Usage Summary:'));
-
-      if (isRedteam) {
-        logger.info(
-          `  ${chalk.cyan('Probes:')} ${chalk.white.bold(tokenUsage.numRequests.toLocaleString())}`,
-        );
-      }
-
-      // Eval tokens
-      logger.info(`\n  ${chalk.yellow.bold('Evaluation:')}`);
-      logger.info(`    ${chalk.gray('Total:')} ${chalk.white(evalTokens.total.toLocaleString())}`);
+      const grandTotal = evalTokens.total + (tokenUsage.assertions.total || 0);
       logger.info(
-        `    ${chalk.gray('Prompt:')} ${chalk.white(evalTokens.prompt.toLocaleString())}`,
+        `${chalk.bold('Total Tokens:')} ${chalk.white.bold(grandTotal.toLocaleString())}`,
       );
-      logger.info(
-        `    ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}`,
-      );
-      if (evalTokens.cached > 0) {
+
+      // Show probe count for redteam
+      if (isRedteam && tokenUsage.numRequests) {
         logger.info(
-          `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
-        );
-      }
-      if (evalTokens.completionDetails?.reasoning && evalTokens.completionDetails.reasoning > 0) {
-        logger.info(
-          `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
+          `  ${chalk.gray('Probes:')} ${chalk.white(tokenUsage.numRequests.toLocaleString())}`,
         );
       }
 
-      // Provider breakdown
+      // Build eval breakdown - only show if there are eval tokens
+      if (evalTokens.total > 0) {
+        const evalParts = [];
+        if (evalTokens.prompt > 0) {
+          evalParts.push(`${evalTokens.prompt.toLocaleString()} prompt`);
+        }
+        if (evalTokens.completion > 0) {
+          evalParts.push(`${evalTokens.completion.toLocaleString()} completion`);
+        }
+        if (evalTokens.cached > 0) {
+          // If 100% cached, just say "cached" instead of repeating the number
+          if (evalTokens.cached === evalTokens.total && evalParts.length === 0) {
+            evalParts.push('cached');
+          } else {
+            evalParts.push(`${evalTokens.cached.toLocaleString()} cached`);
+          }
+        }
+        if (evalTokens.completionDetails?.reasoning && evalTokens.completionDetails.reasoning > 0) {
+          evalParts.push(`${evalTokens.completionDetails.reasoning.toLocaleString()} reasoning`);
+        }
+        logger.info(
+          `  ${chalk.gray('Eval:')} ${chalk.white(evalTokens.total.toLocaleString())} (${evalParts.join(', ')})`,
+        );
+      }
 
+      // Grading breakdown (if present)
+      if (tokenUsage.assertions && tokenUsage.assertions.total && tokenUsage.assertions.total > 0) {
+        const gradingParts = [];
+        if (tokenUsage.assertions.prompt && tokenUsage.assertions.prompt > 0) {
+          gradingParts.push(`${tokenUsage.assertions.prompt.toLocaleString()} prompt`);
+        }
+        if (tokenUsage.assertions.completion && tokenUsage.assertions.completion > 0) {
+          gradingParts.push(`${tokenUsage.assertions.completion.toLocaleString()} completion`);
+        }
+        if (tokenUsage.assertions.cached && tokenUsage.assertions.cached > 0) {
+          // Simplify 100% cached
+          if (
+            tokenUsage.assertions.cached === tokenUsage.assertions.total &&
+            gradingParts.length === 0
+          ) {
+            gradingParts.push('cached');
+          } else {
+            gradingParts.push(`${tokenUsage.assertions.cached.toLocaleString()} cached`);
+          }
+        }
+        if (
+          tokenUsage.assertions.completionDetails?.reasoning &&
+          tokenUsage.assertions.completionDetails.reasoning > 0
+        ) {
+          gradingParts.push(
+            `${tokenUsage.assertions.completionDetails.reasoning.toLocaleString()} reasoning`,
+          );
+        }
+        logger.info(
+          `  ${chalk.gray('Grading:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())} (${gradingParts.join(', ')})`,
+        );
+      }
+
+      // Provider breakdown (if multiple providers)
       const providerIds = tracker.getProviderIds();
       if (providerIds.length > 1) {
-        logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
+        logger.info('');
+        logger.info(chalk.bold('Providers:'));
 
         // Sort providers by total token usage (descending)
         const sortedProviders = providerIds
@@ -701,82 +751,81 @@ export async function doEval(
             const displayTotal = usage.total || (usage.prompt || 0) + (usage.completion || 0);
             // Extract just the provider ID part (remove class name in parentheses)
             const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
-            logger.info(
-              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())} (${usage.numRequests} requests)`,
-            );
 
-            // Show breakdown if there are individual components
-            if (usage.prompt || usage.completion || usage.cached) {
-              const details = [];
-              if (usage.prompt) {
-                details.push(`${usage.prompt.toLocaleString()} prompt`);
-              }
-              if (usage.completion) {
-                details.push(`${usage.completion.toLocaleString()} completion`);
-              }
-              if (usage.cached) {
+            // Build breakdown details - only show non-zero values, simplify 100% cached
+            const details = [];
+            if (usage.prompt && usage.prompt > 0) {
+              details.push(`${usage.prompt.toLocaleString()} prompt`);
+            }
+            if (usage.completion && usage.completion > 0) {
+              details.push(`${usage.completion.toLocaleString()} completion`);
+            }
+            if (usage.cached && usage.cached > 0) {
+              // Simplify 100% cached
+              if (usage.cached === displayTotal && details.length === 0) {
+                details.push('cached');
+              } else {
                 details.push(`${usage.cached.toLocaleString()} cached`);
               }
-              if (usage.completionDetails?.reasoning) {
-                details.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
-              }
-              if (details.length > 0) {
-                logger.info(`      ${chalk.dim('(' + details.join(', ') + ')')}`);
-              }
             }
+            if (usage.completionDetails?.reasoning && usage.completionDetails.reasoning > 0) {
+              details.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
+            }
+
+            // Always show request count - 0 requests means 100% cached, which is valuable info
+            const requestInfo = `${usage.numRequests || 0} requests`;
+            const separator = details.length > 0 ? '; ' : '';
+            const breakdown = ` (${requestInfo}${separator}${details.join(', ')})`;
+            logger.info(
+              `  ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())}${breakdown}`,
+            );
           }
         }
       }
+    }
 
-      // Grading tokens
-      if (tokenUsage.assertions && tokenUsage.assertions.total && tokenUsage.assertions.total > 0) {
-        logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
-        logger.info(
-          `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
-        );
-        if (tokenUsage.assertions.prompt) {
-          logger.info(
-            `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
-          );
-        }
-        if (tokenUsage.assertions.completion) {
-          logger.info(
-            `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
-          );
-        }
-        if (tokenUsage.assertions.cached && tokenUsage.assertions.cached > 0) {
-          logger.info(
-            `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
-          );
-        }
-        if (
-          tokenUsage.assertions.completionDetails?.reasoning &&
-          tokenUsage.assertions.completionDetails.reasoning > 0
-        ) {
-          logger.info(
-            `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
-          );
-        }
+    // Add spacing between provider breakdown and results
+    logger.info('');
+
+    // Determine pass rate color and precision
+    let passRateDisplay;
+    if (!Number.isNaN(passRate)) {
+      // Use smart precision: whole numbers for 0% and 100%, otherwise 2 decimals
+      const passRateFormatted =
+        passRate === 0 || passRate === 100 ? `${passRate.toFixed(0)}%` : `${passRate.toFixed(2)}%`;
+
+      if (passRate >= 100) {
+        passRateDisplay = chalk.green.bold(passRateFormatted);
+      } else if (passRate >= 80) {
+        passRateDisplay = chalk.yellow.bold(passRateFormatted);
+      } else {
+        passRateDisplay = chalk.red.bold(passRateFormatted);
       }
+    }
 
-      // Grand total
-      const grandTotal = evalTokens.total + (tokenUsage.assertions.total || 0);
-      logger.info(
-        `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(grandTotal.toLocaleString())} tokens`,
-      );
-      printBorder();
+    // Results line - always show detailed breakdown with bold numbers
+    const passedPart =
+      successes > 0
+        ? `${chalk.green('✓')} ${chalk.green.bold(successes.toLocaleString())} passed`
+        : `${chalk.gray.bold(successes.toLocaleString())} passed`;
+    const failedPart =
+      failures > 0
+        ? `${chalk.red('✗')} ${chalk.red.bold(failures.toLocaleString())} failed`
+        : `${chalk.gray.bold(failures.toLocaleString())} failed`;
+    const errorsPart =
+      errors > 0
+        ? `${chalk.red('✗')} ${chalk.red.bold(errors.toLocaleString())} errors`
+        : `${chalk.gray.bold(errors.toLocaleString())} errors`;
+
+    const resultsLine = `${passedPart}, ${failedPart}, ${errorsPart}`;
+    if (Number.isNaN(passRate)) {
+      logger.info(`${chalk.bold('Results:')} ${resultsLine}`);
+    } else {
+      logger.info(`${chalk.bold('Results:')} ${resultsLine} (${passRateDisplay})`);
     }
 
     logger.info(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
-    logger.info(chalk.green.bold(`Successes: ${successes}`));
-    logger.info(chalk.red.bold(`Failures: ${failures}`));
-    if (!Number.isNaN(errors)) {
-      logger.info(chalk.red.bold(`Errors: ${errors}`));
-    }
-    if (!Number.isNaN(passRate)) {
-      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
-    }
-    printBorder();
+    logger.info('');
 
     telemetry.record('command_used', {
       name: 'eval',
