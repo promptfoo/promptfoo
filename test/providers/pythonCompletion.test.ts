@@ -3,6 +3,7 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import * as pythonUtils from '../../src/python/pythonUtils';
 import { getEnvInt } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
@@ -529,6 +530,49 @@ describe('PythonProvider', () => {
         undefined,
         300000,
       );
+    });
+  });
+
+  describe('cleanup', () => {
+    it('should cleanup worker pool on shutdown', async () => {
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd() },
+      });
+
+      await provider.initialize();
+      expect((provider as any).pool).not.toBeNull();
+
+      await provider.shutdown();
+      expect((provider as any).pool).toBeNull();
+      expect(mockPoolInstance.shutdown).toHaveBeenCalled();
+    });
+
+    it('should register provider for global cleanup', async () => {
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd() },
+      });
+
+      await provider.initialize();
+
+      // Provider should be registered
+      expect((providerRegistry as any).providers.has(provider)).toBe(true);
+
+      await provider.shutdown();
+
+      // Should be unregistered
+      expect((providerRegistry as any).providers.has(provider)).toBe(false);
+    });
+
+    it('should set isInitialized to false after shutdown', async () => {
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd() },
+      });
+
+      await provider.initialize();
+      expect((provider as any).isInitialized).toBe(true);
+
+      await provider.shutdown();
+      expect((provider as any).isInitialized).toBe(false);
     });
   });
 });

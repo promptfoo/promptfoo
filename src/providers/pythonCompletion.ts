@@ -9,6 +9,7 @@ import { parsePathOrGlob } from '../util/index';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { safeJsonStringify } from '../util/json';
+import { providerRegistry } from './providerRegistry';
 
 import type {
   ApiProvider,
@@ -93,6 +94,9 @@ export class PythonProvider implements ApiProvider {
         );
 
         await this.pool.initialize();
+
+        // Register for cleanup
+        providerRegistry.register(this);
 
         this.isInitialized = true;
         logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
@@ -323,5 +327,14 @@ export class PythonProvider implements ApiProvider {
       await this.initialize();
     }
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.pool) {
+      await this.pool.shutdown();
+      this.pool = null;
+    }
+    providerRegistry.unregister(this);
+    this.isInitialized = false;
   }
 }
