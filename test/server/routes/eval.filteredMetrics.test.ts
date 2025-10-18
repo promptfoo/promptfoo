@@ -11,12 +11,18 @@
 import request from 'supertest';
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
-import { app } from '../../../src/server/server';
+import { createApp } from '../../../src/server/server';
 import EvalFactory from '../../factories/evalFactory';
 
 describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
+  let app: ReturnType<typeof createApp>;
+
   beforeAll(async () => {
     await runDbMigrations();
+  });
+
+  beforeEach(() => {
+    app = createApp();
   });
 
   beforeEach(async () => {
