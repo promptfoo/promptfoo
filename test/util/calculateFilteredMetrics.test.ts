@@ -57,8 +57,7 @@ describe('calculateFilteredMetrics', () => {
       });
 
       // Total should be 10
-      const total =
-        metrics[0].testPassCount + metrics[0].testFailCount + metrics[0].testErrorCount;
+      const total = metrics[0].testPassCount + metrics[0].testFailCount + metrics[0].testErrorCount;
       expect(total).toBe(10);
     });
 
@@ -88,7 +87,10 @@ describe('calculateFilteredMetrics', () => {
             provider: { id: 'test-provider', label: 'test' },
             prompt: { raw: `Prompt ${promptIdx + 1}`, label: `Prompt ${promptIdx + 1}` },
             vars: { test: 'value' },
-            response: { output: 'test output', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 } },
+            response: {
+              output: 'test output',
+              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+            },
             error: null,
             failureReason: ResultFailureReason.NONE,
             success: testIdx % 2 === 0, // Alternate success/failure
@@ -266,7 +268,10 @@ describe('calculateFilteredMetrics', () => {
         provider: { id: 'test', label: 'test' },
         prompt: { raw: 'test', label: 'test' },
         vars: {},
-        response: { output: 'test', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 } },
+        response: {
+          output: 'test',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
         error: null,
         failureReason: ResultFailureReason.NONE,
         success: true,
@@ -285,7 +290,10 @@ describe('calculateFilteredMetrics', () => {
         provider: { id: 'test', label: 'test' },
         prompt: { raw: 'test', label: 'test' },
         vars: {},
-        response: { output: 'test', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 } },
+        response: {
+          output: 'test',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
         error: null,
         failureReason: ResultFailureReason.NONE,
         success: true,
@@ -345,7 +353,10 @@ describe('calculateFilteredMetrics', () => {
         provider: { id: 'test', label: 'test' },
         prompt: { raw: 'test', label: 'test' },
         vars: {},
-        response: { output: 'test', tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 } },
+        response: {
+          output: 'test',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
         error: null,
         failureReason: ResultFailureReason.NONE,
         success: true,

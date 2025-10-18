@@ -497,7 +497,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setTotalResultsCount: (count: number) => set(() => ({ totalResultsCount: count })),
 
   filteredMetrics: null,
-  setFilteredMetrics: (metrics: PromptMetrics[] | null) => set(() => ({ filteredMetrics: metrics })),
+  setFilteredMetrics: (metrics: PromptMetrics[] | null) =>
+    set(() => ({ filteredMetrics: metrics })),
 
   highlightedResultsCount: 0,
 

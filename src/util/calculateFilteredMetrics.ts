@@ -61,10 +61,9 @@ export async function calculateFilteredMetrics(
     // Check result count first (protect against OOM)
     const countResult = await getResultCount(whereSql, whereParams);
     if (countResult > MAX_RESULTS_FOR_METRICS) {
-      logger.warn(
-        `Filtered result count ${countResult} exceeds limit ${MAX_RESULTS_FOR_METRICS}`,
-        { evalId: opts.evalId },
-      );
+      logger.warn(`Filtered result count ${countResult} exceeds limit ${MAX_RESULTS_FOR_METRICS}`, {
+        evalId: opts.evalId,
+      });
       throw new Error(`Result count ${countResult} exceeds maximum ${MAX_RESULTS_FOR_METRICS}`);
     }
 
@@ -97,9 +96,7 @@ async function getResultCount(whereSql: string, params: any[]): Promise<number> 
  * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
  * This is the key performance improvement from the audit.
  */
-async function calculateWithOptimizedQuery(
-  opts: FilteredMetricsOptions,
-): Promise<PromptMetrics[]> {
+async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql, whereParams } = opts;
   const db = getDb();
 

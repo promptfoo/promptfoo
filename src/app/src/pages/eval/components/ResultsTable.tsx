@@ -786,7 +786,9 @@ function ResultsTable({
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
                           maximumFractionDigits:
-                            testCounts[idx]?.total && metrics.cost / testCounts[idx].total >= 1 ? 2 : 4,
+                            testCounts[idx]?.total && metrics.cost / testCounts[idx].total >= 1
+                              ? 2
+                              : 4,
                         }).format(
                           testCounts[idx]?.total ? metrics.cost / testCounts[idx].total : 0,
                         )} per test`}
@@ -801,10 +803,12 @@ function ResultsTable({
                       </Tooltip>
                       {filteredMetrics?.cost && testCounts[idx]?.filtered ? (
                         <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
-                          (${Intl.NumberFormat(undefined, {
+                          ($
+                          {Intl.NumberFormat(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: filteredMetrics.cost >= 1 ? 2 : 4,
-                          }).format(filteredMetrics.cost)} filtered)
+                          }).format(filteredMetrics.cost)}{' '}
+                          filtered)
                         </span>
                       ) : null}
                     </div>
@@ -817,9 +821,11 @@ function ResultsTable({
                       }).format(metrics.tokenUsage.total)}
                       {filteredMetrics?.tokenUsage?.total ? (
                         <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
-                          ({Intl.NumberFormat(undefined, {
+                          (
+                          {Intl.NumberFormat(undefined, {
                             maximumFractionDigits: 0,
-                          }).format(filteredMetrics.tokenUsage.total)} filtered)
+                          }).format(filteredMetrics.tokenUsage.total)}{' '}
+                          filtered)
                         </span>
                       ) : null}
                     </div>
@@ -831,15 +837,19 @@ function ResultsTable({
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
                       }).format(
-                        testCounts[idx]?.total ? metrics.tokenUsage.total / testCounts[idx].total : 0,
+                        testCounts[idx]?.total
+                          ? metrics.tokenUsage.total / testCounts[idx].total
+                          : 0,
                       )}
                       {filteredMetrics?.tokenUsage?.total && testCounts[idx]?.filtered ? (
                         <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
-                          ({Intl.NumberFormat(undefined, {
+                          (
+                          {Intl.NumberFormat(undefined, {
                             maximumFractionDigits: 0,
                           }).format(
                             filteredMetrics.tokenUsage.total / testCounts[idx].filtered,
-                          )} filtered)
+                          )}{' '}
+                          filtered)
                         </span>
                       ) : null}
                     </div>
@@ -855,11 +865,10 @@ function ResultsTable({
                       ms
                       {filteredMetrics?.totalLatencyMs && testCounts[idx]?.filtered ? (
                         <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
-                          ({Intl.NumberFormat(undefined, {
+                          (
+                          {Intl.NumberFormat(undefined, {
                             maximumFractionDigits: 0,
-                          }).format(
-                            filteredMetrics.totalLatencyMs / testCounts[idx].filtered,
-                          )}{' '}
+                          }).format(filteredMetrics.totalLatencyMs / testCounts[idx].filtered)}{' '}
                           ms filtered)
                         </span>
                       ) : null}
@@ -871,10 +880,7 @@ function ResultsTable({
                       {metrics.totalLatencyMs > 0
                         ? Intl.NumberFormat(undefined, {
                             maximumFractionDigits: 0,
-                          }).format(
-                            metrics.tokenUsage.completion /
-                              (metrics.totalLatencyMs / 1000),
-                          )
+                          }).format(metrics.tokenUsage.completion / (metrics.totalLatencyMs / 1000))
                         : '0'}
                     </div>
                   ) : null}
@@ -932,8 +938,9 @@ function ResultsTable({
                           >
                             <span>
                               <strong>{passRates[idx].filtered?.toFixed(2)}% passing</strong> (
-                              {passingTestCounts[idx]?.filtered}/{testCounts[idx]?.filtered} filtered,{' '}
-                              {passingTestCounts[idx]?.total}/{testCounts[idx]?.total} total)
+                              {passingTestCounts[idx]?.filtered}/{testCounts[idx]?.filtered}{' '}
+                              filtered, {passingTestCounts[idx]?.total}/{testCounts[idx]?.total}{' '}
+                              total)
                             </span>
                           </Tooltip>
                         ) : (
@@ -951,8 +958,7 @@ function ResultsTable({
                         </div>
                       </div>
                     ) : null}
-                    {metrics?.namedScores &&
-                    Object.keys(metrics.namedScores).length > 0 ? (
+                    {metrics?.namedScores && Object.keys(metrics.namedScores).length > 0 ? (
                       <Box className="collapse-hidden">
                         <CustomMetrics
                           lookup={metrics.namedScores}

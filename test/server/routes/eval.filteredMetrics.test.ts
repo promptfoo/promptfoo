@@ -300,9 +300,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
       // If filteredMetrics is not null, it must have the same length as prompts
       if (response.body.filteredMetrics !== null) {
-        expect(response.body.filteredMetrics.length).toBe(
-          response.body.table.head.prompts.length,
-        );
+        expect(response.body.filteredMetrics.length).toBe(response.body.table.head.prompts.length);
       }
     });
   });
@@ -393,12 +391,10 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval1.id}/table`)
-        .query({
-          filterMode: 'passes',
-          comparisonEvalIds: eval2.id,
-        });
+      const response = await request(app).get(`/api/eval/${eval1.id}/table`).query({
+        filterMode: 'passes',
+        comparisonEvalIds: eval2.id,
+      });
 
       expect(response.status).toBe(200);
 

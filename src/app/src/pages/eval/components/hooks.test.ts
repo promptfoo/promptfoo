@@ -892,18 +892,18 @@ describe('useMetricsGetter', () => {
     const metrics = getMetrics(0);
 
     // Should return both total and filtered
-      expect(metrics).toEqual({
-        total: {
-          testPassCount: 100,
-          testFailCount: 50,
-          cost: 10.0,
-        },
-        filtered: {
-          testPassCount: 8,
-          testFailCount: 2,
-          cost: 0.8,
-        },
-      });
+    expect(metrics).toEqual({
+      total: {
+        testPassCount: 100,
+        testFailCount: 50,
+        cost: 10.0,
+      },
+      filtered: {
+        testPassCount: 8,
+        testFailCount: 2,
+        cost: 0.8,
+      },
+    });
   });
 
   it('should return null for out-of-bounds index', () => {
