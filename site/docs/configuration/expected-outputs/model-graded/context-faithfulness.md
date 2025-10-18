@@ -81,7 +81,7 @@ Override the default grader:
 ```yaml
 assert:
   - type: context-faithfulness
-    provider: openai:gpt-4 # Use a different model for grading
+    provider: gpt-5 # Use a different model for grading
     threshold: 0.9
 ```
 
@@ -98,5 +98,5 @@ assert:
 
 ## Further reading
 
-- [Defining context in test cases](/docs/configuration/expected-outputs/model-graded#defining-context-for-context-based-assertions)
+- [Defining context in test cases](/docs/configuration/expected-outputs/model-graded#defining-context)
 - [RAG Evaluation Guide](/docs/guides/evaluate-rag)

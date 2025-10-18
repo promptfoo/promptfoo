@@ -47,7 +47,7 @@ MCP servers can be run locally or accessed remotely. For development and testing
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:chat:gpt-5
     config:
       apiKey: <your-api-key>
       mcp:
@@ -60,7 +60,7 @@ providers:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:chat:gpt-5
     config:
       apiKey: <your-api-key>
       mcp:
@@ -87,7 +87,7 @@ Promptfoo allows a single provider to connect to multiple MCP servers by using t
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:chat:gpt-5
     config:
       mcp:
         enabled: true
@@ -143,7 +143,7 @@ providers:
           args: ['-y', '@modelcontextprotocol/server-memory']
           name: gemini-memory
 
-  - id: openai:chat:gpt-4.1
+  - id: openai:chat:gpt-5
     config:
       apiKey: <your-api-key>
       mcp:

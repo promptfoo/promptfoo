@@ -37,7 +37,7 @@ For example:
 
 ```js
 // OpenAI - model, messages, settings
-`openai:gpt-4:${JSON.stringify({
+`gpt-5:${JSON.stringify({
   "messages": [...],
   "temperature": 0
 })}`
