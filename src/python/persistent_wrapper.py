@@ -6,7 +6,7 @@ This wrapper loads a user script once and handles multiple requests
 via a simple control protocol over stdin/stdout.
 
 Protocol:
-  - Node sends: "CALL:<request_file>:<response_file>\n"
+  - Node sends: "CALL:<function_name>:<request_file>:<response_file>\n"
   - Worker executes function, writes response to file
   - Worker sends: "DONE\n"
   - Node sends: "SHUTDOWN\n" to exit
@@ -78,7 +78,8 @@ def main():
     # Load user module once
     try:
         user_module = load_user_module(script_path)
-        method_callable = get_callable(user_module, function_name)
+        # Verify default function exists (for backward compatibility)
+        default_callable = get_callable(user_module, function_name)
     except Exception as e:
         print(f"ERROR: Failed to load module: {e}", file=sys.stderr, flush=True)
         print(traceback.format_exc(), file=sys.stderr, flush=True)
@@ -100,7 +101,7 @@ def main():
             if line.startswith("SHUTDOWN"):
                 break
             elif line.startswith("CALL:"):
-                handle_call(line, method_callable)
+                handle_call(line, user_module, function_name)
             else:
                 print(f"ERROR: Unknown command: {line}", file=sys.stderr, flush=True)
 
@@ -111,15 +112,25 @@ def main():
             print(traceback.format_exc(), file=sys.stderr, flush=True)
 
 
-def handle_call(command_line, method_callable):
+def handle_call(command_line, user_module, default_function_name):
     """Handle a CALL command."""
     try:
-        # Parse command: "CALL:<request_file>:<response_file>"
-        parts = command_line.split(":", 2)
-        if len(parts) != 3:
+        # Parse command: "CALL:<function_name>:<request_file>:<response_file>"
+        # or legacy: "CALL:<request_file>:<response_file>"
+        parts = command_line.split(":", 3)
+
+        if len(parts) == 4:
+            # New format: CALL:<function_name>:<request_file>:<response_file>
+            _, function_name, request_file, response_file = parts
+        elif len(parts) == 3:
+            # Legacy format: CALL:<request_file>:<response_file>
+            _, request_file, response_file = parts
+            function_name = default_function_name
+        else:
             raise ValueError(f"Invalid CALL command format: {command_line}")
 
-        _, request_file, response_file = parts
+        # Resolve the callable for this call
+        method_callable = get_callable(user_module, function_name)
 
         # Read request
         with open(request_file, "r", encoding="utf-8") as f:

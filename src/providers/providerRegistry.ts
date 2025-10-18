@@ -29,7 +29,14 @@ class ProviderRegistry {
   }
 
   private registerShutdownHandlers(): void {
+    let shuttingDown = false;
+
     const shutdown = async (signal: string) => {
+      if (shuttingDown) {
+        return; // Prevent duplicate shutdown
+      }
+      shuttingDown = true;
+
       logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
 
       await Promise.all(
@@ -41,16 +48,12 @@ class ProviderRegistry {
       );
 
       logger.debug('Python provider shutdown complete');
-
-      // Exit after cleanup (only for signals, not normal exit)
-      if (signal !== 'exit') {
-        process.exit(signal === 'SIGINT' ? 0 : 1);
-      }
     };
 
-    process.on('SIGINT', () => shutdown('SIGINT'));
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('exit', () => shutdown('exit'));
+    process.once('SIGINT', () => void shutdown('SIGINT'));
+    process.once('SIGTERM', () => void shutdown('SIGTERM'));
+    // Use beforeExit for async cleanup (exit event cannot await)
+    process.once('beforeExit', () => void shutdown('beforeExit'));
   }
 
   async shutdownAll(): Promise<void> {

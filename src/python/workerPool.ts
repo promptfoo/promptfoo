@@ -65,8 +65,8 @@ export class PythonWorkerPool {
     const worker = this.getAvailableWorker();
 
     if (worker) {
-      // Worker available, execute immediately
-      return worker.call(functionName, args);
+      // Worker available, execute immediately and trigger queue processing when done
+      return worker.call(functionName, args).finally(() => this.processQueue());
     } else {
       // All workers busy, queue the request
       return new Promise<any>((resolve, reject) => {
@@ -79,56 +79,34 @@ export class PythonWorkerPool {
   private getAvailableWorker(): PythonWorker | null {
     for (const worker of this.workers) {
       if (worker.isReady() && !worker.isBusy()) {
-        // Wrap the call to process queue when done
-        this.wrapWorkerCall(worker);
         return worker;
       }
     }
     return null;
-  }
-
-  private wrapWorkerCall(worker: PythonWorker): void {
-    // Monkey-patch the worker's call method to process queue after completion
-    const originalCall = worker.call.bind(worker);
-
-    worker.call = async (functionName: string, args: any[]): Promise<any> => {
-      try {
-        return await originalCall(functionName, args);
-      } finally {
-        // After call completes, process queue
-        this.processQueue();
-      }
-    };
   }
 
   private processQueue(): void {
-    if (this.queue.length === 0) {
-      return;
-    }
-
-    const worker = this.getAvailableWorkerForQueue();
-    if (!worker) {
-      return; // No workers available
-    }
-
-    const request = this.queue.shift();
-    if (!request) {
-      return;
-    }
-
-    logger.debug(`Processing queued request (${this.queue.length} remaining)`);
-
-    worker.call(request.functionName, request.args).then(request.resolve).catch(request.reject);
-  }
-
-  private getAvailableWorkerForQueue(): PythonWorker | null {
-    // Don't re-wrap workers when processing queue
-    for (const worker of this.workers) {
-      if (worker.isReady() && !worker.isBusy()) {
-        return worker;
+    // Drain the entire queue - process all waiting requests with available workers
+    while (this.queue.length > 0) {
+      const worker = this.getAvailableWorker();
+      if (!worker) {
+        return; // No workers available right now
       }
+
+      const request = this.queue.shift();
+      if (!request) {
+        return;
+      }
+
+      logger.debug(`Processing queued request (${this.queue.length} remaining)`);
+
+      // Execute and attach queue processing to continue draining when done
+      worker
+        .call(request.functionName, request.args)
+        .then(request.resolve)
+        .catch(request.reject)
+        .finally(() => this.processQueue());
     }
-    return null;
   }
 
   getWorkerCount(): number {
@@ -137,6 +115,15 @@ export class PythonWorkerPool {
 
   async shutdown(): Promise<void> {
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);
+
+    // Reject any queued requests
+    for (const req of this.queue) {
+      try {
+        req.reject(new Error('Worker pool shutting down'));
+      } catch {
+        // Ignore errors from rejecting
+      }
+    }
 
     // Shutdown all workers in parallel
     await Promise.all(this.workers.map((w) => w.shutdown()));

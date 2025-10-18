@@ -116,19 +116,30 @@ export class PythonProvider implements ApiProvider {
    * Priority: config.workers > PROMPTFOO_PYTHON_WORKERS env > default 1
    */
   private getWorkerCount(): number {
+    let count: number;
+
     // 1. Explicit config.workers
     if (this.config.workers !== undefined) {
-      return this.config.workers;
+      count = this.config.workers;
     }
-
     // 2. Environment variable
-    const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
-    if (envWorkers !== undefined) {
-      return envWorkers;
+    else {
+      const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
+      if (envWorkers !== undefined) {
+        count = envWorkers;
+      } else {
+        // 3. Default: 1 worker (memory-efficient)
+        count = 1;
+      }
     }
 
-    // 3. Default: 1 worker (memory-efficient)
-    return 1;
+    // Validate: must be at least 1
+    if (count < 1) {
+      logger.warn(`Invalid worker count ${count}, using minimum of 1`);
+      return 1;
+    }
+
+    return count;
   }
 
   /**

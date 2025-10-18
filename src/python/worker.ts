@@ -9,6 +9,7 @@ export class PythonWorker {
   private process: PythonShell | null = null;
   private ready: boolean = false;
   private busy: boolean = false;
+  private shuttingDown: boolean = false;
   private crashCount: number = 0;
   private readonly maxCrashes: number = 3;
   private pendingRequest: {
@@ -61,7 +62,9 @@ export class PythonWorker {
       });
 
       this.process!.on('close', () => {
-        this.handleCrash();
+        if (!this.shuttingDown) {
+          this.handleCrash();
+        }
       });
 
       this.process!.stderr?.on('data', (data) => {
@@ -92,7 +95,7 @@ export class PythonWorker {
     }
   }
 
-  private async executeCall(_functionName: string, args: any[]): Promise<any> {
+  private async executeCall(functionName: string, args: any[]): Promise<any> {
     const requestFile = path.join(
       os.tmpdir(),
       `promptfoo-worker-req-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
@@ -106,8 +109,8 @@ export class PythonWorker {
       // Write request
       fs.writeFileSync(requestFile, safeJsonStringify(args) as string, 'utf-8');
 
-      // Send CALL command
-      const command = `CALL:${requestFile}:${responseFile}\n`;
+      // Send CALL command with function name
+      const command = `CALL:${functionName}:${requestFile}:${responseFile}\n`;
       this.process!.send(command);
 
       // Wait for DONE
@@ -186,6 +189,14 @@ export class PythonWorker {
     }
 
     try {
+      this.shuttingDown = true;
+
+      // Reject any in-flight request promptly
+      if (this.pendingRequest) {
+        this.pendingRequest.reject(new Error('Worker shutting down'));
+        this.pendingRequest = null;
+      }
+
       this.process.send('SHUTDOWN\n');
 
       // Wait for exit (5s timeout)
@@ -203,6 +214,8 @@ export class PythonWorker {
         this.process = null;
       }
       this.ready = false;
+      this.busy = false;
+      this.shuttingDown = false;
     }
   }
 }
