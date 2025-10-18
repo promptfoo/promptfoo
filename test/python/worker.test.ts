@@ -99,4 +99,38 @@ def call_classification_api(prompt, options, context):
       }
     }
   });
+
+  it('should handle Python errors gracefully', async () => {
+    const errorPath = path.join(__dirname, 'fixtures', 'error_provider.py');
+    fs.writeFileSync(
+      errorPath,
+      `
+def call_api(prompt, options, context):
+    if prompt == "error":
+        raise ValueError("Intentional error for testing")
+    return {"output": f"Success: {prompt}"}
+`,
+    );
+
+    try {
+      worker = new PythonWorker(errorPath, 'call_api');
+      await worker.initialize();
+
+      // Should succeed
+      const goodResult = await worker.call('call_api', ['good', {}, {}]);
+      expect(goodResult.output).toBe('Success: good');
+
+      // Should throw error
+      await expect(worker.call('call_api', ['error', {}, {}])).rejects.toThrow('Intentional error');
+
+      // Worker should still be usable after error
+      const afterErrorResult = await worker.call('call_api', ['still works', {}, {}]);
+      expect(afterErrorResult.output).toBe('Success: still works');
+    } finally {
+      if (fs.existsSync(errorPath)) {
+        fs.unlinkSync(errorPath);
+      }
+    }
+  });
+
 });
