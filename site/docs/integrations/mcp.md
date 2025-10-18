@@ -199,7 +199,7 @@ Promptfoo automatically handles JSON Schema compatibility between MCP servers an
 
 ### Schema Cleaning
 
-MCP SDKs may add JSON Schema metadata fields (like `$schema`, `additionalProperties`) that are not compatible with all providers. Promptfoo automatically:
+MCP SDKs may add JSON Schema metadata fields (like `$schema`, `additionalProperties`) that are incompatible with all providers. Promptfoo automatically:
 
 - **Removes** the `$schema` field to prevent provider errors
 - **Preserves** `additionalProperties` for providers that support it (OpenAI strict mode)
