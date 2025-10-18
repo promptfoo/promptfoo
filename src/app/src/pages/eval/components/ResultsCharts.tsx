@@ -182,7 +182,7 @@ function PassRateChart({ table }: ChartProps) {
 
     const datasets = table.head.prompts.map((prompt, promptIdx) => ({
       label: prompt.provider,
-      data: [passRates[promptIdx]],
+      data: [passRates[promptIdx]?.total ?? 0],
       backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
     }));
 

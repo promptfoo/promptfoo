@@ -22,6 +22,7 @@ import type {
   EvaluateTestSuiteWithEvaluateOptions,
   GradingResult,
   Job,
+  PromptMetrics,
   ResultsFile,
 } from '../../index';
 
@@ -311,14 +312,55 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     return;
   }
 
+  // Calculate filtered metrics when filters are active
+  let filteredMetrics: PromptMetrics[] | null = null;
+  const hasActiveFilters = filterMode !== 'all' || searchText !== '' || filters.length > 0;
+
+  if (hasActiveFilters) {
+    try {
+      filteredMetrics = await eval_.getFilteredMetrics({
+        filterMode,
+        searchQuery: searchText,
+        filters: filters as string[],
+      });
+      logger.debug('[GET /:id/table] Calculated filtered metrics', {
+        evalId: id,
+        filterMode,
+        numPrompts: filteredMetrics.length,
+      });
+
+      // Validate that filteredMetrics array length matches prompts array length
+      const expectedLength = returnTable.head.prompts.length;
+      if (filteredMetrics.length !== expectedLength) {
+        logger.error(
+          '[GET /:id/table] Filtered metrics array length mismatch - setting to null to prevent frontend errors',
+          {
+            evalId: id,
+            expectedLength,
+            actualLength: filteredMetrics.length,
+            filterMode,
+            searchText,
+            filtersCount: filters.length,
+          },
+        );
+        filteredMetrics = null;
+      }
+    } catch (error) {
+      logger.error('[GET /:id/table] Failed to calculate filtered metrics', { error, evalId: id });
+      // Don't fail the request, just return null for filteredMetrics
+    }
+  }
+
   // Default response for table view
   res.json({
     table: returnTable,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
+    filteredMetrics,
     config: eval_.config,
     author: eval_.author || null,
     version: eval_.version(),
+    id,
   } as EvalTableDTO);
 });
 
