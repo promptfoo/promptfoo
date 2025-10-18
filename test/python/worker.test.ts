@@ -132,5 +132,4 @@ def call_api(prompt, options, context):
       }
     }
   });
-
 });
