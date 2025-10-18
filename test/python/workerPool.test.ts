@@ -5,8 +5,14 @@ import path from 'path';
 describe('PythonWorkerPool', () => {
   let pool: PythonWorkerPool;
   const testScriptPath = path.join(__dirname, 'fixtures', 'counter_provider.py');
+  const fixturesDir = path.join(__dirname, 'fixtures');
 
   beforeAll(() => {
+    // Create fixtures directory if it doesn't exist
+    if (!fs.existsSync(fixturesDir)) {
+      fs.mkdirSync(fixturesDir, { recursive: true });
+    }
+
     // Create test fixture with global state
     fs.writeFileSync(
       testScriptPath,
@@ -23,7 +29,9 @@ def call_api(prompt, options, context):
   });
 
   afterAll(() => {
-    fs.unlinkSync(testScriptPath);
+    if (fs.existsSync(testScriptPath)) {
+      fs.unlinkSync(testScriptPath);
+    }
   });
 
   afterEach(async () => {
