@@ -1,18 +1,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import type { CallApiContextParams } from '../../src/types/index';
 import * as pythonUtils from '../../src/python/pythonUtils';
-import { runPython } from '../../src/python/pythonUtils';
-
-// Mock the expensive Python execution for fast, reliable tests
-jest.mock('../../src/python/pythonUtils');
-const mockRunPython = jest.mocked(runPython);
 
 describe('PythonProvider Unicode handling', () => {
   let tempDir: string;
+  const providers: PythonProvider[] = [];
 
   beforeAll(() => {
     // Disable caching for tests to ensure fresh runs
@@ -20,41 +16,40 @@ describe('PythonProvider Unicode handling', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    // Reset mocked implementations to avoid test interference
-    mockRunPython.mockReset();
     // Reset Python state to avoid test interference
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-unicode-test-'));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Cleanup providers
+    await Promise.all(providers.map((p) => p.shutdown().catch(() => {})));
+    providers.length = 0;
+
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true });
     }
+  });
+
+  afterAll(async () => {
+    // Final cleanup
+    await Promise.all(providers.map((p) => p.shutdown().catch(() => {})));
   });
 
   // Helper to create a provider with less overhead
   const createProvider = (scriptName: string, scriptContent: string) => {
     const scriptPath = path.join(tempDir, scriptName);
     fs.writeFileSync(scriptPath, scriptContent);
-    return new PythonProvider(scriptPath, {
+    const provider = new PythonProvider(scriptPath, {
       id: `python:${scriptName}`,
       config: { basePath: tempDir },
     });
+    providers.push(provider);
+    return provider;
   };
 
   it('should correctly handle Unicode characters in prompt', async () => {
-    // Mock Python execution to return expected Unicode response
-    mockRunPython.mockResolvedValue({
-      output: 'Received: Product® Plus',
-      metadata: {
-        prompt_length: 13,
-        prompt_bytes: 14, // ® is 2 bytes in UTF-8
-      },
-    });
-
     const provider = createProvider(
       'unicode_test.py',
       `
@@ -77,31 +72,14 @@ def call_api(prompt, options, context):
     expect(result.metadata?.prompt_bytes).toBe(14);
     expect(result.error).toBeUndefined();
 
-    // Verify Unicode string was passed correctly to Python layer
-    expect(mockRunPython).toHaveBeenCalledWith(
-      expect.stringContaining('unicode_test.py'),
-      'call_api',
-      ['Product® Plus', expect.any(Object), undefined],
-      { pythonExecutable: undefined },
-    );
-
     // Ensure no null bytes in JSON serialization
     const jsonStr = JSON.stringify(result);
     expect(jsonStr).not.toContain('\u0000');
     expect(jsonStr).not.toContain('\\u0000');
     expect(jsonStr).toContain('Product® Plus');
-  });
+  }, 15000);
 
   it('should handle Unicode in context vars', async () => {
-    // Mock Python execution with Unicode context response
-    mockRunPython.mockResolvedValue({
-      output: 'Test prompt - Product: Product® Plus™',
-      metadata: {
-        product_name: 'Product® Plus™',
-        product_bytes: 16, // Unicode characters in bytes
-      },
-    });
-
     const provider = createProvider(
       'context_unicode_test.py',
       `
@@ -132,43 +110,11 @@ def call_api(prompt, options, context):
     // Verify Unicode handling in response
     expect(result.output).toBe('Test prompt - Product: Product® Plus™');
     expect(result.metadata?.product_name).toBe('Product® Plus™');
-
-    // Verify Unicode context vars were passed correctly
-    expect(mockRunPython).toHaveBeenCalledWith(
-      expect.stringContaining('context_unicode_test.py'),
-      'call_api',
-      [
-        'Test prompt',
-        expect.any(Object),
-        expect.objectContaining({
-          vars: expect.objectContaining({
-            product: 'Product® Plus™',
-            company: '© 2025 Company',
-            price: '€100',
-          }),
-        }),
-      ],
-      { pythonExecutable: undefined },
-    );
-  });
+    // Note: ® is 2 bytes, ™ is 3 bytes in UTF-8, so total is 17 bytes
+    expect(result.metadata?.product_bytes).toBe(17);
+  }, 15000);
 
   it('should handle complex nested Unicode data', async () => {
-    // Mock complex nested Unicode response
-    mockRunPython.mockResolvedValue({
-      output: 'Complex Unicode test',
-      nested: {
-        products: [
-          { name: 'Product®', price: '€100' },
-          { name: 'Brand™', price: '€200' },
-          { name: 'Item© 2025', price: '€300' },
-        ],
-        metadata: {
-          temperature: '25°C',
-          description: 'Advanced Product® with Brand™ technology ©2025',
-        },
-      },
-    });
-
     const provider = createProvider(
       'nested_unicode_test.py',
       `
@@ -202,14 +148,6 @@ def call_api(prompt, options, context):
       'Advanced Product® with Brand™ technology ©2025',
     );
 
-    // Verify the prompt was passed through correctly
-    expect(mockRunPython).toHaveBeenCalledWith(
-      expect.stringContaining('nested_unicode_test.py'),
-      'call_api',
-      ['Test', expect.any(Object), undefined],
-      { pythonExecutable: undefined },
-    );
-
     // Ensure nested Unicode data serializes properly
     const jsonStr = JSON.stringify(result);
     expect(jsonStr).toContain('Product®');
@@ -217,5 +155,5 @@ def call_api(prompt, options, context):
     expect(jsonStr).toContain('€100');
     expect(jsonStr).toContain('25°C');
     expect(jsonStr).not.toContain('\u0000');
-  });
+  }, 15000);
 });

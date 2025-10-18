@@ -11,7 +11,7 @@ describe('Python Provider Integration Tests', () => {
     tempFiles.forEach((file) => {
       try {
         fs.unlinkSync(file);
-      } catch (e) {
+      } catch (_e) {
         // ignore
       }
     });
@@ -52,7 +52,6 @@ def call_api(prompt, options, context):
 
     const start = Date.now();
     await provider.initialize();
-    const initTime = Date.now() - start;
 
     // First call
     const result1 = await provider.callApi('test1');

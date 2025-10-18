@@ -91,11 +91,13 @@ def call_api(prompt, options, context):
 ```
 
 **Before (ephemeral)**:
+
 - Call 1: 10s (load model) + 0.1s (inference) = 10.1s
 - Call 2: 10s (load model) + 0.1s (inference) = 10.1s
 - **Total: 20.2s for 2 calls**
 
 **After (persistent)**:
+
 - Startup: 10s (load model once)
 - Call 1: 0.1s (inference)
 - Call 2: 0.1s (inference)
@@ -118,8 +120,9 @@ def call_api(prompt, options, context):
 ```
 
 Results:
+
 - Call 1: "Call #1"
-- Call 2: "Call #2"  ← Counter persisted!
+- Call 2: "Call #2" ← Counter persisted!
 - Call 3: "Call #3"
 
 **If you need fresh state for each call**, move initialization into the function:
@@ -144,7 +147,7 @@ providers:
   # Opt-in to parallel workers for CPU-bound tasks
   - id: file://api_wrapper.py
     config:
-      workers: 4  # Spawn 4 parallel workers
+      workers: 4 # Spawn 4 parallel workers
 ```
 
 Or set globally via environment:
@@ -157,11 +160,13 @@ npx promptfoo@latest eval
 **Default**: 1 worker (memory-efficient, ideal for GPU-bound ML models)
 
 **When to use multiple workers**:
+
 - CPU-bound tasks (not GPU-limited)
 - Lightweight API wrappers (no heavy imports)
 - You have memory to spare (each worker = separate copy of imports)
 
 **When to use 1 worker** (default):
+
 - ML models (GPU-bound, only 1 can run at a time)
 - Heavy imports (avoid memory duplication)
 - Memory-constrained environments
@@ -174,7 +179,7 @@ Configure timeout per provider (default: 2 minutes):
 providers:
   - id: file://slow_model.py
     config:
-      timeout: 300000  # 5 minutes in milliseconds
+      timeout: 300000 # 5 minutes in milliseconds
 ```
 
 ### Backward Compatibility

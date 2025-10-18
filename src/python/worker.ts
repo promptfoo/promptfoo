@@ -92,7 +92,7 @@ export class PythonWorker {
     }
   }
 
-  private async executeCall(functionName: string, args: any[]): Promise<any> {
+  private async executeCall(_functionName: string, args: any[]): Promise<any> {
     const requestFile = path.join(
       os.tmpdir(),
       `promptfoo-worker-req-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
@@ -111,7 +111,7 @@ export class PythonWorker {
       this.process!.send(command);
 
       // Wait for DONE
-      const result = await new Promise<any>((resolve, reject) => {
+      await new Promise<any>((resolve, reject) => {
         this.pendingRequest = { resolve, reject };
       });
 

@@ -1,7 +1,6 @@
 import { PythonWorker } from '../../src/python/worker';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 
 describe('PythonWorker', () => {
   let worker: PythonWorker;

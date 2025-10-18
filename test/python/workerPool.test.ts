@@ -77,7 +77,6 @@ def call_api(prompt, options, context):
     await pool.initialize();
 
     // Start 3 concurrent calls with 1 worker - should queue
-    const start = Date.now();
     const promises = [
       pool.execute('call_api', ['Q1', {}, {}]),
       pool.execute('call_api', ['Q2', {}, {}]),
@@ -85,7 +84,6 @@ def call_api(prompt, options, context):
     ];
 
     const results = await Promise.all(promises);
-    const duration = Date.now() - start;
 
     // All should complete (queued and executed)
     expect(results.length).toBe(3);
