@@ -118,9 +118,26 @@ export class PythonWorker {
         this.pendingRequest = { resolve, reject };
       });
 
-      // Read response
-      const responseData = fs.readFileSync(responseFile, 'utf-8');
-      const response = JSON.parse(responseData);
+      // Read response (with retry for Windows file system delays)
+      let responseData: string;
+      const maxRetries = 10;
+      const retryDelay = 50; // ms
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          responseData = fs.readFileSync(responseFile, 'utf-8');
+          break;
+        } catch (error: any) {
+          if (error.code === 'ENOENT' && attempt < maxRetries - 1) {
+            // File doesn't exist yet, wait and retry (Windows file system delay)
+            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      const response = JSON.parse(responseData!);
 
       if (response.type === 'error') {
         throw new Error(`Python error: ${response.error}\n${response.traceback || ''}`);
