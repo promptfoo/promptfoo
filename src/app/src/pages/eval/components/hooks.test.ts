@@ -173,6 +173,155 @@ describe('usePassingTestCounts', () => {
 
     expect(result.current).toEqual([{ total: 0, filtered: null }]);
   });
+
+  it('should return null as the filtered value when filteredMetrics array is shorter than prompts array', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: { testPassCount: 15 } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 2',
+            label: 'Test prompt 2',
+            provider: 'test-provider-2',
+            metrics: { testPassCount: 30 } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 3',
+            label: 'Test prompt 3',
+            provider: 'test-provider-3',
+            metrics: { testPassCount: 5 } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics: [{ testPassCount: 7 }],
+    });
+
+    const { result } = renderHook(() => usePassingTestCounts());
+
+    expect(result.current).toEqual([
+      { total: 15, filtered: 7 },
+      { total: 30, filtered: null },
+      { total: 5, filtered: null },
+    ]);
+  });
+
+  it('should preserve an explicit 0 value in filteredMetrics for testPassCount', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: { testPassCount: 15 } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics: [{ testPassCount: 0 }],
+    });
+
+    const { result } = renderHook(() => usePassingTestCounts());
+
+    expect(result.current).toEqual([{ total: 15, filtered: 0 }]);
+  });
+
+  it('should correctly handle a filteredMetrics entry with an explicit null testPassCount value', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: { testPassCount: 15 } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 2',
+            label: 'Test prompt 2',
+            provider: 'test-provider-2',
+            metrics: { testPassCount: 30 } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    const filteredMetrics = [{ testPassCount: 5 }, { testPassCount: null }];
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics,
+    });
+
+    const { result } = renderHook(() => usePassingTestCounts());
+
+    expect(result.current).toEqual([
+      { total: 15, filtered: 5 },
+      { total: 30, filtered: null },
+    ]);
+  });
+
+  it('should handle undefined entries in filteredMetrics array by returning null for the filtered count', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: { testPassCount: 15 } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 2',
+            label: 'Test prompt 2',
+            provider: 'test-provider-2',
+            metrics: { testPassCount: 30 } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 3',
+            label: 'Test prompt 3',
+            provider: 'test-provider-3',
+            metrics: { testPassCount: 5 } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    const filteredMetrics = [undefined, { testPassCount: 20 }, undefined];
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics,
+    });
+
+    const { result } = renderHook(() => usePassingTestCounts());
+
+    expect(result.current).toEqual([
+      { total: 15, filtered: null },
+      { total: 30, filtered: 20 },
+      { total: 5, filtered: null },
+    ]);
+  });
 });
 
 describe('useTestCounts', () => {
@@ -448,6 +597,158 @@ describe('useTestCounts', () => {
 
     expect(newTestCounts).toStrictEqual(initialTestCounts);
   });
+
+  it('should handle missing data in filteredMetrics gracefully', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: {
+              testPassCount: 10,
+              testFailCount: 5,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 2',
+            label: 'Test prompt 2',
+            provider: 'test-provider-2',
+            metrics: {
+              testPassCount: 20,
+              testFailCount: 10,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 3',
+            label: 'Test prompt 3',
+            provider: 'test-provider-3',
+            metrics: {
+              testPassCount: 0,
+              testFailCount: 8,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    const filteredMetrics = [
+      { testPassCount: 8, testFailCount: 2 },
+      undefined,
+      { testPassCount: 0, testFailCount: 0 },
+    ];
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics,
+    });
+
+    const { result } = renderHook(() => useTestCounts());
+
+    expect(result.current).toEqual([
+      { total: 15, filtered: 10 },
+      { total: 30, filtered: null },
+      { total: 8, filtered: 0 },
+    ]);
+  });
+
+  it('should handle the case where filteredMetrics array length does not match the prompts array length', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: {
+              testPassCount: 10,
+              testFailCount: 5,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 2',
+            label: 'Test prompt 2',
+            provider: 'test-provider-2',
+            metrics: {
+              testPassCount: 20,
+              testFailCount: 10,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 3',
+            label: 'Test prompt 3',
+            provider: 'test-provider-3',
+            metrics: {
+              testPassCount: 5,
+              testFailCount: 2,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    const filteredMetrics = [
+      { testPassCount: 8, testFailCount: 2 },
+      { testPassCount: 15, testFailCount: 5 },
+    ];
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics,
+    });
+
+    const { result } = renderHook(() => useTestCounts());
+
+    expect(result.current).toEqual([
+      { total: 15, filtered: 10 },
+      { total: 30, filtered: 20 },
+      { total: 7, filtered: null },
+    ]);
+  });
+
+  it('should handle very large numbers for testPassCount and testFailCount correctly', () => {
+    const largeNumber = Number.MAX_SAFE_INTEGER;
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: {
+              testPassCount: largeNumber,
+              testFailCount: largeNumber,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    const filteredMetrics = [
+      {
+        testPassCount: largeNumber,
+        testFailCount: largeNumber,
+      },
+    ];
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics,
+    });
+
+    const { result } = renderHook(() => useTestCounts());
+
+    expect(result.current).toEqual([
+      { total: largeNumber + largeNumber, filtered: largeNumber + largeNumber },
+    ]);
+  });
 });
 
 describe('usePassRates', () => {
@@ -599,6 +900,72 @@ describe('usePassRates', () => {
       { total: (120 / 140) * 100, filtered: null },
       { total: 50, filtered: null },
     ]);
+  });
+
+  it('should return a filtered pass rate of 0 for a prompt when the filtered test count is zero, while still returning the correct total pass rate', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: {
+              testPassCount: 10,
+              testFailCount: 0,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    const filteredMetrics = [
+      {
+        testPassCount: 0,
+        testFailCount: 0,
+      },
+    ];
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics,
+    });
+
+    const { result } = renderHook(() => usePassRates());
+
+    expect(result.current).toEqual([{ total: 100, filtered: 0 }]);
+  });
+
+  it('should correctly calculate pass rates with floating point precision when passing counts are very close to total counts', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: {
+              testPassCount: 9999999,
+              testFailCount: 1,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+    });
+
+    const { result } = renderHook(() => usePassRates());
+
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0].filtered).toBe(null);
+    expect(result.current[0].total).toBeCloseTo(99.99999, 5);
   });
 });
 
@@ -985,5 +1352,179 @@ describe('useMetricsGetter', () => {
       },
       filtered: null,
     });
+  });
+
+  it('should handle the case where filteredMetrics is an empty array but the table has prompts', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: {
+              testPassCount: 10,
+              testFailCount: 5,
+              cost: 1.5,
+              totalLatencyMs: 200,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 2',
+            label: 'Test prompt 2',
+            provider: 'test-provider-2',
+            metrics: {
+              testPassCount: 20,
+              testFailCount: 10,
+              cost: 2.5,
+              totalLatencyMs: 300,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics: [],
+    });
+
+    const { result } = renderHook(() => useMetricsGetter());
+    const getMetrics = result.current;
+
+    const metrics0 = getMetrics(0);
+    const metrics1 = getMetrics(1);
+
+    expect(metrics0).toEqual({
+      total: {
+        testPassCount: 10,
+        testFailCount: 5,
+        cost: 1.5,
+        totalLatencyMs: 200,
+      },
+      filtered: null,
+    });
+
+    expect(metrics1).toEqual({
+      total: {
+        testPassCount: 20,
+        testFailCount: 10,
+        cost: 2.5,
+        totalLatencyMs: 300,
+      },
+      filtered: null,
+    });
+  });
+
+  it('should handle the case where filteredMetrics array is shorter than the prompts array', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: {
+              testPassCount: 10,
+              testFailCount: 5,
+              cost: 1.5,
+              totalLatencyMs: 200,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Test prompt 2',
+            label: 'Test prompt 2',
+            provider: 'test-provider-2',
+            metrics: {
+              testPassCount: 20,
+              testFailCount: 10,
+              cost: 2.5,
+              totalLatencyMs: 300,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    const filteredMetrics = [
+      {
+        testPassCount: 5,
+        testFailCount: 2,
+        cost: 0.5,
+        totalLatencyMs: 100,
+      },
+    ];
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics,
+    });
+
+    const { result } = renderHook(() => useMetricsGetter());
+    const getMetrics = result.current;
+
+    const metrics0 = getMetrics(0);
+    const metrics1 = getMetrics(1);
+
+    expect(metrics0).toEqual({
+      total: {
+        testPassCount: 10,
+        testFailCount: 5,
+        cost: 1.5,
+        totalLatencyMs: 200,
+      },
+      filtered: {
+        testPassCount: 5,
+        testFailCount: 2,
+        cost: 0.5,
+        totalLatencyMs: 100,
+      },
+    });
+
+    expect(metrics1).toEqual({
+      total: {
+        testPassCount: 20,
+        testFailCount: 10,
+        cost: 2.5,
+        totalLatencyMs: 300,
+      },
+      filtered: null,
+    });
+  });
+
+  it('should maintain referential stability when dependencies do not change', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt 1',
+            label: 'Test prompt 1',
+            provider: 'test-provider-1',
+            metrics: { testPassCount: 10 } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    const mockFilteredMetrics = [{ testPassCount: 5 }];
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics: mockFilteredMetrics,
+    });
+
+    const { result, rerender } = renderHook(() => useMetricsGetter());
+    const getMetrics1 = result.current;
+
+    rerender();
+    const getMetrics2 = result.current;
+
+    expect(getMetrics2).toBe(getMetrics1);
   });
 });
