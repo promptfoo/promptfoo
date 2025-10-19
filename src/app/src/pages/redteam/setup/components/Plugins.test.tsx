@@ -120,9 +120,7 @@ const renderWithProviders = (ui: React.ReactNode) => {
   return render(
     <MemoryRouter>
       <ToastProvider>
-        <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>
-          {ui}
-        </TestCaseGenerationProvider>
+        <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>{ui}</TestCaseGenerationProvider>
       </ToastProvider>
     </MemoryRouter>,
   );

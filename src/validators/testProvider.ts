@@ -64,7 +64,7 @@ export async function testHTTPProviderConnectivity(
   // Generate a session ID for testing (works for both client sessions)
   // For server sessions, a value is provided by the server, and subsequent
   // requests will use the server-returned session ID
-  if (!provider.config.sessionParser) {
+  if (!provider?.config?.sessionParser) {
     vars['sessionId'] = uuidv4();
   }
 
