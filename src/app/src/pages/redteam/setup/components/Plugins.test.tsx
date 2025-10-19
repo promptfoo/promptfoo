@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
+import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');
@@ -115,9 +116,14 @@ const mockUseRecentlyUsedPlugins = useRecentlyUsedPlugins as unknown as Mock;
 
 // Helper function for rendering with providers
 const renderWithProviders = (ui: React.ReactNode) => {
+  const redTeamConfig = mockUseRedTeamConfig();
   return render(
     <MemoryRouter>
-      <ToastProvider>{ui}</ToastProvider>
+      <ToastProvider>
+        <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>
+          {ui}
+        </TestCaseGenerationProvider>
+      </ToastProvider>
     </MemoryRouter>,
   );
 };

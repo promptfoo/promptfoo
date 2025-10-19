@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { CustomPoliciesSection } from './CustomPoliciesSection';
+import { TestCaseGenerationProvider } from '../TestCaseGenerationProvider';
 
 vi.mock('../../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useTelemetry', () => ({
@@ -20,10 +21,13 @@ const mockShowToast = vi.fn();
 
 const renderComponent = () => {
   const theme = createTheme();
+  const redTeamConfig = (useRedTeamConfig as unknown as Mock)();
   return render(
     <ThemeProvider theme={theme}>
       <ToastProvider>
-        <CustomPoliciesSection />
+        <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>
+          <CustomPoliciesSection />
+        </TestCaseGenerationProvider>
       </ToastProvider>
     </ThemeProvider>,
   );
