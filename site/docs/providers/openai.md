@@ -824,6 +824,88 @@ In the web UI, audio outputs display with an embedded player and transcript. For
 npx promptfoo@latest init --example openai-audio
 ```
 
+### Audio transcription
+
+OpenAI provides dedicated transcription models for converting speech to text. These models charge per minute of audio rather than per token.
+
+**Available transcription models:**
+
+| Model                       | Description                          | Cost per minute |
+| --------------------------- | ------------------------------------ | --------------- |
+| `whisper-1`                 | Original Whisper transcription model | $0.006          |
+| `gpt-4o-transcribe`         | GPT-4o optimized for transcription   | $0.006          |
+| `gpt-4o-mini-transcribe`    | Faster, more cost-effective option   | $0.003          |
+| `gpt-4o-transcribe-diarize` | Identifies different speakers        | $0.006          |
+
+To use transcription models, specify the provider format `openai:transcription:<model name>`:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - file://sample-audio.mp3
+
+providers:
+  - id: openai:transcription:whisper-1
+    config:
+      language: en # Optional: specify language for better accuracy
+      temperature: 0 # Optional: 0 for more deterministic output
+
+  - id: openai:transcription:gpt-4o-transcribe
+    config:
+      language: en
+      prompt: This is a technical discussion about AI and machine learning.
+
+  - id: openai:transcription:gpt-4o-transcribe-diarize
+    config:
+      num_speakers: 2 # Optional: expected number of speakers
+      speaker_labels: ['Alice', 'Bob'] # Optional: provide speaker names
+
+tests:
+  - assert:
+      - type: contains
+        value: expected transcript content
+```
+
+#### Transcription configuration options
+
+| Parameter                 | Description                               | Options                |
+| ------------------------- | ----------------------------------------- | ---------------------- |
+| `language`                | Language of the audio (ISO-639-1)         | e.g., 'en', 'es', 'fr' |
+| `prompt`                  | Context to improve transcription accuracy | Any text string        |
+| `temperature`             | Controls randomness (0-1)                 | Number between 0 and 1 |
+| `timestamp_granularities` | Get word or segment-level timestamps      | ['word', 'segment']    |
+| `num_speakers`            | Expected number of speakers (diarization) | Number                 |
+| `speaker_labels`          | Names for speakers (diarization)          | Array of strings       |
+
+Supported audio formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM.
+
+#### Diarization example
+
+The diarization model identifies different speakers in the audio:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - file://interview.mp3
+
+providers:
+  - id: openai:transcription:gpt-4o-transcribe-diarize
+    config:
+      num_speakers: 2
+      speaker_labels: ['Interviewer', 'Guest']
+
+tests:
+  - assert:
+      - type: contains
+        value: Interviewer
+      - type: contains
+        value: Guest
+```
+
+For a complete working example, see the [OpenAI audio transcription example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-audio-transcription) or initialize it with:
+
+```bash
+npx promptfoo@latest init --example openai-audio-transcription
+```
+
 ## Realtime API Models
 
 The Realtime API allows for real-time communication with GPT-4o class models using WebSockets, supporting both text and audio inputs/outputs with streaming responses.
