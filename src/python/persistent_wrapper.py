@@ -163,10 +163,15 @@ def handle_call(command_line, user_module, default_function_name):
             except (IOError, OSError):
                 if attempt < max_verify_attempts - 1:
                     import time
+
                     time.sleep(0.01)  # Wait 10ms before retry
                 else:
                     # File still not readable after retries, but continue anyway
-                    print(f"WARNING: Could not verify {response_file} is readable", file=sys.stderr, flush=True)
+                    print(
+                        f"WARNING: Could not verify {response_file} is readable",
+                        file=sys.stderr,
+                        flush=True,
+                    )
 
         # Signal done
         print("DONE", flush=True)
