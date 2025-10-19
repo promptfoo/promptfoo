@@ -204,7 +204,7 @@ export class PythonWorker {
         new Promise<void>((resolve) => {
           this.process!.on('close', () => resolve());
         }),
-        new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+        new Promise<void>((resolve) => setTimeout(resolve, 5000).unref()),
       ]);
     } catch (error) {
       logger.error(`Error during worker shutdown: ${error}`);
