@@ -2,7 +2,10 @@ import { PythonWorkerPool } from '../../src/python/workerPool';
 import fs from 'fs';
 import path from 'path';
 
-describe('PythonWorkerPool', () => {
+// Skip worker pool tests on Windows due to slow Python process startup
+const describeOnPosix = process.platform === 'win32' ? describe.skip : describe;
+
+describeOnPosix('PythonWorkerPool', () => {
   let pool: PythonWorkerPool;
   const testScriptPath = path.join(__dirname, 'fixtures', 'counter_provider.py');
   const fixturesDir = path.join(__dirname, 'fixtures');

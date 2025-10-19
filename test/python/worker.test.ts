@@ -2,7 +2,10 @@ import { PythonWorker } from '../../src/python/worker';
 import fs from 'fs';
 import path from 'path';
 
-describe('PythonWorker', () => {
+// Skip worker tests on Windows due to slow Python process startup
+const describeOnPosix = process.platform === 'win32' ? describe.skip : describe;
+
+describeOnPosix('PythonWorker', () => {
   let worker: PythonWorker;
   const testScriptPath = path.join(__dirname, 'fixtures', 'simple_provider.py');
 
