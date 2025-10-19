@@ -153,6 +153,21 @@ def handle_call(command_line, user_module, default_function_name):
             f.flush()  # Flush Python buffer
             os.fsync(f.fileno())  # Force OS to write to disk (critical for Windows)
 
+        # Verify file is readable before signaling done (Windows file system race condition fix)
+        max_verify_attempts = 10
+        for attempt in range(max_verify_attempts):
+            try:
+                with open(response_file, "r", encoding="utf-8") as f:
+                    f.read(1)  # Try to read first byte to verify file is accessible
+                break  # File is readable, continue
+            except (IOError, OSError):
+                if attempt < max_verify_attempts - 1:
+                    import time
+                    time.sleep(0.01)  # Wait 10ms before retry
+                else:
+                    # File still not readable after retries, but continue anyway
+                    print(f"WARNING: Could not verify {response_file} is readable", file=sys.stderr, flush=True)
+
         # Signal done
         print("DONE", flush=True)
 
