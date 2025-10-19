@@ -118,7 +118,7 @@ const AboutPageContent = () => {
                 name: 'James Hiester',
                 title: 'Deployment Engineer',
                 image: '/img/team/james.jpeg',
-                bio: 'James brings years of experience in professional services helping leading financial institutions and energy sector clients.  James specializes in managing transformation initiatives and deploying enterprise solutions.',
+                bio: 'James brings years of experience in professional services helping leading financial institutions and energy sector clients. James specializes in managing transformation initiatives and deploying enterprise solutions.',
               },
               {
                 name: 'Steve Klein',
