@@ -190,10 +190,11 @@ describe('API Health Utilities', () => {
     it('should handle unknown status with custom message', async () => {
       mockedFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ 
-          status: 'MAINTENANCE',
-          message: 'System is under maintenance' 
-        }),
+        json: () =>
+          Promise.resolve({
+            status: 'MAINTENANCE',
+            message: 'System is under maintenance',
+          }),
       } as Response);
 
       const result = await checkRemoteHealth('https://test.api/health');
