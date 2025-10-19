@@ -97,7 +97,8 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
               ...config,
             },
           }),
-          timeout: 10000,
+          // Abort after 10s
+          signal: AbortSignal.timeout(10000),
         });
 
         const data = await response.json();
