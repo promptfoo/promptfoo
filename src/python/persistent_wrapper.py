@@ -150,6 +150,8 @@ def handle_call(command_line, user_module, default_function_name):
         # Write response
         with open(response_file, "w", encoding="utf-8") as f:
             json.dump(response, f, ensure_ascii=False)
+            f.flush()  # Flush Python buffer
+            os.fsync(f.fileno())  # Force OS to write to disk (critical for Windows)
 
         # Signal done
         print("DONE", flush=True)
