@@ -57,7 +57,7 @@ describe('CustomIntentPluginSection', () => {
       expect(screen.getByText('Supports .csv and .json files')).toBeInTheDocument();
 
       // Check for action buttons
-      expect(screen.getByText('Add prompt')).toBeInTheDocument();
+      expect(screen.getByText('Add Intent')).toBeInTheDocument();
       expect(screen.getByText('Upload File')).toBeInTheDocument();
       expect(screen.getByText('Clear All')).toBeInTheDocument();
 
@@ -86,7 +86,7 @@ describe('CustomIntentPluginSection', () => {
   });
 
   describe('Intent Management', () => {
-    it('adds new intent when Add prompt button is clicked', async () => {
+    it('adds new intent when add button is clicked', async () => {
       render(<CustomIntentPluginSection />);
 
       // First fill the empty field to enable the Add button
@@ -95,11 +95,11 @@ describe('CustomIntentPluginSection', () => {
 
       // Wait for the Add button to be enabled
       await waitFor(() => {
-        const addButton = screen.getByText('Add prompt');
+        const addButton = screen.getByText('Add Intent');
         expect(addButton).not.toBeDisabled();
       });
 
-      const addButton = screen.getByText('Add prompt');
+      const addButton = screen.getByText('Add Intent');
       fireEvent.click(addButton);
 
       // Should have 2 text fields now (with longer timeout for state update)
@@ -141,10 +141,10 @@ describe('CustomIntentPluginSection', () => {
       });
     });
 
-    it('disables Add prompt button when empty intents exist', () => {
+    it('disables Add button when empty intents exist', () => {
       render(<CustomIntentPluginSection />);
 
-      const addButton = screen.getByText('Add prompt');
+      const addButton = screen.getByText('Add Intent');
       expect(addButton).toBeDisabled();
     });
   });
