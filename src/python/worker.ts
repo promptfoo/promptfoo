@@ -120,8 +120,8 @@ export class PythonWorker {
 
       // Read response (with retry for Windows file system delays)
       let responseData: string;
-      const maxRetries = 10;
-      const retryDelay = 50; // ms
+      const maxRetries = 50;
+      const retryDelay = 100; // ms (total max wait: 5 seconds)
 
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
@@ -130,8 +130,21 @@ export class PythonWorker {
         } catch (error: any) {
           if (error.code === 'ENOENT' && attempt < maxRetries - 1) {
             // File doesn't exist yet, wait and retry (Windows file system delay)
+            logger.debug(
+              `Response file not found (attempt ${attempt + 1}/${maxRetries}), retrying: ${responseFile}`,
+            );
             await new Promise((resolve) => setTimeout(resolve, retryDelay));
             continue;
+          }
+          // Final attempt failed - log directory contents for debugging
+          const tempDir = path.dirname(responseFile);
+          try {
+            const files = fs.readdirSync(tempDir).filter((f) => f.startsWith('promptfoo-worker-'));
+            logger.error(
+              `Failed to read response file after ${maxRetries} attempts. Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
+            );
+          } catch {
+            logger.error(`Failed to read response file: ${responseFile}`);
           }
           throw error;
         }
