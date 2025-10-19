@@ -1296,6 +1296,7 @@
                           "unsafebench",
                           "unverifiable-claims",
                           "vlguard",
+                          "wordplay",
                           "xstest"
                         ]
                       },
@@ -1498,6 +1499,7 @@
                               "unsafebench",
                               "unverifiable-claims",
                               "vlguard",
+                              "wordplay",
                               "xstest"
                             ]
                           },

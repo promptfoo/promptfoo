@@ -1,9 +1,4 @@
-import path from 'path';
-
-import cliState from '../cliState';
-import { importModule } from '../esm';
 import logger from '../logger';
-import { isJavascriptFile } from '../util/fileExtensions';
 import { safeJsonStringify } from '../util/json';
 import { sanitizeObject } from '../util/sanitizer';
 
@@ -16,6 +11,8 @@ export interface TransformResponseContext {
 
 // This is in another module so it can be imported by the frontend
 // Useful to test these in the UI before running an eval
+// Note: file:// references should be pre-loaded in http.ts using loadTransformModule
+// before being passed to this function. This is because we can't use importModule in the frontend.
 export async function createTransformResponse(
   parser: string | Function | undefined,
 ): Promise<(data: any, text: string, context?: TransformResponseContext) => ProviderResponse> {
@@ -41,23 +38,9 @@ export async function createTransformResponse(
     };
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = parser.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return requiredModule;
-    }
+    // This should have been pre-loaded in http.ts using loadTransformModule
     throw new Error(
-      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
+      `Response transform with file:// reference should be pre-loaded before calling createTransformResponse. This is a bug in the HTTP provider implementation.`,
     );
   } else if (typeof parser === 'string') {
     return (data, text, context) => {
@@ -119,34 +102,9 @@ export async function createTransformRequest(
   }
 
   if (typeof transform === 'string' && transform.startsWith('file://')) {
-    let filename = transform.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return async (prompt, vars, context) => {
-        try {
-          return await requiredModule(prompt, vars, context);
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          const wrappedError = new Error(
-            `Error in request transform function from ${filename}: ${errorMessage}`,
-          );
-          logger.error(wrappedError.message);
-          throw wrappedError;
-        }
-      };
-    }
+    // This should have been pre-loaded in http.ts using loadTransformModule
     throw new Error(
-      `Request transform malformed: ${filename} must export a function or have a default export as a function`,
+      `Request transform with file:// reference should be pre-loaded before calling createTransformRequest. This is a bug in the HTTP provider implementation.`,
     );
   } else if (typeof transform === 'string') {
     return async (prompt, vars, context) => {
