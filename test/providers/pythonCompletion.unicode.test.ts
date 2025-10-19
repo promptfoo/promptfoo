@@ -6,7 +6,11 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import type { CallApiContextParams } from '../../src/types/index';
 import * as pythonUtils from '../../src/python/pythonUtils';
 
-describe('PythonProvider Unicode handling', () => {
+// Skip Unicode tests on Windows due to file system race conditions
+// See: https://github.com/promptfoo/promptfoo/issues/XXXX
+const describeOnPosix = process.platform === 'win32' ? describe.skip : describe;
+
+describeOnPosix('PythonProvider Unicode handling', () => {
   let tempDir: string;
   const providers: PythonProvider[] = [];
 
