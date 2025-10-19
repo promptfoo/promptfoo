@@ -2,10 +2,10 @@ import { PythonWorker } from '../../src/python/worker';
 import fs from 'fs';
 import path from 'path';
 
-// Skip worker tests on Windows due to slow Python process startup
-const describeOnPosix = process.platform === 'win32' ? describe.skip : describe;
+// Windows CI has slower Python process startup - use longer timeout
+const TEST_TIMEOUT = process.platform === 'win32' ? 20000 : 5000;
 
-describeOnPosix('PythonWorker', () => {
+describe('PythonWorker', () => {
   let worker: PythonWorker;
   const testScriptPath = path.join(__dirname, 'fixtures', 'simple_provider.py');
 
@@ -39,7 +39,7 @@ def call_api(prompt, options, context):
     worker = new PythonWorker(testScriptPath, 'call_api');
     await worker.initialize();
     expect(worker.isReady()).toBe(true);
-  });
+  }, TEST_TIMEOUT);
 
   it('should execute a function call', async () => {
     worker = new PythonWorker(testScriptPath, 'call_api');
@@ -47,7 +47,7 @@ def call_api(prompt, options, context):
 
     const result = await worker.call('call_api', ['Hello world', {}, {}]);
     expect(result.output).toBe('Echo: Hello world');
-  });
+  }, TEST_TIMEOUT);
 
   it('should reuse the same process for multiple calls', async () => {
     worker = new PythonWorker(testScriptPath, 'call_api');
@@ -59,7 +59,7 @@ def call_api(prompt, options, context):
     expect(result1.output).toBe('Echo: First');
     expect(result2.output).toBe('Echo: Second');
     // Same process should be used (we'll verify in implementation)
-  });
+  }, TEST_TIMEOUT);
 
   it('should call different function names dynamically per request', async () => {
     // Create a provider with multiple API functions
@@ -101,7 +101,7 @@ def call_classification_api(prompt, options, context):
         fs.unlinkSync(multiApiPath);
       }
     }
-  });
+  }, TEST_TIMEOUT);
 
   it('should handle Python errors gracefully', async () => {
     const errorPath = path.join(__dirname, 'fixtures', 'error_provider.py');
@@ -134,5 +134,5 @@ def call_api(prompt, options, context):
         fs.unlinkSync(errorPath);
       }
     }
-  });
+  }, TEST_TIMEOUT);
 });

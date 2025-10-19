@@ -6,11 +6,10 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import type { CallApiContextParams } from '../../src/types/index';
 import * as pythonUtils from '../../src/python/pythonUtils';
 
-// Skip Unicode tests on Windows due to file system race conditions
-// See: https://github.com/promptfoo/promptfoo/issues/XXXX
-const describeOnPosix = process.platform === 'win32' ? describe.skip : describe;
+// Windows CI has slower Python process startup - use longer timeout
+const TEST_TIMEOUT = process.platform === 'win32' ? 20000 : 15000;
 
-describeOnPosix('PythonProvider Unicode handling', () => {
+describe('PythonProvider Unicode handling', () => {
   let tempDir: string;
   const providers: PythonProvider[] = [];
 
@@ -81,7 +80,7 @@ def call_api(prompt, options, context):
     expect(jsonStr).not.toContain('\u0000');
     expect(jsonStr).not.toContain('\\u0000');
     expect(jsonStr).toContain('Product® Plus');
-  }, 15000);
+  }, TEST_TIMEOUT);
 
   it('should handle Unicode in context vars', async () => {
     const provider = createProvider(
@@ -116,7 +115,7 @@ def call_api(prompt, options, context):
     expect(result.metadata?.product_name).toBe('Product® Plus™');
     // Note: ® is 2 bytes, ™ is 3 bytes in UTF-8, so total is 17 bytes
     expect(result.metadata?.product_bytes).toBe(17);
-  }, 15000);
+  }, TEST_TIMEOUT);
 
   it('should handle complex nested Unicode data', async () => {
     const provider = createProvider(
@@ -159,5 +158,5 @@ def call_api(prompt, options, context):
     expect(jsonStr).toContain('€100');
     expect(jsonStr).toContain('25°C');
     expect(jsonStr).not.toContain('\u0000');
-  }, 15000);
+  }, TEST_TIMEOUT);
 });

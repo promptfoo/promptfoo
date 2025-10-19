@@ -2,10 +2,10 @@ import { PythonWorkerPool } from '../../src/python/workerPool';
 import fs from 'fs';
 import path from 'path';
 
-// Skip worker pool tests on Windows due to slow Python process startup
-const describeOnPosix = process.platform === 'win32' ? describe.skip : describe;
+// Windows CI has slower Python process startup - use longer timeout
+const TEST_TIMEOUT = process.platform === 'win32' ? 20000 : 5000;
 
-describeOnPosix('PythonWorkerPool', () => {
+describe('PythonWorkerPool', () => {
   let pool: PythonWorkerPool;
   const testScriptPath = path.join(__dirname, 'fixtures', 'counter_provider.py');
   const fixturesDir = path.join(__dirname, 'fixtures');
@@ -47,7 +47,7 @@ def call_api(prompt, options, context):
     pool = new PythonWorkerPool(testScriptPath, 'call_api', 2);
     await pool.initialize();
     expect(pool.getWorkerCount()).toBe(2);
-  });
+  }, TEST_TIMEOUT);
 
   it('should execute calls sequentially with 1 worker', async () => {
     pool = new PythonWorkerPool(testScriptPath, 'call_api', 1);
@@ -61,7 +61,7 @@ def call_api(prompt, options, context):
     expect(result1.count).toBe(1);
     expect(result2.count).toBe(2);
     expect(result3.count).toBe(3);
-  });
+  }, TEST_TIMEOUT);
 
   it('should handle concurrent calls with multiple workers', async () => {
     pool = new PythonWorkerPool(testScriptPath, 'call_api', 2);
@@ -81,7 +81,7 @@ def call_api(prompt, options, context):
     // With 2 workers, we should see counters go to 2
     const counts = results.map((r) => r.count);
     expect(Math.max(...counts)).toBe(2); // Each worker called twice
-  });
+  }, TEST_TIMEOUT);
 
   it('should queue requests when all workers busy', async () => {
     pool = new PythonWorkerPool(testScriptPath, 'call_api', 1);
@@ -101,7 +101,7 @@ def call_api(prompt, options, context):
     expect(results[0].count).toBe(1);
     expect(results[1].count).toBe(2);
     expect(results[2].count).toBe(3);
-  });
+  }, TEST_TIMEOUT);
 
   it('should handle different function names across pool', async () => {
     const multiApiPath = path.join(__dirname, 'fixtures', 'pool_multi_api.py');
@@ -135,7 +135,7 @@ def call_embedding_api(prompt, options, context):
         fs.unlinkSync(multiApiPath);
       }
     }
-  });
+  }, TEST_TIMEOUT);
 
   it('should process queued requests after worker becomes available', async () => {
     const queuePath = path.join(__dirname, 'fixtures', 'pool_queue.py');
@@ -174,5 +174,5 @@ def call_api(prompt, options, context):
         fs.unlinkSync(queuePath);
       }
     }
-  });
+  }, TEST_TIMEOUT);
 });
