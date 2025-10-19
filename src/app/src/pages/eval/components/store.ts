@@ -430,7 +430,7 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 
 export const useTableStore = create<TableState>()((set, get) => ({
   evalId: null,
-  setEvalId: (evalId: string) => set(() => ({ evalId })),
+  setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
 
   author: null,
   setAuthor: (author: string | null) => set(() => ({ author })),
