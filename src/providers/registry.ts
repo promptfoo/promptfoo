@@ -90,6 +90,7 @@ import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
+import { createTrueFoundryProvider } from './truefoundry';
 import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
@@ -140,13 +141,24 @@ export const providerMap: ProviderFactory[] = [
       const providerName = splits[1];
       const modelType = splits[2];
       const modelName = splits[3];
-      const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
-        './adaline.gateway'
-      );
-      if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
+
+      try {
+        const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
+          './adaline.gateway'
+        );
+        if (modelType === 'embedding' || modelType === 'embeddings') {
+          return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
+        }
+        return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
+      } catch (error: any) {
+        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@adaline/')) {
+          throw new Error(
+            'The Adaline Gateway provider requires @adaline packages. Please install them with:\n' +
+              'npm install @adaline/anthropic @adaline/azure @adaline/gateway @adaline/google @adaline/groq @adaline/open-router @adaline/openai @adaline/provider @adaline/together-ai @adaline/types @adaline/vertex',
+          );
+        }
+        throw error;
       }
-      return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
     },
   },
   {
@@ -860,6 +872,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createTogetherAiProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('truefoundry:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createTrueFoundryProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });

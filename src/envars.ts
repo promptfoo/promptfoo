@@ -326,6 +326,9 @@ type EnvVars = {
   // Together AI
   TOGETHER_API_KEY?: string;
 
+  // TrueFoundry
+  TRUEFOUNDRY_API_KEY?: string;
+
   // Vertex AI
   VERTEX_API_VERSION?: string;
 

@@ -348,6 +348,7 @@ const remotePlugins: PluginFactory[] = [
   'special-token-injection',
   'ssrf',
   'system-prompt-override',
+  'wordplay',
 ].map((key) => createRemotePlugin(key));
 
 remotePlugins.push(

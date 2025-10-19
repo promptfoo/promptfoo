@@ -167,7 +167,10 @@ export async function testHTTPProviderConnectivity(
       return {
         success: !testAnalyzerResponseObj.error && !testAnalyzerResponseObj.changes_needed,
         message:
-          testAnalyzerResponseObj.message || testAnalyzerResponseObj.error || 'Test completed',
+          testAnalyzerResponseObj.message ||
+          testAnalyzerResponseObj.error ||
+          errorMsg ||
+          "Test successfully completed. We've verified that the provider is working correctly.",
         error: errorMsg
           ? errorMsg.substring(0, 100) + (errorMsg.length > 100 ? '...' : '')
           : undefined,
