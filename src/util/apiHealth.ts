@@ -79,7 +79,13 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
     // Type guard for Error objects
     const error = err instanceof Error ? err : new Error(String(err));
 
-    if ((err as any)['cause'] && (err as any)['cause']['code'] === 'ECONNREFUSED') {
+    const errorCause = (error as { cause?: unknown }).cause;
+    if (
+      typeof errorCause === 'object' &&
+      errorCause !== null &&
+      'code' in errorCause &&
+      (errorCause as { code?: string }).code === 'ECONNREFUSED'
+    ) {
       return {
         status: 'ERROR',
         message: 'API is not reachable',
