@@ -1220,6 +1220,11 @@ class Evaluator {
         if (testSuite.derivedMetrics) {
           const math = await import('mathjs');
           for (const metric of testSuite.derivedMetrics) {
+            // Skip post-processing metrics - they run after all results are collected
+            if (metric.phase === 'post') {
+              continue;
+            }
+
             if (metrics.namedScores[metric.name] === undefined) {
               metrics.namedScores[metric.name] = 0;
             }
@@ -1679,6 +1684,14 @@ class Evaluator {
 
     await this.evalRecord.addPrompts(prompts);
 
+    // Run post-processing derived metrics if any exist
+    if (testSuite.derivedMetrics) {
+      const postMetrics = testSuite.derivedMetrics.filter((m) => m.phase === 'post');
+      if (postMetrics.length > 0) {
+        await this.runPostProcessingMetrics(postMetrics, prompts);
+      }
+    }
+
     // Clean up progress reporters and timers
     try {
       if (progressBarManager) {
@@ -1859,6 +1872,70 @@ class Evaluator {
     updateSignalFile();
 
     return this.evalRecord;
+  }
+
+  /**
+   * Run post-processing derived metrics that operate on all results
+   */
+  private async runPostProcessingMetrics(
+    postMetrics: Array<{ name: string; value: string | Function; phase?: 'runtime' | 'post' }>,
+    prompts: CompletedPrompt[],
+  ): Promise<void> {
+    // Fetch results from database if persisted, otherwise use in-memory results
+    const results = this.evalRecord.persisted
+      ? await (await import('./models/evalResult')).default.findManyByEvalId(this.evalRecord.id)
+      : this.evalRecord.results;
+
+    const context = {
+      results,
+      prompts,
+      stats: this.stats,
+      options: this.options,
+    };
+
+    for (const metric of postMetrics) {
+      try {
+        let metricFunction: Function;
+
+        // Load function from file:// path if needed
+        if (typeof metric.value === 'string') {
+          const { filePath, functionName } = parseFileUrl(metric.value);
+          metricFunction = await loadFunction({ filePath, functionName });
+        } else {
+          metricFunction = metric.value;
+        }
+
+        // Execute the function with post-processing context
+        const result = await metricFunction(context);
+
+        // Result should be a map of metric names to values
+        if (typeof result !== 'object' || result === null) {
+          logger.warn(
+            `Post-processing metric '${metric.name}' returned non-object: ${typeof result}`,
+          );
+          continue;
+        }
+
+        // Merge returned metrics into each prompt's namedScores
+        for (const prompt of prompts) {
+          if (!prompt.metrics) {
+            continue;
+          }
+
+          for (const [key, value] of Object.entries(result)) {
+            if (typeof value === 'number') {
+              prompt.metrics.namedScores[key] = value;
+            }
+          }
+        }
+
+        logger.debug(`Post-processing metric '${metric.name}' completed: ${JSON.stringify(result)}`);
+      } catch (error) {
+        logger.error(
+          `Error running post-processing metric '${metric.name}': ${(error as Error).message}`,
+        );
+      }
+    }
   }
 
   async evaluate(): Promise<Eval> {

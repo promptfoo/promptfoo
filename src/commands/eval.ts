@@ -17,7 +17,7 @@ import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers/index';
 import { createShareableUrl, isSharingEnabled } from '../share';
-import { generateTable } from '../table';
+import { generateRepeatStatsTable, generateTable } from '../table';
 import telemetry from '../telemetry';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';

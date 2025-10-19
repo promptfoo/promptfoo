@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Measure LLM consistency with repeated tests
+
+prompts:
+  - 'Classify this sentiment: "{{text}}"'
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  - vars:
+      text: I love this product!
+    assert:
+      - type: llm-rubric
+        value: The output correctly identifies positive sentiment
+
+  - vars:
+      text: This is terrible and I hate it
+    assert:
+      - type: llm-rubric
+        value: The output correctly identifies negative sentiment
+
+  - vars:
+      text: It's okay, nothing special
+    assert:
+      - type: llm-rubric
+        value: The output correctly identifies neutral sentiment
+
+  - vars:
+      text: The weather is nice today
+    assert:
+      - type: llm-rubric
+        value: The output correctly identifies positive or neutral sentiment
+
+derivedMetrics:
+  - name: repeat_stats
+    value: file://../../dist/src/metrics/repeatStats.js
+    phase: post

@@ -799,8 +799,23 @@ export const DerivedMetricSchema = z.object({
       .args(z.record(z.string(), z.number()), z.custom<RunEvalOptions>())
       .returns(z.number()),
   ]),
+
+  // When to calculate this metric: 'runtime' (during eval) or 'post' (after all results collected)
+  phase: z.enum(['runtime', 'post']).optional().default('runtime'),
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
+
+// Context passed to post-processing derived metrics (phase: 'post')
+export interface PostProcessingContext {
+  results: EvaluateResult[];
+  prompts: CompletedPrompt[];
+  stats: EvaluateStats;
+  options: EvaluateOptions;
+}
+
+export type PostProcessingMetricFunction = (
+  context: PostProcessingContext,
+) => Record<string, number> | Promise<Record<string, number>>;
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({

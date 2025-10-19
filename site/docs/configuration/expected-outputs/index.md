@@ -578,6 +578,107 @@ See also:
 - [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) - Complete F1 score implementation
 - [MathJS documentation](https://mathjs.org/docs/expressions/syntax.html) - Expression syntax reference
 
+### Post-processing metrics
+
+Post-processing metrics run after all evaluation results are collected, allowing you to calculate aggregate statistics across all test results. Use the `phase: 'post'` field to distinguish them from runtime metrics.
+
+**When to use post vs runtime:**
+
+- **Runtime metrics** (default): Calculate scores per test case during evaluation (e.g., F1 score, weighted averages)
+- **Post metrics** (`phase: 'post'`): Calculate statistics across all results after evaluation completes (e.g., pass rates, variance, percentiles)
+
+```yaml
+derivedMetrics:
+  # Runtime metric - calculated per test case
+  - name: 'weighted_score'
+    value: 'accuracy * 0.6 + relevance * 0.4'
+
+  # Post-processing metric - calculated after all tests
+  - name: 'repeat_stats'
+    value: file://./node_modules/promptfoo/dist/src/metrics/repeatStats.js
+    phase: post
+```
+
+#### Built-in: Repeat statistics
+
+When running tests with `--repeat N`, use the built-in `repeatStats` metric to measure consistency:
+
+```yaml
+derivedMetrics:
+  - name: repeat_stats
+    value: file://./node_modules/promptfoo/dist/src/metrics/repeatStats.js
+    phase: post
+```
+
+Run your eval with repeat:
+
+```bash
+promptfoo eval --repeat 5
+```
+
+This calculates consistency metrics:
+
+| Metric                  | Description                                             |
+| ----------------------- | ------------------------------------------------------- |
+| `repeat.pass_n`         | Probability that ALL N attempts pass (pessimistic)      |
+| `repeat.pass_rate`      | Overall pass rate across all attempts                   |
+| `repeat.flip_rate`      | How often pass/fail status changes between attempts     |
+| `repeat.score.mean`     | Average score across all attempts                       |
+| `repeat.score.stddev`   | Standard deviation of scores (consistency measure)      |
+| `repeat.score.min`      | Lowest score observed                                   |
+| `repeat.score.max`      | Highest score observed                                  |
+| `repeat.latency.mean`   | Average response time                                   |
+| `repeat.latency.p95`    | 95th percentile latency                                 |
+| `repeat.latency.p99`    | 99th percentile latency                                 |
+
+See the [repeat metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/repeat-metrics) for a complete working example.
+
+#### Custom post-processing metrics
+
+Create custom post-processing functions to calculate your own statistics:
+
+```javascript
+// customStats.js
+module.exports = function (context) {
+  const { results, options } = context;
+
+  // Calculate statistics across all results
+  const totalTests = results.length;
+  const passCount = results.filter((r) => r.success).length;
+  const passRate = passCount / totalTests;
+
+  const avgScore = results.reduce((sum, r) => sum + r.score, 0) / totalTests;
+
+  return {
+    'custom.pass_rate': passRate,
+    'custom.avg_score': avgScore,
+    'custom.total_tests': totalTests,
+  };
+};
+```
+
+Add to your config:
+
+```yaml
+derivedMetrics:
+  - name: custom_stats
+    value: file://./customStats.js
+    phase: post
+```
+
+**Context interface:**
+
+```typescript
+interface PostProcessingContext {
+  results: EvaluateResult[]; // All test results
+  prompts: CompletedPrompt[]; // All prompts that were tested
+  stats: EvaluateStats; // Overall statistics
+  options: EvaluateOptions; // All evaluation options (maxConcurrency, repeat, etc.)
+}
+```
+
+Your function should return an object with metric names as keys and numeric values.
+
 ## Running assertions directly on outputs
 
 If you already have LLM outputs and want to run assertions on them, the `eval` command supports standalone assertion files.
