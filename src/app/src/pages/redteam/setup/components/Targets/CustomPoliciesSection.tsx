@@ -151,12 +151,7 @@ export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
   const apiRef = useGridApiRef();
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
   const [generatingPolicyIndex, setGeneratingPolicyIndex] = useState<number | null>(null);
-  const [generatedTestCase, setGeneratedTestCase] = useState<{
-    prompt: string;
-    context?: string;
-  } | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -389,10 +384,6 @@ export const CustomPoliciesSection = () => {
     },
     [toast],
   );
-
-  const handleCloseTestCaseDialog = () => {
-    setGeneratingPolicyIndex(null);
-  };
 
   const handleEditClick = useCallback(
     (row: PolicyRow) => {
