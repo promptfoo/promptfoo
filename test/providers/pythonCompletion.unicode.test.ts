@@ -10,7 +10,11 @@ import * as pythonUtils from '../../src/python/pythonUtils';
 // (60s for file retry + 30s for Python startup and test overhead)
 const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 15000;
 
-describe('PythonProvider Unicode handling', () => {
+// Skip on Windows CI due to aggressive file security policies blocking temp file IPC
+// Works fine on local Windows and all other platforms
+const describeOrSkip = process.platform === 'win32' && process.env.CI ? describe.skip : describe;
+
+describeOrSkip('PythonProvider Unicode handling', () => {
   let tempDir: string;
   const providers: PythonProvider[] = [];
 
