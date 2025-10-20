@@ -1,5 +1,6 @@
 import { createContext, useContext, useState } from 'react';
 import { callApi } from '@app/utils/api';
+import usePolling from '@app/hooks/usePolling';
 
 export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'loading' | 'disabled';
 
@@ -16,6 +17,8 @@ const DEFAULT_CONTEXT: ApiHealthContext = {
   isChecking: false,
   checkHealth: async () => {},
 };
+
+const API_POLLING_INTERVAL = 3000; // poll every 3s
 
 export const ApiHealthContext = createContext<ApiHealthContext>(DEFAULT_CONTEXT);
 
@@ -34,7 +37,7 @@ export function ApiHealthProvider({ children }: { children: React.ReactNode }) {
 
   const checkHealth = async () => {
     try {
-      const response = await callApi('/remote-health');
+      const response = await callApi('/remote-health', {cache: 'no-store'});
       const data = (await response.json()) as {
         status: string;
         message: string;
@@ -53,6 +56,8 @@ export function ApiHealthProvider({ children }: { children: React.ReactNode }) {
       setIsChecking(false);
     }
   };
+
+  usePolling(() => checkHealth(), API_POLLING_INTERVAL, []);
 
   return (
     <ApiHealthContext.Provider value={{ status, message, isChecking, checkHealth }}>
