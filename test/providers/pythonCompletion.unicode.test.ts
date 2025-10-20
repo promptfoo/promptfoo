@@ -6,8 +6,9 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import type { CallApiContextParams } from '../../src/types/index';
 import * as pythonUtils from '../../src/python/pythonUtils';
 
-// Windows CI has slower Python process startup - use longer timeout
-const TEST_TIMEOUT = process.platform === 'win32' ? 20000 : 15000;
+// Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
+// (60s for file retry + 30s for Python startup and test overhead)
+const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 15000;
 
 describe('PythonProvider Unicode handling', () => {
   let tempDir: string;

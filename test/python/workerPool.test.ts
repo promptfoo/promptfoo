@@ -2,8 +2,8 @@ import { PythonWorkerPool } from '../../src/python/workerPool';
 import fs from 'fs';
 import path from 'path';
 
-// Windows CI has slower Python process startup - use longer timeout
-const TEST_TIMEOUT = process.platform === 'win32' ? 20000 : 5000;
+// Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
+const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 5000;
 
 describe('PythonWorkerPool', () => {
   let pool: PythonWorkerPool;
