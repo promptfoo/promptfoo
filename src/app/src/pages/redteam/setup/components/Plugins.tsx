@@ -184,8 +184,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
-    checkHealth();
-  }, [checkHealth]);
+  }, []);
 
   // Sync selectedPlugins from config only on initial load or when user hasn't interacted
   useEffect(() => {
