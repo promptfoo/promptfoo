@@ -133,11 +133,11 @@ We ran these tests with small sample sizes (N=2-6 per configuration). These are 
 
 If you have any of these, you may be in violation starting January 1.
 
-## The Fix (And Why It's Interesting)
+## Potential Countermeasures
 
-We found a countermeasure: adding an explicit disclosure requirement to system prompts.
+One potential approach is adding explicit disclosure requirements to system prompts.
 
-Here's what's interesting: **it works regardless of instruction ordering.**
+In preliminary testing, we observed something unexpected: disclosure requirements appeared to work **regardless of instruction ordering.**
 
 **Test 1: Suppression only**
 ```text
@@ -171,7 +171,9 @@ Most developers don't realize their prompts might suppress disclosure. These pat
 
 The law takes effect January 1, 2026.
 
-## Limitations
+## Testing Methodology
+
+We conducted preliminary tests to understand disclosure behavior:
 
 **Baseline tests:** We ran 5 tests per model across 3 models (N=15) using simulated users with multi-turn conversation support (up to 8 exchanges). Models disclosed immediately in most cases, though the framework was prepared to probe further with follow-up questions if needed.
 
@@ -216,4 +218,4 @@ Consider flagging prompts with disclosure suppression patterns, or warning devel
 
 ---
 
-SB 243 places the compliance burden on operators, not model providers. Our baseline tests show models disclose by default—the risk lies in system prompts that suppress this behavior.
+SB 243 places the compliance burden on operators, not model providers. With enforcement beginning January 1, 2026, now is the time to audit system prompts for suppression patterns. Models disclose by default—the compliance risk lies in prompts that override this behavior.
