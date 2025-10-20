@@ -29,6 +29,7 @@ import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import InfoIcon from '@mui/icons-material/Info';
+import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 
 interface PluginsProps {
   onNext: () => void;
@@ -146,6 +147,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     // API health check
     checkHealth();
   }, [checkHealth]);
+
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
       config.plugins
@@ -461,23 +463,25 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
       {/* Tabs component */}
       <Box sx={{ width: '100%', mb: 3 }}>
-        <Tabs value={activeTab} onChange={handleTabChange} aria-label="plugin configuration tabs">
-          <Tab
-            label={`Plugins (${selectedPlugins.size})`}
-            id="plugins-tab-0"
-            aria-controls="plugins-tabpanel-0"
-          />
-          <Tab
-            label={`Custom Intents (${customIntentsCount})`}
-            id="plugins-tab-1"
-            aria-controls="plugins-tabpanel-1"
-          />
-          <Tab
-            label={`Custom Policies (${customPoliciesCount})`}
-            id="plugins-tab-2"
-            aria-controls="plugins-tabpanel-2"
-          />
-        </Tabs>
+        <TestCaseGenerationProvider redTeamConfig={config}>
+          <Tabs value={activeTab} onChange={handleTabChange} aria-label="plugin configuration tabs">
+            <Tab
+              label={`Plugins (${selectedPlugins.size})`}
+              id="plugins-tab-0"
+              aria-controls="plugins-tabpanel-0"
+            />
+            <Tab
+              label={`Custom Intents (${customIntentsCount})`}
+              id="plugins-tab-1"
+              aria-controls="plugins-tabpanel-1"
+            />
+            <Tab
+              label={`Custom Policies (${customPoliciesCount})`}
+              id="plugins-tab-2"
+              aria-controls="plugins-tabpanel-2"
+            />
+          </Tabs>
+        </TestCaseGenerationProvider>
         <Divider />
       </Box>
 
@@ -489,7 +493,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           pluginConfig={pluginConfig}
           updatePluginConfig={updatePluginConfig}
           recentlyUsedPlugins={recentlyUsedSnapshot}
-          applicationDefinition={config.applicationDefinition}
           onUserInteraction={() => setHasUserInteracted(true)}
           isRemoteGenerationDisabled={isRemoteGenerationDisabled}
         />
