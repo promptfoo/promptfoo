@@ -364,15 +364,17 @@ export class OllamaChatProvider implements ApiProvider {
 
       // Normalize tool_calls to match OpenAI format (arguments as JSON string, not object)
       if (tool_calls && tool_calls.length > 0) {
-        tool_calls = tool_calls.map((call) => ({
-          function: {
-            name: call.function.name,
-            arguments:
-              typeof call.function.arguments === 'string'
-                ? call.function.arguments
-                : JSON.stringify(call.function.arguments),
-          },
-        }));
+        tool_calls = tool_calls.map(
+          (call: { function: { name: string; arguments: any } }) => ({
+            function: {
+              name: call.function.name,
+              arguments:
+                typeof call.function.arguments === 'string'
+                  ? call.function.arguments
+                  : JSON.stringify(call.function.arguments),
+            },
+          }),
+        );
       }
 
       // Determine output based on message content and tool_calls
