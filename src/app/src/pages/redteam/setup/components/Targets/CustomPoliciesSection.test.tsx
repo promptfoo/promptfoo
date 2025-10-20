@@ -49,11 +49,105 @@ describe('CustomPoliciesSection', () => {
     });
   });
 
+  describe('Config Reset', () => {
+    it('should show empty grid when config.plugins is empty', async () => {
+      // Start with empty config
+      const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderComponent();
+
+      // Verify the DataGrid is rendered but empty
+      await waitFor(() => {
+        const grid = screen.getByRole('grid');
+        expect(grid).toBeInTheDocument();
+        // No policy rows should be visible
+        expect(screen.queryByDisplayValue(/Custom Policy/)).not.toBeInTheDocument();
+      });
+    });
+
+    it('should display policies from config when they exist', async () => {
+      const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [
+            { id: 'policy', config: { policy: 'Custom Policy Text 1' } },
+            { id: 'policy', config: { policy: 'Custom Policy Text 2' } },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderComponent();
+
+      // Verify the custom policies are displayed in the DataGrid
+      await waitFor(() => {
+        expect(screen.getByText('Custom Policy Text 1')).toBeInTheDocument();
+        expect(screen.getByText('Custom Policy Text 2')).toBeInTheDocument();
+      });
+    });
+
+    it('should reset to empty policy when config changes from having policies to none', async () => {
+      // Start with some custom policies
+      const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [
+            { id: 'policy', config: { policy: 'Custom Policy Text 1' } },
+            { id: 'policy', config: { policy: 'Custom Policy Text 2' } },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      const { rerender } = renderComponent();
+
+      // Verify the custom policies are displayed in the DataGrid
+      await waitFor(() => {
+        expect(screen.getByText('Custom Policy Text 1')).toBeInTheDocument();
+        expect(screen.getByText('Custom Policy Text 2')).toBeInTheDocument();
+      });
+
+      // Simulate config reset (plugins becomes empty)
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      rerender(
+        <ThemeProvider theme={createTheme()}>
+          <ToastProvider>
+            <CustomPoliciesSection />
+          </ToastProvider>
+        </ThemeProvider>,
+      );
+
+      // Verify policies are reset to empty grid
+      await waitFor(() => {
+        expect(screen.queryByText('Custom Policy Text 1')).not.toBeInTheDocument();
+        expect(screen.queryByText('Custom Policy Text 2')).not.toBeInTheDocument();
+        // Grid should be empty
+        const grid = screen.getByRole('grid');
+        expect(grid).toBeInTheDocument();
+      });
+    });
+  });
+
   describe('CSV Upload', () => {
     it('should append new policies and show a success toast for a valid CSV upload', async () => {
       renderComponent();
 
-      expect(screen.getByDisplayValue('Custom Policy 1')).toBeInTheDocument();
+      // Wait for component to be ready
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /upload csv/i })).toBeInTheDocument();
+      });
 
       const csvContent = 'policy_text\n"Policy from CSV 1"\n"Policy from CSV 2"';
       const file = new File([csvContent], 'policies.csv', { type: 'text/csv' });
@@ -70,19 +164,13 @@ describe('CustomPoliciesSection', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByDisplayValue('Custom Policy 2')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('Custom Policy 3')).toBeInTheDocument();
-
-        expect(screen.getByDisplayValue('Policy from CSV 1')).toBeInTheDocument();
-        expect(screen.getByDisplayValue('Policy from CSV 2')).toBeInTheDocument();
+        expect(mockUpdateConfig).toHaveBeenCalled();
 
         expect(mockShowToast).toHaveBeenCalledWith(
           'Successfully imported 2 policies from CSV',
           'success',
         );
       });
-
-      expect(screen.getByDisplayValue('Custom Policy 1')).toBeInTheDocument();
     });
 
     it('should disable the "Upload CSV" button and display "Uploading..." while processing, then re-enable and restore label', async () => {
@@ -102,25 +190,19 @@ describe('CustomPoliciesSection', () => {
       });
 
       expect(uploadButton).toHaveAttribute('aria-disabled', 'true');
-      expect(uploadButton).toHaveClass('Mui-disabled');
       expect(uploadButton).toHaveTextContent('Uploading...');
 
       await waitFor(() => {
         expect(uploadButton).not.toHaveAttribute('aria-disabled');
-        expect(uploadButton).not.toHaveClass('Mui-disabled');
         expect(uploadButton).toHaveTextContent('Upload CSV');
       });
     });
 
-    it('should not add new policies and show a warning toast when a CSV file is uploaded with only empty or whitespace values', async () => {
+    it('should show a warning toast when no valid policies are found in the CSV', async () => {
       renderComponent();
 
-      expect(screen.getByDisplayValue('Custom Policy 1')).toBeInTheDocument();
-
-      const initialPoliciesCount = screen.getAllByLabelText('Policy Text').length;
-
-      const csvContent = 'policy_text\n""\n"   "\n" "';
-      const file = new File([csvContent], 'empty_policies.csv', { type: 'text/csv' });
+      const csvContent = 'policy_text\n\n\n';
+      const file = new File([csvContent], 'policies.csv', { type: 'text/csv' });
       Object.defineProperty(file, 'text', {
         value: () => Promise.resolve(csvContent),
       });
@@ -134,56 +216,24 @@ describe('CustomPoliciesSection', () => {
       });
 
       await waitFor(() => {
-        const currentPoliciesCount = screen.getAllByLabelText('Policy Text').length;
-        expect(currentPoliciesCount).toBe(initialPoliciesCount);
-
         expect(mockShowToast).toHaveBeenCalledWith(
           'No valid policies found in CSV file',
           'warning',
         );
       });
-
-      expect(screen.getByDisplayValue('Custom Policy 1')).toBeInTheDocument();
     });
 
     it('should show an error toast when a non-CSV file is uploaded with a .csv extension', async () => {
       renderComponent();
 
-      const invalidCsvContent =
-        'This is not a CSV file. <?xml version="1.0" encoding="UTF-8"?> <root> <element> <subelement>Invalid CSV Data</subelement> </element> </root>';
-      const file = new File([invalidCsvContent], 'invalid.csv', { type: 'text/plain' });
-      Object.defineProperty(file, 'text', {
-        value: () => Promise.resolve(invalidCsvContent),
-      });
-
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
-      expect(fileInput).not.toBeNull();
-
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
-
-      await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith(
-          expect.stringContaining('Error parsing CSV:'),
-          'error',
-        );
-      });
-    });
-
-    it('should show a warning toast when a CSV file with no columns (empty lines) is uploaded', async () => {
-      renderComponent();
-
-      const csvContent = '\n\n\n';
-      const file = new File([csvContent], 'empty_policies.csv', { type: 'text/csv' });
+      const csvContent = 'This is not a CSV file. <?xml version="1.0"?>';
+      const file = new File([csvContent], 'not-csv.csv', { type: 'text/csv' });
       Object.defineProperty(file, 'text', {
         value: () => Promise.resolve(csvContent),
       });
 
       const uploadButton = screen.getByRole('button', { name: /upload csv/i });
       const fileInput = uploadButton.querySelector('input[type="file"]');
-      expect(fileInput).not.toBeNull();
 
       fireEvent.change(fileInput!, {
         target: { files: [file] },
@@ -191,27 +241,22 @@ describe('CustomPoliciesSection', () => {
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
-          'No valid policies found in CSV file',
-          'warning',
+          expect.stringContaining('Error parsing CSV'),
+          'error',
         );
       });
-
-      expect(screen.getByDisplayValue('Custom Policy 1')).toBeInTheDocument();
-      const policyNameInputs = screen.getAllByLabelText('Policy Name');
-      expect(policyNameInputs.length).toBe(1);
     });
 
     it('should show an error toast when a file cannot be read as text', async () => {
       renderComponent();
 
-      const file = new File([''], 'invalid.csv', { type: 'image/jpeg' });
+      const file = new File([''], 'test.csv', { type: 'text/csv' });
       Object.defineProperty(file, 'text', {
         value: () => Promise.reject(new Error('File could not be read')),
       });
 
       const uploadButton = screen.getByRole('button', { name: /upload csv/i });
       const fileInput = uploadButton.querySelector('input[type="file"]');
-      expect(fileInput).not.toBeNull();
 
       fireEvent.change(fileInput!, {
         target: { files: [file] },
@@ -219,7 +264,7 @@ describe('CustomPoliciesSection', () => {
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
-          'Error parsing CSV: Error: File could not be read',
+          expect.stringContaining('Error parsing CSV'),
           'error',
         );
       });

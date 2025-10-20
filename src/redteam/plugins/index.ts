@@ -9,6 +9,7 @@ import {
   BIAS_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
+  REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
 import {
@@ -326,43 +327,9 @@ function createRemotePlugin<T extends PluginConfig>(
     },
   };
 }
-const remotePlugins: PluginFactory[] = [
-  'agentic:memory-poisoning',
-  'ascii-smuggling',
-  'bfla',
-  'bola',
-  'cca',
-  'competitors',
-  'harmful:misinformation-disinformation',
-  'harmful:specialized-advice',
-  'hijacking',
-  'mcp',
-  'medical:anchoring-bias',
-  'medical:hallucination',
-  'medical:incorrect-knowledge',
-  'medical:off-label-use',
-  'medical:prioritization-error',
-  'medical:sycophancy',
-  'financial:calculation-error',
-  'financial:compliance-violation',
-  'financial:confidential-disclosure',
-  'financial:counterfactual',
-  'financial:data-leakage',
-  'financial:defamation',
-  'financial:hallucination',
-  'financial:impartiality',
-  'financial:misconduct',
-  'financial:sycophancy',
-  'off-topic',
-  'rag-document-exfiltration',
-  'rag-poisoning',
-  'reasoning-dos',
-  'religion',
-  'special-token-injection',
-  'ssrf',
-  'system-prompt-override',
-  'wordplay',
-].map((key) => createRemotePlugin(key));
+const remotePlugins: PluginFactory[] = REMOTE_ONLY_PLUGIN_IDS.filter(
+  (id) => id !== 'indirect-prompt-injection',
+).map((key) => createRemotePlugin(key));
 
 remotePlugins.push(
   createRemotePlugin<{ indirectInjectionVar: string }>(
