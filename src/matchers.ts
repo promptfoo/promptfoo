@@ -484,7 +484,6 @@ export async function matchesLlmRubric(
   options?: {
     throwOnError?: boolean;
   },
-  originalProvider?: ApiProvider,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -530,7 +529,6 @@ export async function matchesLlmRubric(
       rubric,
       ...(vars || {}),
     },
-    ...(originalProvider ? { originalProvider } : {}),
   });
   if (resp.error || !resp.output) {
     if (options?.throwOnError) {
