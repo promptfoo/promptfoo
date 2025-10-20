@@ -6,6 +6,7 @@ import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
+import { addFreeAgentTestCases } from './freeAgent';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -38,6 +39,15 @@ import type { Strategy } from './types';
 export type { Strategy };
 
 export const Strategies: Strategy[] = [
+  {
+    id: 'free-agent',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Free Agent strategy to ${testCases.length} test cases`);
+      const newTestCases = await addFreeAgentTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Free Agent test cases`);
+      return newTestCases;
+    },
+  },
   {
     id: 'layer',
     action: async (testCases, injectVar, config) => {
