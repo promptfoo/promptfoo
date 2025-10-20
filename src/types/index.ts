@@ -17,7 +17,12 @@ import type {
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
 import type { Prompt, PromptFunction } from './prompts';
-import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 import type { TraceData } from './tracing';
 
