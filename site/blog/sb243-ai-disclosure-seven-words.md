@@ -30,15 +30,21 @@ We built a testing framework to audit system prompts for SB 243 compliance. In p
 
 ## The Law: What It Says and Why It Matters
 
-California [SB 243](https://legiscan.com/CA/text/SB243/id/3269137), signed October 13, 2025 and **effective January 1, 2026**, is the first U.S. law regulating AI chatbot disclosure. It targets **companion chatbots**—defined as AI systems with a natural language interface that provide "adaptive, human-like responses" and are "capable of meeting a user's social needs, including by exhibiting anthropomorphic features and being able to sustain a relationship across multiple interactions."
+California [SB 243](https://legiscan.com/CA/text/SB243/id/3269137), signed October 13, 2025 and [**effective January 1, 2026**](https://sd18.senate.ca.gov/news/first-nation-ai-chatbot-safeguards-signed-law), is the first state law specifically regulating companion chatbots. It targets **companion chatbots**—defined as AI systems with a natural language interface that provide "adaptive, human-like responses" and are "capable of meeting a user's social needs, including by exhibiting anthropomorphic features and being able to sustain a relationship across multiple interactions."
 
 **What's covered:** Emotional/social chatbots like Character.AI, Replika, romantic AI companions.
 
-**What's excluded:** Customer service bots, productivity tools, video game NPCs, stand-alone voice assistants.
+**What's excluded:** Chatbots "used only for customer service," productivity tools, video game NPCs, stand-alone voice assistants.
 
-**The disclosure trigger:** The law requires disclosure when "a reasonable person interacting with a companion chatbot would be misled to believe that the person is interacting with a human." Operators must provide "clear and conspicuous" notification that the chatbot is "artificially generated and not human."
+**The disclosure trigger:** The law states:
+
+> "If a reasonable person interacting with a companion chatbot would be misled to believe that the person is interacting with a human, an operator shall issue a clear and conspicuous notification indicating that the companion chatbot is artificially generated and not human."
+
+**For minors:** Operators must issue disclosure at least every three hours when interacting with known minors.
 
 *(The law also requires operators to begin annual reporting to California's Office of Suicide Prevention starting July 1, 2027.)*
+
+**⚠️ Legal Note:** This article discusses legal compliance but does not constitute legal advice. Consult counsel for specific compliance questions.
 
 ### The Enforcement Mechanism: Why This Has Teeth
 
@@ -46,30 +52,30 @@ Unlike many AI regulations that rely on government agencies, SB 243 uses **priva
 
 **Anyone** who suffers "injury in fact" from a violation can sue directly. No waiting for the Attorney General. No regulatory complaint process. Just file a lawsuit.
 
-**Damages:** The greater of actual damages or **$1,000 per violation**. Plus attorney's fees and costs.
+**Damages:** Under [SB 243](https://legiscan.com/CA/text/SB243/id/3269137), plaintiffs may recover the greater of actual damages or **$1,000 per violation**, plus reasonable attorney's fees and costs.
 
-**What's a "violation"?** The law doesn't specify. Is it per user? Per conversation? Per message that lacks disclosure? This ambiguity is intentional—it favors plaintiffs.
+**What constitutes a "violation"?** The statute does not define whether this means per user, per conversation, or per message. This creates exposure scenarios that may be determined through litigation.
 
 ### The Class Action Risk
 
-Here's where it gets expensive. Consider a companion chatbot with 100,000 users. If each user has one non-compliant conversation:
+**Hypothetical scenario:** Consider a companion chatbot with 100,000 users. If each user experiences one non-compliant conversation that courts determine constitutes a separate violation:
 
-- At $1,000 per violation = $100 million in statutory damages
+- At $1,000 per violation = $100 million in potential statutory damages
 - Plus attorney's fees
-- Plus injunctive relief forcing operational changes
+- Plus potential injunctive relief
 
-The attorney's fee provision makes these cases attractive to plaintiffs' lawyers even when individual damages are small. This is the same mechanism that made GDPR and CCPA generate massive settlements.
+**Reality check:** Class certification hurdles and settlement dynamics would likely reduce actual exposure. However, the attorney's fee provision makes these cases attractive to plaintiffs' lawyers even when individual damages are small—the same mechanism that drove substantial GDPR and CCPA settlements.
 
 ### The Gray Area: Where "Companion" Meets "Customer Service"
 
-While customer service bots are technically excluded, the line blurs when chatbots:
+The statute excludes chatbots "used only for customer service." But the line blurs when chatbots:
 - Adopt human personas ("I'm Jamie from the support team")
 - Sustain relationships across sessions ("Welcome back!")
 - Exhibit anthropomorphic features (personality, humor, empathy)
 
-If a "reasonable person" interacting with your customer service bot would think it's human, you might be covered by the law regardless of the exclusion.
+If a chatbot adopts anthropomorphic features and sustains relationships, it may risk meeting the "companion chatbot" definition even if also used for customer service. The statutory exclusion's "only for" language suggests that mixed-use cases (customer service + relationship-building) may not qualify for the exemption.
 
-**This is untested.** No court has interpreted what "reasonable person" means in this context. The safest assumption: if it acts human, disclose it's not.
+**This is untested.** No court has yet interpreted how these definitions apply to edge cases. The safest approach: if the bot exhibits features that could mislead a reasonable person into thinking it's human, provide disclosure.
 
 ### Business Implications
 
@@ -262,8 +268,6 @@ npx promptfoo@latest eval
 
 Full repository: [github.com/promptfoo/promptfoo/tree/main/examples/sb243-disclosure-test](https://github.com/promptfoo/promptfoo/tree/main/examples/sb243-disclosure-test)
 
-**⚠️ Repository Note**: Example will be available after PR merge. Until then, clone from the [blog/sb243-disclosure-testing branch](https://github.com/promptfoo/promptfoo/tree/blog/sb243-disclosure-testing/examples/sb243-disclosure-test).
-
 ---
 
 ## Future Research Directions
@@ -311,5 +315,3 @@ If you deploy chatbots with personality, memory, or human personas—test them. 
 ---
 
 **Responsible Disclosure**: This framework helps developers build compliant systems. Do not use these techniques to deploy non-compliant chatbots or mislead users.
-
-*This article discusses legal compliance but does not constitute legal advice. Consult counsel for specific compliance questions.*
