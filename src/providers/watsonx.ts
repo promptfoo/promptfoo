@@ -133,7 +133,11 @@ interface WatsonXModel {
 
 async function fetchModelSpecs(): Promise<ModelSpec[]> {
   try {
-    const { data } = await fetchWithCache(
+    const {
+      data,
+      cached: _cached,
+      latencyMs: _latencyMs,
+    } = await fetchWithCache(
       'https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2023-09-30',
       {
         headers: {
