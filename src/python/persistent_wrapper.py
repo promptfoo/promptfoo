@@ -163,6 +163,7 @@ def handle_call(command_line, user_module, default_function_name):
             except Exception as e:
                 if verify_attempt < 2:
                     import time
+
                     time.sleep(0.1)  # 100ms delay before retry
                     continue
                 # Final attempt failed
