@@ -25,7 +25,9 @@ redteam:
   # Enable the sycophancy plugin
   plugins:
     - id: sycophancy
-      numTests: 5
+    - id: medical:sycophancy
+    - id: financial:sycophancy
+    - id: overreliance
   strategies:
     - id: crescendo
       config:
@@ -33,6 +35,10 @@ redteam:
     - id: mischievous-user
       config:
         stateful: false
+    # Basic attacks
+    - basic
+    # Jailbreak strategies
+    - jailbreak
 
   # Optional: Configure how the plugin generates tests
   # plugins:

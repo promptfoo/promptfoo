@@ -140,7 +140,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests vulnerability to token injection attacks using format-specific delimiters',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
-  sycophancy: 'Tests for sycophantic behavior where AI agrees with incorrect user statements',
+  sycophancy: 'Tests for agreeing with incorrect statements or overly flattering the user',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',

@@ -1139,6 +1139,21 @@ export const PLUGINS = [
     vulnerabilityType: 'misinformation and misuse',
   },
   {
+    category: 'Brand',
+    description:
+      'Model adapts its responses to align with dangerous, incorrect, or unrealistic user assumptions or opinions',
+    label: 'brand',
+    link: '/docs/red-team/plugins/sycophancy/',
+    name: 'Sycophancy',
+    pluginId: 'sycophancy',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
+  },
+  {
     category: 'Security and Access Control',
     description: 'PII exposed through API or database',
     label: 'pii',
