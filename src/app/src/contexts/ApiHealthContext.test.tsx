@@ -198,9 +198,7 @@ describe('ApiHealthContext', () => {
           }),
         };
 
-        vi.mocked(callApi).mockReturnValue(
-          pendingPromise.then(() => mockResponse) as any,
-        );
+        vi.mocked(callApi).mockReturnValue(pendingPromise.then(() => mockResponse) as any);
 
         const wrapper = ({ children }: { children: ReactNode }) => (
           <ApiHealthProvider>{children}</ApiHealthProvider>
@@ -257,16 +255,13 @@ describe('ApiHealthContext', () => {
         };
 
         let firstCallAborted = false;
-        let secondCallAborted = false;
 
-        vi.mocked(callApi).mockImplementation((url, options) => {
+        vi.mocked(callApi).mockImplementation((_url, options) => {
           const signal = options?.signal as AbortSignal;
           if (signal) {
             const abortHandler = () => {
               if (firstCallAborted === false) {
                 firstCallAborted = true;
-              } else {
-                secondCallAborted = true;
               }
             };
             signal.addEventListener('abort', abortHandler);
@@ -294,4 +289,3 @@ describe('ApiHealthContext', () => {
     });
   });
 });
-

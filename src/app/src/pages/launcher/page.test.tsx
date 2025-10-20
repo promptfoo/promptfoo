@@ -42,7 +42,7 @@ const renderLauncher = () => {
   );
 };
 
-vi.mock('../../hooks/useApiHealth', () => ({
+vi.mock('@app/contexts/ApiHealthContext', () => ({
   useApiHealth: vi.fn().mockReturnValue({
     status: 'unknown',
     message: null,

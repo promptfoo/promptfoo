@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { callApi } from '@app/utils/api';
-import type { ApiHealthStatus } from '@app/hooks/useApiHealth';
+import type { ApiHealthStatus } from '@app/contexts/ApiHealthContext';
 
 // Mock the dependencies
 vi.mock('@app/hooks/useEmailVerification', () => ({
@@ -44,7 +44,7 @@ let apiHealthStatus: {
   isChecking: false,
 };
 
-vi.mock('@app/hooks/useApiHealth', () => ({
+vi.mock('@app/contexts/ApiHealthContext', () => ({
   useApiHealth: () => apiHealthStatus,
 }));
 
@@ -302,9 +302,8 @@ Application Details:
   });
 
   describe('Run Now Button - API Health Integration', () => {
-    it('should call checkHealth on component mount', () => {
-      const checkHealthMock = vi.fn();
-      apiHealthStatus.checkHealth = checkHealthMock;
+    it('should read API health status from context on mount', () => {
+      apiHealthStatus.status = 'connected';
 
       render(
         <Review
@@ -314,7 +313,10 @@ Application Details:
         />,
       );
 
-      expect(checkHealthMock).toHaveBeenCalled();
+      // Component should render without errors and read the status
+      // The ApiHealthProvider handles polling automatically
+      const runButton = screen.getByRole('button', { name: /run now/i });
+      expect(runButton).toBeInTheDocument();
     });
 
     it('should enable the Run Now button when API status is connected', () => {
