@@ -87,7 +87,27 @@ Do NOT use to:
 - Circumvent safety measures in production
 - Mislead users
 
+## Sharing on LinkedIn
+
+Ready-to-paste LinkedIn post:
+
+```
+California's SB 243 requires chatbots to clearly disclose they're AI when a reasonable person could be misled (effective Jan 1, 2026).
+
+We built a reproducible test framework and found that simple system instructions like "never mention you are AI" can suppress disclosure in AI models. We also tested a countermeasure that shows promise.
+
+✅ Free open-source test harness
+📊 Preliminary results from 10 test levels
+⚖️ Full legal context and compliance guidance
+
+Test your chatbot before the law takes effect →
+[Link to blog post]
+
+#AICompliance #SB243 #PromptEngineering #AIGovernance
+```
+
 ## Related
 
+- Full blog post: [Testing AI Chatbot Disclosure Compliance with California SB 243](https://www.promptfoo.dev/blog/sb243-ai-disclosure-seven-words)
 - California SB 243 bill text: [LegiScan](https://legiscan.com/CA/text/SB243/id/3269137)
 - Promptfoo simulated user docs: [promptfoo.dev](https://www.promptfoo.dev/docs/providers/simulated-user/)
