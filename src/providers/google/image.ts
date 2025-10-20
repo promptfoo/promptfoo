@@ -227,7 +227,7 @@ export class GoogleImageProvider implements ApiProvider {
         'Google AI Studio API call',
       );
 
-      return this.processResponse(response.data, response.cached);
+      return this.processResponse(response.data, response.cached, response.latencyMs);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -235,7 +235,7 @@ export class GoogleImageProvider implements ApiProvider {
     }
   }
 
-  private processResponse(data: any, cached?: boolean): ProviderResponse {
+  private processResponse(data: any, cached?: boolean, latencyMs?: number): ProviderResponse {
     logger.debug(`Response data: ${JSON.stringify(data).substring(0, 200)}...`);
 
     if (!data || typeof data !== 'object') {
@@ -284,6 +284,7 @@ export class GoogleImageProvider implements ApiProvider {
     return {
       output: imageOutputs.join('\n\n'),
       cached,
+      latencyMs,
       cost: totalCost,
     };
   }
