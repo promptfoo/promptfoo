@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { useApiHealth } from '@app/contexts/ApiHealthContext';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
@@ -138,15 +138,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config } = useRedTeamConfig();
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  const { status: apiHealthStatus } = useApiHealth();
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
-
-  useEffect(() => {
-    // API health check
-    checkHealth();
-  }, [checkHealth]);
 
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(

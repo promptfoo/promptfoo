@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { useApiHealth } from '@app/contexts/ApiHealthContext';
 import { useToast } from '@app/hooks/useToast';
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
@@ -158,14 +158,7 @@ export const CustomPoliciesSection = () => {
   const [editingRowId, setEditingRowId] = useState<number | null>(null);
   const [autoEditRowId, setAutoEditRowId] = useState<number | null>(null);
 
-  // TODO: This effect is component-scoped, so `checkHealth` needs to be called redundantly in each
-  // component which needs to check API health. Instead, the hook should be backed by app-scoped
-  // context (e.g. via a Zustand store).
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
-
-  useEffect(() => {
-    checkHealth();
-  }, []);
+  const { status: apiHealthStatus } = useApiHealth();
 
   // Test case generation state - now from context
   const { generateTestCase, isGenerating: generatingTestCase } = useTestCaseGeneration();

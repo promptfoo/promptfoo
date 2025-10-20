@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Code from '@app/components/Code';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { useApiHealth } from '@app/contexts/ApiHealthContext';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -184,11 +184,6 @@ export default function Review({
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
-
-  // Check API health on mount
-  useEffect(() => {
-    checkHealth();
-  }, [checkHealth]);
 
   // Sync local maxConcurrency state with config
   useEffect(() => {

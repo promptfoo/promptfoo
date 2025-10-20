@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Code from '@app/components/Code';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { useApiHealth } from '@app/contexts/ApiHealthContext';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import { formatToolsAsJSDocs } from '@app/utils/discovery';

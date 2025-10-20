@@ -52,7 +52,7 @@ import {
 import type { LocalPluginConfig } from '../types';
 import { useTestCaseGeneration } from './TestCaseGenerationProvider';
 import { TestCaseGenerateButton } from './TestCaseDialog';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { useApiHealth } from '@app/contexts/ApiHealthContext';
 
 const ErrorFallback = ({ error }: { error: Error }) => (
   <div role="alert">
@@ -107,14 +107,7 @@ export default function PluginsTab({
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
   const [isCustomMode, setIsCustomMode] = useState(true);
 
-  // TODO: This effect is component-scoped, so `checkHealth` needs to be called redundantly in each
-  // component which needs to check API health. Instead, the hook should be backed by app-scoped
-  // context (e.g. via a Zustand store).
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
-
-  useEffect(() => {
-    checkHealth();
-  }, [checkHealth]);
+  const { status: apiHealthStatus } = useApiHealth();
 
   // Test case generation state - now from context
   const {
