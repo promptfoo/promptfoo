@@ -120,8 +120,9 @@ export class PythonWorker {
 
       // Read response (with retry for Windows file system delays)
       let responseData: string;
-      const maxRetries = 50;
-      const retryDelay = 100; // ms (total max wait: 5 seconds)
+      // Windows needs more retries due to filesystem delays (antivirus, file locking, etc.)
+      const maxRetries = process.platform === 'win32' ? 150 : 50;
+      const retryDelay = process.platform === 'win32' ? 200 : 100; // ms (Windows: 30s, Unix: 5s)
 
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
