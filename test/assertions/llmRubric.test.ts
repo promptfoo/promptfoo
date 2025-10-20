@@ -60,6 +60,8 @@ describe('handleLlmRubric', () => {
       undefined,
       {},
       params.assertion,
+      undefined,
+      undefined,
     );
   });
 
@@ -86,6 +88,8 @@ describe('handleLlmRubric', () => {
       undefined,
       {},
       params.assertion,
+      undefined,
+      undefined,
     );
   });
 
@@ -112,6 +116,8 @@ describe('handleLlmRubric', () => {
       undefined,
       {},
       params.assertion,
+      undefined,
+      undefined,
     );
   });
 
@@ -398,6 +404,8 @@ describe('handleLlmRubric', () => {
       undefined,
       {},
       params.assertion,
+      undefined,
+      undefined,
     );
   });
 });
