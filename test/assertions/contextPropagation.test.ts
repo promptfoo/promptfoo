@@ -4,6 +4,7 @@ import { handleContextRecall } from '../../src/assertions/contextRecall';
 import { handleContextRelevance } from '../../src/assertions/contextRelevance';
 import { handleFactuality } from '../../src/assertions/factuality';
 import { handleGEval } from '../../src/assertions/geval';
+import { runCompareAssertion } from '../../src/assertions/index';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { handleModelGradedClosedQa } from '../../src/assertions/modelGradedClosedQa';
 import {
@@ -15,6 +16,7 @@ import {
   matchesFactuality,
   matchesGEval,
   matchesLlmRubric,
+  matchesSelectBest,
 } from '../../src/matchers';
 
 import type { ApiProvider, AssertionParams, CallApiContextParams } from '../../src/types/index';
@@ -345,6 +347,52 @@ describe('Context Propagation in Model-Graded Assertions', () => {
         undefined,
         { query: 'user question' },
         mockCallApiContext,
+      );
+    });
+  });
+
+  describe('runCompareAssertion (select-best)', () => {
+    it('should pass callApiContext to matchesSelectBest', async () => {
+      const mockResult = [
+        { pass: true, score: 1, reason: 'best' },
+        { pass: false, score: 0, reason: 'not best' },
+      ];
+      jest.mocked(matchesSelectBest).mockResolvedValue(mockResult);
+
+      const test = { vars: { testVar: 'value' }, options: { provider: 'test-provider' } };
+      const assertion = { type: 'select-best' as const, value: 'test criteria' };
+      const outputs = ['output1', 'output2'];
+
+      await runCompareAssertion(test, assertion, outputs, mockCallApiContext);
+
+      expect(matchesSelectBest).toHaveBeenCalledWith(
+        'test criteria',
+        outputs,
+        { provider: 'test-provider' },
+        { testVar: 'value' },
+        mockCallApiContext,
+      );
+    });
+
+    it('should work when callApiContext is undefined', async () => {
+      const mockResult = [
+        { pass: true, score: 1, reason: 'best' },
+        { pass: false, score: 0, reason: 'not best' },
+      ];
+      jest.mocked(matchesSelectBest).mockResolvedValue(mockResult);
+
+      const test = { vars: { testVar: 'value' } };
+      const assertion = { type: 'select-best' as const, value: 'test criteria' };
+      const outputs = ['output1', 'output2'];
+
+      await runCompareAssertion(test, assertion, outputs, undefined);
+
+      expect(matchesSelectBest).toHaveBeenCalledWith(
+        'test criteria',
+        outputs,
+        { provider: undefined, rubricPrompt: undefined },
+        { testVar: 'value' },
+        undefined,
       );
     });
   });

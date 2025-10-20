@@ -1461,18 +1461,17 @@ export async function matchesSelectBest(
     ...(vars || {}),
   });
 
-  const resp = await textProvider.callApi(promptText, {
-    ...context,
-    prompt: {
-      raw: promptText,
-      label: 'select-best',
-    },
-    vars: {
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'select-best',
+    {
       criteria,
       outputs: outputs.map((o) => tryParse(o)),
       ...(vars || {}),
     },
-  });
+    context,
+  );
   if (resp.error || !resp.output) {
     return new Array(outputs.length).fill(fail(resp.error || 'No output', resp.tokenUsage));
   }

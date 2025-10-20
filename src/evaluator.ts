@@ -1528,10 +1528,24 @@ class Evaluator {
       ) as Assertion;
       if (compareAssertion) {
         const outputs = resultsToCompare.map((r) => r.response?.output || '');
+
+        // Construct CallApiContextParams for model-graded select-best that needs originalProvider
+        const firstResult = resultsToCompare[0];
+        const providerId = firstResult.provider.id;
+        const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
+        const callApiContext = originalProvider
+          ? {
+              originalProvider,
+              prompt: firstResult.prompt,
+              vars: firstResult.testCase.vars || {},
+            }
+          : undefined;
+
         const gradingResults = await runCompareAssertion(
           resultsToCompare[0].testCase,
           compareAssertion,
           outputs,
+          callApiContext,
         );
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
