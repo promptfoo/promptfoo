@@ -340,9 +340,8 @@ export class OllamaChatProvider implements ApiProvider {
         .filter((line: string) => line.trim() !== '')
         .map((line: string) => JSON.parse(line) as OllamaChatJsonL);
 
-      // Find the final message (usually the last one with done: true)
+      // Find the final chunk (with done: true)
       const finalChunk = lines.find((chunk: OllamaChatJsonL) => chunk.done);
-      const message = finalChunk?.message || lines[lines.length - 1]?.message;
 
       // Collect all content chunks
       const contentParts = lines
@@ -356,20 +355,27 @@ export class OllamaChatProvider implements ApiProvider {
 
       const content = contentParts.join('');
 
+      // Find tool_calls from any chunk (they may appear before done: true)
+      const chunkWithToolCalls = lines.find(
+        (chunk: OllamaChatJsonL) =>
+          chunk.message?.tool_calls && chunk.message.tool_calls.length > 0,
+      );
+      const tool_calls = chunkWithToolCalls?.message?.tool_calls;
+
       // Determine output based on message content and tool_calls
       let output: any;
-      if (message?.tool_calls && message.tool_calls.length > 0) {
+      if (tool_calls && tool_calls.length > 0) {
         // If there are tool calls, return them (similar to OpenAI behavior)
         logger.debug('[Ollama Chat] Tool calls detected', {
-          toolCallCount: message.tool_calls.length,
+          toolCallCount: tool_calls.length,
           hasContent: !!(content && content.trim()),
         });
         if (content && content.trim()) {
           // If there's also content, return the full message object
-          output = { content, tool_calls: message.tool_calls };
+          output = { content, tool_calls };
         } else {
           // If only tool calls, return just the tool calls
-          output = message.tool_calls;
+          output = tool_calls;
         }
       } else {
         // No tool calls, return the content
