@@ -53,6 +53,7 @@ export class PythonWorkerPool {
         this.functionName,
         this.pythonPath,
         this.timeout,
+        () => this.processQueue(), // Resume queue processing when worker becomes ready
       );
       initPromises.push(worker.initialize());
       this.workers.push(worker);

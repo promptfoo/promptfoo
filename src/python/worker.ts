@@ -23,6 +23,7 @@ export class PythonWorker {
     private functionName: string,
     private pythonPath?: string,
     private timeout: number = 120000, // 2 minutes default
+    private onReady?: () => void,
   ) {}
 
   async initialize(): Promise<void> {
@@ -50,6 +51,10 @@ export class PythonWorker {
           clearTimeout(readyTimeout);
           this.ready = true;
           logger.debug(`Python worker ready for ${this.scriptPath}`);
+          // Notify pool that worker is ready (triggers queue processing)
+          if (this.onReady) {
+            this.onReady();
+          }
           resolve();
         } else if (message.startsWith('DONE')) {
           this.handleDone();
@@ -68,7 +73,7 @@ export class PythonWorker {
       });
 
       this.process!.stderr?.on('data', (data) => {
-        logger.error(`Python worker stderr: ${data}`);
+        logger.error(`Python worker stderr: ${data.toString()}`);
       });
     });
   }
@@ -110,7 +115,8 @@ export class PythonWorker {
       fs.writeFileSync(requestFile, safeJsonStringify(args) as string, 'utf-8');
 
       // Send CALL command with function name
-      const command = `CALL:${functionName}:${requestFile}:${responseFile}\n`;
+      // Note: PythonShell.send() adds newline automatically in 'text' mode
+      const command = `CALL:${functionName}:${requestFile}:${responseFile}`;
       this.process!.send(command);
 
       // Wait for DONE
@@ -123,8 +129,8 @@ export class PythonWorker {
       let responseData: string;
       let lastError: any;
 
-      // Exponential backoff: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms, 1024ms, 2048ms...
-      // Total max wait: ~60 seconds (handles severe Windows antivirus delays)
+      // Exponential backoff: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms, 1024ms, 2048ms, 4096ms, 5000ms (capped)...
+      // Total max wait: ~18 seconds (handles severe filesystem delays)
       for (let attempt = 0, delay = 1; attempt < 16; attempt++, delay = Math.min(delay * 2, 5000)) {
         try {
           responseData = fs.readFileSync(responseFile, 'utf-8');
@@ -150,7 +156,7 @@ export class PythonWorker {
         try {
           const files = fs.readdirSync(tempDir).filter((f) => f.startsWith('promptfoo-worker-'));
           logger.error(
-            `Failed to read response file after 16 attempts (~60s). Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
+            `Failed to read response file after 16 attempts (~18s). Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
           );
         } catch {
           logger.error(`Failed to read response file: ${responseFile}`);
@@ -184,6 +190,8 @@ export class PythonWorker {
       this.requestTimeout = setTimeout(() => {
         reject(new Error(`Python worker timed out after ${this.timeout}ms`));
       }, this.timeout);
+      // Prevent timeout from keeping Node.js event loop alive
+      this.requestTimeout.unref();
     });
   }
 
@@ -235,7 +243,8 @@ export class PythonWorker {
         this.pendingRequest = null;
       }
 
-      this.process.send('SHUTDOWN\n');
+      // Note: PythonShell.send() adds newline automatically in 'text' mode
+      this.process.send('SHUTDOWN');
 
       // Wait for exit (5s timeout)
       await Promise.race([
