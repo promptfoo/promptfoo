@@ -1,7 +1,7 @@
 ---
 title: 'Testing AI Chatbot Disclosure Compliance with California SB 243'
 description: 'A reproducible testing framework for auditing system prompts against California's new AI disclosure law. Includes test cases, countermeasures, and preliminary findings.'
-image: /img/blog/sb243-disclosure/sb243-hero.png
+image: /img/blog/sb243-disclosure/sb243-hero.jpg
 keywords:
   [
     California SB 243,
