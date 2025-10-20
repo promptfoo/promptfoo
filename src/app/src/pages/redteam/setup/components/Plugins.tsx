@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
-import { useTheme } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
@@ -133,11 +134,18 @@ function TabPanel({ children, value, index }: TabPanelProps) {
 }
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
-  const theme = useTheme();
   const { config } = useRedTeamConfig();
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
+
+  const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
+
+  useEffect(() => {
+    // API health check
+    checkHealth();
+  }, [checkHealth]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
       config.plugins
@@ -386,12 +394,45 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         !isConfigValid() || !hasAnyPluginsConfigured() ? getNextButtonTooltip() : undefined
       }
     >
+      {/* Warning banner when remote generation is disabled - outside tabs, full width sticky */}
+      {isRemoteGenerationDisabled && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon />}
+          sx={(theme) => ({
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            margin: -3,
+            marginBottom: 3,
+            padding: theme.spacing(2, 3),
+            borderRadius: 0,
+            boxShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.1)}`,
+            '& .MuiAlert-message': {
+              width: '100%',
+            },
+          })}
+        >
+          <Box>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Remote Generation Disabled
+            </Typography>
+            <Typography variant="body2">
+              Some plugins require remote generation and are currently unavailable. These plugins
+              include harmful content tests, bias tests, and other advanced security checks. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+            </Typography>
+          </Box>
+        </Alert>
+      )}
+
       {/* Warning banner when all/most plugins are selected - outside tabs, full width sticky */}
       {hasSelectedMostPlugins && (
         <Alert
           severity="warning"
           icon={<WarningAmberIcon />}
-          sx={{
+          sx={(theme) => ({
             position: 'sticky',
             top: 0,
             zIndex: 9,
@@ -399,11 +440,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             marginBottom: 3,
             padding: theme.spacing(2, 3),
             borderRadius: 0,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            boxShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.1)}`,
             '& .MuiAlert-message': {
               width: '100%',
             },
-          }}
+          })}
         >
           <Box>
             <Typography variant="body2" fontWeight="bold" gutterBottom>
@@ -450,6 +491,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           recentlyUsedPlugins={recentlyUsedSnapshot}
           applicationDefinition={config.applicationDefinition}
           onUserInteraction={() => setHasUserInteracted(true)}
+          isRemoteGenerationDisabled={isRemoteGenerationDisabled}
         />
       </TabPanel>
 
