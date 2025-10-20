@@ -1,6 +1,6 @@
 ---
-title: 'Open-Source Tool to Test Chatbot Compliance with California's AI Disclosure Law'
-description: 'A reproducible testing framework for auditing system prompts against California SB 243. Test your chatbot before the $1,000-per-violation law takes effect January 1, 2026.'
+title: "Open-Source Tool to Test Chatbot Compliance with California's AI Disclosure Law"
+description: "A reproducible testing framework for auditing system prompts against California SB 243. Test your chatbot before the $1,000-per-violation law takes effect January 1, 2026."
 image: /img/blog/sb243-disclosure/sb243-hero.jpg
 keywords:
   [
