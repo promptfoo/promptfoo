@@ -342,7 +342,8 @@ function EvalOutputCell({
     const isCached = output.response?.cached;
     latencyDisplay = (
       <span>
-        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms{isCached ? ' (cached)' : ''}
+        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
+        {isCached ? ' (cached)' : ''}
       </span>
     );
   }
