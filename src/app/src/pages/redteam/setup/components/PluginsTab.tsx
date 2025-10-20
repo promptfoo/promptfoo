@@ -72,7 +72,6 @@ export interface PluginsTabProps {
   pluginConfig: LocalPluginConfig;
   updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
   recentlyUsedPlugins: Plugin[];
-  applicationDefinition?: ApplicationDefinition;
   onUserInteraction: () => void;
   isRemoteGenerationDisabled: boolean;
 }
