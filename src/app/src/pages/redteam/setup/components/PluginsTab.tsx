@@ -643,14 +643,17 @@ export default function PluginsTab({
                     <TestCaseGenerateButton
                       onClick={() => handleGenerateTestCase(plugin)}
                       disabled={
+                        pluginDisabled ||
                         apiHealthStatus !== 'connected' ||
                         (generatingTestCase && generatingPlugin === plugin)
                       }
                       isGenerating={generatingTestCase && generatingPlugin === plugin}
                       tooltipTitle={
-                        apiHealthStatus === 'connected'
-                          ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
-                          : 'Promptfoo Cloud connection is required for test generation'
+                        pluginDisabled
+                          ? 'This plugin reqiures remote generation'
+                          : apiHealthStatus === 'connected'
+                            ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
+                            : 'Promptfoo Cloud connection is required for test generation'
                       }
                     />
                     {/* Config button for plugins that support config */}
