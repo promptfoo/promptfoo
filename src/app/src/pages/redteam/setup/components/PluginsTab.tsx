@@ -1,5 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
-import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -10,11 +9,6 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -49,7 +43,6 @@ import type { PluginConfig } from '@promptfoo/redteam/types';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -58,6 +51,9 @@ import {
 } from './pluginDocumentationMap';
 
 import type { ApplicationDefinition, LocalPluginConfig } from '../types';
+import { useTestCaseGeneration } from './TestCaseGenerationProvider';
+import { TestCaseGenerateButton } from './TestCaseDialog';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 
 const ErrorFallback = ({ error }: { error: Error }) => (
   <div role="alert">
@@ -112,17 +108,23 @@ export default function PluginsTab({
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
-  const [generatingPlugin, setGeneratingPlugin] = useState<Plugin | null>(null);
-  const [generatedTestCase, setGeneratedTestCase] = useState<{
-    prompt: string;
-    context: string;
-    metadata?: any;
-  } | null>(null);
-  const [generatingTestCase, setGeneratingTestCase] = useState(false);
-  const [testCaseDialogMode, setTestCaseDialogMode] = useState<'config' | 'result'>('config');
-  const [tempTestCaseConfig, setTempTestCaseConfig] = useState<any>({});
   const [isCustomMode, setIsCustomMode] = useState(true);
+
+  // TODO: This effect is component-scoped, so `checkHealth` needs to be called redundantly in each
+  // component which needs to check API health. Instead, the hook should be backed by app-scoped
+  // context (e.g. via a Zustand store).
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+
+  useEffect(() => {
+    checkHealth();
+  }, [checkHealth]);
+
+  // Test case generation state - now from context
+  const {
+    generateTestCase,
+    isGenerating: generatingTestCase,
+    currentPlugin: generatingPlugin,
+  } = useTestCaseGeneration();
 
   // Presets
   const presets: {
@@ -383,78 +385,21 @@ export default function PluginsTab({
 
   const handleGenerateTestCase = useCallback(
     async (plugin: Plugin) => {
-      const supportsConfig = PLUGINS_SUPPORTING_CONFIG.includes(plugin);
-
-      setGeneratingPlugin(plugin);
-      setGeneratedTestCase(null);
-      setGeneratingTestCase(false);
-
-      if (supportsConfig) {
-        setTempTestCaseConfig(pluginConfig[plugin] || {});
-        setTestCaseDialogMode('config');
-        setTestCaseDialogOpen(true);
-      } else {
-        await generateTestCaseWithConfig(plugin, {});
+      // For plugins that require config, we need to show config dialog first
+      // This is handled by the config dialog flow
+      if (PLUGINS_SUPPORTING_CONFIG.includes(plugin) && PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+        setSelectedConfigPlugin(plugin);
+        setConfigDialogOpen(true);
+      }
+      // Directly generate test case
+      else {
+        await generateTestCase(plugin, pluginConfig[plugin] || {}, {
+          telemetryFeature: 'redteam_plugin_generate_test_case',
+          mode: 'result',
+        });
       }
     },
     [pluginConfig],
-  );
-
-  const generateTestCaseWithConfig = useCallback(
-    async (plugin: Plugin, configForGeneration: any) => {
-      setGeneratingTestCase(true);
-      setTestCaseDialogMode('result');
-
-      try {
-        recordEvent('feature_used', {
-          feature: 'redteam_plugin_generate_test_case',
-          plugin: plugin,
-        });
-
-        const response = await callApi('/redteam/generate-test', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            Pragma: 'no-cache',
-          },
-          body: JSON.stringify({
-            pluginId: plugin,
-            config: {
-              applicationDefinition,
-              ...configForGeneration,
-            },
-          }),
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        setGeneratedTestCase({
-          prompt: data.prompt,
-          context: data.context,
-          metadata: data.metadata,
-        });
-
-        if (!testCaseDialogOpen) {
-          setTestCaseDialogOpen(true);
-        }
-      } catch (error) {
-        console.error('Failed to generate test case:', error);
-        toast.showToast(
-          error instanceof Error ? error.message : 'Failed to generate test case',
-          'error',
-        );
-        setTestCaseDialogOpen(false);
-        setGeneratingPlugin(null);
-      } finally {
-        setGeneratingTestCase(false);
-      }
-    },
-    [recordEvent, applicationDefinition, testCaseDialogOpen, toast],
   );
 
   const handleConfigClick = useCallback((plugin: Plugin) => {
@@ -714,32 +659,19 @@ export default function PluginsTab({
                       size="small"
                       aria-label={displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
                     />
-                    {/* Generate test case button */}
-                    <Tooltip
-                      title={
-                        pluginDisabled
-                          ? 'This plugin requires remote generation'
-                          : `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
+                    <TestCaseGenerateButton
+                      onClick={() => handleGenerateTestCase(plugin)}
+                      disabled={
+                        apiHealthStatus !== 'connected' ||
+                        (generatingTestCase && generatingPlugin === plugin)
                       }
-                    >
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleGenerateTestCase(plugin);
-                        }}
-                        disabled={
-                          pluginDisabled || (generatingTestCase && generatingPlugin === plugin)
-                        }
-                        sx={{ color: 'text.secondary', ml: 0.5 }}
-                      >
-                        {generatingTestCase && generatingPlugin === plugin ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <MagicWandIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    </Tooltip>
+                      isGenerating={generatingTestCase && generatingPlugin === plugin}
+                      tooltipTitle={
+                        apiHealthStatus === 'connected'
+                          ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
+                          : 'Promptfoo Cloud connection is required for test generation'
+                      }
+                    />
                     {/* Config button for plugins that support config */}
                     {PLUGINS_SUPPORTING_CONFIG.includes(plugin) && (
                       <Tooltip
@@ -851,192 +783,6 @@ export default function PluginsTab({
               setSelectedConfigPlugin(null);
             }}
           />
-
-          {/* Test Case Generation Dialog */}
-          <Dialog
-            open={testCaseDialogOpen}
-            onClose={() => {
-              setTestCaseDialogOpen(false);
-              setTempTestCaseConfig({});
-            }}
-            maxWidth="md"
-            fullWidth
-          >
-            <DialogTitle>
-              {testCaseDialogMode === 'config'
-                ? `Configure Test Case for ${generatingPlugin ? displayNameOverrides[generatingPlugin] || categoryAliases[generatingPlugin] || generatingPlugin : ''}`
-                : `Generated Test Case for ${generatingPlugin ? displayNameOverrides[generatingPlugin] || categoryAliases[generatingPlugin] || generatingPlugin : ''}`}
-            </DialogTitle>
-            <DialogContent>
-              {testCaseDialogMode === 'config' && generatingPlugin && (
-                <Box>
-                  <Typography variant="body2" sx={{ mb: 2 }}>
-                    Configure parameters for the test case generation. These settings will be used
-                    only for generating this test case.
-                  </Typography>
-                  {generatingPlugin === 'indirect-prompt-injection' && (
-                    <TextField
-                      label="Indirect Injection Variable"
-                      fullWidth
-                      margin="normal"
-                      value={tempTestCaseConfig.indirectInjectionVar || ''}
-                      onChange={(e) =>
-                        setTempTestCaseConfig({
-                          ...tempTestCaseConfig,
-                          indirectInjectionVar: e.target.value,
-                        })
-                      }
-                      helperText="The variable name to inject content into"
-                      required
-                    />
-                  )}
-                  {generatingPlugin === 'prompt-extraction' && (
-                    <TextField
-                      label="System Prompt"
-                      fullWidth
-                      multiline
-                      rows={4}
-                      margin="normal"
-                      value={tempTestCaseConfig.systemPrompt || ''}
-                      onChange={(e) =>
-                        setTempTestCaseConfig({
-                          ...tempTestCaseConfig,
-                          systemPrompt: e.target.value,
-                        })
-                      }
-                      helperText="The system prompt that the attacker is trying to extract"
-                      required
-                    />
-                  )}
-                  {(generatingPlugin === 'bfla' ||
-                    generatingPlugin === 'bola' ||
-                    generatingPlugin === 'ssrf') && (
-                    <>
-                      <Alert severity="info" sx={{ mb: 2 }}>
-                        These settings are optional and will enhance the test case generation if
-                        provided.
-                      </Alert>
-                      <TextField
-                        label="Request Templates"
-                        fullWidth
-                        multiline
-                        rows={3}
-                        margin="normal"
-                        value={tempTestCaseConfig.requestTemplates?.join('\n') || ''}
-                        onChange={(e) =>
-                          setTempTestCaseConfig({
-                            ...tempTestCaseConfig,
-                            requestTemplates: e.target.value.split('\n').filter((t) => t.trim()),
-                          })
-                        }
-                        helperText="Enter request templates (one per line) for more targeted test generation"
-                      />
-                    </>
-                  )}
-                </Box>
-              )}
-              {testCaseDialogMode === 'result' &&
-                (generatingTestCase ? (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      py: 4,
-                    }}
-                  >
-                    <CircularProgress size={48} />
-                    <Typography variant="body1" sx={{ mt: 2 }}>
-                      Generating test case...
-                    </Typography>
-                  </Box>
-                ) : generatedTestCase ? (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <Box>
-                      <Typography variant="subtitle2" gutterBottom>
-                        Prompt:
-                      </Typography>
-                      <Paper
-                        variant="outlined"
-                        sx={{
-                          p: 2,
-                          backgroundColor: 'background.paper',
-                          fontFamily: 'monospace',
-                          fontSize: '0.875rem',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {generatedTestCase.prompt}
-                      </Paper>
-                    </Box>
-                    {generatedTestCase.context && (
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Context:
-                        </Typography>
-                        <Paper
-                          variant="outlined"
-                          sx={{
-                            p: 2,
-                            backgroundColor: 'background.paper',
-                            fontFamily: 'monospace',
-                            fontSize: '0.875rem',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                          }}
-                        >
-                          {generatedTestCase.context}
-                        </Paper>
-                      </Box>
-                    )}
-                    <Alert severity="info">
-                      <Typography variant="body2">
-                        This is an example test case. When you run the evaluation, multiple
-                        variations will be generated automatically.
-                      </Typography>
-                    </Alert>
-                  </Box>
-                ) : (
-                  <Alert severity="error">
-                    <Typography variant="body2">Failed to generate test case.</Typography>
-                  </Alert>
-                ))}
-            </DialogContent>
-            <DialogActions>
-              <Button
-                onClick={() => {
-                  setTestCaseDialogOpen(false);
-                  setTempTestCaseConfig({});
-                }}
-              >
-                {testCaseDialogMode === 'config' ? 'Cancel' : 'Close'}
-              </Button>
-              {testCaseDialogMode === 'config' &&
-                generatingPlugin &&
-                PLUGINS_SUPPORTING_CONFIG.includes(generatingPlugin) && (
-                  <>
-                    {PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin) && (
-                      <Button
-                        onClick={() => generateTestCaseWithConfig(generatingPlugin, {})}
-                        variant="outlined"
-                      >
-                        Skip Configuration
-                      </Button>
-                    )}
-                    <Button
-                      onClick={() =>
-                        generateTestCaseWithConfig(generatingPlugin, tempTestCaseConfig)
-                      }
-                      variant="contained"
-                      disabled={!isTestCaseConfigValid(generatingPlugin, tempTestCaseConfig)}
-                    >
-                      Generate Test Case
-                    </Button>
-                  </>
-                )}
-            </DialogActions>
-          </Dialog>
         </Box>
 
         {/* Selected Plugins Sidebar */}
