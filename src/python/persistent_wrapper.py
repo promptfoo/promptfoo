@@ -153,6 +153,11 @@ def handle_call(command_line, user_module, default_function_name):
             f.flush()  # Flush Python buffer
             os.fsync(f.fileno())  # Force OS to write to disk (critical for Windows)
 
+        # Verify file is readable before signaling done (prevents race conditions)
+        # If Python can read it, Node should be able to read it too
+        with open(response_file, "r", encoding="utf-8") as f:
+            _ = f.read()
+
         # Signal done
         print("DONE", flush=True)
 

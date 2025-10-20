@@ -118,37 +118,44 @@ export class PythonWorker {
         this.pendingRequest = { resolve, reject };
       });
 
-      // Read response (with retry for Windows file system delays)
+      // Read response with exponential backoff retry
+      // Python verifies file readability before sending DONE, but OS-level delays may still occur
       let responseData: string;
-      // Windows needs more retries due to filesystem delays (antivirus, file locking, etc.)
-      const maxRetries = process.platform === 'win32' ? 150 : 50;
-      const retryDelay = process.platform === 'win32' ? 200 : 100; // ms (Windows: 30s, Unix: 5s)
+      let lastError: any;
 
-      for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // Exponential backoff: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms, 1024ms...
+      // Total max wait: ~10 seconds (handles both fast and slow systems gracefully)
+      for (let attempt = 0, delay = 1; attempt < 14; attempt++, delay *= 2) {
         try {
           responseData = fs.readFileSync(responseFile, 'utf-8');
+          if (attempt > 0) {
+            logger.debug(`Response file read succeeded on attempt ${attempt + 1} after ${delay}ms`);
+          }
           break;
         } catch (error: any) {
-          if (error.code === 'ENOENT' && attempt < maxRetries - 1) {
-            // File doesn't exist yet, wait and retry (Windows file system delay)
-            logger.debug(
-              `Response file not found (attempt ${attempt + 1}/${maxRetries}), retrying: ${responseFile}`,
-            );
-            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          lastError = error;
+          if (error.code === 'ENOENT') {
+            // File doesn't exist yet, wait and retry with exponential backoff
+            await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           }
-          // Final attempt failed - log directory contents for debugging
-          const tempDir = path.dirname(responseFile);
-          try {
-            const files = fs.readdirSync(tempDir).filter((f) => f.startsWith('promptfoo-worker-'));
-            logger.error(
-              `Failed to read response file after ${maxRetries} attempts. Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
-            );
-          } catch {
-            logger.error(`Failed to read response file: ${responseFile}`);
-          }
+          // Non-ENOENT error, don't retry
           throw error;
         }
+      }
+
+      // If we exhausted all retries, throw with debugging info
+      if (!responseData!) {
+        const tempDir = path.dirname(responseFile);
+        try {
+          const files = fs.readdirSync(tempDir).filter((f) => f.startsWith('promptfoo-worker-'));
+          logger.error(
+            `Failed to read response file after 14 attempts (~10s). Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
+          );
+        } catch {
+          logger.error(`Failed to read response file: ${responseFile}`);
+        }
+        throw lastError;
       }
 
       const response = JSON.parse(responseData!);
