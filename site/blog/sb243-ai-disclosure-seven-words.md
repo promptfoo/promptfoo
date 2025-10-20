@@ -16,7 +16,7 @@ keywords:
     AI safety,
   ]
 date: 2025-10-20
-authors: [ian]
+authors: [michael]
 tags: [legal-compliance, red-teaming, technical-guide]
 ---
 
