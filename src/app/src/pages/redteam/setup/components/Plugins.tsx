@@ -140,11 +140,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
 
-  // Check if remote generation is disabled
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
-  // Check API health on mount
   useEffect(() => {
+    // API health check
     checkHealth();
   }, [checkHealth]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
