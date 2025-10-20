@@ -1,4 +1,4 @@
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { useApiHealth } from '@app/contexts/ApiHealthContext';
 import useApiConfig from '@app/stores/apiConfig';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,7 +23,7 @@ describe('ApiSettingsModal', () => {
 
     vi.mocked(useApiHealth).mockReturnValue({
       status: 'unknown',
-      message: null,
+      message: '',
       checkHealth: mockCheckHealth,
       isChecking: false,
     });
@@ -66,7 +66,7 @@ describe('ApiSettingsModal', () => {
   it('shows loading state during health check', () => {
     vi.mocked(useApiHealth).mockReturnValue({
       status: 'loading',
-      message: null,
+      message: '',
       checkHealth: mockCheckHealth,
       isChecking: true,
     });
@@ -136,7 +136,7 @@ describe('ApiSettingsModal', () => {
   it('disables form controls during health check', () => {
     vi.mocked(useApiHealth).mockReturnValue({
       status: 'loading',
-      message: null,
+      message: '',
       checkHealth: mockCheckHealth,
       isChecking: true,
     });

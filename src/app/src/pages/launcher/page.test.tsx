@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import LauncherPage from './page';
-import { useApiHealth } from '../../hooks/useApiHealth';
+import { useApiHealth } from '@app/contexts/ApiHealthContext';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;

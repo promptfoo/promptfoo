@@ -28,7 +28,7 @@ vi.mock('@app/hooks/useTelemetry', () => ({
   }),
 }));
 
-vi.mock('@app/hooks/useApiHealth', () => ({
+vi.mock('@app/contexts/ApiHealthContext', () => ({
   useApiHealth: () => apiHealthStatus,
 }));
 
