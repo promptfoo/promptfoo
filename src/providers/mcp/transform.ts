@@ -52,14 +52,18 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
 }
 
 export function transformMCPToolsToAnthropic(tools: MCPTool[]): Anthropic.Tool[] {
-  return tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    input_schema: {
-      type: 'object',
-      ...tool.inputSchema,
-    },
-  }));
+  return tools.map((tool) => {
+    // Remove $schema field if present to prevent provider errors
+    const { $schema: _$schema, ...cleanSchema } = tool.inputSchema;
+    return {
+      name: tool.name,
+      description: tool.description,
+      input_schema: {
+        type: 'object',
+        ...cleanSchema,
+      },
+    };
+  });
 }
 
 export function transformMCPToolsToGoogle(tools: MCPTool[]): GoogleTool[] {

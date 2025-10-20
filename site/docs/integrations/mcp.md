@@ -195,47 +195,13 @@ For detailed information about using MCP with OpenAI's Responses API, see the [O
 
 ## Tool Schema Compatibility
 
-Promptfoo automatically handles JSON Schema compatibility between MCP servers and different LLM providers. When MCP tools are transformed for use with providers like OpenAI, Google, or Anthropic, Promptfoo performs these transformations:
-
-### Schema Cleaning
-
-MCP SDKs may add JSON Schema metadata fields (like `$schema`, `additionalProperties`) that are incompatible with all providers. Promptfoo automatically:
-
-- **Removes** the `$schema` field to prevent provider errors
-- **Preserves** `additionalProperties` for providers that support it (OpenAI strict mode)
-- **Handles** tools with no input parameters gracefully
-
-### Empty Input Schemas
-
-Tools that require no input parameters are fully supported. The MCP SDK typically generates:
-
-```json
-{
-  "type": "object",
-  "properties": {},
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
-}
-```
-
-Promptfoo transforms this to a clean schema compatible with your provider:
-
-```json
-{
-  "type": "object",
-  "properties": {},
-  "additionalProperties": false
-}
-```
-
-This ensures compatibility across all supported providers without manual schema adjustments.
+Promptfoo automatically handles JSON Schema compatibility between MCP servers and LLM providers by removing provider-incompatible metadata fields (like `$schema`) while preserving supported features. Tools with no input parameters work without modification.
 
 ## Troubleshooting
 
 - Ensure your MCP server is running and accessible.
 - Check your provider logs for MCP connection errors.
 - Verify that your custom headers are correctly formatted if you're having authentication issues.
-- If you encounter schema-related errors with tools that have no parameters, ensure you're using the latest version of Promptfoo which includes automatic schema cleaning.
 
 ## See Also
 

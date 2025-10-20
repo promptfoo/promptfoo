@@ -277,6 +277,54 @@ describe('transformMCPToolsToAnthropic', () => {
     const result = transformMCPToolsToAnthropic(mcpTools);
     expect(result).toEqual(expected);
   });
+
+  it('should remove $schema field from inputSchema', () => {
+    const mcpTools: MCPTool[] = [
+      {
+        name: 'tool_with_schema',
+        description: 'Tool with $schema field',
+        inputSchema: {
+          $schema: 'http://json-schema.org/draft-07/schema#',
+          type: 'object',
+          properties: {
+            param: { type: 'string' },
+          },
+        },
+      },
+    ];
+
+    const result = transformMCPToolsToAnthropic(mcpTools);
+    expect(result[0].input_schema).not.toHaveProperty('$schema');
+    expect(result[0].input_schema).toEqual({
+      type: 'object',
+      properties: {
+        param: { type: 'string' },
+      },
+    });
+  });
+
+  it('should handle empty input schemas', () => {
+    const mcpTools: MCPTool[] = [
+      {
+        name: 'no_input_tool',
+        description: 'Tool with no input parameters',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          additionalProperties: false,
+          $schema: 'http://json-schema.org/draft-07/schema#',
+        },
+      },
+    ];
+
+    const result = transformMCPToolsToAnthropic(mcpTools);
+    expect(result[0].input_schema).not.toHaveProperty('$schema');
+    expect(result[0].input_schema).toEqual({
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    });
+  });
 });
 
 describe('transformMCPToolsToGoogle', () => {
