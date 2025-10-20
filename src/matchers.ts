@@ -484,6 +484,7 @@ export async function matchesLlmRubric(
   options?: {
     throwOnError?: boolean;
   },
+  context?: CallApiContextParams,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -520,6 +521,7 @@ export async function matchesLlmRubric(
     'llm-rubric check',
   );
   const resp = await finalProvider.callApi(prompt, {
+    ...context,
     prompt: {
       raw: prompt,
       label: 'llm-rubric',
@@ -644,6 +646,7 @@ export async function matchesFactuality(
   output: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  context?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -667,7 +670,19 @@ export async function matchesFactuality(
     'factuality check',
   );
 
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await finalProvider.callApi(prompt, {
+    ...context,
+    prompt: {
+      raw: prompt,
+      label: 'factuality',
+    },
+    vars: {
+      input,
+      ideal: expected,
+      completion: tryParse(output),
+      ...(vars || {}),
+    },
+  });
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -798,6 +813,7 @@ export async function matchesClosedQa(
   output: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  context?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -819,7 +835,19 @@ export async function matchesClosedQa(
     (await getDefaultProviders()).gradingProvider,
     'model-graded-closedqa check',
   );
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await finalProvider.callApi(prompt, {
+    ...context,
+    prompt: {
+      raw: prompt,
+      label: 'model-graded-closedqa',
+    },
+    vars: {
+      input,
+      criteria: expected,
+      completion: tryParse(output),
+      ...(vars || {}),
+    },
+  });
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -863,6 +891,7 @@ export async function matchesGEval(
   output: string,
   threshold: number,
   grading?: GradingConfig,
+  context?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!input) {
     throw Error('No source text to estimate reply');
@@ -897,7 +926,16 @@ export async function matchesGEval(
   const stepsPrompt = await loadRubricPrompt(stepsRubricPrompt, GEVAL_PROMPT_STEPS);
   const promptSteps = await renderLlmRubricPrompt(stepsPrompt, { criteria });
 
-  const respSteps = await textProvider.callApi(promptSteps);
+  const respSteps = await textProvider.callApi(promptSteps, {
+    ...context,
+    prompt: {
+      raw: promptSteps,
+      label: 'g-eval-steps',
+    },
+    vars: {
+      criteria,
+    },
+  });
   accumulateTokens(tokensUsed, respSteps.tokenUsage);
   let steps;
 
@@ -929,7 +967,20 @@ export async function matchesGEval(
     output: tryParse(output),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await textProvider.callApi(promptText, {
+    ...context,
+    prompt: {
+      raw: promptText,
+      label: 'g-eval',
+    },
+    vars: {
+      criteria,
+      steps: steps.join('\n- '),
+      maxScore: maxScore.toString(),
+      input: tryParse(input),
+      output: tryParse(output),
+    },
+  });
   accumulateTokens(tokensUsed, resp.tokenUsage);
   let result;
 
@@ -952,6 +1003,7 @@ export async function matchesAnswerRelevance(
   output: string,
   threshold: number,
   grading?: GradingConfig,
+  context?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const embeddingProvider = await getAndCheckProvider(
     'embedding',
@@ -984,7 +1036,16 @@ export async function matchesAnswerRelevance(
     // TODO(ian): Parallelize
     const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
     const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: tryParse(output) });
-    const resp = await textProvider.callApi(promptText);
+    const resp = await textProvider.callApi(promptText, {
+      ...context,
+      prompt: {
+        raw: promptText,
+        label: 'answer-relevance',
+      },
+      vars: {
+        answer: tryParse(output),
+      },
+    });
     accumulateTokens(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
       return fail(resp.error || 'No output', tokensUsed);
@@ -1060,6 +1121,7 @@ export async function matchesContextRecall(
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  callContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1078,7 +1140,18 @@ export async function matchesContextRecall(
     ...(vars || {}),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await textProvider.callApi(promptText, {
+    ...callContext,
+    prompt: {
+      raw: promptText,
+      label: 'context-recall',
+    },
+    vars: {
+      context: contextString,
+      groundTruth,
+      ...(vars || {}),
+    },
+  });
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -1139,6 +1212,7 @@ export async function matchesContextRelevance(
   context: string | string[],
   threshold: number,
   grading?: GradingConfig,
+  callContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1156,7 +1230,17 @@ export async function matchesContextRelevance(
     query: question,
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await textProvider.callApi(promptText, {
+    ...callContext,
+    prompt: {
+      raw: promptText,
+      label: 'context-relevance',
+    },
+    vars: {
+      context: contextString,
+      query: question,
+    },
+  });
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -1227,6 +1311,7 @@ export async function matchesContextFaithfulness(
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  callContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1266,7 +1351,18 @@ export async function matchesContextFaithfulness(
     ...(vars || {}),
   });
 
-  let resp = await textProvider.callApi(promptText);
+  let resp = await textProvider.callApi(promptText, {
+    ...callContext,
+    prompt: {
+      raw: promptText,
+      label: 'context-faithfulness-longform',
+    },
+    vars: {
+      question: query,
+      answer: tryParse(output),
+      ...(vars || {}),
+    },
+  });
   accumulateTokens(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
@@ -1284,7 +1380,18 @@ export async function matchesContextFaithfulness(
     ...(vars || {}),
   });
 
-  resp = await textProvider.callApi(promptText);
+  resp = await textProvider.callApi(promptText, {
+    ...callContext,
+    prompt: {
+      raw: promptText,
+      label: 'context-faithfulness-nli',
+    },
+    vars: {
+      context: contextString,
+      statements,
+      ...(vars || {}),
+    },
+  });
   accumulateTokens(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
@@ -1321,6 +1428,7 @@ export async function matchesSelectBest(
   outputs: string[],
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  context?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
     outputs.length >= 2,
@@ -1340,7 +1448,18 @@ export async function matchesSelectBest(
     ...(vars || {}),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await textProvider.callApi(promptText, {
+    ...context,
+    prompt: {
+      raw: promptText,
+      label: 'select-best',
+    },
+    vars: {
+      criteria,
+      outputs: outputs.map((o) => tryParse(o)),
+      ...(vars || {}),
+    },
+  });
   if (resp.error || !resp.output) {
     return new Array(outputs.length).fill(fail(resp.error || 'No output', resp.tokenUsage));
   }
