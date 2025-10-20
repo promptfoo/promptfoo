@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -48,7 +46,6 @@ import {
 } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 import { ErrorBoundary } from 'react-error-boundary';
-import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -80,6 +77,7 @@ export interface PluginsTabProps {
   recentlyUsedPlugins: Plugin[];
   applicationDefinition?: ApplicationDefinition;
   onUserInteraction: () => void;
+  isRemoteGenerationDisabled: boolean;
 }
 
 export default function PluginsTab({
@@ -90,14 +88,11 @@ export default function PluginsTab({
   recentlyUsedPlugins,
   applicationDefinition,
   onUserInteraction,
+  isRemoteGenerationDisabled,
 }: PluginsTabProps): JSX.Element {
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
   const toast = useToast();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
-
-  // Check if remote generation is disabled
-  const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
   const isPluginDisabled = useCallback(
     (plugin: Plugin) => {
@@ -110,11 +105,6 @@ export default function PluginsTab({
     },
     [isRemoteGenerationDisabled],
   );
-
-  // Check API health on mount
-  useEffect(() => {
-    checkHealth();
-  }, [checkHealth]);
 
   // Internal state
   const [searchTerm, setSearchTerm] = useState('');
@@ -476,30 +466,6 @@ export default function PluginsTab({
       <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
         {/* Main content */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          {/* Warning banner when remote generation is disabled */}
-          {isRemoteGenerationDisabled && (
-            <Alert
-              severity="warning"
-              icon={<WarningAmberIcon />}
-              sx={(theme) => ({
-                marginBottom: 3,
-                boxShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.1)}`,
-              })}
-            >
-              <Box>
-                <Typography variant="body2" fontWeight="bold" gutterBottom>
-                  Remote Generation Disabled
-                </Typography>
-                <Typography variant="body2">
-                  Some plugins require remote generation and are currently unavailable. These
-                  plugins include harmful content tests, bias tests, and other advanced security
-                  checks. To enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code>{' '}
-                  or <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
-                </Typography>
-              </Box>
-            </Alert>
-          )}
-
           {/* Presets section */}
           <Box sx={{ mb: 3 }}>
             <Typography
