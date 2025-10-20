@@ -65,7 +65,8 @@ describe('PythonProvider', () => {
     // Mock the PythonWorkerPool constructor to return our mock instance
     mockPythonWorkerPool.mockImplementation(() => mockPoolInstance as any);
 
-    // Mock getEnvInt to return undefined by default
+    // Reset getEnvInt mock implementation (clears mockReturnValueOnce queue)
+    mockGetEnvInt.mockReset();
     mockGetEnvInt.mockReturnValue(undefined);
 
     // Reset Python state to avoid test interference
