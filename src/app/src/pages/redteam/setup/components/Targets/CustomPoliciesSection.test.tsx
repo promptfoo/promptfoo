@@ -124,7 +124,9 @@ describe('CustomPoliciesSection', () => {
       rerender(
         <ThemeProvider theme={createTheme()}>
           <ToastProvider>
-            <CustomPoliciesSection />
+            <TestCaseGenerationProvider redTeamConfig={(mockUseRedTeamConfig as unknown as Mock)()}>
+              <CustomPoliciesSection />
+            </TestCaseGenerationProvider>
           </ToastProvider>
         </ThemeProvider>,
       );
