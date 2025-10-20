@@ -118,7 +118,7 @@ interface OllamaChatJsonL {
     tool_calls?: Array<{
       function: {
         name: string;
-        arguments: string;
+        arguments: any; // Ollama returns object, but we'll normalize to string for OpenAI compatibility
       };
     }>;
   };
@@ -360,7 +360,20 @@ export class OllamaChatProvider implements ApiProvider {
         (chunk: OllamaChatJsonL) =>
           chunk.message?.tool_calls && chunk.message.tool_calls.length > 0,
       );
-      const tool_calls = chunkWithToolCalls?.message?.tool_calls;
+      let tool_calls = chunkWithToolCalls?.message?.tool_calls;
+
+      // Normalize tool_calls to match OpenAI format (arguments as JSON string, not object)
+      if (tool_calls && tool_calls.length > 0) {
+        tool_calls = tool_calls.map((call) => ({
+          function: {
+            name: call.function.name,
+            arguments:
+              typeof call.function.arguments === 'string'
+                ? call.function.arguments
+                : JSON.stringify(call.function.arguments),
+          },
+        }));
+      }
 
       // Determine output based on message content and tool_calls
       let output: any;
