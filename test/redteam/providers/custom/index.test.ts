@@ -981,4 +981,63 @@ describe('CustomProvider', () => {
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
   });
+
+  it('should include modifiers in system prompt from test metadata', async () => {
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+      test: {
+        vars: {},
+        metadata: {
+          pluginId: 'test-plugin',
+          purpose: 'payment processing system',
+          modifiers: {
+            testGenerationInstructions: 'Generate prompts as realistic invoice queries',
+            language: 'Spanish',
+          },
+        },
+      } as any,
+    };
+
+    // Capture the system prompt that gets sent
+    let capturedSystemPrompt = '';
+    mockRedTeamProvider.callApi.mockImplementation(async (prompt: string) => {
+      const input = JSON.parse(prompt);
+      if (Array.isArray(input) && input[0]?.role === 'system') {
+        capturedSystemPrompt = input[0].content;
+      }
+      return {
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      };
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'Success',
+      }),
+    });
+
+    await customProvider.callApi(prompt, context);
+
+    // Verify modifiers were included in the system prompt
+    expect(capturedSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+    expect(capturedSystemPrompt).toContain('<Modifiers>');
+    expect(capturedSystemPrompt).toContain(
+      'testGenerationInstructions: Generate prompts as realistic invoice queries',
+    );
+    expect(capturedSystemPrompt).toContain('language: Spanish');
+    expect(capturedSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
+  });
 });

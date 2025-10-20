@@ -1,10 +1,4 @@
 import logger from '../logger';
-import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
-import { sleep } from '../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { PromptfooSimulatedUserProvider } from './promptfoo';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,6 +7,11 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
+import invariant from '../util/invariant';
+import { getNunjucksEngine } from '../util/templates';
+import { sleep } from '../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 export type Message = {
   role: 'user' | 'assistant' | 'system';
