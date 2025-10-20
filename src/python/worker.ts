@@ -123,9 +123,9 @@ export class PythonWorker {
       let responseData: string;
       let lastError: any;
 
-      // Exponential backoff: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms, 1024ms...
-      // Total max wait: ~10 seconds (handles both fast and slow systems gracefully)
-      for (let attempt = 0, delay = 1; attempt < 14; attempt++, delay *= 2) {
+      // Exponential backoff: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms, 1024ms, 2048ms...
+      // Total max wait: ~60 seconds (handles severe Windows antivirus delays)
+      for (let attempt = 0, delay = 1; attempt < 16; attempt++, delay = Math.min(delay * 2, 5000)) {
         try {
           responseData = fs.readFileSync(responseFile, 'utf-8');
           if (attempt > 0) {
@@ -150,7 +150,7 @@ export class PythonWorker {
         try {
           const files = fs.readdirSync(tempDir).filter((f) => f.startsWith('promptfoo-worker-'));
           logger.error(
-            `Failed to read response file after 14 attempts (~10s). Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
+            `Failed to read response file after 16 attempts (~60s). Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
           );
         } catch {
           logger.error(`Failed to read response file: ${responseFile}`);

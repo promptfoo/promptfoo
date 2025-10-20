@@ -154,9 +154,24 @@ def handle_call(command_line, user_module, default_function_name):
             os.fsync(f.fileno())  # Force OS to write to disk (critical for Windows)
 
         # Verify file is readable before signaling done (prevents race conditions)
-        # If Python can read it, Node should be able to read it too
-        with open(response_file, "r", encoding="utf-8") as f:
-            _ = f.read()
+        # Retry up to 3 times with small delays if file isn't immediately readable
+        for verify_attempt in range(3):
+            try:
+                with open(response_file, "r", encoding="utf-8") as f:
+                    _ = f.read()
+                break  # Successfully read, exit retry loop
+            except Exception as e:
+                if verify_attempt < 2:
+                    import time
+                    time.sleep(0.1)  # 100ms delay before retry
+                    continue
+                # Final attempt failed
+                print(
+                    f"ERROR: Failed to verify response file after 3 attempts: {e}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                # Still send DONE to avoid hanging Node, but Node will handle missing file
 
         # Signal done
         print("DONE", flush=True)
