@@ -24,6 +24,7 @@ import NotFoundPage from './pages/NotFoundPage';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
+import { ApiHealthProvider } from './contexts/ApiHealthContext';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -85,7 +86,9 @@ const router = createBrowserRouter(
 function App() {
   return (
     <ToastProvider>
-      <RouterProvider router={router} />
+      <ApiHealthProvider>
+        <RouterProvider router={router} />
+      </ApiHealthProvider>
     </ToastProvider>
   );
 }
