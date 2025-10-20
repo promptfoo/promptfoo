@@ -169,6 +169,7 @@ describe('Groq', () => {
           },
           cached: false,
           cost: undefined,
+          latencyMs: 0,
           logProbs: undefined,
           guardrails: {
             flagged: false,
@@ -197,6 +198,7 @@ describe('Groq', () => {
           output: 'Cached output',
           cached: true,
           cost: undefined,
+          latencyMs: 0,
           logProbs: undefined,
           guardrails: {
             flagged: false,

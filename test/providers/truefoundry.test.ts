@@ -217,6 +217,7 @@ describe('TrueFoundry', () => {
           },
           cached: false,
           cost: undefined,
+          latencyMs: 0,
           logProbs: undefined,
           guardrails: {
             flagged: false,
@@ -352,6 +353,7 @@ describe('TrueFoundry', () => {
           output: 'Cached output',
           cached: true,
           cost: undefined,
+          latencyMs: 0,
           logProbs: undefined,
           guardrails: {
             flagged: false,
@@ -493,6 +495,7 @@ describe('TrueFoundry', () => {
 
       expect(result).toEqual({
         embedding: [0.1, 0.2, 0.3],
+        latencyMs: 0,
         tokenUsage: {
           total: 5,
           prompt: 5,
