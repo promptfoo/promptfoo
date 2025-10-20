@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useRef } from 'react';
 import { callApi } from '@app/utils/api';
 import usePolling from '@app/hooks/usePolling';
 
@@ -34,10 +34,23 @@ export function ApiHealthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<ApiHealthStatus>(DEFAULT_CONTEXT.status);
   const [message, setMessage] = useState<string>(DEFAULT_CONTEXT.message);
   const [isChecking, setIsChecking] = useState(DEFAULT_CONTEXT.isChecking);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const checkHealth = async () => {
+    // Abort any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+
     try {
-      const response = await callApi('/remote-health', {cache: 'no-store'});
+      setIsChecking(true);
+      const response = await callApi('/remote-health', {
+        cache: 'no-store',
+        signal: abortControllerRef.current.signal,
+      });
       const data = (await response.json()) as {
         status: string;
         message: string;
@@ -49,7 +62,11 @@ export function ApiHealthProvider({ children }: { children: React.ReactNode }) {
         setStatus(data.status === 'OK' ? 'connected' : 'blocked');
       }
       setMessage(data.message);
-    } catch {
+    } catch (error) {
+      // Don't update state if request was aborted
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       setStatus('blocked');
       setMessage('Network error: Unable to check API health');
     } finally {
