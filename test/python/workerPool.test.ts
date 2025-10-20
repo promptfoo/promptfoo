@@ -57,6 +57,18 @@ def call_api(prompt, options, context):
     TEST_TIMEOUT,
   );
 
+  it('should reject invalid worker counts', async () => {
+    // Test zero workers
+    pool = new PythonWorkerPool(testScriptPath, 'call_api', 0);
+    await expect(pool.initialize()).rejects.toThrow('Invalid worker count: 0. Must be at least 1.');
+
+    // Test negative workers
+    pool = new PythonWorkerPool(testScriptPath, 'call_api', -1);
+    await expect(pool.initialize()).rejects.toThrow(
+      'Invalid worker count: -1. Must be at least 1.',
+    );
+  });
+
   it(
     'should execute calls sequentially with 1 worker',
     async () => {
