@@ -493,7 +493,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           pluginConfig={pluginConfig}
           updatePluginConfig={updatePluginConfig}
           recentlyUsedPlugins={recentlyUsedSnapshot}
-          applicationDefinition={config.applicationDefinition}
           onUserInteraction={() => setHasUserInteracted(true)}
           isRemoteGenerationDisabled={isRemoteGenerationDisabled}
         />

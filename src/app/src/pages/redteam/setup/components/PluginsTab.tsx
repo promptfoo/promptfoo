@@ -83,7 +83,6 @@ export default function PluginsTab({
   pluginConfig,
   updatePluginConfig,
   recentlyUsedPlugins,
-  applicationDefinition,
   onUserInteraction,
   isRemoteGenerationDisabled,
 }: PluginsTabProps): JSX.Element {
@@ -216,22 +215,6 @@ export default function PluginsTab({
     },
     [pluginConfig],
   );
-
-  const isTestCaseConfigValid = useCallback((plugin: Plugin, config: any) => {
-    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-      return true;
-    }
-    if (!config) {
-      return false;
-    }
-    if (plugin === 'indirect-prompt-injection') {
-      return config.indirectInjectionVar && config.indirectInjectionVar.trim() !== '';
-    }
-    if (plugin === 'prompt-extraction') {
-      return config.systemPrompt && config.systemPrompt.trim() !== '';
-    }
-    return true;
-  }, []);
 
   // Category filters
   const categoryFilters = useMemo(

@@ -97,8 +97,7 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
               ...config,
             },
           }),
-          // Abort after 10s
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(10000), // 10s timeout
         });
 
         const data = await response.json();
@@ -129,7 +128,7 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
                 providerOptions: redTeamConfig.target,
                 prompt: data.prompt,
               }),
-              timeout: 30000,
+              signal: AbortSignal.timeout(30000), // 30s timeout
             });
 
             if (!testResponse.ok) {
