@@ -28,9 +28,7 @@ export class PythonWorkerPool {
 
     // Validate worker count
     if (this.workerCount < 1) {
-      throw new Error(
-        `Invalid worker count: ${this.workerCount}. Must be at least 1.`,
-      );
+      throw new Error(`Invalid worker count: ${this.workerCount}. Must be at least 1.`);
     }
 
     // Warn on excessive workers
