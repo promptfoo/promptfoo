@@ -5,6 +5,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -475,6 +476,30 @@ export default function PluginsTab({
       <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
         {/* Main content */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
+          {/* Warning banner when remote generation is disabled */}
+          {isRemoteGenerationDisabled && (
+            <Alert
+              severity="warning"
+              icon={<WarningAmberIcon />}
+              sx={(theme) => ({
+                marginBottom: 3,
+                boxShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.1)}`,
+              })}
+            >
+              <Box>
+                <Typography variant="body2" fontWeight="bold" gutterBottom>
+                  Remote Generation Disabled
+                </Typography>
+                <Typography variant="body2">
+                  Some plugins require remote generation and are currently unavailable. These
+                  plugins include harmful content tests, bias tests, and other advanced security
+                  checks. To enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code>{' '}
+                  or <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+                </Typography>
+              </Box>
+            </Alert>
+          )}
+
           {/* Presets section */}
           <Box sx={{ mb: 3 }}>
             <Typography
@@ -775,17 +800,37 @@ export default function PluginsTab({
                     )}
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography
-                      variant="body1"
-                      sx={{
-                        fontWeight: 500,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                      <Typography
+                        variant="body1"
+                        sx={{
+                          fontWeight: 500,
+                        }}
+                      >
+                        {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                      </Typography>
+
+                      {/* Badge for plugins requiring remote generation */}
+                      {pluginDisabled && isRemoteGenerationDisabled && (
+                        <Tooltip title="This plugin requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.">
+                          <Typography
+                            variant="caption"
+                            sx={(theme) => ({
+                              fontSize: '0.7rem',
+                              color: 'error.main',
+                              fontWeight: 500,
+                              backgroundColor: alpha(theme.palette.error.main, 0.08),
+                              px: 0.5,
+                              py: 0.25,
+                              borderRadius: 0.5,
+                              border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
+                            })}
+                          >
+                            Remote generation required
+                          </Typography>
+                        </Tooltip>
+                      )}
+                    </Box>
                     {subCategoryDescriptions[plugin] && (
                       <Typography
                         variant="body2"
