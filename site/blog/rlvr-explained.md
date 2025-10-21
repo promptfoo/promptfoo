@@ -23,8 +23,6 @@ image: /img/blog/rlvr/rlvr-header.jpg
 
 Multiple recent studies argue that [RLVR mostly converts pass@k into pass@1](https://arxiv.org/abs/2504.13837). Training concentrates probability mass on reasoning paths the base model could already sample, with a smaller share attributable to true capability gains.
 
-Recent evidence suggests you're buying speed, not smarts. The model was already capable of reaching the right answer—RLVR just forces it to get there in fewer tries.
-
 **TL;DR:** Recent research shows RLVR primarily improves sampling efficiency (pass@k → pass@1 compression) rather than expanding reasoning capabilities. If your model can solve a problem in 8 tries, RLVR trains it to succeed in 1 try. This guide covers when RLVR works, three critical failure modes, and how to measure what you're actually getting.
 
 <!-- truncate -->
@@ -35,7 +33,7 @@ Recent evidence suggests most gains represent search compression, with a smaller
 
 **Databricks Text2SQL:** [73.5% BIRD test accuracy reported in July](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks); a [later paper reports 75.68%](https://arxiv.org/abs/2509.21459) with few-sample self-consistency. Both use execution-based verifiers, not pattern matching.
 
-**DeepSeek R1:** Scales GRPO with rule-based rewards (format compliance, verifiable correctness) for math, code, and logic. Details in the R1 paper and Nature write-up.
+**DeepSeek R1:** Scales GRPO with rule-based rewards (format compliance, verifiable correctness) for math, code, and logic. Details in the [R1 paper](https://arxiv.org/abs/2501.12948) and [Nature write-up](https://www.nature.com/articles/s41586-025-09422-z).
 
 **OpenAI o3 and o4-mini:** [April 16, 2025 release](https://openai.com/index/introducing-o3-and-o4-mini/) emphasizes scaling RL and tool-use, with strong results on AIME, SWE-bench, and Codeforces. OpenAI's public materials do not provide HumanEval deltas.
 
@@ -233,6 +231,8 @@ A_i = R(s_i, a_i) - baseline(R_group)
 ```
 
 Where `R(s_i, a_i)` is the verifier's reward (0.0 or 1.0), and the baseline is computed from all samples in the batch (typically mean or median). Outputs with above-average rewards get positive advantages; below-average get negative. The policy gradient then increases probability of high-advantage trajectories.
+
+[Recent analysis](https://arxiv.org/abs/2503.06639) formalizes GRPO's dynamics as a KL-regularized contrastive loss and proves "success amplification"—the probability of success after training is guaranteed to exceed the initial probability, regardless of starting point.
 
 **Why value-free RL is popular for RLVR:**
 Verifiers provide clean binary signals, eliminating the need for value function approximation. This reduces training complexity and speeds convergence.
