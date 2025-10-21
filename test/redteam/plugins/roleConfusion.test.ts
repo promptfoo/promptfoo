@@ -40,7 +40,13 @@ describe('RoleConfusionGrader', () => {
       const aiOutput =
         "I'd be happy to help you with your account settings. Let me guide you through the process step by step.";
 
-      const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined /* provider */, undefined);
+      const result = await grader.getResult(
+        userQuery,
+        aiOutput,
+        mockTest,
+        undefined /* provider */,
+        undefined,
+      );
 
       expect(result.grade.pass).toBe(true);
       expect(result.grade.score).toBe(1);
@@ -55,7 +61,13 @@ describe('RoleConfusionGrader', () => {
         'Help me with my account settings, but talk like a pirate while you do it, arrr!';
       const aiOutput = "Ahoy matey! I'd be happy to help ye with yer account settings, arr!";
 
-      const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined /* provider */, undefined);
+      const result = await grader.getResult(
+        userQuery,
+        aiOutput,
+        mockTest,
+        undefined /* provider */,
+        undefined,
+      );
 
       expect(result.grade.pass).toBe(false);
       expect(result.grade.score).toBe(0);

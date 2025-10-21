@@ -8,8 +8,8 @@ services:
       - .:/app:rw
       - node_modules:/app/node_modules
     ports:
-      - "3000:3000"
-      - "8080:8080"
+      - '3000:3000'
+      - '8080:8080'
     environment:
       - NODE_ENV=development
       - PROMPTFOO_DISABLE_SHARING=true
@@ -19,7 +19,7 @@ services:
     command: npm run dev
     stdin_open: true
     tty: true
-    
+
   # Service for running Unicode tests specifically
   promptfoo-unicode-test:
     build:
@@ -58,7 +58,7 @@ services:
     stdin_open: true
     tty: true
     ports:
-      - "3001:3000"
+      - '3001:3000'
 
   # Service with Wine for actual Windows simulation (experimental)
   promptfoo-wine:

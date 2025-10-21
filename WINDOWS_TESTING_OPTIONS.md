@@ -35,6 +35,7 @@ jobs:
 ## Option 2: Remote Windows VM (Azure/AWS)
 
 1. **Create Windows VM:**
+
    ```bash
    # Azure CLI
    az vm create \
@@ -56,7 +57,7 @@ jobs:
 Unfortunately, Codespaces doesn't support Windows containers either, but you can:
 
 1. Push your code to GitHub
-2. Open in Codespaces  
+2. Open in Codespaces
 3. Use the existing `.devcontainer` setup
 4. Test Unicode handling in a Linux environment that might reveal similar issues
 

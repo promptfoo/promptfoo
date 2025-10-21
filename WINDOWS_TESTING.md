@@ -5,6 +5,7 @@ This document explains how to set up a Windows development environment using Doc
 ## Quick Setup
 
 1. **Start the Windows environment:**
+
    ```bash
    ./scripts/setup-windows-dev.sh
    ```
@@ -17,17 +18,20 @@ This document explains how to set up a Windows development environment using Doc
 ## Manual Setup
 
 ### Prerequisites
+
 - Docker Desktop with Windows container support enabled
 - At least 8GB RAM available for the container
 
 ### Build and Run
 
 1. **Build the Windows container:**
+
    ```bash
    docker-compose -f docker-compose.windows.yml build
    ```
 
 2. **Start development environment:**
+
    ```bash
    docker-compose -f docker-compose.windows.yml up -d promptfoo-windows
    ```
@@ -42,6 +46,7 @@ This document explains how to set up a Windows development environment using Doc
 The failing test is in `test/providers/pythonCompletion.unicode.test.ts`. To debug:
 
 ### Run Specific Test
+
 ```bash
 # Inside the container
 npm test -- test/providers/pythonCompletion.unicode.test.ts --verbose
@@ -51,6 +56,7 @@ npm test -- test/providers/pythonCompletion.unicode.test.ts --testTimeout=30000
 ```
 
 ### Debug Python Execution
+
 ```powershell
 # Inside the container, test Python Unicode handling directly
 python -c "print('🔥 Unicode test: café résumé naïve')"
@@ -59,12 +65,14 @@ python -c "print('🔥 Unicode test: café résumé naïve')"
 ## Using Claude Code in the Container
 
 1. **Install Claude Code in the container:**
+
    ```powershell
    # Inside the container
    npm install -g @anthropic/claude-code
    ```
 
 2. **Start Claude Code:**
+
    ```powershell
    claude-code
    ```
@@ -83,18 +91,22 @@ python -c "print('🔥 Unicode test: café résumé naïve')"
 ## Troubleshooting
 
 ### Container Won't Start
+
 - Ensure Docker Desktop is set to Windows container mode
 - Check available memory (Windows containers require more RAM)
 - Verify Docker Desktop is running
 
 ### Unicode Test Still Failing
+
 Common Windows-specific issues:
+
 1. **Encoding**: Windows may use different default encoding (CP1252 vs UTF-8)
 2. **Line endings**: CRLF vs LF differences
 3. **Python path**: Different Python executable paths on Windows
 4. **Timeout**: Windows containers may be slower, need increased timeout
 
 ### Performance
+
 - Windows containers are slower than Linux containers
 - Consider increasing test timeouts for Windows-specific runs
 - Use volume mounts carefully to avoid performance issues
