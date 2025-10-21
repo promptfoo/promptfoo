@@ -64,6 +64,7 @@ import type Eval from './models/eval';
 import type {
   EvalConversations,
   EvalRegisters,
+  PromptMetrics,
   ProviderOptions,
   ScoringFunction,
   TokenUsage,
@@ -104,7 +105,8 @@ class ProgressBarManager {
     // Create single progress bar
     this.progressBar = new cliProgress.SingleBar(
       {
-        format: 'Evaluating [{bar}] {percentage}% | {value}/{total} | {provider} {prompt} {vars}',
+        format:
+          'Evaluating [{bar}] {percentage}% | {value}/{total} (errors: {errors}) | {provider} {prompt} {vars}',
         hideCursor: true,
         gracefulExit: true,
       },
@@ -116,6 +118,7 @@ class ProgressBarManager {
       provider: '',
       prompt: '',
       vars: '',
+      errors: 0,
     });
   }
 
@@ -123,9 +126,10 @@ class ProgressBarManager {
    * Update progress for a specific evaluation
    */
   updateProgress(
-    index: number,
+    _index: number,
     evalStep: RunEvalOptions | undefined,
-    phase: 'serial' | 'concurrent' = 'concurrent',
+    _phase: 'serial' | 'concurrent' = 'concurrent',
+    metrics?: PromptMetrics,
   ): void {
     if (this.isWebUI || !evalStep || !this.progressBar) {
       return;
@@ -140,6 +144,7 @@ class ProgressBarManager {
       provider,
       prompt: prompt || '""',
       vars: vars || '',
+      errors: metrics?.testErrorCount ?? 0,
     });
   }
 
@@ -267,8 +272,6 @@ export async function runEval({
   conversations,
   registers,
   isRedteam,
-  allTests,
-  concurrency,
   abortSignal,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
@@ -1411,7 +1414,7 @@ class Evaluator {
       } else if (progressBarManager) {
         // Progress bar update is handled by the manager
         const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
-        progressBarManager.updateProgress(index, evalStep, phase);
+        progressBarManager.updateProgress(index, evalStep, phase, metrics);
       } else if (ciProgressReporter) {
         // CI progress reporter update
         ciProgressReporter.update(numComplete);

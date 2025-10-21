@@ -119,7 +119,25 @@ export async function getGradingProvider(
       );
     }
   } else {
-    finalProvider = defaultProvider;
+    // No provider specified - check defaultTest.options.provider as fallback
+    const defaultTestIsObject = typeof cliState.config?.defaultTest === 'object';
+    const cfg =
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.provider) ||
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider) ||
+      undefined;
+
+    if (cfg) {
+      // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
+      finalProvider = await getGradingProvider(type, cfg, defaultProvider);
+      if (finalProvider) {
+        logger.debug(
+          `[Grading] Using provider from defaultTest.options.provider: ${finalProvider.id()}`,
+        );
+      }
+    } else {
+      finalProvider = defaultProvider;
+    }
   }
   return finalProvider;
 }
@@ -444,7 +462,7 @@ export async function renderLlmRubricPrompt(
   try {
     // Render every string scalar within the JSON
     // Does not render object keys (only values)
-    const parsed = JSON.parse(rubricPrompt, (k, v) =>
+    const parsed = JSON.parse(rubricPrompt, (_k, v) =>
       typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
     );
     return JSON.stringify(parsed);
@@ -1348,7 +1366,7 @@ export async function matchesSelectBest(
       rejectedPrediction: 0,
     },
   };
-  return outputs.map((output, index) => {
+  return outputs.map((_output, index) => {
     if (index === verdict) {
       return {
         pass: true,

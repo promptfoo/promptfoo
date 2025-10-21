@@ -1,18 +1,20 @@
-import { useEffect, useState } from 'react';
-
-import { callApi } from '@app/utils/api';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import TraceTimeline from './TraceTimeline';
+
+export interface Trace {
+  traceId: string;
+  testCaseId?: string | number;
+  spans?: any[];
+}
 
 interface TraceViewProps {
   evaluationId?: string;
   testCaseId?: string;
   testIndex?: number;
   promptIndex?: number;
-  onVisibilityChange?: (shouldShow: boolean) => void;
+  traces?: Trace[];
 }
 
 export default function TraceView({
@@ -20,85 +22,10 @@ export default function TraceView({
   testCaseId,
   testIndex,
   promptIndex,
-  onVisibilityChange,
+  traces = [],
 }: TraceViewProps) {
-  const [traces, setTraces] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isActive = true;
-    const controller = new AbortController();
-
-    const fetchTraces = async () => {
-      if (!evaluationId) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await callApi(`/traces/evaluation/${evaluationId}`, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (!isActive) {
-          return;
-        }
-        setTraces(Array.isArray(data.traces) ? data.traces : []);
-      } catch (err) {
-        console.error('Error fetching traces:', err);
-        if (!isActive) {
-          return;
-        }
-        setError(err instanceof Error ? err.message : 'Failed to fetch traces');
-      } finally {
-        if (!isActive) {
-          return;
-        }
-        setLoading(false);
-      }
-    };
-
-    fetchTraces();
-
-    return () => {
-      isActive = false;
-      controller.abort();
-    };
-  }, [evaluationId]);
-
-  useEffect(() => {
-    if (onVisibilityChange) {
-      const shouldShow = !!evaluationId && (loading || !!error || traces.length > 0);
-      onVisibilityChange(shouldShow);
-    }
-  }, [evaluationId, loading, error, traces, onVisibilityChange]);
-
   if (!evaluationId) {
     return null;
-  }
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress size={24} />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Alert severity="error">{error}</Alert>
-      </Box>
-    );
   }
 
   if (traces.length === 0) {

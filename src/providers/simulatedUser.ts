@@ -1,10 +1,4 @@
 import logger from '../logger';
-import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
-import { sleep } from '../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { PromptfooSimulatedUserProvider } from './promptfoo';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,6 +7,11 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
+import invariant from '../util/invariant';
+import { getNunjucksEngine } from '../util/templates';
+import { sleep } from '../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 export type Message = {
   role: 'user' | 'assistant' | 'system';
@@ -114,7 +113,7 @@ export class SimulatedUser implements ApiProvider {
 
   async callApi(
     // NOTE: `prompt` is not used in this provider; `vars.instructions` is used instead.
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {

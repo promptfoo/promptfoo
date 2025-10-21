@@ -77,6 +77,15 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
   </purpose>
 
   {% endif %}
+  {% if modifierSection %}
+
+  CRITICAL: Ensure all generated prompts strictly follow these requirements:
+  <Modifiers>
+  {{modifierSection}}
+  </Modifiers>
+  Rewrite ALL prompts to fully comply with the above modifiers.
+
+  {% endif %}
 
 `;
 
@@ -317,6 +326,14 @@ export class CustomProvider implements ApiProvider {
     while (roundNum < this.maxTurns) {
       try {
         // Generate system prompt for each round with updated currentRound
+        const modifierSection =
+          context?.test?.metadata?.modifiers &&
+          Object.keys(context.test.metadata.modifiers).length > 0
+            ? Object.entries(context.test.metadata.modifiers)
+                .map(([key, value]) => `${key}: ${value}`)
+                .join('\n')
+            : undefined;
+
         const systemPrompt = this.nunjucks.renderString(CUSTOM_PARENT_TEMPLATE, {
           customStrategyText:
             this.config.strategyText ||
@@ -325,6 +342,7 @@ export class CustomProvider implements ApiProvider {
           currentRound: roundNum, // 0-indexed to match user's expectation
           maxTurns: this.maxTurns,
           purpose: context?.test?.metadata?.purpose,
+          modifierSection,
         });
 
         // Update system message for this round
@@ -712,7 +730,7 @@ export class CustomProvider implements ApiProvider {
     vars: Record<string, string | object>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
-    roundNum: number,
+    _roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<TargetResponse> {
@@ -897,7 +915,7 @@ export class CustomProvider implements ApiProvider {
     return this.memory.duplicateConversationExcludingLastTurn(conversationId);
   }
 
-  private logChatHistory(conversationId: string, lastMessageOnly = false): void {
+  private logChatHistory(conversationId: string, _lastMessageOnly = false): void {
     const messages = this.memory.getConversation(conversationId);
     logger.debug(`[Custom] Memory for conversation ${conversationId}:`);
     for (const message of messages) {

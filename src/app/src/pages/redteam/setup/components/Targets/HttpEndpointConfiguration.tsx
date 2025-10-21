@@ -13,6 +13,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
 import HttpIcon from '@mui/icons-material/Http';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -33,12 +34,12 @@ import Switch from '@mui/material/Switch';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import dedent from 'dedent';
 import yaml from 'js-yaml';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
+import ResponseParserTestModal from './ResponseParserTestModal';
 import TestSection from './TestSection';
 
 import type { ProviderOptions } from '../../types';
@@ -51,7 +52,6 @@ interface HttpEndpointConfigurationProps {
   setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
   setUrlError: (error: string | null) => void;
-  updateFullTarget: (target: ProviderOptions) => void;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
 }
@@ -89,7 +89,6 @@ const HttpEndpointConfiguration = ({
   setBodyError,
   urlError,
   setUrlError,
-  updateFullTarget,
   onTargetTested,
   onSessionTested,
 }: HttpEndpointConfigurationProps): JSX.Element => {
@@ -144,6 +143,9 @@ Content-Type: application/json
   // Test Target state
   const [isTestRunning, setIsTestRunning] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
+
+  // Response transform test state
+  const [responseTestOpen, setResponseTestOpen] = useState(false);
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
@@ -748,6 +750,24 @@ ${exampleRequest}`;
             docs
           </a>{' '}
           for examples.
+          <Box sx={{ mt: 1 }}>
+            <details>
+              <summary>Examples</summary>
+              <ul style={{ listStyleType: 'decimal' }}>
+                <li>
+                  A JavaScript object path: <code>json.choices[0].message.content</code>
+                </li>{' '}
+                <li>
+                  A function:{' '}
+                  <code>{`(json, text) => json.choices[0].message.content || text`}</code>{' '}
+                </li>
+                <li>
+                  With guardrails:{' '}
+                  <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
+                </li>
+              </ul>
+            </details>
+          </Box>
         </Typography>
         <Box
           sx={{
@@ -763,18 +783,27 @@ ${exampleRequest}`;
             onValueChange={(code) => updateCustomTarget('transformResponse', code)}
             highlight={highlightJS}
             padding={10}
-            placeholder={dedent`Optional: Transform the API response before using it. Format as either:
-
-                        1. A JavaScript object path: \`json.choices[0].message.content\`
-                        2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
-
-                        With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
+            placeholder={'json.choices[0].message.content'}
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
               minHeight: '150px',
             }}
           />
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<PlayArrowIcon />}
+            onClick={() => setResponseTestOpen(true)}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 1,
+            }}
+          >
+            Test
+          </Button>
         </Box>
 
         {/* Test Target Section - Common for both modes */}
@@ -905,8 +934,15 @@ ${exampleRequest}`;
         selectedTarget={selectedTarget}
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
-        onTargetTested={onTargetTested}
         onSessionTested={onSessionTested}
+      />
+
+      {/* Response Transform Test Dialog */}
+      <ResponseParserTestModal
+        open={responseTestOpen}
+        onClose={() => setResponseTestOpen(false)}
+        currentTransform={selectedTarget.config.transformResponse || ''}
+        onApply={(code) => updateCustomTarget('transformResponse', code)}
       />
     </Box>
   );

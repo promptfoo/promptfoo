@@ -44,6 +44,7 @@ import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerforma
 import EvalResult from './evalResult';
 
 import type { EvalResultsFilterMode } from '../types/index';
+import { calculateAttackSuccessRate } from '../redteam/metrics';
 
 interface FilteredCountRow {
   count: number | null;
@@ -177,6 +178,7 @@ export default class Eval {
   vars: string[];
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+  _shared: boolean = false;
 
   static async latest() {
     const db = getDb();
@@ -902,6 +904,14 @@ export default class Eval {
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
+
+  get shared() {
+    return this._shared;
+  }
+
+  set shared(shared: boolean) {
+    this._shared = shared;
+  }
 }
 
 /**
@@ -959,6 +969,11 @@ export async function getEvalSummaries(
     const passCount =
       result.prompts?.reduce((memo, prompt) => {
         return memo + (prompt.metrics?.testPassCount ?? 0);
+      }, 0) ?? 0;
+
+    const failCount =
+      result.prompts?.reduce((memo, prompt) => {
+        return memo + (prompt.metrics?.testFailCount ?? 0);
       }, 0) ?? 0;
 
     // All prompts should have the same number of test cases:
@@ -1026,9 +1041,11 @@ export async function getEvalSummaries(
       numTests: testCount,
       datasetId: result.datasetId,
       isRedteam: result.isRedteam,
-      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0, // ASR
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,
+      attackSuccessRate:
+        type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
     };
   });
 }

@@ -11,6 +11,24 @@ import {
 } from './RunOptions';
 import type { RedteamRunOptions } from '@promptfoo/types';
 
+describe('RUNOPTIONS_TEXT', () => {
+  it('should have all the required properties and nested structure for each input type', () => {
+    expect(RUNOPTIONS_TEXT).toBeDefined();
+
+    expect(RUNOPTIONS_TEXT.numberOfTests).toBeDefined();
+    expect(RUNOPTIONS_TEXT.numberOfTests.helper).toBeDefined();
+    expect(RUNOPTIONS_TEXT.numberOfTests.error).toBeDefined();
+
+    expect(RUNOPTIONS_TEXT.delayBetweenApiCalls).toBeDefined();
+    expect(RUNOPTIONS_TEXT.delayBetweenApiCalls.helper).toBeDefined();
+    expect(RUNOPTIONS_TEXT.delayBetweenApiCalls.error).toBeDefined();
+
+    expect(RUNOPTIONS_TEXT.maxConcurrentRequests).toBeDefined();
+    expect(RUNOPTIONS_TEXT.maxConcurrentRequests.helper).toBeDefined();
+    expect(RUNOPTIONS_TEXT.maxConcurrentRequests.error).toBeDefined();
+  });
+});
+
 describe('RunOptionsContent', () => {
   const mockUpdateConfig = vi.fn();
   const mockUpdateRunOption = vi.fn();
@@ -92,6 +110,39 @@ describe('RunOptionsContent', () => {
       );
       expect(tooltips.length).toBeGreaterThan(0);
     });
+
+    describe('Rendering with large values', () => {
+      it('should render with clamped minimum values when provided with Number.MAX_SAFE_INTEGER', () => {
+        const largeValue = Number.MAX_SAFE_INTEGER;
+        const props = {
+          ...defaultProps,
+          numTests: largeValue,
+          runOptions: {
+            delay: largeValue,
+            maxConcurrency: largeValue,
+            verbose: false,
+          },
+        };
+
+        render(<RunOptionsContent {...props} />);
+
+        const numTestsInput = screen.getByLabelText('Number of test cases') as HTMLInputElement;
+        expect(numTestsInput).toBeInTheDocument();
+        expect(Number(numTestsInput.value)).toBe(largeValue);
+
+        const delayInput = screen.getByLabelText(
+          'Delay between API calls (ms)',
+        ) as HTMLInputElement;
+        expect(delayInput).toBeInTheDocument();
+        expect(Number(delayInput.value)).toBe(largeValue);
+
+        const maxConcurrencyInput = screen.getByLabelText(
+          'Max number of concurrent requests',
+        ) as HTMLInputElement;
+        expect(maxConcurrencyInput).toBeInTheDocument();
+        expect(Number(maxConcurrencyInput.value)).toBe(largeValue);
+      });
+    });
   });
 
   describe('Functionality', () => {
@@ -104,6 +155,14 @@ describe('RunOptionsContent', () => {
 
       expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
       expect(mockUpdateConfig).toHaveBeenCalledWith('numTests', 25);
+    });
+
+    it('should initialize with default numTests when numTests prop is undefined and update config on blur', () => {
+      render(<RunOptionsContent {...defaultProps} numTests={undefined} />);
+      const numTestsInput = screen.getByLabelText('Number of test cases');
+      fireEvent.blur(numTestsInput);
+      expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
+      expect(mockUpdateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
     });
   });
 
@@ -215,6 +274,53 @@ describe('DelayBetweenAPICallsInput', () => {
     expect(input).toHaveAttribute('aria-invalid', 'false');
     expect(screen.getByText(RUNOPTIONS_TEXT.delayBetweenApiCalls.helper)).toBeInTheDocument();
   });
+
+  it('when readOnly, blurring the field does not trigger updateRunOption or setMaxConcurrencyValue calls', () => {
+    render(<DelayBetweenAPICallsInput {...baseProps} readOnly={true} />);
+    const input = screen.getByLabelText('Delay between API calls (ms)');
+    fireEvent.blur(input);
+    expect(updateRunOption).not.toHaveBeenCalled();
+    expect(setMaxConcurrencyValue).not.toHaveBeenCalled();
+  });
+
+  it('is disabled when readOnly=true even if canSetDelay=true', () => {
+    render(<DelayBetweenAPICallsInput {...baseProps} readOnly={true} canSetDelay={true} />);
+    const input = screen.getByLabelText('Delay between API calls (ms)');
+    expect(input).toBeDisabled();
+  });
+
+  it('displays the correct tooltip text when canSetDelay is false', () => {
+    render(<DelayBetweenAPICallsInput {...baseProps} canSetDelay={false} />);
+    const tooltips = screen.getAllByLabelText(
+      'To set a delay, you must set the number of concurrent requests to 1.',
+    );
+    expect(tooltips.length).toBeGreaterThan(0);
+  });
+
+  it('handles whitespace-only input by treating it as 0 on blur', () => {
+    render(<DelayBetweenAPICallsInput {...baseProps} value="   " />);
+    const input = screen.getByLabelText('Delay between API calls (ms)');
+    fireEvent.blur(input);
+    expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
+    expect(setValue).toHaveBeenCalledWith('0');
+    expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
+    expect(setMaxConcurrencyValue).toHaveBeenCalledWith('1');
+  });
+
+  it('handles Number.MAX_SAFE_INTEGER by clamping or handling appropriately on blur', () => {
+    const maxSafeIntegerString = Number.MAX_SAFE_INTEGER.toString();
+    render(<DelayBetweenAPICallsInput {...baseProps} value={maxSafeIntegerString} />);
+    const input = screen.getByLabelText('Delay between API calls (ms)');
+    fireEvent.blur(input);
+
+    expect(updateRunOption).toHaveBeenCalled();
+    const updateRunOptionValue = (updateRunOption.mock.calls[0] as any)[1];
+    expect(typeof updateRunOptionValue).toBe('number');
+
+    expect(setValue).toHaveBeenCalledWith(String(updateRunOptionValue));
+    expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
+    expect(setMaxConcurrencyValue).toHaveBeenCalledWith('1');
+  });
 });
 
 describe('MaxNumberOfConcurrentRequestsInput', () => {
@@ -283,6 +389,56 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
     expect(input).toHaveAttribute('aria-invalid', 'false');
     expect(screen.getByText(RUNOPTIONS_TEXT.maxConcurrentRequests.helper)).toBeInTheDocument();
   });
+
+  it('does not call onChange or onBlur handlers when readOnly is true', () => {
+    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} readOnly={true} />);
+    const input = screen.getByLabelText('Max number of concurrent requests');
+
+    fireEvent.change(input, { target: { value: '7' } });
+    fireEvent.blur(input);
+
+    expect(setValue).not.toHaveBeenCalled();
+    expect(updateRunOption).not.toHaveBeenCalled();
+    expect(setDelayValue).not.toHaveBeenCalled();
+  });
+
+  it('defaults to 1 on blur when the input is an empty string and enforces delay=0', () => {
+    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="" />);
+    const input = screen.getByLabelText('Max number of concurrent requests');
+
+    fireEvent.blur(input);
+
+    expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
+    expect(setValue).toHaveBeenCalledWith('1');
+    expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
+    expect(setDelayValue).toHaveBeenCalledWith('0');
+  });
+
+  it('should default to 1, update state, and enforce delay=0 when receiving a non-numeric string onBlur', () => {
+    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="abc" />);
+    const input = screen.getByLabelText('Max number of concurrent requests');
+
+    fireEvent.blur(input);
+
+    expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
+    expect(setValue).toHaveBeenCalledWith('1');
+    expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
+    expect(setDelayValue).toHaveBeenCalledWith('0');
+  });
+
+  it('should handle form submission with an invalid value by clamping to the minimum value', () => {
+    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} />);
+    const input = screen.getByLabelText('Max number of concurrent requests');
+
+    fireEvent.change(input, { target: { value: '0' } });
+
+    fireEvent.blur(input);
+
+    expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
+    expect(setValue).toHaveBeenCalledWith('1');
+    expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
+    expect(setDelayValue).toHaveBeenCalledWith('0');
+  });
 });
 
 describe('NumberOfTestCasesInput', () => {
@@ -318,6 +474,64 @@ describe('NumberOfTestCasesInput', () => {
     expect(updateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
   });
 
+  it('should use custom default when cleared then blurred', () => {
+    const customDefault = 50;
+    render(
+      <NumberOfTestCasesInput
+        value=""
+        setValue={setValue}
+        updateConfig={updateConfig}
+        defaultNumberOfTests={customDefault}
+      />,
+    );
+
+    const numTestsInput = screen.getByLabelText('Number of test cases');
+
+    updateConfig.mockClear();
+
+    fireEvent.blur(numTestsInput);
+
+    expect(updateConfig).toHaveBeenCalledWith('numTests', customDefault);
+  });
+
+  it('should fallback to default when a non-numeric string is entered and blurred', () => {
+    render(<NumberOfTestCasesInput value="abc" setValue={setValue} updateConfig={updateConfig} />);
+
+    const numTestsInput = screen.getByLabelText('Number of test cases');
+
+    fireEvent.blur(numTestsInput);
+
+    expect(updateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
+  });
+
+  it('should not call updateConfig when readOnly is true and the input is blurred', () => {
+    render(
+      <NumberOfTestCasesInput
+        value="23"
+        setValue={setValue}
+        updateConfig={updateConfig}
+        readOnly={true}
+      />,
+    );
+
+    const numTestsInput = screen.getByLabelText('Number of test cases');
+    fireEvent.change(numTestsInput, { target: { value: '25' } });
+    fireEvent.blur(numTestsInput);
+
+    expect(updateConfig).not.toHaveBeenCalled();
+  });
+
+  it('should clamp negative number to default value on blur', () => {
+    render(<NumberOfTestCasesInput value="-5" setValue={setValue} updateConfig={updateConfig} />);
+
+    const numTestsInput = screen.getByLabelText('Number of test cases');
+
+    fireEvent.blur(numTestsInput);
+
+    expect(updateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
+    expect(setValue).toHaveBeenCalledWith(String(REDTEAM_DEFAULTS.NUM_TESTS));
+  });
+
   it('displays error state and message when value is less than 1', () => {
     render(<NumberOfTestCasesInput value="0" setValue={setValue} updateConfig={updateConfig} />);
 
@@ -336,5 +550,18 @@ describe('NumberOfTestCasesInput', () => {
     expect(numTestsInput).toHaveAttribute('aria-invalid', 'false');
 
     expect(screen.getByText(RUNOPTIONS_TEXT.numberOfTests.helper)).toBeInTheDocument();
+  });
+
+  it('should not display helper text when RUNOPTIONS_TEXT.missingProperty is accessed', () => {
+    const originalRunOptionsText = { ...RUNOPTIONS_TEXT };
+    // @ts-ignore - Intentionally testing access to a non-existent property
+    RUNOPTIONS_TEXT.missingProperty = { helper: undefined, error: undefined };
+
+    render(<NumberOfTestCasesInput value="3" setValue={setValue} updateConfig={updateConfig} />);
+
+    expect(screen.queryByText('undefined')).toBeNull();
+
+    // @ts-ignore - Restoring the original object
+    RUNOPTIONS_TEXT.missingProperty = originalRunOptionsText.missingProperty;
   });
 });

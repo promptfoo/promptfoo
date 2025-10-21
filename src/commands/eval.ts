@@ -10,7 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -21,19 +21,19 @@ import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
-import { promptfooCommand } from '../util/promptfooCommand';
 import { checkCloudPermissions } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
+import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
+import { promptfooCommand } from '../util/promptfooCommand';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
-import { getErrorResultIds, deleteErrorResults, recalculatePromptMetrics } from './retry';
+import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
 
@@ -45,6 +45,7 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types/index';
+import { EMAIL_OK_STATUS } from '../types/email';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -389,8 +390,14 @@ export async function doEval(
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
-      await promptForEmailUnverified();
-      await checkEmailStatusOrExit();
+      // Prompt for email until we get a valid one
+      // Other status problems apart from bad emails (like 'exceeded_limit') just log and exit
+      let hasValidEmail = false;
+      while (!hasValidEmail) {
+        const { emailNeedsValidation } = await promptForEmailUnverified();
+        const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+        hasValidEmail = res === EMAIL_OK_STATUS;
+      }
     }
 
     if (!resumeEval) {
@@ -538,7 +545,9 @@ export async function doEval(
 
     const shareableUrl =
       wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
-
+    if (shareableUrl) {
+      evalRecord.shared = true;
+    }
     let successes = 0;
     let failures = 0;
     let errors = 0;

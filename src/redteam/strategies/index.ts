@@ -12,6 +12,7 @@ import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
+import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
@@ -72,7 +73,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'basic',
-    action: async (testCases: TestCase[], injectVar: string, config?: Record<string, any>) => {
+    action: async (_testCases: TestCase[], _injectVar: string, _config?: Record<string, any>) => {
       // Basic strategy doesn't modify test cases, it just controls whether they're included
       // The actual filtering happens in synthesize()
       return [];
@@ -129,6 +130,19 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'authoritative-markup-injection',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Authoritative Markup Injection to ${testCases.length} test cases`);
+      const newTestCases = await addAuthoritativeMarkupInjectionTestCases(
+        testCases,
+        injectVar,
+        config,
+      );
+      logger.debug(`Added ${newTestCases.length} Authoritative Markup Injection test cases`);
       return newTestCases;
     },
   },

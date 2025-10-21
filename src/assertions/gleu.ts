@@ -150,8 +150,6 @@ export function handleGleuScore({
   inverse,
   outputString,
   renderedValue,
-  provider,
-  test,
 }: AssertionParams): GradingResult {
   // Validate inputs
   invariant(

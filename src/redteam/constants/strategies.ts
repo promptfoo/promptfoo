@@ -49,6 +49,7 @@ export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 export const ADDITIONAL_STRATEGIES = [
   'layer',
   'audio',
+  'authoritative-markup-injection',
   'base64',
   'best-of-n',
   'camelcase',
@@ -135,4 +136,28 @@ export const ENCODING_STRATEGIES = new Set([
  */
 export function isEncodingStrategy(strategyId: string | undefined): boolean {
   return strategyId ? ENCODING_STRATEGIES.has(strategyId) : false;
+}
+
+/**
+ * Default 'n' fan out for strategies that can add additional test cases during generation
+ */
+const DEFAULT_N_FAN_OUT_BY_STRATEGY = {
+  'jailbreak:composite': 5,
+  gcg: 1,
+} as const;
+
+for (const strategyId in DEFAULT_N_FAN_OUT_BY_STRATEGY) {
+  if (!ALL_STRATEGIES.includes(strategyId as Strategy)) {
+    throw new Error(`Default fan out strategy ${strategyId} is not in ALL_STRATEGIES`);
+  }
+}
+
+type FanOutStrategy = keyof typeof DEFAULT_N_FAN_OUT_BY_STRATEGY;
+
+export function getDefaultNFanout(strategyId: FanOutStrategy): number {
+  return DEFAULT_N_FAN_OUT_BY_STRATEGY[strategyId] ?? 1;
+}
+
+export function isFanoutStrategy(strategyId: string): strategyId is FanOutStrategy {
+  return strategyId in DEFAULT_N_FAN_OUT_BY_STRATEGY;
 }

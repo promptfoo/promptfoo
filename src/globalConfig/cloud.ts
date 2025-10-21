@@ -1,4 +1,3 @@
-import chalk from 'chalk';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
@@ -143,12 +142,6 @@ export class CloudConfig {
       this.setApiKey(token);
       this.setApiHost(apiHost);
       this.setAppUrl(app.url);
-
-      logger.info(chalk.green.bold('Successfully logged in'));
-      logger.info(chalk.dim('Logged in as:'));
-      logger.info(`User: ${chalk.cyan(user.email)}`);
-      logger.info(`Organization: ${chalk.cyan(organization.name)}`);
-      logger.info(`Access the app at ${chalk.cyan(app.url)}`);
 
       return {
         user,

@@ -7,7 +7,7 @@ import path from 'path';
 import httpZ from 'http-z';
 import { Agent } from 'undici';
 import { z } from 'zod';
-import { type FetchWithCacheResult, fetchWithCache } from '../cache';
+import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -22,6 +22,11 @@ import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { fetchWithRetries, processStreamingResponse, type StreamingMetrics } from '../util/fetch';
+import {
+  createTransformRequest,
+  createTransformResponse,
+  type TransformResponseContext,
+} from './httpTransforms';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -36,7 +41,7 @@ import type {
  * Escapes string values in variables for safe JSON template substitution.
  * Converts { key: "value\nwith\nnewlines" } to { key: "value\\nwith\\nnewlines" }
  */
-function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
+export function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
   return Object.fromEntries(
     Object.entries(vars).map(([key, value]) => [
       key,
@@ -800,6 +805,46 @@ interface SessionParserData {
   body?: Record<string, any> | string | null;
 }
 
+/**
+ * Loads a module from a file:// reference if needed
+ * This function should be called before passing transforms to createTransformResponse/createTransformRequest
+ *
+ * @param transform - The transform config (string or function)
+ * @returns The loaded function, or the original value if not a file:// reference
+ */
+export async function loadTransformModule(
+  transform: string | Function | undefined,
+): Promise<string | Function | undefined> {
+  if (!transform) {
+    return transform;
+  }
+  if (typeof transform === 'function') {
+    return transform;
+  }
+  if (typeof transform === 'string' && transform.startsWith('file://')) {
+    let filename = transform.slice('file://'.length);
+    let functionName: string | undefined;
+    if (filename.includes(':')) {
+      const splits = filename.split(':');
+      if (splits[0] && isJavascriptFile(splits[0])) {
+        [filename, functionName] = splits;
+      }
+    }
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
+    if (typeof requiredModule === 'function') {
+      return requiredModule;
+    }
+    throw new Error(
+      `Transform module malformed: ${filename} must export a function or have a default export as a function`,
+    );
+  }
+  // For string expressions, return as-is
+  return transform;
+}
+
 export async function createSessionParser(
   parser: string | Function | undefined,
 ): Promise<(data: SessionParserData) => string> {
@@ -833,91 +878,6 @@ export async function createSessionParser(
       const trimmedParser = parser.trim();
 
       return new Function('data', `return (${trimmedParser});`)(data);
-    };
-  }
-  throw new Error(
-    `Unsupported response transform type: ${typeof parser}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
-  );
-}
-
-interface TransformResponseContext {
-  response: FetchWithCacheResult<any>;
-}
-
-export async function createTransformResponse(
-  parser: string | Function | undefined,
-): Promise<(data: any, text: string, context?: TransformResponseContext) => ProviderResponse> {
-  if (!parser) {
-    return (data, text) => ({ output: data || text });
-  }
-
-  if (typeof parser === 'function') {
-    return (data, text, context) => {
-      try {
-        const result = parser(data, text, context);
-        if (typeof result === 'object') {
-          return result;
-        } else {
-          return { output: result };
-        }
-      } catch (err) {
-        logger.error(
-          `[Http Provider] Error in response transform function: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
-        );
-        throw err;
-      }
-    };
-  }
-  if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = parser.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return requiredModule;
-    }
-    throw new Error(
-      `Response transform malformed: ${filename} must export a function or have a default export as a function`,
-    );
-  } else if (typeof parser === 'string') {
-    return (data, text, context) => {
-      try {
-        const trimmedParser = parser.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
-        const transformFn = new Function(
-          'json',
-          'text',
-          'context',
-          isFunctionExpression
-            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
-            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
-        );
-        let resp: ProviderResponse | string;
-        if (context) {
-          resp = transformFn(data || null, text, context);
-        } else {
-          resp = transformFn(data || null, text);
-        }
-
-        if (typeof resp === 'string') {
-          return { output: resp };
-        }
-        return resp;
-      } catch (err) {
-        logger.error(
-          `[Http Provider] Error in response transform: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
-        );
-        throw new Error(`Failed to transform response: ${String(err)}`);
-      }
     };
   }
   throw new Error(
@@ -1055,104 +1015,40 @@ function parseRawRequest(input: string) {
   }
 }
 
-export async function createTransformRequest(
-  transform: string | Function | undefined,
-): Promise<(prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any> {
-  if (!transform) {
-    return (prompt) => prompt;
-  }
-
-  if (typeof transform === 'function') {
-    return async (prompt, vars, context) => {
-      try {
-        // Pass prompt, vars, and context to user-provided function (extra args are safe)
-        return await (transform as any)(prompt, vars, context);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
-        logger.error(wrappedError.message);
-        throw wrappedError;
-      }
-    };
-  }
-
-  if (typeof transform === 'string') {
-    if (transform.startsWith('file://')) {
-      let filename = transform.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
-      }
-      const requiredModule = await importModule(
-        path.resolve(cliState.basePath || '', filename),
-        functionName,
-      );
-      if (typeof requiredModule === 'function') {
-        return async (prompt, vars, context) => {
-          try {
-            return await requiredModule(prompt, vars, context);
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            const wrappedError = new Error(
-              `Error in request transform function from ${filename}: ${errorMessage}`,
-            );
-            logger.error(wrappedError.message);
-            throw wrappedError;
-          }
-        };
-      }
-      throw new Error(
-        `Request transform malformed: ${filename} must export a function or have a default export as a function`,
-      );
-    }
-    // Handle string template
-    return async (prompt, vars, context) => {
-      try {
-        const rendered = getNunjucksEngine().renderString(transform, { prompt, vars, context });
-        return await new Function('prompt', 'vars', 'context', `${rendered}`)(
-          prompt,
-          vars,
-          context,
-        );
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const wrappedError = new Error(
-          `Error in request transform string template: ${errorMessage}`,
-        );
-        logger.error(wrappedError.message);
-        throw wrappedError;
-      }
-    };
-  }
-
-  throw new Error(
-    `Unsupported request transform type: ${typeof transform}. Expected a function, a string starting with 'file://' pointing to a JavaScript file, or a string containing a JavaScript expression.`,
-  );
-}
-
 export function determineRequestBody(
   contentType: boolean,
   parsedPrompt: any,
   configBody: Record<string, any> | any[] | string | undefined,
   vars: Record<string, any>,
 ): Record<string, any> | any[] | string {
+  // Parse stringified JSON body if needed (handles legacy data saved as strings)
+  let actualConfigBody = configBody;
+  if (typeof configBody === 'string' && contentType) {
+    try {
+      actualConfigBody = JSON.parse(configBody);
+      logger.debug('[HTTP Provider] Parsed stringified config body to object');
+    } catch (err) {
+      // If parsing fails, it's probably a template string or non-JSON content, leave as-is
+      logger.debug(
+        `[HTTP Provider] Config body is a string that couldn't be parsed as JSON, treating as template: ${String(err)}`,
+      );
+    }
+  }
+
   if (contentType) {
     // For JSON content type
     if (typeof parsedPrompt === 'object' && parsedPrompt !== null) {
       // If parser returned an object, merge it with config body
-      return Object.assign({}, configBody || {}, parsedPrompt);
+      return Object.assign({}, actualConfigBody || {}, parsedPrompt);
     }
     // Otherwise process the config body with parsed prompt
-    return processJsonBody(configBody as Record<string, any> | any[], {
+    return processJsonBody(actualConfigBody as Record<string, any> | any[], {
       ...vars,
       prompt: parsedPrompt,
     });
   }
   // For non-JSON content type, process as text
-  return processTextBody(configBody as string, {
+  return processTextBody(actualConfigBody as string, {
     ...vars,
     prompt: parsedPrompt,
   });
@@ -1162,7 +1058,7 @@ export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
 ): Promise<(status: number) => boolean> {
   if (!validator) {
-    return (status: number) => true;
+    return (_status: number) => true;
   }
 
   if (typeof validator === 'function') {
@@ -1416,11 +1312,16 @@ export class HttpProvider implements ApiProvider {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
     this.url = this.config.url || url;
-    this.transformResponse = createTransformResponse(
+
+    // Pre-load any file:// references before passing to transform functions
+    // This ensures httpTransforms.ts doesn't need to import from ../esm
+    this.transformResponse = loadTransformModule(
       this.config.transformResponse || this.config.responseParser,
-    );
+    ).then(createTransformResponse);
     this.sessionParser = createSessionParser(this.config.sessionParser);
-    this.transformRequest = createTransformRequest(this.config.transformRequest);
+    this.transformRequest = loadTransformModule(this.config.transformRequest).then(
+      createTransformRequest,
+    );
     this.validateStatus = createValidateStatus(this.config.validateStatus);
 
     // Initialize HTTPS agent if TLS configuration is provided
@@ -1807,6 +1708,9 @@ export class HttpProvider implements ApiProvider {
         status: response.status,
         statusText: response.statusText,
         headers: sanitizeObject(response.headers, { context: 'response headers' }),
+        ...(context?.debug && {
+          requestHeaders: sanitizeObject(headers, { context: 'request headers' }),
+        }),
       },
     };
     if (context?.debug) {
@@ -1866,10 +1770,14 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
-    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, {
+    // JSON-escape all string variables for safe substitution in raw request body
+    // This prevents control characters and quotes from breaking JSON strings
+    const escapedVars = escapeJsonVariables({
       ...vars,
       prompt: transformedPrompt,
     });
+
+    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
@@ -1937,6 +1845,12 @@ export class HttpProvider implements ApiProvider {
           ? transformedPrompt
           : parsedRequest.body?.text || renderedRequest.trim(),
         finalRequestBody: parsedRequest.body?.text,
+        http: {
+          status: response.status,
+          statusText: response.statusText,
+          headers: sanitizeObject(response.headers, { context: 'response headers' }),
+          requestHeaders: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
+        },
       };
     }
 
