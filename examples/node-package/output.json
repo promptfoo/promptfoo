@@ -1,1337 +1,385 @@
 {
-  "version": 2,
-  "timestamp": "2024-06-05T21:10:32.315Z",
-  "results": [
-    {
-      "provider": {
-        "id": "My custom function"
-      },
-      "prompt": {
-        "raw": "Write a haiku about: Hello world",
+  "_resultsLoaded": false,
+  "createdAt": 1758065695513,
+  "id": "eval-IF3-2025-09-16T23:34:55",
+  "config": {
+    "prompts": [
+      {
+        "raw": "Write a haiku about: {{body}}",
         "label": "Write a haiku about: {{body}}"
       },
-      "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "<LLM output>"
-      },
-      "success": true,
-      "score": 1,
-      "namedScores": {},
-      "latencyMs": 1,
-      "gradingResult": {
-        "pass": true,
-        "score": 1,
-        "reason": "No assertions",
-        "tokensUsed": {
-          "total": 0,
-          "prompt": 0,
-          "completion": 0
-        },
-        "assertion": null
-      }
-    },
-    {
-      "provider": {
-        "id": "My custom function"
-      },
-      "prompt": {
-        "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are speaking to a time traveler. Begin your conversation.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Hello world\"\n  }\n]",
+      {
+        "raw": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
         "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]"
       },
-      "vars": {
-        "body": "Hello world"
+      {
+        "raw": "Write 3 words about {{body}}",
+        "label": "prompt.txt: Write 3 words about {{body}}"
       },
-      "response": {
-        "output": "<LLM output>"
+      {
+        "raw": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }",
+        "label": ""
+      }
+    ],
+    "providers": ["openai:gpt-4.1-mini", null],
+    "tests": [
+      {
+        "vars": {
+          "body": "Hello world"
+        }
       },
-      "success": true,
-      "score": 1,
-      "namedScores": {},
-      "latencyMs": 1,
-      "gradingResult": {
-        "pass": true,
+      {
+        "vars": {
+          "body": "I'm hungry"
+        },
+        "assert": [
+          {
+            "type": "javascript"
+          }
+        ]
+      }
+    ],
+    "writeLatestResults": true
+  },
+  "results": [],
+  "prompts": [
+    {
+      "raw": "Write a haiku about: {{body}}",
+      "label": "Write a haiku about: {{body}}",
+      "id": "64a38a678decacb9c6c12748f049b7558eaf709be7fe34f2b7120605754a02e6",
+      "provider": "openai:gpt-4.1-mini",
+      "metrics": {
         "score": 1,
-        "reason": "No assertions",
-        "tokensUsed": {
-          "total": 0,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 40,
+        "tokenUsage": {
           "prompt": 0,
-          "completion": 0
+          "completion": 0,
+          "cached": 68,
+          "total": 68,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
         },
-        "assertion": null
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0.00007280000000000001
       }
     },
     {
-      "provider": {
-        "id": "My custom function"
-      },
-      "prompt": {
-        "raw": "Write 3 words about Hello world",
-        "label": "Write 3 words about {{body}}"
-      },
-      "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "<LLM output>"
-      },
-      "success": true,
-      "score": 1,
-      "namedScores": {},
-      "latencyMs": 0,
-      "gradingResult": {
-        "pass": true,
+      "raw": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+      "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+      "id": "13fa8ee48f9101367ab54fddbb72cc53eabc1aeacc250503e0023c99635059c7",
+      "provider": "openai:gpt-4.1-mini",
+      "metrics": {
         "score": 1,
-        "reason": "No assertions",
-        "tokensUsed": {
-          "total": 0,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 74,
+        "tokenUsage": {
           "prompt": 0,
-          "completion": 0
+          "completion": 0,
+          "cached": 91,
+          "total": 91,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
         },
-        "assertion": null
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0.00008560000000000001
       }
     },
     {
-      "provider": {
-        "id": "openai:gpt-3.5-turbo"
-      },
-      "prompt": {
-        "raw": "Write a haiku about: Hello world",
-        "label": "Write a haiku about: {{body}}"
-      },
-      "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "Hello world, so vast\nEndless possibilities\nLet's explore and learn",
-        "tokenUsage": {
-          "cached": 30,
-          "total": 30
-        },
-        "cached": true,
-        "cost": 0.00003
-      },
-      "success": true,
-      "score": 1,
-      "namedScores": {},
-      "latencyMs": 21,
-      "cost": 0.00003,
-      "gradingResult": {
-        "pass": true,
+      "raw": "Write 3 words about {{body}}",
+      "label": "prompt.txt: Write 3 words about {{body}}",
+      "id": "16946aa0e5135cee46b889df493c8c8c6033b45b679c47143e94e39ee1854e26",
+      "provider": "openai:gpt-4.1-mini",
+      "metrics": {
         "score": 1,
-        "reason": "No assertions",
-        "tokensUsed": {
-          "total": 0,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 55,
+        "tokenUsage": {
           "prompt": 0,
-          "completion": 0
+          "completion": 0,
+          "cached": 37,
+          "total": 37,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
         },
-        "assertion": null
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0.000025600000000000002
       }
     },
     {
-      "provider": {
-        "id": "My custom function"
-      },
-      "prompt": {
-        "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You have encountered a alien in a sci-fi setting. Engage with the character using the knowledge typical for that genre.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Hello world\"\n  }\n]",
-        "label": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }"
-      },
-      "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "<LLM output>"
-      },
-      "success": true,
-      "score": 1,
-      "namedScores": {},
-      "latencyMs": 0,
-      "gradingResult": {
-        "pass": true,
+      "raw": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }",
+      "label": "",
+      "id": "cffda0450e7d3fc46ddfe961b52b57210717fab072e65d6814015e756ad56b4f",
+      "provider": "openai:gpt-4.1-mini",
+      "metrics": {
         "score": 1,
-        "reason": "No assertions",
-        "tokensUsed": {
-          "total": 0,
-          "prompt": 0,
-          "completion": 0
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 2207,
+        "tokenUsage": {
+          "prompt": 35,
+          "completion": 22,
+          "cached": 116,
+          "total": 173,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
         },
-        "assertion": null
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0.00019280000000000002
       }
     },
     {
-      "provider": {
-        "id": "openai:gpt-3.5-turbo"
-      },
-      "prompt": {
-        "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are speaking to a time traveler. Begin your conversation.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Hello world\"\n  }\n]",
-        "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]"
-      },
-      "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "Hello! How can I assist you today?",
-        "tokenUsage": {
-          "cached": 34,
-          "total": 34
-        },
-        "cached": true,
-        "cost": 0.000026
-      },
-      "success": true,
-      "score": 1,
-      "namedScores": {},
-      "latencyMs": 22,
-      "cost": 0.000026,
-      "gradingResult": {
-        "pass": true,
+      "raw": "Write a haiku about: {{body}}",
+      "label": "Write a haiku about: {{body}}",
+      "id": "64a38a678decacb9c6c12748f049b7558eaf709be7fe34f2b7120605754a02e6",
+      "provider": "My custom function",
+      "metrics": {
         "score": 1,
-        "reason": "No assertions",
-        "tokensUsed": {
-          "total": 0,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 0,
+        "tokenUsage": {
           "prompt": 0,
-          "completion": 0
-        },
-        "assertion": null
-      }
-    },
-    {
-      "provider": {
-        "id": "My custom function"
-      },
-      "prompt": {
-        "raw": "Write a haiku about: I'm hungry",
-        "label": "Write a haiku about: {{body}}"
-      },
-      "vars": {
-        "body": "I'm hungry"
-      },
-      "response": {
-        "output": "<LLM output>"
-      },
-      "success": false,
-      "score": 0,
-      "namedScores": {},
-      "latencyMs": 0,
-      "error": "Output did not contain substring",
-      "gradingResult": {
-        "pass": false,
-        "score": 0,
-        "reason": "Output did not contain substring",
-        "namedScores": {},
-        "tokensUsed": {
+          "completion": 0,
+          "cached": 0,
           "total": 0,
-          "prompt": 0,
-          "completion": 0
-        },
-        "componentResults": [
-          {
-            "pass": false,
-            "score": 0,
-            "reason": "Output did not contain substring",
-            "assertion": {
-              "type": "javascript",
-              "value": "(output) => {\n          // Logic for checking LLM ..."
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
             }
           }
-        ],
-        "assertion": null
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0
       }
     },
     {
-      "provider": {
-        "id": "openai:gpt-3.5-turbo"
-      },
-      "prompt": {
-        "raw": "Write 3 words about Hello world",
-        "label": "Write 3 words about {{body}}"
-      },
-      "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "Simple, universal, classic",
-        "tokenUsage": {
-          "cached": 19,
-          "total": 19
-        },
-        "cached": true,
-        "cost": 0.0000145
-      },
-      "success": true,
-      "score": 1,
-      "namedScores": {},
-      "latencyMs": 22,
-      "cost": 0.0000145,
-      "gradingResult": {
-        "pass": true,
+      "raw": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+      "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+      "id": "13fa8ee48f9101367ab54fddbb72cc53eabc1aeacc250503e0023c99635059c7",
+      "provider": "My custom function",
+      "metrics": {
         "score": 1,
-        "reason": "No assertions",
-        "tokensUsed": {
-          "total": 0,
-          "prompt": 0,
-          "completion": 0
-        },
-        "assertion": null
-      }
-    },
-    {
-      "provider": {
-        "id": "My custom function"
-      },
-      "prompt": {
-        "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are speaking to a time traveler. Begin your conversation.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"I'm hungry\"\n  }\n]",
-        "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]"
-      },
-      "vars": {
-        "body": "I'm hungry"
-      },
-      "response": {
-        "output": "<LLM output>"
-      },
-      "success": false,
-      "score": 0,
-      "namedScores": {},
-      "latencyMs": 1,
-      "error": "Output did not contain substring",
-      "gradingResult": {
-        "pass": false,
-        "score": 0,
-        "reason": "Output did not contain substring",
-        "namedScores": {},
-        "tokensUsed": {
-          "total": 0,
-          "prompt": 0,
-          "completion": 0
-        },
-        "componentResults": [
-          {
-            "pass": false,
-            "score": 0,
-            "reason": "Output did not contain substring",
-            "assertion": {
-              "type": "javascript",
-              "value": "(output) => {\n          // Logic for checking LLM ..."
-            }
-          }
-        ],
-        "assertion": null
-      }
-    },
-    {
-      "provider": {
-        "id": "openai:gpt-3.5-turbo"
-      },
-      "prompt": {
-        "raw": "Write a haiku about: I'm hungry",
-        "label": "Write a haiku about: {{body}}"
-      },
-      "vars": {
-        "body": "I'm hungry"
-      },
-      "response": {
-        "output": "Stomach growls loudly\nCraving food to satisfy\nHunger pangs persist",
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 0,
         "tokenUsage": {
-          "cached": 34,
-          "total": 34
-        },
-        "cached": true,
-        "cost": 0.000035
-      },
-      "success": false,
-      "score": 0,
-      "namedScores": {},
-      "latencyMs": 2,
-      "cost": 0.000035,
-      "error": "Output did not contain substring",
-      "gradingResult": {
-        "pass": false,
-        "score": 0,
-        "reason": "Output did not contain substring",
-        "namedScores": {},
-        "tokensUsed": {
-          "total": 0,
           "prompt": 0,
-          "completion": 0
-        },
-        "componentResults": [
-          {
-            "pass": false,
-            "score": 0,
-            "reason": "Output did not contain substring",
-            "assertion": {
-              "type": "javascript",
-              "value": "(output) => {\n          // Logic for checking LLM ..."
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
             }
           }
-        ],
-        "assertion": null
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0
       }
     },
     {
-      "provider": {
-        "id": "My custom function"
-      },
-      "prompt": {
-        "raw": "Write 3 words about I'm hungry",
-        "label": "Write 3 words about {{body}}"
-      },
-      "vars": {
-        "body": "I'm hungry"
-      },
-      "response": {
-        "output": "<LLM output>"
-      },
-      "success": false,
-      "score": 0,
-      "namedScores": {},
-      "latencyMs": 0,
-      "error": "Output did not contain substring",
-      "gradingResult": {
-        "pass": false,
-        "score": 0,
-        "reason": "Output did not contain substring",
-        "namedScores": {},
-        "tokensUsed": {
-          "total": 0,
-          "prompt": 0,
-          "completion": 0
-        },
-        "componentResults": [
-          {
-            "pass": false,
-            "score": 0,
-            "reason": "Output did not contain substring",
-            "assertion": {
-              "type": "javascript",
-              "value": "(output) => {\n          // Logic for checking LLM ..."
-            }
-          }
-        ],
-        "assertion": null
-      }
-    },
-    {
-      "provider": {
-        "id": "openai:gpt-3.5-turbo"
-      },
-      "prompt": {
-        "raw": "Write 3 words about I'm hungry",
-        "label": "Write 3 words about {{body}}"
-      },
-      "vars": {
-        "body": "I'm hungry"
-      },
-      "response": {
-        "output": "Feed me now.",
-        "tokenUsage": {
-          "cached": 19,
-          "total": 19
-        },
-        "cached": true,
-        "cost": 0.0000135
-      },
-      "success": false,
-      "score": 0,
-      "namedScores": {},
-      "latencyMs": 1,
-      "cost": 0.0000135,
-      "error": "Output did not contain substring",
-      "gradingResult": {
-        "pass": false,
-        "score": 0,
-        "reason": "Output did not contain substring",
-        "namedScores": {},
-        "tokensUsed": {
-          "total": 0,
-          "prompt": 0,
-          "completion": 0
-        },
-        "componentResults": [
-          {
-            "pass": false,
-            "score": 0,
-            "reason": "Output did not contain substring",
-            "assertion": {
-              "type": "javascript",
-              "value": "(output) => {\n          // Logic for checking LLM ..."
-            }
-          }
-        ],
-        "assertion": null
-      }
-    },
-    {
-      "provider": {
-        "id": "My custom function"
-      },
-      "prompt": {
-        "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You have encountered a detective in a mystery setting. Engage with the character using the knowledge typical for that genre.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"I'm hungry\"\n  }\n]",
-        "label": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }"
-      },
-      "vars": {
-        "body": "I'm hungry"
-      },
-      "response": {
-        "output": "<LLM output>"
-      },
-      "success": false,
-      "score": 0,
-      "namedScores": {},
-      "latencyMs": 0,
-      "error": "Output did not contain substring",
-      "gradingResult": {
-        "pass": false,
-        "score": 0,
-        "reason": "Output did not contain substring",
-        "namedScores": {},
-        "tokensUsed": {
-          "total": 0,
-          "prompt": 0,
-          "completion": 0
-        },
-        "componentResults": [
-          {
-            "pass": false,
-            "score": 0,
-            "reason": "Output did not contain substring",
-            "assertion": {
-              "type": "javascript",
-              "value": "(output) => {\n          // Logic for checking LLM ..."
-            }
-          }
-        ],
-        "assertion": null
-      }
-    },
-    {
-      "provider": {
-        "id": "openai:gpt-3.5-turbo"
-      },
-      "prompt": {
-        "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are speaking to a time traveler. Begin your conversation.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"I'm hungry\"\n  }\n]",
-        "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]"
-      },
-      "vars": {
-        "body": "I'm hungry"
-      },
-      "response": {
-        "output": "Hello! I understand your hunger. If you could travel to any time and place to satisfy your hunger, where and when would you go?",
-        "tokenUsage": {
-          "cached": 54,
-          "total": 54
-        },
-        "cached": true,
-        "cost": 0.000055
-      },
-      "success": false,
-      "score": 0,
-      "namedScores": {},
-      "latencyMs": 2,
-      "cost": 0.000055,
-      "error": "Output did not contain substring",
-      "gradingResult": {
-        "pass": false,
-        "score": 0,
-        "reason": "Output did not contain substring",
-        "namedScores": {},
-        "tokensUsed": {
-          "total": 0,
-          "prompt": 0,
-          "completion": 0
-        },
-        "componentResults": [
-          {
-            "pass": false,
-            "score": 0,
-            "reason": "Output did not contain substring",
-            "assertion": {
-              "type": "javascript",
-              "value": "(output) => {\n          // Logic for checking LLM ..."
-            }
-          }
-        ],
-        "assertion": null
-      }
-    },
-    {
-      "provider": {
-        "id": "openai:gpt-3.5-turbo"
-      },
-      "prompt": {
-        "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You have encountered a wizard in a fantasy setting. Engage with the character using the knowledge typical for that genre.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Hello world\"\n  }\n]",
-        "label": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }"
-      },
-      "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "Greetings, traveler. I am Merlin the Wizard. What brings you to my realm?",
-        "tokenUsage": {
-          "total": 54,
-          "prompt": 36,
-          "completion": 18
-        },
-        "cached": false,
-        "cost": 0.000044999999999999996
-      },
-      "success": true,
-      "score": 1,
-      "namedScores": {},
-      "latencyMs": 689,
-      "cost": 0.000044999999999999996,
-      "gradingResult": {
-        "pass": true,
+      "raw": "Write 3 words about {{body}}",
+      "label": "prompt.txt: Write 3 words about {{body}}",
+      "id": "16946aa0e5135cee46b889df493c8c8c6033b45b679c47143e94e39ee1854e26",
+      "provider": "My custom function",
+      "metrics": {
         "score": 1,
-        "reason": "No assertions",
-        "tokensUsed": {
-          "total": 0,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 1,
+        "tokenUsage": {
           "prompt": 0,
-          "completion": 0
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
         },
-        "assertion": null
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0
       }
     },
     {
-      "provider": {
-        "id": "openai:gpt-3.5-turbo"
-      },
-      "prompt": {
-        "raw": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You have encountered a alien in a sci-fi setting. Engage with the character using the knowledge typical for that genre.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"I'm hungry\"\n  }\n]",
-        "label": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }"
-      },
-      "vars": {
-        "body": "I'm hungry"
-      },
-      "response": {
-        "output": "Greetings, alien friend! Allow me to offer you some Earthly sustenance. We have a variety of food options available, from fruits and vegetables to meats and grains. What type of cuisine do you typically enjoy on your home planet? Perhaps we can find something similar for you here.",
+      "raw": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }",
+      "label": "",
+      "id": "cffda0450e7d3fc46ddfe961b52b57210717fab072e65d6814015e756ad56b4f",
+      "provider": "My custom function",
+      "metrics": {
+        "score": 1,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 0,
         "tokenUsage": {
-          "total": 95,
-          "prompt": 38,
-          "completion": 57
-        },
-        "cached": false,
-        "cost": 0.0001045
-      },
-      "success": false,
-      "score": 0,
-      "namedScores": {},
-      "latencyMs": 1083,
-      "cost": 0.0001045,
-      "error": "Output did not contain substring",
-      "gradingResult": {
-        "pass": false,
-        "score": 0,
-        "reason": "Output did not contain substring",
-        "namedScores": {},
-        "tokensUsed": {
-          "total": 0,
           "prompt": 0,
-          "completion": 0
-        },
-        "componentResults": [
-          {
-            "pass": false,
-            "score": 0,
-            "reason": "Output did not contain substring",
-            "assertion": {
-              "type": "javascript",
-              "value": "(output) => {\n          // Logic for checking LLM ..."
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
             }
           }
-        ],
-        "assertion": null
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0
       }
     }
   ],
-  "stats": {
-    "successes": 8,
-    "failures": 8,
-    "tokenUsage": {
-      "total": 339,
-      "prompt": 74,
-      "completion": 75,
-      "cached": 190
-    }
-  },
-  "table": {
-    "head": {
-      "prompts": [
-        {
-          "raw": "Write a haiku about: {{body}}",
-          "label": "Write a haiku about: {{body}}",
-          "id": "64a38a678decacb9c6c12748f049b7558eaf709be7fe34f2b7120605754a02e6",
-          "provider": "openai:gpt-3.5-turbo",
-          "metrics": {
-            "score": 1,
-            "testPassCount": 1,
-            "testFailCount": 1,
-            "assertPassCount": 0,
-            "assertFailCount": 1,
-            "totalLatencyMs": 23,
-            "tokenUsage": {
-              "total": 64,
-              "prompt": 0,
-              "completion": 0,
-              "cached": 64
-            },
-            "namedScores": {},
-            "cost": 0.000065
-          }
-        },
-        {
-          "raw": "Write a haiku about: {{body}}",
-          "label": "Write a haiku about: {{body}}",
-          "id": "64a38a678decacb9c6c12748f049b7558eaf709be7fe34f2b7120605754a02e6",
-          "provider": "My custom function",
-          "metrics": {
-            "score": 1,
-            "testPassCount": 1,
-            "testFailCount": 1,
-            "assertPassCount": 0,
-            "assertFailCount": 1,
-            "totalLatencyMs": 1,
-            "tokenUsage": {
-              "total": 0,
-              "prompt": 0,
-              "completion": 0,
-              "cached": 0
-            },
-            "namedScores": {},
-            "cost": 0
-          }
-        },
-        {
-          "raw": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
-          "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
-          "id": "13fa8ee48f9101367ab54fddbb72cc53eabc1aeacc250503e0023c99635059c7",
-          "provider": "openai:gpt-3.5-turbo",
-          "metrics": {
-            "score": 1,
-            "testPassCount": 1,
-            "testFailCount": 1,
-            "assertPassCount": 0,
-            "assertFailCount": 1,
-            "totalLatencyMs": 24,
-            "tokenUsage": {
-              "total": 88,
-              "prompt": 0,
-              "completion": 0,
-              "cached": 88
-            },
-            "namedScores": {},
-            "cost": 0.000081
-          }
-        },
-        {
-          "raw": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
-          "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
-          "id": "13fa8ee48f9101367ab54fddbb72cc53eabc1aeacc250503e0023c99635059c7",
-          "provider": "My custom function",
-          "metrics": {
-            "score": 1,
-            "testPassCount": 1,
-            "testFailCount": 1,
-            "assertPassCount": 0,
-            "assertFailCount": 1,
-            "totalLatencyMs": 2,
-            "tokenUsage": {
-              "total": 0,
-              "prompt": 0,
-              "completion": 0,
-              "cached": 0
-            },
-            "namedScores": {},
-            "cost": 0
-          }
-        },
-        {
-          "raw": "Write 3 words about {{body}}",
-          "label": "Write 3 words about {{body}}",
-          "id": "65011eff2bf9e6920ca9965d1bedff5e01447c95b2634a916029c05696dc50b1",
-          "provider": "openai:gpt-3.5-turbo",
-          "metrics": {
-            "score": 1,
-            "testPassCount": 1,
-            "testFailCount": 1,
-            "assertPassCount": 0,
-            "assertFailCount": 1,
-            "totalLatencyMs": 23,
-            "tokenUsage": {
-              "total": 38,
-              "prompt": 0,
-              "completion": 0,
-              "cached": 38
-            },
-            "namedScores": {},
-            "cost": 0.000028
-          }
-        },
-        {
-          "raw": "Write 3 words about {{body}}",
-          "label": "Write 3 words about {{body}}",
-          "id": "65011eff2bf9e6920ca9965d1bedff5e01447c95b2634a916029c05696dc50b1",
-          "provider": "My custom function",
-          "metrics": {
-            "score": 1,
-            "testPassCount": 1,
-            "testFailCount": 1,
-            "assertPassCount": 0,
-            "assertFailCount": 1,
-            "totalLatencyMs": 0,
-            "tokenUsage": {
-              "total": 0,
-              "prompt": 0,
-              "completion": 0,
-              "cached": 0
-            },
-            "namedScores": {},
-            "cost": 0
-          }
-        },
-        {
-          "raw": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }",
-          "label": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }",
-          "id": "cffda0450e7d3fc46ddfe961b52b57210717fab072e65d6814015e756ad56b4f",
-          "provider": "openai:gpt-3.5-turbo",
-          "metrics": {
-            "score": 1,
-            "testPassCount": 1,
-            "testFailCount": 1,
-            "assertPassCount": 0,
-            "assertFailCount": 1,
-            "totalLatencyMs": 1772,
-            "tokenUsage": {
-              "total": 149,
-              "prompt": 74,
-              "completion": 75,
-              "cached": 0
-            },
-            "namedScores": {},
-            "cost": 0.0001495
-          }
-        },
-        {
-          "raw": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }",
-          "label": "(vars) => {\n    const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];\n    const characters = {\n      fantasy: 'wizard',\n      'sci-fi': 'alien',\n      mystery: 'detective',\n      horror: 'ghost',\n    };\n    const genre = genres[Math.floor(Math.random() * genres.length)];\n    const character = characters[genre];\n    return [\n      {\n        role: 'system',\n        content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,\n      },\n      {\n        role: 'user',\n        content: '{{body}}',\n      },\n    ];\n  }",
-          "id": "cffda0450e7d3fc46ddfe961b52b57210717fab072e65d6814015e756ad56b4f",
-          "provider": "My custom function",
-          "metrics": {
-            "score": 1,
-            "testPassCount": 1,
-            "testFailCount": 1,
-            "assertPassCount": 0,
-            "assertFailCount": 1,
-            "totalLatencyMs": 0,
-            "tokenUsage": {
-              "total": 0,
-              "prompt": 0,
-              "completion": 0,
-              "cached": 0
-            },
-            "namedScores": {},
-            "cost": 0
-          }
-        }
-      ],
-      "vars": ["body"]
-    },
-    "body": [
-      {
-        "outputs": [
-          {
-            "pass": true,
-            "score": 1,
-            "namedScores": {},
-            "text": "Hello world, so vast\nEndless possibilities\nLet's explore and learn",
-            "prompt": "Write a haiku about: Hello world",
-            "provider": "openai:gpt-3.5-turbo",
-            "latencyMs": 21,
-            "tokenUsage": {
-              "cached": 30,
-              "total": 30
-            },
-            "gradingResult": {
-              "pass": true,
-              "score": 1,
-              "reason": "No assertions",
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "assertion": null
-            },
-            "cost": 0.00003
-          },
-          {
-            "pass": true,
-            "score": 1,
-            "namedScores": {},
-            "text": "<LLM output>",
-            "prompt": "Write a haiku about: Hello world",
-            "provider": "My custom function",
-            "latencyMs": 1,
-            "gradingResult": {
-              "pass": true,
-              "score": 1,
-              "reason": "No assertions",
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "assertion": null
-            },
-            "cost": 0
-          },
-          {
-            "pass": true,
-            "score": 1,
-            "namedScores": {},
-            "text": "Hello! How can I assist you today?",
-            "prompt": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are speaking to a time traveler. Begin your conversation.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Hello world\"\n  }\n]",
-            "provider": "openai:gpt-3.5-turbo",
-            "latencyMs": 22,
-            "tokenUsage": {
-              "cached": 34,
-              "total": 34
-            },
-            "gradingResult": {
-              "pass": true,
-              "score": 1,
-              "reason": "No assertions",
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "assertion": null
-            },
-            "cost": 0.000026
-          },
-          {
-            "pass": true,
-            "score": 1,
-            "namedScores": {},
-            "text": "<LLM output>",
-            "prompt": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are speaking to a time traveler. Begin your conversation.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Hello world\"\n  }\n]",
-            "provider": "My custom function",
-            "latencyMs": 1,
-            "gradingResult": {
-              "pass": true,
-              "score": 1,
-              "reason": "No assertions",
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "assertion": null
-            },
-            "cost": 0
-          },
-          {
-            "pass": true,
-            "score": 1,
-            "namedScores": {},
-            "text": "Simple, universal, classic",
-            "prompt": "Write 3 words about Hello world",
-            "provider": "openai:gpt-3.5-turbo",
-            "latencyMs": 22,
-            "tokenUsage": {
-              "cached": 19,
-              "total": 19
-            },
-            "gradingResult": {
-              "pass": true,
-              "score": 1,
-              "reason": "No assertions",
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "assertion": null
-            },
-            "cost": 0.0000145
-          },
-          {
-            "pass": true,
-            "score": 1,
-            "namedScores": {},
-            "text": "<LLM output>",
-            "prompt": "Write 3 words about Hello world",
-            "provider": "My custom function",
-            "latencyMs": 0,
-            "gradingResult": {
-              "pass": true,
-              "score": 1,
-              "reason": "No assertions",
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "assertion": null
-            },
-            "cost": 0
-          },
-          {
-            "pass": true,
-            "score": 1,
-            "namedScores": {},
-            "text": "Greetings, traveler. I am Merlin the Wizard. What brings you to my realm?",
-            "prompt": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You have encountered a wizard in a fantasy setting. Engage with the character using the knowledge typical for that genre.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Hello world\"\n  }\n]",
-            "provider": "openai:gpt-3.5-turbo",
-            "latencyMs": 689,
-            "tokenUsage": {
-              "total": 54,
-              "prompt": 36,
-              "completion": 18
-            },
-            "gradingResult": {
-              "pass": true,
-              "score": 1,
-              "reason": "No assertions",
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "assertion": null
-            },
-            "cost": 0.000044999999999999996
-          },
-          {
-            "pass": true,
-            "score": 1,
-            "namedScores": {},
-            "text": "<LLM output>",
-            "prompt": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You have encountered a alien in a sci-fi setting. Engage with the character using the knowledge typical for that genre.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Hello world\"\n  }\n]",
-            "provider": "My custom function",
-            "latencyMs": 0,
-            "gradingResult": {
-              "pass": true,
-              "score": 1,
-              "reason": "No assertions",
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "assertion": null
-            },
-            "cost": 0
-          }
-        ],
-        "test": {
-          "vars": {
-            "body": "Hello world"
-          },
-          "assert": [],
-          "options": {}
-        },
-        "vars": ["Hello world"]
-      },
-      {
-        "outputs": [
-          {
-            "pass": false,
-            "score": 0,
-            "namedScores": {},
-            "text": "Output did not contain substring\n---\nStomach growls loudly\nCraving food to satisfy\nHunger pangs persist",
-            "prompt": "Write a haiku about: I'm hungry",
-            "provider": "openai:gpt-3.5-turbo",
-            "latencyMs": 2,
-            "tokenUsage": {
-              "cached": 34,
-              "total": 34
-            },
-            "gradingResult": {
-              "pass": false,
-              "score": 0,
-              "reason": "Output did not contain substring",
-              "namedScores": {},
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "componentResults": [
-                {
-                  "pass": false,
-                  "score": 0,
-                  "reason": "Output did not contain substring",
-                  "assertion": {
-                    "type": "javascript",
-                    "value": "(output) => {\n          // Logic for checking LLM ..."
-                  }
-                }
-              ],
-              "assertion": null
-            },
-            "cost": 0.000035
-          },
-          {
-            "pass": false,
-            "score": 0,
-            "namedScores": {},
-            "text": "Output did not contain substring\n---\n<LLM output>",
-            "prompt": "Write a haiku about: I'm hungry",
-            "provider": "My custom function",
-            "latencyMs": 0,
-            "gradingResult": {
-              "pass": false,
-              "score": 0,
-              "reason": "Output did not contain substring",
-              "namedScores": {},
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "componentResults": [
-                {
-                  "pass": false,
-                  "score": 0,
-                  "reason": "Output did not contain substring",
-                  "assertion": {
-                    "type": "javascript",
-                    "value": "(output) => {\n          // Logic for checking LLM ..."
-                  }
-                }
-              ],
-              "assertion": null
-            },
-            "cost": 0
-          },
-          {
-            "pass": false,
-            "score": 0,
-            "namedScores": {},
-            "text": "Output did not contain substring\n---\nHello! I understand your hunger. If you could travel to any time and place to satisfy your hunger, where and when would you go?",
-            "prompt": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are speaking to a time traveler. Begin your conversation.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"I'm hungry\"\n  }\n]",
-            "provider": "openai:gpt-3.5-turbo",
-            "latencyMs": 2,
-            "tokenUsage": {
-              "cached": 54,
-              "total": 54
-            },
-            "gradingResult": {
-              "pass": false,
-              "score": 0,
-              "reason": "Output did not contain substring",
-              "namedScores": {},
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "componentResults": [
-                {
-                  "pass": false,
-                  "score": 0,
-                  "reason": "Output did not contain substring",
-                  "assertion": {
-                    "type": "javascript",
-                    "value": "(output) => {\n          // Logic for checking LLM ..."
-                  }
-                }
-              ],
-              "assertion": null
-            },
-            "cost": 0.000055
-          },
-          {
-            "pass": false,
-            "score": 0,
-            "namedScores": {},
-            "text": "Output did not contain substring\n---\n<LLM output>",
-            "prompt": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You are speaking to a time traveler. Begin your conversation.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"I'm hungry\"\n  }\n]",
-            "provider": "My custom function",
-            "latencyMs": 1,
-            "gradingResult": {
-              "pass": false,
-              "score": 0,
-              "reason": "Output did not contain substring",
-              "namedScores": {},
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "componentResults": [
-                {
-                  "pass": false,
-                  "score": 0,
-                  "reason": "Output did not contain substring",
-                  "assertion": {
-                    "type": "javascript",
-                    "value": "(output) => {\n          // Logic for checking LLM ..."
-                  }
-                }
-              ],
-              "assertion": null
-            },
-            "cost": 0
-          },
-          {
-            "pass": false,
-            "score": 0,
-            "namedScores": {},
-            "text": "Output did not contain substring\n---\nFeed me now.",
-            "prompt": "Write 3 words about I'm hungry",
-            "provider": "openai:gpt-3.5-turbo",
-            "latencyMs": 1,
-            "tokenUsage": {
-              "cached": 19,
-              "total": 19
-            },
-            "gradingResult": {
-              "pass": false,
-              "score": 0,
-              "reason": "Output did not contain substring",
-              "namedScores": {},
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "componentResults": [
-                {
-                  "pass": false,
-                  "score": 0,
-                  "reason": "Output did not contain substring",
-                  "assertion": {
-                    "type": "javascript",
-                    "value": "(output) => {\n          // Logic for checking LLM ..."
-                  }
-                }
-              ],
-              "assertion": null
-            },
-            "cost": 0.0000135
-          },
-          {
-            "pass": false,
-            "score": 0,
-            "namedScores": {},
-            "text": "Output did not contain substring\n---\n<LLM output>",
-            "prompt": "Write 3 words about I'm hungry",
-            "provider": "My custom function",
-            "latencyMs": 0,
-            "gradingResult": {
-              "pass": false,
-              "score": 0,
-              "reason": "Output did not contain substring",
-              "namedScores": {},
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "componentResults": [
-                {
-                  "pass": false,
-                  "score": 0,
-                  "reason": "Output did not contain substring",
-                  "assertion": {
-                    "type": "javascript",
-                    "value": "(output) => {\n          // Logic for checking LLM ..."
-                  }
-                }
-              ],
-              "assertion": null
-            },
-            "cost": 0
-          },
-          {
-            "pass": false,
-            "score": 0,
-            "namedScores": {},
-            "text": "Output did not contain substring\n---\nGreetings, alien friend! Allow me to offer you some Earthly sustenance. We have a variety of food options available, from fruits and vegetables to meats and grains. What type of cuisine do you typically enjoy on your home planet? Perhaps we can find something similar for you here.",
-            "prompt": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You have encountered a alien in a sci-fi setting. Engage with the character using the knowledge typical for that genre.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"I'm hungry\"\n  }\n]",
-            "provider": "openai:gpt-3.5-turbo",
-            "latencyMs": 1083,
-            "tokenUsage": {
-              "total": 95,
-              "prompt": 38,
-              "completion": 57
-            },
-            "gradingResult": {
-              "pass": false,
-              "score": 0,
-              "reason": "Output did not contain substring",
-              "namedScores": {},
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "componentResults": [
-                {
-                  "pass": false,
-                  "score": 0,
-                  "reason": "Output did not contain substring",
-                  "assertion": {
-                    "type": "javascript",
-                    "value": "(output) => {\n          // Logic for checking LLM ..."
-                  }
-                }
-              ],
-              "assertion": null
-            },
-            "cost": 0.0001045
-          },
-          {
-            "pass": false,
-            "score": 0,
-            "namedScores": {},
-            "text": "Output did not contain substring\n---\n<LLM output>",
-            "prompt": "[\n  {\n    \"role\": \"system\",\n    \"content\": \"You have encountered a detective in a mystery setting. Engage with the character using the knowledge typical for that genre.\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"I'm hungry\"\n  }\n]",
-            "provider": "My custom function",
-            "latencyMs": 0,
-            "gradingResult": {
-              "pass": false,
-              "score": 0,
-              "reason": "Output did not contain substring",
-              "namedScores": {},
-              "tokensUsed": {
-                "total": 0,
-                "prompt": 0,
-                "completion": 0
-              },
-              "componentResults": [
-                {
-                  "pass": false,
-                  "score": 0,
-                  "reason": "Output did not contain substring",
-                  "assertion": {
-                    "type": "javascript",
-                    "value": "(output) => {\n          // Logic for checking LLM ..."
-                  }
-                }
-              ],
-              "assertion": null
-            },
-            "cost": 0
-          }
-        ],
-        "test": {
-          "vars": {
-            "body": "I'm hungry"
-          },
-          "assert": [
-            {
-              "type": "javascript"
-            }
-          ],
-          "options": {}
-        },
-        "vars": ["I'm hungry"]
-      }
-    ]
-  }
+  "persisted": true,
+  "vars": ["body"]
 }

@@ -2,6 +2,7 @@ import { AegisGrader } from './plugins/aegis';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
 import { MemoryPoisoningPluginGrader } from './plugins/agentic/memoryPoisoning';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
+import type { RedteamGraderBase } from './plugins/base';
 import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
 import { BiasGrader } from './plugins/bias';
@@ -15,8 +16,13 @@ import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { FinancialCalculationErrorPluginGrader } from './plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from './plugins/financial/financialComplianceViolation';
+import { FinancialConfidentialDisclosurePluginGrader } from './plugins/financial/financialConfidentialDisclosure';
+import { FinancialCounterfactualPluginGrader } from './plugins/financial/financialCounterfactual';
 import { FinancialDataLeakagePluginGrader } from './plugins/financial/financialDataLeakage';
+import { FinancialDefamationPluginGrader } from './plugins/financial/financialDefamation';
 import { FinancialHallucinationPluginGrader } from './plugins/financial/financialHallucination';
+import { FinancialImpartialityPluginGrader } from './plugins/financial/financialImpartiality';
+import { FinancialMisconductPluginGrader } from './plugins/financial/financialMisconduct';
 import { FinancialSycophancyPluginGrader } from './plugins/financial/financialSycophancy';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmbenchGrader } from './plugins/harmbench';
@@ -73,8 +79,8 @@ import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
-
-import type { RedteamGraderBase } from './plugins/base';
+import { VLGuardGrader } from './plugins/vlguard';
+import { WordplayGrader } from './plugins/wordplay';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
@@ -99,8 +105,14 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:financial:calculation-error': new FinancialCalculationErrorPluginGrader(),
   'promptfoo:redteam:financial:compliance-violation':
     new FinancialComplianceViolationPluginGrader(),
+  'promptfoo:redteam:financial:confidential-disclosure':
+    new FinancialConfidentialDisclosurePluginGrader(),
+  'promptfoo:redteam:financial:counterfactual': new FinancialCounterfactualPluginGrader(),
   'promptfoo:redteam:financial:data-leakage': new FinancialDataLeakagePluginGrader(),
+  'promptfoo:redteam:financial:defamation': new FinancialDefamationPluginGrader(),
   'promptfoo:redteam:financial:hallucination': new FinancialHallucinationPluginGrader(),
+  'promptfoo:redteam:financial:impartiality': new FinancialImpartialityPluginGrader(),
+  'promptfoo:redteam:financial:misconduct': new FinancialMisconductPluginGrader(),
   'promptfoo:redteam:financial:sycophancy': new FinancialSycophancyPluginGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
@@ -166,6 +178,8 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:toxic-chat': new ToxicChatGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
   'promptfoo:redteam:unverifiable-claims': new UnverifiableClaimsGrader(),
+  'promptfoo:redteam:vlguard': new VLGuardGrader(),
+  'promptfoo:redteam:wordplay': new WordplayGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {

@@ -43,7 +43,7 @@ tests:
 
 :::tip
 
-For more information on setting up a prompt file, see [input and output files](/docs/configuration/parameters).
+For more information on setting up a prompt file, see [input and output files](/docs/configuration/prompts).
 
 :::
 

@@ -14,7 +14,12 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
-import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types';
+import {
+  type ApiProvider,
+  type Prompt,
+  ResultFailureReason,
+  type TestSuite,
+} from '../src/types/index';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
@@ -184,6 +189,10 @@ jest.mock('glob', () => ({
     }
     return [];
   }),
+  hasMagic: jest.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 
 jest.mock('../src/esm');
@@ -191,6 +200,19 @@ jest.mock('../src/esm');
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
   runExtensionHook: jest.fn().mockImplementation((extensions, hookName, context) => context),
+}));
+
+jest.mock('../src/cliState', () => ({
+  __esModule: true,
+  default: {
+    resume: false,
+    basePath: '',
+    webUI: false,
+  },
+}));
+
+jest.mock('../src/models/prompt', () => ({
+  generateIdFromPrompt: jest.fn((prompt) => `prompt-${prompt.label || 'default'}`),
 }));
 
 jest.mock('../src/util/time', () => ({
@@ -280,10 +302,18 @@ describe('evaluator', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset cliState for each test to ensure clean state
+    const cliState = require('../src/cliState').default;
+    cliState.resume = false;
+    cliState.basePath = '';
+    cliState.webUI = false;
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+    // Reset cliState after each test
+    const cliState = require('../src/cliState').default;
+    cliState.resume = false;
     if (global.gc) {
       global.gc(); // Force garbage collection
     }
@@ -3476,7 +3506,7 @@ describe('formatVarsForDisplay', () => {
 
   it('should handle extremely large vars without crashing', () => {
     // This would have caused RangeError before the fix
-    const megaString = 'x'.repeat(5 * 1024 * 1024); // 5MB string
+    const megaString = 'x'.repeat(500 * 1024); // 500KB string (reduced from 5MB to prevent SIGSEGV on macOS/Node24)
     const vars = {
       mega1: megaString,
       mega2: megaString,
@@ -3571,9 +3601,8 @@ describe('evaluator defaultTest merging', () => {
           vars: { text: 'Hello world' },
           assert: [
             {
-              type: 'similar',
-              value: 'expected output',
-              threshold: 0.8,
+              type: 'equals',
+              value: 'Test output',
             },
           ],
         },
@@ -3777,5 +3806,105 @@ describe('Evaluator with external defaultTest', () => {
     expect(result.testCase.options?.transformVars).toBe('vars.transformed = true; return vars;');
     // But other options should be merged
     expect(result.testCase.options?.provider).toBe('default-provider');
+  });
+
+  it('should preserve metrics from existing prompts when resuming evaluation', async () => {
+    const cliState = require('../src/cliState').default;
+
+    // Store original resume state and ensure it's false
+    const originalResume = cliState.resume;
+    cliState.resume = false;
+
+    try {
+      // Create a test suite with 2 prompts and 1 test
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [
+          { raw: 'Test prompt 1', label: 'test1' },
+          { raw: 'Test prompt 2', label: 'test2' },
+        ],
+        tests: [{ vars: { var: 'value1' } }],
+      };
+
+      // Create initial eval record
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      // Simulate that the eval was already partially completed with some metrics
+      const initialMetrics1 = {
+        score: 10,
+        testPassCount: 1,
+        testFailCount: 0,
+        testErrorCount: 0,
+        assertPassCount: 1,
+        assertFailCount: 0,
+        totalLatencyMs: 100,
+        tokenUsage: createEmptyTokenUsage(),
+        namedScores: {},
+        namedScoresCount: {},
+        cost: 0.001,
+      };
+
+      const initialMetrics2 = {
+        score: 5,
+        testPassCount: 0,
+        testFailCount: 1,
+        testErrorCount: 0,
+        assertPassCount: 0,
+        assertFailCount: 1,
+        totalLatencyMs: 150,
+        tokenUsage: createEmptyTokenUsage(),
+        namedScores: {},
+        namedScoresCount: {},
+        cost: 0.002,
+      };
+
+      evalRecord.prompts = [
+        {
+          raw: 'Test prompt 1',
+          label: 'test1',
+          id: 'prompt-test1',
+          provider: 'test-provider',
+          metrics: { ...initialMetrics1 },
+        },
+        {
+          raw: 'Test prompt 2',
+          label: 'test2',
+          id: 'prompt-test2',
+          provider: 'test-provider',
+          metrics: { ...initialMetrics2 },
+        },
+      ];
+      evalRecord.persisted = true;
+
+      // Enable resume mode
+      cliState.resume = true;
+
+      // Run evaluation with resume - this will run the test on both prompts
+      await evaluate(testSuite, evalRecord, {});
+
+      // Verify the prompts still exist and have the right IDs
+      expect(evalRecord.prompts).toHaveLength(2);
+      expect(evalRecord.prompts[0].id).toBe('prompt-test1');
+      expect(evalRecord.prompts[1].id).toBe('prompt-test2');
+
+      // Check that the prompts have preserved metrics
+      // When resuming, the metrics should be accumulated with the initial values
+      // The key test is that metrics are not reset to 0
+
+      // For prompt 1 which had testPassCount=1 initially
+      expect(evalRecord.prompts[0].metrics?.testPassCount).toBeGreaterThanOrEqual(1);
+
+      // For prompt 2, at least verify metrics exist and aren't completely reset
+      expect(evalRecord.prompts[1].metrics).toBeDefined();
+
+      // The combined pass/fail count should be greater than 0, showing metrics weren't reset
+      const prompt2TotalTests =
+        (evalRecord.prompts[1].metrics?.testPassCount || 0) +
+        (evalRecord.prompts[1].metrics?.testFailCount || 0);
+      expect(prompt2TotalTests).toBeGreaterThan(0);
+    } finally {
+      // Always restore original state
+      cliState.resume = originalResume;
+    }
   });
 });

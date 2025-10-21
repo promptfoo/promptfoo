@@ -37,7 +37,7 @@ function ErrorFallback({
   );
 }
 
-const EvaluateTestSuiteCreator: React.FC = () => {
+const EvaluateTestSuiteCreator = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const { config, updateConfig, reset } = useStore();

@@ -15,6 +15,10 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 - `vertex:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding (2M context)
 - `vertex:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
+- `vertex:gemini-2.5-flash-preview-09-2025` - Newest Gemini 2.5 Flash preview release featuring enhanced quality improvements
+- `vertex:gemini-2.5-flash-lite-preview-09-2025` - Latest Flash Lite preview release with further cost and latency optimizations
+- `vertex:gemini-flash-latest` - Alias for `vertex:gemini-2.5-flash-preview-09-2025`
+- `vertex:gemini-flash-lite-latest` - Alias for `vertex:gemini-2.5-flash-lite-preview-09-2025`
 - `vertex:gemini-2.0-pro` - Strongest model quality, especially for code & world knowledge with 2M context window
 - `vertex:gemini-2.0-flash-thinking-exp` - Enhanced reasoning capabilities with thinking process in responses
 - `vertex:gemini-2.0-flash-001` - Workhorse model for all daily tasks with strong overall performance and real-time streaming
@@ -31,6 +35,7 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-opus-4-1@20250805` - Latest Claude 4.1 Opus model
 - `vertex:claude-opus-4@20250514` - Claude 4 Opus model
 - `vertex:claude-sonnet-4@20250514` - Claude 4 Sonnet model
+- `vertex:claude-haiku-4-5@20251001` - Claude 4.5 Haiku model
 - `vertex:claude-3-7-sonnet@20250219` - Claude 3.7 Sonnet model
 - `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
 - `vertex:claude-3-opus@20240229` - Claude 3 Opus (Public Preview)

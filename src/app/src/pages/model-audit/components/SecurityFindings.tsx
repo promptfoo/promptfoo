@@ -110,13 +110,15 @@ export default function SecurityFindings({
   };
 
   const handleDownloadResults = () => {
-    const csvHeaders = ['Severity', 'Message', 'Location', 'Details'];
+    const csvHeaders = ['Severity', 'Message', 'Why', 'Location', 'Details'];
     const csvRows = scanResults.issues.map((issue) => {
       const details = issue.details ? JSON.stringify(issue.details).replace(/"/g, '""') : '';
       const location = getIssueFilePath(issue);
+      const why = issue.why ? issue.why.replace(/"/g, '""') : '';
       return [
         getSeverityLabel(issue.severity),
         `"${issue.message.replace(/"/g, '""')}"`,
+        `"${why}"`,
         `"${location.replace(/"/g, '""')}"`,
         `"${details}"`,
       ].join(',');
@@ -178,7 +180,6 @@ export default function SecurityFindings({
           {getIssueSummaryText(scanResults.issues)}
         </Alert>
       )}
-
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
         <Typography variant="h6">Security Findings</Typography>
         <Box sx={{ flexGrow: 1 }} />
@@ -230,9 +231,7 @@ export default function SecurityFindings({
           {showRawOutput ? 'Hide' : 'Show'} Raw Output
         </Button>
       </Stack>
-
       <Divider sx={{ mb: 3 }} />
-
       {filteredIssues.length === 0 ? (
         <Paper
           sx={{
@@ -405,6 +404,11 @@ export default function SecurityFindings({
                                   {getSeverityLabel(issue.severity)}
                                 </SeverityBadge>
                               </Stack>
+                              {issue.why && (
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                  {issue.why}
+                                </Typography>
+                              )}
                               {issue.details && (
                                 <Alert severity="info" sx={{ mt: 2 }}>
                                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
@@ -463,6 +467,11 @@ export default function SecurityFindings({
                       Location: {getIssueFilePath(issue)}
                     </Typography>
                   )}
+                  {issue.why && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                      {issue.why}
+                    </Typography>
+                  )}
                   {issue.details && (
                     <Alert severity="info" sx={{ mt: 2 }}>
                       <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
@@ -476,7 +485,6 @@ export default function SecurityFindings({
           ))}
         </Stack>
       )}
-
       {/* Raw Output Dialog */}
       <Dialog
         open={showRawOutput}

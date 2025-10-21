@@ -1,13 +1,14 @@
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
-import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { type UnifiedConfig } from '../types';
 import { ProviderOptionsSchema } from '../validators/providers';
+import { fetchWithProxy } from './fetch';
 import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
 
 import type { Plugin, Severity } from '../redteam/constants';
+import type { PoliciesById } from '../redteam/types';
+import type { UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
@@ -64,7 +65,6 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     }
     const body = await response.json();
     logger.debug(`Provider fetched from cloud: ${id}`);
-    logger.debug(`Provider from cloud: ${JSON.stringify(body, null, 2)}`);
 
     const provider = ProviderOptionsSchema.parse(body.config);
     // The provider options schema has ID field as optional but we know it's required for cloud providers
@@ -105,7 +105,6 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
     }
     const body = await response.json();
     logger.info(`Config fetched from cloud: ${id}`);
-    logger.debug(`Config from cloud: ${JSON.stringify(body, null, 2)}`);
     return body;
   } catch (e) {
     logger.error(`Failed to fetch config from cloud: ${id}.`);
@@ -180,10 +179,6 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 
       const pluginSeverityOverride = await overrideRes.json();
 
-      logger.debug(
-        `Plugin severity overrides ${pluginSeverityOverride.id} fetched from cloud: ${JSON.stringify(pluginSeverityOverride.members, null, 2)}`,
-      );
-
       return {
         id: pluginSeverityOverride.id,
         severities: pluginSeverityOverride.members.reduce(
@@ -206,25 +201,176 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 }
 
 /**
- * Retrieves the default team for the current user from PromptFoo Cloud.
- * The default team is determined as the oldest team by creation date.
- * @returns Promise resolving to an object with team id and name
- * @throws Error if the request fails or no teams are found
+ * Retrieves all teams for the current user from Promptfoo Cloud.
+ * @returns Promise resolving to an array of team objects
+ * @throws Error if the request fails
  */
-export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
+export async function getUserTeams(): Promise<
+  Array<{
+    id: string;
+    name: string;
+    slug: string;
+    organizationId: string;
+    createdAt: string;
+    updatedAt: string;
+  }>
+> {
   const response = await makeRequest(`/users/me/teams`, 'GET');
   if (!response.ok) {
-    throw new Error(`Failed to get default team id: ${response.statusText}`);
+    throw new Error(`Failed to get user teams: ${response.statusText}`);
   }
 
   const body = await response.json();
+  return body;
+}
+
+/**
+ * Retrieves the default team for the current user from Promptfoo Cloud.
+ * The default team is determined as the oldest team by creation date.
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the request fails or no teams are found
+ */
+export async function getDefaultTeam(): Promise<{
+  id: string;
+  name: string;
+  organizationId: string;
+  createdAt: string;
+}> {
+  const teams = await getUserTeams();
+
+  if (teams.length === 0) {
+    throw new Error('No teams found for user');
+  }
 
   // get the oldest team -- this matches the logic of the enterprise app
-  const oldestTeam = body.sort((a: { createdAt: string }, b: { createdAt: string }) => {
+  const oldestTeam = teams.sort((a, b) => {
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   })[0];
 
-  return oldestTeam;
+  return {
+    id: oldestTeam.id,
+    name: oldestTeam.name,
+    organizationId: oldestTeam.organizationId,
+    createdAt: oldestTeam.createdAt,
+  };
+}
+
+/**
+ * Retrieves a team by its ID.
+ * @param teamId - The team ID to look up
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the team is not found or not accessible
+ */
+export async function getTeamById(
+  teamId: string,
+): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
+  const teams = await getUserTeams();
+  const team = teams.find((t) => t.id === teamId);
+
+  if (!team) {
+    throw new Error(`Team with ID '${teamId}' not found or not accessible`);
+  }
+
+  return {
+    id: team.id,
+    name: team.name,
+    organizationId: team.organizationId,
+    createdAt: team.createdAt,
+  };
+}
+
+/**
+ * Resolves a team identifier (name, slug, or ID) to a team object.
+ * @param identifier - The team name, slug, or ID
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the team is not found
+ */
+export async function resolveTeamFromIdentifier(
+  identifier: string,
+): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
+  const teams = await getUserTeams();
+
+  // Try exact ID match first
+  let team = teams.find((t) => t.id === identifier);
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  // Try name match (case-insensitive)
+  team = teams.find((t) => t.name.toLowerCase() === identifier.toLowerCase());
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  // Try slug match
+  team = teams.find((t) => t.slug === identifier);
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  const availableTeams = teams.map((t) => t.name).join(', ');
+  throw new Error(`Team '${identifier}' not found. Available teams: ${availableTeams}`);
+}
+
+/**
+ * Resolves the current team context, checking stored preferences first.
+ * @param teamIdentifier - Optional explicit team identifier to use
+ * @param fallbackToDefault - Whether to fall back to server default team
+ * @returns Promise resolving to an object with team id and name
+ * @throws Error if no team can be resolved
+ */
+export async function resolveTeamId(
+  teamIdentifier?: string,
+  fallbackToDefault = true,
+): Promise<{ id: string; name: string }> {
+  // 1. Use explicit team identifier if provided
+  if (teamIdentifier) {
+    logger.debug(`[Team Resolution] Using explicit team identifier: ${teamIdentifier}`);
+    return await resolveTeamFromIdentifier(teamIdentifier);
+  }
+
+  // 2. Use stored current team preference (scoped to current organization)
+  const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
+  const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
+  if (currentTeamId) {
+    try {
+      logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
+      return await getTeamById(currentTeamId);
+    } catch (_error) {
+      logger.warn(
+        `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
+      );
+    }
+  }
+
+  // 3. Fall back to server default (oldest team)
+  if (fallbackToDefault) {
+    logger.debug(`[Team Resolution] Using server default team`);
+    const defaultTeam = await getDefaultTeam();
+    // Store the default team for future use (scoped to organization)
+    cloudConfig.setCurrentTeamId(defaultTeam.id, defaultTeam.organizationId);
+    logger.info(
+      `Using team: ${defaultTeam.name} (use 'promptfoo auth teams set <name>' to change)`,
+    );
+    return defaultTeam;
+  }
+
+  throw new Error('No team specified and no default available');
 }
 
 /**
@@ -363,16 +509,57 @@ export async function canCreateTargets(teamId: string | undefined): Promise<bool
   }
   const body = await response.json();
 
-  logger.debug(
-    `[canCreateTargets] Checking provider permissions for team ${teamId}: ${JSON.stringify(
-      body.filter((ability: { action: string; subject: string }) => ability.subject === 'Provider'),
-      null,
-      2,
-    )}`,
-  );
-
   return body.some(
     (ability: { action: string; subject: string }) =>
       ability.action === 'create' && ability.subject === 'Provider',
   );
+}
+
+/**
+ * Given a list of policy IDs, fetches custom policies from Promptfoo Cloud.
+ * @param ids - The IDs of the policies to fetch.
+ * @param teamId - The ID of the team to fetch policies from. Note that all policies must belong to this team.
+ * @returns A map of policy IDs to their texts and severities.
+ */
+export async function getPoliciesFromCloud(ids: string[], teamId: string): Promise<PoliciesById> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch policies from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+  try {
+    // Encode the ids as search params
+    const searchParams = new URLSearchParams();
+    ids.forEach((id) => {
+      searchParams.append('id', id);
+    });
+    const response = await makeRequest(
+      `/custom-policies/?${searchParams.toString()}&teamId=${teamId}`,
+      'GET',
+    );
+
+    if (!response.ok) {
+      const errorMessage = await response.text();
+      throw new Error(
+        `Failed to fetch policies from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
+      );
+    }
+
+    const body = await response.json();
+
+    const policiesById = new Map();
+    body.forEach((policy: { id: string; text: string; severity: Severity; name: string }) => {
+      policiesById.set(policy.id, {
+        text: policy.text,
+        severity: policy.severity,
+        name: policy.name,
+      });
+    });
+
+    return policiesById;
+  } catch (e) {
+    logger.error(`Failed to fetch policies from cloud.`);
+    logger.error(String(e));
+    throw new Error(`Failed to fetch policies from cloud.`);
+  }
 }

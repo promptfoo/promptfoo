@@ -1,30 +1,30 @@
-import assertions from './assertions';
+import assertions from './assertions/index';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
 import guardrails from './guardrails';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { processPrompts, readProviderPromptMap } from './prompts';
-import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
+import { processPrompts, readProviderPromptMap } from './prompts/index';
+import { loadApiProvider, loadApiProviders, resolveProvider } from './providers/index';
 import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
-import { Plugins } from './redteam/plugins';
+import { Plugins } from './redteam/plugins/index';
 import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
 import { doRedteamRun } from './redteam/shared';
-import { Strategies } from './redteam/strategies';
-import { readFilters, writeMultipleOutputs, writeOutput } from './util';
+import { Strategies } from './redteam/strategies/index';
+import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { maybeLoadFromExternalFile } from './util/file';
 import { readTests } from './util/testCaseReader';
 
-import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
+import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types/index';
 import type { ApiProvider } from './types/providers';
 import { isApiProvider } from './types/providers';
 
 export { generateTable } from './table';
-export * from './types';
+export * from './types/index';
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {

@@ -22,7 +22,7 @@ import {
 } from '../../src/providers/mistral/defaults';
 import { DefaultModerationProvider } from '../../src/providers/openai/defaults';
 
-import type { ApiProvider } from '../../src/types';
+import type { ApiProvider } from '../../src/types/index';
 import type { EnvOverrides } from '../../src/types/env';
 
 jest.mock('../../src/providers/google/util', () => ({

@@ -35,6 +35,14 @@ const redTeamSidebar = [
     id: 'red-team/owasp-llm-top-10',
   },
   {
+    type: 'doc',
+    id: 'red-team/iso-42001',
+  },
+  {
+    type: 'doc',
+    id: 'red-team/risk-scoring',
+  },
+  {
     type: 'category',
     label: 'Plugins',
     collapsed: true,
@@ -66,6 +74,7 @@ const redTeamSidebar = [
           'red-team/plugins/rbac',
           'red-team/plugins/reasoning-dos',
           'red-team/plugins/shell-injection',
+          'red-team/plugins/special-token-injection',
           'red-team/plugins/sql-injection',
           'red-team/plugins/ssrf',
           'red-team/plugins/system-prompt-override',
@@ -77,11 +86,22 @@ const redTeamSidebar = [
         label: 'Trust, Safety, & Compliance',
         collapsed: true,
         items: [
+          {
+            type: 'category',
+            label: 'Bias Detection',
+            collapsed: true,
+            items: [
+              'red-team/plugins/bias',
+              'red-team/plugins/age-bias',
+              'red-team/plugins/disability-bias',
+              'red-team/plugins/gender-bias',
+              'red-team/plugins/race-bias',
+            ],
+          },
           'red-team/plugins/beavertails',
           'red-team/plugins/contracts',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
-          'red-team/plugins/gender-bias',
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
           'red-team/plugins/harmful',
@@ -91,6 +111,8 @@ const redTeamSidebar = [
           'red-team/plugins/religion',
           'red-team/plugins/toxic-chat',
           'red-team/plugins/unsafebench',
+          'red-team/plugins/vlguard',
+          'red-team/plugins/wordplay',
           'red-team/plugins/xstest',
         ],
       },
@@ -105,6 +127,7 @@ const redTeamSidebar = [
           'red-team/plugins/imitation',
           'red-team/plugins/off-topic',
           'red-team/plugins/overreliance',
+          'red-team/plugins/unverifiable-claims',
         ],
       },
       {
@@ -185,7 +208,11 @@ const redTeamSidebar = [
         type: 'category',
         label: 'Custom',
         collapsed: true,
-        items: ['red-team/strategies/custom-strategy', 'red-team/strategies/custom'],
+        items: [
+          'red-team/strategies/layer',
+          'red-team/strategies/custom-strategy',
+          'red-team/strategies/custom',
+        ],
       },
       {
         type: 'category',
@@ -203,10 +230,6 @@ const redTeamSidebar = [
       {
         type: 'doc',
         id: 'red-team/discovery',
-      },
-      {
-        type: 'doc',
-        id: 'red-team/guardrails',
       },
       {
         type: 'category',

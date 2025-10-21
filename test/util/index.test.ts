@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import dotenv from 'dotenv';
 import { globSync } from 'glob';
-import { getDb } from '../../src/database';
+import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
 import {
@@ -11,7 +11,7 @@ import {
   type EvaluateResult,
   ResultFailureReason,
   type TestCase,
-} from '../../src/types';
+} from '../../src/types/index';
 import {
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
@@ -25,7 +25,7 @@ import {
   writeMultipleOutputs,
   writeOutput,
   createOutputMetadata,
-} from '../../src/util';
+} from '../../src/util/index';
 import { TestGrader } from './utils';
 
 jest.mock('../../src/database', () => ({
@@ -38,6 +38,11 @@ jest.mock('proxy-agent', () => ({
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+  hasMagic: (path: string) => {
+    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+    // This mimics glob's actual behavior where backslash paths return false
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  },
 }));
 
 jest.mock('fs', () => ({
@@ -469,6 +474,60 @@ describe('util', () => {
       } as any as EvaluateResult;
 
       expect(resultIsForTestCase(absolutePathResult, noPathTestCase)).toBe(true);
+    });
+
+    it('matches when result.vars has runtime variables like _conversation', () => {
+      // This tests the fix for issue #5849 - cache behavior regression
+      // result.vars contains runtime variables that should be filtered out
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+          _conversation: [], // Runtime variable added during evaluation
+        },
+        testCase: {
+          vars: {
+            input: 'hello',
+            language: 'en',
+          },
+        },
+      } as any as EvaluateResult;
+
+      // Should match because _conversation is filtered out
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('matches when result.vars has runtime variables and testCase also has them', () => {
+      // Edge case: both have runtime vars (shouldn't happen in practice but should still work)
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+          _conversation: [],
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          language: 'en',
+          _conversation: [],
+        },
+      } as any as EvaluateResult;
+
+      // Should match because both have same vars after filtering
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
     });
   });
 

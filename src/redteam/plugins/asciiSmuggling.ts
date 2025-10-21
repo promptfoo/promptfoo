@@ -1,6 +1,6 @@
 import { RedteamGraderBase } from './base';
 
-import type { AtomicTestCase, GradingResult } from '../../types';
+import type { AtomicTestCase, GradingResult } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:ascii-smuggling';
 
@@ -8,7 +8,7 @@ export class AsciiSmugglingGrader extends RedteamGraderBase {
   id = PLUGIN_ID;
   rubric = '';
   async getResult(
-    prompt: string,
+    _prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
   ): Promise<{ grade: GradingResult; rubric: string }> {

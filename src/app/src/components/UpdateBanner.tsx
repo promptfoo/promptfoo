@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
@@ -16,6 +16,8 @@ const StyledAlert = styled(Alert)(({ theme }) => ({
   borderRadius: 0,
   padding: theme.spacing(0.75, 2),
   alignItems: 'center',
+  position: 'relative',
+  zIndex: theme.zIndex.appBar + 1,
   '& .MuiAlert-message': {
     width: '100%',
     padding: theme.spacing(0.5, 0),
@@ -49,6 +51,43 @@ const UpdateActions = styled(Box)({
 export default function UpdateBanner() {
   const { versionInfo, loading, error, dismissed, dismiss } = useVersionCheck();
   const [copySnackbarOpen, setCopySnackbarOpen] = useState(false);
+  const bannerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const element = bannerRef.current;
+
+    if (!element) {
+      return () => {
+        document.documentElement.style.removeProperty('--update-banner-height');
+      };
+    }
+
+    const updateHeight = () => {
+      const height = element.offsetHeight;
+      document.documentElement.style.setProperty('--update-banner-height', `${height}px`);
+    };
+
+    updateHeight();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => {
+        updateHeight();
+      });
+      observer.observe(element);
+
+      return () => {
+        observer.disconnect();
+        document.documentElement.style.removeProperty('--update-banner-height');
+      };
+    }
+
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      document.documentElement.style.removeProperty('--update-banner-height');
+    };
+  }, []);
 
   const handleCopyCommand = async () => {
     const command = versionInfo?.updateCommands?.primary;
@@ -93,6 +132,7 @@ export default function UpdateBanner() {
   return (
     <>
       <StyledAlert
+        ref={bannerRef}
         severity="info"
         icon={<UpdateIcon />}
         action={

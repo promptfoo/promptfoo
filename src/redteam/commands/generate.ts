@@ -14,19 +14,22 @@ import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { getProviderIds } from '../../providers';
+import { getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
   checkCloudPermissions,
   getCloudDatabaseId,
   getConfigFromCloud,
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
+  resolveTeamId,
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
-import { writePromptfooConfig } from '../../util/config/manage';
+import { writePromptfooConfig } from '../../util/config/writer';
+import { getCustomPolicies } from '../../util/generation';
+import { printBorder, setupEnv } from '../../util/index';
+import { promptfooCommand } from '../../util/promptfooCommand';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
@@ -40,13 +43,16 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
 import type {
+  PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
+  RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
@@ -109,6 +115,7 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
+  let resolvedConfigMetadata: Record<string, any> | undefined;
 
   // Write a remote config to a temporary file
   if (options.configFromCloud) {
@@ -162,6 +169,8 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+    resolvedConfigMetadata = resolved.config.metadata;
+
     await checkCloudPermissions(resolved.config);
 
     // Warn if both tests section and redteam config are present
@@ -213,7 +222,7 @@ export async function doGenerateRedteam(
     logger.info(
       chalk.red(
         `\nCan't generate without configuration - run ${chalk.yellow.bold(
-          isRunningUnderNpx() ? 'npx promptfoo redteam init' : 'promptfoo redteam init',
+          promptfooCommand('redteam init'),
         )} first`,
       ),
     );
@@ -229,8 +238,16 @@ export async function doGenerateRedteam(
     strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
+  telemetry.record('redteam generate', {
+    phase: 'started',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
+    strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
+    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+  });
 
-  let plugins;
+  let plugins: RedteamPluginObject[] = [];
 
   // If plugins are defined in the config file
   if (redteamConfig?.plugins && redteamConfig.plugins.length > 0) {
@@ -301,6 +318,40 @@ export async function doGenerateRedteam(
     logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
   }
 
+  // Resolve policy references.
+  // Each reference is an id of the policy record stored in Promptfoo Cloud; load their respective texts.
+  const policyPluginsWithRefs = plugins.filter(
+    (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
+  );
+  if (policyPluginsWithRefs.length > 0) {
+    // Load the calling user's team id; all policies must belong to the same team.
+    const teamId =
+      resolvedConfigMetadata?.teamId ??
+      (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
+      (await resolveTeamId()).id;
+
+    const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
+
+    // Assign, in-place, the policy texts and severities to the plugins
+    for (const policyPlugin of policyPluginsWithRefs) {
+      const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
+      const policyData = policiesById.get(policyId);
+      if (policyData) {
+        // Set the policy details
+        policyPlugin.config!.policy = {
+          id: policyId,
+          name: policyData.name,
+          text: policyData.text,
+        } as PolicyObject;
+        // Set the plugin severity if it hasn't been set already; this allows the user to override the severity
+        // on a per-config basis if necessary.
+        if (policyPlugin.severity == null) {
+          policyPlugin.severity = policyData.severity;
+        }
+      }
+    }
+  }
+
   let strategies: (string | { id: string })[] =
     redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
   if (options.strategies) {
@@ -338,9 +389,8 @@ export async function doGenerateRedteam(
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
-    logger.error('Invalid redteam configuration:');
-    logger.error(fromError(parsedConfig.error).toString());
-    throw new Error('Invalid redteam configuration');
+    const errorMessage = fromError(parsedConfig.error).toString();
+    throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
   }
 
   const targetLabels = testSuite.providers
@@ -477,14 +527,13 @@ export async function doGenerateRedteam(
     }
 
     if (!options.inRedteamRun) {
-      const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
         '\n' +
           chalk.green(
             `Run ${chalk.bold(
               relativeOutputPath === 'redteam.yaml'
-                ? `${commandPrefix} redteam eval`
-                : `${commandPrefix} redteam eval -c ${relativeOutputPath}`,
+                ? promptfooCommand('redteam eval')
+                : promptfooCommand(`redteam eval -c ${relativeOutputPath}`),
             )} to run the red team!`,
           ),
       );
@@ -534,10 +583,9 @@ export async function doGenerateRedteam(
     logger.info(
       `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
     );
-    const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
     const command = configPath.endsWith('promptfooconfig.yaml')
-      ? `${commandPrefix} eval`
-      : `${commandPrefix} eval -c ${path.relative(process.cwd(), configPath)}`;
+      ? promptfooCommand('eval')
+      : promptfooCommand(`eval -c ${path.relative(process.cwd(), configPath)}`);
     logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
   } else {
     const author = getAuthor();
@@ -559,6 +607,16 @@ export async function doGenerateRedteam(
   telemetry.record('command_used', {
     duration: Math.round((Date.now() - startTime) / 1000),
     name: 'generate redteam',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+    numTestsGenerated: redteamTests.length,
+    plugins: plugins.map((p) => p.id),
+    strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
+    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+  });
+  telemetry.record('redteam generate', {
+    phase: 'completed',
+    duration: Math.round((Date.now() - startTime) / 1000),
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
     numTestsGenerated: redteamTests.length,
@@ -718,10 +776,11 @@ export function redteamGenerateCommand(
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
+          // Log the stack trace, which already includes the error message
           logger.error(
-            `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}\n${
-              error instanceof Error ? error.stack : ''
-            }`,
+            error instanceof Error && error.stack
+              ? error.stack
+              : `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
         process.exit(1);

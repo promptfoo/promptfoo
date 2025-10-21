@@ -47,6 +47,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    strategy: 'authoritative-markup-injection',
+    displayName: 'Authoritative Markup Injection',
+    description: 'Structured format authority',
+    longDescription:
+      'Tests vulnerability to authoritative formatting by embedding prompts in structured markup that exploits trust in formatted content',
+    cost: 'Medium',
+    asrIncrease: '40-60%',
+    link: '/docs/red-team/strategies/authoritative-markup-injection/',
+  },
+  {
+    category: 'Dynamic (Single-Turn)',
     strategy: 'jailbreak:composite',
     displayName: 'Composite Jailbreaks',
     description: 'Combined techniques',
@@ -309,6 +320,17 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '0-5%',
     link: '/docs/red-team/strategies/other-encodings/#emoji-encoding',
+  },
+  {
+    category: 'Custom',
+    strategy: 'layer',
+    displayName: 'Layer',
+    description: 'Compose multiple strategies',
+    longDescription:
+      'Compose multiple red team strategies sequentially (e.g., multilingual → rot13) to create sophisticated attack chains',
+    cost: 'Variable',
+    asrIncrease: 'Cumulative',
+    link: '/docs/red-team/strategies/layer/',
   },
   {
     category: 'Regression',

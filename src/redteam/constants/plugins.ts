@@ -145,8 +145,14 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'harmful:privacy',
 ] as const;
 
+export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac'] as const;
+
 export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
+
+// Plugins that require HuggingFace API keys for their datasets
+export const HUGGINGFACE_GATED_PLUGINS = ['beavertails', 'unsafebench', 'aegis'] as const;
+export type HuggingFaceGatedPlugin = (typeof HUGGINGFACE_GATED_PLUGINS)[number];
 
 export const COLLECTIONS = [
   'default',
@@ -294,12 +300,15 @@ export const ADDITIONAL_PLUGINS = [
   'religion',
   'role-confusion',
   'shell-injection',
+  'special-token-injection',
   'sql-injection',
   'ssrf',
   'system-prompt-override',
   'tool-discovery',
   'unsafebench',
   'unverifiable-claims',
+  'vlguard',
+  'wordplay',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
@@ -315,7 +324,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
-export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench'] as const;
+export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench', 'vlguard'] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
@@ -359,3 +368,39 @@ export const PLUGIN_CATEGORIES = {
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
 } as const;
+
+// Plugins registered via createRemotePlugin() in plugins/index.ts
+// These have no local implementation and always call the remote API
+export const REMOTE_ONLY_PLUGIN_IDS = [
+  'agentic:memory-poisoning',
+  'ascii-smuggling',
+  'bfla',
+  'bola',
+  'cca',
+  'competitors',
+  'harmful:misinformation-disinformation',
+  'harmful:specialized-advice',
+  'hijacking',
+  'indirect-prompt-injection',
+  'mcp',
+  'off-topic',
+  'rag-document-exfiltration',
+  'rag-poisoning',
+  'reasoning-dos',
+  'religion',
+  'special-token-injection',
+  'ssrf',
+  'system-prompt-override',
+  'wordplay',
+  ...MEDICAL_PLUGINS,
+  ...FINANCIAL_PLUGINS,
+] as const;
+
+// Plugins that frontend should disable when remote generation is unavailable
+// Superset of REMOTE_ONLY_PLUGIN_IDS plus harm/bias plugins
+// Used by frontend UI to gray out plugins when PROMPTFOO_DISABLE_REMOTE_GENERATION is set
+export const UI_DISABLED_WHEN_REMOTE_UNAVAILABLE = [
+  ...Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS),
+  ...BIAS_PLUGINS,
+  ...REMOTE_ONLY_PLUGIN_IDS,
+] as const;

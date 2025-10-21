@@ -1,7 +1,7 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getEnvString } from '../envars';
 
-import type { ProviderOptions } from '../types';
+import type { ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 export interface HeliconeGatewayOptions extends OpenAiCompletionOptions {

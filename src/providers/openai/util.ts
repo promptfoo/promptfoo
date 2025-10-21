@@ -1,33 +1,42 @@
 import OpenAI from 'openai';
-import { renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
 
-import type { TokenUsage } from '../../types';
+import type { TokenUsage } from '../../types/index';
 import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
-  // Transcription models
-  ...['gpt-4o-transcribe', 'gpt-4o-mini-transcribe'].map((model) => ({
-    id: model,
+  // Transcription models (text + audio input costs)
+  {
+    id: 'gpt-4o-transcribe',
     cost: {
       input: 2.5 / 1e6,
       output: 10 / 1e6,
       audioInput: 6 / 1e6,
     },
-  })),
-  // TTS models
-  ...['gpt-4o-mini-tts'].map((model) => ({
-    id: model,
+  },
+  {
+    id: 'gpt-4o-mini-transcribe',
+    cost: {
+      input: 1.25 / 1e6,
+      output: 5 / 1e6,
+      audioInput: 3 / 1e6,
+    },
+  },
+  // TTS model (text input + audio output costs)
+  {
+    id: 'gpt-4o-mini-tts',
     cost: {
       input: 0.6 / 1e6,
-      output: 12 / 1e6,
+      output: 0 / 1e6,
+      audioOutput: 12 / 1e6,
     },
-  })),
+  },
   // Search preview models
   ...['gpt-4o-search-preview', 'gpt-4o-search-preview-2025-03-11'].map((model) => ({
     id: model,
@@ -94,11 +103,12 @@ export const OPENAI_CHAT_MODELS = [
       output: 60 / 1e6,
     },
   })),
+  // o1-mini pricing per Standard tier
   ...['o1-mini', 'o1-mini-2024-09-12'].map((model) => ({
     id: model,
     cost: {
-      input: 3 / 1e6,
-      output: 12 / 1e6,
+      input: 1.1 / 1e6,
+      output: 4.4 / 1e6,
     },
   })),
   ...['o3', 'o3-2025-04-16'].map((model) => ({
@@ -244,7 +254,7 @@ export const OPENAI_CHAT_MODELS = [
       output: 4.4 / 1e6,
     },
   })),
-  // GPT-5 models - hypothetical pricing based on model progression
+  // GPT-5 models
   ...['gpt-5', 'gpt-5-2025-08-07'].map((model) => ({
     id: model,
     cost: {
@@ -278,6 +288,39 @@ export const OPENAI_CHAT_MODELS = [
     cost: {
       input: 1.5 / 1e6,
       output: 6.0 / 1e6,
+    },
+  })),
+  ...['gpt-5-codex'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5-pro', 'gpt-5-pro-2025-10-06'].map((model) => ({
+    id: model,
+    cost: {
+      input: 15 / 1e6,
+      output: 120 / 1e6,
+    },
+  })),
+  // gpt-audio models
+  ...['gpt-audio', 'gpt-audio-2025-08-28'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
+      audioInput: 40 / 1e6,
+      audioOutput: 80 / 1e6,
+    },
+  })),
+  ...['gpt-audio-mini', 'gpt-audio-mini-2025-10-06'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
     },
   })),
 ];
@@ -319,7 +362,38 @@ export const OPENAI_COMPLETION_MODELS = [
 
 // Realtime models for WebSocket API
 export const OPENAI_REALTIME_MODELS = [
+  // gpt-realtime models (latest)
+  {
+    id: 'gpt-realtime',
+    type: 'chat',
+    cost: {
+      input: 32 / 1e6,
+      output: 64 / 1e6,
+      audioInput: 32 / 1e6,
+      audioOutput: 64 / 1e6,
+    },
+  },
   // gpt-4o realtime models
+  {
+    id: 'gpt-realtime',
+    type: 'chat',
+    cost: {
+      input: 4 / 1e6,
+      output: 16 / 1e6,
+      audioInput: 40 / 1e6,
+      audioOutput: 80 / 1e6,
+    },
+  },
+  {
+    id: 'gpt-4o-realtime-preview',
+    type: 'chat',
+    cost: {
+      input: 5 / 1e6,
+      output: 20 / 1e6,
+      audioInput: 40 / 1e6,
+      audioOutput: 80 / 1e6,
+    },
+  },
   {
     id: 'gpt-4o-realtime-preview-2024-12-17',
     type: 'chat',
@@ -342,7 +416,38 @@ export const OPENAI_REALTIME_MODELS = [
   },
   // gpt-4o-mini realtime models
   {
+    id: 'gpt-4o-mini-realtime-preview',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
+  {
     id: 'gpt-4o-mini-realtime-preview-2024-12-17',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
+  // gpt-realtime-mini models
+  {
+    id: 'gpt-realtime-mini',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
+  {
+    id: 'gpt-realtime-mini-2025-10-06',
     type: 'chat',
     cost: {
       input: 0.6 / 1e6,
@@ -400,9 +505,9 @@ export function calculateOpenAICost(
   const outputCost = config.cost ?? model.cost.output;
   totalCost += inputCost * promptTokens + outputCost * completionTokens;
 
-  if ('audioInput' in model.cost && 'audioOutput' in model.cost) {
-    const audioInputCost = config.audioCost ?? (model.cost.audioInput as number);
-    const audioOutputCost = config.audioCost ?? (model.cost.audioOutput as number);
+  if ('audioInput' in model.cost || 'audioOutput' in model.cost) {
+    const audioInputCost = config.audioCost ?? (model.cost as any).audioInput ?? 0;
+    const audioOutputCost = config.audioCost ?? (model.cost as any).audioOutput ?? 0;
     totalCost += audioInputCost * audioPromptTokens + audioOutputCost * audioCompletionTokens;
   }
 

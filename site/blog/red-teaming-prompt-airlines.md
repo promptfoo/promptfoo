@@ -106,7 +106,7 @@ You will also need to update your request.txt file to include where Promptfoo sh
 
 ![modifying raw request](/img/blog/prompt-airlines/promptfoo_request.png)
 
-In this case, the appropriate language would be `{{ prompt | dump }}`. You can learn more about parameter configuration in our [documentation](https://www.promptfoo.dev/docs/configuration/parameters/).
+In this case, the appropriate language would be `{{ prompt | dump }}`. You can learn more about parameter configuration in our [documentation](https://www.promptfoo.dev/docs/configuration/prompts/).
 
 ### Generating the Attack and Evaluating Results
 

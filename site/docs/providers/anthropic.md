@@ -29,7 +29,9 @@ The `anthropic` provider supports the following models via the messages API:
 | -------------------------------------------------------------------------- | -------------------------------- |
 | `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Latest Claude 4.1 Opus model     |
 | `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Latest Claude 4 Opus model       |
+| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Latest Claude 4.5 Sonnet model   |
 | `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Latest Claude 4 Sonnet model     |
+| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5-latest)   | Latest Claude 4.5 Haiku model    |
 | `anthropic:messages:claude-3-7-sonnet-20250219` (claude-3-7-sonnet-latest) | Latest Claude 3.7 Sonnet model   |
 | `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Latest Claude 3.5 Sonnet model   |
 | `anthropic:messages:claude-3-5-sonnet-20240620`                            | Previous Claude 3.5 Sonnet model |
@@ -45,7 +47,9 @@ Claude models are available across multiple platforms. Here's how the model name
 | ----------------- | ----------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
 | Claude 4.1 Opus   | claude-opus-4-1-20250805                              | anthropic.claude-opus-4-1-20250805-v1:0                    | claude-opus-4-1@20250805                                |
 | Claude 4 Opus     | claude-opus-4-20250514 (claude-opus-4-latest)         | anthropic.claude-opus-4-20250514-v1:0                      | claude-opus-4@20250514                                  |
+| Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5-latest) | anthropic.claude-sonnet-4-5-20250929-v1:0                  | claude-sonnet-4-5@20250929                              |
 | Claude 4 Sonnet   | claude-sonnet-4-20250514 (claude-sonnet-4-latest)     | anthropic.claude-sonnet-4-20250514-v1:0                    | claude-sonnet-4@20250514                                |
+| Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5-latest)   | anthropic.claude-haiku-4-5-20251001-v1:0                   | claude-haiku-4-5@20251001                               |
 | Claude 3.7 Sonnet | claude-3-7-sonnet-20250219 (claude-3-7-sonnet-latest) | anthropic.claude-3-7-sonnet-20250219-v1:0                  | claude-3-7-sonnet@20250219                              |
 | Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 (claude-3-5-sonnet-latest) | anthropic.claude-3-5-sonnet-20241022-v2:0                  | claude-3-5-sonnet-v2@20241022                           |
 | Claude 3.5 Haiku  | claude-3-5-haiku-20241022 (claude-3-5-haiku-latest)   | anthropic.claude-3-5-haiku-20241022-v1:0                   | claude-3-5-haiku@20241022                               |
@@ -108,7 +112,7 @@ Example configuration with options and prompts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       temperature: 0.0
       max_tokens: 512
@@ -124,7 +128,7 @@ The Anthropic provider supports tool use (or function calling). Here's an exampl
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       tools:
         - name: get_weather
@@ -143,6 +147,94 @@ providers:
             required:
               - location
 ```
+
+#### Web Search and Web Fetch Tools
+
+Anthropic provides specialized tools for web search and web fetching capabilities:
+
+##### Web Fetch Tool
+
+The web fetch tool allows Claude to retrieve full content from web pages and PDF documents. This is useful when you want Claude to access and analyze specific web content.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      tools:
+        - type: web_fetch_20250910
+          name: web_fetch
+          max_uses: 5
+          allowed_domains:
+            - docs.example.com
+            - help.example.com
+          citations:
+            enabled: true
+          max_content_tokens: 50000
+```
+
+**Web Fetch Tool Configuration Options:**
+
+| Parameter            | Type     | Description                                                                                  |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `type`               | string   | Must be `web_fetch_20250910`                                                                 |
+| `name`               | string   | Must be `web_fetch`                                                                          |
+| `max_uses`           | number   | Maximum number of web fetches per request (optional)                                         |
+| `allowed_domains`    | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`) |
+| `blocked_domains`    | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`) |
+| `citations`          | object   | Enable citations with `{ enabled: true }` (optional)                                         |
+| `max_content_tokens` | number   | Maximum tokens for web content (optional)                                                    |
+
+##### Web Search Tool
+
+The web search tool allows Claude to search the internet for information:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 3
+```
+
+**Web Search Tool Configuration Options:**
+
+| Parameter  | Type   | Description                                       |
+| ---------- | ------ | ------------------------------------------------- |
+| `type`     | string | Must be `web_search_20250305`                     |
+| `name`     | string | Must be `web_search`                              |
+| `max_uses` | number | Maximum number of searches per request (optional) |
+
+##### Combined Web Search and Web Fetch
+
+You can use both tools together for comprehensive web information gathering:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 3
+        - type: web_fetch_20250910
+          name: web_fetch
+          max_uses: 5
+          citations:
+            enabled: true
+```
+
+This configuration allows the model to first search for relevant information, then fetch full content from the most promising results.
+
+**Important Security Notes:**
+
+- The web fetch tool requires trusted environments due to potential data exfiltration risks
+- The model cannot dynamically construct URLs - only URLs provided by users or from search results can be fetched
+- Use domain filtering to restrict access to specific sites:
+  - Use `allowed_domains` to whitelist trusted domains (recommended)
+  - Use `blocked_domains` to blacklist specific domains
+  - **Note:** Only one of `allowed_domains` or `blocked_domains` can be specified, not both
 
 See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use).
 
@@ -165,7 +257,7 @@ Supported on all Claude 3, 3.5, and 4 models. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
   - file://prompts.yaml
 ```
@@ -200,7 +292,7 @@ Claude can provide detailed citations when answering questions about documents. 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
   - file://prompts.yaml
 ```
@@ -227,7 +319,7 @@ Claude supports an extended thinking capability that allows you to see the model
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       max_tokens: 20000
       thinking:
@@ -286,7 +378,7 @@ By default, thinking content is included in the response output. You can control
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       thinking:
         type: 'enabled'
@@ -323,7 +415,7 @@ Claude 4 models provide enhanced output capabilities and extended thinking suppo
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       max_tokens: 64000 # Claude 4 Sonnet supports up to 64K output tokens
       thinking:
@@ -356,7 +448,7 @@ You can override the grading provider in several ways:
 ```yaml title="promptfooconfig.yaml"
 defaultTest:
   options:
-    provider: anthropic:messages:claude-sonnet-4-20250514
+    provider: anthropic:messages:claude-sonnet-4-5-20250929
 ```
 
 2. For individual assertions:
@@ -366,7 +458,7 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: anthropic:messages:claude-sonnet-4-20250514
+      id: anthropic:messages:claude-sonnet-4-5-20250929
       config:
         temperature: 0.0
 ```
@@ -379,7 +471,7 @@ tests:
       question: What is the capital of France?
     options:
       provider:
-        id: anthropic:messages:claude-sonnet-4-20250514
+        id: anthropic:messages:claude-sonnet-4-5-20250929
     assert:
       - type: llm-rubric
         value: Answer should mention Paris

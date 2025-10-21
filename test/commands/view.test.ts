@@ -3,7 +3,7 @@ import { viewCommand } from '../../src/commands/view';
 import { getDefaultPort } from '../../src/constants';
 import { startServer } from '../../src/server/server';
 import telemetry from '../../src/telemetry';
-import { setupEnv } from '../../src/util';
+import { setupEnv } from '../../src/util/index';
 import { setConfigDirectoryPath } from '../../src/util/config/manage';
 import { BrowserBehavior } from '../../src/util/server';
 
@@ -53,12 +53,17 @@ describe('viewCommand', () => {
 
   it('should handle browser behavior options correctly', async () => {
     viewCommand(program);
-    const viewCmd = program.commands[0];
+    let viewCmd = program.commands[0];
 
     await viewCmd.parseAsync(['node', 'test', '--yes']);
     expect(startServer).toHaveBeenCalledWith(getDefaultPort().toString(), BrowserBehavior.OPEN);
 
     jest.clearAllMocks();
+
+    // Reset program and viewCommand for the second test
+    program = new Command();
+    viewCommand(program);
+    viewCmd = program.commands[0];
 
     // Use a unique port to avoid confusion with default port
     await viewCmd.parseAsync(['node', 'test', '--no', '--port', '15500']);

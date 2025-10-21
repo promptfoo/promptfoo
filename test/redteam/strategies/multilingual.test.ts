@@ -6,7 +6,6 @@ import {
   getConcurrencyLimit,
   translateBatch,
 } from '../../../src/redteam/strategies/multilingual';
-
 import type { TestCase } from '../../../src/types';
 
 jest.mock('cli-progress', () => ({
@@ -24,6 +23,7 @@ jest.mock('../../../src/logger', () => ({
   debug: jest.fn(),
   error: jest.fn(),
   info: jest.fn(),
+  warn: jest.fn(),
 }));
 
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
@@ -42,6 +42,7 @@ jest.mock('../../../src/cache', () => ({
 
 jest.mock('../../../src/redteam/providers/shared', () => ({
   redteamProviderManager: {
+    getMultilingualProvider: jest.fn().mockResolvedValue(undefined),
     getProvider: jest.fn().mockResolvedValue({
       callApi: jest.fn().mockResolvedValue({
         output: '{"de": "Hallo Welt"}',
@@ -57,27 +58,40 @@ describe('Multilingual Strategy', () => {
     jest.clearAllMocks();
   });
 
-  describe('getConcurrencyLimit', () => {
-    it('should return default concurrency when no config provided', () => {
-      expect(getConcurrencyLimit()).toBe(4);
-    });
-
-    it('should return configured concurrency limit', () => {
-      expect(getConcurrencyLimit({ maxConcurrency: 8 })).toBe(8);
-    });
-
-    it('should handle invalid concurrency values', () => {
-      expect(getConcurrencyLimit({ maxConcurrency: undefined })).toBe(4);
-      // 0, null, and negative values should fallback to default (4)
-      expect(getConcurrencyLimit({ maxConcurrency: 0 })).toBe(4);
-      expect(getConcurrencyLimit({ maxConcurrency: null })).toBe(4);
-      // For negative value, should fallback to default (4)
-      // The implementation currently returns the value as-is, so this will fail if not fixed in src
-      expect(getConcurrencyLimit({ maxConcurrency: -1 })).toBe(-1);
-    });
-  });
-
   describe('translateBatch', () => {
+    it('prefers multilingual provider when available', async () => {
+      const multilingualProvider = {
+        callApi: jest.fn().mockResolvedValue({
+          output: '{"es": "Hola"}',
+        }),
+      };
+      jest
+        .mocked(redteamProviderManager.getMultilingualProvider)
+        .mockResolvedValueOnce(multilingualProvider as any);
+
+      const result = await translateBatch('Hello', ['es']);
+
+      expect(result).toEqual({ es: 'Hola' });
+      expect(jest.mocked(redteamProviderManager.getProvider)).not.toHaveBeenCalled();
+      expect(multilingualProvider.callApi).toHaveBeenCalled();
+    });
+
+    it('falls back to regular provider when multilingual provider is unavailable', async () => {
+      jest
+        .mocked(redteamProviderManager.getMultilingualProvider)
+        .mockResolvedValueOnce(undefined as any);
+
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ output: '{"fr": "Bonjour"}' }),
+      };
+      jest.mocked(redteamProviderManager.getProvider).mockResolvedValueOnce(provider as any);
+
+      const result = await translateBatch('Hello', ['fr']);
+
+      expect(result).toEqual({ fr: 'Bonjour' });
+      expect(jest.mocked(redteamProviderManager.getProvider)).toHaveBeenCalled();
+      expect(provider.callApi).toHaveBeenCalled();
+    });
     it('should handle JSON response format', async () => {
       const mockProvider = {
         callApi: jest.fn().mockResolvedValue({
@@ -155,7 +169,7 @@ describe('Multilingual Strategy', () => {
       };
       jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
-      const result = await translateBatch('Hello', ['es', 'fr']).catch(() => ({}));
+      const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({});
     });
 
@@ -339,12 +353,13 @@ describe('Multilingual Strategy', () => {
     });
 
     it('should handle multiple languages in batches', async () => {
-      // First batch returns only two languages, second returns the last
+      // With adaptive batching: first batch (es, fr) succeeds with partial result,
+      // then fallback tries individual de
       const mockProvider = {
         callApi: jest
           .fn()
-          .mockResolvedValueOnce({ output: '{"es": "Hola", "fr": "Bonjour"}' })
-          .mockResolvedValueOnce({ output: '{"de": "Hallo"}' }),
+          .mockResolvedValueOnce({ output: '{"es": "Hola", "fr": "Bonjour"}' }) // First batch succeeds
+          .mockResolvedValueOnce({ output: '{"de": "Hallo"}' }), // Individual fallback for de
       };
       jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
@@ -355,14 +370,16 @@ describe('Multilingual Strategy', () => {
 
       const result = await addMultilingual([testCase], 'text', {
         languages: ['es', 'fr', 'de'],
+        batchSize: 2, // Set explicit batch size of 2
         maxConcurrency: 1,
       });
 
-      // The batchSize is 3, so only one call will be made, not two. The test must reflect this.
-      // The mock returns only the first two languages in the first call, so only two are returned.
-      expect(result).toHaveLength(2);
-      expect(result.map((r) => r.vars?.text)).toEqual(expect.arrayContaining(['Hola', 'Bonjour']));
-      expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
+      // Should get all 3 languages: first batch (es, fr) + individual fallback (de)
+      expect(result).toHaveLength(3);
+      expect(result.map((r) => r.vars?.text)).toEqual(
+        expect.arrayContaining(['Hola', 'Bonjour', 'Hallo']),
+      );
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2); // One batch call + one individual call
     });
 
     it('should skip testCase if vars are missing', async () => {
@@ -500,6 +517,163 @@ describe('Multilingual Strategy', () => {
       // Only one translation should be returned
       expect(result).toHaveLength(1);
       expect(result[0].vars?.text).toBe('Hola');
+    });
+
+    describe('getConcurrencyLimit', () => {
+      it('should return default concurrency when no config provided', () => {
+        expect(getConcurrencyLimit()).toBe(4);
+      });
+
+      it('should return configured concurrency limit', () => {
+        expect(getConcurrencyLimit({ maxConcurrency: 8 })).toBe(8);
+      });
+
+      it('should handle invalid concurrency values', () => {
+        expect(getConcurrencyLimit({ maxConcurrency: undefined })).toBe(4);
+        expect(getConcurrencyLimit({ maxConcurrency: 0 })).toBe(4);
+        expect(getConcurrencyLimit({ maxConcurrency: null })).toBe(4);
+        expect(getConcurrencyLimit({ maxConcurrency: -1 })).toBe(4);
+        expect(getConcurrencyLimit({ maxConcurrency: 'invalid' })).toBe(4);
+      });
+
+      it('should handle valid concurrency values', () => {
+        expect(getConcurrencyLimit({ maxConcurrency: 1 })).toBe(1);
+        expect(getConcurrencyLimit({ maxConcurrency: 10 })).toBe(10);
+        expect(getConcurrencyLimit({ maxConcurrency: '5' })).toBe(5);
+      });
+    });
+
+    it('should handle partial local translation results', async () => {
+      // Mock provider to return partial translations (missing one language)
+      const mockProvider = {
+        callApi: jest
+          .fn()
+          .mockResolvedValueOnce({ output: '{"es": "Hola"}' }) // Missing 'fr'
+          .mockResolvedValueOnce({ output: '{"fr": "Bonjour"}' }), // Individual retry
+      };
+      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+
+      const result = await translateBatch('Hello', ['es', 'fr'], 2);
+
+      expect(result).toEqual({ es: 'Hola', fr: 'Bonjour' });
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2); // Batch + individual retry
+    });
+
+    it('should escape language codes in regex fallback', async () => {
+      const mockProvider = {
+        callApi: jest.fn().mockResolvedValue({
+          output: '"zh-CN": "你好", "en-US": "Hello"', // Raw text with special chars
+        }),
+      };
+      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+
+      const result = await translateBatch('Hello', ['zh-CN', 'en-US']);
+
+      expect(result).toEqual({ 'zh-CN': '你好', 'en-US': 'Hello' });
+    });
+
+    it('should handle local partial fallback and deduplication', async () => {
+      // Test the deduplication logic by simulating partial results that would come from
+      // remote generation fallback. Since the remote path is complex to mock properly,
+      // we'll test the core deduplication logic that ensures no duplicate test cases
+      // are returned when retries occur.
+
+      // Mock provider that simulates what would happen in remote generation:
+      // 1. Initial batch returns some results
+      // 2. Individual retries fill in missing results
+      // 3. Later retries might return duplicates that should be filtered
+      const mockProvider = {
+        callApi: jest
+          .fn()
+          // Simulate local fallback after remote fails - partial translation
+          .mockResolvedValueOnce({ output: '{"es": "Hola"}' }) // Missing 'fr'
+          // Individual retry for missing language
+          .mockResolvedValueOnce({ output: '{"fr": "Bonjour"}' })
+          // Potential duplicate retry (should not create duplicate test cases)
+          .mockResolvedValueOnce({ output: '{"es": "Hola alternative"}' }),
+      };
+      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+
+      const testCases: TestCase[] = [{ vars: { prompt: 'Hello' }, metadata: {} }];
+
+      const result = await addMultilingual(testCases, 'prompt', {
+        languages: ['es', 'fr'],
+        batchSize: 1, // Small batch to trigger retry logic
+        maxConcurrency: 1,
+      });
+
+      // Should have exactly 2 results (one per language), not duplicates
+      expect(result).toHaveLength(2);
+
+      // Should have both languages
+      const resultLanguages = result.map((r) => r.metadata?.language);
+      expect(resultLanguages).toEqual(expect.arrayContaining(['es', 'fr']));
+
+      // Verify the translations are the expected ones (first occurrence wins)
+      const spanishTest = result.find((r) => r.metadata?.language === 'es');
+      const frenchTest = result.find((r) => r.metadata?.language === 'fr');
+
+      expect(spanishTest?.vars?.prompt).toBe('Hola');
+      expect(frenchTest?.vars?.prompt).toBe('Bonjour');
+    });
+
+    it('should handle improved missing detection logic', async () => {
+      // Test the improved missing detection logic indirectly through local generation
+      // This validates that the deduplication key logic improvements work correctly
+      // when originalText metadata is properly preserved vs when it's missing
+
+      let callCount = 0;
+      const mockProvider = {
+        callApi: jest.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            // First call: partial success with proper originalText metadata
+            return Promise.resolve({
+              output: JSON.stringify({
+                es: 'Hola mundo',
+                // Missing French, will trigger individual retry
+              }),
+            });
+          } else if (callCount === 2) {
+            // Second call: individual retry for missing language
+            return Promise.resolve({
+              output: JSON.stringify({
+                fr: 'Bonjour le monde',
+              }),
+            });
+          } else {
+            // Should not have additional calls for this scenario
+            return Promise.resolve({ output: '{}' });
+          }
+        }),
+      };
+      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+
+      const testCases: TestCase[] = [{ vars: { prompt: 'Hello world' }, metadata: {} }];
+
+      const result = await addMultilingual(testCases, 'prompt', {
+        languages: ['es', 'fr'],
+        batchSize: 1, // Small batch size to trigger retry logic
+        maxConcurrency: 1,
+      });
+
+      // Should have exactly 2 results (one per language)
+      expect(result).toHaveLength(2);
+
+      // Verify both languages are present and correct
+      const resultLanguages = result.map((r) => r.metadata?.language);
+      expect(resultLanguages).toEqual(expect.arrayContaining(['es', 'fr']));
+
+      const spanishResult = result.find((r) => r.metadata?.language === 'es');
+      const frenchResult = result.find((r) => r.metadata?.language === 'fr');
+
+      expect(spanishResult?.vars?.prompt).toBe('Hola mundo');
+      expect(frenchResult?.vars?.prompt).toBe('Bonjour le monde');
+
+      // Should have made exactly 2 API calls:
+      // 1. Initial batch call (partial success)
+      // 2. Individual retry for missing language
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
     });
   });
 });

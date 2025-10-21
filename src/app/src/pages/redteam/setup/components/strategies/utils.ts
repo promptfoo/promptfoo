@@ -10,6 +10,7 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 
 const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   audio: 1,
+  'authoritative-markup-injection': 1,
   base64: 1,
   basic: 1,
   'best-of-n': 1,
@@ -27,6 +28,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'jailbreak:composite': 5,
   'jailbreak:likert': 1,
   'jailbreak:tree': 150,
+  layer: 1,
   leetspeak: 1,
   'math-prompt': 1,
   'mischievous-user': 5,

@@ -2,7 +2,6 @@ import { render, screen, fireEvent, within, RenderResult } from '@testing-librar
 import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { alpha } from '@mui/material';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 import Prompts from './Prompts';
 
@@ -195,37 +194,6 @@ describe('Prompts', () => {
   it('should not call handleClickOpen if the prompt ID is not found in the data array', () => {
     const handleClickOpenMock = vi.fn();
 
-    const _MockPrompts = ({
-      data,
-      isLoading,
-      error,
-    }: {
-      data: ServerPromptWithMetadata[];
-      isLoading: boolean;
-      error: string | null;
-    }) => {
-      const handleRowClick = (params: any) => {
-        const index = data.findIndex((p) => p.id === params.id);
-        if (index !== -1) {
-          handleClickOpenMock(index);
-        }
-      };
-
-      return (
-        <div>
-          {data.map((prompt) => (
-            <div
-              key={prompt.id}
-              data-rowid={prompt.id}
-              onClick={() => handleRowClick({ id: prompt.id })}
-            >
-              {prompt.prompt.label}
-            </div>
-          ))}
-        </div>
-      );
-    };
-
     renderWithProviders({ data: mockPrompts });
 
     const nonexistentId = 'prompt:nonexistent';
@@ -246,7 +214,7 @@ describe('Prompts', () => {
     expect(handleClickOpenMock).not.toHaveBeenCalled();
   });
 
-  it('should apply dark theme background when in dark mode', () => {
+  it('should render correctly in dark mode', () => {
     const darkTheme = createTheme({ palette: { mode: 'dark' } });
 
     const { container } = renderWithProviders({
@@ -254,10 +222,11 @@ describe('Prompts', () => {
       theme: darkTheme,
     });
 
-    const promptsBox = container.firstChild;
+    const promptsContainer = container.firstChild;
 
-    expect(promptsBox).toHaveStyle(
-      `background-color: ${alpha(darkTheme.palette.common.black, 0.2)}`,
-    );
+    // After layout unification, the Container no longer has theme-specific background colors
+    // This test now verifies the component renders without errors in dark mode
+    expect(promptsContainer).toBeInTheDocument();
+    expect(screen.getByText('This is the first sample prompt.')).toBeInTheDocument();
   });
 });
