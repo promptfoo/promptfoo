@@ -1,18 +1,23 @@
 import { callApi } from '@app/utils/api';
 import { useQuery } from '@tanstack/react-query';
 
-export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'loading' | 'disabled';
+export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'disabled';
 
 interface HealthResponse {
   status: string;
   message: string;
 }
 
+export type ApiHealthResult = {
+  status: ApiHealthStatus;
+  message: string;
+};
+
 /**
  * Checks the health of the connection to Promptfoo Cloud.
  */
 export function useApiHealth() {
-  return useQuery<{ status: ApiHealthStatus; message: string }, Error>({
+  return useQuery<ApiHealthResult, Error>({
     queryKey: ['apiHealth'],
     queryFn: async () => {
       try {
@@ -30,8 +35,8 @@ export function useApiHealth() {
       }
     },
     refetchInterval: 3000, // Poll every 3 seconds
-    retry: false,
-    staleTime: 2000,
+    retry: false, // Failed queries will not be retried until the next poll
+    staleTime: 2000, // Data is fresh for 2 seconds
     initialData: {
       status: 'unknown',
       message: '',

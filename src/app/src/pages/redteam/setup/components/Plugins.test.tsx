@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');
@@ -24,6 +26,17 @@ vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({
     recordEvent: mockRecordEvent,
   }),
+}));
+
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: vi.fn(
+    () =>
+      ({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      }) as unknown as DefinedUseQueryResult<ApiHealthResult, Error>,
+  ),
 }));
 
 vi.mock('./CustomIntentPluginSection', () => ({
