@@ -1,6 +1,6 @@
 ---
 title: 'Reinforcement Learning with Verifiable Rewards Makes Models Faster, Not Smarter'
-description: 'RLVR trains reasoning models with programmatic verifiers instead of human labels. Recent research suggests most gains come from search compression rather than new capabilities. Here is what actually works.'
+description: 'RLVR trains reasoning models with programmatic verifiers instead of human labels. Recent research suggests most gains come from search compression rather than new capabilities. What actually works.'
 authors: [michael]
 tags: [technical-guide, best-practices, evaluation]
 keywords:
@@ -19,7 +19,7 @@ date: 2025-10-20
 image: /img/blog/rlvr/rlvr-header.jpg
 ---
 
-# Reinforcement Learning with Verifiable Rewards: When It Works, When It Fails
+# Reinforcement Learning with Verifiable Rewards Makes Models Faster, Not Smarter
 
 If your model can solve a problem in 8 tries, RLVR trains it to succeed in 1 try. [Recent research](https://arxiv.org/abs/2504.13837) shows this is primarily search compression, not expanded reasoning capability. Training concentrates probability mass on paths the base model could already sample.
 
