@@ -42,6 +42,8 @@ Promptfoo also supports various risk management frameworks based on common secur
 | [**OWASP Top 10 for LLMs**](/docs/red-team/owasp-llm-top-10/)                                                   | owasp:llm       | owasp:llm:01               |
 | [**OWASP Top 10 for APIs**](/docs/red-team/configuration/#owasp-api-security-top-10)                            | owasp:api       | owasp:api:01               |
 | [**MITRE ATLAS**](/docs/red-team/configuration/#mitre-atlas)                                                    | mitre:atlas     | mitre:atlas:reconnaissance |
+| [**ISO/IEC 42001**](/docs/red-team/iso-42001/)                                                                  | iso:42001       | iso:42001:privacy          |
+| [**GDPR**](/docs/red-team/gdpr/)                                                                                | gdpr            | gdpr:art5                  |
 | **Promptfoo Recommended**                                                                                       | default         | default                    |
 
 ## Available Plugins
