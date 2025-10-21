@@ -581,7 +581,8 @@ describe('useTableStore', () => {
       });
 
       const state = useTableStore.getState();
-      expect(state.filters.options.strategy).toEqual(['multilingual', 'retry', 'basic']);
+      // multilingual is filtered out since it's now a pure config mechanism
+      expect(state.filters.options.strategy).toEqual(['retry', 'basic']);
       expect(state.filters.options.plugin).toEqual(['pii', 'bias']);
     });
   });
