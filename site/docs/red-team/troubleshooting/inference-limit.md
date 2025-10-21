@@ -1,9 +1,9 @@
 ---
-sidebar_label: Inference 
+sidebar_label: Configuring Inference 
 description: Red team LLM inference security by monitoring usage limits and configuring remote generation. 
 ---
 
-# About Promptfoo Inference 
+# Configuring Inference 
 
 Promptfoo open-source red teaming requires inference to generate probes and grade results.  When using Promptfoo’s open-source red teaming solution, your usage falls under Promptfoo’s [privacy policy](https://www.promptfoo.dev/privacy/). By default, Promptfoo manages all inference. This service is optimized for high-quality, diverse test cases.
 
