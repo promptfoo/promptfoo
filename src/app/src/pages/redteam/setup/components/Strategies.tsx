@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -12,6 +14,7 @@ import {
   DEFAULT_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
+  STRATEGIES_REQUIRING_REMOTE,
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
@@ -67,6 +70,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const theme = useTheme();
+  const toast = useToast();
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
   const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
@@ -79,6 +84,19 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
   }, [recordEvent]);
+
+  useEffect(() => {
+    checkHealth();
+  }, [checkHealth]);
+
+  const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
+
+  const isStrategyDisabled = useCallback(
+    (strategyId: string) => {
+      return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE.includes(strategyId as any);
+    },
+    [isRemoteGenerationDisabled],
+  );
 
   // Categorize strategies by type
   const categorizedStrategies = useMemo(() => {
@@ -210,6 +228,14 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const handleStrategyToggle = useCallback(
     (strategyId: string) => {
+      if (isStrategyDisabled(strategyId)) {
+        toast.showToast(
+          'This strategy requires remote generation to be enabled. Set PROMPTFOO_DISABLE_REMOTE_GENERATION=false or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=false.',
+          'error',
+        );
+        return;
+      }
+
       const isSelected = config.strategies.some((s) => getStrategyId(s) === strategyId);
 
       if (!isSelected) {
@@ -242,7 +268,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         updateConfig('strategies', [...config.strategies, newStrategy]);
       }
     },
-    [config.strategies, recordEvent, updateConfig, isStatefulValue],
+    [config.strategies, recordEvent, updateConfig, isStatefulValue, isStrategyDisabled, toast],
   );
 
   const handleSelectNoneInSection = useCallback(
@@ -469,6 +495,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
           />
         )}
 
@@ -482,6 +510,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
           />
         )}
 
@@ -495,6 +525,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
           />
         )}
 
@@ -508,6 +540,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onToggle={handleStrategyToggle}
             onConfigClick={handleConfigClick}
             onSelectNone={handleSelectNoneInSection}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
           />
         )}
 
