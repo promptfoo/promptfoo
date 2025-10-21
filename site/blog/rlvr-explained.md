@@ -1,5 +1,5 @@
 ---
-title: 'Reinforcement Learning with Verifiable Rewards: When It Works, When It Fails'
+title: 'Reinforcement Learning with Verifiable Rewards Makes Models Faster, Not Smarter'
 description: 'RLVR trains reasoning models with programmatic verifiers instead of human labels. Recent research suggests most gains come from search compression rather than new capabilities. Here is what actually works.'
 authors: [michael]
 tags: [technical-guide, best-practices, evaluation]
