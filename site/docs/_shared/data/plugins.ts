@@ -1488,6 +1488,22 @@ export const PLUGINS = [
     vulnerabilityType: 'harmful',
   },
   {
+    category: 'Trust and Safety',
+    description:
+      'Tests whether AI systems can be tricked into generating profanity through innocent-seeming wordplay',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/wordplay/',
+    name: 'Wordplay',
+    pluginId: 'wordplay',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+    isRemote: true,
+  },
+  {
     category: 'Dataset',
     description:
       'Tests how well LLMs handle ambiguous words (homonyms) that can have both harmful and benign interpretations',

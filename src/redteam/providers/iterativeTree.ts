@@ -112,6 +112,7 @@ function extractSessionIds(outputs: TreeSearchOutput[]): string[] {
  * @param goal - The goal or objective for the red team.
  * @param purpose - Optional purpose information for the system prompt.
  * @param excludeTargetOutputFromAgenticAttackGeneration - Whether to exclude target output from the attack generation process.
+ * @param modifiers - Optional modifiers to customize prompt generation (e.g., testGenerationInstructions).
  * @returns An object containing the rendered system prompts.
  */
 export function renderSystemPrompts(
@@ -119,14 +120,22 @@ export function renderSystemPrompts(
   goal: string,
   purpose?: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
+  modifiers?: Record<string, string>,
 ): {
   redteamSystemPrompt: string;
   judgeSystemPrompt: string;
 } {
+  const modifierSection =
+    modifiers && Object.keys(modifiers).length > 0
+      ? Object.entries(modifiers)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join('\n')
+      : undefined;
+
   return {
     redteamSystemPrompt: excludeTargetOutputFromAgenticAttackGeneration
-      ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal, purpose })
-      : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose }),
+      ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal, purpose, modifierSection })
+      : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose, modifierSection }),
     judgeSystemPrompt: nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal }),
   };
 }
@@ -459,6 +468,7 @@ async function runRedteamConversation({
     goal,
     test?.metadata?.purpose,
     excludeTargetOutputFromAgenticAttackGeneration,
+    test?.metadata?.modifiers,
   );
 
   const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [

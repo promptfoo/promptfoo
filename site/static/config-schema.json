@@ -1158,6 +1158,14 @@
                           "financial:misconduct",
                           "financial:sycophancy",
                           "foundation",
+                          "gdpr",
+                          "gdpr:art15",
+                          "gdpr:art17",
+                          "gdpr:art22",
+                          "gdpr:art25",
+                          "gdpr:art32",
+                          "gdpr:art5",
+                          "gdpr:art9",
                           "guardrails-eval",
                           "hallucination",
                           "harmbench",
@@ -1297,6 +1305,7 @@
                           "unsafebench",
                           "unverifiable-claims",
                           "vlguard",
+                          "wordplay",
                           "xstest"
                         ]
                       },
@@ -1361,6 +1370,14 @@
                               "financial:misconduct",
                               "financial:sycophancy",
                               "foundation",
+                              "gdpr",
+                              "gdpr:art15",
+                              "gdpr:art17",
+                              "gdpr:art22",
+                              "gdpr:art25",
+                              "gdpr:art32",
+                              "gdpr:art5",
+                              "gdpr:art9",
                               "guardrails-eval",
                               "hallucination",
                               "harmbench",
@@ -1499,6 +1516,7 @@
                               "unsafebench",
                               "unverifiable-claims",
                               "vlguard",
+                              "wordplay",
                               "xstest"
                             ]
                           },
@@ -1543,6 +1561,7 @@
                         "type": "string",
                         "enum": [
                           "audio",
+                          "authoritative-markup-injection",
                           "base64",
                           "basic",
                           "best-of-n",
@@ -1600,7 +1619,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
               "default": ["default"]
             },
             "maxConcurrency": {

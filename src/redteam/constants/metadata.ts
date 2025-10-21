@@ -6,6 +6,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
+  'authoritative-markup-injection': 'Tests vulnerability to authoritative markup injection attacks',
   layer: 'Applies multiple strategies in a defined order',
   base64: 'Tests handling of Base64-encoded malicious payloads',
   basic: 'Original plugin tests without any additional strategies or optimizations',
@@ -146,6 +147,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
   vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
+  wordplay: 'Tests whether AI systems can be tricked into generating profanity through wordplay',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
@@ -160,6 +162,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
+  'authoritative-markup-injection': 'Authoritative Markup Injection',
   layer: 'Strategy Layer',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
@@ -286,6 +289,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   unsafebench: 'UnsafeBench Dataset',
   'unverifiable-claims': 'Unverifiable Claims',
   vlguard: 'VLGuard Dataset',
+  wordplay: 'Wordplay',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
 };
@@ -417,6 +421,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   unsafebench: Severity.Medium,
   'unverifiable-claims': Severity.Medium,
   vlguard: Severity.Medium,
+  wordplay: Severity.Low,
   xstest: Severity.Low,
 };
 
@@ -489,6 +494,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
+    'wordplay',
   ],
 
   Brand: [
@@ -668,6 +674,7 @@ export const categoryAliases: Record<Plugin, string> = {
   unsafebench: 'UnsafeBench',
   'unverifiable-claims': 'Unverifiable Claims',
   vlguard: 'VLGuard',
+  wordplay: 'Wordplay',
   xstest: 'XSTest',
 };
 
@@ -810,6 +817,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'unverifiable-claims':
     'Tests whether an AI system makes claims that cannot be verified, including future predictions, unsourced statistics, and unknowable information',
   vlguard: 'Tests handling of potentially unsafe image content using the VLGuard dataset',
+  wordplay:
+    'Tests whether AI systems can be tricked into generating profanity or offensive language through innocent-seeming wordplay like riddles and rhyming games',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
@@ -818,6 +827,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
 export const strategyDescriptions: Record<Strategy, string> = {
   layer: 'Composes multiple strategies and applies them sequentially',
   audio: 'Tests detection and handling of audio-based malicious payloads',
+  'authoritative-markup-injection':
+    'Tests detection and handling of authoritative markup injection attacks',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
@@ -854,6 +865,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 export const strategyDisplayNames: Record<Strategy, string> = {
   layer: 'Layer',
   audio: 'Audio',
+  'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',
   'best-of-n': 'Best-of-N',
@@ -887,11 +899,12 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
-  'EU AI Act': 'Plugins mapped to EU AI Act prohibited & high-risk requirements',
+  'EU AI Act': 'EU AI Act prohibited & high-risk requirements',
   Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
+  GDPR: 'Data protection and privacy requirements',
   'Guardrails Evaluation': 'Evaluate guardrail effectiveness against common risks',
   Harmful: 'Harmful content assessment using MLCommons and HarmBench taxonomies',
-  'ISO 42001': 'Plugins mapped to ISO/IEC 42001 AI management system requirements',
+  'ISO 42001': 'ISO/IEC 42001 AI management system requirements',
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
   NIST: 'NIST AI Risk Management Framework',

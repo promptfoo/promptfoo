@@ -4,15 +4,18 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { checkRemoteHealth } from '../../util/apiHealth';
 import invariant from '../../util/invariant';
 import {
   BIAS_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
+  REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
 import {
   getRemoteGenerationUrl,
+  getRemoteHealthUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
@@ -78,6 +81,16 @@ async function fetchRemoteTestCases(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteTestCases should never be called when remote generation is disabled',
   );
+
+  // Health check remote before generating test cases
+  const remoteHealth = await checkRemoteHealth(
+    getRemoteHealthUrl() as string, // Only returns null if remote gen is disabled
+  );
+
+  if (remoteHealth.status !== 'OK') {
+    logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
+    return [];
+  }
 
   const body = JSON.stringify({
     config,
@@ -313,43 +326,10 @@ function createRemotePlugin<T extends PluginConfig>(
     },
   };
 }
-const remotePlugins: PluginFactory[] = [
-  'agentic:memory-poisoning',
-  'ascii-smuggling',
-  'bfla',
-  'bola',
-  'cca',
-  'competitors',
-  'financial:calculation-error',
-  'financial:compliance-violation',
-  'financial:confidential-disclosure',
-  'financial:counterfactual',
-  'financial:data-leakage',
-  'financial:defamation',
-  'financial:hallucination',
-  'financial:impartiality',
-  'financial:misconduct',
-  'financial:sycophancy',
-  'harmful:misinformation-disinformation',
-  'harmful:specialized-advice',
-  'hijacking',
-  'mcp',
-  'medical:anchoring-bias',
-  'medical:hallucination',
-  'medical:incorrect-knowledge',
-  'medical:off-label-use',
-  'medical:prioritization-error',
-  'medical:sycophancy',
-  'off-topic',
-  'rag-document-exfiltration',
-  'rag-poisoning',
-  'reasoning-dos',
-  'religion',
-  'special-token-injection',
-  'ssrf',
-  'sycophancy',
-  'system-prompt-override',
-].map((key) => createRemotePlugin(key));
+
+const remotePlugins: PluginFactory[] = REMOTE_ONLY_PLUGIN_IDS.filter(
+  (id) => id !== 'indirect-prompt-injection',
+).map((key) => createRemotePlugin(key));
 
 remotePlugins.push(
   createRemotePlugin<{ indirectInjectionVar: string }>(
