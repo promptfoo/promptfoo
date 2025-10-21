@@ -538,7 +538,7 @@ export default function PluginsTab({
                   onClick={() => {
                     if (pluginDisabled) {
                       toast.showToast(
-                        'This plugin requires remote generation to be enabled. Set PROMPTFOO_DISABLE_REMOTE_GENERATION=false or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=false.',
+                        'This plugin requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
                         'error',
                       );
                       return;
