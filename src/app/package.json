@@ -63,6 +63,7 @@
     "zustand": "^5.0.8"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.5",
     "redent": "^4.0.0",
     "reselect": "^5.1.1",
     "set-cookie-parser": "^2.7.1"
