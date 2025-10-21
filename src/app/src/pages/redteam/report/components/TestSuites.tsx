@@ -5,7 +5,6 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
-import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
@@ -93,7 +92,6 @@ const TestSuites = ({
   setVulnerabilitiesDataGridFilterModel,
 }: TestSuitesProps) => {
   const navigate = useNavigate();
-  const theme = useTheme();
   const { recordEvent } = useTelemetry();
   const [sortModel, setSortModel] = React.useState<GridSortModel>([
     { field: 'riskScore', sort: 'desc' },
@@ -368,7 +366,7 @@ const TestSuites = ({
                   width: 12,
                   height: 12,
                   borderRadius: '50%',
-                  backgroundColor: getRiskScoreColor(value, theme),
+                  backgroundColor: (theme) => getRiskScoreColor(value, theme),
                 }}
               />
               {value.toFixed(2)}

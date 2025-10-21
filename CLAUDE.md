@@ -331,7 +331,7 @@ find examples -name "package.json" -not -path "*/node_modules/*" -type f
 npm run build && npm test && npm run lint && npm run format
 
 # Check version consistency across workspaces (required by CI)
-npx check-dependency-version-consistency
+npx check-dependency-version-consistency --ignore-dep promptfoo-toolkit --ignore-dep storybook
 ```
 
 ### Critical Rules

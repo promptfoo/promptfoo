@@ -11,7 +11,10 @@ describe('getSeverityColor', () => {
       expectedColor: theme.palette.custom.severity[Severity.Critical].main,
     },
     { severity: Severity.High, expectedColor: theme.palette.custom.severity[Severity.High].main },
-    { severity: Severity.Medium, expectedColor: theme.palette.warning.main },
+    {
+      severity: Severity.Medium,
+      expectedColor: theme.palette.custom.severity[Severity.Medium].main,
+    },
     { severity: Severity.Low, expectedColor: theme.palette.success.main },
     { severity: undefined, expectedColor: theme.palette.grey[500] },
     { severity: 'invalid-severity' as Severity, expectedColor: theme.palette.grey[500] },
@@ -57,7 +60,11 @@ describe('getProgressColor', () => {
       { percentage: 75, expectedColor: darkTheme.palette.warning.light, dark: true },
       { percentage: 60, expectedColor: darkTheme.palette.warning.light, dark: true },
       { percentage: 30, expectedColor: darkTheme.palette.warning.dark, dark: true },
-      { percentage: 25, expectedColor: darkTheme.palette.error.main, dark: true },
+      {
+        percentage: 25,
+        expectedColor: darkTheme.palette.custom.severity[Severity.High].main,
+        dark: true,
+      },
       {
         percentage: 10,
         expectedColor: darkTheme.palette.custom.severity[Severity.Critical].main,
