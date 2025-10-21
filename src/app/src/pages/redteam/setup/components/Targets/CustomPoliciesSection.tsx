@@ -148,6 +148,10 @@ function CustomToolbar({
   );
 }
 
+function newPolicyName(index: number): string {
+  return `Custom Policy ${index + 1}`;
+}
+
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
@@ -177,7 +181,7 @@ export const CustomPoliciesSection = () => {
   // Get policy plugins from config
   const policyPlugins = config.plugins.filter(
     (p) => typeof p === 'object' && p.id === 'policy',
-  ) as Array<{ id: string; config: { policy: string } }>;
+  ) as Array<{ id: string; config: { policy: string | { id: string; text: string; name?: string } } }>;
 
   // Convert policies to rows for the data grid
   const rows: PolicyRow[] = useMemo(() => {
@@ -185,11 +189,25 @@ export const CustomPoliciesSection = () => {
       return [];
     }
     return policyPlugins.map((p, index) => {
-      const policyId = makeInlinePolicyId(p.config.policy);
+      // Handle both string and PolicyObject formats
+      let policyText: string;
+      let policyId: string;
+      let policyName: string;
+      
+      if (typeof p.config.policy === 'string') {
+        policyText = p.config.policy;
+        policyId = makeInlinePolicyId(policyText);
+        policyName = policyNames[policyId] || `Custom Policy ${index + 1}`;
+      } else {
+        policyText = p.config.policy.text || '';
+        policyId = p.config.policy.id;
+        policyName = p.config.policy.name || policyNames[policyId] || `Custom Policy ${index + 1}`;
+      }
+      
       return {
         id: policyId,
-        name: policyNames[policyId] || `Custom Policy ${index + 1}`,
-        policyText: p.config.policy,
+        name: policyName,
+        policyText: policyText,
       };
     });
   }, [policyPlugins, policyNames]);
@@ -210,6 +228,7 @@ export const CustomPoliciesSection = () => {
     );
 
     const newPolicyText = '';
+    const newPolicyId = makeInlinePolicyId(newPolicyText);
     const newPolicies = [
       ...policyPlugins.map((p) => ({
         id: 'policy',
@@ -217,15 +236,20 @@ export const CustomPoliciesSection = () => {
       })),
       {
         id: 'policy',
-        config: { policy: newPolicyText },
+        config: {
+          policy: {
+            id: newPolicyId,
+            text: newPolicyText,
+            name: newPolicyName(policyPlugins.length),
+          },
+        },
       },
     ];
 
     // Update the config state
     updateConfig('plugins', [...otherPlugins, ...newPolicies]);
 
-    // Set the new row to be auto-edited (use the ID of the new empty policy)
-    const newPolicyId = makeInlinePolicyId(newPolicyText);
+    // Set the new row to be auto-edited
     setAutoEditRowId(newPolicyId);
   };
 
@@ -243,7 +267,12 @@ export const CustomPoliciesSection = () => {
 
     const selectedIds = new Set(rowSelectionModel as string[]);
     const remainingPolicies = policyPlugins
-      .filter((p) => !selectedIds.has(makeInlinePolicyId(p.config.policy)))
+      .filter((p) => {
+        const policyId = typeof p.config.policy === 'string' 
+          ? makeInlinePolicyId(p.config.policy)
+          : p.config.policy.id;
+        return !selectedIds.has(policyId);
+      })
       .map((p) => ({
         id: 'policy',
         config: { policy: p.config.policy },
@@ -271,12 +300,24 @@ export const CustomPoliciesSection = () => {
         typeof p === 'string' ? true : p.id !== 'policy',
       );
 
+      const newPolicyId = makeInlinePolicyId(newRow.policyText);
+      
       const updatedPolicies = policyPlugins.map((p) => {
-        const currentPolicyId = makeInlinePolicyId(p.config.policy);
+        const currentPolicyId = typeof p.config.policy === 'string'
+          ? makeInlinePolicyId(p.config.policy)
+          : p.config.policy.id;
+          
         if (currentPolicyId === oldRow.id) {
+          // Save as PolicyObject format
           return {
             id: 'policy',
-            config: { policy: newRow.policyText },
+            config: {
+              policy: {
+                id: newPolicyId,
+                text: newRow.policyText,
+                name: newRow.name,
+              },
+            },
           };
         }
         return {
@@ -284,25 +325,6 @@ export const CustomPoliciesSection = () => {
           config: { policy: p.config.policy },
         };
       });
-
-      // Handle policy name updates considering potential ID change
-      const newPolicyId = makeInlinePolicyId(newRow.policyText);
-      const oldPolicyId = oldRow.id;
-      
-      if (newPolicyId !== oldPolicyId || newRow.name !== oldRow.name) {
-        setPolicyNames((prev) => {
-          const updated = { ...prev };
-          // If ID changed, remove old and add new
-          if (newPolicyId !== oldPolicyId) {
-            delete updated[oldPolicyId];
-          }
-          // Set the name for the new/updated ID
-          if (newRow.name !== `Custom Policy ${policyPlugins.findIndex(p => makeInlinePolicyId(p.config.policy) === newPolicyId) + 1}`) {
-            updated[newPolicyId] = newRow.name;
-          }
-          return updated;
-        });
-      }
 
       updateConfig('plugins', [...otherPlugins, ...updatedPolicies]);
       setEditingRowId(null);
@@ -342,15 +364,26 @@ export const CustomPoliciesSection = () => {
             typeof p === 'string' ? true : p.id !== 'policy',
           );
 
+          const currentPolicyCount = policyPlugins.length;
           const allPolicies = [
             ...policyPlugins.map((p) => ({
               id: 'policy',
               config: { policy: p.config.policy },
             })),
-            ...newPolicies.map((policy) => ({
-              id: 'policy',
-              config: { policy: policy.trim() },
-            })),
+            ...newPolicies.map((policy, index) => {
+              const policyText = policy.trim();
+              const policyId = makeInlinePolicyId(policyText);
+              return {
+                id: 'policy',
+                config: {
+                  policy: {
+                    id: policyId,
+                    text: policyText,
+                    name: newPolicyName(currentPolicyCount + index),
+                  },
+                },
+              };
+            }),
           ];
 
           updateConfig('plugins', [...otherPlugins, ...allPolicies]);
@@ -384,7 +417,11 @@ export const CustomPoliciesSection = () => {
       await generateTestCase(
         'policy',
         {
-          policy: row.policyText,
+          policy: {
+            id: row.id,
+            text: row.policyText,
+            name: row.name,
+          },
         },
         {
           telemetryFeature: 'redteam_policy_generate_test_case',

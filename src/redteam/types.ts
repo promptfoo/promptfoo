@@ -11,7 +11,15 @@ export type Intent = string | string[];
 
 // Policy Types
 export const PolicyObjectSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().refine(
+    (id) => {
+      // Accept either UUID (for cloud policies) or hash-based IDs (for inline policies)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const hashRegex = /^[0-9a-f]{12}$/i; // 12-char hex string from makeInlinePolicyId
+      return uuidRegex.test(id) || hashRegex.test(id);
+    },
+    { message: 'ID must be either a UUID or a 12-character hex string' }
+  ),
   text: z.string().optional(),
   name: z.string().optional(),
 });

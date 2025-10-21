@@ -64,7 +64,11 @@ interface ReviewProps {
 interface PolicyPlugin {
   id: 'policy';
   config: {
-    policy: string;
+    policy: string | {
+      id: string;
+      text?: string;
+      name?: string;
+    };
   };
 }
 
@@ -609,17 +613,23 @@ export default function Review({
                           paddingRight: '24px',
                         }}
                       >
-                        {policy.config.policy}
+                        {typeof policy.config.policy === 'string' 
+                          ? policy.config.policy 
+                          : policy.config.policy?.text || ''}
                       </Typography>
                       <IconButton
                         size="small"
                         onClick={() => {
+                          const policyToMatch = typeof policy.config.policy === 'string'
+                            ? policy.config.policy
+                            : policy.config.policy?.id;
                           const newPlugins = config.plugins.filter(
                             (p, _i) =>
                               !(
                                 typeof p === 'object' &&
                                 p.id === 'policy' &&
-                                p.config?.policy === policy.config.policy
+                                ((typeof p.config?.policy === 'string' && p.config.policy === policyToMatch) ||
+                                 (typeof p.config?.policy === 'object' && p.config.policy?.id === policyToMatch))
                               ),
                           );
                           updateConfig('plugins', newPlugins);
