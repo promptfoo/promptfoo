@@ -1,8 +1,8 @@
 ---
 sidebar_position: 4
 title: Azure OpenAI Provider
-description: Configure and use Azure OpenAI models with promptfoo for evals, including GPT-4, reasoning models, and vision capabilities
-keywords: [azure, openai, gpt-4, vision, reasoning models, evaluation]
+description: Configure and use Azure OpenAI models with promptfoo for evals, including GPT-4, reasoning models, assistants, Azure AI Foundry, and vision capabilities
+keywords: [azure, openai, gpt-4, vision, reasoning models, assistants, azure ai foundry, evaluation]
 ---
 
 # Azure
@@ -69,6 +69,8 @@ providers:
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
 - `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-4.1, gpt-5, o3-mini)
+- `azure:assistant:<assistant id>` - For Azure OpenAI Assistants (using Azure OpenAI API)
+- `azure:foundry-agent:<assistant id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 
 Vision-capable models (GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
 
@@ -412,7 +414,7 @@ All other [OpenAI provider](/docs/providers/openai) environment variables and co
 
 ## Using Client Credentials
 
-To use client credentials for authentication with Azure, first install the peer dependency:
+Install the `@azure/identity` package:
 
 ```sh
 npm i @azure/identity
@@ -772,7 +774,7 @@ To evaluate an OpenAI assistant on Azure:
 
 1. Create a deployment for the assistant in the Azure portal
 2. Create an assistant in the Azure web UI
-3. Install the peer dependency:
+3. Install the `@azure/openai-assistants` package:
 
 ```sh
 npm i @azure/openai-assistants
@@ -877,6 +879,228 @@ tests:
 For complete working examples of Azure OpenAI Assistants with various tool configurations, check out the [azure-openai-assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant).
 
 See the guide on [How to evaluate OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
+
+## Azure AI Foundry Agents
+
+Azure AI Foundry Agents provide an alternative way to use Azure OpenAI Assistants through the Azure AI Projects SDK (`@azure/ai-projects`). This provider uses native Azure SDK authentication and is designed for use with Azure AI Foundry projects.
+
+### Key Differences from Standard Azure Assistants
+
+| Feature             | Azure Assistant                              | Azure Foundry Agent                                                           |
+| ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------- |
+| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`)                                  |
+| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity) |
+| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)               |
+| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<assistant_id>`                                          |
+
+### Setup
+
+1. Install the required Azure SDK packages:
+
+```bash
+npm install @azure/ai-projects @azure/identity
+```
+
+2. Authenticate using one of these methods:
+   - **Azure CLI** (recommended for local development): Run `az login`
+   - **Environment variables**: Set Azure service principal credentials
+   - **Managed Identity**: Automatic in Azure-hosted environments
+   - **Service Principal**: Configure via environment variables
+
+3. Set your Azure AI Project URL:
+
+```bash
+export AZURE_AI_PROJECT_URL="https://your-project.services.ai.azure.com/api/projects/your-project-id"
+```
+
+Alternatively, you can provide the `projectUrl` in your configuration file.
+
+### Basic Configuration
+
+The provider uses the `azure:foundry-agent:<assistant_id>` format:
+
+```yaml
+providers:
+  - id: azure:foundry-agent:asst_E4GyOBYKlnAzMi19SZF2Sn8I
+    config:
+      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
+      temperature: 0.7
+      max_tokens: 150
+      instructions: 'You are a helpful assistant that provides clear and concise answers.'
+```
+
+### Configuration Options
+
+The Azure Foundry Agent provider supports all the same configuration options as the standard Azure Assistant provider:
+
+| Parameter               | Description                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `projectUrl`            | Azure AI Project URL (required, can also use `AZURE_AI_PROJECT_URL` env var) |
+| `temperature`           | Controls randomness (0.0 to 2.0)                                             |
+| `max_tokens`            | Maximum tokens in response                                                   |
+| `top_p`                 | Nucleus sampling parameter                                                   |
+| `tools`                 | Function tools configuration (see below)                                     |
+| `tool_choice`           | Tool selection strategy (`auto`, `none`, or specific tool)                   |
+| `tool_resources`        | Resource configuration (file search, code interpreter, etc.)                 |
+| `instructions`          | Override system instructions for the assistant                               |
+| `functionToolCallbacks` | Custom function callbacks for tool execution                                 |
+| `modelName`             | Model name to override assistant's default model                             |
+| `maxPollTimeMs`         | Maximum time to poll for completion (default: 300000ms / 5 minutes)          |
+| `response_format`       | Response format specification                                                |
+
+### Function Tools with Azure Foundry Agents
+
+Function tools work the same way as with standard Azure Assistants. You can define functions and provide callback implementations:
+
+```yaml
+providers:
+  - id: azure:foundry-agent:your_assistant_id
+    config:
+      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
+      # Load function tool definitions
+      tools: file://tools/weather-function.json
+      # Define function callbacks
+      functionToolCallbacks:
+        # Use an external file
+        get_current_weather: file://callbacks/weather.js:getCurrentWeather
+        # Or use an inline function
+        get_forecast: |
+          async function(args) {
+            try {
+              const parsedArgs = JSON.parse(args);
+              const location = parsedArgs.location;
+              const days = parsedArgs.days || 7;
+              
+              // Your implementation here
+              return JSON.stringify({
+                location,
+                forecast: [
+                  { day: 'Monday', temperature: 72, condition: 'sunny' },
+                  { day: 'Tuesday', temperature: 68, condition: 'cloudy' }
+                ]
+              });
+            } catch (error) {
+              return JSON.stringify({ error: String(error) });
+            }
+          }
+```
+
+The function callbacks receive two parameters:
+
+- `args`: String containing JSON-encoded function arguments
+- `context`: Object with `{ threadId, runId, assistantId, provider }` for advanced use cases
+
+### Using Vector Stores with Azure Foundry Agents
+
+Vector stores work the same way as with standard Azure Assistants:
+
+```yaml
+providers:
+  - id: azure:foundry-agent:your_assistant_id
+    config:
+      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
+      # Add tools for file search
+      tools:
+        - type: file_search
+      # Configure vector store IDs
+      tool_resources:
+        file_search:
+          vector_store_ids:
+            - 'your_vector_store_id'
+      # Optional parameters
+      temperature: 1
+      top_p: 1
+```
+
+### Environment Variables
+
+| Variable               | Description                                                    |
+| ---------------------- | -------------------------------------------------------------- |
+| `AZURE_AI_PROJECT_URL` | Your Azure AI Project URL (can be overridden in config)        |
+| `AZURE_CLIENT_ID`      | Azure service principal client ID (for service principal auth) |
+| `AZURE_CLIENT_SECRET`  | Azure service principal secret (for service principal auth)    |
+| `AZURE_TENANT_ID`      | Azure tenant ID (for service principal auth)                   |
+
+### Complete Example
+
+Here's a complete example configuration:
+
+```yaml
+description: 'Azure Foundry Agent evaluation'
+
+providers:
+  - id: azure:foundry-agent:asst_uRGMedGFDehLkjJJaq51J9GY
+    config:
+      projectUrl: 'https://my-project.services.ai.azure.com/api/projects/my-project-id'
+      temperature: 0.7
+      max_tokens: 150
+      instructions: 'You are a helpful assistant that provides clear and concise answers.'
+
+prompts:
+  - '{{question}}'
+
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  - vars:
+      question: 'Explain what photosynthesis is in simple terms.'
+    assert:
+      - type: contains
+        value: 'plants'
+      - type: contains
+        value: 'sunlight'
+```
+
+### Error Handling
+
+The Azure Foundry Agent provider includes comprehensive error handling:
+
+- **Content Filter Detection**: Automatically detects and reports content filtering events with guardrails metadata
+- **Rate Limit Handling**: Identifies rate limit errors for proper retry handling
+- **Service Error Detection**: Detects transient service errors (500, 502, 503, 504)
+- **Timeout Management**: Configurable polling timeout via `maxPollTimeMs`
+
+### Caching
+
+The provider supports caching to improve performance and reduce API calls. Results are cached based on:
+
+- Assistant configuration (instructions, model, temperature, etc.)
+- Tool definitions
+- Input prompt
+
+Enable caching globally in your configuration:
+
+```yaml
+cache: true
+
+providers:
+  - id: azure:foundry-agent:your_assistant_id
+    config:
+      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
+```
+
+### When to Use Azure Foundry Agents
+
+Use Azure Foundry Agents when:
+
+- You're working within Azure AI Foundry projects
+- You prefer native Azure SDK authentication (`DefaultAzureCredential`)
+- You're using managed identities or service principals for authentication
+- You want to leverage Azure AI Projects features
+
+Use standard Azure Assistants when:
+
+- You're using Azure OpenAI Service directly (not through AI Foundry)
+- You have an existing Azure OpenAI resource and endpoint
+- You prefer API key-based authentication
+
+### Example Repository
+
+For complete working examples, check out the [azure-foundry-agent example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-foundry-agent).
 
 ## See Also
 

@@ -1,10 +1,19 @@
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 
+export type TestResultStats = {
+  // The count of successful defenses (tests that passed)
+  pass: number;
+  // The total number of tests run
+  total: number;
+  // The count of successful defenses due to content moderation filtering
+  passWithFilter?: number;
+  // The number of successful attacks
+  failCount: number;
+};
+
 // Types for utility functions
-export type CategoryStats = Record<
-  string,
-  { pass: number; total: number; passWithFilter?: number }
->;
+export type CategoryStats = Record<string, TestResultStats>;
+
 type PluginCategories = {
   compliant: string[];
   nonCompliant: string[];

@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   AGENTIC_STRATEGIES,
@@ -27,10 +25,11 @@ import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
 import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
-import { getEstimatedProbes, getStrategyId } from './strategies/utils';
+import { getStrategyId } from './strategies/utils';
 import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
-
+import EstimationsDisplay from './EstimationsDisplay';
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
+import Divider from '@mui/material/Divider';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -439,30 +438,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       )}
 
       <Box>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            mb: 3,
-            p: 2,
-            borderRadius: 1,
-            backgroundColor: theme.palette.background.paper,
-            border: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography variant="body1" color="text.secondary">
-              Estimated Probes:
-            </Typography>
-          </Box>
-          <Typography variant="body1" fontWeight="bold" color="primary.main">
-            {getEstimatedProbes(config).toLocaleString()}
-          </Typography>
-          <Tooltip title="Probes are the number of requests to target application">
-            <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
-          </Tooltip>
-        </Box>
+        <EstimationsDisplay config={config} />
+
+        <Divider sx={{ my: 4 }} />
 
         {/* Preset Selector */}
         <PresetSelector

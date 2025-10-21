@@ -11,7 +11,7 @@ node_modules
 dist
 .aider*
 .vite
-*.tsbuildinfo
+**/*.tsbuildinfo
 src/generated/
 task.md
 
