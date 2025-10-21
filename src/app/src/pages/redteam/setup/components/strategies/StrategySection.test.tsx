@@ -24,6 +24,8 @@ describe('StrategySection', () => {
     it('renders section title', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -38,6 +40,8 @@ describe('StrategySection', () => {
     it('renders section description when provided', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           description="This is a test description"
           strategies={testStrategies}
@@ -53,6 +57,8 @@ describe('StrategySection', () => {
     it('does not render description when not provided', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -67,6 +73,8 @@ describe('StrategySection', () => {
     it('renders all strategy items', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -85,6 +93,8 @@ describe('StrategySection', () => {
     it('shows Reset button when strategies exist', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={['strategy1']}
@@ -100,6 +110,8 @@ describe('StrategySection', () => {
     it('disables Reset button when no strategies are selected', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -116,6 +128,8 @@ describe('StrategySection', () => {
     it('enables Reset button when strategies are selected', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={['strategy1', 'strategy2']}
@@ -132,6 +146,8 @@ describe('StrategySection', () => {
     it('calls onSelectNone with selected strategy IDs when Reset is clicked', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={['strategy1', 'strategy3']}
@@ -150,6 +166,8 @@ describe('StrategySection', () => {
     it('falls back to calling onToggle for each selected strategy when onSelectNone is not provided', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={['strategy1', 'strategy3']}
@@ -169,6 +187,8 @@ describe('StrategySection', () => {
     it('calls onSelectNone with only valid strategy IDs when Reset is clicked and selectedIds contains non-existent IDs', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={['strategy1', 'nonexistent', 'strategy3']}
@@ -187,6 +207,8 @@ describe('StrategySection', () => {
     it('does not call onSelectNone or onToggle when strategies are empty but selectedIds contains IDs', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={[]}
           selectedIds={['strategy1', 'strategy2']}
@@ -208,6 +230,8 @@ describe('StrategySection', () => {
     it('applies highlighted styling when highlighted prop is true', () => {
       const { container } = render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -225,6 +249,8 @@ describe('StrategySection', () => {
     it('applies special title styling when highlighted', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Highlighted Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -244,6 +270,8 @@ describe('StrategySection', () => {
     it('renders empty section when no strategies provided', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Empty Section"
           strategies={[]}
           selectedIds={[]}
@@ -269,6 +297,8 @@ describe('StrategySection', () => {
       render(
         <ThemeProvider theme={customTheme}>
           <StrategySection
+            isStrategyDisabled={() => false}
+            isRemoteGenerationDisabled={false}
             title="Test Section"
             strategies={testStrategies}
             selectedIds={[]}
@@ -310,6 +340,8 @@ describe('StrategySection', () => {
 
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={[configurableStrategy]}
           selectedIds={[configurableStrategyId]}

@@ -32,14 +32,6 @@ const redTeamSidebar = [
   },
   {
     type: 'doc',
-    id: 'red-team/owasp-llm-top-10',
-  },
-  {
-    type: 'doc',
-    id: 'red-team/iso-42001',
-  },
-  {
-    type: 'doc',
     id: 'red-team/risk-scoring',
   },
   {
@@ -220,6 +212,20 @@ const redTeamSidebar = [
         collapsed: true,
         items: ['red-team/strategies/retry'],
       },
+    ],
+  },
+  {
+    type: 'category',
+    label: 'Frameworks',
+    collapsed: true,
+    items: [
+      'red-team/nist-ai-rmf',
+      'red-team/owasp-llm-top-10',
+      'red-team/owasp-api-top-10',
+      'red-team/mitre-atlas',
+      'red-team/iso-42001',
+      'red-team/gdpr',
+      'red-team/eu-ai-act',
     ],
   },
   {
