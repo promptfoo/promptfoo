@@ -4,6 +4,7 @@ import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
+import RedteamFreeAgentProvider from '../redteam/providers/freeAgent';
 import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
@@ -1208,6 +1209,16 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new RedteamAuthoritativeMarkupInjectionProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:free-agent',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new RedteamFreeAgentProvider(providerOptions.config);
     },
   },
   {

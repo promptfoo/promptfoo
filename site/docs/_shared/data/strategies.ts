@@ -81,6 +81,18 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    strategy: 'free-agent',
+    displayName: 'Free Agent',
+    description: 'Agentic adaptive jailbreaks',
+    longDescription:
+      'Uses an AI agent to generate and refine single-turn jailbreak attempts based on target responses',
+    cost: 'High',
+    asrIncrease: '60-80%',
+    link: '/docs/red-team/strategies/free-agent/',
+    recommended: true,
+  },
+  {
+    category: 'Dynamic (Single-Turn)',
     strategy: 'jailbreak',
     displayName: 'Jailbreak',
     description: 'Lightweight iterative refinement',
