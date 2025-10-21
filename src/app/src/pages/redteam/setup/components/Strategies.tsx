@@ -6,7 +6,7 @@ import { useToast } from '@app/hooks/useToast';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
   AGENTIC_STRATEGIES,
@@ -431,6 +431,39 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       onNext={onNext}
       onBack={onBack}
     >
+      {/* Warning banner when remote generation is disabled - full width sticky */}
+      {isRemoteGenerationDisabled && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon />}
+          sx={(theme) => ({
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            margin: -3,
+            marginBottom: 3,
+            padding: theme.spacing(2, 3),
+            borderRadius: 0,
+            boxShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.1)}`,
+            '& .MuiAlert-message': {
+              width: '100%',
+            },
+          })}
+        >
+          <Box>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Remote Generation Disabled
+            </Typography>
+            <Typography variant="body2">
+              Some strategies require remote generation and are currently unavailable. These
+              strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+            </Typography>
+          </Box>
+        </Alert>
+      )}
+
       {/* Warning banner when all/most strategies are selected - full width sticky */}
       {hasSelectedMostStrategies && (
         <Alert
