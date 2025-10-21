@@ -135,11 +135,9 @@ def strong_sql_verifier(sql_query, expected_results, db_connection):
 
 [Research from June 2025](https://arxiv.org/abs/2506.10947) found Qwen2.5-Math-7B improved 21.4% on MATH-500 with _random_ rewards, nearly matching the 29.1% gain from ground truth rewards.
 
-The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward; the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. [These effects were strongest on Qwen2.5-Math and did not consistently replicate on Llama3 or OLMo2](https://arxiv.org/abs/2506.10947).
+The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward; the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. [These effects were strongest on Qwen2.5-Math and did not consistently replicate on Llama3 or OLMo2](https://arxiv.org/abs/2506.10947). [Later research](https://arxiv.org/abs/2507.10532) suggests Qwen's unusual sensitivity may indicate training data contamination rather than genuine capability surfacing. On contamination-free datasets, only accurate rewards deliver gains; random rewards provide no benefit. Always validate RLVR gains on held-out, distribution-shifted test sets.
 
-**Important caveat:** [Research from July 2025](https://arxiv.org/abs/2507.10532) suggests Qwen's unusual sensitivity to spurious rewards may indicate training data contamination rather than genuine latent capability surfacing. The study found that on contamination-free datasets, only accurate rewards deliver gains; random rewards provide no benefit. Always validate RLVR gains on held-out, distribution-shifted test sets when evaluating effectiveness.
-
-**Always run this test:**
+**You can validate your verifier with this test:**
 
 ```python
 def random_baseline_test(model, dataset, real_verifier):
@@ -167,20 +165,7 @@ Some "RLVR gains" are artifacts of the training process. Validate on held-out da
 
 **Value-free methods are fast but can make your model's outputs collapse into repetition or explode into gibberish.**
 
-GRPO and value-free algorithms can cause entropy collapse (outputs become deterministic) or explosion (outputs become random) without proper baseline selection.
-
-[Quantile Advantage Estimation (QAE)](https://arxiv.org/abs/2509.22611) diagnoses entropy collapse/explosion from mean baselines in value-free RL and proposes quantile baselines to reduce outlier sensitivity:
-
-```python
-# Instead of mean baseline (can be unstable with heavy-tailed rewards)
-baseline = np.mean(rewards)
-
-# Use quantile baseline (more stable) - QAE recommendation
-baseline = np.quantile(rewards, q=0.5)  # Median
-# Or use K-quantile for finer control
-```
-
-Prefer quantile or robust baselines over simple means when reward distributions are heavy-tailed to avoid entropy collapse.
+GRPO and value-free algorithms can cause entropy collapse (outputs become deterministic) or explosion (outputs become random) without proper baseline selection. Using robust baselines like medians instead of means helps prevent instability when reward distributions have outliers.
 
 **Monitor these metrics:**
 
