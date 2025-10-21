@@ -449,7 +449,7 @@ requirements = {
 }
 ````
 
-**Reality check:** DPO often outperforms rubric-based RLVR on truly creative tasks. Use rubrics for structured documents (reports, documentation), not creative writing or marketing copy.
+DPO often outperforms rubric-based RLVR on creative tasks where quality is subjective. Rubrics work for structured documents (reports, documentation), not creative writing or marketing copy.
 
 ### Verifier Design Principles
 
@@ -573,12 +573,11 @@ For pretraining, we have Chinchilla laws. For RLVR: unknown. How do gains scale 
 **Q4: Can we expand beyond deterministic verifiers?**
 Current RLVR needs binary correctness. Can we extend to fuzzy verifiers, learned verifiers, or hybrid human-AI verification?
 
-### What to Watch (Late 2025-2026)
+### Emerging Techniques
 
-1. **Multi-verifier composition** - Chaining multiple checks with weighted scoring
-2. **Self-play + RLVR** - Models generating harder problems for themselves
-3. **Enterprise tooling** - Verifier template libraries, automated coverage testing
-4. **Regulatory implications** - Auditing standards for high-stakes verifiers
+Research teams are exploring multi-verifier composition (chaining multiple checks with weighted scoring) to address partial verifier coverage. Self-play approaches have models generate harder problems for themselves to sustain exploration during training.
+
+On the tooling front, teams are building verifier template libraries and automated coverage testing frameworks. For high-stakes applications, expect auditing standards and regulatory frameworks as RLVR moves into medical, legal, and financial domains.
 
 ## Should You Use RLVR?
 
