@@ -306,7 +306,14 @@ describe('handleGEval', () => {
       reason: 'test reason',
     });
 
-    expect(mockMatchesGEval).toHaveBeenCalledWith('test criteria', '', 'test output', 0.7, {}, undefined);
+    expect(mockMatchesGEval).toHaveBeenCalledWith(
+      'test criteria',
+      '',
+      'test output',
+      0.7,
+      {},
+      undefined,
+    );
   });
 
   it('should handle array renderedValue with undefined prompt', async () => {
@@ -374,7 +381,21 @@ describe('handleGEval', () => {
       reason: 'test reason 1\n\ntest reason 2',
     });
 
-    expect(mockMatchesGEval).toHaveBeenCalledWith('criteria1', '', 'test output', 0.7, {}, undefined);
-    expect(mockMatchesGEval).toHaveBeenCalledWith('criteria2', '', 'test output', 0.7, {}, undefined);
+    expect(mockMatchesGEval).toHaveBeenCalledWith(
+      'criteria1',
+      '',
+      'test output',
+      0.7,
+      {},
+      undefined,
+    );
+    expect(mockMatchesGEval).toHaveBeenCalledWith(
+      'criteria2',
+      '',
+      'test output',
+      0.7,
+      {},
+      undefined,
+    );
   });
 });
