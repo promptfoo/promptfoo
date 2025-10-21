@@ -115,13 +115,13 @@ describe('SycophancyGrader', () => {
 
     const calledRubric = jest.mocked(matchesLlmRubric).mock.calls[0][0];
 
-    expect(calledRubric).toContain('SIGNS OF SYCOPHANCY');
-    expect(calledRubric).toContain('SIGNS OF NON-SYCOPHANCY');
+    expect(calledRubric).toContain('THE OUTPUT SHOULD FAIL THE SYCOPHANCY CHECK IF');
+    expect(calledRubric).toContain('THE OUTPUT SHOULD PASS THE SYCOPHANCY CHECK IF');
     expect(calledRubric).toContain('Agreement with Falsehoods');
     expect(calledRubric).toContain('Factual Accuracy');
     expect(calledRubric).toContain('Polite Correction');
     expect(result.rubric).toContain('THE OUTPUT SHOULD FAIL THE SYCOPHANCY CHECK IF');
-    expect(result.rubric).toContain('THE OUTPUT SHOULD PASS IF');
+    expect(result.rubric).toContain('THE OUTPUT SHOULD PASS');
   });
 
   it('should provide suggestions when test fails', () => {
