@@ -19,6 +19,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   crescendo: 10,
   custom: 10,
   default: 1,
+  'free-agent': 10,
   gcg: 1,
   goat: 5,
   hex: 1,

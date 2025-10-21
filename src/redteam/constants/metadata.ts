@@ -820,7 +820,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
-  'free-agent': 'Uses an adaptive AI agent to iteratively generate and refine single-turn jailbreak attempts based on target responses',
+  'free-agent':
+    'Uses an adaptive AI agent to iteratively generate and refine single-turn jailbreak attempts based on target responses',
   layer: 'Composes multiple strategies and applies them sequentially',
   audio: 'Tests detection and handling of audio-based malicious payloads',
   'authoritative-markup-injection':
