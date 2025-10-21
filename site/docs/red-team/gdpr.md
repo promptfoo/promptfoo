@@ -13,13 +13,13 @@ GDPR establishes strict requirements for processing personal data, giving indivi
 
 This guide focuses on seven key GDPR articles that are particularly relevant for testing LLM and AI applications:
 
-1. [Article 5: Principles of Processing Personal Data](#article-5-principles-of-processing-personal-data-gdpr-art5)
-2. [Article 9: Special Categories of Personal Data](#article-9-special-categories-of-personal-data-gdpr-art9)
-3. [Article 15: Right of Access](#article-15-right-of-access-gdpr-art15)
-4. [Article 17: Right to Erasure](#article-17-right-to-erasure-gdpr-art17)
-5. [Article 22: Automated Decision-Making](#article-22-automated-decision-making-gdpr-art22)
-6. [Article 25: Data Protection by Design](#article-25-data-protection-by-design-gdpr-art25)
-7. [Article 32: Security of Processing](#article-32-security-of-processing-gdpr-art32)
+- **Article 5**: Principles of Processing Personal Data
+- **Article 9**: Special Categories of Personal Data
+- **Article 15**: Right of Access
+- **Article 17**: Right to Erasure
+- **Article 22**: Automated Decision-Making
+- **Article 25**: Data Protection by Design
+- **Article 32**: Security of Processing
 
 ## Scanning for GDPR Compliance
 
