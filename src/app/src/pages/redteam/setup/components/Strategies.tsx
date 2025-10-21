@@ -210,20 +210,38 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
       // At this point we know it's a StrategyPreset
       const strategyPreset = STRATEGY_PRESETS[presetId];
+      let allStrategyIds: string[];
+
       if (strategyPreset.options?.multiTurn && isMultiTurnEnabled) {
-        const nextStrats = [
+        allStrategyIds = [
           ...strategyPreset.strategies,
           ...strategyPreset.options.multiTurn.strategies,
-        ].map((id: string) => ({ id }));
-        updateConfig('strategies', nextStrats);
+        ];
       } else {
-        updateConfig(
-          'strategies',
-          strategyPreset.strategies.map((id: string) => ({ id })),
+        allStrategyIds = strategyPreset.strategies;
+      }
+
+      // Filter out disabled strategies
+      const enabledStrategyIds = allStrategyIds.filter((id) => !isStrategyDisabled(id));
+      const skippedStrategyIds = allStrategyIds.filter((id) => isStrategyDisabled(id));
+
+      // Show toast if any strategies were skipped
+      if (skippedStrategyIds.length > 0) {
+        const skippedNames = skippedStrategyIds
+          .map((id) => strategyDisplayNames[id] || id)
+          .join(', ');
+        toast.showToast(
+          `Skipped ${skippedStrategyIds.length} disabled ${skippedStrategyIds.length === 1 ? 'strategy' : 'strategies'}: ${skippedNames}`,
+          'warning',
         );
       }
+
+      updateConfig(
+        'strategies',
+        enabledStrategyIds.map((id: string) => ({ id })),
+      );
     },
-    [recordEvent, isMultiTurnEnabled, updateConfig],
+    [recordEvent, isMultiTurnEnabled, updateConfig, isStrategyDisabled, toast],
   );
 
   const handleStrategyToggle = useCallback(
@@ -296,13 +314,28 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         return;
       }
 
-      const multiTurnStrats = multiTurnStrategies.map((id: string) => ({
-        id,
-        config: { stateful: isStatefulValue },
-      }));
-
       if (checked) {
-        // Add multi-turn strategies
+        // Filter out disabled strategies
+        const enabledMultiTurnIds = multiTurnStrategies.filter((id) => !isStrategyDisabled(id));
+        const skippedMultiTurnIds = multiTurnStrategies.filter((id) => isStrategyDisabled(id));
+
+        // Show toast if any strategies were skipped
+        if (skippedMultiTurnIds.length > 0) {
+          const skippedNames = skippedMultiTurnIds
+            .map((id) => strategyDisplayNames[id] || id)
+            .join(', ');
+          toast.showToast(
+            `Skipped ${skippedMultiTurnIds.length} disabled ${skippedMultiTurnIds.length === 1 ? 'strategy' : 'strategies'}: ${skippedNames}`,
+            'warning',
+          );
+        }
+
+        // Add enabled multi-turn strategies
+        const multiTurnStrats = enabledMultiTurnIds.map((id: string) => ({
+          id,
+          config: { stateful: isStatefulValue },
+        }));
+
         const newStrats = [
           ...config.strategies,
           ...multiTurnStrats.filter(
@@ -318,7 +351,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         updateConfig('strategies', filtered);
       }
     },
-    [config.strategies, updateConfig, isStatefulValue, selectedPreset],
+    [config.strategies, updateConfig, isStatefulValue, selectedPreset, isStrategyDisabled, toast],
   );
 
   const handleStatefulChange = useCallback(
