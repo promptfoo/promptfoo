@@ -1,8 +1,7 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 
-import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
@@ -32,7 +31,8 @@ import {
 } from '@mui/x-data-grid';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import { TestCaseDialog, TestCaseGenerateButton } from '../TestCaseDialog';
+import { TestCaseGenerateButton } from '../TestCaseDialog';
+import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 
 // Augment the toolbar props interface
 declare module '@mui/x-data-grid' {
@@ -149,21 +149,26 @@ function CustomToolbar({
 
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
-  const { recordEvent } = useTelemetry();
   const toast = useToast();
   const apiRef = useGridApiRef();
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
   const [generatingPolicyIndex, setGeneratingPolicyIndex] = useState<number | null>(null);
-  const [generatedTestCase, setGeneratedTestCase] = useState<{
-    prompt: string;
-    context?: string;
-  } | null>(null);
-  const [generatingTestCase, setGeneratingTestCase] = useState(false);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [editingRowId, setEditingRowId] = useState<number | null>(null);
   const [autoEditRowId, setAutoEditRowId] = useState<number | null>(null);
+
+  // TODO: This effect is component-scoped, so `checkHealth` needs to be called redundantly in each
+  // component which needs to check API health. Instead, the hook should be backed by app-scoped
+  // context (e.g. via a Zustand store).
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+
+  useEffect(() => {
+    checkHealth();
+  }, []);
+
+  // Test case generation state - now from context
+  const { generateTestCase, isGenerating: generatingTestCase } = useTestCaseGeneration();
 
   // Track custom names for policies (by index)
   const [policyNames, setPolicyNames] = useState<Record<number, string>>({});
@@ -359,59 +364,26 @@ export const CustomPoliciesSection = () => {
       }
 
       setGeneratingPolicyIndex(row.id);
-      setGeneratedTestCase(null);
-      setGeneratingTestCase(true);
-      setTestCaseDialogOpen(true);
 
-      try {
-        recordEvent('feature_used', {
-          feature: 'redteam_policy_generate_test_case',
-          plugin: 'policy',
-        });
-
-        const response = await callApi('/redteam/generate-test', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+      await generateTestCase(
+        'policy',
+        {
+          policy: row.policyText,
+        },
+        {
+          telemetryFeature: 'redteam_policy_generate_test_case',
+          mode: 'result',
+          onSuccess: () => {
+            setGeneratingPolicyIndex(null);
           },
-          body: JSON.stringify({
-            pluginId: 'policy',
-            config: {
-              policy: row.policyText,
-            },
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to generate test case');
-        }
-
-        const data = await response.json();
-        setGeneratedTestCase({
-          prompt: data.prompt || '',
-          context: data.context || row.policyText,
-        });
-      } catch (error) {
-        console.error('Error generating test case:', error);
-        toast.showToast(
-          `Failed to generate test case: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          'error',
-        );
-        setTestCaseDialogOpen(false);
-      } finally {
-        setGeneratingTestCase(false);
-      }
+          onError: () => {
+            setGeneratingPolicyIndex(null);
+          },
+        },
+      );
     },
-    [toast, recordEvent],
+    [toast],
   );
-
-  const handleCloseTestCaseDialog = () => {
-    setTestCaseDialogOpen(false);
-    setGeneratingPolicyIndex(null);
-    setGeneratedTestCase(null);
-    setGeneratingTestCase(false);
-  };
 
   const handleEditClick = useCallback(
     (row: PolicyRow) => {
@@ -526,8 +498,16 @@ export const CustomPoliciesSection = () => {
                   </Tooltip>
                   <TestCaseGenerateButton
                     onClick={() => handleGenerateTestCase(params.row)}
-                    disabled={generatingTestCase && generatingPolicyIndex === params.row.id}
+                    disabled={
+                      apiHealthStatus !== 'connected' ||
+                      (generatingTestCase && generatingPolicyIndex === params.row.id)
+                    }
                     isGenerating={generatingTestCase && generatingPolicyIndex === params.row.id}
+                    tooltipTitle={
+                      apiHealthStatus === 'connected'
+                        ? undefined
+                        : 'Promptfoo Cloud connection is required for test generation'
+                    }
                   />
                 </>
               )}
@@ -603,16 +583,6 @@ export const CustomPoliciesSection = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Test case generation dialog */}
-      <TestCaseDialog
-        open={testCaseDialogOpen}
-        onClose={handleCloseTestCaseDialog}
-        plugin="policy"
-        isGenerating={generatingTestCase}
-        generatedTestCase={generatedTestCase}
-        mode="result"
-      />
     </Box>
   );
 };
