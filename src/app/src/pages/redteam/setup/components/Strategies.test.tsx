@@ -1,4 +1,5 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -9,12 +10,14 @@ import Strategies from './Strategies';
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useTelemetry');
+vi.mock('@app/hooks/useToast');
 vi.mock('./StrategyConfigDialog', () => ({
   default: () => <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>,
 }));
 
 const mockUpdateConfig = vi.fn();
 const mockRecordEvent = vi.fn();
+const mockShowToast = vi.fn();
 
 describe('Strategies', () => {
   const mockOnNext = vi.fn();
@@ -39,6 +42,10 @@ describe('Strategies', () => {
 
     (useTelemetry as any).mockReturnValue({
       recordEvent: mockRecordEvent,
+    });
+
+    (useToast as any).mockReturnValue({
+      showToast: mockShowToast,
     });
   });
 

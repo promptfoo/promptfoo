@@ -521,8 +521,8 @@ describe('AgenticStrategiesGroup', () => {
       const renderWithoutError = () => {
         render(
           <AgenticStrategiesGroup
-          isStrategyDisabled={mockIsStrategyDisabled}
-          isRemoteGenerationDisabled={false}
+            isStrategyDisabled={mockIsStrategyDisabled}
+            isRemoteGenerationDisabled={false}
             singleTurnStrategies={singleTurnStrategies}
             multiTurnStrategies={multiTurnStrategies}
             selectedIds={['jailbreak']}

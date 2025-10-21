@@ -297,8 +297,8 @@ describe('StrategySection', () => {
       render(
         <ThemeProvider theme={customTheme}>
           <StrategySection
-          isStrategyDisabled={() => false}
-          isRemoteGenerationDisabled={false}
+            isStrategyDisabled={() => false}
+            isRemoteGenerationDisabled={false}
             title="Test Section"
             strategies={testStrategies}
             selectedIds={[]}
