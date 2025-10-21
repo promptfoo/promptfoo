@@ -294,6 +294,7 @@ The submitted answer may either be a subset or superset of the expert answer, or
     // Verify the custom prompt was used
     expect(mockCallApi).toHaveBeenCalledWith(
       expect.stringContaining(
+      expect.stringContaining(
         'The submitted answer may either be a subset or superset of the expert answer',
       ),
     );

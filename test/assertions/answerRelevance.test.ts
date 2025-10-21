@@ -46,7 +46,7 @@ describe('handleAnswerRelevance', () => {
       },
     });
 
-    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test prompt', 'test output', 0.7, {});
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test prompt', 'test output', 0.7, {}, undefined);
     expect(result).toEqual({
       assertion: {
         type: 'answer-relevance',
@@ -89,7 +89,7 @@ describe('handleAnswerRelevance', () => {
       },
     });
 
-    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test query', 'test output', 0.7, {});
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test query', 'test output', 0.7, {}, undefined);
     expect(result).toEqual({
       assertion: {
         type: 'answer-relevance',
@@ -177,7 +177,7 @@ describe('handleAnswerRelevance', () => {
       },
     });
 
-    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test prompt', 'test output', 0, {});
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith('test prompt', 'test output', 0, {}, undefined);
     expect(result).toEqual({
       assertion: {
         type: 'answer-relevance',

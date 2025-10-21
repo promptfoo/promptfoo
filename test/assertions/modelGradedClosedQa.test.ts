@@ -210,6 +210,7 @@ describe('handleModelGradedClosedQa', () => {
       {
         var: 'value',
       },
+      undefined,
     );
 
     expect(result).toEqual({

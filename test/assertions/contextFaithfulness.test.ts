@@ -65,6 +65,8 @@ describe('handleContextFaithfulness', () => {
       'test context',
       0.7,
       {},
+      expect.any(Object),
+      undefined,
     );
   });
 
@@ -123,6 +125,8 @@ describe('handleContextFaithfulness', () => {
       'test context',
       0.7,
       {},
+      expect.any(Object),
+      undefined,
     );
   });
 
@@ -266,6 +270,8 @@ describe('handleContextFaithfulness', () => {
       'from-transform',
       0,
       {},
+      expect.any(Object),
+      undefined,
     );
     expect(result.metadata).toBeDefined();
     expect(result.metadata!.context).toBe('from-transform');

@@ -461,6 +461,7 @@ describe('matchesLlmRubric', () => {
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
+      expect.stringContaining(
       'Grading prompt',
       expect.objectContaining({
         prompt: expect.objectContaining({
