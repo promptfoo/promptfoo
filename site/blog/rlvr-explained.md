@@ -52,7 +52,7 @@ _Note: This comparison focuses on post-training methods for reasoning models. Ot
 
 ### The Training Loop
 
-```
+```text
 1. Generate K candidate solutions for each prompt
    Input: "What is 37 × 29?"
    Outputs: [1073, 1072, 1073, 1074, 1073, 1071, 1073, 1073]
@@ -78,7 +78,7 @@ RLVR works where ground truth exists. It fails for creative writing, brand voice
 
 **DeepSeek R1:** Scales GRPO with rule-based rewards (format compliance, verifiable correctness) for math, code, and logic. Details in the [R1 paper](https://arxiv.org/abs/2501.12948) and [Nature write-up](https://www.nature.com/articles/s41586-025-09422-z).
 
-**OpenAI o3 and o4-mini:** [April 16, 2025 release](https://openai.com/index/introducing-o3-and-o4-mini/) emphasizes scaling RL and tool-use, with strong results on AIME, SWE-bench, and Codeforces. OpenAI's public materials do not provide HumanEval deltas.
+**OpenAI o3 and o4-mini:** [April 16, 2025, release](https://openai.com/index/introducing-o3-and-o4-mini/) emphasizes scaling RL and tool-use, with strong results on AIME, SWE-bench, and Codeforces. OpenAI's public materials do not provide HumanEval deltas.
 
 **Compression vs capability:** [Tsinghua finds](https://arxiv.org/abs/2504.13837) RLVR mostly improves sampling efficiency rather than expanding the reasoning boundary; [Scale formalizes](https://arxiv.org/abs/2506.13923) "self-distillation" vs "capability gain."
 
@@ -202,7 +202,7 @@ RLVR uses standard RL with deterministic reward functions. Your choice of algori
 
 The advantage calculation uses group statistics as the baseline:
 
-```
+```text
 A_i = R(s_i, a_i) - baseline(R_group)
 ```
 
@@ -258,7 +258,7 @@ These techniques reduce compute by 60-70% with minimal performance loss.
 
 **Example:**
 
-```
+```text
 Before RLVR:
   pass@1: 40%, pass@8: 75%
 
@@ -347,7 +347,7 @@ Verifier quality determines RLVR effectiveness. These patterns work across domai
 
 ### Math & Code Verifiers (Easy Mode)
 
-**Pattern: Exact Match + Normalization**
+#### Pattern: Exact Match + Normalization
 
 ```python
 # Simplified example - add error handling for production
@@ -365,7 +365,7 @@ def math_verifier(output: str, expected_answer: float) -> float:
     return 1.0 if abs(final_answer - expected_answer) < 0.01 else 0.0
 ```
 
-**Pattern: Unit Test Execution**
+#### Pattern: Unit Test Execution
 
 ```python
 # CRITICAL: Never exec() untrusted code in production without sandboxing.
@@ -397,7 +397,7 @@ def code_verifier_unsafe_example(generated_code: str, test_cases: list) -> float
 
 ### Text2SQL Verifiers (Medium Mode)
 
-**Pattern: Execution Equivalence**
+#### Pattern: Execution Equivalence
 
 ```python
 from collections import Counter
@@ -585,7 +585,7 @@ On the tooling front, teams are building verifier template libraries and automat
 
 ### Decision Framework
 
-```
+```text
 Do you have objective correctness criteria?
 │
 ├─ YES → Can you write a verifier covering >90% of errors?
