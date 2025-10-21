@@ -85,6 +85,7 @@
       "esbuild": "0.25.9"
     }
   },
+  "peerDependencies": {},
   "devDependencies": {
     "@adaline/anthropic": "1.8.0",
     "@adaline/azure": "1.6.2",
