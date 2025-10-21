@@ -1,14 +1,13 @@
-import * as fs from 'fs';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import * as fs from 'fs';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
-import { type TestCase, type TestCaseWithPlugin } from '../types/index';
+import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
@@ -16,7 +15,9 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
   FOUNDATION_PLUGINS,
+  getDefaultNFanout,
   HARM_PLUGINS,
+  isFanoutStrategy,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
@@ -25,16 +26,15 @@ import {
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import { Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
+import { Plugins } from './plugins/index';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
-import { loadStrategy, Strategies, validateStrategies } from './strategies';
+import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
-import { extractGoalFromPrompt, getShortPluginId } from './util';
-
 import { pluginMatchesStrategyTargets } from './strategies/util';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
+import { extractGoalFromPrompt, getShortPluginId } from './util';
 
 const MAX_MAX_CONCURRENCY = 20;
 
@@ -161,8 +161,8 @@ const categories = {
  */
 const formatTestCount = (numTests: number, strategy: boolean): string =>
   numTests === 1
-    ? `1 ${strategy ? 'additional' : ''} test`
-    : `${numTests} ${strategy ? 'additional' : ''} tests`;
+    ? `1 ${strategy ? 'additional ' : ''}test`
+    : `${numTests} ${strategy ? 'additional ' : ''}tests`;
 
 /**
  * Determines whether a strategy should be applied to a test case based on plugin targeting rules.
@@ -266,9 +266,14 @@ async function applyStrategies(
             ...(t?.metadata || {}),
             strategyId: t?.metadata?.strategyId || strategy.id,
             ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
-            ...(t?.metadata?.pluginConfig && { pluginConfig: t.metadata.pluginConfig }),
+            ...(t?.metadata?.pluginConfig && {
+              pluginConfig: t.metadata.pluginConfig,
+            }),
             ...(strategy.config && {
-              strategyConfig: { ...strategy.config, ...(t?.metadata?.strategyConfig || {}) },
+              strategyConfig: {
+                ...strategy.config,
+                ...(t?.metadata?.strategyConfig || {}),
+              },
             }),
           },
         })),
@@ -312,8 +317,16 @@ async function applyStrategies(
         generated: strategyTestCases.length,
       };
     } else {
+      // get an accurate 'Requested' count for strategies that add additional tests during generation
+      let n = 1;
+      if (typeof strategy.config?.n === 'number') {
+        n = strategy.config.n;
+      } else if (isFanoutStrategy(strategy.id)) {
+        n = getDefaultNFanout(strategy.id);
+      }
+
       strategyResults[displayId] = {
-        requested: applicableTestCases.length,
+        requested: applicableTestCases.length * n,
         generated: strategyTestCases.length,
       };
     }
@@ -332,7 +345,7 @@ async function applyStrategies(
 export function getTestCount(
   strategy: RedteamStrategyObject,
   totalPluginTests: number,
-  strategies: RedteamStrategyObject[],
+  _strategies: RedteamStrategyObject[],
 ): number {
   // Basic strategy either keeps original count or removes all tests
   if (strategy.id === 'basic') {
@@ -380,8 +393,14 @@ export function getTestCount(
     return totalPluginTests + additionalTests;
   }
 
-  // Return the number of additional tests (equal to totalPluginTests) for these strategies
-  return totalPluginTests;
+  // Apply fan-out multiplier if this is a fan-out strategy
+  let n = 1;
+  if (typeof strategy.config?.n === 'number') {
+    n = strategy.config.n;
+  } else if (isFanoutStrategy(strategy.id)) {
+    n = getDefaultNFanout(strategy.id);
+  }
+  return totalPluginTests * n;
 }
 
 /**
@@ -556,7 +575,9 @@ export async function synthesize({
 
   validateStrategies(strategies);
 
-  const redteamProvider = await redteamProviderManager.getProvider({ provider });
+  const redteamProvider = await redteamProviderManager.getProvider({
+    provider,
+  });
 
   const {
     effectiveStrategyCount,
@@ -586,10 +607,19 @@ export async function synthesize({
           .filter((s) => !['basic', 'retry'].includes(s.id))
           .map((s) => {
             // For non-basic, non-multilingual strategies, we want to show the additional tests they generate
-            const testCount =
-              s.id === 'multilingual'
-                ? getTestCount(s, totalPluginTests, strategies)
-                : totalPluginTests;
+            let testCount = totalPluginTests;
+            if (s.id === 'multilingual') {
+              testCount = getTestCount(s, totalPluginTests, strategies);
+            } else {
+              // Apply fan-out multiplier if this is a fan-out strategy
+              let n = 1;
+              if (typeof s.config?.n === 'number') {
+                n = s.config.n;
+              } else if (isFanoutStrategy(s.id)) {
+                n = getDefaultNFanout(s.id);
+              }
+              testCount = totalPluginTests * n;
+            }
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
@@ -658,7 +688,7 @@ export async function synthesize({
     if (mappingKey) {
       const mapping =
         ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
-        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((m) =>
+        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((_m) =>
           plugin.id.startsWith(`${mappingKey}:`),
         );
       if (mapping) {
@@ -876,7 +906,10 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        pluginResults[plugin.id] = { requested: plugin.numTests, generated: customTests.length };
+        pluginResults[plugin.id] = {
+          requested: plugin.numTests,
+          generated: customTests.length,
+        };
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
         pluginResults[plugin.id] = { requested: plugin.numTests, generated: 0 };

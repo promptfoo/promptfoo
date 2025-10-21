@@ -300,6 +300,7 @@ export interface EvaluateTableOutput {
   testCase: AtomicTestCase;
   text: string;
   tokenUsage?: Partial<TokenUsage>;
+  error?: string | null;
   audio?: {
     id?: string;
     expiresAt?: number;
@@ -384,7 +385,8 @@ export interface GradingResult {
   componentResults?: GradingResult[];
 
   // The assertion that was evaluated
-  assertion?: Assertion | null;
+  // TODO(Will): Can we move to this being required?
+  assertion?: Assertion;
 
   // User comment
   comment?: string;
@@ -464,6 +466,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'python',
   'regex',
   'rouge-n',
+  'ruby',
   'similar',
   'starts-with',
   'trace-error-spans',
@@ -1153,6 +1156,7 @@ export type EvalSummary = ResultLightweightWithLabel & {
     id: string;
     label: string | null;
   }[];
+  attackSuccessRate?: number;
 };
 
 export interface OutputMetadata {

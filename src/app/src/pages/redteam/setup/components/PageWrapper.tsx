@@ -22,13 +22,13 @@ interface PageWrapperProps {
   warningMessage?: string;
 }
 
-const Root = styled(Box)(({ theme }) => ({
+const Root = styled(Box)({
   display: 'flex',
   flexDirection: 'column',
   height: '100vh',
   width: '100%',
   overflow: 'hidden',
-}));
+});
 
 const ContentContainer = styled(Box)({
   flex: 1,
@@ -75,7 +75,7 @@ const DescriptionTypography = styled(Typography, {
   fontSize: '1rem',
   color: theme.palette.text.secondary,
   opacity: isVisible ? 1 : 0,
-  maxHeight: isVisible ? '100px' : 0,
+  maxHeight: isVisible ? 'unset' : 0,
   overflow: 'hidden',
   transition: theme.transitions.create(['opacity', 'max-height'], {
     duration: theme.transitions.duration.short,

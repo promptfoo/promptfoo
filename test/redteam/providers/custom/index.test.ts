@@ -1,9 +1,8 @@
 import { getGraderById } from '../../../../src/redteam/graders';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom';
+import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
-
-import type { Message } from '../../../../src/redteam/providers/shared';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
   PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({
@@ -535,6 +534,42 @@ describe('CustomProvider', () => {
     expect(result.metadata?.successfulAttacks?.length).toBeGreaterThan(0);
   });
 
+  it('should surface final target error while preserving mapped output', async () => {
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'simple',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'p', label: 'l' },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'attack',
+        rationaleBehindJailbreak: 'r',
+        lastResponseSummary: 's',
+      }),
+    });
+
+    // final target returns error with output
+    mockTargetProvider.callApi.mockResolvedValue({ output: 'This is 504', error: 'HTTP 504' });
+
+    // refusal false, eval not 100
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 0 }) })
+      .mockResolvedValueOnce({ output: JSON.stringify({ value: false, metadata: 50 }) });
+
+    const result = await provider.callApi('p', context);
+    expect(result.output).toBe('This is 504');
+    expect(result.error).toBe('HTTP 504');
+  });
+
   it('should handle custom strategy text with round-specific logic', async () => {
     const roundSpecificStrategy = `
       If current round is 0, generatedQuestion should be just "hi" by itself.
@@ -945,5 +980,64 @@ describe('CustomProvider', () => {
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
+  });
+
+  it('should include modifiers in system prompt from test metadata', async () => {
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+      test: {
+        vars: {},
+        metadata: {
+          pluginId: 'test-plugin',
+          purpose: 'payment processing system',
+          modifiers: {
+            testGenerationInstructions: 'Generate prompts as realistic invoice queries',
+            language: 'Spanish',
+          },
+        },
+      } as any,
+    };
+
+    // Capture the system prompt that gets sent
+    let capturedSystemPrompt = '';
+    mockRedTeamProvider.callApi.mockImplementation(async (prompt: string) => {
+      const input = JSON.parse(prompt);
+      if (Array.isArray(input) && input[0]?.role === 'system') {
+        capturedSystemPrompt = input[0].content;
+      }
+      return {
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      };
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'Success',
+      }),
+    });
+
+    await customProvider.callApi(prompt, context);
+
+    // Verify modifiers were included in the system prompt
+    expect(capturedSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+    expect(capturedSystemPrompt).toContain('<Modifiers>');
+    expect(capturedSystemPrompt).toContain(
+      'testGenerationInstructions: Generate prompts as realistic invoice queries',
+    );
+    expect(capturedSystemPrompt).toContain('language: Spanish');
+    expect(capturedSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
   });
 });

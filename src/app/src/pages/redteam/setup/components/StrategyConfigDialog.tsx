@@ -295,23 +295,41 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy && MULTI_TURN_STRATEGIES.includes(strategy as MultiTurnStrategy)) {
+    } else if (strategy === 'custom') {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Configure the multi-turn strategy parameters.
+            Define your custom multi-turn strategy with specific instructions for the AI agent.
           </Typography>
+
+          <TextField
+            fullWidth
+            multiline
+            rows={6}
+            label="Strategy Text"
+            value={localConfig.strategyText || ''}
+            onChange={(e) => {
+              setLocalConfig({ ...localConfig, strategyText: e.target.value });
+            }}
+            placeholder="For turns 0-3: Try to establish trust and gather information about {{conversationObjective}}. For turns 4-{{maxTurns}}: Use gathered info to achieve the objective. Analyze {{lastResponse}} for signs of resistance or cooperation to adapt your next message."
+            helperText={
+              !localConfig.strategyText || localConfig.strategyText.trim().length === 0
+                ? 'Strategy text is required for custom strategy'
+                : 'Define how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc.'
+            }
+            error={!localConfig.strategyText || localConfig.strategyText.trim().length === 0}
+          />
 
           <TextField
             fullWidth
             label="Max Turns"
             type="number"
-            value={localConfig.maxTurns || 5}
+            value={localConfig.maxTurns ?? 10}
             onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 5;
+              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
               setLocalConfig({ ...localConfig, maxTurns: value });
             }}
-            placeholder="Maximum number of conversation turns (default: 5)"
+            placeholder="Maximum number of conversation turns (default: 10)"
             InputProps={{ inputProps: { min: 1, max: 20 } }}
             helperText="Maximum number of back-and-forth exchanges with the model"
           />
@@ -337,43 +355,30 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy === 'custom') {
+    } else if (strategy && MULTI_TURN_STRATEGIES.includes(strategy as MultiTurnStrategy)) {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Define your custom multi-turn strategy with specific instructions for the AI agent.
+            Configure the multi-turn strategy parameters.
           </Typography>
-
-          <TextField
-            fullWidth
-            multiline
-            rows={6}
-            label="Strategy Text"
-            value={localConfig.strategyText || ''}
-            onChange={(e) => {
-              setLocalConfig({ ...localConfig, strategyText: e.target.value });
-            }}
-            placeholder="Describe how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc."
-            helperText={
-              !localConfig.strategyText || localConfig.strategyText.trim().length === 0
-                ? 'Strategy text is required for custom strategy'
-                : 'Define how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc.'
-            }
-            error={!localConfig.strategyText || localConfig.strategyText.trim().length === 0}
-          />
 
           <TextField
             fullWidth
             label="Max Turns"
             type="number"
-            value={localConfig.maxTurns || 10}
+            value={localConfig.maxTurns ?? 5}
             onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
+              const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
               setLocalConfig({ ...localConfig, maxTurns: value });
             }}
-            placeholder="Maximum number of conversation turns (default: 10)"
+            onBlur={(e) => {
+              if (!e.target.value || Number.parseInt(e.target.value, 10) < 1) {
+                setLocalConfig({ ...localConfig, maxTurns: 5 });
+              }
+            }}
+            placeholder="5"
             InputProps={{ inputProps: { min: 1, max: 20 } }}
-            helperText="Maximum number of back-and-forth exchanges with the model"
+            helperText="Maximum number of back-and-forth exchanges with the model (default: 5)"
           />
 
           <FormControlLabel

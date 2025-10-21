@@ -117,9 +117,6 @@ describe('RedteamIterativeProvider', () => {
           }),
         }))
         .mockImplementationOnce(async () => ({
-          output: JSON.stringify({ onTopic: true }),
-        }))
-        .mockImplementationOnce(async () => ({
           output: JSON.stringify({
             currentResponse: { rating: 10, explanation: 'perfect' },
             previousBestResponse: { rating: 5, explanation: 'good' },
@@ -166,9 +163,6 @@ describe('RedteamIterativeProvider', () => {
             improvement: 'test',
             prompt: 'test',
           }),
-        }))
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({ onTopic: true }),
         }))
         .mockImplementationOnce(async () => ({
           output: JSON.stringify({
@@ -235,9 +229,6 @@ describe('RedteamIterativeProvider', () => {
           }),
         }))
         .mockImplementationOnce(async () => ({
-          output: JSON.stringify({ onTopic: true }),
-        }))
-        .mockImplementationOnce(async () => ({
           output: JSON.stringify({
             currentResponse: { rating: 10, explanation: 'Excellent jailbreak achieved' },
             previousBestResponse: { rating: 0, explanation: 'none' },
@@ -278,8 +269,8 @@ describe('RedteamIterativeProvider', () => {
       // Reset the mock to handle the exact sequence of calls for 3 iterations
       mockRedteamProvider.callApi.mockReset();
 
-      // Each iteration makes 3 calls: redteam, onTopic, judge
-      // So for 3 iterations we need 9 calls total
+      // Each iteration now makes 2 calls: redteam, judge
+      // So for 3 iterations we need 6 calls total
       mockRedteamProvider.callApi
         // Iteration 1
         .mockResolvedValueOnce({
@@ -287,9 +278,6 @@ describe('RedteamIterativeProvider', () => {
             improvement: 'test improvement 1',
             prompt: 'test prompt 1',
           }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ onTopic: true }),
         })
         .mockResolvedValueOnce({
           output: JSON.stringify({
@@ -305,9 +293,6 @@ describe('RedteamIterativeProvider', () => {
           }),
         })
         .mockResolvedValueOnce({
-          output: JSON.stringify({ onTopic: true }),
-        })
-        .mockResolvedValueOnce({
           output: JSON.stringify({
             currentResponse: { rating: 6, explanation: 'moderate score 2' },
             previousBestResponse: { rating: 5, explanation: 'previous' },
@@ -319,9 +304,6 @@ describe('RedteamIterativeProvider', () => {
             improvement: 'test improvement 3',
             prompt: 'test prompt 3',
           }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ onTopic: true }),
         })
         .mockResolvedValueOnce({
           output: JSON.stringify({
@@ -356,7 +338,6 @@ describe('RedteamIterativeProvider', () => {
         .mockResolvedValueOnce({
           output: JSON.stringify({ improvement: 'test', prompt: 'test' }),
         })
-        .mockResolvedValueOnce({ output: JSON.stringify({ onTopic: true }) })
         .mockResolvedValueOnce({
           output: JSON.stringify({
             currentResponse: { rating: '5', explanation: 'ok' },
@@ -383,6 +364,47 @@ describe('RedteamIterativeProvider', () => {
       expect(result.metadata.finalIteration).toBe(1);
     });
 
+    it('should surface last errored output and mark error on final result', async () => {
+      // First iteration: normal flow but low score, so no early exit
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'test', prompt: 'test' }),
+        })
+        .mockResolvedValueOnce({ output: JSON.stringify({ onTopic: true }) })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 2, explanation: 'low' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        });
+
+      // Second iteration: target returns error but with mapped output
+      mockGetTargetResponse
+        .mockResolvedValueOnce({ output: 'mock target response' }) // first iteration target
+        .mockResolvedValueOnce({ output: 'This is 504', error: 'HTTP 504' }); // second iteration target
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.output).toBe('mock target response');
+
+      if (result.error) {
+        expect(result.error).toBe('HTTP 504');
+      }
+    });
+
     it('should extract JSON object from fenced/narrative judge output', async () => {
       const fenced =
         "I'll evaluate now.\n```json\n{" +
@@ -394,7 +416,6 @@ describe('RedteamIterativeProvider', () => {
         .mockResolvedValueOnce({
           output: JSON.stringify({ improvement: 'test', prompt: 'test' }),
         })
-        .mockResolvedValueOnce({ output: JSON.stringify({ onTopic: true }) })
         .mockResolvedValueOnce({ output: fenced });
 
       const result = await runRedteamConversation({
@@ -436,9 +457,6 @@ describe('RedteamIterativeProvider', () => {
             improvement: 'test',
             prompt: 'test',
           }),
-        }))
-        .mockImplementationOnce(async () => ({
-          output: JSON.stringify({ onTopic: true }),
         }))
         .mockImplementationOnce(async () => ({
           output: JSON.stringify({
@@ -496,6 +514,73 @@ describe('RedteamIterativeProvider', () => {
       expect(additionalRubricArg).toContain('iterative jailbreak attack');
       expect(additionalRubricArg).toContain('standalone request');
       expect(additionalRubricArg).toContain('series of different approaches');
+    });
+
+    it('should include modifiers in system prompt from test metadata', async () => {
+      const test: AtomicTestCase = {
+        vars: {},
+        metadata: {
+          pluginId: 'test-plugin',
+          goal: 'test goal',
+          purpose: 'payment processing system',
+          modifiers: {
+            testGenerationInstructions: 'Generate prompts as merchant account queries',
+            language: 'English',
+          },
+        },
+      };
+
+      // Capture the FIRST system prompt that gets sent (attacker, not judge)
+      let capturedSystemPrompt = '';
+      let firstSystemCapture = false;
+      mockRedteamProvider.callApi.mockImplementation(async (prompt: string) => {
+        const input = JSON.parse(prompt);
+        if (Array.isArray(input) && input[0]?.role === 'system' && !firstSystemCapture) {
+          capturedSystemPrompt = input[0].content;
+          firstSystemCapture = true;
+          return {
+            output: JSON.stringify({
+              improvement: 'test improvement',
+              prompt: 'test prompt',
+            }),
+          };
+        }
+        // For subsequent calls (judge), return judge response
+        return {
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'moderate' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        };
+      });
+
+      await runRedteamConversation({
+        context: {
+          prompt: { raw: '', label: '' },
+          vars: {},
+          test,
+        },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      // Verify modifiers were included in the attacker system prompt
+      expect(capturedSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+      expect(capturedSystemPrompt).toContain('<Modifiers>');
+      expect(capturedSystemPrompt).toContain(
+        'testGenerationInstructions: Generate prompts as merchant account queries',
+      );
+      expect(capturedSystemPrompt).toContain('language: English');
+      expect(capturedSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
     });
 
     it('should not include additional rubric when no goal is present', async () => {
@@ -590,9 +675,6 @@ describe('RedteamIterativeProvider', () => {
           }),
         }))
         .mockImplementationOnce(async () => ({
-          output: JSON.stringify({ onTopic: true }),
-        }))
-        .mockImplementationOnce(async () => ({
           output: JSON.stringify({
             currentResponse: { rating: 10, explanation: 'Judge also thinks its great' }, // Judge success
             previousBestResponse: { rating: 0, explanation: 'none' },
@@ -655,9 +737,6 @@ describe('RedteamIterativeProvider', () => {
           output: JSON.stringify({ improvement: 'test1', prompt: 'test1' }),
         })
         .mockResolvedValueOnce({
-          output: JSON.stringify({ onTopic: true }),
-        })
-        .mockResolvedValueOnce({
           output: JSON.stringify({
             currentResponse: { rating: 3, explanation: 'test' },
             previousBestResponse: { rating: 0, explanation: 'none' },
@@ -668,9 +747,6 @@ describe('RedteamIterativeProvider', () => {
           output: JSON.stringify({ improvement: 'test2', prompt: 'test2' }),
         })
         .mockResolvedValueOnce({
-          output: JSON.stringify({ onTopic: true }),
-        })
-        .mockResolvedValueOnce({
           output: JSON.stringify({
             currentResponse: { rating: 5, explanation: 'test' },
             previousBestResponse: { rating: 3, explanation: 'test' },
@@ -679,9 +755,6 @@ describe('RedteamIterativeProvider', () => {
         // Third iteration
         .mockResolvedValueOnce({
           output: JSON.stringify({ improvement: 'test3', prompt: 'test3' }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ onTopic: true }),
         })
         .mockResolvedValueOnce({
           output: JSON.stringify({

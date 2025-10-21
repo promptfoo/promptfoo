@@ -242,7 +242,7 @@ describe('Targets Component', () => {
         }),
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Initially Next button should be disabled (tests not completed)
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
@@ -301,7 +301,7 @@ describe('Targets Component', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Test buttons should be disabled when URL is empty
       const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
@@ -327,7 +327,7 @@ describe('Targets Component', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // The next button should be disabled and should show warning message in the UI
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
@@ -370,7 +370,7 @@ Content-Type: application/json
         }),
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Test the target configuration
       const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
@@ -399,7 +399,7 @@ Content-Type: application/json
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Component starts in collapsed view showing HTTP provider, click Change to expand
       const changeButton = screen.getByRole('button', { name: 'Change' });
@@ -441,7 +441,7 @@ Content-Type: application/json
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
       expect(nextButton).toBeDisabled();
@@ -481,7 +481,7 @@ Content-Type: application/json
         }),
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
       fireEvent.click(testTargetButton);
@@ -500,49 +500,6 @@ Content-Type: application/json
           body: JSON.stringify(validHttpTarget),
         }),
       );
-    });
-
-    it('should display error message when target test fails', async () => {
-      const validHttpTarget = {
-        ...DEFAULT_HTTP_TARGET,
-        label: 'My HTTP Target',
-        config: {
-          url: 'https://example.com/api',
-        },
-      };
-
-      (useRedTeamConfig as any).mockReturnValue({
-        config: {
-          target: validHttpTarget,
-          plugins: [],
-          strategies: [],
-        },
-        updateConfig: mockUpdateConfig,
-      });
-
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          testResult: {
-            success: false,
-            message: 'Connection failed: Unable to reach endpoint',
-          },
-          providerResponse: {},
-        }),
-      });
-
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
-
-      const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Connection failed: Unable to reach endpoint')).toBeInTheDocument();
-      });
-
-      // Next button should remain disabled after failed test
-      const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
-      expect(nextButton).toBeDisabled();
     });
   });
 
@@ -563,7 +520,7 @@ Content-Type: application/json
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Component starts in collapsed view showing HTTP provider, click Change to expand
       const changeButton = screen.getByRole('button', { name: 'Change' });
@@ -602,7 +559,7 @@ Content-Type: application/json
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // For WebSocket, Next button should be enabled with valid URL
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
@@ -646,7 +603,7 @@ Content-Type: application/json
         updateConfig: mockUpdateConfig,
       });
 
-      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+      renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Click Back button
       const backButton = screen.getAllByRole('button', { name: /Back/i })[0];

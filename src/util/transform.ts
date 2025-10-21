@@ -16,12 +16,17 @@ export enum TransformInputType {
 
 /**
  * Parses a file path string to extract the file path and function name.
+ * Handles Windows drive letters (e.g., C:\path\to\file.js:functionName).
  * @param filePath - The file path string, potentially including a function name.
  * @returns A tuple containing the file path and function name (if present).
  */
 function parseFilePathAndFunctionName(filePath: string): [string, string | undefined] {
-  const parts = filePath.split(':');
-  return parts.length === 2 ? [parts[0], parts[1]] : [filePath, undefined];
+  const lastColonIndex = filePath.lastIndexOf(':');
+  // Check if colon is part of Windows drive letter (position 1) or not present
+  if (lastColonIndex > 1) {
+    return [filePath.slice(0, lastColonIndex), filePath.slice(lastColonIndex + 1)];
+  }
+  return [filePath, undefined];
 }
 
 /**

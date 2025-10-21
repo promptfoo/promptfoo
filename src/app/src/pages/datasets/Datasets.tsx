@@ -118,7 +118,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         headerName: 'Test Cases',
         flex: 1,
         minWidth: 120,
-        valueGetter: (value: DatasetRow['testCases'], row: DatasetRow) => value.length,
+        valueGetter: (value: DatasetRow['testCases']) => value.length,
         renderCell: (params: GridRenderCellParams<DatasetRow>) => `${params.value} test cases`,
       },
       {
@@ -126,7 +126,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         headerName: 'Variables',
         flex: 2,
         minWidth: 200,
-        valueGetter: (value: undefined, row: DatasetRow) => getVariables(row.testCases),
+        valueGetter: (_value: undefined, row: DatasetRow) => getVariables(row.testCases),
       },
       {
         field: 'count',
@@ -139,7 +139,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         headerName: 'Total Prompts',
         flex: 1,
         minWidth: 120,
-        valueGetter: (value: DatasetRow['prompts'], row: DatasetRow) => row.prompts?.length || 0,
+        valueGetter: (_value: DatasetRow['prompts'], row: DatasetRow) => row.prompts?.length || 0,
       },
       {
         field: 'recentEvalDate',

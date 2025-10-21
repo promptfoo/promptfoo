@@ -27,7 +27,14 @@ export const ApiSchemas = {
       Response: z.object({
         hasEmail: z.boolean(),
         email: EmailSchema.optional(),
-        status: z.enum(['ok', 'exceeded_limit', 'show_usage_warning', 'no_email']),
+        status: z.enum([
+          'ok',
+          'exceeded_limit',
+          'show_usage_warning',
+          'no_email',
+          'risky_email',
+          'disposable_email',
+        ]),
         message: z.string().optional(),
       }),
     },

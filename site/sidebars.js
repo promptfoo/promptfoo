@@ -112,6 +112,7 @@ const redTeamSidebar = [
           'red-team/plugins/toxic-chat',
           'red-team/plugins/unsafebench',
           'red-team/plugins/vlguard',
+          'red-team/plugins/wordplay',
           'red-team/plugins/xstest',
         ],
       },
@@ -229,10 +230,6 @@ const redTeamSidebar = [
       {
         type: 'doc',
         id: 'red-team/discovery',
-      },
-      {
-        type: 'doc',
-        id: 'red-team/guardrails',
       },
       {
         type: 'category',

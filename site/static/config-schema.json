@@ -126,16 +126,19 @@
                             "AZURE_TOKEN_SCOPE": {
                               "type": "string"
                             },
-                            "BAM_API_HOST": {
+                            "CLAUDE_CODE_USE_BEDROCK": {
                               "type": "string"
                             },
-                            "BAM_API_KEY": {
+                            "CLAUDE_CODE_USE_VERTEX": {
                               "type": "string"
                             },
                             "CLOUDFLARE_ACCOUNT_ID": {
                               "type": "string"
                             },
                             "CLOUDFLARE_API_KEY": {
+                              "type": "string"
+                            },
+                            "COMETAPI_KEY": {
                               "type": "string"
                             },
                             "COHERE_API_KEY": {
@@ -588,6 +591,7 @@
                                               "python",
                                               "regex",
                                               "rouge-n",
+                                              "ruby",
                                               "similar",
                                               "starts-with",
                                               "trace-error-spans",
@@ -1292,6 +1296,7 @@
                           "unsafebench",
                           "unverifiable-claims",
                           "vlguard",
+                          "wordplay",
                           "xstest"
                         ]
                       },
@@ -1494,6 +1499,7 @@
                               "unsafebench",
                               "unverifiable-claims",
                               "vlguard",
+                              "wordplay",
                               "xstest"
                             ]
                           },
@@ -1538,6 +1544,7 @@
                         "type": "string",
                         "enum": [
                           "audio",
+                          "authoritative-markup-injection",
                           "base64",
                           "basic",
                           "best-of-n",
@@ -1595,7 +1602,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
               "default": ["default"]
             },
             "maxConcurrency": {

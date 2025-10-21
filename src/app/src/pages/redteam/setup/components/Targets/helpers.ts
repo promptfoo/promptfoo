@@ -19,7 +19,12 @@ export function getProviderType(providerId?: string): string | undefined {
     if (providerId.endsWith('.go')) {
       return 'go';
     }
-    if (providerId.endsWith('.sh')) {
+    if (
+      providerId.endsWith('.sh') ||
+      providerId.endsWith('.bat') ||
+      providerId.endsWith('.cmd') ||
+      providerId.endsWith('.ps1')
+    ) {
       return 'shell';
     }
   }

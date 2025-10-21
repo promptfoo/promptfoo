@@ -396,11 +396,7 @@ export abstract class RedteamGraderBase {
     }
   }
 
-  getSuggestions({
-    test,
-    rawPrompt,
-    renderedValue,
-  }: {
+  getSuggestions({}: {
     test: AtomicTestCase;
     rawPrompt: string;
     renderedValue?: AssertionValue;
@@ -416,7 +412,11 @@ export abstract class RedteamGraderBase {
     renderedValue: AssertionValue | undefined,
     additionalRubric?: string,
     skipRefusalCheck?: boolean,
-  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
+  ): Promise<{
+    grade: GradingResult;
+    rubric: string;
+    suggestions?: ResultSuggestion[];
+  }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
     const vars = {
@@ -452,10 +452,11 @@ export abstract class RedteamGraderBase {
       };
     }
 
-    const grade = await matchesLlmRubric(finalRubric, llmOutput, {
+    const grade = (await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
-    });
+    })) as GradingResult;
+
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 
     let suggestions: ResultSuggestion[] | undefined;

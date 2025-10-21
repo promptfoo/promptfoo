@@ -1,10 +1,4 @@
 import logger from '../logger';
-import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
-import { sleep } from '../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { PromptfooSimulatedUserProvider } from './promptfoo';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,6 +7,11 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
+import invariant from '../util/invariant';
+import { getNunjucksEngine } from '../util/templates';
+import { sleep } from '../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 export type Message = {
   role: 'user' | 'assistant' | 'system';
@@ -58,7 +57,7 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
-  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage }> {
+  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage; error?: string }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
     const flippedMessages = messages.map((message) => {
@@ -69,6 +68,15 @@ export class SimulatedUser implements ApiProvider {
     });
 
     const response = await userProvider.callApi(JSON.stringify(flippedMessages));
+
+    // Propagate error from remote generation disable check
+    if (response.error) {
+      return {
+        messages,
+        error: response.error,
+      };
+    }
+
     logger.debug(`User: ${response.output}`);
     return {
       messages: [...messages, { role: 'user', content: String(response.output || '') }],
@@ -105,7 +113,7 @@ export class SimulatedUser implements ApiProvider {
 
   async callApi(
     // NOTE: `prompt` is not used in this provider; `vars.instructions` is used instead.
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
@@ -127,7 +135,17 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
-      const { messages: messagesToUser } = await this.sendMessageToUser(messages, userProvider);
+      const userResult = await this.sendMessageToUser(messages, userProvider);
+
+      // Check for errors from remote generation disable
+      if (userResult.error) {
+        return {
+          error: userResult.error,
+          tokenUsage,
+        };
+      }
+
+      const { messages: messagesToUser } = userResult;
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 
       // Check whether the judge has determined that the instruction goal is satisfied.
