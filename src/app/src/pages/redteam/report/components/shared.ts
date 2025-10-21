@@ -9,7 +9,7 @@ import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 /**
  * Check if a test belongs to a strategy.
- * Tests can belong to multiple strategies (e.g., crescendo + multilingual).
+ * Tests belong to strategies via their explicit strategyId metadata.
  */
 export function testBelongsToStrategy(
   test: {
@@ -19,11 +19,6 @@ export function testBelongsToStrategy(
       testCase?: {
         metadata?: {
           strategyId?: string;
-          modifiers?: {
-            language?: string;
-            [key: string]: any;
-          };
-          language?: string;
           [key: string]: any;
         };
       };
@@ -39,18 +34,7 @@ export function testBelongsToStrategy(
     return true;
   }
 
-  // multilingual: Check for language in BOTH locations (new and old)
-  if (strategy === 'multilingual') {
-    const hasLanguage =
-      test.metadata?.modifiers?.language || // NEW: global config path
-      test.result?.testCase?.metadata?.modifiers?.language ||
-      test.metadata?.language || // OLD: translation path
-      test.result?.testCase?.metadata?.language;
-
-    return !!hasLanguage;
-  }
-
-  // basic: includes ALL tests
+  // basic: includes ALL tests (baseline section)
   if (strategy === 'basic') {
     return true;
   }
