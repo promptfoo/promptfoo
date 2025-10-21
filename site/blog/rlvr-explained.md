@@ -557,7 +557,7 @@ def test_verifier_coverage(verifier, test_cases):
 
 ### Using Evaluation Harnesses
 
-After training, use tools like lm-evaluation-harness, [Promptfoo](https://promptfoo.dev), or custom scripts to validate your model. These tools test if training worked; they don't provide training rewards.
+After training, use tools like [Promptfoo](https://promptfoo.dev) or custom scripts to validate your model. These tools test if training worked; they don't provide training rewards.
 
 ## Open Questions
 
@@ -599,14 +599,6 @@ Do you have objective correctness criteria?
 └─ NO → Stick with DPO/RLHF
     └─ Unless: Task decomposes into verifiable sub-tasks
 ```
-
-### Budget-Based Guidance
-
-**Under $10K:** Open-source models, math/code domains, existing benchmarks (GSM8K, HumanEval)
-
-**$10K-$100K:** Fine-tune on your domain, custom verifiers, compare RLVR vs DPO
-
-**Over $100K:** Hybrid approach (RLVR for verifiable + DPO for quality), production monitoring
 
 ## Conclusion: Don't Mistake Efficiency for Intelligence
 
