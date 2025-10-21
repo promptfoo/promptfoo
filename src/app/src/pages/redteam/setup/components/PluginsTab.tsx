@@ -23,6 +23,7 @@ import {
   displayNameOverrides,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
+  GDPR_MAPPING,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   ISO_42001_MAPPING,
@@ -179,6 +180,10 @@ export default function PluginsTab({
       {
         name: 'ISO 42001',
         plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'GDPR',
+        plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
       },
     ],
     [],
@@ -528,7 +533,7 @@ export default function PluginsTab({
                   onClick={() => {
                     if (pluginDisabled) {
                       toast.showToast(
-                        'This plugin requires remote generation to be enabled. Set PROMPTFOO_DISABLE_REMOTE_GENERATION=false or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=false.',
+                        'This plugin requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
                         'error',
                       );
                       return;

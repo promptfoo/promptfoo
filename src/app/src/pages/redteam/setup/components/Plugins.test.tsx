@@ -100,6 +100,7 @@ vi.mock('@promptfoo/redteam/constants', () => ({
   MITRE_ATLAS_MAPPING: {},
   EU_AI_ACT_MAPPING: {},
   ISO_42001_MAPPING: {},
+  GDPR_MAPPING: {},
   PLUGIN_PRESET_DESCRIPTIONS: {
     Recommended: 'A broad set of plugins recommended by Promptfoo',
     'Minimal Test': 'Minimal set of plugins to validate your setup',

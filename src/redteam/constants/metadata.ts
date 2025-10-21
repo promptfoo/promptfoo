@@ -892,11 +892,12 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
-  'EU AI Act': 'Plugins mapped to EU AI Act prohibited & high-risk requirements',
+  'EU AI Act': 'EU AI Act prohibited & high-risk requirements',
   Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
+  GDPR: 'Data protection and privacy requirements',
   'Guardrails Evaluation': 'Evaluate guardrail effectiveness against common risks',
   Harmful: 'Harmful content assessment using MLCommons and HarmBench taxonomies',
-  'ISO 42001': 'Plugins mapped to ISO/IEC 42001 AI management system requirements',
+  'ISO 42001': 'ISO/IEC 42001 AI management system requirements',
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
   NIST: 'NIST AI Risk Management Framework',
