@@ -161,11 +161,13 @@ def random_baseline_test(model, dataset, real_verifier):
 
 Some "RLVR gains" are artifacts of the training process. Validate on held-out data from different distributions. Test across multiple model families.
 
-### 3. Entropy Instability in Value-Free RL
+### 3. Entropy Instability Destroys Generalization
 
-**Value-free methods are fast but can make your model's outputs collapse into repetition or explode into gibberish.**
+**Entropy collapse is the silent killer of RLVR generalization.**
 
-GRPO and value-free algorithms can cause entropy collapse (outputs become deterministic) or explosion (outputs become random) without proper baseline selection. Using robust baselines like medians instead of means helps prevent instability when reward distributions have outliers.
+[Recent research](https://arxiv.org/abs/2505.22617) shows that as GRPO training progresses and entropy declines, in-distribution test accuracy rises while out-of-distribution performance deteriorates. The model isn't learning generalizable reasoning patterns; it's overfitting to the training distribution. When entropy collapses too early, the policy becomes trapped in narrow reasoning modes that succeed on training data but fail on novel problems.
+
+Value-free methods like GRPO are particularly vulnerable because they use batch statistics as baselines. Using robust baselines like medians instead of means helps prevent instability when reward distributions have outliers.
 
 **Monitor these metrics:**
 
