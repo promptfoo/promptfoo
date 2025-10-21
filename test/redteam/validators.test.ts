@@ -1269,8 +1269,8 @@ describe('RedteamConfigSchema transform', () => {
 
       const result = RedteamConfigSchema.parse(input);
 
-      // Language should be lifted to global config with undefined prepended
-      expect(result.language).toEqual([undefined, 'hi', 'fr']);
+      // Language should be lifted to global config with 'en' prepended
+      expect(result.language).toEqual(['en', 'hi', 'fr']);
       // Multilingual should be removed from strategies array
       expect(
         result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
@@ -1294,7 +1294,7 @@ describe('RedteamConfigSchema transform', () => {
       const result = RedteamConfigSchema.parse(input);
 
       // Should merge and deduplicate
-      expect(result.language).toEqual(['de', undefined, 'hi', 'fr']);
+      expect(result.language).toEqual(['de', 'en', 'hi', 'fr']);
       // Multilingual should be removed from strategies array
       expect(
         result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
@@ -1318,7 +1318,7 @@ describe('RedteamConfigSchema transform', () => {
 
       const result = RedteamConfigSchema.parse(input);
 
-      expect(result.language).toEqual([undefined, 'hi']);
+      expect(result.language).toEqual(['en', 'hi']);
       // Should keep other strategies but remove multilingual
       const strategyIds = result.strategies?.map((s) => (typeof s === 'string' ? s : s.id));
       expect(strategyIds).toContain('jailbreak');
