@@ -639,9 +639,9 @@ export const GDPR_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strat
       'pii:session',
       'pii:social',
       'prompt-extraction',
-      'cross-session-leak',
+      // 'cross-session-leak',
     ],
-    strategies: ['jailbreak', 'prompt-injection'],
+    strategies: [],
   },
   'gdpr:art32': {
     // Article 32 - Security of processing
@@ -655,7 +655,7 @@ export const GDPR_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strat
       'bfla',
       'bola',
     ],
-    strategies: ['jailbreak', 'prompt-injection'],
+    strategies: [],
   },
 };
 
