@@ -218,7 +218,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           ...strategyPreset.options.multiTurn.strategies,
         ];
       } else {
-        allStrategyIds = strategyPreset.strategies;
+        allStrategyIds = [...strategyPreset.strategies];
       }
 
       // Filter out disabled strategies
@@ -228,7 +228,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       // Show toast if any strategies were skipped
       if (skippedStrategyIds.length > 0) {
         const skippedNames = skippedStrategyIds
-          .map((id) => strategyDisplayNames[id] || id)
+          .map((id) => (strategyDisplayNames as Record<string, string>)[id] || id)
           .join(', ');
         toast.showToast(
           `Skipped ${skippedStrategyIds.length} disabled ${skippedStrategyIds.length === 1 ? 'strategy' : 'strategies'}: ${skippedNames}`,
@@ -322,7 +322,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         // Show toast if any strategies were skipped
         if (skippedMultiTurnIds.length > 0) {
           const skippedNames = skippedMultiTurnIds
-            .map((id) => strategyDisplayNames[id] || id)
+            .map((id) => (strategyDisplayNames as Record<string, string>)[id] || id)
             .join(', ');
           toast.showToast(
             `Skipped ${skippedMultiTurnIds.length} disabled ${skippedMultiTurnIds.length === 1 ? 'strategy' : 'strategies'}: ${skippedNames}`,
