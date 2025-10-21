@@ -13,13 +13,13 @@ GDPR establishes strict requirements for processing personal data, giving indivi
 
 This guide focuses on seven key GDPR articles that are particularly relevant for testing LLM and AI applications:
 
-1. [Article 5: Principles of Processing Personal Data](#article-5-principles-of-processing-personal-data-gdprart5)
-2. [Article 9: Special Categories of Personal Data](#article-9-special-categories-of-personal-data-gdprart9)
-3. [Article 15: Right of Access](#article-15-right-of-access-gdprart15)
-4. [Article 17: Right to Erasure](#article-17-right-to-erasure-gdprart17)
-5. [Article 22: Automated Decision-Making](#article-22-automated-decision-making-gdprart22)
-6. [Article 25: Data Protection by Design](#article-25-data-protection-by-design-gdprart25)
-7. [Article 32: Security of Processing](#article-32-security-of-processing-gdprart32)
+1. [Article 5: Principles of Processing Personal Data](#article-5-principles-of-processing-personal-data-gdpr-art5)
+2. [Article 9: Special Categories of Personal Data](#article-9-special-categories-of-personal-data-gdpr-art9)
+3. [Article 15: Right of Access](#article-15-right-of-access-gdpr-art15)
+4. [Article 17: Right to Erasure](#article-17-right-to-erasure-gdpr-art17)
+5. [Article 22: Automated Decision-Making](#article-22-automated-decision-making-gdpr-art22)
+6. [Article 25: Data Protection by Design](#article-25-data-protection-by-design-gdpr-art25)
+7. [Article 32: Security of Processing](#article-32-security-of-processing-gdpr-art32)
 
 ## Scanning for GDPR Compliance
 
@@ -40,7 +40,7 @@ redteam:
 
 Or target specific GDPR articles using the individual identifiers shown below.
 
-## Article 5: Principles of Processing Personal Data (gdpr:art5)
+## Article 5: Principles of Processing Personal Data (gdpr:art5) {#article-5-principles-of-processing-personal-data-gdprart5}
 
 Article 5 establishes the fundamental principles for processing personal data under GDPR, including:
 
@@ -84,7 +84,7 @@ redteam:
     - gdpr:art5
 ```
 
-## Article 9: Special Categories of Personal Data (gdpr:art9)
+## Article 9: Special Categories of Personal Data (gdpr:art9) {#article-9-special-categories-of-personal-data-gdprart9}
 
 Article 9 provides enhanced protection for "special categories" of sensitive personal data, including:
 
@@ -128,7 +128,7 @@ redteam:
     - gdpr:art9
 ```
 
-## Article 15: Right of Access (gdpr:art15)
+## Article 15: Right of Access (gdpr:art15) {#article-15-right-of-access-gdprart15}
 
 Article 15 grants individuals the right to obtain from the data controller:
 
@@ -170,7 +170,7 @@ redteam:
     - gdpr:art15
 ```
 
-## Article 17: Right to Erasure (gdpr:art17)
+## Article 17: Right to Erasure (gdpr:art17) {#article-17-right-to-erasure-gdprart17}
 
 Article 17 establishes the "right to be forgotten," giving individuals the right to have their personal data erased when:
 
@@ -213,7 +213,7 @@ redteam:
     - gdpr:art17
 ```
 
-## Article 22: Automated Decision-Making (gdpr:art22)
+## Article 22: Automated Decision-Making (gdpr:art22) {#article-22-automated-decision-making-gdprart22}
 
 Article 22 gives individuals the right not to be subject to decisions based solely on automated processing, including profiling, that produce legal effects or similarly significantly affect them.
 
@@ -254,7 +254,7 @@ redteam:
     - gdpr:art22
 ```
 
-## Article 25: Data Protection by Design (gdpr:art25)
+## Article 25: Data Protection by Design (gdpr:art25) {#article-25-data-protection-by-design-gdprart25}
 
 Article 25 requires organizations to implement data protection by design and by default. This means:
 
@@ -294,7 +294,7 @@ redteam:
     - gdpr:art25
 ```
 
-## Article 32: Security of Processing (gdpr:art32)
+## Article 32: Security of Processing (gdpr:art32) {#article-32-security-of-processing-gdprart32}
 
 Article 32 mandates appropriate technical and organizational measures to ensure a level of security appropriate to the risk, including:
 

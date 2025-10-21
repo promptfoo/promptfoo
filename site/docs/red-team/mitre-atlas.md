@@ -13,12 +13,12 @@ ATLAS organizes adversarial techniques into tactics that represent the adversary
 
 ATLAS organizes adversarial ML techniques into the following tactics:
 
-1. [Reconnaissance](#reconnaissance-mitreatlas-reconnaissance) - Gathering information about the ML system
-2. [Resource Development](#resource-development-mitreatlas-resource-development) - Establishing resources to support targeting
-3. [Initial Access](#initial-access-mitreatlas-initial-access) - Gaining entry into the ML system
-4. [ML Attack Staging](#ml-attack-staging-mitreatlas-ml-attack-staging) - Preparing and positioning attacks against the ML model
-5. [Exfiltration](#exfiltration-mitreatlas-exfiltration) - Stealing data or model information
-6. [Impact](#impact-mitreatlas-impact) - Disrupting, degrading, or destroying the ML system
+1. [Reconnaissance](#reconnaissance-mitre-atlas-reconnaissance) - Gathering information about the ML system
+2. [Resource Development](#resource-development-mitre-atlas-resource-development) - Establishing resources to support targeting
+3. [Initial Access](#initial-access-mitre-atlas-initial-access) - Gaining entry into the ML system
+4. [ML Attack Staging](#ml-attack-staging-mitre-atlas-ml-attack-staging) - Preparing and positioning attacks against the ML model
+5. [Exfiltration](#exfiltration-mitre-atlas-exfiltration) - Stealing data or model information
+6. [Impact](#impact-mitre-atlas-impact) - Disrupting, degrading, or destroying the ML system
 
 ## Scanning for MITRE ATLAS Threats
 
@@ -43,7 +43,7 @@ redteam:
     - mitre:atlas:impact
 ```
 
-## Reconnaissance (mitre:atlas:reconnaissance)
+## Reconnaissance (mitre:atlas:reconnaissance) {#reconnaissance-mitre-atlas-reconnaissance}
 
 Reconnaissance involves adversaries gathering information about the ML system to plan subsequent attacks. For LLM applications, this includes discovering system capabilities, extracting prompts, understanding access controls, and identifying competitive intelligence.
 
@@ -87,7 +87,7 @@ redteam:
     - mitre:atlas:reconnaissance
 ```
 
-## Resource Development (mitre:atlas:resource-development)
+## Resource Development (mitre:atlas:resource-development) {#resource-development-mitre-atlas-resource-development}
 
 Resource Development involves adversaries creating, purchasing, or compromising resources to support targeting. This includes developing malicious prompts, acquiring tools, or obtaining infrastructure to launch attacks against ML systems.
 
@@ -125,7 +125,7 @@ redteam:
     - mitre:atlas:resource-development
 ```
 
-## Initial Access (mitre:atlas:initial-access)
+## Initial Access (mitre:atlas:initial-access) {#initial-access-mitre-atlas-initial-access}
 
 Initial Access consists of techniques that adversaries use to gain their initial foothold in the ML system. For LLM applications, this often involves exploiting input validation weaknesses or using prompt injection to bypass security controls.
 
@@ -175,7 +175,7 @@ redteam:
     - mitre:atlas:initial-access
 ```
 
-## ML Attack Staging (mitre:atlas:ml-attack-staging)
+## ML Attack Staging (mitre:atlas:ml-attack-staging) {#ml-attack-staging-mitre-atlas-ml-attack-staging}
 
 ML Attack Staging involves techniques that adversaries use to prepare and position attacks specifically against the ML model itself. This includes poisoning inputs, manipulating model behavior, and exploiting ML-specific vulnerabilities.
 
@@ -220,7 +220,7 @@ redteam:
     - mitre:atlas:ml-attack-staging
 ```
 
-## Exfiltration (mitre:atlas:exfiltration)
+## Exfiltration (mitre:atlas:exfiltration) {#exfiltration-mitre-atlas-exfiltration}
 
 Exfiltration involves techniques that adversaries use to steal data, including personally identifiable information (PII), training data, proprietary prompts, or other sensitive information from the ML system.
 
@@ -267,7 +267,7 @@ redteam:
     - mitre:atlas:exfiltration
 ```
 
-## Impact (mitre:atlas:impact)
+## Impact (mitre:atlas:impact) {#impact-mitre-atlas-impact}
 
 Impact consists of techniques that adversaries use to disrupt, degrade, or destroy the ML system or manipulate its outputs. For LLM applications, this includes hijacking the system's purpose, generating harmful content, causing it to imitate others, or taking excessive agency actions.
 
