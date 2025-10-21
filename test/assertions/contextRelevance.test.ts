@@ -79,6 +79,7 @@ describe('handleContextRelevance', () => {
       'test context',
       0.8,
       {},
+      undefined,
     );
   });
 
@@ -151,6 +152,7 @@ describe('handleContextRelevance', () => {
       'irrelevant context',
       0.7,
       {},
+      undefined,
     );
   });
 
@@ -186,7 +188,7 @@ describe('handleContextRelevance', () => {
       providerResponse: { output: 'out', tokenUsage: {} },
     } as any);
 
-    expect(matchesContextRelevance).toHaveBeenCalledWith('test query', 'test context', 0, {});
+    expect(matchesContextRelevance).toHaveBeenCalledWith('test query', 'test context', 0, {}, undefined);
     expect(result.metadata).toEqual({
       context: 'test context',
     });
@@ -286,7 +288,7 @@ describe('handleContextRelevance', () => {
       undefined,
       { output: 'out', tokenUsage: {} },
     );
-    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {});
+    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {}, undefined);
     expect(result.metadata).toEqual({
       context: 'cx',
     });

@@ -332,13 +332,14 @@ The submitted answer may either be a subset or superset of the expert answer, or
     await matchesFactuality(input, expected, output, grading);
 
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('Input {{ var }}'),
-    );
-    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('Expected {{ var }}'),
-    );
-    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('Output {{ var }}'),
+      expect.any(String),
+      expect.objectContaining({
+        vars: expect.objectContaining({
+          input: 'Input {{ var }}',
+          ideal: 'Expected {{ var }}',
+          completion: 'Output {{ var }}',
+        }),
+      }),
     );
 
     process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;

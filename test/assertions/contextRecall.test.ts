@@ -79,6 +79,7 @@ describe('handleContextRecall', () => {
       0.8,
       {},
       { context: 'test context' },
+      undefined,
     );
   });
 
@@ -126,6 +127,7 @@ describe('handleContextRecall', () => {
       0.7,
       {},
       { context: 'incomplete context' },
+      undefined,
     );
   });
 
@@ -170,6 +172,7 @@ describe('handleContextRecall', () => {
       0,
       {},
       { context: 'test context' },
+      undefined,
     );
   });
 
@@ -216,7 +219,7 @@ describe('handleContextRecall', () => {
       'test prompt',
       {},
     );
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('test prompt', 'test output', 0, {}, {});
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith('test prompt', 'test output', 0, {}, {}, undefined);
   });
 
   it('should use contextTransform when provided', async () => {
@@ -259,7 +262,7 @@ describe('handleContextRecall', () => {
       'prompt',
       {},
     );
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {});
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {}, undefined);
   });
 
   it('should throw error when renderedValue is not a string', async () => {
