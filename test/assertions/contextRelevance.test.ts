@@ -188,7 +188,13 @@ describe('handleContextRelevance', () => {
       providerResponse: { output: 'out', tokenUsage: {} },
     } as any);
 
-    expect(matchesContextRelevance).toHaveBeenCalledWith('test query', 'test context', 0, {}, undefined);
+    expect(matchesContextRelevance).toHaveBeenCalledWith(
+      'test query',
+      'test context',
+      0,
+      {},
+      undefined,
+    );
     expect(result.metadata).toEqual({
       context: 'test context',
     });

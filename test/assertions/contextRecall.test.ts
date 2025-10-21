@@ -219,7 +219,14 @@ describe('handleContextRecall', () => {
       'test prompt',
       {},
     );
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('test prompt', 'test output', 0, {}, {}, undefined);
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test prompt',
+      'test output',
+      0,
+      {},
+      {},
+      undefined,
+    );
   });
 
   it('should use contextTransform when provided', async () => {
