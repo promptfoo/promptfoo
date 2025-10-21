@@ -160,7 +160,8 @@ export const RedteamGenerateOptionsSchema = z.object({
   envFile: z.string().optional().describe('Path to the environment file'),
   force: z.boolean().describe('Whether to force generation').default(false),
   injectVar: z.string().optional().describe('Variable to inject'),
-  language: z.union([z.string(), z.array(z.string())])
+  language: z
+    .union([z.string(), z.array(z.string())])
     .optional()
     .describe('Language(s) of tests to generate'),
   maxConcurrency: z
@@ -202,7 +203,8 @@ export const RedteamConfigSchema = z
       .describe('Additional instructions for test generation applied to each plugin'),
     provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
-    language: z.union([z.string(), z.array(z.string())])
+    language: z
+      .union([z.string(), z.array(z.string())])
       .optional()
       .describe('Language(s) of tests to generate for this plugin'),
     entities: z
@@ -248,7 +250,7 @@ export const RedteamConfigSchema = z
     // MIGRATION: Extract languages from multilingual strategy and merge into global language config
     // This allows plugin-level language generation to work with multilingual strategy
     const multilingualStrategy = data.strategies?.find(
-      (s) => (typeof s === 'string' ? s : s.id) === 'multilingual'
+      (s) => (typeof s === 'string' ? s : s.id) === 'multilingual',
     );
 
     if (multilingualStrategy && typeof multilingualStrategy !== 'string') {

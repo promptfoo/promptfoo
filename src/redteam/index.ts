@@ -808,10 +808,18 @@ export async function synthesize({
 
       // If plugin has its own language, use that; otherwise use global language
       const languages = pluginLanguage
-        ? (Array.isArray(pluginLanguage) ? pluginLanguage : [pluginLanguage])
-        : (Array.isArray(language) ? language : (language ? [language] : [undefined]));
+        ? Array.isArray(pluginLanguage)
+          ? pluginLanguage
+          : [pluginLanguage]
+        : Array.isArray(language)
+          ? language
+          : language
+            ? [language]
+            : [undefined];
 
-      logger.debug(`[Language Processing] Plugin: ${plugin.id}, Languages: ${JSON.stringify(languages)}, NumTests per language: ${plugin.numTests}${pluginLanguage ? ' (plugin override)' : ''}`);
+      logger.debug(
+        `[Language Processing] Plugin: ${plugin.id}, Languages: ${JSON.stringify(languages)}, NumTests per language: ${plugin.numTests}${pluginLanguage ? ' (plugin override)' : ''}`,
+      );
 
       // Generate tests for each language
       const allPluginTests: TestCase[] = [];
@@ -848,11 +856,15 @@ export async function synthesize({
 
           allPluginTests.push(...testsWithLanguage);
         } else {
-          logger.warn(`[Language Processing] No tests generated for ${plugin.id} in language: ${lang || 'default'}`);
+          logger.warn(
+            `[Language Processing] No tests generated for ${plugin.id} in language: ${lang || 'default'}`,
+          );
         }
       }
 
-      logger.debug(`[Language Processing] Total tests generated for ${plugin.id}: ${allPluginTests.length} (across ${languages.length} language(s))`);
+      logger.debug(
+        `[Language Processing] Total tests generated for ${plugin.id}: ${allPluginTests.length} (across ${languages.length} language(s))`,
+      );
 
       if (!Array.isArray(allPluginTests) || allPluginTests.length === 0) {
         logger.warn(`Failed to generate tests for ${plugin.id}`);
@@ -907,7 +919,8 @@ export async function synthesize({
       }
       logger.debug(`Added ${allPluginTests.length} ${plugin.id} test cases`);
       pluginResults[plugin.id] = {
-        requested: plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length,
+        requested:
+          plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length,
         generated: allPluginTests.length,
       };
     } else if (plugin.id.startsWith('file://')) {

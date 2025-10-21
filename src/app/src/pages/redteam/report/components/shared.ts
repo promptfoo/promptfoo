@@ -42,9 +42,9 @@ export function testBelongsToStrategy(
   // multilingual: Check for language in BOTH locations (new and old)
   if (strategy === 'multilingual') {
     const hasLanguage =
-      test.metadata?.modifiers?.language ||         // NEW: global config path
+      test.metadata?.modifiers?.language || // NEW: global config path
       test.result?.testCase?.metadata?.modifiers?.language ||
-      test.metadata?.language ||                     // OLD: translation path
+      test.metadata?.language || // OLD: translation path
       test.result?.testCase?.metadata?.language;
 
     return !!hasLanguage;

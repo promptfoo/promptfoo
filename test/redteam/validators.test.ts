@@ -1272,7 +1272,9 @@ describe('RedteamConfigSchema transform', () => {
       // Language should be lifted to global config with undefined prepended
       expect(result.language).toEqual([undefined, 'hi', 'fr']);
       // Multilingual should be removed from strategies array
-      expect(result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual')).toBe(false);
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(false);
     });
 
     it('should merge multilingual languages with existing global language config', () => {
@@ -1294,7 +1296,9 @@ describe('RedteamConfigSchema transform', () => {
       // Should merge and deduplicate
       expect(result.language).toEqual(['de', undefined, 'hi', 'fr']);
       // Multilingual should be removed from strategies array
-      expect(result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual')).toBe(false);
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(false);
     });
 
     it('should preserve other strategies when removing multilingual', () => {
@@ -1333,7 +1337,9 @@ describe('RedteamConfigSchema transform', () => {
       // String form doesn't have config, so no lifting should occur
       expect(result.language).toBeUndefined();
       // Multilingual as string should be kept (no lifting occurred)
-      expect(result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual')).toBe(true);
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(true);
     });
 
     it('should not lift if multilingual has no languages', () => {
@@ -1354,7 +1360,9 @@ describe('RedteamConfigSchema transform', () => {
       // No lifting should occur with empty languages
       expect(result.language).toBeUndefined();
       // Multilingual should still be removed? Or kept? Let's keep it for empty config
-      expect(result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual')).toBe(true);
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(true);
     });
   });
 });

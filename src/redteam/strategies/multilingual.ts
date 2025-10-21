@@ -509,13 +509,13 @@ export async function addMultilingual(
 ): Promise<TestCase[]> {
   // Check if tests were already generated with language modifiers
   // This happens when multilingual strategy was migrated to global language config
-  const hasLanguageModifiers = testCases.some(t => t.metadata?.modifiers?.language);
+  const hasLanguageModifiers = testCases.some((t) => t.metadata?.modifiers?.language);
 
   if (hasLanguageModifiers) {
     // Tests already generated in multiple languages at plugin level
     // Just return them - no translation needed
     logger.info(
-      `Multilingual strategy: ${testCases.length} tests already generated with language support`
+      `Multilingual strategy: ${testCases.length} tests already generated with language support`,
     );
     return testCases;
   }
