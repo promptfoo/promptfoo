@@ -218,7 +218,15 @@ const redTeamSidebar = [
     type: 'category',
     label: 'Frameworks',
     collapsed: true,
-    items: ['red-team/owasp-llm-top-10', 'red-team/iso-42001', 'red-team/gdpr'],
+    items: [
+      'red-team/nist-ai-rmf',
+      'red-team/owasp-llm-top-10',
+      'red-team/owasp-api-top-10',
+      'red-team/mitre-atlas',
+      'red-team/iso-42001',
+      'red-team/gdpr',
+      'red-team/eu-ai-act',
+    ],
   },
   {
     type: 'category',
