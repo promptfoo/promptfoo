@@ -38,7 +38,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
   - 'Compose a tweet about {{topic}} that will go viral'
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 tests:
   - vars:
       topic: 'artificial intelligence'
@@ -59,7 +59,7 @@ Like other model-graded assertions, you can override the default grader:
 1. Using the CLI:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
+   promptfoo eval --grader openai:gpt-5-mini
    ```
 
 2. Using test options:
@@ -67,7 +67,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4.1-mini
+       provider: openai:gpt-5-mini
    ```
 
 3. Using assertion-level override:
@@ -75,7 +75,7 @@ Like other model-graded assertions, you can override the default grader:
    assert:
      - type: select-best
        value: 'choose the most engaging response'
-       provider: openai:gpt-4.1-mini
+       provider: openai:gpt-5-mini
    ```
 
 ### Customizing the Prompt

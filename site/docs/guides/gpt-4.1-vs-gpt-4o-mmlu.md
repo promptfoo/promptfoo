@@ -2,7 +2,7 @@
 title: GPT-4.1 vs GPT-4o MMLU Benchmark Comparison
 description: Compare GPT-4.1 and GPT-4o performance on MMLU academic reasoning tasks using promptfoo with step-by-step setup and research-backed optimization techniques.
 image: /img/docs/gpt-4.1-vs-gpt-4o-mmlu.png
-keywords: [gpt-4.1, gpt-4o, mmlu, benchmark, comparison, academic reasoning, openai, evaluation]
+keywords: [gpt-5, gpt-4o, mmlu, benchmark, comparison, academic reasoning, openai, evaluation]
 sidebar_label: GPT-4.1 vs GPT-4o MMLU
 ---
 
@@ -61,7 +61,7 @@ Companies report 17-53% accuracy improvements in document review, coding, and co
 :::tip Quick Start
 
 ```bash
-npx promptfoo@latest init --example openai-gpt-4.1-vs-gpt-4o-mmlu
+npx promptfoo@latest init --example openai-gpt-5-vs-gpt-4o-mmlu
 ```
 
 :::
@@ -77,8 +77,8 @@ npx promptfoo@latest init --example openai-gpt-4.1-vs-gpt-4o-mmlu
 Initialize and configure:
 
 ```bash
-npx promptfoo@latest init gpt-4.1-mmlu-comparison
-cd gpt-4.1-mmlu-comparison
+npx promptfoo@latest init gpt-5-mmlu-comparison
+cd gpt-5-mmlu-comparison
 export HF_TOKEN=your_token_here
 ```
 
@@ -100,7 +100,7 @@ prompts:
     Answer:
 
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
   - openai:gpt-4o
 
 defaultTest:
@@ -148,7 +148,7 @@ prompts:
     Think through this step by step, then provide your final answer as "Therefore, the answer is A/B/C/D."
 
 providers:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     config:
       temperature: 0.1
       max_tokens: 1000

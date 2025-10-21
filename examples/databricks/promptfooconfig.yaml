@@ -5,8 +5,8 @@ prompts:
   - 'You are a helpful AI assistant. Answer the following: {{question}}'
 
 providers:
-  # Databricks pay-per-token endpoint for Llama 3.3
-  - id: databricks:databricks-meta-llama-3-3-70b-instruct
+  # Databricks pay-per-token endpoint for Llama 4
+  - id: databricks:databricks-meta-llama-4-scout-instruct
     config:
       isPayPerToken: true
       temperature: 0.7
