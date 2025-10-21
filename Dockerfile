@@ -1,20 +1,46 @@
 # syntax=docker/dockerfile:1
-FROM --platform=${BUILDPLATFORM} node:22.14.0-alpine
+FROM --platform=${BUILDPLATFORM} ubuntu:24.04 AS node-installer
 
-FROM node:22.14.0-alpine AS base
+# Install Node.js on Ubuntu 24.04
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
-# Make Python version configurable with a default of 3.12
-ARG PYTHON_VERSION=3.12
+FROM ubuntu:24.04 AS base
 
-# Install Python for python providers, prompts, asserts, etc.
-RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
-    ln -sf python3 /usr/bin/python
+# Install Node.js
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r promptfoo && useradd -r -g promptfoo promptfoo
+
+# Install Python 3.12 for python providers, prompts, asserts, etc.
+# Ubuntu 24.04 comes with Python 3.12
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3-pip \
+    python3-setuptools \
+    curl && \
+    ln -sf python3.12 /usr/bin/python3 && \
+    ln -sf python3 /usr/bin/python && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install dependencies only when needed
 FROM base AS builder
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat build-base
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 ARG VITE_PUBLIC_BASENAME
@@ -30,17 +56,7 @@ ENV VITE_IS_HOSTED=1 \
 # Install dependencies (deterministic + cached)
 COPY package.json package-lock.json ./
 # Leverage BuildKit cache and install architecture-specific binaries
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-      export npm_config_arch=arm64; \
-    elif [ "$TARGETARCH" = "amd64" ]; then \
-      export npm_config_arch=x64; \
-    fi && \
-    export npm_config_platform=linux && \
-    export npm_config_libc=musl && \
-    # Install without running scripts to avoid architecture mismatches
-    npm install --install-links --include=peer --ignore-scripts && \
-    # Rebuild all native modules for the correct architecture
-    npm rebuild
+RUN npm ci --install-links --include=peer
 
 # Copy the rest of the application code
 COPY . .
