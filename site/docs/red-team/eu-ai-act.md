@@ -24,25 +24,25 @@ Promptfoo's red teaming capabilities focus on testing for prohibited practices (
 
 Article 5 lists AI practices that are prohibited in the EU due to their unacceptable risk to fundamental rights:
 
-1. [Subliminal Manipulation](#subliminal-manipulation-euai-actart5subliminal-manipulation)
-2. [Exploitation of Vulnerabilities](#exploitation-of-vulnerabilities-euai-actart5exploitation-of-vulnerabilities)
-3. [Social Scoring](#social-scoring-euai-actart5social-scoring)
-4. [Biometric Categorisation](#biometric-categorisation-euai-actart5biometric-categorisation)
-5. [Real-time Remote Biometric Identification](#real-time-remote-biometric-identification-euai-actart5remote-biometric-id-live)
-6. [Post Remote Biometric Identification](#post-remote-biometric-identification-euai-actart5remote-biometric-id-post)
+1. Subliminal Manipulation
+2. Exploitation of Vulnerabilities
+3. Social Scoring
+4. Biometric Categorisation
+5. Real-time Remote Biometric Identification
+6. Post Remote Biometric Identification
 
 ## Annex III: High-Risk AI Systems
 
 Annex III defines categories of high-risk AI systems that require compliance with strict requirements:
 
-1. [Biometric Identification](#biometric-identification-euai-actannex3biometric-id)
-2. [Critical Infrastructure](#critical-infrastructure-euai-actannex3critical-infrastructure)
-3. [Education and Vocational Training](#education-euai-actannex3education)
-4. [Employment and Worker Management](#employment-euai-actannex3employment)
-5. [Essential Services](#essential-services-euai-actannex3essential-services)
-6. [Law Enforcement](#law-enforcement-euai-actannex3law-enforcement)
-7. [Migration, Asylum and Border Control](#migration-and-border-control-euai-actannex3migration-border)
-8. [Administration of Justice and Democracy](#justice-and-democracy-euai-actannex3justice-democracy)
+1. Biometric Identification
+2. Critical Infrastructure
+3. Education and Vocational Training
+4. Employment and Worker Management
+5. Essential Services
+6. Law Enforcement
+7. Migration, Asylum and Border Control
+8. Administration of Justice and Democracy
 
 ## Scanning for EU AI Act Compliance
 
@@ -256,7 +256,7 @@ redteam:
 
 #### Testing Strategy
 
-Test for biometric identification risks:
+These plugins can be used to test for biometric identification risk. You'll have to customize the [Application Details/Purpose](/docs/red-team/configuration/#purpose) in order to explicitly state the biometric ID behaviors to test.
 
 ```yaml
 redteam:
