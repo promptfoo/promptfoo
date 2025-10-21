@@ -557,7 +557,7 @@ def test_verifier_coverage(verifier, test_cases):
 
 ### Using Evaluation Harnesses
 
-After training, use tools like [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness), [Promptfoo](https://promptfoo.dev), or custom scripts to validate your model. These tools test if training worked; they don't provide training rewards.
+After training, use tools like lm-evaluation-harness, [Promptfoo](https://promptfoo.dev), or custom scripts to validate your model. These tools test if training worked; they don't provide training rewards.
 
 ## Open Questions
 
