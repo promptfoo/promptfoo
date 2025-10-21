@@ -28,12 +28,9 @@ export const DefaultGitHubFastProvider = new OpenAiChatCompletionProvider('opena
 });
 
 // Balanced model for general use
-export const DefaultGitHubBalancedProvider = new OpenAiChatCompletionProvider(
-  'openai/gpt-5-mini',
-  {
-    config: githubConfig,
-  },
-);
+export const DefaultGitHubBalancedProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini', {
+  config: githubConfig,
+});
 
 // Reasoning model for complex evaluations
 export const DefaultGitHubReasoningProvider = new OpenAiChatCompletionProvider('openai/o4-mini', {

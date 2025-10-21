@@ -24,7 +24,7 @@ providers:
 
 | API Providers                                       | Description                                                  | Syntax & Example                                                                |
 | --------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [OpenAI](./openai.md)                               | GPT models including GPT-5 and reasoning models            | `openai:gpt-5` or `openai:gpt-5-mini`                                            |
+| [OpenAI](./openai.md)                               | GPT models including GPT-5 and reasoning models              | `openai:gpt-5` or `openai:gpt-5-mini`                                           |
 | [Anthropic](./anthropic.md)                         | Claude models                                                | `anthropic:messages:claude-sonnet-4-20250514`                                   |
 | [Claude Agent SDK](./claude-agent-sdk.md)           | Claude Agent SDK                                             | `anthropic:claude-agent-sdk`                                                    |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                                 | `https://api.example.com/v1/chat/completions`                                   |
@@ -52,15 +52,15 @@ providers:
 | [F5](./f5.md)                                       | OpenAI-compatible AI Gateway interface                       | `f5:path-name`                                                                  |
 | [fal.ai](./fal.md)                                  | Image Generation Provider                                    | `fal:image:fal-ai/fast-sdxl`                                                    |
 | [Fireworks AI](./fireworks.md)                      | Various hosted models                                        | `fireworks:accounts/fireworks/models/qwen-v2p5-7b`                              |
-| [GitHub](./github.md)                               | GitHub Models - OpenAI, Anthropic, Google, and more          | `github:openai/gpt-5` or `github:anthropic/claude-3.7-sonnet`                 |
+| [GitHub](./github.md)                               | GitHub Models - OpenAI, Anthropic, Google, and more          | `github:openai/gpt-5` or `github:anthropic/claude-3.7-sonnet`                   |
 | [Google AI Studio](./google.md)                     | Gemini models, Live API, and Imagen image generation         | `google:gemini-2.5-pro`, `google:image:imagen-4.0-generate-preview-06-06`       |
 | [Google Vertex AI](./vertex.md)                     | Google Cloud's AI platform                                   | `vertex:gemini-2.5-pro`, `vertex:gemini-2.5-flash`                              |
 | [Groq](./groq.md)                                   | High-performance inference API                               | `groq:llama-3.3-70b-versatile`                                                  |
-| [Helicone AI Gateway](./helicone.md)                | Self-hosted AI gateway for unified provider access           | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-4`                 |
+| [Helicone AI Gateway](./helicone.md)                | Self-hosted AI gateway for unified provider access           | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-4`                   |
 | [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider                           | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                  |
 | [Hugging Face](./huggingface.md)                    | Access thousands of models                                   | `huggingface:text-generation:gpt2`                                              |
 | [JFrog ML](./jfrog.md)                              | JFrog's LLM Model Library                                    | `jfrog:llama_3_8b_instruct`                                                     |
-| [LiteLLM](./litellm.md)                             | Unified interface for 400+ LLMs with embedding support       | `litellm:gpt-5`, `litellm:embedding:text-embedding-3-small`                   |
+| [LiteLLM](./litellm.md)                             | Unified interface for 400+ LLMs with embedding support       | `litellm:gpt-5`, `litellm:embedding:text-embedding-3-small`                     |
 | [Llama API](./llamaApi.md)                          | Meta's hosted Llama models with multimodal capabilities      | `llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8`                               |
 | [Mistral AI](./mistral.md)                          | Mistral's language models                                    | `mistral:magistral-medium-latest`                                               |
 | [Nscale](./nscale.md)                               | Cost-effective serverless AI inference with zero rate limits | `nscale:openai/gpt-oss-120b`                                                    |
