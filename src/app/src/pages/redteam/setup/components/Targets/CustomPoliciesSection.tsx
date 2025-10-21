@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 
-import { useApiHealth } from '@app/contexts/ApiHealthContext';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useToast } from '@app/hooks/useToast';
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
@@ -158,7 +158,9 @@ export const CustomPoliciesSection = () => {
   const [editingRowId, setEditingRowId] = useState<number | null>(null);
   const [autoEditRowId, setAutoEditRowId] = useState<number | null>(null);
 
-  const { status: apiHealthStatus } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
 
   // Test case generation state - now from context
   const { generateTestCase, isGenerating: generatingTestCase } = useTestCaseGeneration();

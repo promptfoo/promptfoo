@@ -52,7 +52,7 @@ import {
 import type { LocalPluginConfig } from '../types';
 import { useTestCaseGeneration } from './TestCaseGenerationProvider';
 import { TestCaseGenerateButton } from './TestCaseDialog';
-import { useApiHealth } from '@app/contexts/ApiHealthContext';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 
 const ErrorFallback = ({ error }: { error: Error }) => (
   <div role="alert">
@@ -107,7 +107,9 @@ export default function PluginsTab({
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
   const [isCustomMode, setIsCustomMode] = useState(true);
 
-  const { status: apiHealthStatus } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
 
   // Test case generation state - now from context
   const {

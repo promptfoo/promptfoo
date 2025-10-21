@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-import { type ApiHealthStatus, useApiHealth } from '@app/contexts/ApiHealthContext';
+import { type ApiHealthStatus, useApiHealth } from '@app/hooks/useApiHealth';
 import useApiConfig from '@app/stores/apiConfig';
 import CircleIcon from '@mui/icons-material/Circle';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -42,7 +42,11 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
 }: T) {
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
   const [tempApiBaseUrl, setTempApiBaseUrl] = useState(apiBaseUrl || '');
-  const { status, message, checkHealth, isChecking } = useApiHealth();
+  const {
+    data: { status, message },
+    refetch: checkHealth,
+    isLoading: isChecking,
+  } = useApiHealth();
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
