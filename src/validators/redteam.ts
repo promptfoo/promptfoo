@@ -257,9 +257,9 @@ export const RedteamConfigSchema = z
       const strategyLanguages = multilingualStrategy.config?.languages;
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
-        // Include undefined to represent original English tests (no language modifier)
-        // [undefined, 'hi', 'fr'] means: generate English (no modifier) + Hindi + French
-        const languagesWithOriginal = [undefined, ...strategyLanguages];
+        // Include 'en' to represent original English tests explicitly
+        // ['en', 'hi', 'fr'] means: generate English + Hindi + French
+        const languagesWithOriginal = ['en', ...strategyLanguages];
 
         if (data.language) {
           // Global language exists, merge and deduplicate
