@@ -846,6 +846,8 @@ export async function synthesize({
             ...test,
             metadata: {
               ...test.metadata,
+              // Hoist language to top-level metadata for backward compatibility and easier access
+              ...(lang && !test.metadata?.language ? { language: lang } : {}),
               modifiers: {
                 ...test.metadata?.modifiers,
                 // Add language to modifiers if not already present (respect existing)
