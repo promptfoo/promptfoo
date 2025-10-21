@@ -21,23 +21,11 @@ image: /img/blog/rlvr/rlvr-header.jpg
 
 # Reinforcement Learning with Verifiable Rewards: When It Works, When It Fails
 
-Multiple recent studies argue that [RLVR mostly converts pass@k into pass@1](https://arxiv.org/abs/2504.13837). Training concentrates probability mass on reasoning paths the base model could already sample, with a smaller share attributable to true capability gains.
+If your model can solve a problem in 8 tries, RLVR trains it to succeed in 1 try. [Recent research](https://arxiv.org/abs/2504.13837) shows this is primarily search compression, not expanded reasoning capability. Training concentrates probability mass on paths the base model could already sample.
 
-**TL;DR:** Recent research shows RLVR primarily improves sampling efficiency (pass@k → pass@1 compression) rather than expanding reasoning capabilities. If your model can solve a problem in 8 tries, RLVR trains it to succeed in 1 try. This guide covers when RLVR works, three critical failure modes, and how to measure what you're actually getting.
+This matters because you need to measure what you're actually getting. Most RLVR gains come from sampling efficiency, with a smaller portion from true learning. This guide covers when RLVR works, three critical failure modes, and how to distinguish compression from capability expansion.
 
 <!-- truncate -->
-
-Recent evidence suggests most gains represent search compression, with a smaller share attributable to real learning—but only under specific conditions. The data, failure modes, and diagnostics below show how to tell if you're paying for intelligence or just faster search.
-
-## Recent RLVR Results
-
-**Databricks Text2SQL:** [73.5% BIRD test accuracy reported in July](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks); a [later paper reports 75.68%](https://arxiv.org/abs/2509.21459) with few-sample self-consistency. Both use execution-based verifiers, not pattern matching.
-
-**DeepSeek R1:** Scales GRPO with rule-based rewards (format compliance, verifiable correctness) for math, code, and logic. Details in the [R1 paper](https://arxiv.org/abs/2501.12948) and [Nature write-up](https://www.nature.com/articles/s41586-025-09422-z).
-
-**OpenAI o3 and o4-mini:** [April 16, 2025 release](https://openai.com/index/introducing-o3-and-o4-mini/) emphasizes scaling RL and tool-use, with strong results on AIME, SWE-bench, and Codeforces. OpenAI's public materials do not provide HumanEval deltas.
-
-**Compression vs capability:** [Tsinghua finds](https://arxiv.org/abs/2504.13837) RLVR mostly improves sampling efficiency rather than expanding the reasoning boundary; [Scale formalizes](https://arxiv.org/abs/2506.13923) "self-distillation" vs "capability gain."
 
 ## What RLVR Is (and Isn't)
 
@@ -50,12 +38,7 @@ def verifier(output: str, ground_truth: Any) -> float:
     return 1.0 if check_correctness(output, ground_truth) else 0.0
 ```
 
-**The tradeoffs:**
-
-- **No reward model training:** Skip weeks of training on preference pairs
-- **Deterministic feedback:** Same input produces same reward
-- **Fast iteration:** Change verifier logic without retraining
-- **Scalable:** Verifiers can be cheap relative to model inference if engineered carefully (though SQL execution and unit tests can take seconds)
+This approach eliminates **reward model training** (skipping weeks of work on preference pairs) and provides **deterministic feedback** (same input always produces the same reward). You get **fast iteration** because verifier logic changes don't require retraining. Verifiers are **scalable** if engineered carefully, though SQL execution and unit tests can take seconds.
 
 ### Comparison to Other Methods
 
@@ -87,9 +70,19 @@ If 5 out of 8 attempts succeed, the model learns which reasoning paths led to co
 
 ### What RLVR Is NOT
 
-RLVR works where ground truth exists. It fails for creative writing, brand voice, or nuanced argumentation. Human preference data remains superior for subjective quality. RLVR is standard reinforcement learning with deterministic reward functions—the technique isn't new, but applying it to LLM post-training at scale is.
+RLVR works where ground truth exists. It fails for creative writing, brand voice, or nuanced argumentation. Human preference data remains superior for subjective quality. RLVR is standard reinforcement learning with deterministic reward functions (the technique isn't new, but applying it to LLM post-training at scale is).
 
-## What Breaks (Research-Backed Failure Modes)
+## Recent Results
+
+**Databricks Text2SQL:** [73.5% BIRD test accuracy reported in July](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks); a [later paper reports 75.68%](https://arxiv.org/abs/2509.21459) with few-sample self-consistency. Both use execution-based verifiers, not pattern matching.
+
+**DeepSeek R1:** Scales GRPO with rule-based rewards (format compliance, verifiable correctness) for math, code, and logic. Details in the [R1 paper](https://arxiv.org/abs/2501.12948) and [Nature write-up](https://www.nature.com/articles/s41586-025-09422-z).
+
+**OpenAI o3 and o4-mini:** [April 16, 2025 release](https://openai.com/index/introducing-o3-and-o4-mini/) emphasizes scaling RL and tool-use, with strong results on AIME, SWE-bench, and Codeforces. OpenAI's public materials do not provide HumanEval deltas.
+
+**Compression vs capability:** [Tsinghua finds](https://arxiv.org/abs/2504.13837) RLVR mostly improves sampling efficiency rather than expanding the reasoning boundary; [Scale formalizes](https://arxiv.org/abs/2506.13923) "self-distillation" vs "capability gain."
+
+## Common Failure Modes
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', alignItems: 'center', margin: '2rem auto'}}>
   <div>
@@ -134,11 +127,7 @@ def strong_sql_verifier(sql_query, expected_results, db_connection):
         return 0.0
 ```
 
-**Mitigation:**
-
-- Build adversarial test suites for verifiers
-- Measure false negative rate on known-bad outputs
-- Add secondary checks (intent verification, format validation)
+**Mitigation:** Build adversarial test suites for verifiers and measure false negative rates on known-bad outputs. Add secondary checks like intent verification and format validation to catch what execution testing misses.
 
 ### 2. Spurious Rewards: Models Improve with Random Signals
 
@@ -146,9 +135,9 @@ def strong_sql_verifier(sql_query, expected_results, db_connection):
 
 [Research from June 2025](https://arxiv.org/abs/2506.10947) found Qwen2.5-Math-7B improved 21.4% on MATH-500 with _random_ rewards, nearly matching the 29.1% gain from ground truth rewards.
 
-The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward—the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. [These effects were strongest on Qwen2.5-Math and did not consistently replicate on Llama3 or OLMo2](https://arxiv.org/abs/2506.10947).
+The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward; the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. [These effects were strongest on Qwen2.5-Math and did not consistently replicate on Llama3 or OLMo2](https://arxiv.org/abs/2506.10947).
 
-**Important caveat:** [Research from July 2025](https://arxiv.org/abs/2507.10532) suggests Qwen's unusual sensitivity to spurious rewards may indicate training data contamination rather than genuine latent capability surfacing. The study found that on contamination-free datasets, only accurate rewards deliver gains—random rewards provide no benefit. Always validate RLVR gains on held-out, distribution-shifted test sets when evaluating effectiveness.
+**Important caveat:** [Research from July 2025](https://arxiv.org/abs/2507.10532) suggests Qwen's unusual sensitivity to spurious rewards may indicate training data contamination rather than genuine latent capability surfacing. The study found that on contamination-free datasets, only accurate rewards deliver gains; random rewards provide no benefit. Always validate RLVR gains on held-out, distribution-shifted test sets when evaluating effectiveness.
 
 **Always run this test:**
 
@@ -232,7 +221,7 @@ A_i = R(s_i, a_i) - baseline(R_group)
 
 Where `R(s_i, a_i)` is the verifier's reward (0.0 or 1.0), and the baseline is computed from all samples in the batch (typically mean or median). Outputs with above-average rewards get positive advantages; below-average get negative. The policy gradient then increases probability of high-advantage trajectories.
 
-[Recent analysis](https://arxiv.org/abs/2503.06639) formalizes GRPO's dynamics as a KL-regularized contrastive loss and proves "success amplification"—the probability of success after training is guaranteed to exceed the initial probability, regardless of starting point.
+[Recent analysis](https://arxiv.org/abs/2503.06639) formalizes GRPO's dynamics as a KL-regularized contrastive loss and proves "success amplification": the probability of success after training is guaranteed to exceed the initial probability, regardless of starting point.
 
 **Why value-free RL is popular for RLVR:**
 Verifiers provide clean binary signals, eliminating the need for value function approximation. This reduces training complexity and speeds convergence.
@@ -367,7 +356,7 @@ You trade generality (RLHF works for any task) for efficiency (RLVR is 3x cheape
 
 ## Practical RLVR: Verifier Design Patterns
 
-Verifier quality determines RLVR effectiveness. Here are patterns that work across domains.
+Verifier quality determines RLVR effectiveness. These patterns work across domains.
 
 ### Math & Code Verifiers (Easy Mode)
 
@@ -448,7 +437,7 @@ def sql_execution_verifier(generated_sql: str, expected_results: list, db) -> fl
         return 0.0
 ```
 
-Multiple correct SQL queries can produce the same results. Execution-based verification handles this naturally—you don't need to enumerate all valid queries.
+Multiple correct SQL queries can produce the same results. Execution-based verification handles this naturally; you don't need to enumerate all valid queries.
 
 **Databricks case study:**
 Their [later paper reports 75.68% BIRD test accuracy](https://arxiv.org/abs/2509.21459) combining execution verifiers with schema validation. Execution checking scales better than query pattern matching.
@@ -581,7 +570,7 @@ def test_verifier_coverage(verifier, test_cases):
 
 ### Using Evaluation Harnesses
 
-After training, use tools like [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness), [Promptfoo](https://promptfoo.dev), or custom scripts to validate your model. These tools test if training worked—they don't provide training rewards.
+After training, use tools like [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness), [Promptfoo](https://promptfoo.dev), or custom scripts to validate your model. These tools test if training worked; they don't provide training rewards.
 
 ## Open Questions
 
@@ -635,7 +624,7 @@ Do you have objective correctness criteria?
 
 ## Conclusion: Don't Mistake Efficiency for Intelligence
 
-Evidence to date suggests that for most applications, RLVR's gains are dominated by search compression rather than expanded reasoning capability. You're buying speed, not smarts. The model was already capable of finding the right answer—RLVR just optimizes the path to solutions it could already reach.
+Evidence to date suggests that for most applications, RLVR's gains are dominated by search compression rather than expanded reasoning capability. You're optimizing search, not expanding intelligence. The model was already capable of finding the right answer; RLVR just optimizes the path to solutions it could already reach.
 
 If you can write a verifier, you can scale learning. Where ground truth doesn't exist, RLVR fails and human preference data remains superior.
 
