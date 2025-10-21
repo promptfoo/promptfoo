@@ -22,7 +22,7 @@ import TableRow from '@mui/material/TableRow';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import { getPluginIdFromResult, testBelongsToStrategy } from './shared';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { formatASRForDisplay } from '@app/utils/redteam';
@@ -124,9 +124,7 @@ const DrawerContent = ({
 
     Object.entries(failedAttacksByPlugin).forEach(([plugin, tests]) => {
       tests.forEach((test) => {
-        const testStrategy = getStrategyIdFromTest(test);
-
-        if (testStrategy === selectedStrategy) {
+        if (testBelongsToStrategy(test, selectedStrategy)) {
           if (!pluginStats[plugin]) {
             pluginStats[plugin] = { successfulAttacks: 0, total: 0 };
           }
@@ -137,9 +135,7 @@ const DrawerContent = ({
 
     Object.entries(succeededAttacksByPlugin).forEach(([plugin, tests]) => {
       tests.forEach((test) => {
-        const testStrategy = getStrategyIdFromTest(test);
-
-        if (testStrategy === selectedStrategy) {
+        if (testBelongsToStrategy(test, selectedStrategy)) {
           if (!pluginStats[plugin]) {
             pluginStats[plugin] = { successfulAttacks: 0, total: 0 };
           }
@@ -164,8 +160,7 @@ const DrawerContent = ({
 
     Object.values(succeededAttacksByPlugin).forEach((tests) => {
       tests.forEach((test) => {
-        const testStrategy = getStrategyIdFromTest(test);
-        if (testStrategy === selectedStrategy) {
+        if (testBelongsToStrategy(test, selectedStrategy)) {
           failures.push(test);
         }
       });
@@ -173,8 +168,7 @@ const DrawerContent = ({
 
     Object.values(failedAttacksByPlugin).forEach((tests) => {
       tests.forEach((test) => {
-        const testStrategy = getStrategyIdFromTest(test);
-        if (testStrategy === selectedStrategy) {
+        if (testBelongsToStrategy(test, selectedStrategy)) {
           passes.push(test);
         }
       });

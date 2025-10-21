@@ -115,7 +115,7 @@ export interface PluginActionParams {
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
-  language?: string;
+  language?: string | string[];
   numTests?: number;
   plugins?: RedteamPluginObject[];
   provider?: string | ProviderOptions | ApiProvider;

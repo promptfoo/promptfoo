@@ -161,7 +161,6 @@ export const RedteamGenerateOptionsSchema = z.object({
   force: z.boolean().describe('Whether to force generation').default(false),
   injectVar: z.string().optional().describe('Variable to inject'),
   language: z.union([z.string(), z.array(z.string())])
-    .transform((val) => Array.isArray(val) ? val : [val])
     .optional()
     .describe('Language(s) of tests to generate'),
   maxConcurrency: z
@@ -204,7 +203,6 @@ export const RedteamConfigSchema = z
     provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
     language: z.union([z.string(), z.array(z.string())])
-      .transform((val) => Array.isArray(val) ? val : [val])
       .optional()
       .describe('Language(s) of tests to generate for this plugin'),
     entities: z
@@ -261,14 +259,21 @@ export const RedteamConfigSchema = z
         // [undefined, 'hi', 'fr'] means: generate English (no modifier) + Hindi + French
         const languagesWithOriginal = [undefined, ...strategyLanguages];
 
-        if (!data.language) {
-          // No global language set, use multilingual strategy languages
-          data.language = languagesWithOriginal;
-        } else {
+        if (data.language) {
           // Global language exists, merge and deduplicate
           const existingLanguages = Array.isArray(data.language) ? data.language : [data.language];
           data.language = [...new Set([...existingLanguages, ...languagesWithOriginal])];
+        } else {
+          // No global language set, use multilingual strategy languages
+          data.language = languagesWithOriginal;
         }
+
+        // Remove multilingual strategy from array - it's now a pure config mechanism
+        // Tests will be generated with language modifiers by plugins, not by the strategy
+        data.strategies = data.strategies?.filter((s) => {
+          const id = typeof s === 'string' ? s : s.id;
+          return id !== 'multilingual';
+        });
       }
     }
 
