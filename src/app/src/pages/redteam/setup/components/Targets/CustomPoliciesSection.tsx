@@ -30,6 +30,7 @@ import {
   useGridApiRef,
 } from '@mui/x-data-grid';
 import { parse } from 'csv-parse/browser/esm/sync';
+import { makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
@@ -46,7 +47,7 @@ declare module '@mui/x-data-grid' {
 }
 
 type PolicyRow = {
-  id: number;
+  id: string;
   name: string;
   policyText: string;
 };
@@ -151,12 +152,12 @@ export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
   const apiRef = useGridApiRef();
-  const [generatingPolicyIndex, setGeneratingPolicyIndex] = useState<number | null>(null);
+  const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [editingRowId, setEditingRowId] = useState<number | null>(null);
-  const [autoEditRowId, setAutoEditRowId] = useState<number | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [autoEditRowId, setAutoEditRowId] = useState<string | null>(null);
 
   // TODO: This effect is component-scoped, so `checkHealth` needs to be called redundantly in each
   // component which needs to check API health. Instead, the hook should be backed by app-scoped
@@ -170,8 +171,8 @@ export const CustomPoliciesSection = () => {
   // Test case generation state - now from context
   const { generateTestCase, isGenerating: generatingTestCase } = useTestCaseGeneration();
 
-  // Track custom names for policies (by index)
-  const [policyNames, setPolicyNames] = useState<Record<number, string>>({});
+  // Track custom names for policies (by policy ID)
+  const [policyNames, setPolicyNames] = useState<Record<string, string>>({});
 
   // Get policy plugins from config
   const policyPlugins = config.plugins.filter(
@@ -183,11 +184,14 @@ export const CustomPoliciesSection = () => {
     if (policyPlugins.length === 0) {
       return [];
     }
-    return policyPlugins.map((p, index) => ({
-      id: index,
-      name: policyNames[index] || `Custom Policy ${index + 1}`,
-      policyText: p.config.policy,
-    }));
+    return policyPlugins.map((p, index) => {
+      const policyId = makeInlinePolicyId(p.config.policy);
+      return {
+        id: policyId,
+        name: policyNames[policyId] || `Custom Policy ${index + 1}`,
+        policyText: p.config.policy,
+      };
+    });
   }, [policyPlugins, policyNames]);
 
   // Auto-edit newly added rows
@@ -205,6 +209,7 @@ export const CustomPoliciesSection = () => {
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
+    const newPolicyText = '';
     const newPolicies = [
       ...policyPlugins.map((p) => ({
         id: 'policy',
@@ -212,15 +217,16 @@ export const CustomPoliciesSection = () => {
       })),
       {
         id: 'policy',
-        config: { policy: '' },
+        config: { policy: newPolicyText },
       },
     ];
 
     // Update the config state
     updateConfig('plugins', [...otherPlugins, ...newPolicies]);
 
-    // Set the new row to be auto-edited (id will be the current length)
-    setAutoEditRowId(policyPlugins.length);
+    // Set the new row to be auto-edited (use the ID of the new empty policy)
+    const newPolicyId = makeInlinePolicyId(newPolicyText);
+    setAutoEditRowId(newPolicyId);
   };
 
   const handleDeleteSelected = () => {
@@ -235,22 +241,18 @@ export const CustomPoliciesSection = () => {
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
-    const selectedIndices = new Set(rowSelectionModel as number[]);
+    const selectedIds = new Set(rowSelectionModel as string[]);
     const remainingPolicies = policyPlugins
-      .filter((_, index) => !selectedIndices.has(index))
+      .filter((p) => !selectedIds.has(makeInlinePolicyId(p.config.policy)))
       .map((p) => ({
         id: 'policy',
         config: { policy: p.config.policy },
       }));
 
     // Clean up policy names for removed policies
-    const newPolicyNames: Record<number, string> = {};
-    let newIndex = 0;
-    policyPlugins.forEach((_, oldIndex) => {
-      if (!selectedIndices.has(oldIndex) && policyNames[oldIndex]) {
-        newPolicyNames[newIndex] = policyNames[oldIndex];
-        newIndex++;
-      }
+    const newPolicyNames = { ...policyNames };
+    selectedIds.forEach((id) => {
+      delete newPolicyNames[id];
     });
 
     setPolicyNames(newPolicyNames);
@@ -269,8 +271,9 @@ export const CustomPoliciesSection = () => {
         typeof p === 'string' ? true : p.id !== 'policy',
       );
 
-      const updatedPolicies = policyPlugins.map((p, index) => {
-        if (index === newRow.id) {
+      const updatedPolicies = policyPlugins.map((p) => {
+        const currentPolicyId = makeInlinePolicyId(p.config.policy);
+        if (currentPolicyId === oldRow.id) {
           return {
             id: 'policy',
             config: { policy: newRow.policyText },
@@ -282,17 +285,30 @@ export const CustomPoliciesSection = () => {
         };
       });
 
-      // Update policy name if changed
-      if (newRow.name !== oldRow.name) {
-        setPolicyNames((prev) => ({
-          ...prev,
-          [newRow.id]: newRow.name,
-        }));
+      // Handle policy name updates considering potential ID change
+      const newPolicyId = makeInlinePolicyId(newRow.policyText);
+      const oldPolicyId = oldRow.id;
+      
+      if (newPolicyId !== oldPolicyId || newRow.name !== oldRow.name) {
+        setPolicyNames((prev) => {
+          const updated = { ...prev };
+          // If ID changed, remove old and add new
+          if (newPolicyId !== oldPolicyId) {
+            delete updated[oldPolicyId];
+          }
+          // Set the name for the new/updated ID
+          if (newRow.name !== `Custom Policy ${policyPlugins.findIndex(p => makeInlinePolicyId(p.config.policy) === newPolicyId) + 1}`) {
+            updated[newPolicyId] = newRow.name;
+          }
+          return updated;
+        });
       }
 
       updateConfig('plugins', [...otherPlugins, ...updatedPolicies]);
       setEditingRowId(null);
-      return newRow;
+      
+      // Return row with updated ID if policy text changed
+      return { ...newRow, id: newPolicyId };
     },
     [config.plugins, policyPlugins, updateConfig],
   );
@@ -363,7 +379,7 @@ export const CustomPoliciesSection = () => {
         return;
       }
 
-      setGeneratingPolicyIndex(row.id);
+      setGeneratingPolicyId(row.id);
 
       await generateTestCase(
         'policy',
@@ -374,15 +390,15 @@ export const CustomPoliciesSection = () => {
           telemetryFeature: 'redteam_policy_generate_test_case',
           mode: 'result',
           onSuccess: () => {
-            setGeneratingPolicyIndex(null);
+            setGeneratingPolicyId(null);
           },
           onError: () => {
-            setGeneratingPolicyIndex(null);
+            setGeneratingPolicyId(null);
           },
         },
       );
     },
-    [toast],
+    [toast, generateTestCase],
   );
 
   const handleEditClick = useCallback(
@@ -410,7 +426,7 @@ export const CustomPoliciesSection = () => {
   );
 
   const handleRowEditStart = useCallback((params: GridRowEditStartParams) => {
-    setEditingRowId(params.id as number);
+    setEditingRowId(params.id as string);
   }, []);
 
   const handleRowEditStop = useCallback((_params: GridRowEditStopParams) => {
@@ -500,9 +516,9 @@ export const CustomPoliciesSection = () => {
                     onClick={() => handleGenerateTestCase(params.row)}
                     disabled={
                       apiHealthStatus !== 'connected' ||
-                      (generatingTestCase && generatingPolicyIndex === params.row.id)
+                      (generatingTestCase && generatingPolicyId === params.row.id)
                     }
-                    isGenerating={generatingTestCase && generatingPolicyIndex === params.row.id}
+                    isGenerating={generatingTestCase && generatingPolicyId === params.row.id}
                     tooltipTitle={
                       apiHealthStatus === 'connected'
                         ? undefined
@@ -518,12 +534,13 @@ export const CustomPoliciesSection = () => {
     ],
     [
       generatingTestCase,
-      generatingPolicyIndex,
+      generatingPolicyId,
       editingRowId,
       handleEditClick,
       handleSaveClick,
       handleCancelClick,
       handleGenerateTestCase,
+      apiHealthStatus,
     ],
   );
 
