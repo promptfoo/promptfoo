@@ -15,7 +15,7 @@ keywords:
     verifier design,
     model evaluation,
   ]
-date: 2025-09-30
+date: 2025-10-20
 image: /img/blog/rlvr/rlvr-header.jpg
 ---
 
@@ -25,11 +25,13 @@ Multiple recent studies argue that [RLVR mostly converts pass@k into pass@1](htt
 
 Recent evidence suggests you're buying speed, not smarts. The model was already capable of reaching the right answer—RLVR just forces it to get there in fewer tries.
 
+**TL;DR:** Recent research shows RLVR primarily improves sampling efficiency (pass@k → pass@1 compression) rather than expanding reasoning capabilities. If your model can solve a problem in 8 tries, RLVR trains it to succeed in 1 try. This guide covers when RLVR works, three critical failure modes, and how to measure what you're actually getting.
+
 <!-- truncate -->
 
-The remaining 20-30% represents real learning, but only under specific conditions. The data, failure modes, and diagnostics below show how to tell if you're paying for intelligence or just faster search.
+Recent evidence suggests most gains represent search compression, with a smaller share attributable to real learning—but only under specific conditions. The data, failure modes, and diagnostics below show how to tell if you're paying for intelligence or just faster search.
 
-## Recent RLVR Results (September 2025)
+## Recent RLVR Results
 
 **Databricks Text2SQL:** [73.5% BIRD test accuracy reported in July](https://www.databricks.com/blog/power-rlvr-training-leading-sql-reasoning-model-databricks); a [later paper reports 75.68%](https://arxiv.org/abs/2509.21459) with few-sample self-consistency. Both use execution-based verifiers, not pattern matching.
 
@@ -147,6 +149,8 @@ def strong_sql_verifier(sql_query, expected_results, db_connection):
 [Research from June 2025](https://arxiv.org/abs/2506.10947) found Qwen2.5-Math-7B improved 21.4% on MATH-500 with _random_ rewards, nearly matching the 29.1% gain from ground truth rewards.
 
 The RL update process, even with random rewards, implicitly guides the model's attention. The model isn't learning from the random reward—the training process itself encourages exploring and refining certain internal pathways. In Qwen's case, "code reasoning" (thinking in code without execution) becomes more frequent (65% → 90%). Your performance gain might be an accidental side effect of training, not a result of your carefully designed verifier. [These effects were strongest on Qwen2.5-Math and did not consistently replicate on Llama3 or OLMo2](https://arxiv.org/abs/2506.10947).
+
+**Important caveat:** [Research from July 2025](https://arxiv.org/abs/2507.10532) suggests Qwen's unusual sensitivity to spurious rewards may indicate training data contamination rather than genuine latent capability surfacing. The study found that on contamination-free datasets, only accurate rewards deliver gains—random rewards provide no benefit. Always validate RLVR gains on held-out, distribution-shifted test sets when evaluating effectiveness.
 
 **Always run this test:**
 
@@ -302,12 +306,12 @@ Analysis:
 
 ### What the Data Shows
 
-Most RLVR gains break down as:
+Recent research suggests most RLVR gains break down as:
 
-- **70-80%:** Search compression (pass@k → pass@1 efficiency)
-- **20-30%:** Capability expansion (pass@k ceiling lift)
+- **Majority:** Search compression (pass@k → pass@1 efficiency)
+- **Minority:** Capability expansion (pass@k ceiling lift)
 
-The ratio depends on base model strength, verifier coverage, and whether you use guidance techniques.
+The exact ratio varies by model family, verifier coverage, and whether you use guidance techniques. [Tsinghua](https://arxiv.org/abs/2504.13837) and [Scale](https://arxiv.org/abs/2506.13923) both formalize this as "self-distillation" vs "capability gain."
 
 **How to measure what you're getting:**
 
@@ -482,6 +486,31 @@ requirements = {
 3. **High coverage** (>90% of errors caught)
 4. **Interpretable** (easy to debug false positives/negatives)
 5. **Safe** (no side effects, sandboxed execution)
+
+**Critical security requirements for production verifiers:**
+
+**Code execution verifiers:**
+
+- ⚠️ **NEVER** use `exec()` without sandboxing
+- Use Docker containers, gVisor, or Firecracker for isolation
+- Hard timeouts (5s max execution time)
+- Disable network access entirely
+- Resource limits (CPU, memory, disk I/O)
+
+**SQL verifiers:**
+
+- ⚠️ **Read-only** database connections only
+- Whitelist allowed tables and schemas
+- Query timeouts (2s max)
+- No DDL commands (CREATE, DROP, ALTER)
+- Never interpolate model output directly (SQL injection risk)
+
+**API-based verifiers:**
+
+- Rate limiting to prevent runaway costs
+- Aggressive caching of identical requests
+- Cost monitoring and circuit breakers
+- Timeout all external calls
 
 **Anti-patterns:**
 
