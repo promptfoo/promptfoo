@@ -831,12 +831,12 @@ export async function synthesize({
           n: plugin.numTests,
           delayMs: delay || 0,
           config: {
+            ...resolvePluginConfig(plugin.config),
             language: lang,
             modifiers: {
               ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
               ...(plugin.config?.modifiers || {}),
             },
-            ...resolvePluginConfig(plugin.config),
           },
         });
 
@@ -872,29 +872,20 @@ export async function synthesize({
         logger.warn(`Failed to generate tests for ${plugin.id}`);
       } else {
         // Add metadata to each test case (language already added in the loop above)
-        const testCasesWithMetadata = allPluginTests.map((t) => {
-          // Destructure to separate modifiers from other metadata
-          const { modifiers: existingModifiers, ...restMetadata } = t?.metadata || {};
-
-          return {
-            ...t,
-            metadata: {
-              pluginId: plugin.id,
-              pluginConfig: resolvePluginConfig(plugin.config),
-              severity:
-                plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
-              // Merge ALL modifiers together in correct priority order
-              modifiers: {
-                ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-                ...(plugin.config?.modifiers || {}),
-                // existingModifiers already includes language from the loop above
-                ...existingModifiers,
-              },
-              // Spread other metadata fields (without modifiers)
-              ...restMetadata,
+        const testCasesWithMetadata = allPluginTests.map((t) => ({
+          ...t,
+          metadata: {
+            pluginId: plugin.id,
+            pluginConfig: resolvePluginConfig(plugin.config),
+            severity:
+              plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            modifiers: {
+              ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
+              ...(plugin.config?.modifiers || {}),
             },
-          };
-        });
+            ...(t?.metadata || {}),
+          },
+        }));
 
         // Extract goal for this plugin's tests
         logger.debug(

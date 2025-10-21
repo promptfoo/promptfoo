@@ -514,7 +514,7 @@ export async function addMultilingual(
   if (hasLanguageModifiers) {
     // Tests already generated in multiple languages at plugin level
     // Just return them - no translation needed
-    logger.info(
+    logger.debug(
       `Multilingual strategy: ${testCases.length} tests already generated with language support`,
     );
     return testCases;
