@@ -15,7 +15,7 @@ import { FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
-import logger, { disableConsoleLogging, enableConsoleLogging } from './logger';
+import logger from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
@@ -106,14 +106,12 @@ class ProgressBarManager {
     this.progressBar = new cliProgress.SingleBar(
       {
         format:
-          'Evaluating [{bar}] {percentage}% | {value}/{total} ({errors} errors) | {provider} {prompt} {vars}',
+          'Evaluating [{bar}] {percentage}% | {value}/{total} (errors: {errors}) | {provider} {prompt} {vars}',
         hideCursor: true,
         gracefulExit: true,
       },
       cliProgress.Presets.shades_classic,
     );
-
-    disableConsoleLogging();
 
     // Start the progress bar
     this.progressBar.start(this.totalCount, 0, {
@@ -131,7 +129,7 @@ class ProgressBarManager {
     _index: number,
     evalStep: RunEvalOptions | undefined,
     _phase: 'serial' | 'concurrent' = 'concurrent',
-    metrics: PromptMetrics,
+    metrics?: PromptMetrics,
   ): void {
     if (this.isWebUI || !evalStep || !this.progressBar) {
       return;
@@ -141,11 +139,12 @@ class ProgressBarManager {
     const provider = evalStep.provider.label || evalStep.provider.id();
     const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
     const vars = formatVarsForDisplay(evalStep.test.vars, 10);
+
     this.progressBar.increment({
       provider,
       prompt: prompt || '""',
       vars: vars || '',
-      errors: metrics.testErrorCount,
+      errors: metrics?.testErrorCount ?? 0,
     });
   }
 
@@ -181,7 +180,6 @@ class ProgressBarManager {
    * Mark evaluation as complete
    */
   complete(): void {
-    enableConsoleLogging();
     if (this.isWebUI || !this.progressBar) {
       return;
     }
@@ -194,7 +192,6 @@ class ProgressBarManager {
    * Stop the progress bar
    */
   stop(): void {
-    enableConsoleLogging();
     if (this.progressBar) {
       this.progressBar.stop();
     }

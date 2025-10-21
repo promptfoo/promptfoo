@@ -4,6 +4,7 @@ import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
+import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
 import RedteamCustomProvider from '../redteam/providers/custom';
@@ -141,13 +142,24 @@ export const providerMap: ProviderFactory[] = [
       const providerName = splits[1];
       const modelType = splits[2];
       const modelName = splits[3];
-      const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
-        './adaline.gateway'
-      );
-      if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
+
+      try {
+        const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
+          './adaline.gateway'
+        );
+        if (modelType === 'embedding' || modelType === 'embeddings') {
+          return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
+        }
+        return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
+      } catch (error: any) {
+        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@adaline/')) {
+          throw new Error(
+            'The Adaline Gateway provider requires @adaline packages. Please install them with:\n' +
+              'npm install @adaline/anthropic @adaline/azure @adaline/gateway @adaline/google @adaline/groq @adaline/open-router @adaline/openai @adaline/provider @adaline/together-ai @adaline/types @adaline/vertex',
+          );
+        }
+        throw error;
       }
-      return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
     },
   },
   {
@@ -1185,6 +1197,17 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new RedteamGoatProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath === 'promptfoo:redteam:authoritative-markup-injection',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new RedteamAuthoritativeMarkupInjectionProvider(providerOptions.config);
     },
   },
   {
