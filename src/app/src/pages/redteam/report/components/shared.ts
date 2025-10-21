@@ -7,41 +7,6 @@ import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 
-/**
- * Check if a test belongs to a strategy.
- * Tests belong to strategies via their explicit strategyId metadata.
- */
-export function testBelongsToStrategy(
-  test: {
-    metadata?: Record<string, any>;
-    gradingResult?: GradingResult;
-    result?: {
-      testCase?: {
-        metadata?: {
-          strategyId?: string;
-          [key: string]: any;
-        };
-      };
-    };
-    [key: string]: any;
-  },
-  strategy: string,
-): boolean {
-  const explicitStrategyId =
-    test.metadata?.strategyId || test.result?.testCase?.metadata?.strategyId;
-
-  if (explicitStrategyId === strategy) {
-    return true;
-  }
-
-  // basic: includes ALL tests (baseline section)
-  if (strategy === 'basic') {
-    return true;
-  }
-
-  return false;
-}
-
 export function getStrategyIdFromTest(test: {
   metadata?: Record<string, any>;
   gradingResult?: GradingResult;
