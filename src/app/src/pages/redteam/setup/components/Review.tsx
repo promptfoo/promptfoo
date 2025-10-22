@@ -54,6 +54,7 @@ import type { Job } from '@promptfoo/types';
 import EstimationsDisplay from './EstimationsDisplay';
 import Tooltip from '@mui/material/Tooltip';
 import { isValidPolicyObject } from '@promptfoo/redteam/plugins/policy/utils';
+import { makeDefaultPolicyName } from './Targets/helpers';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -589,8 +590,6 @@ export default function Review({
                 <Stack spacing={1} sx={{ maxHeight: 400, overflowY: 'auto' }}>
                   {customPolicies.map((policy, index) => {
                     const isPolicyObject = isValidPolicyObject(policy.config.policy);
-                    const hasName =
-                      isPolicyObject && Boolean((policy.config.policy as PolicyObject).name);
                     return (
                       <Box
                         key={index}
@@ -602,15 +601,16 @@ export default function Review({
                           display: 'flex',
                           flexDirection: 'row',
                           justifyContent: 'space-between',
-                          alignItems: hasName ? 'flex-start' : 'center',
+                          alignItems: 'flex-start',
                         }}
                       >
                         <Box>
-                          {hasName && (
-                            <Typography gutterBottom>
-                              {(policy.config.policy as PolicyObject).name}
-                            </Typography>
-                          )}
+                          <Typography gutterBottom>
+                            {isPolicyObject
+                              ? (policy.config.policy as PolicyObject).name
+                              : // Backwards compatibility w/ text-only inline policies.
+                                makeDefaultPolicyName(index)}
+                          </Typography>
                           <Typography
                             variant="body2"
                             sx={{

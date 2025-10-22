@@ -29,6 +29,7 @@ import { makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
+import { makeDefaultPolicyName } from './helpers';
 
 // Augment the toolbar props interface
 declare module '@mui/x-data-grid' {
@@ -120,10 +121,6 @@ function CustomToolbar({
   );
 }
 
-function newPolicyName(index: number): string {
-  return `Custom Policy ${index + 1}`;
-}
-
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
@@ -182,11 +179,11 @@ export const CustomPoliciesSection = () => {
       if (typeof p.config.policy === 'string') {
         policyText = p.config.policy;
         policyId = makeInlinePolicyId(policyText);
-        policyName = policyNames[policyId] || `Custom Policy ${index + 1}`;
+        policyName = makeDefaultPolicyName(index);
       } else {
-        policyText = p.config.policy.text || '';
+        policyText = p.config.policy.text;
         policyId = p.config.policy.id;
-        policyName = p.config.policy.name || policyNames[policyId] || `Custom Policy ${index + 1}`;
+        policyName = p.config.policy.name || policyNames[policyId] || makeDefaultPolicyName(index);
       }
 
       return {
@@ -429,7 +426,7 @@ export const CustomPoliciesSection = () => {
                   policy: {
                     id: policyId,
                     text: policyText,
-                    name: newPolicyName(currentPolicyCount + index),
+                    name: makeDefaultPolicyName(currentPolicyCount + index),
                   },
                 },
               };
@@ -493,31 +490,17 @@ export const CustomPoliciesSection = () => {
       {
         field: 'name',
         headerName: 'Name',
-        flex: 1,
-        minWidth: 150,
+        flex: 0.75,
       },
       {
         field: 'policyText',
         headerName: 'Policy Text',
-        flex: 2,
-        minWidth: 300,
-        renderCell: (params: GridRenderCellParams<PolicyRow>) => (
-          <Box
-            sx={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              width: '100%',
-            }}
-          >
-            {params.value || '(empty)'}
-          </Box>
-        ),
+        flex: 3,
       },
       {
         field: 'actions',
         headerName: 'Actions',
-        flex: 0.7,
+        flex: 0.5,
         minWidth: 160,
         sortable: false,
         filterable: false,

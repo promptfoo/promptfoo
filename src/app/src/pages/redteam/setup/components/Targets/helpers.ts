@@ -32,3 +32,10 @@ export function getProviderType(providerId?: string): string | undefined {
   // Direct provider types
   return providerId;
 }
+
+/**
+ * Creates a default name for a (legacy) text-only inline custom policy.
+ */
+export function makeDefaultPolicyName(index: number): string {
+  return `Custom Policy ${index + 1}`;
+}
