@@ -134,7 +134,12 @@ const CustomMetrics = ({
             map[policy.id] = policy;
           } else {
             const id = makeInlinePolicyId(policy);
-            map[id] = { id, text: policy };
+            map[id] = {
+              id,
+              text: policy,
+              // Backwards compatibility w/ text-online inline policies.
+              name: '',
+            };
           }
         }
       }
@@ -153,13 +158,16 @@ const CustomMetrics = ({
           if (isPolicyMetric(metric)) {
             const policyId = deserializePolicyIdFromMetric(metric);
             const policy = policiesById[policyId];
+            const hasName = Boolean(policy.name);
             if (policy) {
-              displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
+              displayLabel = formatPolicyIdentifierAsMetric(hasName ? policy.name : policy.id);
               tooltipContent = (
                 <>
-                  <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 600, mb: 1 }}>
-                    {policy.name}
-                  </Typography>
+                  {hasName && (
+                    <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 600, mb: 1 }}>
+                      {policy.name}
+                    </Typography>
+                  )}
                   <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 400 }}>
                     {policy.text}
                   </Typography>

@@ -55,7 +55,12 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             map[policy.id] = policy;
           } else {
             const id = makeInlinePolicyId(policy);
-            map[id] = { id, text: policy };
+            map[id] = {
+              id,
+              text: policy,
+              // Backwards compatibility w/ text-online inline policies.
+              name: '',
+            };
           }
         }
       }
@@ -174,7 +179,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             if (!policy) {
               return value;
             }
-            return formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
+            return formatPolicyIdentifierAsMetric(Boolean(policy.name) ? policy.name : policy.id);
           } else {
             return value;
           }
