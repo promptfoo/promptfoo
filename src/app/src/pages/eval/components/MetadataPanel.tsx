@@ -105,6 +105,7 @@ export function MetadataPanel({
                             rel="noopener noreferrer"
                             href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policyId)}
                             sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                            data-testId="pf-cloud-policy-detail-link"
                           >
                             <span>View policy in Promptfoo Cloud</span>
                             <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
