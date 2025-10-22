@@ -3,12 +3,10 @@ import {
   determinePolicyTypeFromId,
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
-  isValidPolicyObject,
   makeCustomPolicyCloudUrl,
-  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
@@ -18,8 +16,7 @@ import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import useCloudConfig from '../../../hooks/useCloudConfig';
 import { useTableStore } from './store';
-import type { PolicyObject } from '@promptfoo/redteam/types';
-
+import { useCustomPoliciesMap } from './hooks';
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
@@ -124,28 +121,7 @@ const CustomMetrics = ({
     [addFilter, filters.values],
   );
 
-  const policiesById = useMemo(() => {
-    const map: Record<PolicyObject['id'], PolicyObject> = {};
-    config?.redteam?.plugins?.forEach((plugin) => {
-      if (typeof plugin !== 'string' && plugin.id === 'policy') {
-        const policy = plugin?.config?.policy;
-        if (policy) {
-          if (isValidPolicyObject(policy)) {
-            map[policy.id] = policy;
-          } else {
-            const id = makeInlinePolicyId(policy);
-            map[id] = {
-              id,
-              text: policy,
-              // Backwards compatibility w/ text-only inline policies.
-              name: '',
-            };
-          }
-        }
-      }
-    });
-    return map;
-  }, [config]);
+  const policiesById = useCustomPoliciesMap();
 
   return (
     <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>

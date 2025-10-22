@@ -19,11 +19,9 @@ import {
   deserializePolicyIdFromMetric,
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
-  isValidPolicyObject,
-  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { useTableStore } from './store';
-import type { PolicyObject } from '@promptfoo/redteam/types';
+import { useCustomPoliciesMap } from './hooks';
 
 type MetricScore = {
   score: number;
@@ -45,28 +43,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     return null;
   }
 
-  const policiesById = React.useMemo(() => {
-    const map: Record<PolicyObject['id'], PolicyObject> = {};
-    config?.redteam?.plugins?.forEach((plugin) => {
-      if (typeof plugin !== 'string' && plugin.id === 'policy') {
-        const policy = plugin?.config?.policy;
-        if (policy) {
-          if (isValidPolicyObject(policy)) {
-            map[policy.id] = policy;
-          } else {
-            const id = makeInlinePolicyId(policy);
-            map[id] = {
-              id,
-              text: policy,
-              // Backwards compatibility w/ text-only inline policies.
-              name: '',
-            };
-          }
-        }
-      }
-    });
-    return map;
-  }, [config]);
+  const policiesById = useCustomPoliciesMap();
 
   /**
    * Given the pass rate percentages, calculates the color and text color for the cell.

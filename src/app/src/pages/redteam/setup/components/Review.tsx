@@ -53,8 +53,10 @@ import type { RedteamPlugin, Policy, PolicyObject } from '@promptfoo/redteam/typ
 import type { Job } from '@promptfoo/types';
 import EstimationsDisplay from './EstimationsDisplay';
 import Tooltip from '@mui/material/Tooltip';
-import { isValidPolicyObject } from '@promptfoo/redteam/plugins/policy/utils';
-import { makeDefaultPolicyName } from './Targets/helpers';
+import {
+  isValidPolicyObject,
+  makeDefaultPolicyName,
+} from '@promptfoo/redteam/plugins/policy/utils';
 
 interface ReviewProps {
   onBack?: () => void;
