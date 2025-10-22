@@ -79,12 +79,6 @@ const AboutPageContent = () => {
                 bio: 'Ian previously led LLM engineering and developer platform teams at Discord, scaling AI products to 200M users while maintaining rigorous safety, security, and policy standards.',
               },
               {
-                name: "Michael D'Angelo",
-                title: 'CTO & Co-founder',
-                image: '/img/team/michael.jpeg',
-                bio: 'Michael brings extensive experience in AI and engineering leadership. As the former VP of Engineering and Head of AI at Smile Identity, he has a track record of scaling ML solutions to serve over 100 million people across hundreds of enterprises.',
-              },
-              {
                 name: 'Lily Liu',
                 title: 'Business Operations Lead',
                 image: '/img/team/lily.jpeg',
@@ -167,6 +161,12 @@ const AboutPageContent = () => {
                 title: 'Software Engineer',
                 image: '/img/team/yash.png',
                 bio: 'Yash specializes in securing ML infrastructure, distributed systems, and multi-tenant platforms. His work spans threat modeling, purple teaming, and building proactive defenses against supply chain risks and privacy attacks in AI systems.',
+              },
+              {
+                name: "Michael D'Angelo",
+                title: 'CTO & Co-founder',
+                image: '/img/team/michael.jpeg',
+                bio: 'Michael brings extensive experience in AI and engineering leadership. As the former VP of Engineering and Head of AI at Smile Identity, he has a track record of scaling ML solutions to serve over 100 million people across hundreds of enterprises.',
               },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
