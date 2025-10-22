@@ -58,7 +58,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             map[id] = {
               id,
               text: policy,
-              // Backwards compatibility w/ text-online inline policies.
+              // Backwards compatibility w/ text-only inline policies.
               name: '',
             };
           }
