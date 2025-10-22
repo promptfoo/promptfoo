@@ -4,6 +4,7 @@ import type { Strategy } from './strategies';
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
+  'free-agent': 'Adaptive single-turn jailbreak generation using an agentic approach',
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
   'authoritative-markup-injection': 'Tests vulnerability to authoritative markup injection attacks',
@@ -159,6 +160,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ['agentic:memory-poisoning']: 'Agentic Memory Poisoning',
   aegis: 'Aegis Dataset',
+  'free-agent': 'Free Agent Strategy',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
@@ -818,6 +820,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
+  'free-agent': 'Uses an adaptive AI agent to iteratively generate and refine single-turn jailbreak attempts based on target responses',
   layer: 'Composes multiple strategies and applies them sequentially',
   audio: 'Tests detection and handling of audio-based malicious payloads',
   'authoritative-markup-injection':
@@ -856,6 +859,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
+  'free-agent': 'Free Agent',
   layer: 'Layer',
   audio: 'Audio',
   'authoritative-markup-injection': 'Authoritative Markup Injection',

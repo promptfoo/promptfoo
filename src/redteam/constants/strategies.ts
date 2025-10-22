@@ -12,7 +12,12 @@ export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'custom', 'mischievous-user'] as const;
+export const MULTI_TURN_STRATEGIES = [
+  'crescendo',
+  'goat',
+  'custom',
+  'mischievous-user',
+] as const;
 
 // Helper function to check if a strategy is a custom variant
 export const isCustomStrategy = (strategyId: string): boolean => {
@@ -24,6 +29,7 @@ export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
 export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
+  'free-agent',
   'crescendo',
   'goat',
   'custom',
@@ -47,6 +53,7 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'free-agent',
   'layer',
   'audio',
   'authoritative-markup-injection',
@@ -94,6 +101,7 @@ export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
+  'free-agent',
   'layer',
   'multilingual',
   'best-of-n',
