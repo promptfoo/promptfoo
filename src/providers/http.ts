@@ -758,6 +758,8 @@ export const HttpProviderConfigSchema = z.object({
     .optional()
     .describe('Use HTTPS for the request. This only works with the raw request option'),
   sessionParser: z.union([z.string(), z.function()]).optional(),
+  sessionSource: z.enum(['client', 'server']).optional(),
+  stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
