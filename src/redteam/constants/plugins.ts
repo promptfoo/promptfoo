@@ -249,6 +249,7 @@ export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
 export const BASE_PLUGINS = [
   'contracts',
   'excessive-agency',
+  'goal-misalignment',
   'hallucination',
   'hijacking',
   'politics',

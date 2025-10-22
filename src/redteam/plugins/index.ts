@@ -27,6 +27,7 @@ import { DebugAccessPlugin } from './debugAccess';
 import { DivergentRepetitionPlugin } from './divergentRepetition';
 import { DoNotAnswerPlugin } from './donotanswer';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
+import { GoalMisalignmentPlugin } from './goalMisalignment';
 import { HallucinationPlugin } from './hallucination';
 import { HarmbenchPlugin } from './harmbench';
 import { AlignedHarmfulPlugin } from './harmful/aligned';
@@ -173,6 +174,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   createPluginFactory(DoNotAnswerPlugin, 'donotanswer'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
+  createPluginFactory(GoalMisalignmentPlugin, 'goal-misalignment'),
   createPluginFactory(XSTestPlugin, 'xstest'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),

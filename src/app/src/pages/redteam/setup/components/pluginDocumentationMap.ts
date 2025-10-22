@@ -68,6 +68,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   // Brand
   competitors: `${BASE_DOCS_URL}/competitors/`,
   'excessive-agency': `${BASE_DOCS_URL}/excessive-agency/`,
+  'goal-misalignment': `${BASE_DOCS_URL}/goal-misalignment/`,
   hallucination: `${BASE_DOCS_URL}/hallucination/`,
   'harmful:misinformation-disinformation': `${BASE_DOCS_URL}/harmful/`,
   imitation: `${BASE_DOCS_URL}/imitation/`,

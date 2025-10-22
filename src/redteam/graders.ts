@@ -14,6 +14,7 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
+import { GoalMisalignmentGrader } from './plugins/goalMisalignment';
 import { FinancialCalculationErrorPluginGrader } from './plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from './plugins/financial/financialComplianceViolation';
 import { FinancialConfidentialDisclosurePluginGrader } from './plugins/financial/financialConfidentialDisclosure';
@@ -100,6 +101,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:goal-misalignment': new GoalMisalignmentGrader(),
   'promptfoo:redteam:financial:calculation-error': new FinancialCalculationErrorPluginGrader(),
   'promptfoo:redteam:financial:compliance-violation':
     new FinancialComplianceViolationPluginGrader(),

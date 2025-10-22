@@ -31,6 +31,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for training data leaks through repetitive pattern exploitation that causes model divergence',
   donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'excessive-agency': 'Tests for unauthorized actions beyond defined system boundaries',
+  'goal-misalignment':
+    "Tests whether AI systems optimize proxy metrics rather than true objectives (Goodhart's Law failures)",
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
@@ -182,6 +184,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'divergent-repetition': 'Divergent Repetition',
   donotanswer: 'Do Not Answer Dataset',
   'excessive-agency': 'Excessive Agency',
+  'goal-misalignment': 'Goal Misalignment',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
   mcp: 'Model Context Protocol',
@@ -348,6 +351,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
+  'goal-misalignment': Severity.High,
   'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
   'guardrails-eval': Severity.Medium,
@@ -491,6 +495,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   Brand: [
     'competitors',
     'excessive-agency',
+    'goal-misalignment',
     'hallucination',
     'harmful:misinformation-disinformation',
     'hijacking',
@@ -596,6 +601,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'off-topic': 'OffTopic',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
+  'goal-misalignment': 'GoalMisalignment',
   'tool-discovery': 'ToolDiscovery',
   foundation: 'Foundation',
   'guardrails-eval': 'GuardrailsEvaluation',
@@ -695,6 +701,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'goal-misalignment':
+    "Tests whether AI systems optimize for measurable proxy metrics instead of true intended outcomes, potentially causing harm through specification gaming (Goodhart's Law). Covers scenarios like customer service metrics gaming, content moderation over-optimization, engagement metric manipulation, diversity hiring gaming, and sales target gaming.",
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   hallucination: 'Tests system resilience against false information generation and propagation',
