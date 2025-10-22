@@ -20,8 +20,8 @@ export const PolicyObjectSchema = z.object({
     },
     { message: 'ID must be either a UUID or a 12-character hex string' },
   ),
-  text: z.string().optional(),
-  name: z.string().optional(),
+  text: z.string(),
+  name: z.string(),
 });
 export type PolicyObject = z.infer<typeof PolicyObjectSchema>;
 export type Policy = string | PolicyObject; // Policy Text or Policy ID
