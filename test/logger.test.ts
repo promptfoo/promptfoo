@@ -1,3 +1,4 @@
+import path from 'path';
 import chalk from 'chalk';
 import type { Logger } from 'winston';
 import type Transport from 'winston-transport';
@@ -364,8 +365,16 @@ describe('logger', () => {
     beforeEach(async () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date('2025-03-01T12:00:00.000Z'));
-      expectedDebugFile = '/mock/config/logs/promptfoo-debug-2025-03-01_12-00-00-000Z.log';
-      expectedErrorFile = '/mock/config/logs/promptfoo-error-2025-03-01_12-00-00-000Z.log';
+      expectedDebugFile = path.join(
+        '/mock/config',
+        'logs',
+        'promptfoo-debug-2025-03-01_12-00-00-000Z.log',
+      );
+      expectedErrorFile = path.join(
+        '/mock/config',
+        'logs',
+        'promptfoo-error-2025-03-01_12-00-00-000Z.log',
+      );
       cliState = (await import('../src/cliState')).default;
       winston = jest.requireMock('winston');
     });
@@ -381,7 +390,9 @@ describe('logger', () => {
       logger.initializeRunLogging();
 
       expect(mockGetConfigDirectoryPath).toHaveBeenCalledWith(true);
-      expect(fsMock.mkdirSync).toHaveBeenCalledWith('/mock/config/logs', { recursive: true });
+      expect(fsMock.mkdirSync).toHaveBeenCalledWith(path.join('/mock/config', 'logs'), {
+        recursive: true,
+      });
       expect(cliState.debugLogFile).toBe(expectedDebugFile);
       expect(cliState.errorLogFile).toBe(expectedErrorFile);
 
