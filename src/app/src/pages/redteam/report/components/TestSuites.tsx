@@ -183,7 +183,9 @@ const TestSuites = ({
               if (plugin.config.policy.text) {
                 description = plugin.config.policy.text;
               }
-            } else {
+            }
+            // Backwards compatibility w/ text-only inline policies.
+            else {
               type = formatPolicyIdentifierAsMetric(makeDefaultPolicyName(customPolicyIndex));
               description = plugin.config?.policy as string;
             }

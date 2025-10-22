@@ -89,7 +89,9 @@ function extractPolicyIdToNameMap(plugins: RedteamPluginObject[]): PolicyIdToNam
       const policy = plugin?.config?.policy as Policy;
       if (isValidPolicyObject(policy)) {
         map[policy.id] = policy.name;
-      } else {
+      }
+      // Backwards compatibility w/ text-only inline policies.
+      else {
         const id = makeInlinePolicyId(policy);
         map[id] = makeDefaultPolicyName(index);
       }
