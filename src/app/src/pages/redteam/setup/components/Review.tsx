@@ -84,6 +84,7 @@ export default function Review({
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
+    isLoading: isCheckingApiHealth,
   } = useApiHealth();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
@@ -1099,7 +1100,7 @@ export default function Review({
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
             </Typography>
-            {apiHealthStatus !== 'connected' && apiHealthStatus !== 'loading' && (
+            {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert severity="warning" sx={{ mb: 2 }}>
                 {apiHealthStatus === 'blocked'
                   ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'

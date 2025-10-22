@@ -17,8 +17,8 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
-const StatusIndicator = ({ status }: { status: ApiHealthStatus }) => {
-  const statusConfig: Record<ApiHealthStatus, { color: string; text: string }> = {
+const StatusIndicator = ({ status }: { status: ApiHealthStatus | 'loading' }) => {
+  const statusConfig: Record<ApiHealthStatus | 'loading', { color: string; text: string }> = {
     connected: { color: 'success.main', text: 'Connected to promptfoo API' },
     blocked: { color: 'error.main', text: 'Cannot connect to promptfoo API' },
     loading: { color: 'info.main', text: 'Checking connection...' },
@@ -75,7 +75,7 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
     }
   };
 
-  const isFormDisabled = status === 'loading' || isChecking || isSaving;
+  const isFormDisabled = isChecking || isSaving;
 
   return (
     <Dialog
@@ -91,16 +91,16 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
           <Box
             sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}
           >
-            <StatusIndicator status={status} />
+            <StatusIndicator status={isChecking ? 'loading' : status} />
             <Tooltip title="Check connection">
               <span>
-                <IconButton onClick={checkHealth} size="small" disabled={isChecking}>
+                <IconButton onClick={() => checkHealth()} size="small" disabled={isChecking}>
                   {isChecking ? <CircularProgress size={20} /> : <RefreshIcon />}
                 </IconButton>
               </span>
             </Tooltip>
           </Box>
-          {message && status !== 'unknown' && status !== 'loading' && (
+          {message && status !== 'unknown' && !isChecking && (
             <Alert severity={status === 'connected' ? 'success' : 'error'} sx={{ mt: 1 }}>
               {message}
             </Alert>
