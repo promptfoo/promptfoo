@@ -53,6 +53,7 @@ import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 import EstimationsDisplay from './EstimationsDisplay';
 import Tooltip from '@mui/material/Tooltip';
+import { isValidPolicyObject } from '@promptfoo/redteam/plugins/policy/utils';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -602,30 +603,42 @@ export default function Review({
                         borderRadius: 1,
                         bgcolor: theme.palette.action.hover,
                         position: 'relative',
+                        display: 'flex',
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
                       }}
                     >
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          paddingRight: '24px',
-                        }}
-                      >
-                        {typeof policy.config.policy === 'string'
-                          ? policy.config.policy
-                          : policy.config.policy?.text || ''}
-                      </Typography>
+                      <Box>
+                        {isValidPolicyObject(policy.config.policy) &&
+                          policy.config.policy?.name && (
+                            <Typography gutterBottom>{policy.config.policy?.name}</Typography>
+                          )}
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            paddingRight: '24px',
+                          }}
+                        >
+                          {typeof policy.config.policy === 'string'
+                            ? policy.config.policy
+                            : policy.config.policy?.text || ''}
+                        </Typography>
+                      </Box>
                       <IconButton
                         size="small"
                         onClick={() => {
                           const policyToMatch =
+                            // Backwards compatibility for policies w/o object config
                             typeof policy.config.policy === 'string'
                               ? policy.config.policy
                               : policy.config.policy?.id;
+
                           const newPlugins = config.plugins.filter(
                             (p, _i) =>
                               !(
@@ -638,13 +651,6 @@ export default function Review({
                               ),
                           );
                           updateConfig('plugins', newPlugins);
-                        }}
-                        sx={{
-                          position: 'absolute',
-                          right: 4,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          padding: '2px',
                         }}
                       >
                         <CloseIcon fontSize="small" />
