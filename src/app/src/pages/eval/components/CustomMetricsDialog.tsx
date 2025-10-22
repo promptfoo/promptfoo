@@ -36,7 +36,7 @@ interface MetricRow {
 }
 
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
-  const { table, filters, addFilter, config } = useTableStore();
+  const { table, filters, addFilter } = useTableStore();
   const theme = useTheme();
 
   if (!table || !table.head || !table.head.prompts) {

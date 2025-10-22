@@ -84,7 +84,7 @@ const CustomMetrics = ({
   onShowMore,
 }: CustomMetricsProps) => {
   const { data: cloudConfig } = useCloudConfig();
-  const { filters, addFilter, config } = useTableStore();
+  const { filters, addFilter } = useTableStore();
 
   if (!lookup || !Object.keys(lookup).length) {
     return null;
