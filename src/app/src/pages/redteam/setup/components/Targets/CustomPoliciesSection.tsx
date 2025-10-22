@@ -132,7 +132,7 @@ export const CustomPoliciesSection = () => {
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  
+
   // Policy dialog state
   const [policyDialog, setPolicyDialog] = useState<PolicyDialogState>({
     open: false,
@@ -163,7 +163,10 @@ export const CustomPoliciesSection = () => {
   // Get policy plugins from config
   const policyPlugins = config.plugins.filter(
     (p) => typeof p === 'object' && p.id === 'policy',
-  ) as Array<{ id: string; config: { policy: string | { id: string; text: string; name?: string } } }>;
+  ) as Array<{
+    id: string;
+    config: { policy: string | { id: string; text: string; name?: string } };
+  }>;
 
   // Convert policies to rows for the data grid
   const rows: PolicyRow[] = useMemo(() => {
@@ -175,7 +178,7 @@ export const CustomPoliciesSection = () => {
       let policyText: string;
       let policyId: string;
       let policyName: string;
-      
+
       if (typeof p.config.policy === 'string') {
         policyText = p.config.policy;
         policyId = makeInlinePolicyId(policyText);
@@ -185,7 +188,7 @@ export const CustomPoliciesSection = () => {
         policyId = p.config.policy.id;
         policyName = p.config.policy.name || policyNames[policyId] || `Custom Policy ${index + 1}`;
       }
-      
+
       return {
         id: policyId,
         name: policyName,
@@ -201,23 +204,23 @@ export const CustomPoliciesSection = () => {
       if (!trimmedText) {
         return 'Policy text is required';
       }
-      
+
       // Check if this policy text already exists (excluding current policy being edited)
       const duplicateExists = policyPlugins.some((p) => {
-        const existingText = typeof p.config.policy === 'string' 
-          ? p.config.policy 
-          : p.config.policy.text;
-        const existingId = typeof p.config.policy === 'string'
-          ? makeInlinePolicyId(p.config.policy)
-          : p.config.policy.id;
-          
+        const existingText =
+          typeof p.config.policy === 'string' ? p.config.policy : p.config.policy.text;
+        const existingId =
+          typeof p.config.policy === 'string'
+            ? makeInlinePolicyId(p.config.policy)
+            : p.config.policy.id;
+
         return existingText === trimmedText && existingId !== currentPolicyId;
       });
-      
+
       if (duplicateExists) {
         return 'This policy text already exists. Policy texts must be unique.';
       }
-      
+
       return undefined;
     },
     [policyPlugins],
@@ -261,33 +264,33 @@ export const CustomPoliciesSection = () => {
     const { formData, mode, editingPolicy } = policyDialog;
     const trimmedText = formData.policyText.trim();
     const trimmedName = formData.name.trim();
-    
+
     // Validate
     const errors: typeof policyDialog.errors = {};
-    
+
     if (!trimmedName) {
       errors.name = 'Name is required';
     }
-    
+
     const policyTextError = validatePolicyText(
-      trimmedText, 
-      mode === 'edit' ? editingPolicy?.id : undefined
+      trimmedText,
+      mode === 'edit' ? editingPolicy?.id : undefined,
     );
     if (policyTextError) {
       errors.policyText = policyTextError;
     }
-    
+
     if (Object.keys(errors).length > 0) {
       setPolicyDialog((prev) => ({ ...prev, errors }));
       return;
     }
-    
+
     const otherPlugins = config.plugins.filter((p) =>
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
     const newPolicyId = makeInlinePolicyId(trimmedText);
-    
+
     if (mode === 'create') {
       // Add new policy
       const newPolicies = [
@@ -311,10 +314,11 @@ export const CustomPoliciesSection = () => {
     } else {
       // Update existing policy
       const updatedPolicies = policyPlugins.map((p) => {
-        const currentPolicyId = typeof p.config.policy === 'string'
-          ? makeInlinePolicyId(p.config.policy)
-          : p.config.policy.id;
-          
+        const currentPolicyId =
+          typeof p.config.policy === 'string'
+            ? makeInlinePolicyId(p.config.policy)
+            : p.config.policy.id;
+
         if (currentPolicyId === editingPolicy?.id) {
           return {
             id: 'policy',
@@ -335,7 +339,7 @@ export const CustomPoliciesSection = () => {
       updateConfig('plugins', [...otherPlugins, ...updatedPolicies]);
       toast.showToast('Policy updated successfully', 'success');
     }
-    
+
     handleClosePolicyDialog();
   };
 
@@ -354,9 +358,10 @@ export const CustomPoliciesSection = () => {
     const selectedIds = new Set(rowSelectionModel as string[]);
     const remainingPolicies = policyPlugins
       .filter((p) => {
-        const policyId = typeof p.config.policy === 'string' 
-          ? makeInlinePolicyId(p.config.policy)
-          : p.config.policy.id;
+        const policyId =
+          typeof p.config.policy === 'string'
+            ? makeInlinePolicyId(p.config.policy)
+            : p.config.policy.id;
         return !selectedIds.has(policyId);
       })
       .map((p) => ({
@@ -379,7 +384,6 @@ export const CustomPoliciesSection = () => {
   const handleCancelDelete = () => {
     setConfirmDeleteOpen(false);
   };
-
 
   const handleCsvUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -483,7 +487,6 @@ export const CustomPoliciesSection = () => {
     },
     [toast, generateTestCase],
   );
-
 
   const columns: GridColDef<PolicyRow>[] = useMemo(
     () => [
@@ -612,12 +615,7 @@ export const CustomPoliciesSection = () => {
       </Dialog>
 
       {/* Policy edit/create dialog */}
-      <Dialog 
-        open={policyDialog.open} 
-        onClose={handleClosePolicyDialog}
-        maxWidth="md"
-        fullWidth
-      >
+      <Dialog open={policyDialog.open} onClose={handleClosePolicyDialog} maxWidth="md" fullWidth>
         <DialogTitle>
           {policyDialog.mode === 'create' ? 'Add New Policy' : 'Edit Policy'}
         </DialogTitle>
@@ -661,11 +659,13 @@ export const CustomPoliciesSection = () => {
           <Button onClick={handleClosePolicyDialog} variant="outlined">
             Cancel
           </Button>
-          <Button 
-            onClick={handleSavePolicy} 
-            variant="contained" 
+          <Button
+            onClick={handleSavePolicy}
+            variant="contained"
             color="primary"
-            disabled={!policyDialog.formData.name.trim() || !policyDialog.formData.policyText.trim()}
+            disabled={
+              !policyDialog.formData.name.trim() || !policyDialog.formData.policyText.trim()
+            }
           >
             Save
           </Button>

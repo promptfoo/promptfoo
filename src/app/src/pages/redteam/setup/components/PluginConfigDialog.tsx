@@ -129,8 +129,8 @@ export default function PluginConfigDialog({
                   Policy {index + 1}
                 </Typography>
                 <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
-                  {typeof policyPlugin.config.policy === 'string' 
-                    ? policyPlugin.config.policy 
+                  {typeof policyPlugin.config.policy === 'string'
+                    ? policyPlugin.config.policy
                     : policyPlugin.config.policy?.text || 'No policy text'}
                 </Typography>
               </Paper>

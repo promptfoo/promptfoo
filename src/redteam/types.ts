@@ -18,7 +18,7 @@ export const PolicyObjectSchema = z.object({
       const hashRegex = /^[0-9a-f]{12}$/i; // 12-char hex string from makeInlinePolicyId
       return uuidRegex.test(id) || hashRegex.test(id);
     },
-    { message: 'ID must be either a UUID or a 12-character hex string' }
+    { message: 'ID must be either a UUID or a 12-character hex string' },
   ),
   text: z.string().optional(),
   name: z.string().optional(),
