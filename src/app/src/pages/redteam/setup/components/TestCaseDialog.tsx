@@ -64,17 +64,15 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   isConfigValid = true,
 }) => {
   const theme = useTheme();
-  
+
   const pluginName = typeof plugin === 'string' ? plugin : plugin || '';
   const pluginDisplayName =
     displayNameOverrides[pluginName as Plugin] ||
     categoryAliases[pluginName as Plugin] ||
     pluginName;
-    
+
   const strategyName = typeof strategy === 'string' ? strategy : strategy || '';
-  const strategyDisplayName =
-    displayNameOverrides[strategyName as Strategy] ||
-    strategyName;
+  const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -369,8 +367,8 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
             ) : null}
 
             <Alert severity="info" sx={{ mt: 2 }}>
-              Dissatisfied with the test case? Fine tune it by adjusting your {pluginName === 'policy' ? 'policy' : 'application'}{' '}
-              details.
+              Dissatisfied with the test case? Fine tune it by adjusting your{' '}
+              {pluginName === 'policy' ? 'policy' : 'application'} details.
             </Alert>
           </Box>
         ) : null}
