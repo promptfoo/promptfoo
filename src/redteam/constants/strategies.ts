@@ -24,6 +24,7 @@ export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
 export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
+  'agent-api',
   'crescendo',
   'goat',
   'custom',
@@ -47,6 +48,7 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
+  'agent-api',
   'layer',
   'audio',
   'authoritative-markup-injection',
@@ -94,6 +96,7 @@ export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
+  'agent-api',
   'layer',
   'multilingual',
   'best-of-n',

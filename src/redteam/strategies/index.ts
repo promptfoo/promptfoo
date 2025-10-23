@@ -1,18 +1,24 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
+
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import type {
+  RedteamStrategyObject,
+  TestCase,
+} from '../../types/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
+import { addAgentApiTestCases } from './agentApi';
+import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
-import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
@@ -23,7 +29,10 @@ import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
 import { addMultilingual } from './multilingual';
-import { addOtherEncodings, EncodingType } from './otherEncodings';
+import {
+  addOtherEncodings,
+  EncodingType,
+} from './otherEncodings';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
@@ -31,13 +40,20 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
-
-import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
 
 export type { Strategy };
 
 export const Strategies: Strategy[] = [
+  {
+    id: 'agent-api',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Agent API strategy to ${testCases.length} test cases`);
+      const newTestCases = await addAgentApiTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Agent API test cases`);
+      return newTestCases;
+    },
+  },
   {
     id: 'layer',
     action: async (testCases, injectVar, config) => {

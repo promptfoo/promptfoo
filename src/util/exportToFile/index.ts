@@ -1,5 +1,8 @@
 import type EvalResult from '../../models/evalResult';
-import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
+import type {
+  EvaluateTableOutput,
+  EvaluateTableRow,
+} from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
@@ -18,6 +21,19 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
     resultText = `${result.error}`;
   } else {
     resultText = outputTextDisplay;
+  }
+
+  // Debug logging for agent-api
+  const isAgentApi = result.provider?.id === 'promptfoo:redteam:agent-api';
+  if (isAgentApi) {
+    console.log('\n🔍 ===== CONVERT EVAL RESULT =====');
+    console.log('📝 Prompt.raw:', result.prompt.raw);
+    console.log('📝 Prompt.label:', result.prompt.label);
+    console.log('🎯 Provider:', result.provider?.id);
+    console.log('📊 Metadata.redteamFinalPrompt:', result.metadata?.redteamFinalPrompt);
+    console.log('📊 Metadata.redteamHistory:', result.metadata?.redteamHistory?.length);
+    console.log('📊 Metadata.messages:', result.metadata?.messages?.length);
+    console.log('✅ ===== END CONVERT =====\n');
   }
 
   return {

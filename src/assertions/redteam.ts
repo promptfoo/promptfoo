@@ -1,7 +1,9 @@
 import { getGraderById } from '../redteam/graders';
+import type {
+  AssertionParams,
+  GradingResult,
+} from '../types/index';
 import invariant from '../util/invariant';
-
-import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * As the name implies, this function "handles" redteam assertions by either calling the
@@ -40,9 +42,13 @@ export const handleRedteam = async ({
 
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
-  invariant(prompt, `Grader ${baseType} must have a prompt`);
+  
+  // For agent-based strategies, use the final attack message as the prompt
+  const promptToGrade = prompt || providerResponse.metadata?.redteamFinalPrompt || '';
+  invariant(promptToGrade, `Grader ${baseType} must have a prompt`);
+  
   const { grade, rubric, suggestions } = await grader.getResult(
-    prompt,
+    promptToGrade,
     outputString,
     test,
     provider,

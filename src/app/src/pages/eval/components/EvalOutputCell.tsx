@@ -1,17 +1,29 @@
 import React, { useMemo } from 'react';
 
-import { useShiftKey } from '@app/hooks/useShiftKey';
-import { useEvalOperations } from '@app/hooks/useEvalOperations';
-import useCloudConfig from '@app/hooks/useCloudConfig';
-import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
-import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
-import { diffJson, diffSentences, diffWords } from 'diff';
+import {
+  diffJson,
+  diffSentences,
+  diffWords,
+} from 'diff';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+import useCloudConfig from '@app/hooks/useCloudConfig';
+import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import { useShiftKey } from '@app/hooks/useShiftKey';
+import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
+import {
+  type EvaluateTableOutput,
+  ResultFailureReason,
+} from '@promptfoo/types';
+
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import {
+  useResultsViewSettingsStore,
+  useTableStore,
+} from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 
@@ -607,7 +619,7 @@ function EvalOutputCell({
           </Tooltip>
         </>
       )}
-      {output.prompt && (
+      {(output.prompt || output.metadata?.redteamHistory?.length > 0) && (
         <>
           <Tooltip title={'View output and test details'} slotProps={tooltipSlotProps}>
             <button className="action" onClick={handlePromptOpen}>
