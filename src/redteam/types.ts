@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { Plugin, Severity } from './constants';
+import { isValidPolicyId } from './plugins/policy/utils';
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -11,15 +12,9 @@ export type Intent = string | string[];
 
 // Policy Types
 export const PolicyObjectSchema = z.object({
-  id: z.string().refine(
-    (id) => {
-      // Accept either UUID (for cloud policies) or hash-based IDs (for inline policies)
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const hashRegex = /^[0-9a-f]{12}$/i; // 12-char hex string from makeInlinePolicyId
-      return uuidRegex.test(id) || hashRegex.test(id);
-    },
-    { message: 'ID must be either a UUID or a 12-character hex string' },
-  ),
+  id: z
+    .string()
+    .refine(isValidPolicyId, { message: 'ID must be either a UUID or a 12-character hex string' }),
   text: z.string(),
   name: z.string(),
 });
