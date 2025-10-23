@@ -98,6 +98,7 @@ describe('index.ts exports', () => {
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',
+    'PluginConfigSchema',
     'PolicyObjectSchema',
     'ResultFailureReason',
     'ScenarioSchema',

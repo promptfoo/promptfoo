@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { Plugin, Severity } from './constants';
+import { type Plugin, Severity } from './constants';
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -29,39 +29,43 @@ export type PoliciesById = Map<
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
-export type PluginConfig = {
-  examples?: string[];
-  graderExamples?: {
-    output: string;
-    pass: boolean;
-    score: number;
-    reason: string;
-  }[];
-  severity?: Severity;
-  language?: string;
-  prompt?: string;
-  purpose?: string;
-  modifiers?: Partial<Record<Modifier, unknown>>;
-  // BOLA
-  targetIdentifiers?: string[];
-  // BFLA
-  targetSystems?: string[];
-  // Competitor
-  mentions?: boolean;
-  // SSRF
-  targetUrls?: string[];
-  // PII
-  name?: string;
-  // CyberSecEval
-  multilingual?: boolean;
 
-  indirectInjectionVar?: string;
-  intent?: Intent | Intent[];
-  policy?: Policy;
-  systemPrompt?: string;
+export const PluginConfigSchema = z.object({
+  examples: z.array(z.string()).optional(),
+  graderExamples: z.array(z.object({
+    output: z.string(),
+    pass: z.boolean(),
+    score: z.number(),
+    reason: z.string(),
+  })).optional(),
+  severity: z.nativeEnum(Severity).optional(),
+  language: z.string().optional(),
+  prompt: z.string().optional(),
+  purpose: z.string().optional(),
+  modifiers: z.record(z.unknown()).optional(),
+  // BOLA
+  targetIdentifiers: z.array(z.string()).optional(),
+  // BFLA
+  targetSystems: z.array(z.string()).optional(),
+  // Competitor
+  mentions: z.boolean().optional(),
+  // SSRF
+  targetUrls: z.array(z.string()).optional(),
+  // PII
+  name: z.string().optional(),
+  // CyberSecEval
+  multilingual: z.boolean().optional(),
+
+  indirectInjectionVar: z.string().optional(),
+  intent: z.union([z.string(), z.array(z.string())]).optional(),
+  policy: z.union([z.string(), PolicyObjectSchema]).optional(),
+  systemPrompt: z.string().optional(),
   // Strategy exclusions - allows plugins to exclude incompatible strategies
-  excludeStrategies?: string[];
-};
+  excludeStrategies: z.array(z.string()).optional(),
+});
+
+export type PluginConfig = z.infer<typeof PluginConfigSchema>;
+
 export type StrategyConfig = RedteamObjectConfig;
 
 type ConfigurableObject = {
