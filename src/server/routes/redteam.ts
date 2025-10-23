@@ -133,7 +133,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     let finalTestCases = testCases;
 
     // Skip applying strategy if it's 'basic' as they don't transform test cases
-    if (strategy.id !== 'basic') {
+    if (!['basic', 'default'].includes(strategy.id)) {
       try {
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
 
