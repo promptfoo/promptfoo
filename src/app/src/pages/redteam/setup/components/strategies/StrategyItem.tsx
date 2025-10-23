@@ -53,9 +53,13 @@ export function StrategyItem({
   } = useTestCaseGeneration();
 
   const strategyConfig = useMemo(() => {
-    return (config.strategies.find(
-      s => typeof s === 'object' && 'id' in s && s!.id === strategy.id
-    ) as RedteamStrategyObject)?.config ?? {};
+    return (
+      (
+        config.strategies.find(
+          (s) => typeof s === 'object' && 'id' in s && s!.id === strategy.id,
+        ) as RedteamStrategyObject
+      )?.config ?? {}
+    );
   }, [config, strategy.id]) as StrategyConfig;
 
   const handleTestCaseGeneration = useCallback(async () => {
