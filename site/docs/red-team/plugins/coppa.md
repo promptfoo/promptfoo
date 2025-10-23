@@ -68,7 +68,7 @@ By incorporating the COPPA plugin in your LLM red teaming strategy, you can iden
 ## Related Concepts
 
 - [PII (Personally Identifiable Information)](pii.md)
-- [Privacy Violations](../llm-vulnerability-types.md#privacy-violations)
+- [Privacy Vulnerabilities](../llm-vulnerability-types.md#privacy-vulnerabilities)
 - [Excessive Agency](excessive-agency.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
