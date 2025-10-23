@@ -373,12 +373,12 @@ export async function runEval({
         const simbaProvider = activeProvider as any;
         if (simbaProvider.runSimba) {
           // Simba returns EvaluateResult[] directly, so we need to return early
-          const simbaResults: EvaluateResult[] = await simbaProvider.runSimba(
-            renderedPrompt,
-            callApiContext,
-            abortSignal ? { abortSignal } : undefined,
-            evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
-          );
+          const simbaResults: EvaluateResult[] = await simbaProvider.runSimba({
+            prompt: renderedPrompt,
+            context: callApiContext,
+            options: abortSignal ? { abortSignal } : undefined,
+            concurrency: evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
+          });
 
           // Update results with proper indices for Simba
           for (const result of simbaResults) {
@@ -1071,7 +1071,6 @@ class Evaluator {
                 conversations: this.conversations,
                 registers: this.registers,
                 isRedteam: testSuite.redteam != null,
-                allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
               });
