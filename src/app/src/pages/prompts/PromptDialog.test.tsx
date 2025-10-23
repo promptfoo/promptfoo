@@ -146,7 +146,9 @@ describe('PromptDialog', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: mockSelectedPrompt.prompt.label })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: mockSelectedPrompt.prompt.label }),
+    ).toBeInTheDocument();
     expect(screen.getByText(mockSelectedPrompt.id.slice(0, 6))).toBeInTheDocument();
 
     expect(screen.getByRole('textbox')).toHaveValue(mockSelectedPrompt.prompt.raw);
@@ -600,7 +602,9 @@ describe('PromptDialog', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: mockSelectedPrompt.prompt.label })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: mockSelectedPrompt.prompt.label }),
+    ).toBeInTheDocument();
 
     // Test fallback to display when label is empty
     const mockWithDisplayOnly: ServerPromptWithMetadata = {
