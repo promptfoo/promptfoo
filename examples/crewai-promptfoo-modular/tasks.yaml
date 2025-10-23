@@ -1,0 +1,7 @@
+trend_identification_task:
+  description: >
+    Read the input_text carefully and identify the most important market trends, changes in consumer behavior,
+    major industry shifts, or strategic investments related to the topic.
+  expected_output: >
+    A bullet-point list (maximum of 10 points) summarizing the most relevant market trends or insights identified in the input_text.
+  agent: trend_researcher
