@@ -1456,11 +1456,6 @@ class Evaluator {
         `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
       );
     }
-    if (simbaRunEvalOptions.length > 0) {
-      logger.info(
-        `Running ${simbaRunEvalOptions.length} Simba test cases sequentially after normal tests...`,
-      );
-    }
 
     // Now start the progress bar after info messages
     if (this.options.showProgressBar && progressBarManager) {
@@ -1497,7 +1492,10 @@ class Evaluator {
 
       // Finally run Simba evaluations sequentially (they have their own internal concurrency)
       if (simbaRunEvalOptions.length > 0) {
-        logger.info(`Running ${simbaRunEvalOptions.length} Simba test cases sequentially...`);
+        if (progressBarManager) {
+          progressBarManager.complete();
+          progressBarManager.stop();
+        }
 
         for (const evalStep of simbaRunEvalOptions) {
           if (isWebUI) {
@@ -1512,9 +1510,6 @@ class Evaluator {
           await processEvalStepWithTimeout(evalStep, idx);
           processedIndices.add(idx);
         }
-
-        // Simba phase complete
-        logger.info('Simba test cases completed');
       }
     } catch (err) {
       if (options.abortSignal?.aborted) {

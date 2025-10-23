@@ -10,7 +10,7 @@ import SimbaProvider from '../providers/simba';
 
 const SimbaCommandSchema = z.object({
   config: z.union([z.string(), z.array(z.string())]).optional(),
-  goal: z.union([z.string(), z.array(z.string())]),
+  goals: z.array(z.string()),
   purpose: z.string().optional(),
   maxRounds: z.number().optional(),
   maxVectors: z.number().optional(),
@@ -104,9 +104,10 @@ async function runSimbaWithProvider(
     goals,
     purpose: options.purpose ?? 'Red team testing',
     additionalAttackInstructions: options.additionalInstructions,
-    maxRounds: options.maxRounds ?? 20,
-    maxVectors: options.maxVectors ?? 5,
+    maxConversationRounds: options.maxRounds ?? 10,
+    maxAttacksPerGoal: options.maxVectors ?? 5,
     sessionId: options.sessionId,
+    concurrency: concurrency,
   });
 
   const context: CallApiContextParams = {
@@ -192,11 +193,11 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
       '-c, --config <paths...>',
       'Path to configuration file (defaults to promptfooconfig.yaml)',
     )
-    .requiredOption('-g, --goal <goal>', 'The goal/objective for the red team test')
+    .requiredOption('-g, --goals <goals...>', 'The goals/objectives for the red team test')
     .option('-e, --email <email>', 'Email address for analytics')
     .option('--purpose <purpose>', 'Purpose of the target system', 'Red team testing')
-    .option('--max-rounds <number>', 'Maximum conversation rounds', '20')
-    .option('--max-vectors <number>', 'Maximum attack vectors to try', '5')
+    .option('--max-conversation-rounds <number>', 'Maximum conversation rounds', '10')
+    .option('--max-attacks-per-goal <number>', 'Maximum attack vectors to try', '5')
     .option('--additional-instructions <text>', 'Additional attack instructions')
     .option('-s, --session-id <id>', 'Session ID to continue')
     .option('-j, --concurrency <number>', 'Number of concurrent conversations (1-100)', '1')
@@ -207,7 +208,7 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
       try {
         const validatedOpts = SimbaCommandSchema.parse({
           ...opts,
-          goal: opts.goal,
+          goals: opts.goals,
           maxRounds: parseOptionalInt(opts.maxRounds),
           maxVectors: parseOptionalInt(opts.maxVectors),
           concurrency: parseOptionalInt(opts.concurrency),
