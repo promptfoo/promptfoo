@@ -374,10 +374,14 @@ export default function PluginsTab({
       }
       // Directly generate test case
       else {
-        await generateTestCase(plugin, pluginConfig[plugin] || {}, {
-          telemetryFeature: 'redteam_plugin_generate_test_case',
-          mode: 'result',
-        });
+        await generateTestCase(
+          { id: plugin, config: pluginConfig[plugin] ?? {} },
+          { id: 'basic', config: {} },
+          {
+            telemetryFeature: 'redteam_plugin_generate_test_case',
+            mode: 'result',
+          },
+        );
       }
     },
     [pluginConfig],
