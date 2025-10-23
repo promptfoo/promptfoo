@@ -43,6 +43,7 @@ export const FOUNDATION_PLUGINS = [
   'donotanswer',
   'divergent-repetition',
   'excessive-agency',
+  'goal-misalignment',
   'hallucination',
   'harmful:chemical-biological-weapons',
   'harmful:child-exploitation',
