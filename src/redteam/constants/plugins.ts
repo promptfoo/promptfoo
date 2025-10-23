@@ -264,7 +264,6 @@ export const ADDITIONAL_PLUGINS = [
   'cca',
   'competitors',
   'coppa',
-  'coppa',
   'cross-session-leak',
   'cyberseceval',
   'debug-access',

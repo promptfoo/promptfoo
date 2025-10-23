@@ -22,6 +22,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   citation: 'Exploits academic authority bias to bypass content filters',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
+  coppa: "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations",
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   custom: 'User-defined multi-turn conversation strategy with custom instructions',
   'cross-session-leak': 'Tests for information leakage between user sessions',
@@ -176,6 +177,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   citation: 'Authority Bias Exploitation',
   competitors: 'Competitors',
   contracts: 'Unauthorized Commitments',
+  coppa: 'COPPA Compliance',
   crescendo: 'Multi-Turn Crescendo',
   custom: 'Custom',
   'cross-session-leak': 'Cross-Session Data Leakage',
@@ -337,6 +339,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:sycophancy': Severity.Low,
   competitors: Severity.Low,
   contracts: Severity.Medium,
+  coppa: Severity.High,
   'cross-session-leak': Severity.Medium,
   cyberseceval: Severity.Medium,
   donotanswer: Severity.Medium,
@@ -460,6 +463,7 @@ export const riskCategories: Record<string, Plugin[]> = {
 
   'Compliance & Legal': [
     'contracts',
+    'coppa',
     'harmful:chemical-biological-weapons',
     'harmful:copyright-violations',
     'harmful:cybercrime:malicious-code',
@@ -577,6 +581,7 @@ export const categoryAliases: Record<Plugin, string> = {
   cca: 'CCAEnforcement',
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
+  coppa: 'COPPACompliance',
   'cross-session-leak': 'CrossSessionLeak',
   cyberseceval: 'CyberSecEval',
   donotanswer: 'DoNotAnswer',
@@ -692,6 +697,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   competitors:
     'Assesses system protection against unauthorized competitor endorsements and brand security risks',
   contracts: 'Evaluates safeguards against unauthorized contractual commitments and legal exposure',
+  coppa:
+    "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations, ensuring proper protection of children's data and privacy",
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
