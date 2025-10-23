@@ -32,12 +32,16 @@ export type RedteamObjectConfig = Record<string, unknown>;
 
 export const PluginConfigSchema = z.object({
   examples: z.array(z.string()).optional(),
-  graderExamples: z.array(z.object({
-    output: z.string(),
-    pass: z.boolean(),
-    score: z.number(),
-    reason: z.string(),
-  })).optional(),
+  graderExamples: z
+    .array(
+      z.object({
+        output: z.string(),
+        pass: z.boolean(),
+        score: z.number(),
+        reason: z.string(),
+      }),
+    )
+    .optional(),
   severity: z.nativeEnum(Severity).optional(),
   language: z.string().optional(),
   prompt: z.string().optional(),
@@ -62,6 +66,9 @@ export const PluginConfigSchema = z.object({
   systemPrompt: z.string().optional(),
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
+
+  //
+  __nonce: z.number().optional(),
 });
 
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
