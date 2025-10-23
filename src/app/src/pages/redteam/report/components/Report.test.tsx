@@ -226,6 +226,6 @@ describe('Report Component Edge Cases', () => {
       expect(TestSuites).toHaveBeenCalled();
     });
 
-    await findByText('LLM Risk Assessment');
+    await findByText('Test eval');
   });
 });
