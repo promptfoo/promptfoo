@@ -1,6 +1,7 @@
 import invariant from 'tiny-invariant';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -11,7 +12,7 @@ import {
   ResultFailureReason,
   TokenUsage,
 } from '../../types';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithRetries } from '../../util/fetch';
 import {
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
@@ -167,13 +168,18 @@ export default class SimbaProvider implements ApiProvider {
     const url =
       buildRemoteUrl('/api/v1/simba', 'https://api.promptfoo.app/api/v1/simba') + endpoint;
 
-    const response = await fetchWithProxy(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetchWithRetries(
+      url,
+      {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
       },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+      REQUEST_TIMEOUT_MS,
+      3,
+    );
 
     if (!response.ok) {
       throw new Error(`Simba API request failed: ${response.status} ${response.statusText}`);
