@@ -138,15 +138,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
-
-  useEffect(() => {
-    // API health check
-    checkHealth();
-  }, [checkHealth]);
 
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(

@@ -3,6 +3,8 @@ import { useToast } from '@app/hooks/useToast';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { CustomPoliciesSection } from './CustomPoliciesSection';
@@ -15,6 +17,16 @@ vi.mock('@app/hooks/useTelemetry', () => ({
   }),
 }));
 vi.mock('@app/hooks/useToast');
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: vi.fn(
+    () =>
+      ({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      }) as unknown as DefinedUseQueryResult<ApiHealthResult, Error>,
+  ),
+}));
 
 const mockUpdateConfig = vi.fn();
 const mockShowToast = vi.fn();

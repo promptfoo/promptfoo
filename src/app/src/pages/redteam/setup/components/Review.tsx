@@ -82,7 +82,10 @@ export default function Review({
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+    isLoading: isCheckingApiHealth,
+  } = useApiHealth();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
@@ -184,11 +187,6 @@ export default function Review({
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
-
-  // Check API health on mount
-  useEffect(() => {
-    checkHealth();
-  }, [checkHealth]);
 
   // Sync local maxConcurrency state with config
   useEffect(() => {
@@ -1102,7 +1100,7 @@ export default function Review({
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
             </Typography>
-            {apiHealthStatus !== 'connected' && apiHealthStatus !== 'loading' && (
+            {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert severity="warning" sx={{ mb: 2 }}>
                 {apiHealthStatus === 'blocked'
                   ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
