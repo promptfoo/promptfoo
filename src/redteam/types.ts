@@ -67,7 +67,7 @@ export const PluginConfigSchema = z.object({
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
 
-  //
+  // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
 });
 
