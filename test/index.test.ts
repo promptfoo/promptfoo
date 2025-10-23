@@ -103,6 +103,7 @@ describe('index.ts exports', () => {
     'ResultFailureReason',
     'ScenarioSchema',
     'SpecialAssertionTypesSchema',
+    'StrategyConfigSchema',
     'TestCaseSchema',
     'TestCasesWithMetadataPromptSchema',
     'TestCasesWithMetadataSchema',

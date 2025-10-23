@@ -73,7 +73,17 @@ export const PluginConfigSchema = z.object({
 
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
 
-export type StrategyConfig = RedteamObjectConfig;
+export const StrategyConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    plugins: z.array(z.string()).optional(),
+    // Allow arbitrary extra fields for strategy configs
+    // Use .catchall to accept any additional unknown properties
+    // See: https://github.com/colinhacks/zod#catchall
+  })
+  .catchall(z.unknown());
+
+export type StrategyConfig = z.infer<typeof StrategyConfigSchema>;
 
 type ConfigurableObject = {
   id: string;
@@ -103,11 +113,7 @@ export type RedteamPlugin = string | RedteamPluginObject;
 
 export type RedteamStrategyObject = ConfigurableObject & {
   id: string;
-  config?: {
-    enabled?: boolean;
-    plugins?: string[];
-    [key: string]: unknown;
-  };
+  config?: StrategyConfig;
 };
 export type RedteamStrategy = string | RedteamStrategyObject;
 
