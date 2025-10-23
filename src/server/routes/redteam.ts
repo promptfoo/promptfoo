@@ -11,7 +11,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { PluginConfigSchema } from '../../redteam/types';
+import { PluginConfigSchema, StrategyConfigSchema } from '../../redteam/types';
 
 export const redteamRouter = Router();
 
@@ -26,7 +26,7 @@ const TestCaseGenerationSchema = z.object({
     id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
       message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
     }),
-    config: z.record(z.unknown()).optional().default({}),
+    config: StrategyConfigSchema.optional().default({}),
   }),
   config: z.object({
     applicationDefinition: z.object({

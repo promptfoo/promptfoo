@@ -18,6 +18,9 @@ import {
 import { TestCaseGenerateButton } from './../TestCaseDialog';
 import { useTestCaseGeneration } from './../TestCaseGenerationProvider';
 import type { StrategyCardData } from './types';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { useCallback, useMemo } from 'react';
+import { type StrategyConfig, type RedteamStrategyObject } from '@promptfoo/redteam/types';
 
 const TEST_GENERATION_PLUGIN = 'harmful:hate';
 const TEST_GENERATION_PLUGIN_DISPLAY_NAME = pluginDisplayNames[TEST_GENERATION_PLUGIN as Plugin];
@@ -39,6 +42,8 @@ export function StrategyItem({
   isDisabled,
   isRemoteGenerationDisabled,
 }: StrategyItemProps) {
+  const { config } = useRedTeamConfig();
+
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
 
   const {
@@ -47,14 +52,19 @@ export function StrategyItem({
     currentStrategy,
   } = useTestCaseGeneration();
 
-  const handleTestCaseGeneration = async () => {
+  const strategyConfig = useMemo(() => {
+    return (config.strategies.find(
+      s => typeof s === 'object' && 'id' in s && s!.id === strategy.id
+    ) as RedteamStrategyObject)?.config ?? {};
+  }, [config, strategy.id]) as StrategyConfig;
+
+  const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(
       { id: TEST_GENERATION_PLUGIN, config: {} },
-      // TODO: Strategy config
-      { id: strategy.id, config: {} },
+      { id: strategy.id, config: strategyConfig },
       { telemetryFeature: 'redteam_strategy_generate_test_case', mode: 'result' },
     );
-  };
+  }, [strategyConfig, generateTestCase, strategy.id]);
 
   return (
     <Paper

@@ -111,7 +111,7 @@ export type RedteamPluginObject = ConfigurableObject &
   };
 export type RedteamPlugin = string | RedteamPluginObject;
 
-export type RedteamStrategyObject = ConfigurableObject & {
+export type RedteamStrategyObject = {
   id: string;
   config?: StrategyConfig;
 };
