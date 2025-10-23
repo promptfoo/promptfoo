@@ -2,16 +2,24 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { REDTEAM_MODEL, ALL_PLUGINS, ALL_STRATEGIES } from '../../redteam/constants';
+import {
+  REDTEAM_MODEL,
+  ALL_PLUGINS,
+  ALL_STRATEGIES,
+  type Plugin,
+  type Strategy,
+} from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
+import { Strategies } from '../../redteam/strategies/index';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { PluginConfigSchema, StrategyConfigSchema } from '../../redteam/types';
+import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 
 export const redteamRouter = Router();
 
@@ -19,13 +27,13 @@ const TestCaseGenerationSchema = z.object({
   plugin: z.object({
     id: z.string().refine((val) => ALL_PLUGINS.includes(val as any), {
       message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
-    }),
+    }) as unknown as z.ZodType<Plugin>,
     config: PluginConfigSchema.optional().default({}),
   }),
   strategy: z.object({
     id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
       message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
-    }),
+    }) as unknown as z.ZodType<Strategy>,
     config: StrategyConfigSchema.optional().default({}),
   }),
   config: z.object({
@@ -121,7 +129,35 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       return;
     }
 
-    const testCase = testCases[0];
+    // Apply strategy to test case
+    let finalTestCases = testCases;
+
+    // Skip applying strategy if it's 'basic' as they don't transform test cases
+    if (strategy.id !== 'basic') {
+      try {
+        const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
+
+        const strategyTestCases = await strategyFactory.action(
+          testCases as any, // Cast to TestCaseWithPlugin[]
+          injectVar,
+          strategy.config || {},
+          strategy.id,
+        );
+
+        if (strategyTestCases && strategyTestCases.length > 0) {
+          finalTestCases = strategyTestCases;
+        }
+      } catch (error) {
+        logger.error(`Error applying strategy ${strategy.id}: ${error}`);
+        res.status(500).json({
+          error: `Failed to apply strategy ${strategy.id}`,
+          details: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+    }
+
+    const testCase = finalTestCases[0];
     const generatedPrompt = testCase.vars?.[injectVar] || 'Unable to extract test prompt';
 
     const context = `This test case targets the ${plugin.id} plugin with strategy ${strategy.id} and was generated based on your application context. If the test case is not relevant to your application, you can modify the application definition to improve relevance.`;
