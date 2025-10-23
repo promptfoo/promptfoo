@@ -3,8 +3,10 @@ import React, { createContext, useCallback, useContext, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
-import type { Plugin } from '@promptfoo/redteam/constants';
+import type { Plugin, Strategy } from '@promptfoo/redteam/constants';
 import { TestCaseDialog } from './TestCaseDialog';
+import { type Config } from '../types';
+import type { PluginConfig, StrategyConfig } from '@promptfoo/redteam/types';
 
 interface GeneratedTestCase {
   prompt: string;
@@ -24,25 +26,26 @@ interface GenerateOptions {
   mode?: 'config' | 'result';
 }
 
+interface TargetPlugin {
+  id: Plugin;
+  config: PluginConfig;
+}
+interface TargetStrategy {
+  id: Strategy;
+  config: StrategyConfig;
+}
+
 interface TestCaseGenerationContextValue {
   // State
   isGenerating: boolean;
-  generatedTestCase: GeneratedTestCase | null;
-  targetResponse: TargetResponse | null;
-  isRunningTest: boolean;
-  isDialogOpen: boolean;
-  currentPlugin: string | Plugin | null;
-  dialogMode: 'config' | 'result';
-
+  currentPlugin: Plugin | null;
+  currentStrategy: Strategy | null;
   // Methods
   generateTestCase: (
-    pluginId: string | Plugin,
-    config: any,
+    plugin: TargetPlugin,
+    strategy: TargetStrategy,
     options?: GenerateOptions,
   ) => Promise<void>;
-  openDialog: (pluginId: string | Plugin, mode?: 'config' | 'result') => void;
-  closeDialog: () => void;
-  setDialogMode: (mode: 'config' | 'result') => void;
 }
 
 const TestCaseGenerationContext = createContext<TestCaseGenerationContextValue | undefined>(
@@ -51,7 +54,7 @@ const TestCaseGenerationContext = createContext<TestCaseGenerationContextValue |
 
 interface TestCaseGenerationProviderProps {
   children: React.ReactNode;
-  redTeamConfig: any; // from useRedTeamConfig
+  redTeamConfig: Config;
 }
 
 export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProps> = ({
@@ -63,15 +66,17 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
   const [targetResponse, setTargetResponse] = useState<TargetResponse | null>(null);
   const [isRunningTest, setIsRunningTest] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [currentPlugin, setCurrentPlugin] = useState<string | Plugin | null>(null);
+  const [currentPlugin, setCurrentPlugin] = useState<Plugin | null>(null);
+  const [currentStrategy, setCurrentStrategy] = useState<Strategy | null>(null);
   const [dialogMode, setDialogMode] = useState<'config' | 'result'>('result');
 
   const { recordEvent } = useTelemetry();
   const toast = useToast();
 
   const generateTestCase = useCallback(
-    async (pluginId: string | Plugin, config: any, options: GenerateOptions = {}) => {
-      setCurrentPlugin(pluginId);
+    async (plugin: TargetPlugin, strategy: TargetStrategy, options: GenerateOptions = {}) => {
+      setCurrentPlugin(plugin.id);
+      setCurrentStrategy(strategy.id);
       setGeneratedTestCase(null);
       setIsGenerating(true);
       setDialogMode(options.mode || 'result');
@@ -80,7 +85,8 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
       try {
         recordEvent('feature_used', {
           feature: options.telemetryFeature || 'redteam_generate_test_case',
-          plugin: pluginId,
+          plugin: plugin.id,
+          strategy: strategy.id,
         });
 
         const response = await callApi('/redteam/generate-test', {
@@ -91,10 +97,12 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
             Pragma: 'no-cache',
           },
           body: JSON.stringify({
-            pluginId,
+            plugin,
+            strategy,
             config: {
-              applicationDefinition: redTeamConfig.applicationDefinition,
-              ...config,
+              applicationDefinition: {
+                purpose: redTeamConfig.applicationDefinition.purpose ?? null,
+              },
             },
           }),
           signal: AbortSignal.timeout(10000), // 10s timeout
@@ -173,15 +181,6 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
     [redTeamConfig, recordEvent, toast],
   );
 
-  const openDialog = useCallback(
-    (pluginId: string | Plugin, mode: 'config' | 'result' = 'result') => {
-      setCurrentPlugin(pluginId);
-      setDialogMode(mode);
-      setIsDialogOpen(true);
-    },
-    [],
-  );
-
   const closeDialog = useCallback(() => {
     setIsDialogOpen(false);
     setCurrentPlugin(null);
@@ -195,16 +194,9 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
     <TestCaseGenerationContext.Provider
       value={{
         isGenerating,
-        generatedTestCase,
-        targetResponse,
-        isRunningTest,
-        isDialogOpen,
         currentPlugin,
-        dialogMode,
+        currentStrategy,
         generateTestCase,
-        openDialog,
-        closeDialog,
-        setDialogMode,
       }}
     >
       {children}
