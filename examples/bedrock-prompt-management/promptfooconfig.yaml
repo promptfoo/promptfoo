@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate prompts from AWS Bedrock Prompt Management
+
+# This example demonstrates using prompts stored in AWS Bedrock Prompt Management.
+# Replace PROMPT12345 with your actual Bedrock prompt ID.
+#
+# To create a test prompt, see the README.md or run:
+# python create_test_prompt.py
+#
+# URL Format:
+#  - bedrock://PROMPT_ID         -> DRAFT version
+#  - bedrock://PROMPT_ID:1       -> Version 1
+#  - bedrock://PROMPT_ID:DRAFT   -> Explicitly DRAFT
+
+prompts:
+  # Bedrock Prompt Management - DRAFT version
+  - bedrock://V2RPG4OT1K
+
+  # Bedrock Prompt Management - Version 1 (immutable)
+  - bedrock://V2RPG4OT1K:1
+
+  # For comparison, you can also include a local prompt
+  - 'Create a {{genre}} playlist with {{number}} songs. List the song titles.'
+
+providers:
+  # Test with multiple Bedrock models
+  - id: bedrock:amazon.titan-text-express-v1
+    config:
+      region: us-east-1
+      temperature: 0.7
+      maxTokenCount: 200
+
+  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+    config:
+      region: us-east-1
+      temperature: 0.7
+      max_tokens: 200
+
+  # You can also test with non-Bedrock providers
+  # - openai:gpt-4o-mini
+
+tests:
+  - vars:
+      genre: pop
+      number: 5
+    assert:
+      - type: llm-rubric
+        value: Response contains a list of 5 song titles
+
+  - vars:
+      genre: rock
+      number: 3
+    assert:
+      - type: llm-rubric
+        value: Response contains exactly 3 rock song titles
+
+  - vars:
+      genre: jazz
+      number: 7
+    assert:
+      - type: contains
+        value: jazz
+
+  - vars:
+      genre: classical
+      number: 10
+    assert:
+      - type: llm-rubric
+        value: Response is a playlist of classical music with 10 songs

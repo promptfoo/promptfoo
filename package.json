@@ -85,7 +85,6 @@
       "esbuild": "0.25.9"
     }
   },
-  "peerDependencies": {},
   "devDependencies": {
     "@adaline/anthropic": "1.8.0",
     "@adaline/azure": "1.6.2",
@@ -99,9 +98,11 @@
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.1",
     "@anthropic-ai/claude-agent-sdk": "^0.1.11",
+    "@aws-sdk/client-bedrock-agent": "^3.908.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.908.0",
     "@aws-sdk/client-bedrock-runtime": "^3.908.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.908.0",
+    "@aws-sdk/client-sts": "^3.913.0",
     "@aws-sdk/credential-provider-sso": "^3.908.0",
     "@aws-sdk/types": "^3.901.0",
     "@azure/identity": "^4.13.0",
@@ -176,9 +177,11 @@
     "@adaline/types": "1.9.1",
     "@adaline/vertex": "1.7.1",
     "@anthropic-ai/claude-agent-sdk": "^0.1.11",
+    "@aws-sdk/client-bedrock-agent": "^3.908.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.908.0",
     "@aws-sdk/client-bedrock-runtime": "^3.908.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.908.0",
+    "@aws-sdk/client-sts": "^3.908.0",
     "@aws-sdk/credential-provider-sso": "^3.908.0",
     "@azure/ai-projects": "^1.0.0",
     "@azure/identity": "^4.13.0",

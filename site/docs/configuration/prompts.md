@@ -273,6 +273,17 @@ prompt,label
 
 Promptfoo integrates with external prompt management platforms, allowing you to centralize and version control your prompts:
 
+### AWS Bedrock Prompt Management
+
+[AWS Bedrock Prompt Management](/docs/integrations/bedrock-prompt-management) allows you to create, version, and manage prompts in Amazon Bedrock:
+
+```yaml
+prompts:
+  - bedrock://PROMPT12345 # DRAFT version
+  - bedrock://PROMPT12345:1 # Version 1
+  - bedrock://PROMPT12345:DRAFT # Explicitly DRAFT
+```
+
 ### Langfuse
 
 [Langfuse](/docs/integrations/langfuse) is an open-source LLM engineering platform with collaborative prompt management:

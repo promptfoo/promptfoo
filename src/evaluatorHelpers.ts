@@ -5,6 +5,7 @@ import yaml from 'js-yaml';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
+import { getPrompt as getBedrockPrompt } from './integrations/bedrockPrompt';
 import { getPrompt as getHeliconePrompt } from './integrations/helicone';
 import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
 import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
@@ -344,6 +345,11 @@ export async function renderPrompt(
       minorVersion === undefined ? undefined : Number(minorVersion),
     );
     return heliconeResult;
+  } else if (prompt.raw.startsWith('bedrock://')) {
+    const bedrockPrompt = prompt.raw.slice('bedrock://'.length);
+    const [id, version] = bedrockPrompt.split(':');
+    const bedrockResult = await getBedrockPrompt(id, version, undefined, vars);
+    return bedrockResult;
   }
   // Render prompt
   try {
