@@ -146,7 +146,7 @@ describe('PromptDialog', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Prompt Details')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: mockSelectedPrompt.prompt.label })).toBeInTheDocument();
     expect(screen.getByText(mockSelectedPrompt.id.slice(0, 6))).toBeInTheDocument();
 
     expect(screen.getByRole('textbox')).toHaveValue(mockSelectedPrompt.prompt.raw);
@@ -583,5 +583,69 @@ describe('PromptDialog', () => {
         </ThemeProvider>
       </MemoryRouter>,
     );
+  });
+
+  it('should display label in dialog title, falling back to display or "Prompt Details"', () => {
+    const handleClose = vi.fn();
+
+    // Test with label
+    const { rerender } = render(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockSelectedPrompt}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: mockSelectedPrompt.prompt.label })).toBeInTheDocument();
+
+    // Test fallback to display when label is empty
+    const mockWithDisplayOnly: ServerPromptWithMetadata = {
+      ...mockSelectedPrompt,
+      prompt: {
+        raw: 'Raw text',
+        display: 'Display text',
+        label: '',
+      },
+    };
+
+    rerender(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockWithDisplayOnly}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Display text' })).toBeInTheDocument();
+
+    // Test fallback to "Prompt Details" when both are empty
+    const mockWithNeither: ServerPromptWithMetadata = {
+      ...mockSelectedPrompt,
+      prompt: {
+        raw: 'Raw text',
+        display: '',
+        label: '',
+      },
+    };
+
+    rerender(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={handleClose}
+          selectedPrompt={mockWithNeither}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Prompt Details' })).toBeInTheDocument();
   });
 });
