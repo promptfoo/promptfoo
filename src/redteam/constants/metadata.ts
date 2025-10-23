@@ -351,7 +351,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
-  'goal-misalignment': Severity.High,
+  'goal-misalignment': Severity.Medium,
   'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
   'guardrails-eval': Severity.Medium,
