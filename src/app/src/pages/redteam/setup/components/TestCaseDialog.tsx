@@ -17,7 +17,12 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import { categoryAliases, displayNameOverrides, type Plugin } from '@promptfoo/redteam/constants';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  type Plugin,
+  type Strategy,
+} from '@promptfoo/redteam/constants';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -26,7 +31,8 @@ import {
 interface TestCaseDialogProps {
   open: boolean;
   onClose: () => void;
-  plugin: Plugin | string | null;
+  plugin: Plugin | null;
+  strategy: Strategy | null;
   isGenerating: boolean;
   generatedTestCase: { prompt: string; context?: string } | null;
   targetResponse?: { output: string; error?: string } | null;
@@ -44,6 +50,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   open,
   onClose,
   plugin,
+  strategy,
   isGenerating,
   generatedTestCase,
   targetResponse,
@@ -57,11 +64,17 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   isConfigValid = true,
 }) => {
   const theme = useTheme();
+  
   const pluginName = typeof plugin === 'string' ? plugin : plugin || '';
-  const displayName =
+  const pluginDisplayName =
     displayNameOverrides[pluginName as Plugin] ||
     categoryAliases[pluginName as Plugin] ||
     pluginName;
+    
+  const strategyName = typeof strategy === 'string' ? strategy : strategy || '';
+  const strategyDisplayName =
+    displayNameOverrides[strategyName as Strategy] ||
+    strategyName;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -69,9 +82,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         {isGenerating
           ? 'Generating Test Case...'
           : generatedTestCase
-            ? 'Generated Test Case'
+            ? `Generated Test Case for ${pluginDisplayName} / ${strategyDisplayName}`
             : mode === 'config'
-              ? `Configure ${displayName}`
+              ? `Configure ${pluginDisplayName}`
               : 'Test Generation Failed'}
       </DialogTitle>
       <DialogContent>
@@ -294,13 +307,6 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           </Box>
         ) : generatedTestCase && mode === 'result' ? (
           <Box sx={{ pt: 2 }}>
-            <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
-              <Typography variant="body2">
-                This is a sample test case generated for the <code>{pluginName}</code> plugin. Fine
-                tune it by adjusting your {pluginName === 'policy' ? 'policy' : 'application'}{' '}
-                details.
-              </Typography>
-            </Alert>
             <Typography variant="subtitle2" gutterBottom>
               Test Case:
             </Typography>
@@ -361,6 +367,11 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                 </Box>
               </Box>
             ) : null}
+
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Dissatisfied with the test case? Fine tune it by adjusting your {pluginName === 'policy' ? 'policy' : 'application'}{' '}
+              details.
+            </Alert>
           </Box>
         ) : null}
       </DialogContent>
@@ -383,7 +394,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                 paddingLeft: 2,
               }}
             >
-              Learn more about {displayName}
+              Learn more about {pluginDisplayName}
               <Box component="span" sx={{ fontSize: '0.75rem' }}>
                 ↗
               </Box>

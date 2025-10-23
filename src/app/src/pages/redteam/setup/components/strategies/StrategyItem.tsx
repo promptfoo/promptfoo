@@ -180,7 +180,7 @@ export function StrategyItem({
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
           disabled={isDisabled || generatingTestCase}
-          isGenerating={currentStrategy === strategy.id}
+          isGenerating={generatingTestCase && currentStrategy === strategy.id}
           size="small"
           tooltipTitle={`Generate a test case for ${strategy.name} Strategy with ${TEST_GENERATION_PLUGIN_DISPLAY_NAME} plugin`}
         />

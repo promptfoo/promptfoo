@@ -204,6 +204,7 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
         open={isDialogOpen}
         onClose={closeDialog}
         plugin={currentPlugin}
+        strategy={currentStrategy}
         isGenerating={isGenerating}
         generatedTestCase={generatedTestCase}
         targetResponse={targetResponse}
