@@ -12,9 +12,15 @@ import {
   CONFIGURABLE_STRATEGIES,
   DEFAULT_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
+  displayNameOverrides as pluginDisplayNames,
+  type Plugin,
 } from '@promptfoo/redteam/constants';
-
+import { TestCaseGenerateButton } from './../TestCaseDialog';
+import { useTestCaseGeneration } from './../TestCaseGenerationProvider';
 import type { StrategyCardData } from './types';
+
+const TEST_GENERATION_PLUGIN = 'harmful:hate';
+const TEST_GENERATION_PLUGIN_DISPLAY_NAME = pluginDisplayNames[TEST_GENERATION_PLUGIN as Plugin];
 
 interface StrategyItemProps {
   strategy: StrategyCardData;
@@ -34,6 +40,21 @@ export function StrategyItem({
   isRemoteGenerationDisabled,
 }: StrategyItemProps) {
   const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
+
+  const {
+    generateTestCase,
+    isGenerating: generatingTestCase,
+    currentStrategy,
+  } = useTestCaseGeneration();
+
+  const handleTestCaseGeneration = async () => {
+    await generateTestCase(
+      { id: TEST_GENERATION_PLUGIN, config: {} },
+      // TODO: Strategy config
+      { id: strategy.id, config: {} },
+      { telemetryFeature: 'redteam_strategy_generate_test_case', mode: 'result' },
+    );
+  };
 
   return (
     <Paper
@@ -59,6 +80,8 @@ export function StrategyItem({
               ? alpha(theme.palette.primary.main, 0.08)
               : alpha(theme.palette.action.hover, 0.04),
         },
+        p: 1,
+        gap: 2,
       })}
     >
       {/* Checkbox container */}
@@ -66,7 +89,6 @@ export function StrategyItem({
         sx={{
           display: 'flex',
           alignItems: 'center',
-          pl: 1,
         }}
       >
         <Checkbox
@@ -82,30 +104,7 @@ export function StrategyItem({
       </Box>
 
       {/* Content container */}
-      <Box sx={{ flex: 1, p: 2, minWidth: 0, position: 'relative' }}>
-        {/* Settings button - positioned absolutely in the top-right corner */}
-        {hasSettingsButton && (
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onConfigClick(strategy.id);
-            }}
-            sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              opacity: 0.6,
-              '&:hover': {
-                opacity: 1,
-                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-              },
-            }}
-          >
-            <SettingsOutlinedIcon fontSize="small" />
-          </IconButton>
-        )}
-
+      <Box sx={{ flex: 1, py: 2, minWidth: 0, position: 'relative' }}>
         {/* Title and badges section - add right padding when settings button is present */}
         <Box
           sx={{
@@ -174,6 +173,37 @@ export function StrategyItem({
         <Typography variant="body2" color="text.secondary">
           {strategy.description}
         </Typography>
+      </Box>
+
+      {/* Secondary Actions Container */}
+      <Box>
+        <TestCaseGenerateButton
+          onClick={handleTestCaseGeneration}
+          disabled={isDisabled || generatingTestCase}
+          isGenerating={currentStrategy === strategy.id}
+          size="small"
+          tooltipTitle={`Generate a test case for ${strategy.name} Strategy with ${TEST_GENERATION_PLUGIN_DISPLAY_NAME} plugin`}
+        />
+
+        {/* Settings button - positioned absolutely in the top-right corner */}
+        {hasSettingsButton && (
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              onConfigClick(strategy.id);
+            }}
+            sx={{
+              opacity: 0.6,
+              '&:hover': {
+                opacity: 1,
+                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+              },
+            }}
+          >
+            <SettingsOutlinedIcon fontSize="small" />
+          </IconButton>
+        )}
       </Box>
     </Paper>
   );

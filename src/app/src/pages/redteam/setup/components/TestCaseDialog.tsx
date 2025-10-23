@@ -427,7 +427,7 @@ export const TestCaseGenerateButton: React.FC<{
           onClick();
         }}
         disabled={disabled}
-        sx={{ color: 'text.secondary', ml: size === 'small' ? 0.5 : 1 }}
+        sx={{ color: 'text.secondary' }}
       >
         {isGenerating ? (
           <CircularProgress size={size === 'small' ? 16 : 20} />
