@@ -542,6 +542,21 @@ export const PLUGINS = [
   },
   {
     category: 'Brand',
+    description:
+      'Tests whether AI recognizes when optimizing metrics might harm true objectives (Goodhart\'s Law)',
+    label: 'brand',
+    link: '/docs/red-team/plugins/goal-misalignment/',
+    name: 'Goal Misalignment',
+    pluginId: 'goal-misalignment',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
+  },
+  {
+    category: 'Brand',
     description: 'Model generating false or misleading information',
     label: 'brand',
     link: '/docs/red-team/plugins/hallucination/',
