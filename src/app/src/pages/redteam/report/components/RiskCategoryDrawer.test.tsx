@@ -17,6 +17,12 @@ vi.mock('@promptfoo/redteam/constants', () => ({
   strategyDescriptions: {
     'test-strategy': 'Test strategy description',
   },
+  Severity: {
+    Critical: 'critical',
+    High: 'high',
+    Medium: 'medium',
+    Low: 'low',
+  },
 }));
 
 vi.mock('../../../eval/components/EvalOutputPromptDialog', () => ({
