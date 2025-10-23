@@ -63,6 +63,7 @@ export const ADDITIONAL_STRATEGIES = [
   'image',
   'emoji',
   'jailbreak:likert',
+  'jailbreak:meta',
   'jailbreak:tree',
   'leetspeak',
   'math-prompt',
