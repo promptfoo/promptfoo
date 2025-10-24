@@ -63,8 +63,21 @@ function extractCategory(vars: any): string | undefined {
   const categoryFields = ['category', 'harmful_category', 'harm_category', 'type'];
 
   for (const field of categoryFields) {
-    if (vars[field] && typeof vars[field] === 'string') {
-      return vars[field];
+    const value = vars[field];
+
+    // Handle string category
+    if (value && typeof value === 'string') {
+      return value;
+    }
+
+    // Handle object category (Hugging Face format with boolean fields)
+    if (value && typeof value === 'object') {
+      // Find the first true category
+      for (const [key, val] of Object.entries(value)) {
+        if (val === true || val === 1 || val === '1') {
+          return key;
+        }
+      }
     }
   }
 
@@ -284,7 +297,11 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
     }
 
     // Get category from assertion value if available
-    const category = test.assert?.[0]?.value?.category;
+    const firstAssertion = test.assert?.[0];
+    const category =
+      firstAssertion && 'value' in firstAssertion
+        ? (firstAssertion.value as { category?: string } | undefined)?.category
+        : undefined;
     let contextWithGuidance = undefined;
 
     if (category) {
