@@ -270,10 +270,6 @@ type EnvVars = {
   // Llama API
   LLAMA_API_KEY?: string;
 
-  // LiteLLM
-  LITELLM_API_KEY?: string;
-  LITELLM_BASE_URL?: string;
-
   // Local AI
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
