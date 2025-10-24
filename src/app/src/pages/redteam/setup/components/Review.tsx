@@ -49,10 +49,14 @@ import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
 import type { RedteamRunOptions } from '@promptfoo/types';
 
-import type { RedteamPlugin } from '@promptfoo/redteam/types';
+import type { RedteamPlugin, Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 import EstimationsDisplay from './EstimationsDisplay';
 import Tooltip from '@mui/material/Tooltip';
+import {
+  isValidPolicyObject,
+  makeDefaultPolicyName,
+} from '@promptfoo/redteam/plugins/policy/utils';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -63,9 +67,7 @@ interface ReviewProps {
 
 interface PolicyPlugin {
   id: 'policy';
-  config: {
-    policy: string;
-  };
+  config: { policy: Policy };
 }
 
 interface JobStatusResponse {
@@ -586,54 +588,73 @@ export default function Review({
                   Custom Policies ({customPolicies.length})
                 </Typography>
                 <Stack spacing={1} sx={{ maxHeight: 400, overflowY: 'auto' }}>
-                  {customPolicies.map((policy, index) => (
-                    <Box
-                      key={index}
-                      sx={{
-                        p: 1.5,
-                        borderRadius: 1,
-                        bgcolor: theme.palette.action.hover,
-                        position: 'relative',
-                      }}
-                    >
-                      <Typography
-                        variant="body2"
+                  {customPolicies.map((policy, index) => {
+                    const isPolicyObject = isValidPolicyObject(policy.config.policy);
+                    return (
+                      <Box
+                        key={index}
                         sx={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          paddingRight: '24px',
+                          p: 1.5,
+                          borderRadius: 1,
+                          bgcolor: theme.palette.action.hover,
+                          position: 'relative',
+                          display: 'flex',
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
                         }}
                       >
-                        {policy.config.policy}
-                      </Typography>
-                      <IconButton
-                        size="small"
-                        onClick={() => {
-                          const newPlugins = config.plugins.filter(
-                            (p, _i) =>
-                              !(
-                                typeof p === 'object' &&
-                                p.id === 'policy' &&
-                                p.config?.policy === policy.config.policy
-                              ),
-                          );
-                          updateConfig('plugins', newPlugins);
-                        }}
-                        sx={{
-                          position: 'absolute',
-                          right: 4,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          padding: '2px',
-                        }}
-                      >
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  ))}
+                        <Box>
+                          <Typography gutterBottom>
+                            {isPolicyObject
+                              ? (policy.config.policy as PolicyObject).name
+                              : // Backwards compatibility w/ text-only inline policies.
+                                makeDefaultPolicyName(index)}
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              paddingRight: '24px',
+                            }}
+                          >
+                            {typeof policy.config.policy === 'string'
+                              ? policy.config.policy
+                              : policy.config.policy?.text || ''}
+                          </Typography>
+                        </Box>
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            const policyToMatch =
+                              // Backwards compatibility for policies w/o object config
+                              typeof policy.config.policy === 'string'
+                                ? policy.config.policy
+                                : policy.config.policy?.id;
+
+                            const newPlugins = config.plugins.filter(
+                              (p, _i) =>
+                                !(
+                                  typeof p === 'object' &&
+                                  p.id === 'policy' &&
+                                  ((typeof p.config?.policy === 'string' &&
+                                    p.config.policy === policyToMatch) ||
+                                    (typeof p.config?.policy === 'object' &&
+                                      p.config.policy?.id === policyToMatch))
+                                ),
+                            );
+                            updateConfig('plugins', newPlugins);
+                          }}
+                        >
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    );
+                  })}
                 </Stack>
               </Paper>
             </Grid>
