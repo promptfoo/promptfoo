@@ -10,8 +10,14 @@ import logger from '../../../logger';
 import { ElevenLabsClient } from '../client';
 import { ElevenLabsCache } from '../cache';
 import { CostTracker } from '../cost-tracker';
-import type { ElevenLabsTTSConfig, TTSResponse } from './types';
+import type { ElevenLabsTTSConfig, TTSResponse, TTSStreamConfig } from './types';
 import { encodeAudio, saveAudioFile } from './audio';
+import {
+  createStreamingConnection,
+  handleStreamingTTS,
+  combineStreamingChunks,
+  calculateStreamingMetrics,
+} from './streaming';
 
 /**
  * ElevenLabs Text-to-Speech provider
@@ -82,7 +88,13 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       textLength: prompt.length,
       voiceId: this.config.voiceId,
       modelId: this.config.modelId,
+      streaming: this.config.streaming,
     });
+
+    // Route to streaming if enabled
+    if (this.config.streaming) {
+      return this.handleStreamingRequest(prompt, startTime);
+    }
 
     // Check cache first
     const cacheKey = this.cache.generateKey('tts', {
@@ -257,5 +269,106 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       this.env?.ELEVENLABS_API_KEY ||
       getEnvString('ELEVENLABS_API_KEY')
     );
+  }
+
+  private async handleStreamingRequest(
+    prompt: string,
+    startTime: number,
+  ): Promise<ProviderResponse> {
+    try {
+      const apiKey = this.getApiKey();
+      if (!apiKey) {
+        throw new Error('API key is required for streaming');
+      }
+
+      logger.debug('[ElevenLabs TTS] Starting streaming request');
+
+      // Create streaming configuration
+      const streamConfig: TTSStreamConfig = {
+        modelId: this.config.modelId,
+        voiceSettings: this.config.voiceSettings,
+        baseUrl: this.config.baseUrl?.replace('https:', 'wss:').replace('http:', 'ws:'),
+      };
+
+      // Create WebSocket connection
+      const wsClient = await createStreamingConnection(apiKey, this.config.voiceId, streamConfig);
+
+      // Handle streaming
+      const session = await handleStreamingTTS(wsClient, prompt);
+
+      // Close connection
+      wsClient.close();
+
+      // Combine chunks into single audio buffer
+      const combinedAudio = combineStreamingChunks(session.chunks);
+
+      // Calculate metrics
+      const metrics = calculateStreamingMetrics(session, prompt.length);
+
+      // Encode audio
+      const audioData = await encodeAudio(combinedAudio, this.config.outputFormat || 'mp3_44100_128');
+
+      const ttsResponse: TTSResponse = {
+        audio: audioData,
+        voiceId: this.config.voiceId,
+        modelId: this.config.modelId,
+        alignments: session.alignments,
+      };
+
+      // Save to file if configured
+      if (this.config.saveAudio && this.config.audioOutputPath) {
+        const savedPath = await saveAudioFile(
+          audioData,
+          this.config.audioOutputPath,
+          `tts-streaming-${Date.now()}`,
+        );
+        logger.debug('[ElevenLabs TTS] Streaming audio saved to file', { path: savedPath });
+      }
+
+      // Track cost
+      const cost = this.costTracker.trackTTS(prompt.length, {
+        voiceId: this.config.voiceId,
+        modelId: this.config.modelId,
+        streaming: true,
+      });
+
+      return {
+        output: `Generated ${prompt.length} characters of speech (streaming)`,
+        cached: false,
+        audio: {
+          data: ttsResponse.audio.data,
+          format: ttsResponse.audio.format,
+        },
+        tokenUsage: {
+          total: prompt.length,
+          prompt: prompt.length,
+          completion: 0,
+        },
+        cost,
+        metadata: {
+          voiceId: ttsResponse.voiceId,
+          modelId: ttsResponse.modelId,
+          outputFormat: this.config.outputFormat,
+          latency: Date.now() - startTime,
+          cacheHit: false,
+          streaming: true,
+          audioDuration: ttsResponse.audio.durationMs,
+          audioSize: ttsResponse.audio.sizeBytes,
+          ...metrics,
+        },
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[ElevenLabs TTS] Streaming failed', { error: errorMessage });
+
+      return {
+        error: `ElevenLabs TTS streaming error: ${errorMessage}`,
+        tokenUsage: {
+          total: prompt.length,
+          prompt: prompt.length,
+          completion: 0,
+        },
+      };
+    }
   }
 }

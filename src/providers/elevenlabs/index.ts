@@ -9,6 +9,7 @@
 
 export { ElevenLabsTTSProvider } from './tts';
 export { ElevenLabsClient } from './client';
+export { ElevenLabsWebSocketClient } from './websocket-client';
 export { ElevenLabsCache } from './cache';
 export { CostTracker } from './cost-tracker';
 export { ElevenLabsAPIError, ElevenLabsRateLimitError, ElevenLabsAuthError } from './errors';
@@ -25,4 +26,7 @@ export type {
   OutputFormat,
   VoiceSettings,
   TTSResponse,
+  TTSStreamConfig,
+  StreamingChunk,
 } from './tts/types';
+export type { WebSocketClientConfig, StreamingMessage } from './websocket-client';

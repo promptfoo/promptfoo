@@ -102,3 +102,24 @@ export interface VoiceRemixConfig {
   pacing?: 'slow' | 'normal' | 'fast';
   prompt_strength?: 'low' | 'medium' | 'high' | 'max';
 }
+
+/**
+ * Streaming configuration for TTS
+ */
+export interface TTSStreamConfig {
+  modelId: string;
+  voiceSettings?: VoiceSettings;
+  baseUrl?: string;
+  keepAliveInterval?: number;
+  chunkLengthSchedule?: number[]; // Chunk sizes for streaming (default: [120, 160, 250, 290])
+}
+
+/**
+ * Single audio chunk from streaming
+ */
+export interface StreamingChunk {
+  audio: string; // Base64 encoded audio
+  chunkIndex: number;
+  timestamp: number;
+  alignment?: any; // Word-level alignment data
+}
