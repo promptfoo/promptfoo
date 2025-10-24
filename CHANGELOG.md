@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- chore(webui): add label column to prompts table (#6002)
 - chore: remove "LLM Risk Assessment" prefix (#6004)
 - refactor(app): Reduce unnecessary API health requests (#5979)
 - chore: gray out strategies requiring remote generation when disabled (#5985)
