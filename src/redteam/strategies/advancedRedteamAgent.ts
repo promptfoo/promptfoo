@@ -1,20 +1,16 @@
 import logger from '../../logger';
-import {
-  ADVANCED_REDTEAM_AGENT_DISPLAY_NAME,
-  ADVANCED_REDTEAM_AGENT_METRIC_SUFFIX,
-  ADVANCED_REDTEAM_AGENT_PROVIDER_ID,
-  ADVANCED_REDTEAM_AGENT_STRATEGY_ID,
-} from '../constants/advancedRedteamAgent';
+import { strategyDisplayNames } from '../constants';
+
 import type { TestCase, TestCaseWithPlugin } from '../../types';
 
-export async function addSimbaTestCases(
+export async function addAdvancedRedteamAgentTestCases(
   testCases: TestCaseWithPlugin[],
   injectVar: string,
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
-  logger.debug(`Adding ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} test cases`);
+  logger.debug(`Adding ${strategyDisplayNames['advanced-redteam-agent']} test cases`);
 
-  // Advanced Redteam Agent (Simba) strategy creates only a single test case, regardless of input
+  // Advanced Redteam Agent strategy creates only a single test case, regardless of input
   if (testCases.length === 0) {
     return [];
   }
@@ -27,7 +23,7 @@ export async function addSimbaTestCases(
     {
       ...baseTestCase,
       provider: {
-        id: ADVANCED_REDTEAM_AGENT_PROVIDER_ID,
+        id: 'promptfoo:redteam:advanced-redteam-agent',
         config: {
           injectVar,
           ...config,
@@ -35,11 +31,11 @@ export async function addSimbaTestCases(
       },
       assert: baseTestCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/${ADVANCED_REDTEAM_AGENT_METRIC_SUFFIX}`,
+        metric: `${assertion.metric}/'advanced-redteam-agent'`,
       })),
       metadata: {
         ...baseTestCase.metadata,
-        strategyId: ADVANCED_REDTEAM_AGENT_STRATEGY_ID,
+        strategyId: 'advanced-redteam-agent',
         originalText,
       },
     },

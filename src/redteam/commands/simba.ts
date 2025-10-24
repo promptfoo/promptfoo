@@ -6,11 +6,8 @@ import { TestSuite, UnifiedConfig } from '../../types/index';
 import { ApiProvider, CallApiContextParams, isApiProvider } from '../../types/providers';
 import { resolveConfigs } from '../../util/config/load';
 import { setupEnv } from '../../util/index';
-import SimbaProvider from '../providers/simba';
-import {
-  ADVANCED_REDTEAM_AGENT_DISPLAY_NAME,
-  ADVANCED_REDTEAM_AGENT_PROMPT_LABEL,
-} from '../constants/advancedRedteamAgent';
+import { strategyDisplayNames } from '../constants';
+import AdvancedRedteamAgentProvider from '../providers/advancedRedteamAgent';
 
 const SimbaCommandSchema = z.object({
   config: z.union([z.string(), z.array(z.string())]).optional(),
@@ -61,12 +58,14 @@ function inferInjectVar(testSuite: TestSuite): string {
   const firstCandidate = candidateVars.values().next().value as string | undefined;
   if (firstCandidate) {
     logger.debug(
-      `Inferring ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} injectVar as '${firstCandidate}' from test cases`,
+      `Inferring ${strategyDisplayNames['advanced-redteam-agent']} injectVar as '${firstCandidate}' from test cases`,
     );
     return firstCandidate;
   }
 
-  logger.debug(`Falling back to default ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} injectVar "prompt"`);
+  logger.debug(
+    `Falling back to default ${strategyDisplayNames['advanced-redteam-agent']} injectVar "prompt"`,
+  );
   return 'prompt';
 }
 
@@ -105,7 +104,7 @@ async function runSimbaWithProvider(
   logger.info(chalk.blue(`Concurrency: ${concurrency}`));
   logger.info(chalk.blue(`Inject var: ${injectVar}`));
 
-  const simbaProvider = new SimbaProvider({
+  const simbaProvider = new AdvancedRedteamAgentProvider({
     injectVar,
     goals,
     purpose: options.purpose ?? 'Red team testing',
@@ -117,7 +116,7 @@ async function runSimbaWithProvider(
   });
 
   const context: CallApiContextParams = {
-    prompt: { raw: '', label: ADVANCED_REDTEAM_AGENT_PROMPT_LABEL },
+    prompt: { raw: '', label: strategyDisplayNames['advanced-redteam-agent'] },
     vars: {},
     originalProvider: targetProvider,
     test: {
@@ -129,7 +128,7 @@ async function runSimbaWithProvider(
     } as any,
   };
 
-  logger.info(chalk.cyan(`Starting ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} session...`));
+  logger.info(chalk.cyan(`Starting ${strategyDisplayNames['advanced-redteam-agent']} session...`));
   const results = await simbaProvider.runSimba({
     prompt: goals.join('; '),
     context,
@@ -138,21 +137,23 @@ async function runSimbaWithProvider(
   });
 
   if (!results.length) {
-    logger.warn(`${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} did not return any results.`);
+    logger.warn(`${strategyDisplayNames['advanced-redteam-agent']} did not return any results.`);
     return;
   }
 
   let successCount = 0;
   let errorCount = 0;
 
-  logger.info(chalk.bold(`\n=== ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} Results ===`));
+  logger.info(chalk.bold(`\n=== ${strategyDisplayNames['advanced-redteam-agent']} Results ===`));
   for (const result of results) {
     const planName = String(result.metadata?.attackPlan?.planName ?? result.promptId ?? 'Unknown');
 
     if (result.error) {
       errorCount += 1;
       logger.error(
-        chalk.red(`[${planName}] ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} error: ${result.error}`),
+        chalk.red(
+          `[${planName}] ${strategyDisplayNames['advanced-redteam-agent']} error: ${result.error}`,
+        ),
       );
       continue;
     }
@@ -211,7 +212,7 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
     .option('-j, --concurrency <number>', 'Number of concurrent conversations (1-100)', '1')
     .option(
       '--inject-var <name>',
-      `Variable name to inject ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} prompts into`,
+      `Variable name to inject ${strategyDisplayNames['advanced-redteam-agent']} prompts into`,
     )
     .action(async (opts: any) => {
       setupEnv(opts.envPath);
@@ -236,7 +237,7 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
           });
           process.exit(1);
         }
-        logger.error(`${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} command failed: ${error}`);
+        logger.error(`${strategyDisplayNames['advanced-redteam-agent']} command failed: ${error}`);
         process.exit(1);
       }
     });

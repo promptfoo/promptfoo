@@ -301,7 +301,6 @@ export const ADDITIONAL_PLUGINS = [
   'religion',
   'shell-injection',
   'special-token-injection',
-  'simba',
   'sql-injection',
   'ssrf',
   'system-prompt-override',

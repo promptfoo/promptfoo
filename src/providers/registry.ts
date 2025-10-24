@@ -3,6 +3,7 @@ import path from 'path';
 import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
+import AdvancedRedteamAgentProvider from '../redteam/providers/advancedRedteamAgent';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
@@ -14,7 +15,6 @@ import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
-import RedteamSimbaProvider from '../redteam/providers/simba';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -1227,13 +1227,13 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:simba',
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:advanced-redteam-agent',
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      return new RedteamSimbaProvider(providerOptions.config);
+      return new AdvancedRedteamAgentProvider(providerOptions.config);
     },
   },
   {

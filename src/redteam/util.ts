@@ -315,20 +315,20 @@ export function getSessionId(
 }
 
 /**
- * Determines if a test case should be handled by Simba execution flow
+ * Determines if a test case should be handled by Advanced Redteam Agent execution flow
  * based on provider ID or test metadata.
  *
  * @param evalOptions - The evaluation options to check
- * @returns Returns true if this is a Simba test case, false otherwise.
+ * @returns Returns true if this is a Advanced Redteam Agent test case, false otherwise.
  */
-export function isSimbaTestCase(evalOptions: RunEvalOptions): boolean {
-  // Check if provider is Simba
-  if (evalOptions.provider.id() === 'promptfoo:redteam:simba') {
+export function isAdvancedRedteamAgentTestCase(evalOptions: RunEvalOptions): boolean {
+  // Check if provider is Advanced Redteam Agent
+  if (evalOptions.provider.id() === 'promptfoo:redteam:advanced-redteam-agent') {
     return true;
   }
 
-  // Check if test metadata indicates Simba strategy
-  if (evalOptions.test.metadata?.strategyId === 'simba') {
+  // Check if test metadata indicates Advanced Redteam Agent strategy
+  if (evalOptions.test.metadata?.strategyId === 'advanced-redteam-agent') {
     return true;
   }
 

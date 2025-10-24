@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
+import { buildRedteamHistory } from '../../../src/redteam/providers/advancedRedteamAgent';
 
-import { buildRedteamHistory } from '../../../src/redteam/providers/simba';
 import type { Message } from '../../../src/redteam/providers/shared';
 
 describe('buildRedteamHistory', () => {

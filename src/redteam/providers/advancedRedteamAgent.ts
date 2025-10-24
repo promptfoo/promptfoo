@@ -19,17 +19,11 @@ import {
   accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import {
-  ADVANCED_REDTEAM_AGENT_DISPLAY_NAME,
-  ADVANCED_REDTEAM_AGENT_LOGGER_PREFIX,
-  ADVANCED_REDTEAM_AGENT_PROMPT_LABEL,
-  ADVANCED_REDTEAM_AGENT_PROVIDER_ID,
-  ADVANCED_REDTEAM_AGENT_RESULT_PROMPT_LABEL,
-} from '../constants/advancedRedteamAgent';
+import { strategyDisplayNames } from '../constants';
 import { buildRemoteUrl } from '../remoteGeneration';
 import { Message } from './shared';
 
-enum SimbaSessionPhase {
+enum Phases {
   Reconnaissance = 'reconnaissance',
   Probing = 'probing',
   Attacking = 'attacking',
@@ -38,19 +32,18 @@ enum SimbaSessionPhase {
   Failed = 'failed',
 }
 
-const SimbaSessionPhaseLabels: Record<SimbaSessionPhase, string> = {
-  [SimbaSessionPhase.Reconnaissance]: 'Reconnaissance',
-  [SimbaSessionPhase.Probing]: 'Probing',
-  [SimbaSessionPhase.Attacking]: 'Attacking',
-  [SimbaSessionPhase.AttackPlanning]: 'Attack Planning',
-  [SimbaSessionPhase.Completed]: 'Completed',
-  [SimbaSessionPhase.Failed]: 'Failed',
+const PhaseLabels: Record<Phases, string> = {
+  [Phases.Reconnaissance]: 'Reconnaissance',
+  [Phases.Probing]: 'Probing',
+  [Phases.Attacking]: 'Attacking',
+  [Phases.AttackPlanning]: 'Attack Planning',
+  [Phases.Completed]: 'Completed',
+  [Phases.Failed]: 'Failed',
 };
 
-const LOGGER_PREFIX = ADVANCED_REDTEAM_AGENT_LOGGER_PREFIX;
-const PROVIDER_ERROR_PREFIX = `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} provider error`;
+const LOGGER_PREFIX = `${strategyDisplayNames['advanced-redteam-agent']}`;
 
-interface SimbaConfig {
+interface Config {
   injectVar: string;
   goals: string[];
   purpose: string;
@@ -61,7 +54,7 @@ interface SimbaConfig {
   sessionId?: string;
 }
 
-interface SimbaConfigOptions {
+interface ConfigOptions {
   injectVar: string;
   goals?: string[];
   purpose?: string;
@@ -104,7 +97,7 @@ interface SimbaOperation {
   phaseComplete: boolean;
   name: string;
   round: number;
-  phase: SimbaSessionPhase;
+  phase: Phases;
 }
 
 interface SimbaBatchResponse {
@@ -167,15 +160,15 @@ export function buildRedteamHistory(messages: Message[]): { prompt: string; outp
   return pairs;
 }
 
-export default class SimbaProvider implements ApiProvider {
-  readonly config: SimbaConfig;
+export default class AdvancedRedteamAgentProvider implements ApiProvider {
+  readonly config: Config;
   private sessionId: string | null = null;
 
   id() {
-    return ADVANCED_REDTEAM_AGENT_PROVIDER_ID;
+    return 'promptfoo:redteam:advanced-redteam-agent';
   }
 
-  constructor(options: ProviderOptions & SimbaConfigOptions = {} as any) {
+  constructor(options: ProviderOptions & ConfigOptions = {} as any) {
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
 
     this.config = {
@@ -202,7 +195,13 @@ export default class SimbaProvider implements ApiProvider {
     _context?: CallApiContextParams,
     _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    throw new Error(`${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} provider does not support callApi`);
+    throw new Error(
+      `${strategyDisplayNames['advanced-redteam-agent']} provider does not support callApi`,
+    );
+  }
+
+  get displayName() {
+    return strategyDisplayNames['advanced-redteam-agent'];
   }
 
   private async callSimbaApi(
@@ -232,7 +231,7 @@ export default class SimbaProvider implements ApiProvider {
         { response },
       );
       throw new Error(
-        `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} API request failed: ${response.status} ${response.statusText}`,
+        `${this.displayName} API request failed: ${response.status} ${response.statusText}`,
       );
     }
 
@@ -306,7 +305,7 @@ export default class SimbaProvider implements ApiProvider {
     }
 
     let attackEntry: AttackEntry | undefined;
-    if (operation.phase === SimbaSessionPhase.Attacking) {
+    if (operation.phase === Phases.Attacking) {
       attackEntry = this.getOrCreateAttack(attacks, operation.conversationId, operation.name);
     }
 
@@ -372,15 +371,13 @@ export default class SimbaProvider implements ApiProvider {
       // Get the target provider to interact with
       const targetProvider = context?.originalProvider;
       if (!targetProvider) {
-        throw new Error(
-          `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} provider requires originalProvider in context`,
-        );
+        throw new Error(`${this.displayName} provider requires originalProvider in context`);
       }
 
       const email = (await getUserEmail()) || 'demo@promptfoo.dev';
       let responses: Record<string, string> = {};
 
-      let currentPhase = SimbaSessionPhase.Reconnaissance;
+      let currentPhase = Phases.Reconnaissance;
 
       // Main conversation loop - similar to the existing Simba command
       while (true) {
@@ -396,20 +393,20 @@ export default class SimbaProvider implements ApiProvider {
           nextRequest,
         );
 
-        const latestPhase: SimbaSessionPhase =
+        const latestPhase: Phases =
           batchResponse.operations.length > 0
             ? batchResponse.operations[batchResponse.operations.length - 1].phase
             : currentPhase;
 
         if (latestPhase !== currentPhase) {
           logger.info(
-            `${LOGGER_PREFIX} Phase changed from ${SimbaSessionPhaseLabels[currentPhase]} to ${SimbaSessionPhaseLabels[latestPhase]}`,
+            `${LOGGER_PREFIX} Phase changed from ${PhaseLabels[currentPhase]} to ${PhaseLabels[latestPhase]}`,
           );
           currentPhase = latestPhase;
         }
 
         logger.info(
-          `${LOGGER_PREFIX} Progress update: ${SimbaSessionPhaseLabels[latestPhase]} ${batchResponse.operations.reduce((acc, operation) => acc + operation.round, 0)} probes`,
+          `${LOGGER_PREFIX} Progress update: ${PhaseLabels[latestPhase]} ${batchResponse.operations.reduce((acc, operation) => acc + operation.round, 0)} probes`,
         );
 
         if (batchResponse.completed) {
@@ -464,10 +461,10 @@ export default class SimbaProvider implements ApiProvider {
           testIdx: 0,
           testCase: { vars: {}, assert: [] },
           promptId: `simba-error-${Date.now()}`,
-          provider: { id: this.id(), label: ADVANCED_REDTEAM_AGENT_DISPLAY_NAME },
-          prompt: { raw: prompt, label: ADVANCED_REDTEAM_AGENT_PROMPT_LABEL },
+          provider: { id: this.id(), label: this.displayName },
+          prompt: { raw: prompt, label: this.displayName },
           vars: {},
-          error: `${PROVIDER_ERROR_PREFIX}: ${error instanceof Error ? error.message : String(error)}`,
+          error: `${this.displayName}: ${error instanceof Error ? error.message : String(error)}`,
           success: false,
           score: 0,
           latencyMs: 0,
@@ -501,10 +498,10 @@ export default class SimbaProvider implements ApiProvider {
         assert: [],
       },
       promptId: `simba-${this.sessionId}-${index}`,
-      provider: { id: this.id(), label: ADVANCED_REDTEAM_AGENT_DISPLAY_NAME },
+      provider: { id: this.id(), label: this.displayName },
       prompt: {
         raw: lastUserMessage?.content || '',
-        label: ADVANCED_REDTEAM_AGENT_RESULT_PROMPT_LABEL,
+        label: this.displayName,
       },
       vars: {},
       response: {
@@ -520,12 +517,12 @@ export default class SimbaProvider implements ApiProvider {
         score: output.result.success ? 0 : 1,
         reason: output.result.summary,
         metadata: {
-          pluginId: 'redteam_agent_simba',
-          strategyId: 'redteam_agent_simba',
+          pluginId: 'advanced-redteam-agent',
+          strategyId: 'advanced-redteam-agent',
         },
       },
       namedScores: {
-        redteam_agent_simba: output.result.success ? 0 : 1,
+        'advanced-redteam-agent': output.result.success ? 0 : 1,
       },
       tokenUsage: attackTokenUsage,
       metadata: {

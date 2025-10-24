@@ -1,9 +1,8 @@
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
-const ADVANCED_REDTEAM_AGENT_DISPLAY_NAME = 'Advanced Redteam Agent';
-
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  'advanced-redteam-agent': `Simulates a human red teamer with planning, adversarial reasoning, and dynamic attacks`,
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
@@ -153,7 +152,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
   wordplay: 'Tests whether AI systems can be tricked into generating profanity through wordplay',
   xstest: 'Tests for XSTest attacks',
-  simba: `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} simulates a human red teamer with planning, adversarial reasoning, and dynamic attacks`,
   video: 'Tests handling of video content',
   'other-encodings':
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
@@ -163,12 +161,12 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
+  'advanced-redteam-agent': 'Advanced Redteam Agent',
   ['agentic:memory-poisoning']: 'Agentic Memory Poisoning',
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
-  layer: 'Strategy Layer',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
   beavertails: 'BeaverTails Dataset',
@@ -194,6 +192,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'excessive-agency': 'Excessive Agency',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
+  layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
   'medical:hallucination': 'Medical Hallucination',
@@ -298,7 +297,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   wordplay: 'Wordplay',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
-  simba: ADVANCED_REDTEAM_AGENT_DISPLAY_NAME,
 };
 
 export enum Severity {
@@ -430,7 +428,6 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   vlguard: Severity.Medium,
   wordplay: Severity.Low,
   xstest: Severity.Low,
-  simba: Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -684,7 +681,6 @@ export const categoryAliases: Record<Plugin, string> = {
   vlguard: 'VLGuard',
   wordplay: 'Wordplay',
   xstest: 'XSTest',
-  simba: ADVANCED_REDTEAM_AGENT_DISPLAY_NAME,
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -831,11 +827,10 @@ export const pluginDescriptions: Record<Plugin, string> = {
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
-  simba: `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} simulates intelligent multi-turn adversarial conversations using advanced attack generation`,
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
-  layer: 'Composes multiple strategies and applies them sequentially',
+  'advanced-redteam-agent': `Simulates a human red teamer with planning, adversarial reasoning, and dynamic attacks`,
   audio: 'Tests detection and handling of audio-based malicious payloads',
   'authoritative-markup-injection':
     'Tests detection and handling of authoritative markup injection attacks',
@@ -860,6 +855,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'jailbreak:meta':
     'Meta-agent that dynamically builds attack taxonomy and strategically learns from full attack history',
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
+  layer: 'Composes multiple strategies and applies them sequentially',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
   'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
@@ -871,12 +867,11 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
-  simba: `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} simulates a human red teamer with planning, adversarial reasoning, and dynamic attacks`,
   video: 'Tests detection and handling of video-based malicious payloads',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
-  layer: 'Layer',
+  'advanced-redteam-agent': 'Advanced Redteam Agent',
   audio: 'Audio',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Encoding',
@@ -898,6 +893,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:meta': 'Meta-Agent',
   'jailbreak:tree': 'Tree-based Optimization',
+  layer: 'Layer',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
   'mischievous-user': 'Mischievous User',
@@ -908,7 +904,6 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
-  simba: ADVANCED_REDTEAM_AGENT_DISPLAY_NAME,
   video: 'Video',
 };
 

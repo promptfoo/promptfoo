@@ -24,6 +24,7 @@ export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
 export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
+  'advanced-redteam-agent',
   'crescendo',
   'goat',
   'custom',
@@ -47,7 +48,7 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
-  'layer',
+  'advanced-redteam-agent',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -56,15 +57,18 @@ export const ADDITIONAL_STRATEGIES = [
   'citation',
   'crescendo',
   'custom',
+  'custom',
+  'emoji',
   'gcg',
   'goat',
   'hex',
   'homoglyph',
   'image',
-  'emoji',
   'jailbreak:likert',
   'jailbreak:meta',
   'jailbreak:tree',
+  'jailbreak',
+  'layer',
   'leetspeak',
   'math-prompt',
   'mischievous-user',
@@ -74,7 +78,6 @@ export const ADDITIONAL_STRATEGIES = [
   'prompt-injection',
   'retry',
   'rot13',
-  'simba',
   'video',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
@@ -91,6 +94,7 @@ const _ALL_STRATEGIES = [
   ...DEFAULT_STRATEGIES,
   ...ADDITIONAL_STRATEGIES,
   ...STRATEGY_COLLECTIONS,
+  ...AGENTIC_STRATEGIES,
 ] as const;
 export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
