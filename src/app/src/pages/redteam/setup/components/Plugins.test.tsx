@@ -126,6 +126,12 @@ vi.mock('@promptfoo/redteam/constants', () => ({
   },
   DEFAULT_STRATEGIES: [],
   ALL_STRATEGIES: [],
+  Severity: {
+    Critical: 'critical',
+    High: 'high',
+    Medium: 'medium',
+    Low: 'low',
+  },
 }));
 
 const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
