@@ -1,5 +1,5 @@
 import type { TracingExporter, Trace, Span } from '@openai/agents';
-import { fetchWithProxy } from '../../fetch';
+import { fetchWithProxy } from '../../util/fetch';
 import logger from '../../logger';
 
 /**
