@@ -318,7 +318,9 @@ All user-facing changes must be documented in `CHANGELOG.md`. The changelog is e
 
 ### When to Update
 
-Update the changelog for ANY pull request that affects users, including:
+**IMPORTANT: ALL merged PRs must be documented in the changelog.**
+
+Update the changelog for EVERY pull request, including:
 
 - New features or functionality
 - Bug fixes
@@ -328,17 +330,19 @@ Update the changelog for ANY pull request that affects users, including:
 - Configuration changes
 - Performance improvements
 - Deprecated features
+- Dependency updates
+- Test changes
+- Build configuration changes
+- Code style/formatting changes
+- CI/CD changes
+- Documentation updates
 
-### Exemptions
+### Bypass Labels
 
-PRs are exempt from changelog updates if:
+PRs can bypass changelog requirements with one of these labels:
 
-1. PR has the `no-changelog` label, OR
-2. PR title starts with (case-insensitive):
-   - `chore(deps):` - Dependency updates
-   - `style:` - Code formatting only
-   - `build:` - Build configuration
-   - `test:` - Test-only changes
+1. `no-changelog` - For exceptional cases (automated bot PRs, reverts of unmerged changes)
+2. `dependencies` - For automated dependency updates (Dependabot, Renovate, etc.)
 
 ### Changelog Format
 
@@ -396,11 +400,11 @@ Each entry should:
 ### Categories
 
 - **Added**: New features
-- **Changed**: Changes to existing functionality (refactors, improvements)
+- **Changed**: Changes to existing functionality (refactors, improvements, chores, CI/CD)
 - **Fixed**: Bug fixes
-- **Dependencies**: Dependency updates (only breaking or important ones)
+- **Dependencies**: ALL dependency updates
 - **Documentation**: Documentation additions or updates
-- **Tests**: Test additions or changes
+- **Tests**: ALL test additions or changes
 - **Removed**: Removed features (rare, usually breaking)
 
 ### Examples
@@ -460,7 +464,7 @@ git commit -m "feat(providers): add new provider for XYZ"
 - Maintainers move entries from Unreleased to versioned sections during releases
 - Don't worry about version numbers - focus on the Unreleased section
 - If unsure about categorization, use Changed
-- Dependencies are only included if they're breaking or notable
+- ALL dependencies, tests, CI changes must be included (no exemptions)
 
 ## Dependency Management
 

@@ -17,12 +17,10 @@ jobs:
       - name: Check changelog update
         id: check
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
           HAS_NO_CHANGELOG_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
+          HAS_DEPENDENCIES_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'dependencies') }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          # PR details are passed via environment variables for security
-
           # Check if CHANGELOG.md was modified
           git fetch origin "$BASE_REF"
           CHANGELOG_MODIFIED=$(git diff --name-only origin/"$BASE_REF"...HEAD | grep -c "^CHANGELOG.md$" || true)
@@ -34,31 +32,35 @@ jobs:
 
           # Check if PR has no-changelog label
           if [ "$HAS_NO_CHANGELOG_LABEL" = "true" ]; then
-            echo "✅ PR has 'no-changelog' label"
+            echo "✅ PR has 'no-changelog' label - bypassing check"
             exit 0
           fi
 
-          # Check if PR title matches exemption patterns (case-insensitive)
-          PR_TITLE_LOWER=$(echo "$PR_TITLE" | tr '[:upper:]' '[:lower:]')
-
-          if [[ "$PR_TITLE_LOWER" =~ ^chore\(deps\): ]] || \
-             [[ "$PR_TITLE_LOWER" =~ ^style: ]] || \
-             [[ "$PR_TITLE_LOWER" =~ ^build: ]] || \
-             [[ "$PR_TITLE_LOWER" =~ ^test: ]]; then
-            echo "✅ PR title matches exemption pattern: $PR_TITLE"
+          # Check if PR has dependencies label
+          if [ "$HAS_DEPENDENCIES_LABEL" = "true" ]; then
+            echo "✅ PR has 'dependencies' label - bypassing check"
             exit 0
           fi
 
-          # No exemption found, require changelog
+          # All PRs must update the changelog
           echo "❌ Changelog update required"
           echo ""
-          echo "This PR requires a changelog entry. Please update CHANGELOG.md under the 'Unreleased' section."
+          echo "ALL PRs must update CHANGELOG.md under the 'Unreleased' section."
           echo ""
-          echo "To skip this check, add the 'no-changelog' label to this PR."
+          echo "This ensures complete traceability of all changes to the codebase."
           echo ""
-          echo "Automatic exemptions apply to PRs with titles starting with:"
-          echo "  - chore(deps):"
-          echo "  - style:"
-          echo "  - build:"
-          echo "  - test:"
+          echo "To bypass this check, add one of these labels:"
+          echo "  - 'no-changelog' (exceptional cases only)"
+          echo "  - 'dependencies' (automated dependency updates)"
+          echo ""
+          echo "Include ALL changes:"
+          echo "  - Feature additions (feat:)"
+          echo "  - Bug fixes (fix:)"
+          echo "  - Dependency updates (chore(deps):)"
+          echo "  - Test changes (test:)"
+          echo "  - CI/CD changes (ci:, build:)"
+          echo "  - Documentation updates (docs:)"
+          echo "  - Code refactors (refactor:)"
+          echo "  - Style changes (style:)"
+          echo "  - All other changes (chore:)"
           exit 1

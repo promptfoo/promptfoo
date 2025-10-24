@@ -141,6 +141,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(webui): improved color consistency and dark mode legibility on Red Team dashboard (#5829)
 - chore(test): add snowflake provider tests and environment variables (#5883)
 - chore(config): add conductor config (#5904)
+- chore: bump version 0.118.15 (#5909)
 
 ### Fixed
 
@@ -185,6 +186,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(linter): Enforce no unused function params (#5853)
 - chore(providers): remove deprecated IBM BAM provider (#5843)
 - refactor(webui): improve EvalOutputPromptDialog with grouped dependency injection (#5845)
+- chore: bump version 0.118.13 (#5873)
 
 ### Fixed
 
@@ -292,6 +294,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(providers): update default Granite model to granite-3-3-8b-instruct (#5768)
 - chore(redteam): remove on-topic call (#5774)
 - chore(redteam): update red team init default to gpt-5 (#5756)
+- chore: bump version 0.118.11 (#5784)
+- chore: Add docstrings to `feat/add-latency-to-csv` (#5772)
 
 ### Fixed
 
@@ -372,12 +376,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- **fix:** iterative judge parsing by [@MrFlounder](https://github.com/MrFlounder) in [#5691](https://github.com/promptfoo/promptfoo/pull/5691)  
-- **fix:** Promptfoo CLI hanging after command finishes by [@sklein12](https://github.com/sklein12) in [#5698](https://github.com/promptfoo/promptfoo/pull/5698)  
+- **fix:** iterative judge parsing by [@MrFlounder](https://github.com/MrFlounder) in [#5691](https://github.com/promptfoo/promptfoo/pull/5691)
+- **fix:** Promptfoo CLI hanging after command finishes by [@sklein12](https://github.com/sklein12) in [#5698](https://github.com/promptfoo/promptfoo/pull/5698)
 - **fix:** suppress noisy health check logs during dev startup by [@mldangelo](https://github.com/mldangelo) in [#5667](https://github.com/promptfoo/promptfoo/pull/5667)
 - **fix:** update more prompts to get less refusal by [@MrFlounder](https://github.com/MrFlounder) in [#5689](https://github.com/promptfoo/promptfoo/pull/5689)
-- **chore:** bump version 0.118.8 by [@sklein12](https://github.com/sklein12) in [#5699](https://github.com/promptfoo/promptfoo/pull/5699)  
-- **docs:** release notes August by [@ladyofcode](https://github.com/ladyofcode) in [#5625](https://github.com/promptfoo/promptfoo/pull/5625)  
+- **chore:** bump version 0.118.8 by [@sklein12](https://github.com/sklein12) in [#5699](https://github.com/promptfoo/promptfoo/pull/5699)
+- **docs:** release notes August by [@ladyofcode](https://github.com/ladyofcode) in [#5625](https://github.com/promptfoo/promptfoo/pull/5625)
 
 ### Documentation
 
@@ -385,16 +389,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.118.7] - 2025-09-22
 
+### Added
+
+- feat(webui): connect login page to promptfoo auth system (#5685)
+- feat: ability to retry errors from cli (#5647)
+
+### Changed
+
+- chore(webui): add 404 page (#5687)
+- refactor(webui): Vulnerability Report Table Improvements (#5638)
+- chore: bump version 0.118.7 (#5695)
+- chore: bump openai from 5.21.0 to 5.22.0 (#5694)
+- chore: bump @aws-sdk/client-bedrock-runtime from 3.891.0 to 3.893.0 (#5693)
+
 ## [0.118.6] - 2025-09-18
+
+### Tests
+
+- test: network isolation for tests (#5673)
+
+### Dependencies
+
+- chore(deps): upgrade Vite to v7 and fix browser compatibility issues (#5681)
+
+### Documentation
+
+- docs: clarify webhook issue meaning (#5679)
+- docs(examples): add HTTP provider streaming example (#5648)
+- docs: (blog) add autonomy and agency in AI article (#5512)
 
 ### Added
 
 - feat(redteam): support threshold in custom plugin configuration (#5644)
+- feat: upgrade Material UI from v6 to v7 (#5669)
+- feat(redteam): Adds support for `metric` field on custom plugins (#5656)
+- feat: migrate from MUI Grid to Grid2 across all components (#5578)
+- feat: report filters (#5634)
+- feat: Add string array support for context-based assertions (#5631)
 
 ### Changed
 
-- feat: report filters (#5634)
-- feat: Add string array support for context-based assertions (#5631)
 - chore: Exclude node modules and build/dist from biome (#5641)
 - chore: improvements to framework compliance cards (#5642)
 - chore: improve design of eval download dialog (#5622)
@@ -404,16 +438,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore: update redteam small model to gpt-4.1-mini-2025-04-14 (#5645)
 - chore: reduce coloration on Report View Test Suites table (#5643)
 - chore: bump version 0.118.6 (#5655)
+- chore(webui): minor style tweaks to datagrid pages for consistency (#5686)
+- chore: persistent header on report view (#5678)
+- chore(webui): fix z-index on version update banner (#5677)
+- refactor(webui): Reports table UX Improvements (#5637)
+- ci: revert temporarily disable redteam multi-lingual strategy in integration tests (#5658)
+- ci: temporarily disable redteam multi-lingual strategy in integration tests (#5639)
+- refactor(redteam): remove dead code and optimize page meta handling (#5672)
+- chore: remove accidentally committed site/package-lock.json (#5688)
+- chore: Allow overwriting the logger (#5663)
+- chore: Update names in workflow (#5659)
+- chore: update dependencies to latest compatible versions (#5627)
+- chore(internals): Improves support for defining LLM-Rubric assertion threshold in CSV test cases (#5389)
+
+### Fixed
+
+- fix(webui): Filtering eval results on severity (#5632)
+- fix(tests): correct TypeScript errors in test files (#5683)
+- fix(webui): unify page layout styles (#5682)
+- fix: trace visualization circular dependency (#5676)
+- fix(webui): re-enable sharing button by default (#5675)
+- fix: apply prettier formatting to blog post (#5670)
+- fix: Remove global fetch patch (#5665)
+- fix(webui): Include description column, if defined, in CSV export of eval results (#5654)
+- fix(redteam): add robust fallbacks, partial retries, dedupe, safer logs to multilingual strategy (#5652)
 - fix: handle dynamic imports without eval (#5630)
 - fix: Catch exception when no vertex projectId is found (#5640)
 - fix: spacing on report view (#5646)
 - fix: plugin counts flickering (#5635)
 
-### Fixed
-
-- fix(webui): Filtering eval results on severity (#5632)
-
 ## [0.118.5] - 2025-09-16
+
+### Tests
+
+- test: Unit tests for feat: upload csv for custom policies (#5629)
+- test: Unit tests for chore: organize EvalOutputPromptDialog and change it to a drawer (#5628)
 
 ### Added
 
@@ -475,6 +534,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Documentation
 
 - docs(site): clarify llm-rubric pass/score/threshold semantics, (#5623)
+- docs(site): add August 2025 release highlights (#5518)
 
 ## [0.118.4] - 2025-09-12
 
@@ -576,6 +636,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.118.3] - 2025-09-04
 
+### Added
+
+- feat: migrate MUI Grid to Grid2 across all components (#5435)
+- feat: Add open source red team limits (#5230)
+
 ### Changed
 
 - Add AWS Bedrock support for OpenAI GPT OSS models (#5444)
@@ -624,6 +689,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore: bump the github-actions group with 3 updates (#5440)
 - chore: update dependencies (non-breaking) (#5448)
 - chore: update dependencies to latest minor/patch versions (#5433)
+- chore: bump version 0.118.2 (#5457)
 
 ### Fixed
 
@@ -647,6 +713,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - chore(site): integrate pylon chat into site (#5407)
+- chore: bump version 0.118.1 (#5418)
 
 ### Fixed
 
@@ -735,13 +802,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - fix(CI): refactor docker build (#5353)
-- fix(internals): defaultTest.provider doesn't override  (#5348)
+- fix(internals): defaultTest.provider doesn't override (#5348)
 
 ## [0.117.8] - 2025-08-20
 
+### Tests
+
+- test: Unit tests for fix: loaders on all pages (#5347)
+
+### Fixed
+
+- fix(ui): prevent header dropdown collapse on hover (#5355)
+- fix: audit fix dependencies (#5343)
+- fix: loaders on all pages (#5339)
+- fix(webui): Apply metric filters to eval results via url search params (#5332)
+- fix: validation for no target label set (#5318)
+- fix(internals): Pass `vars.output` and `vars.rubric` to LLM rubric grading call (#5315)
+
+### Documentation
+
+- docs(site): describe llm-rubric default grading providers (#5350)
+- docs: red team data flow (#5325)
+- docs: og image updates (#5324)
+- docs: modelaudit updates (#5322)
+- docs(site): Add GitHub Actions caching optimization tip (#5301)
+- docs(site): correct author attribution (#5297)
+- docs: add writing for promptfoo guidelines to sidebar (#5277)
+- docs(site): add truncation marker to top-5-open-source-ai-red-teaming-tools-2025 blog post (#5351)
+- docs(site): update security quiz questions and answers for prompt injection blog (#5302)
+
 ### Added
 
-- feat(redteam): make unblock call optional for multi-turn strategies  (#5292)
+- feat(redteam): make unblock call optional for multi-turn strategies (#5292)
+- feat(ollama): support for `think` and passthrough parameters (#5341)
+- feat: support file:// in http provider `body` (#5321)
+- feat: Persist model audit scans (#5308)
+- feat: add support for Claude Opus 4.1 (#5183)
 
 ### Changed
 
@@ -750,6 +846,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore: add max max concurrency to generate (#5305)
 - chore: bump version 0.117.8 (#5311)
 - ci: add depcheck (#5310)
+- chore: fix build (#5326)
+- chore(webui): add navigation in redteam report from severity table to vulnerabilities table filtered by severity (#5320)
+- chore: explain why things are disabled on the targets page (#5312)
+- chore: bump version 0.117.9 (#5356)
+- chore: bump openai from 5.13.1 to 5.15.0 (#5345)
+- chore: dropdown menu design consistency (#5328)
+- chore: bump @aws-sdk/client-bedrock-runtime from 3.864.0 to 3.872.0 (#5323)
+- chore: add stack trace to redteam error in web runner (#5319)
+- chore: bump openai from 5.12.2 to 5.13.1 (#5314)
+- chore(modelAudit): defer auth to modelaudit via environment variable (#5296)
+- chore: more share debug info on error (#5266)
+- chore: recursively resolve file:// references in json and yaml prompts (#5215)
 
 ## [0.117.7] - 2025-08-19
 
@@ -1106,7 +1214,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(assertions): additional checking on llm-rubric response (#4954)
 - chore(assertions): include reason in model-graded-closedqa pass reason (#4931)
 - chore(build): resolve build warnings and optimize bundle size (#4895)
-- chore(csv): improve __metadata warning message and test coverage (#4842)
+- chore(csv): improve \_\_metadata warning message and test coverage (#4842)
 - chore(providers): improve guardrails handling in Azure providers (#4788)
 - chore(redteam): add domain-specific risks section and reduce verbose descriptions (#4879)
 - chore(release): bump version 0.117.0 (#4963)
@@ -1214,6 +1322,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.116.7] - 2025-07-09
 
+### Tests
+
+- test: add unit test for src/commands/export.ts (#4889)
+- test: add unit test for src/commands/upgrade.ts (#4874)
+- test: add unit test for src/main.ts (#4873)
+- test: add unit test for src/models/eval.ts (#4868)
+- test: add unit test for src/assertions/contextRecall.ts (#4859)
+- test: add unit test for src/assertions/contextFaithfulness.ts (#4858)
+- test: add unit test for src/assertions/contextRelevance.ts (#4857)
+- test: add unit test for src/util/xlsx.ts (#4843)
+- test: add unit test for src/commands/eval.ts (#4824)
+
 ### Changed
 
 - fix: Always do remote generation if logged into cloud (#4832)
@@ -1258,6 +1378,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.116.4] - 2025-07-08
 
+### Tests
+
+- test: add unit test for src/redteam/types.ts (#4795)
+
 ### Added
 
 - feat(redteam): add support for custom multi-turn strategy by @MrFlounder in #4783
@@ -1270,6 +1394,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - refactor: inline MEMORY_POISONING_PLUGIN_ID constant by @mldangelo in #4794
 - docs: add doc for custom strategy by @MrFlounder in #4802
 - docs: modular configuration management by @typpo in #4763
+- refactor: move MULTI_MODAL_STRATEGIES constant (#4801)
 
 ## [0.116.3] - 2025-07-07
 
@@ -1361,6 +1486,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.116.0] - 2025-07-01
 
+### Tests
+
+- test: add unit test for src/redteam/providers/advNoise.ts (#4716)
+- test: add unit test for src/redteam/strategies/advNoise.ts (#4715)
+- test: add unit test for src/redteam/strategies/index.ts (#4714)
+- test: add unit test for src/redteam/constants/strategies.ts (#4713)
+- test: add unit test for src/providers/openai/image.ts (#4706)
+- test: add unit test for src/providers/openai/util.ts (#4705)
+- test: add unit test for src/providers/openai/completion.ts (#4703)
+
 ### Added
 
 - feat(redteam): add financial plugins (#4416)
@@ -1428,15 +1563,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.115.4] - 2025-06-25
 
+### Tests
+
+- test: add unit test for src/providers/browser.ts (#4687)
+- test: add unit test for src/migrate.ts (#4685)
+- test: add unit test for src/commands/debug.ts (#4684)
+- test: add unit test for src/esm.ts (#4682)
+- test: add unit test for src/constants.ts (#4657)
+- test: add comprehensive test coverage for SageMaker provider (#4646)
+- test: add unit test for src/providers/shared.ts (#4643)
+- test: add unit test for src/redteam/constants/plugins.ts (#4642)
+- test: add unit test for src/assertions/counterfactual.ts (#4629)
+
 ### Changed
 
 - feat: opentelemetry tracing support (#4600)
 - chore: bump version 0.115.4 (#4635)
 - chore: remove invariant (#4633)
-- chore: update Tusk test runner workflow (#4627)*
+- chore: update Tusk test runner workflow (#4627)\*
 - docs: prevent copy button from overlapping screenshot overlay (#4632)
 
 ## [0.115.3] - 2025-06-24
+
+### Tests
+
+- test: add unit test for src/models/eval.ts (#4624)
 
 ### Changed
 
@@ -1540,6 +1691,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.115.1] - 2025-06-17
 
+### Tests
+
+- test: add unit test for src/redteam/sharedFrontend.ts (#4608)
+- test: add unit test for src/redteam/types.ts (#4607)
+- test: add unit test for src/redteam/providers/simulatedUser.ts (#4584)
+- test: add unit test for src/redteam/strategies/index.ts (#4583)
+- test: add unit test for src/providers/hyperbolic/chat.ts (#4578)
+- test: add unit test for src/providers/hyperbolic/image.ts (#4577)
+- test: add unit test for src/providers/hyperbolic/audio.ts (#4576)
+- test: add unit test for src/redteam/strategies/counterfactual.ts (#4548)
+- test: add unit test for src/redteam/strategies/index.ts (#4547)
+- test: add unit test for src/redteam/constants/strategies.ts (#4545)
+- test: add unit test for src/telemetry.ts (#4543)
+
 ### Changed
 
 - fix: Windows Python path validation race condition (#4485)
@@ -1617,6 +1782,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(ui): improve `EvalOutputPromptDialog` styling ([#4364](https://github.com/promptfoo/promptfoo/pull/4364)) by **@typpo**
 - chore(webui): remove extra OpenAI targets ([#4447](https://github.com/promptfoo/promptfoo/pull/4447)) by **@mldangelo**
 - chore(webui): add token-estimation UI ([#4448](https://github.com/promptfoo/promptfoo/pull/4448)) by **@mldangelo**
+- chore(docs): fix link to careers page (#4506)
+- chore: bump @anthropic-ai/sdk from 0.53.0 to 0.54.0 (#4441)
 
 ### Fixed
 
@@ -1647,7 +1814,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - docs(guides): clarify completion-variable for factuality ([#4385](https://github.com/promptfoo/promptfoo/pull/4385)) by **@mldangelo**
 - docs(blog): fix broken image link in GPT post ([#4391](https://github.com/promptfoo/promptfoo/pull/4391)) by **@mldangelo**
 - docs(blog): update Claude-4 post date ([#4392](https://github.com/promptfoo/promptfoo/pull/4392)) by **@mldangelo**
-- docs(site): move discovery docs under *Tools* ([#4408](https://github.com/promptfoo/promptfoo/pull/4408)) by **@typpo**
+- docs(site): move discovery docs under _Tools_ ([#4408](https://github.com/promptfoo/promptfoo/pull/4408)) by **@typpo**
 - docs(guides): GPT-4.1 vs GPT-4o MMLU comparison ([#4399](https://github.com/promptfoo/promptfoo/pull/4399)) by **@mldangelo**
 - docs(blog): 100 k-users milestone post ([#4402](https://github.com/promptfoo/promptfoo/pull/4402)) by **@mldangelo**
 - docs(redteam): configuration precedence section ([#4412](https://github.com/promptfoo/promptfoo/pull/4412)) by **@typpo**
@@ -1665,8 +1832,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - test(redteam): graders unit tests ([#4433](https://github.com/promptfoo/promptfoo/pull/4433), [#4455](https://github.com/promptfoo/promptfoo/pull/4455)) by **@gru-agent**
 - test(redteam): Aegis plugin unit tests ([#4434](https://github.com/promptfoo/promptfoo/pull/4434)) by **@gru-agent**
 - test(redteam): memory-poisoning plugin tests ([#4453](https://github.com/promptfoo/promptfoo/pull/4453)) by **@gru-agent**
+- test: add unit test for src/util/tokenUsage.ts (#4472)
+- test: add unit test for src/redteam/extraction/purpose.ts (#4446)
+- test: add unit test for src/providers/defaults.ts (#4438)
+- test: add unit test for src/providers/mistral.ts (#4437)
+- test: add unit test for src/database/index.ts (#4436)
+- test: add unit test for src/redteam/plugins/medical/medicalIncorrectKnowledge.ts (#4430)
+- test: add unit test for src/redteam/plugins/medical/medicalSycophancy.ts (#4429)
+- test: add unit test for src/redteam/plugins/medical/medicalAnchoringBias.ts (#4428)
+- test: add unit test for src/redteam/plugins/medical/medicalPrioritizationError.ts (#4427)
+- test: add unit test for src/redteam/plugins/medical/medicalHallucination.ts (#4426)
+- test: add unit test for src/redteam/plugins/financial/financialComplianceViolation.ts (#4422)
+- test: add unit test for src/redteam/plugins/financial/financialDataLeakage.ts (#4421)
+- test: add unit test for src/redteam/plugins/financial/financialCalculationError.ts (#4420)
+- test: add unit test for src/redteam/plugins/financial/financialSycophancy.ts (#4419)
+- test: add unit test for src/redteam/plugins/financial/financialHallucination.ts (#4418)
+- test: add unit test for src/redteam/graders.ts (#4417)
 
 ## [0.114.7] - 2025-06-06
+
+### Tests
+
+- test: add unit test for src/assertions/python.ts (#4406)
+- test: add unit test for src/redteam/plugins/agentic/memoryPoisoning.ts (#4389)
+- test: add unit test for src/redteam/plugins/harmful/graders.ts (#4384)
+- test: add unit test for src/redteam/graders.ts (#4383)
+- test: add unit test for src/server/server.ts (#4380)
+- test: add unit test for src/redteam/constants/metadata.ts (#4376)
+- test: add unit test for src/redteam/constants/plugins.ts (#4375)
+- test: add unit test for src/redteam/constants/frameworks.ts (#4374)
+- test: add unit test for src/redteam/constants/strategies.ts (#4373)
+- test: add unit test for src/redteam/providers/goat.ts (#4371)
 
 ### Changed
 
@@ -1731,6 +1927,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Tests
 
 - test(webui): add telemetry hook tests (#4329)
+- test: add unit test for src/redteam/plugins/eu-ai-act/deepfakeDisclosure.ts (#4342)
+- test: add unit test for src/redteam/plugins/eu-ai-act/biometricEmotion.ts (#4341)
+- test: add unit test for src/redteam/plugins/eu-ai-act/datasetShift.ts (#4340)
+- test: add unit test for src/redteam/plugins/eu-ai-act/lawenforcementBiometricId.ts (#4339)
+- test: add unit test for src/redteam/plugins/eu-ai-act/lawenforcementPredictivePolicing.ts (#4338)
+- test: add unit test for src/redteam/plugins/eu-ai-act/biometricInference.ts (#4337)
+- test: add unit test for src/redteam/plugins/eu-ai-act/explainability.ts (#4336)
+- test: add unit test for src/redteam/plugins/eu-ai-act/identityAiDisclosure.ts (#4335)
+- test: add unit test for src/redteam/plugins/policy.ts (#4325)
+- test: add unit test for src/envars.ts (#4323)
 
 ## [0.114.4] - 2025-06-04
 
@@ -1755,6 +1961,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix(webui): restore dark mode cell highlighting without breaking status pill visibility (#4300)
 - fix(redteam): set plugin severity (#4303)
 - fix(redteam): remove empty values from discovery result (#4295)
+- fix: improve logging when inheriting from OpenAiChatCompletionProvider (#4110)
 
 ### Dependencies
 
@@ -1771,12 +1978,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Tests
 
 - test(redteam): add unit test for discover command (#4298)
+- test: add unit test for src/redteam/strategies/mathPrompt.ts (#4316)
+- test: add unit test for src/validators/redteam.ts (#4311)
+- test: add unit test for src/redteam/plugins/shellInjection.ts (#4305)
 
 ## [0.114.3] - 2025-06-02
 
+### Tests
+
+- test: add unit test for src/envars.ts (#4299)
+
 ### Added
 
-- **feat(redteam):** Update application definition flow to collect better info  
+- **feat(redteam):** Update application definition flow to collect better info
 
 ### Changed
 
@@ -1851,6 +2065,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.114.2] - 2025-05-29
 
+### Tests
+
+- test: add unit test for src/redteam/strategies/index.ts (#4267)
+- test: add unit test for src/redteam/constants.ts (#4266)
+- test: add unit test for src/redteam/types.ts (#4245)
+- test: add unit test for src/redteam/util.ts (#4234)
+- test: add unit test for src/validators/redteam.ts (#4227)
+- test: add unit test for src/redteam/plugins/bola.ts (#4226)
+- test: add unit test for src/redteam/plugins/bfla.ts (#4225)
+- test: add unit test for src/redteam/providers/goat.ts (#4223)
+- test: add unit test for src/util/readline.ts (#4220)
+
 ### Added
 
 - feat(redteam): Off-Topic Plugin (#4168)
@@ -1862,6 +2088,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: resolve env variables in renderVarsInObject (issue #4143) (#4231)
 - fix: Check if body is good json before sending warning (#4239)
 - chore: bump version 0.114.2 (#4241)
+- chore(redteam): handle null goal (#4232)
 
 ### Documentation
 
@@ -1903,7 +2130,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: when there’s too many intents result won’t render error (#4175)
 - fix: need to send auth request to api path (#4199)
 - fix: Gemini MCP integration - can not parse $schema field (#4200)
-- chore(redteam): add harmful plugin preset to redteam setup ui  (#4132)
+- chore(redteam): add harmful plugin preset to redteam setup ui (#4132)
 - chore(redteam): add label strategy-less plugins in redteam setup ui (#4131)
 - chore(redteam): improve style of redteam purpose field in webui (#4124)
 - chore(providers): add xai live search support (#4123)
@@ -1927,11 +2154,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Documentation
 
 - docs(site): minimal copy page button + sanitize text (#4156)
-- docs(site): scroll to top when using  (#4162)
+- docs(site): scroll to top when using (#4162)
 - docs(site): document missing redteam plugins (#4169)
 - docs(site): restore scroll-to-top behavior on page navigation (#4176)
 
 ## [0.113.4] - 2025-05-26
+
+### Tests
+
+- test: add unit test for src/commands/canary.ts (#4193)
+- test: add unit test for src/canary/index.ts (#4192)
+- test: add unit test for src/assertions/sql.ts (#4185)
+- test: re-enable sql assertion edge cases (#4184)
+- test: add unit test for src/redteam/plugins/intent.ts (#4179)
+- test: add unit test for src/redteam/graders.ts (#4173)
+- test: add unit test for src/providers/xai/chat.ts (#4172)
+- test: add unit test for src/redteam/plugins/offTopic.ts (#4171)
+- test: add unit test for src/providers/xai/image.ts (#4170)
+- test: add unit test for src/redteam/graders.ts (#4166)
+- test: add unit test for src/providers/xai.ts (#4163)
+- test: add unit test for src/redteam/constants.ts (#4161)
 
 ### Changed
 
@@ -1939,6 +2181,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat: add score to pass/fail in CSV and add json download (#4153)
 - fix: Run red team from UI without email (#4158)
 - chore: bump version 0.113.4 (#4160)
+- refactor: unify React import style (#4177)
+- refactor: organize xai providers into dedicated folder (#4167)
+- refactor: organize bedrock providers into dedicated folder (#4165)
 
 ### Fixed
 
@@ -1970,12 +2215,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: intent grader crescendo (#4113)
 - chore: revert telemtry changes (#4122)
 - chore: bump version 0.113.2 (#4128)
+- chore(cli/redteam/discover): Small improvements (#4117)
 
 ### Dependencies
 
 - chore(deps): update peer dependencies to latest versions (#4125)
 
 ## [0.113.1] - 2025-05-21
+
+### Tests
+
+- test: add unit test for src/redteam/plugins/intent.ts (#4114)
 
 ### Changed
 
@@ -1998,12 +2248,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.113.0] - 2025-05-20
 
+### Tests
+
+- test: add unit test for src/assertions/llmRubric.ts (#4096)
+- test: add unit test for src/telemetry.ts (#4094)
+
 ### Changed
 
 - fix: target purpose not making it into redteam config (#4097)
 - chore: Remove deprecated sharing setups (#4082)
 - chore: add vision grading example (#4090)
 - chore: bump version to 0.113.0 (#4099)
+- chore: bump version to 0.112.9 (#4098)
 
 ## [0.112.8] - 2025-05-20
 
@@ -2055,9 +2311,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.112.7] - 2025-05-15
 
+### Tests
+
+- test: add unit test for src/redteam/constants.ts (#4076)
+- test: add unit test for src/redteam/strategies/multilingual.ts (#4060)
+- test: add unit test for src/redteam/index.ts (#4057)
+- test: add unit test for src/providers/openai/util.ts (#4042)
+- test: add unit test for src/redteam/providers/offTopic.ts (#4028)
+- test: add unit test for src/redteam/plugins/offTopic.ts (#4027)
+- test: add unit test for src/redteam/constants.ts (#4026)
+- test: add unit test for src/redteam/constants.ts (#4019)
+
 ### Added
 
 - feat(redteam): add MCP plugin (#3989)
+- feat(redteam): Target Purpose Discovery (#3907)
 
 ### Changed
 
@@ -2075,10 +2343,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore: update multilingual description (#4016)
 - chore(cli): improve color of Red Team test generation table headers (#4004)
 - chore(redteam): add link to view all logs at top of report (#4007)
+- chore(redteam): add feature flag for purpose discovery agent (#4040)
+- chore(cli/redteam/discover): Sets default turn count to 5 (#4035)
 
 ### Fixed
 
 - fix(redteam): remove duplicate Datasets section in Plugins component (#4022)
+- fix(cli): Discovery bugs (#4032)
+- fix: dont bomb redteam if discovery fails (#4029)
 
 ### Documentation
 
@@ -2123,6 +2395,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - docs(blog): add truncation marker to MCP blog post (#3984)
 
 ## [0.112.5] - 2025-05-12
+
+### Tests
+
+- test: add unit test for src/redteam/constants.ts (#3995)
+- test: add unit test for src/redteam/plugins/mcp.ts (#3994)
 
 ### Added
 
@@ -2176,6 +2453,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.112.4] - 2025-05-08
 
+### Tests
+
+- test: add unit test for src/redteam/constants.ts (#3963)
+- test: add unit test for src/commands/view.ts (#3928)
+- test: add unit test for src/redteam/commands/setup.ts (#3923)
+- test: add unit test for src/constants.ts (#3922)
+- test: add unit test for src/redteam/commands/report.ts (#3921)
+- test: add unit test for src/redteam/types.ts (#3912)
+
 ### Added
 
 - feat(assertions): add PI scorer (#3799)
@@ -2227,6 +2513,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.112.3] - 2025-05-02
 
+### Tests
+
+- test: add unit test for src/util/convertEvalResultsToTable.ts (#3876)
+- test: add unit test for src/models/evalResult.ts (#3875)
+- test: add unit test for src/types/index.ts (#3874)
+
 ### Changed
 
 - Red team: Added memory poisoning plugin ([#3785](https://github.com/promptfoo/promptfoo/pull/3785)) @will-holley
@@ -2242,6 +2534,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Moved maybeLoadFromExternalFile to file.ts ([#3851](https://github.com/promptfoo/promptfoo/pull/3851)) @benbuzz790
 
 ## [0.112.2] - 2025-05-01
+
+### Tests
+
+- test: add unit test for src/redteam/constants.ts (#3860)
 
 ### Added
 
@@ -2278,10 +2574,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.112.1] - 2025-04-29
 
+### Tests
+
+- test: add unit test for src/share.ts (#3840)
+
 ### Changed
 
 - chore: set telemetry key (#3838)
 - chore: improve chunking (#3846)
+- chore: bump version 0.112.1 (#3847)
 
 ## [0.112.0] - 2025-04-29
 
@@ -2344,6 +2645,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.111.1] - 2025-04-22
 
+### Tests
+
+- test: add unit test for src/providers/mcp/client.ts (#3835)
+- test: add unit test for src/providers/mcp/transform.ts (#3834)
+- test: add unit test for src/redteam/strategies/simpleVideo.ts (#3822)
+- test: add unit test for src/redteam/strategies/index.ts (#3821)
+- test: add unit test for src/providers/cerebras.ts (#3819)
+- test: add unit test for src/redteam/strategies/otherEncodings.ts (#3817)
+- test: add unit test for src/redteam/strategies/index.ts (#3816)
+- test: add unit test for src/redteam/strategies/homoglyph.ts (#3812)
+- test: add unit test for src/util/file.ts (#3806)
+- test: add unit test for src/envars.ts (#3788)
+
 ### Changed
 
 - chore(release): bump version to 0.111.1 (#3778)
@@ -2362,6 +2676,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - docs(about): add Ben Shipley to team section (#3758)
 
 ## [0.111.0] - 2025-04-21
+
+### Tests
+
+- test: add unit test for src/providers/defaults.ts (#3757)
 
 ### Added
 
@@ -2403,56 +2721,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- feat(openai): add support for GPT-4.1 model by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3698)  
-- feat(openai): add support for o4-mini reasoning model by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3727)  
+- feat(openai): add support for GPT-4.1 model by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3698)
+- feat(openai): add support for o4-mini reasoning model by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3727)
+- feat(openai): add support for o4-mini reasoning model (#3727)
 
 ### Changed
 
-- feat: Change pass rate to ASR and add export in report by [@sklein12](https://github.com/promptfoo/promptfoo/pull/3694)  
-- fix: Update prompt extraction to work in more scenarios without providing a prompt by [@sklein12](https://github.com/promptfoo/promptfoo/pull/3697)  
-- fix: google is valid function call allow property_ordering field in tool schema by [@abrayne](https://github.com/promptfoo/promptfoo/pull/3704)  
-- fix: settings positioning in strategies view by [@typpo](https://github.com/promptfoo/promptfoo/pull/3723)  
-- fix: stricter test for null or undefined in transform response by [@typpo](https://github.com/promptfoo/promptfoo/pull/3730)  
-- chore(dependencies): update dependencies to latest versions by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3693)  
-- chore: rename owasp plugin presets by [@typpo](https://github.com/promptfoo/promptfoo/pull/3695)  
-- chore: expand frameworks section by [@typpo](https://github.com/promptfoo/promptfoo/pull/3700)  
-- chore(self-hosting): update self-hosting instructions by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3701)  
-- chore: bump openai from 4.93.0 to 4.94.0 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/3702)  
-- chore(cli): When sharing, show auth-gate prior to re-share confirmation by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3706)  
-- chore: email verification analytics by [@sklein12](https://github.com/promptfoo/promptfoo/pull/3708)  
-- chore(cli): improves robustness of hasEvalBeenShared util by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3709)  
-- chore: easily remove plugins/strats from review page by [@typpo](https://github.com/promptfoo/promptfoo/pull/3711)  
-- chore: bump the npm_and_yarn group with 2 updates by [@dependabot](https://github.com/promptfoo/promptfoo/pull/3714)  
-- chore(cli): Health check API before running Redteam by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3718)  
-- chore: make strategies configurable where applicable by [@typpo](https://github.com/promptfoo/promptfoo/pull/3722)  
-- chore: remove moderation assertions from foundation model redteam example by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3725)  
-- chore(cli): Improve description of Redteam run command by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3720)  
-- chore: better parsing by [@MrFlounder](https://github.com/promptfoo/promptfoo/pull/3732)  
-- docs: add owasp selection image by [@typpo](https://github.com/promptfoo/promptfoo/pull/3696)  
-- docs: best-of-n documentation fixes by [@typpo](https://github.com/promptfoo/promptfoo/pull/3712)  
-- perf(webui): Reduce memory usage of eval results by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3678)  
-- refactor: update export syntax for functions by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3734)  
-- test: add unit test for src/providers/google/util.ts by [@gru-agent](https://github.com/promptfoo/promptfoo/pull/3705)  
-- test: add unit test for src/redteam/commands/poison.ts by [@gru-agent](https://github.com/promptfoo/promptfoo/pull/3728)  
+- feat: Change pass rate to ASR and add export in report by [@sklein12](https://github.com/promptfoo/promptfoo/pull/3694)
+- fix: Update prompt extraction to work in more scenarios without providing a prompt by [@sklein12](https://github.com/promptfoo/promptfoo/pull/3697)
+- fix: google is valid function call allow property_ordering field in tool schema by [@abrayne](https://github.com/promptfoo/promptfoo/pull/3704)
+- fix: settings positioning in strategies view by [@typpo](https://github.com/promptfoo/promptfoo/pull/3723)
+- fix: stricter test for null or undefined in transform response by [@typpo](https://github.com/promptfoo/promptfoo/pull/3730)
+- chore(dependencies): update dependencies to latest versions by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3693)
+- chore: rename owasp plugin presets by [@typpo](https://github.com/promptfoo/promptfoo/pull/3695)
+- chore: expand frameworks section by [@typpo](https://github.com/promptfoo/promptfoo/pull/3700)
+- chore(self-hosting): update self-hosting instructions by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3701)
+- chore: bump openai from 4.93.0 to 4.94.0 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/3702)
+- chore(cli): When sharing, show auth-gate prior to re-share confirmation by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3706)
+- chore: email verification analytics by [@sklein12](https://github.com/promptfoo/promptfoo/pull/3708)
+- chore(cli): improves robustness of hasEvalBeenShared util by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3709)
+- chore: easily remove plugins/strats from review page by [@typpo](https://github.com/promptfoo/promptfoo/pull/3711)
+- chore: bump the npm_and_yarn group with 2 updates by [@dependabot](https://github.com/promptfoo/promptfoo/pull/3714)
+- chore(cli): Health check API before running Redteam by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3718)
+- chore: make strategies configurable where applicable by [@typpo](https://github.com/promptfoo/promptfoo/pull/3722)
+- chore: remove moderation assertions from foundation model redteam example by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3725)
+- chore(cli): Improve description of Redteam run command by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3720)
+- chore: better parsing by [@MrFlounder](https://github.com/promptfoo/promptfoo/pull/3732)
+- docs: add owasp selection image by [@typpo](https://github.com/promptfoo/promptfoo/pull/3696)
+- docs: best-of-n documentation fixes by [@typpo](https://github.com/promptfoo/promptfoo/pull/3712)
+- perf(webui): Reduce memory usage of eval results by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3678)
+- refactor: update export syntax for functions by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3734)
+- test: add unit test for src/providers/google/util.ts by [@gru-agent](https://github.com/promptfoo/promptfoo/pull/3705)
+- test: add unit test for src/redteam/commands/poison.ts by [@gru-agent](https://github.com/promptfoo/promptfoo/pull/3728)
+- chore: bump version 0.110.1 (#3739)
+- refactor: update export syntax for functions (#3734)
 
 ### Fixed
 
-- fix(providers): output json rather than string from google live provider by [@abrayne](https://github.com/promptfoo/promptfoo/pull/3703)  
-- fix(cli): Use correct url for sharing validation by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3710)  
-- fix(cli/redteam/poison): Write docs to the output dir by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3726)  
-- fix(evaluator): handle prompt rendering errors gracefully by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3729)  
+- fix(providers): output json rather than string from google live provider by [@abrayne](https://github.com/promptfoo/promptfoo/pull/3703)
+- fix(cli): Use correct url for sharing validation by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3710)
+- fix(cli/redteam/poison): Write docs to the output dir by [@will-holley](https://github.com/promptfoo/promptfoo/pull/3726)
+- fix(evaluator): handle prompt rendering errors gracefully by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3729)
+- fix: stricter test for null or undefined in transform response (#3730)
+- fix(evaluator): handle prompt rendering errors gracefully (#3729)
 
 ### Documentation
 
-- docs(sharing): add troubleshooting section for upload issues by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3699)  
+- docs(sharing): add troubleshooting section for upload issues by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/3699)
 
 ## [0.110.0] - 2025-04-14
+
+### Tests
+
+- test: add unit test for src/redteam/commands/poison.ts (#3728)
+- test: add unit test for src/providers/google/util.ts (#3705)
+- test: add unit test for src/app/src/pages/eval/components/TableSettings/hooks/useSettingsState.ts (#3679)
 
 ### Added
 
 - feat(assertions): add GLEU metric (#3674)
 - feat(providers): add Grok-3 support (#3663)
 - feat(providers): add support for AWS Bedrock Knowledge Base (#3576)
+- feat(openai): add support for GPT-4.1 model (#3698)
+- feat: Change pass rate to ASR and add export (#3694)
 
 ### Changed
 
@@ -2472,6 +2803,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - refactor: change multimodal live to live (#3657)
 - refactor(util): consolidate tool loading and rendering (#3642)
 - test: add unit test for src/commands/auth.ts (#3652)
+- chore: easily remove plugins/strats from review page (#3711)
+- perf(webui): Reduce memory usage of eval results (#3678)
+- chore: bump version 0.110.0 (#3692)
+- chore: better parsing (#3732)
+- chore: remove moderation assertions from foundation model redteam example (#3725)
+- chore: make strategies configurable where applicable (#3722)
+- chore(cli): Improve description of Redteam run command (#3720)
+- chore(cli): Health check API before running Redteam (#3718)
+- chore: bump the npm_and_yarn group with 2 updates (#3714)
+- chore(cli): improves robustness of hasEvalBeenShared util (#3709)
+- chore: email verification analytics (#3708)
+- chore(cli): When sharing, show auth-gate prior to re-share confirmation (#3706)
+- chore: bump openai from 4.93.0 to 4.94.0 (#3702)
+- chore: expand frameworks section (#3700)
+- chore: rename owasp plugin presets (#3695)
+- chore(dependencies): update dependencies to latest versions (#3693)
 
 ### Fixed
 
@@ -2487,6 +2834,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix(share): ensure promptfoo share respects sharing config from promptfooconfig.yaml (#3668)
 - fix(testCaseReader): make JSON test file parsing preserve test case structure (#3651)
 - fix(webui): fix eval comparison mode filter (#3671)
+- fix(cli/redteam/poison): Write docs to the output dir (#3726)
+- fix: settings positioning in strategies view (#3723)
+- fix(cli): Use correct url for sharing validation (#3710)
+- fix: google is valid function call allow property_ordering field in tool schema (#3704)
+- fix(providers): output json rather than string from google live provider (#3703)
+- fix: Update prompt extraction to work in more scenarios without providing a prompt (#3697)
 
 ### Dependencies
 
@@ -2499,8 +2852,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - docs(nav): add lm security db to nav (#3690)
 - docs(blog): add interactive blog on invisible Unicode threats (#3621)
+- docs: best-of-n documentation fixes (#3712)
+- docs(self-hosting): update self-hosting instructions (#3701)
+- docs(sharing): add troubleshooting section for upload issues (#3699)
+- docs: add owasp selection image (#3696)
 
 ## [0.109.1] - 2025-04-08
+
+### Added
+
+- feat: Eval sharing idempotence (#3608)
 
 ### Changed
 
@@ -2509,6 +2870,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(scripts): ensure GitHub CLI is installed in preversion (#3614)
 - refactor(share): improve formatting of cloud sharing instructions (#3628)
 - refactor(tests): consolidate and reorganize test files (#3616)
+- chore: bump version 0.109.1 (#3634)
+- chore: bump version 0.109.0 (#3613)
 
 ### Fixed
 
@@ -2533,6 +2896,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Tests
 
 - test(providers): add unit test for src/providers/google/util.ts (#3626)
+- test: add unit test for src/commands/share.ts (#3641)
+- test: add unit test for src/app/src/pages/eval/components/store.ts (#3635)
+- test: add unit test for src/types/index.ts (#3612)
 
 ## [0.109.0] - 2025-04-08
 
@@ -2568,6 +2934,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - docs(self-hosting): clarify configuration and sharing options (#3591)
 
 ## [0.108.0] - 2025-04-03
+
+### Tests
+
+- test: add unit test for src/providers/lambdalabs.ts (#3602)
 
 ### Added
 
@@ -2636,6 +3006,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore: bump openai from 4.89.1 to 4.90.0 (#3520)
 - chore: bump version 0.107.7 (#3560)
 - chore: bump vite from 5.4.15 to 5.4.16 in the npm_and_yarn group (#3555)
+- Revert "docs(azure): add guidance on configuring DeepSeek models" (#3561)
 
 ### Fixed
 
@@ -2656,6 +3027,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.107.6] - 2025-03-28
 
+### Tests
+
+- test: add unit test for src/models/eval.ts (#3553)
+- test: add unit test for src/prompts/processors/csv.ts (#3543)
+- test: add unit test for src/providers/promptfooModel.ts (#3535)
+
 ### Added
 
 - feat(providers): add support for Amazon SageMaker (#3413)
@@ -2672,10 +3049,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- fix(providers): support token counting for every major type of bedrock model  (#3506)
+- fix(providers): support token counting for every major type of bedrock model (#3506)
 - fix(env): add override option to dotenv.config for --env-file support (#3502)
 
 ## [0.107.5] - 2025-03-26
+
+### Tests
+
+- test: add unit test for src/providers/openai/index.ts (#3514)
+- test: add unit test for src/models/evalResult.ts (#3512)
 
 ### Added
 
@@ -2727,6 +3109,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.107.4] - 2025-03-20
 
+### Tests
+
+- test: add unit test for src/assertions/similar.ts (#3490)
+- test: add unit test for src/assertions/rouge.ts (#3489)
+- test: add unit test for src/assertions/levenshtein.ts (#3488)
+- test: add unit test for src/redteam/graders.ts (#3479)
+- test: add unit test for src/logger.ts (#3467)
+- test: add unit test for src/redteam/providers/toolDiscoveryMulti.ts (#3450)
+- test: add unit test for src/redteam/graders.ts (#3449)
+- test: add unit test for src/providers/openai/util.ts (#3441)
+
 ### Added
 
 - feat(providers): Added support for OpenAI Responses API (#3440)
@@ -2738,6 +3131,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(providers): Added o1-pro (#3438)
 - chore(scripts): Specified repository for postversion PR creation (#3432)
 - test: Added unit test for src/evaluatorHelpers.ts (#3430)
+- chore: bump version 0.107.4 (#3447)
 
 ### Fixed
 
@@ -2756,18 +3150,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.107.3] - 2025-03-19
 
+### Tests
+
+- test: add unit test for src/providers/azure/util.ts (#3427)
+- test: add unit test for src/providers/azure/warnings.ts (#3426)
+
 ### Changed
 
 - chore(providers): improve Azure Assistant integration (#3424)
 - chore(providers): add Google multimodal live function callbacks (#3421)
 - refactor(providers): split Azure provider into multiple files and update model pricing (#3425)
 - docs: add multi-modal redteam example (#3416)
+- chore: bump version 0.107.3 (#3431)
 
 ### Dependencies
 
 - chore(deps): bump openai from 4.87.3 to 4.87.4 (#3428)
 
 ## [0.107.2] - 2025-03-17
+
+### Tests
+
+- test: add unit test for src/redteam/graders.ts (#3423)
+- test: add unit test for src/providers/golangCompletion.ts (#3415)
 
 ### Added
 
@@ -2786,6 +3191,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(prompts): remove unused prompts from grading.ts (#3407)
 - chore(redteam): update entity extraction prompt (#3405)
 - refactor(providers): split Anthropic provider into modular components (#3406)
+- chore: bump version 0.107.2 (#3419)
+- revert: "fix(workflow): temporarily disable redteam-custom-enterprise-server job" (#3418)
 
 ### Fixed
 
@@ -2809,6 +3216,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.107.1] - 2025-03-14
 
+### Tests
+
+- test: add unit test for src/redteam/strategies/iterative.ts (#3400)
+
+### Fixed
+
+- fix(workflow): temporarily disable redteam-custom-enterprise-server job (#3410)
+
 ### Changed
 
 - chore: more copying options in EvalOutputPromptDialog (#3379)
@@ -2817,7 +3232,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(auth): improve login text formatting (#3389)
 - chore: PROMPTFOO_INSECURE_SSL true by default (#3397)
 - chore: bump version 0.107.1 (#3398)
-- docs: update redteam examples  (#3394)
+- docs: update redteam examples (#3394)
 
 ### Dependencies
 
@@ -2828,6 +3243,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - docs(redteam): remove duplicate plugin entry (#3393)
 
 ## [0.107.0] - 2025-03-13
+
+### Tests
+
+- test: add unit test for src/globalConfig/cloud.ts (#3391)
+- test: add unit test for src/providers/openai/util.ts (#3384)
+- test: add unit test for src/redteam/graders.ts (#3382)
 
 ### Added
 
@@ -2898,11 +3319,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - chore: Bump version 0.106.3 (#3320)
 - chore(providers): Add EU Nova models to Bedrock (#3318)
+- chore: bump version 0.106.2 (#3317)
 
 ### Fixed
 
 - fix(webui): Setting custom target ID (#3319)
-- fix(providers): amazon nova outputs 
+- fix(providers): amazon nova outputs
 
 ### Documentation
 
@@ -2917,6 +3339,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore: Update cloud provider prefix (#3311)
 
 ## [0.106.1] - 2025-03-06
+
+### Tests
+
+- test: add unit test for src/providers/azure/moderation.ts (#3298)
+- test: add unit test for src/providers/defaults.ts (#3297)
+- test: add unit test for src/providers/defaults.ts (#3294)
 
 ### Added
 
@@ -2955,6 +3383,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix(providers): catch Vertex finish_reason errors correctly by @kieranmilan in #3277
 
 ## [0.106.0] - 2025-03-03
+
+### Tests
+
+- test: add unit test for src/providers/google.ts (#3284)
+- test: add unit test for src/types/index.ts (#3274)
 
 ### Changed
 
@@ -3118,14 +3551,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - docs(blog): add agent security blog post (#3072)
 - docs(google-sheets): improve documentation clarity (#3104)
+- docs: adds deprecation notice for PaLM models (#3172)
 
 ### Tests
 
 - test(providers): add unit test for src/providers/openai/image.ts (#3086)
 - test(redteam): add unit test for src/redteam/plugins/overreliance.ts (#3093)
 - test(core): add unit test for src/table.ts (#3084)
+- test: add unit test for src/types/index.ts (#3177)
+- test: add unit test for src/types/index.ts (#3144)
+- test: add unit test for src/assertions/assertionsResult.ts (#3143)
 
 ## [0.104.3] - 2025-02-14
+
+### Tests
+
+- test: add unit test for src/providers/replicate.ts (#3098)
 
 ### Changed
 
@@ -3138,6 +3579,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix(testCaseReader): correctly process file:// URLs for YAML files (#3082)
 
 ## [0.104.2] - 2025-02-13
+
+### Tests
+
+- test: add unit test for src/validators/redteam.ts (#3074)
 
 ### Changed
 
@@ -3159,6 +3604,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(deps): bump version to 0.104.2 (#3080)
 
 ## [0.104.1] - 2025-02-11
+
+### Documentation
+
+- docs: improve getting started guide (#3065)
 
 ### Added
 
@@ -3222,8 +3671,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Tests
 
 - test(unit): add test for src/redteam/sharedFrontend.ts (#3051)
+- test: add unit test for src/integrations/huggingfaceDatasets.ts (#3064)
 
 ## [0.104.0] - 2025-02-06
+
+### Tests
+
+- test: add unit test for src/redteam/util.ts (#3017)
 
 ### Added
 
@@ -3276,9 +3730,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.103.19] - 2025-02-02
 
+### Tests
+
+- test: add unit test for src/redteam/strategies/hex.ts (#2951)
+
 ### Added
 
-- feat(redteam): Add a plugin to run redteams against the HarmBench dataset  (#2896)
+- feat(redteam): Add a plugin to run redteams against the HarmBench dataset (#2896)
 - feat(redteam): add hex strategy (#2950)
 
 ### Changed
@@ -3291,12 +3749,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(examples): Example of a very simple barebones eval with Harmbench (#2873)
 - chore: Reduced watched files for nodemon (#2949)
 - chore(redteam): use shared penalized phrase function in `iterativeTree (#2946)
+- chore: bump version 0.103.19 (#2954)
 
 ### Dependencies
 
 - chore(deps): bump various dependencies (#2941)
 
 ## [0.103.18] - 2025-01-31
+
+### Tests
+
+- test: add unit test for src/redteam/constants.ts (#2928)
+- test: add unit test for src/redteam/strategies/retry.ts (#2927)
 
 ### Added
 
@@ -3309,7 +3773,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(grader): improve false positive detection for religion grader (#2909)
 - chore(redteam): upgrade replicate moderation api to Llama Guard 3 (#2904)
 - chore(webui): add preset collections for redteam plugins (#2853)
-- chore: Move callEval outside of the function so we can re-use it  (#2897)
+- chore: Move callEval outside of the function so we can re-use it (#2897)
 - chore: Save test case from EvalResult (#2902)
 - chore: bump @aws-sdk/client-bedrock-runtime from 3.734.0 to 3.738.0 (#2906)
 - chore: bump openai from 4.80.1 to 4.81.0 (#2905)
@@ -3324,6 +3788,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix(webui): improve dark mode syntax highlighting in HTTP request editor (#2911)
 - fix(webui): improve spacing between Back and Next buttons (#2912)
 - fix(webui): update Next button styling to support dark mode (#2898)
+- fix: broken docs build (#2937)
 
 ### Documentation
 
@@ -3404,6 +3869,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - test(redteam): Add unit test for src/redteam/plugins/beavertails.ts (#2844)
 - test(redteam): Add unit test for src/redteam/plugins/contracts.ts (#2845)
+- test: add unit test for src/providers.ts (#2874)
+- test: add unit test for src/redteam/providers/iterative.ts (#2858)
+- test: add unit test for src/types/index.ts (#2857)
 
 ## [0.103.15] - 2025-01-28
 
@@ -3480,12 +3948,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Tests
 
 - test(openai): move OpenAI provider tests to dedicated file (#2802)
+- test: add unit test for src/providers/adaline.gateway.ts (#2834)
 
 ## [0.103.13] - 2025-01-21
+
+### Tests
+
+- test: add unit test for src/types/providers.ts (#2766)
+- test: add unit test for src/redteam/plugins/competitors.ts (#2764)
 
 ### Added
 
 - feat(redteam): Add guardrail option to redteam ui & update transform response (#2688)
+- feat: Share chunked results (#2632)
 
 ### Changed
 
@@ -3579,6 +4054,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.103.10] - 2025-01-16
 
+### Tests
+
+- test: Add unit test for src/redteam/sharedFrontend.ts (#2690)
+
 ### Added
 
 - feat(moderation): Add guardrail checks and logging for moderation (#2624)
@@ -3625,6 +4104,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - test: Fix flaky test (#2715)
 - test: Make share test more robust (#2716)
 - test: Support randomizing test execution order (#2556)
+- chore(providers): automate watsonx provider to fetch model costs dynamically (#2703)
+- Revert "test: Add unit test for src/redteam/sharedFrontend.ts" (#2721)
 
 ### Fixed
 
@@ -3642,6 +4123,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - docs(strategy-table): Enhance grouping and ordering logic (#2640)
 
 ## [0.103.9] - 2025-01-13
+
+### Tests
+
+- test: Add unit test for src/providers.ts (#2671)
+- test: Add unit test for src/globalConfig/accounts.ts (#2652)
 
 ### Added
 
@@ -3679,6 +4165,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore: Revert "chore(redteam): expose redteam run command and auto-share remote results" (#2613)
 - docs: owasp illustrations (#2615)
 - docs: plugin and strategy graphics (#2610)
+- chore(site): add bio and photo of new team member (#2626)
 
 ### Fixed
 
@@ -3780,7 +4267,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - docs: updates to llm vulnerability types page (#2527)
 - docs: updating typo for g-eval pages (#2568)
 - docs: only show frameworks in compliance section (#2559)
-- chore(docs): improve dark mode on redteam configuration  (#2553)
+- chore(docs): improve dark mode on redteam configuration (#2553)
 - chore(docs): sort plugins by pluginId (#2536)
 
 ### Fixed
@@ -3827,6 +4314,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Documentation
 
 - docs(blog): unbounded consumption (#2521)
+- docs(redteam): update configuration.md (#2543)
 
 ## [0.103.2] - 2024-12-31
 
@@ -4004,7 +4492,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- feat(redteam): add api healthcheck to redteam generate  (#2398)
+- feat(redteam): add api healthcheck to redteam generate (#2398)
 
 ### Changed
 
@@ -4046,6 +4534,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - feat(eval): Separate errors from assert failures (#2214)
 - feat(eval): Support more than one multi-turn conversation in the same eval with conversationId metadata field (#2360)
+- feat: chunk results during share to handle large evals (#2381)
 
 ### Changed
 
@@ -4053,6 +4542,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(evaluator): Enhance variable resolution and prompt rendering (#2380)
 - chore(ci): Remove outdated package-lock.json after enabling workspaces in package.json (#2377)
 - chore(examples): Add Ollama red team example from blog post (#2374)
+- Revert "feat: chunk results during share to handle large evals" (#2399)
 
 ### Fixed
 
@@ -4181,11 +4671,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- **Multilingual Redteam Strategy:** Generates test cases across all strategies. [#2313](https://github.com/promptfoo/promptfoo/pull/2313) by [@sklein12](https://github.com/sklein12)  
-- **Multiline Editor:** Added multiline editor for HTTP request body. [#2314](https://github.com/promptfoo/promptfoo/pull/2314) by [@typpo](https://github.com/typpo)  
-- **Redteam Multilingual Strategy:** Preserved assertion types. [#2312](https://github.com/promptfoo/promptfoo/pull/2312) by [@mldangelo](https://github.com/mldangelo)  
-- **Crescendo Handling:** Prevented failures if the provider sends an incorrect response. [#2315](https://github.com/promptfoo/promptfoo/pull/2315) by [@sklein12](https://github.com/sklein12)  
-- **Dependency Updates:** Updated multiple package dependencies. [#2308](https://github.com/promptfoo/promptfoo/pull/2308) by [@mldangelo](https://github.com/mldangelo)  
+- **Multilingual Redteam Strategy:** Generates test cases across all strategies. [#2313](https://github.com/promptfoo/promptfoo/pull/2313) by [@sklein12](https://github.com/sklein12)
+- **Multiline Editor:** Added multiline editor for HTTP request body. [#2314](https://github.com/promptfoo/promptfoo/pull/2314) by [@typpo](https://github.com/typpo)
+- **Redteam Multilingual Strategy:** Preserved assertion types. [#2312](https://github.com/promptfoo/promptfoo/pull/2312) by [@mldangelo](https://github.com/mldangelo)
+- **Crescendo Handling:** Prevented failures if the provider sends an incorrect response. [#2315](https://github.com/promptfoo/promptfoo/pull/2315) by [@sklein12](https://github.com/sklein12)
+- **Dependency Updates:** Updated multiple package dependencies. [#2308](https://github.com/promptfoo/promptfoo/pull/2308) by [@mldangelo](https://github.com/mldangelo)
 
 ## [0.100.0] - 2024-12-05
 
@@ -4237,7 +4727,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - chore(docs): update --config YAML file references to match actual behavior (#2170)
-- chore(providers): add *-latest models for Anthropic (#2262)
+- chore(providers): add \*-latest models for Anthropic (#2262)
 - chore(providers): remove optional chaining in goat provider (#2253)
 - chore(redteam): ability to override severity (#2260)
 - chore(redteam): improve hijacking grader (#2251)
@@ -4382,7 +4872,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore: bump @aws-sdk/client-bedrock-runtime from 3.691.0 to 3.693.0 (#2147)
 - chore: bump @eslint/plugin-kit from 0.2.0 to 0.2.3 in the npm_and_yarn group (#2151)
 - chore: track token usage for redteam providers (#2150)
-- chore(providers): misc harmful completion provider enhancements  (#2153)
+- chore(providers): misc harmful completion provider enhancements (#2153)
 - chore: display strategy used in report view (#2156)
 - chore: open result details in report view (#2159)
 - chore: add # requests to token usage (#2158)
@@ -4427,7 +4917,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- chore(assertions): split assertions into separate modules (#2116)* chore(blog): update API endpoint to canonical domain by @mldangelo in https://github.com/promptfoo/promptfoo/pull/2119
+- chore(assertions): split assertions into separate modules (#2116)\* chore(blog): update API endpoint to canonical domain by @mldangelo in https://github.com/promptfoo/promptfoo/pull/2119
 - chore(cli): add promptfoo version header to all requests (#2121)
 - chore(redteam): allow goat to be used stateless or not (#2102)
 - chore(redteam): Break out Prompt Metrics Types (#2120)
@@ -4471,10 +4961,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(redteam): pass context and options to target in iterativeTree provider (#2093)
 - chore(redteam): Use purpose in graders (#2077)
 - chore(webui): prevent unnecessary state resets in plugin configuration in redteam ui (#2071)
--  chore: add yaml config validation tests (#2070)
+- chore: add yaml config validation tests (#2070)
 - chore(docs): goat-blog demo component usability improvements (#2095)
 - docs: use "provider" key in python prompt function (#2103)
 - docs: add GOAT blog post (#2068)
+- chore(blog): update API endpoint to canonical domain (#2119)
 
 ### Fixed
 
@@ -4497,7 +4988,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - **feat(redteam):** goat (#2006)
-- **feat(webui):** add support for file providers in eval creation view via file upload by @mldangelo  in https://github.com/promptfoo/promptfoo/pull/2055
+- **feat(webui):** add support for file providers in eval creation view via file upload by @mldangelo in https://github.com/promptfoo/promptfoo/pull/2055
+- feat(webui): add support for file providers in eval creation view via file upload (#2055)
 
 ### Changed
 
@@ -4537,10 +5029,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: Integration backlink to portkey docs (#2039)
 - chore: add provider to assertion function context (#2036)
 - chore: add `--verbose` to redteam run (#2032)
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.679.0 to 3.682.0 (#2038)
 
 ### Dependencies
 
 - chore(deps): bump elliptic from 6.5.7 to 6.6.0 in /src/app (#2031)
+- chore(deps): bump langchain from 0.1.14 to 0.3.0 in /examples/langchain-python (#2035)
 
 ## [0.94.5] - 2024-10-28
 
@@ -4597,6 +5091,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: Http Provider parser (#1994)
 - chore: save user consent when logged in via webui (#1999)
 - chore: Constants are lower case (#2007)
+- style(eslint): add sort-keys rule and sort type constituents (#2008)
+- chore(redteam): alphabetize and normalize ordering of constants (#2002)
+- revert: style(eslint): add sort-keys rule and sort type constituents (#2009)
 
 ## [0.94.1] - 2024-10-24
 
@@ -4610,6 +5107,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **chore(webui):** Move Snackbar out of component for reuse by [@sklein12](https://github.com/sklein12) in [#1989](https://github.com/promptfoo/promptfoo/pull/1989)
 - **chore(redteam):** Send version to remote endpoint by [@typpo](https://github.com/typpo) in [#1982](https://github.com/promptfoo/promptfoo/pull/1982)
 - **refactor(tests):** Reorganize test files into subdirectories by [@mldangelo](https://github.com/mldangelo) in [#1984](https://github.com/promptfoo/promptfoo/pull/1984)
+- site: additional landing page (#1996)
 
 ### Fixed
 
@@ -4617,6 +5115,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **fix(providers):** Refusals are not failures by [@typpo](https://github.com/typpo) in [#1991](https://github.com/promptfoo/promptfoo/pull/1991)
 - **fix(redteam):** Better error handling in strategies by [@typpo](https://github.com/typpo) in [#1983](https://github.com/promptfoo/promptfoo/pull/1983)
 - **fix(redteam):** Better error on remote plugins when remote is disabled by [@typpo](https://github.com/typpo) in [#1979](https://github.com/promptfoo/promptfoo/pull/1979)
+- fix: prompt validation (#1993)
 
 ### Dependencies
 
@@ -4631,7 +5130,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat(providers): add support for `github` provider (#1927)
 - feat(providers): add support for xAI (Grok) provider (#1967)
 - feat(providers): Update HTTP Provider to support any type of request (#1920)
-- feat(prompts): add context to python and javascript prompts  (#1974)
+- feat(prompts): add context to python and javascript prompts (#1974)
 - feat(webui): add ability to update eval author (#1951)
 - feat(webui): add login page (#1964)
 - feat(webui): add support for displaying base64-encoded images (#1937)
@@ -4696,6 +5195,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **feat(assertions):** Support array of files in assertion values by [@danpe](https://github.com/promptfoo/promptfoo/pull/1897)
 - **feat(redteam):** Math-prompt strategy by [@AISimplyExplained](https://github.com/promptfoo/promptfoo/pull/1907)
+- feat(redteam): math-prompt strategy (#1907)
+- feat: add watsonx bearer token auth and display model cost (#1904)
+- feat: support array of files in assertion values (#1897)
 
 ### Changed
 
@@ -4706,10 +5208,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **chore(ci):** Fix Docker build by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1910)
 - **chore(ci):** Test eval share for hosted container by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1908)
 - **chore(ci):** Test sharing to cloud by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1909)
+- chore: fix docker build (#1910)
+- chore(redteam): rename math-prompt strategy and update docs (#1912)
+- chore: Test sharing to cloud (#1909)
+- chore: Test eval share for hosted container (#1908)
 
 ### Fixed
 
 - **fix(webui):** Navigating directly to an eval by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1905)
+- fix(providers): lazy load watsonx dependencies (#1977)
+- fix(ci): correct GitHub Actions syntax for secret access (#1911)
+- fix: Navigating directly to an eval (#1905)
 
 ### Documentation
 
@@ -4717,19 +5226,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.93.2] - 2024-10-16
 
+### Fixed
+
+- fix: sharing to hosted (#1902)
+- fix: update cloud share URL path from 'results' to 'eval' (#1901)
+- fix: gemini chat formatting (#1900)
+
+### Documentation
+
+- docs(redteam): add documentation for Custom and PII plugins (#1892)
+
 ### Changed
 
-- **fix:** update cloud share URL path from 'results' to 'eval' by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1901)  
-- **fix:** gemini chat formatting by [@typpo](https://github.com/promptfoo/promptfoo/pull/1900)  
-- **fix:** sharing to hosted by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1902)  
-- **chore:** add `--filter-targets` to `redteam run` by [@typpo](https://github.com/promptfoo/promptfoo/pull/1893)  
-- **chore:** warn users about unknown arguments after 'eval' command by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1898)  
+- **fix:** update cloud share URL path from 'results' to 'eval' by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1901)
+- **fix:** gemini chat formatting by [@typpo](https://github.com/promptfoo/promptfoo/pull/1900)
+- **fix:** sharing to hosted by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1902)
+- **chore:** add `--filter-targets` to `redteam run` by [@typpo](https://github.com/promptfoo/promptfoo/pull/1893)
+- **chore:** warn users about unknown arguments after 'eval' command by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1898)
+- chore(webui): redesign navigation and dark mode components (#1903)
+- chore(cli): warn users about unknown arguments after 'eval' command (#1898)
+- chore: add `--filter-targets` to `redteam run` (#1893)
 
 ### Dependencies
 
-- **chore(deps):** bump `@anthropic-ai/sdk` from 0.29.0 to 0.29.1 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1894)  
+- **chore(deps):** bump `@anthropic-ai/sdk` from 0.29.0 to 0.29.1 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1894)
+- chore(deps): bump @anthropic-ai/sdk from 0.29.0 to 0.29.1 (#1894)
 
 ## [0.93.1] - 2024-10-15
+
+### Fixed
+
+- fix: Delete all evals broken (#1891)
+
+### Added
+
+- feat: Redteam http target tester (#1883)
 
 ### Changed
 
@@ -4739,8 +5270,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **fix:** Delete all evals broken by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1891)
 - **docs:** Add RAG architecture blog post by [@vsauter](https://github.com/promptfoo/promptfoo/pull/1886)
 - **refactor(webui):** Move dashboard to redteam directory by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1890)
+- refactor(webui): move dashboard to redteam directory (#1890)
 
 ## [0.93.0] - 2024-10-14
+
+### Documentation
+
+- docs: add rag architecture blog post (#1886)
 
 ### Added
 
@@ -4748,6 +5284,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat(redteam): introduce experimental redteam setup ui (#1872)
 - feat(providers): watsonx provider (#1869)
 - feat(providers): node package provider (#1855)
+- feat: crisp chat on certain pages (#1880)
 
 ### Changed
 
@@ -4758,6 +5295,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix(cli): only set redteam on combined configs when necessary (#1879)
 - fix(cli): disable remote grading with rubric prompt override (#1877)
 - fix(webui): rendering evals (#1881)
+- fix: do not use default config when config is explicitly set (#1878)
 
 ## [0.92.3] - 2024-10-12
 
@@ -4797,13 +5335,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Dependencies
 
-- **chore(deps)**: 
+- **chore(deps)**:
 
 ## [0.92.1] - 2024-10-08
 
 ### Added
 
 - **feat(providers):** Add support for an optional `responseSchema` file to Google Gemini by [@aud](https://github.com/promptfoo/promptfoo/pull/1839)
+- feat(providers): Add support for an optional `responseSchema` file to google gemini (#1839)
 
 ### Changed
 
@@ -4812,21 +5351,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **fix:** Prompt ordering on tables by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1843)
 - **chore:** delete empty file by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1829)
 - **chore:** rename tables by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1831)
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.665.0 to 3.666.0 (#1836)
 
 ### Fixed
 
 - **fix(provider):** fal prompt config overrides by [@drochetti](https://github.com/promptfoo/promptfoo/pull/1835)
+- fix: Prompt ordering on tables (#1843)
+- fix: support relative paths (#1842)
+- fix: count could be off if there was a test that wasn't recorded (#1841)
 
 ### Dependencies
 
 - **chore(deps):** bump openai from 4.67.1 to 4.67.2 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1837)
 - **chore(deps-dev):** bump @aws-sdk/client-bedrock-runtime from 3.665.0 to 3.666.0 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1836)
+- chore(deps): bump openai from 4.67.1 to 4.67.2 (#1837)
 
 ### Documentation
 
 - **docs(contributing):** expand guide for adding new providers by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1833)
 
 ## [0.92.0] - 2024-10-07
+
+### Fixed
+
+- fix(provider): fal prompt config overrides (#1835)
+
+### Documentation
+
+- docs(contributing): expand guide for adding new providers (#1833)
 
 ### Changed
 
@@ -4835,6 +5387,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - site: custom blog index page (#1824)
 - chore(build): allow-composite-ts (#1825)
 - chore(cli): improve validation for extension hooks (#1827)
+- chore: rename tables (#1831)
+- chore: delete empty file (#1829)
 
 ## [0.91.3] - 2024-10-04
 
@@ -4842,6 +5396,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - feat(redteam): add religion plugin (#1822)
 - feat(provider-fal): allow prompt config overrides (#1815)
+- feat: remove in memory table (#1820)
 
 ## [0.91.2] - 2024-10-04
 
@@ -4921,7 +5476,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(redteam): serverside generation for indirect-prompt-injection by @mldangelo
 - chore(redteam): update adversarial generation to specific gpt-4o model by @typpo in 1f397f62
 - chore(cli): reorganize command structure and add program name by @mldangelo in 66781927
-  
 
 ### Fixed
 
@@ -4974,6 +5528,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **chore:** Added support for config objects in JavaScript and Python assertions. [#1729](https://github.com/promptfoo/promptfoo/pull/1729) by [@vedantr](https://github.com/vedantr)
 - **fix:** Improved prompts handling per provider. [#1757](https://github.com/promptfoo/promptfoo/pull/1757) by [@typpo](https://github.com/typpo)
 - **fix:** Updated `--no-interactive` description and added it to the documentation. [#1761](https://github.com/promptfoo/promptfoo/pull/1761) by [@kentyman23](https://github.com/kentyman23)
+- site: adding blog post for Prompt Airlines (#1774)
 
 ### Dependencies
 
@@ -5020,7 +5575,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: add missing outputPath (#1734)
 - fix: output path when PROMPTFOO_LIGHTWEIGHT_RESULTS is set (#1737)
 - chore: Move share action to server (#1743)
-- docs: Update documentation for Tree-based Jailbreaks Strategy by @vingiarrusso in 
+- docs: Update documentation for Tree-based Jailbreaks Strategy by @vingiarrusso in
 
 ### Fixed
 
@@ -5037,6 +5592,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Added more information to the enterprise page ([#1714](https://github.com/promptfoo/promptfoo/pull/1714) by [@typpo](https://github.com/typpo))
   - Updated the about page ([#1715](https://github.com/promptfoo/promptfoo/pull/1715) by [@typpo](https://github.com/typpo))
   - Minor landing page updates ([#1718](https://github.com/promptfoo/promptfoo/pull/1718) by [@typpo](https://github.com/typpo))
+- Update documentation for Tree-based Jailbreaks Strategy (#1725)
 
 ## [0.89.2] - 2024-09-18
 
@@ -5047,7 +5603,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Fixed Node cache dependency issue (@typpo)
 - Improved nexe build workflow artifact handling in CI pipeline (@mldangelo)
 - Bumped version to 0.89.2 (@typpo)
-- 
+-
 
 ## [0.89.1] - 2024-09-18
 
@@ -5100,6 +5656,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.88.0] - 2024-09-16
 
+### Dependencies
+
+- chore(deps): bump replicate from 0.32.1 to 0.33.0 (#1682)
+
+### Added
+
+- feat(webui): display custom namedScores (#1669)
+
 ### Changed
 
 - **Added** `--env-path` as an alias for the `--env-file` option in CLI (@mldangelo)
@@ -5121,12 +5685,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Refactored** Red Team commands and types to improve code organization (@mldangelo)
 - **Moved** `evaluateOptions` initialization to `evalCommand` (@mldangelo)
 - **Centralized** cost calculation logic in providers (@mldangelo)
+- ci: improve nexe build workflow and caching (#1683)
+- chore(providers): add pricing information for Azure OpenAI models (#1681)
 
 ### Tests
 
 - **Added** support for `file://` prefix for local file paths in the `tests:` field in configuration (@mldangelo)
 
 ## [0.87.1] - 2024-09-12
+
+### Fixed
+
+- fix(docker): add Python to Docker image and verify in CI (#1677)
+- fix(assertions): fix latencyMs comparison with undefined to allow 0 ms latency (#1668)
+- fix(providers): improve parseMessages function for anthropic (#1666)
+- fix(dockerfile): ensure next out directory exists and disable next telemetry (#1665)
+- fix: normalize prompts when reading configs (#1659)
+
+### Added
+
+- feat(python): add validatePythonPath function and improve error handling (#1670)
+- feat(cli): accept '--env-path' as an alias for '--env-file' option (#1654)
+- feat: PROMPTFOO_LIGHTWEIGHT_RESULTS envar (#1450)
+
+### Documentation
+
+- docs: red team intro (#1662)
+- docs: update model references from gpt-3.5-turbo to gpt-4o-mini (#1655)
 
 ### Changed
 
@@ -5136,6 +5721,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Fix OpenAI function tool callbacks handling** by [@mldangelo](https://github.com/mldangelo) in [#1648](https://github.com/promptfoo/promptfoo/pull/1648)
 - **Fix broken anchor links** by [@mldangelo](https://github.com/mldangelo) in [#1645](https://github.com/promptfoo/promptfoo/pull/1645)
 - **Add documentation for Echo provider** by [@mldangelo](https://github.com/mldangelo) in [#1646](https://github.com/promptfoo/promptfoo/pull/1646)
+- ci: add push trigger to docker workflow (#1678)
+- refactor(providers): centralize cost calculation logic (#1679)
+- refactor: move evaluateOptions initialization to evalCommand (#1674)
+- refactor(redteam): move redteam types to src/redteam/types (#1653)
+- refactor(redteam): move redteam commands to src/redteam/commands (#1652)
+- chore(providers): improve API URL formatting for Azure OpenAI provider (#1672)
+- chore(providers): add openai assistant's token usage (#1661)
+- chore(openai): improve support for structured outputs (#1656)
+- chore: support file:// prefix for local file paths in `tests:` field in config (#1651)
 
 ## [0.87.0] - 2024-09-12
 
@@ -5263,6 +5857,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.83.2] - 2024-09-03
 
+### Added
+
+- feat: add --remote to redteam generate (#1576)
+
 ## [0.83.1] - 2024-09-03
 
 ## [0.83.0] - 2024-09-03
@@ -5297,6 +5895,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(redteam): export extraction functions by @mldangelo
 - chore(docker): install peer dependencies during build by @mldangelo
 - docs: update file paths to use file:// prefix by @mldangelo
+- chore: clean up some redteam onboarding questions (#1569)
+- chore: defaults for redteam plugins/strategies (#1521)
 
 ### Dependencies
 
@@ -5307,6 +5907,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.81.5] - 2024-08-30
 
+### Dependencies
+
+- chore(deps): bump the github-actions group with 2 updates (#1566)
+- chore(deps): bump replicate from 0.32.0 to 0.32.1 (#1559)
+- chore(deps): bump openai from 4.56.1 to 4.57.0 (#1558)
+
+### Fixed
+
+- fix: remove indirect prompt injection `config.systemPrompt` dependency (#1562)
+- fix: validate all plugins before running any (#1561)
+
+### Added
+
+- feat: add `delay` option for redteam generate and refactor plugins (#1564)
+- feat(redteam): add remote generation for purpose and entities (#1555)
+
 ### Changed
 
 - feat: global `env` var in templates (#1553)
@@ -5314,6 +5930,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore: include createdAt in getStandaloneEvals (#1550)
 - chore: write eval tags to database and add migration (#1551)
 - style: enforce object shorthand rule (#1557)
+- chore: move redteam command locations (#1565)
+- chore: simplify redteam types (#1563)
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.637.0 to 3.642.0 (#1560)
 
 ## [0.81.4] - 2024-08-29
 
@@ -5477,8 +6096,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Harmful Tests**: Improved test generation and deduplication by @mldangelo in [#1480](https://github.com/promptfoo/promptfoo/pull/1480)
 - **ESLint**: Added and configured eslint-plugin-unicorn by @mldangelo in [#1489](https://github.com/promptfoo/promptfoo/pull/1489)
 - **Dependencies**: Bumped @aws-sdk/client-bedrock-runtime from 3.632.0 to 3.635.0 by @dependabot in [#1490](https://github.com/promptfoo/promptfoo/pull/1490)
-- **Crescendo**: Crescendo now uses gpt-4o-mini instead of gpt-4o by @typpo 
-- **Environment Variables**: Added GROQ_API_KEY and alphabetized 3rd party environment variables by @mldangelo 
+- **Crescendo**: Crescendo now uses gpt-4o-mini instead of gpt-4o by @typpo
+- **Environment Variables**: Added GROQ_API_KEY and alphabetized 3rd party environment variables by @mldangelo
 - **Enterprise Breakdown**: Added enterprise breakdown by @typpo in [#1495](https://github.com/promptfoo/promptfoo/pull/1495)
 
 ## [0.79.0] - 2024-08-20
@@ -5631,7 +6250,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat: `promptfoo eval --description` override (#1399)
 - feat: add `default` strategy and remove `--add-strategies` (#1401)
 - feat: assume unrecognized openai models are chat models (#1404)
-- feat: excessive agency grader looks at tools  (#1403)
+- feat: excessive agency grader looks at tools (#1403)
 - fix: dont check SSL certs (#1396)
 - fix: reduce rbac and moderation false positives (#1400)
 - fix: `redteam` property was not read in config (#1407)
@@ -5652,6 +6271,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.75.2] - 2024-08-06
 
+### Added
+
+- feat: ability to attach configs to prompts (#1391)
+
 ### Changed
 
 - fix: Update "Edit Comment" dialog background for the dark mode (#1374)
@@ -5662,7 +6285,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- fix: temporarily disable nunjucks strict mode by @typpo 
+- fix: temporarily disable nunjucks strict mode by @typpo
 
 ### Dependencies
 
@@ -5723,6 +6346,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.73.9] - 2024-07-30
 
+### Dependencies
+
+- chore(deps): update dev dependencies and minor package versions (#1331)
+- chore(deps): bump @anthropic-ai/sdk from 0.24.3 to 0.25.0 (#1326)
+
+### Fixed
+
+- fix: chain provider and test transform (#1316)
+
+### Added
+
+- feat: handle rate limits in generic fetch path (#1324)
+
 ### Changed
 
 - **Features:**
@@ -5745,12 +6381,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - ci: add assets generation job and update json schema by @mldangelo in https://github.com/promptfoo/promptfoo/pull/1321
   - docs: add CITATION.cff file by @mldangelo in https://github.com/promptfoo/promptfoo/pull/1322
   - docs: update examples and docs to use gpt-4o and gpt-4o-mini models by @mldangelo in https://github.com/promptfoo/promptfoo/pull/1323
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.620.0 to 3.620.1 (#1327)
 
 ### Documentation
 
 - **Documentation:**
 
 ## [0.73.8] - 2024-07-29
+
+### Dependencies
+
+- chore(deps): bump openai from 4.53.1 to 4.53.2 (#1314)
+
+### Documentation
+
+- docs: update examples and docs to use gpt-4o and gpt-4o-mini models (#1323)
+- docs: add CITATION.cff file (#1322)
 
 ### Added
 
@@ -5763,6 +6409,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: trim model-graded-closedqa response (#1309)
 - refactor(utils): move transform logic to separate file (#1310)
 - chore(cli): add option to strip auth info from shared URLs (#1304)
+- chore: set page titles (#1315)
+- chore(webui): persist column selection in evals view (#1302)
+- ci: add assets generation job and update json schema (#1321)
+- refactor(redteam): extract entity and purpose logic, update imitation plugin (#1301)
+- chore(redteam): allow multiple provider selection (#1319)
+- chore: add devcontainer setup (#1317)
 
 ### Fixed
 
@@ -5772,6 +6424,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix(redteam): improve plugin and strategy selection UI (#1300)
 - fix(redteam): decrease false positives in hallucination grader (#1305)
 - fix(redteam): misc fixes in grading and calculations (#1313)
+- fix: show default vars in table (#1306)
 
 ## [0.73.7] - 2024-07-26
 
@@ -5808,6 +6461,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore: move types files (#1278)
 - refactor(redteam): rename strategies and improve type safety (#1275)
 - ci: re-enable Node 22.x in CI matrix (#1272)
+- chore: support loading .{,m,c}ts promptfooconfig files (#1284)
 
 ### Dependencies
 
@@ -5820,6 +6474,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **feat(cli):** Add the ability to share a specific eval by [@typpo](https://github.com/promptfoo/promptfoo/pull/1250)
 - **feat(webui):** Hide long metrics lists by [@typpo](https://github.com/promptfoo/promptfoo/pull/1262)
+- feat(webui): hide long metrics lists (#1262)
+- feat: ability to share a specific eval (#1250)
 
 ### Changed
 
@@ -5829,10 +6485,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **fix:** Improve `--add-strategies` validation error messages by [@typpo](https://github.com/promptfoo/promptfoo/pull/1260)
 - **chore:** Warn when a variable is named `assert` by [@typpo](https://github.com/promptfoo/promptfoo/pull/1259)
 - **chore:** Update Llama examples and add support for chat-formatted prompts in Replicate by [@typpo](https://github.com/promptfoo/promptfoo/pull/1261)
+- chore: update llama examples and add support for chat formatted prompts in Replicate (#1261)
+- chore: warn when a var is named assert (#1259)
 
 ### Fixed
 
 - **fix(redteam):** Allow arbitrary `injectVar` name for redteam providers by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1253)
+- fix: make --add-strategies validation have useful error (#1260)
+- fix: multiple docker fixes (#1257)
+- fix: color error in local checkNodeVersion test (#1255)
+- fix: resolve node-fetch typescript errors (#1254)
+- fix(redteam): allow arbitrary injectVar name for redteam providers (#1253)
 
 ## [0.73.4] - 2024-07-24
 
@@ -5883,9 +6546,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - feat(redteam): add 4 new basic plugins (#1201)
-- feat(redteam): improve test generation logic and add batching by @mldangelo in 
+- feat(redteam): improve test generation logic and add batching by @mldangelo in
 - feat(redteam): settings dialog (#1215)https://github.com/promptfoo/promptfoo/pull/1208
-- feat(redteam): introduce redteam section for promptfooconfig.yaml  (#1192)
+- feat(redteam): introduce redteam section for promptfooconfig.yaml (#1192)
 
 ### Changed
 
@@ -5911,9 +6574,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.72.2] - 2024-07-19
 
+### Documentation
+
+- docs: add guide for comparing GPT-4o vs GPT-4o-mini (#1200)
+
 ### Added
 
 - **feat(openai):** add GPT-4o-mini models by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1196)
+- feat(redteam): improve test generation logic and add batching (#1208)
 
 ### Changed
 
@@ -5925,17 +6593,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **site:** contact page by [@typpo](https://github.com/promptfoo/promptfoo/pull/1190)
 - **site:** newsletter form by [@typpo](https://github.com/promptfoo/promptfoo/pull/1194)
 - **site:** miscellaneous images and improvements by [@typpo](https://github.com/promptfoo/promptfoo/pull/1199)
+- build(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.614.0 to 3.616.0 (#1203)
+- site: misc images and improvements (#1199)
 
 ### Fixed
 
 - **fix(webui):** eval ID not being properly set by [@typpo](https://github.com/promptfoo/promptfoo/pull/1195)
 - **fix(Dockerfile):** install curl for healthcheck by [@orange-anjou](https://github.com/promptfoo/promptfoo/pull/1204)
+- fix(Dockerfile): install curl for healthcheck (#1204)
+- fix: base path for custom filter resolution (#1198)
 
 ### Tests
 
 - **test(webui):** add unit tests for `InfoModal` component by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1187)
 
 ## [0.72.1] - 2024-07-18
+
+### Tests
+
+- test(webui): add unit tests for InfoModal component (#1187)
+
+### Fixed
+
+- fix(webui): eval id not being properly set (#1195)
+
+### Added
+
+- feat(openai): add gpt-4o-mini models (#1196)
+- feat: add schema validation to promptfooconfig.yaml (#1185)
 
 ### Changed
 
@@ -5949,6 +6634,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Chore (redteam): Update CLI for test case generation by @mldangelo in [#1177](https://github.com/promptfoo/promptfoo/pull/1177)
 - Chore: Include hostname in share confirmation by @typpo in [#1183](https://github.com/promptfoo/promptfoo/pull/1183)
 - Build (deps-dev): Bump @azure/identity from 4.3.0 to 4.4.0 by @dependabot in [#1180](https://github.com/promptfoo/promptfoo/pull/1180)
+- chore(redteam): refactor PII categories and improve plugin handling (#1191)
+- site: newsletter form (#1194)
+- site: contact page (#1190)
 
 ## [0.72.0] - 2024-07-17
 
@@ -6021,7 +6709,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- feat: Add `promptfoo redteam init` command  (#1122)
+- feat: Add `promptfoo redteam init` command (#1122)
 - chore: refactor eval and generate commands out of main.ts (#1121)
 - build(deps): bump openai from 4.52.3 to 4.52.4 (#1118)
 - refactor(redteam): relocate harmful and pii plugins from legacy directory (#1123)
@@ -6060,6 +6748,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - feat(redteam): `extra-jailbreak` plugin that applies jailbreak to all probes (#1085)
 - feat(webui): show metrics as % in column header (#1087)
+- feat: add support for PROMPTFOO_AUTHOR environment variable (#1099)
 
 ### Changed
 
@@ -6077,6 +6766,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.68.3] - 2024-07-04
 
+### Tests
+
+- test: fix assertion result mock pollution (#1086)
+
+### Fixed
+
+- fix: browser error on eval page with derived metrics that results when a score is null (#1093)
+- fix(prompts): treat non-existent files as prompt strings (#1084)
+- fix: remove test mutation for classifer and select-best assertion types (#1083)
+
+### Added
+
+- feat(openai): support for attachments for openai assistants (#1080)
+
 ### Changed
 
 - **Features:**
@@ -6091,11 +6794,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.68.2] - 2024-07-03
 
+### Changed
+
+- build(deps): bump openai from 4.52.2 to 4.52.3 (#1073)
+- build(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.606.0 to 3.609.0 (#1072)
+
 ### Added
 
 - feat(webui): add scenarios to test suite configuration in yaml editor (#1071)
 
 ## [0.68.1] - 2024-07-02
+
+### Fixed
+
+- fix: resolve issues with relative prompt paths (#1066)
+- fix: handle replicate ids without version (#1059)
+
+### Added
+
+- feat: support calling specific function from python provider (#1053)
 
 ### Changed
 
@@ -6103,8 +6820,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **fix:** Resolve issues with relative prompt paths by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1066)
 - **fix:** Handle replicate IDs without version by [@typpo](https://github.com/promptfoo/promptfoo/pull/1059)
 - **build(deps):** Bump `@anthropic-ai/sdk` from 0.24.2 to 0.24.3 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1062)
+- build(deps): bump @anthropic-ai/sdk from 0.24.2 to 0.24.3 (#1062)
 
 ## [0.68.0] - 2024-07-01
+
+### Documentation
+
+- docs: dalle jailbreak blog post (#1052)
 
 ### Added
 
@@ -6137,6 +6859,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - feat(bedrock): add proxy support for AWS SDK (#1021)
 - feat(redteam): Expose modified prompt for iterative jailbreaks (#1024)
+- feat: replicate image provider (#1049)
 
 ### Changed
 
@@ -6177,6 +6900,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.65.2] - 2024-06-20
 
+### Documentation
+
+- docs: update claude vs gpt guide with claude 3.5 (#986)
+
 ### Added
 
 - feat(redteam): make it easier to add non default plugins (#958)
@@ -6197,6 +6924,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix(redteam): reduce overreliance, excessive-agency false positive rates (#963)
 
 ## [0.65.1] - 2024-06-18
+
+### Changed
+
+- chore(docs): add shell syntax highlighting and fix typos (#953)
+- chore(dependencies): update package dependencies (#952)
+- Revert "feat(cli): add tests for CLI commands and fix version flag bug" (#967)
+
+### Fixed
+
+- fix: handle case where returned python result is null (#957)
+- fix(webui): handle empty fail reasons and null componentResults (#956)
+
+### Added
+
+- feat(cli): add tests for CLI commands and fix version flag bug (#954)
+- feat(eslint): integrate eslint-plugin-jest and configure rules (#951)
+- feat: add eslint-plugin-unused-imports and remove unused imports (#949)
+- feat: assertion type: is-sql (#926)
 
 ## [0.65.0] - 2024-06-17
 
@@ -6221,7 +6966,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Dependencies
 
-- chore(deps): update dependencies without breaking changes  (#937) 
+- chore(deps): update dependencies without breaking changes (#937)
 
 ## [0.64.0] - 2024-06-15
 
@@ -6250,9 +6995,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.63.2] - 2024-06-10
 
+### Added
+
+- feat: report view for redteam evals (#920)
+
 ### Fixed
 
 - fix(bedrock): default value for configs (#917)
+- fix: prevent assertions from being modified as they run (#929)
 
 ## [0.63.1] - 2024-06-10
 
@@ -6335,8 +7085,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: csv and html outputs include both prompt and provider labels (#851)
 - fix: docker build and prepublish script (#846)
 - fix: show labels for custom provider (#875)
+- chore: fix windows node 22 build issues by adding missing encoding dependency and updating webpack config (#900)
+- chore: update Node.js version management and improve documentation (#896)
+- Fix CI Passing Despite Failing Build (#866) (#876)
 
 ## [0.62.0] - 2024-06-05
+
+### Fixed
+
+- fix: Parameter evaluateOptions not passed correctly in jobs created using web (#870)
 
 ### Added
 
@@ -6438,6 +7195,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: improve GradingResult validation (#772)
 - [fix: update python ProviderResponse error message and docs.](https://github.com/promptfoo/promptfoo/commit/258013080809bc782afe3de51c9309230cb5cdb2) https://github.com/promptfoo/promptfoo/issues/769
 - [chore(openai): add gpt-4o models (](https://github.com/promptfoo/promptfoo/commit/ff4655d31d3588972522bb162733cb61e460f36f)https://github.com/promptfoo/promptfoo/pull/776[)](https://github.com/promptfoo/promptfoo/commit/ff4655d31d3588972522bb162733cb61e460f36f)
+- add gpt-4o models (#776)
 
 ### Fixed
 
@@ -6477,7 +7235,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - docs: Document `python:` prefix when loading assertions in CSV (#731)
 - docs: update README.md (#733)
 - docs: Fixes to Python docs (#728)
-- docs: Update to include --filter-* cli args (#747)
+- docs: Update to include --filter-\* cli args (#747)
 
 ## [0.56.0] - 2024-04-28
 
@@ -6676,8 +7434,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - feat: migrate filesystem storage to sqlite db (#558)
-  * **When you first run `eval` or `view` with 0.48.0, your saved evals will be migrated from `.json` files to a sqlite db.  Please open an issue if you run into problems.**
-  * Restoration: By default, the migration process runs on the promptfoo output directory `~/.promptfoo/output`.  This directory is backed up at `~/.promptfoo/output-backup-*` and you can restore it and use a previous version by renaming that directory back to `output`
+  - **When you first run `eval` or `view` with 0.48.0, your saved evals will be migrated from `.json` files to a sqlite db. Please open an issue if you run into problems.**
+  - Restoration: By default, the migration process runs on the promptfoo output directory `~/.promptfoo/output`. This directory is backed up at `~/.promptfoo/output-backup-*` and you can restore it and use a previous version by renaming that directory back to `output`
 - feat: Add anthropic:messages and replicate:mistral as default providers to web ui (#562)
 - feat: add label field to provider options (#563)
 - docs: adjust configuration for python provider (#565)
@@ -6783,7 +7541,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- fix: pass through PROMPTFOO_* variables from docker run (#498)
+- fix: pass through PROMPTFOO\_\* variables from docker run (#498)
 - docs: clean up python provider header
 
 ### Fixed
@@ -6843,6 +7601,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - fix(factuality): make factuality output case-insensitive (#468)
+- fix: ensure that only valid ollama params are passed (#480)
 
 ## [0.40.0] - 2024-02-06
 
@@ -6957,7 +7716,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat: add perplexity-score metric (#377)
 - feat: add logprobs support for azure openai (#376)
 - fix: use relative paths consistently and handle object formats (#375)
-- [fix: restore __prefix and __suffix column handlers when loading test csv](https://github.com/promptfoo/promptfoo/commit/3a058684b3389693f4c5899f786fb090b04e3c93)
+- [fix: restore **prefix and **suffix column handlers when loading test csv](https://github.com/promptfoo/promptfoo/commit/3a058684b3389693f4c5899f786fb090b04e3c93)
 
 ## [0.34.0] - 2024-01-02
 
@@ -6984,7 +7743,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- [fix: pass env to providers when using CLI](https://github.com/promptfoo/promptfoo/commit/e8170a7f0e9d4033ef219169115f6474d978f1a7) 
+- [fix: pass env to providers when using CLI](https://github.com/promptfoo/promptfoo/commit/e8170a7f0e9d4033ef219169115f6474d978f1a7)
 - [fix: correctly handle bedrock models containing :](https://github.com/promptfoo/promptfoo/commit/4469b693993934192fee2e84cc27c21e31267e5f)
 - feat: add latency assertion type (#344)
 - feat: add perplexity assertion type (#346)
@@ -6993,7 +7752,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: properly escape arguments for external python assertions (#338)
 - fix: use execFile/spawn for external processes (#343)
 - [fix: handle null score in custom metrics](https://github.com/promptfoo/promptfoo/commit/514feed49e2f83f3e04d3e167e5833dc075e6c10)
-- [fix: increment failure counter for script errors.](https://github.com/promptfoo/promptfoo/commit/61d1b068f26c63f3234dc49c9d5f5104b9cf1cda) 
+- [fix: increment failure counter for script errors.](https://github.com/promptfoo/promptfoo/commit/61d1b068f26c63f3234dc49c9d5f5104b9cf1cda)
 
 ## [0.33.0] - 2023-12-17
 
@@ -7006,7 +7765,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: properly escape arguments for external python assertions (#338)
 - fix: use execFile/spawn for external processes (#343)
 - [fix: handle null score in custom metrics](https://github.com/promptfoo/promptfoo/commit/514feed49e2f83f3e04d3e167e5833dc075e6c10)
-- [fix: increment failure counter for script errors.](https://github.com/promptfoo/promptfoo/commit/61d1b068f26c63f3234dc49c9d5f5104b9cf1cda) 
+- [fix: increment failure counter for script errors.](https://github.com/promptfoo/promptfoo/commit/61d1b068f26c63f3234dc49c9d5f5104b9cf1cda)
 
 ## [0.32.0] - 2023-12-14
 
@@ -7028,7 +7787,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- fix: sharing option is degraded  (#325)
+- fix: sharing option is degraded (#325)
 
 ## [0.31.1] - 2023-12-04
 
@@ -7100,7 +7859,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- feat: Add support for multiple "__expected" columns (#284)
+- feat: Add support for multiple "\_\_expected" columns (#284)
 - feat: Support for OpenAI assistants API (#283)
 - feat: Ability to combine multiple configs into a single eval (#285)
 
@@ -7158,6 +7917,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [Stringify output display string if output is a JSON object](https://github.com/promptfoo/promptfoo/commit/e6eff1fb75e09bfd602c08edd89ec154e3e61bf9)
 - [Add JSON schema dereferencing support for JSON configs](https://github.com/promptfoo/promptfoo/commit/c32f9b051a51ee6e1ee08738e0921b4e05a5c23d)
+- Update chat completion endpoint in azureopenai.ts (#273)
 
 ### Fixed
 
@@ -7184,7 +7944,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Add support for custom config directory (#257)
 - Add latency and token metrics per prompt (#258)
 - Add caching support to Anthropic provider (#259)
-- webview: Preserve formatting of LLM outputs 
+- webview: Preserve formatting of LLM outputs
 - Bump langchain from 0.0.317 to 0.0.325 in /examples/langchain-python (#254)
 
 ## [0.26.0] - 2023-10-28
@@ -7210,10 +7970,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - Fix issue with loading google sheets directly. (#222)
-- Add _conversation variable for testing multiple-turn chat conversations (#224)
+- Add \_conversation variable for testing multiple-turn chat conversations (#224)
 - Allow multiple output formats simultaneously with `outputPath` (#229)
 - Fall back to default embedding model if provided model doesn't support embeddings
 - Various fixes and improvements
+- Bump langchain from 0.0.312 to 0.0.317 in /examples/langchain-python (#245)
 
 ## [0.25.0] - 2023-10-10
 
@@ -7223,9 +7984,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Bump langchain from 0.0.279 to 0.0.308 in /examples/langchain-python (#213)
 - Add support for .cjs file extensions (#214)
 - Add Prompts and Datasets pages (#211)
-- Add CLI commands for listing and showing evals, prompts, and datasets  (#218)
+- Add CLI commands for listing and showing evals, prompts, and datasets (#218)
 - Add support for `config` object in webhook provider payload. (#217)
 - Other misc changes and improvements
+- Bump langchain from 0.0.308 to 0.0.312 in /examples/langchain-python (#219)
 
 ## [0.24.4] - 2023-10-01
 
@@ -7310,7 +8072,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- Add OpenAI factuality and closed-QA graders (#126).  These new graders implement OpenAI's eval methodology.
+- Add OpenAI factuality and closed-QA graders (#126). These new graders implement OpenAI's eval methodology.
 - Auto-escape vars when prompt is a JSON object (#127).
 - Improvements to custom providers - Pass context including `vars` to callApi and make `TestCase` generic for ease of typing
 - Add `prompt` to Javascript, Python, and Webhook assertion context
@@ -7423,6 +8185,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - Fix bug in Ollama provider breaking on empty line
+- Bump certifi from 2023.5.7 to 2023.7.22 in /examples/langchain-python (#104)
 
 ## [0.18.3] - 2023-08-08
 
@@ -7460,6 +8223,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Fix ANSI escape codes in console table
 - Fix broken symlink handling for latest output
 - Fix eval history cleanup
+- Promptfoo Theories (#89)
 
 ## [0.17.9] - 2023-07-24
 
@@ -7516,7 +8280,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Add telemetry notice (#39)
 - Fix environments that do not have process.stdout.columns (colab)
-- Fix `init` output 
+- Fix `init` output
 - Don't crash when npm is down (latest version check)
 
 ## [0.17.3] - 2023-07-10
@@ -7546,13 +8310,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - added gpt-3.5-16k and checkpoints (#51)
 - Add ability to view raw prompts in web viewer (#54)
-- OpenAI chat completion fails on invalid JSON.  Enable with envar `PROMPTFOO_REQUIRE_JSON_PROMPTS`
+- OpenAI chat completion fails on invalid JSON. Enable with envar `PROMPTFOO_REQUIRE_JSON_PROMPTS`
 - Ability to view raw prompts in web viewer
 - Update default suggestion provider
 - Add `script` provider prefix for custom providers
 - Add a `cache clear` command
 - Fix: allow number values for `contains` and `icontains` assertions
-- FIx: Don't create asserts from empty __expected columns
+- FIx: Don't create asserts from empty \_\_expected columns
 
 ## [0.16.0] - 2023-06-28
 
@@ -7572,6 +8336,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.14.2] - 2023-06-24
 
+### Changed
+
+- Add support for continuous scoring (#44)
+
 ## [0.14.1] - 2023-06-19
 
 ### Changed
@@ -7583,7 +8351,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - Breaking: Make files in config yaml resolve from config location, not working directory
-- Breaking: output `json` and `yaml` formats have moved results into the `results` property.  Now also include `config` and `shareableUrl`
+- Breaking: output `json` and `yaml` formats have moved results into the `results` property. Now also include `config` and `shareableUrl`
 - Add shareable urls and `promptfoo share` command by @typpo in https://github.com/typpo/promptfoo/pull/42
 - Add new CLI args for `eval`: --no-table, --no-progress-bar, --share
 - Other misc bugfixes and improvements
@@ -7593,6 +8361,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - [Command arguments override config in all cases](https://github.com/typpo/promptfoo/commit/c425d3ae8c4ddb932ba4c1380889a01b47b5ce57)
+- Add shareable urls and `promptfoo share` command (#42)
 
 ## [0.13.0] - 2023-06-16
 
@@ -7601,6 +8370,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Add support for OpenAI functions and custom provider args by @typpo in https://github.com/typpo/promptfoo/pull/34
 - extract and export generateTable() by @tizmagik in https://github.com/typpo/promptfoo/pull/37
 - Add JSONL prompt file support by @typpo in https://github.com/typpo/promptfoo/pull/40
+- Add JSONL prompt file support (#40)
 
 ## [0.12.0] - 2023-06-12
 
@@ -7609,6 +8379,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Add support for sharing by @typpo in https://github.com/typpo/promptfoo/pull/33
 - Warn user if they are using an out-of-date version by @typpo in https://github.com/typpo/promptfoo/pull/31
 - Add basic telemetry
+- extract and export generateTable() (#37)
+- Add support for OpenAI functions and custom provider args (#34)
+- Add support for sharing (#33)
 
 ## [0.11.0] - 2023-06-11
 
@@ -7620,6 +8393,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat: custom functions are passed a context object that contains vars
 - feat: web table view improvements, including the ability to filter only failures, toggle word break mode, etc
 - Misc fixes and small improvements
+- Solve build path issues (#32)
+- Add check for latest package version (#31)
 
 ## [0.10.0] - 2023-06-09
 
@@ -7632,6 +8407,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat: Add support for named prompts by @typpo in https://github.com/typpo/promptfoo/pull/28
 - feat: Better visual distinction in web view
 - Other misc fixes and improvements
+- chore: add native ts-node compatibility (#25)
+- Add many new assertion types (#30)
+- fix parsing of env vars for OPENAI_MAX_TOKENS and OPENAI_MAX_TEMPERATURE (#29)
+- Add support for named prompts (#28)
 
 ## [0.9.0] - 2023-06-05
 
@@ -7639,6 +8418,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Add support for var arrays by @typpo in https://github.com/typpo/promptfoo/pull/21
 - Minor fixes and improvements
+- Add support for var arrays (#21)
 
 ## [0.8.3] - 2023-05-31
 
@@ -7652,6 +8432,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - Fix cache behavior edge case
+- Simplify API and add support for unified test suite definition (#14)
 
 ## [0.8.1] - 2023-05-30
 
@@ -7664,34 +8445,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - Simplify API and add support for unified test suite definition by @typpo in https://github.com/typpo/promptfoo/pull/14
-- The following options have moved inside `evaluateOptions`: `maxConcurrency`, `showProgressBar`, `generateSuggestions`.  
+- The following options have moved inside `evaluateOptions`: `maxConcurrency`, `showProgressBar`, `generateSuggestions`.
 - The following options have moved inside `commandLineOptions`: `write`, `cache`, `verbose`, `view`, and similar.
 
 ## [0.7.0] - 2023-05-29
 
 ### Changed
 
-- Improve caching and cache all requests by default 
+- Improve caching and cache all requests by default
 
 ## [0.6.0] - 2023-05-28
 
 ### Changed
 
--  Add support for open-source LLMs like Llama, Alpaca, Vicuna, GPT4All via LocalAI
-- Add glob support 
+- Add support for open-source LLMs like Llama, Alpaca, Vicuna, GPT4All via LocalAI
+- Add glob support
 - Jest and mocha integrations
-- Rename eval: to fn: for custom js fnc tests by @MentalGear 
+- Rename eval: to fn: for custom js fnc tests by @MentalGear
 - Add exports for types and useful utility functions
 - Support non-es module requires
 - Web viewer dark mode
-- Improved handling of third-party API errors 
-- Many other fixes and improvements 
+- Improved handling of third-party API errors
+- Many other fixes and improvements
+- Improve caching and cache all requests by default (#17)
+- Bump socket.io-parser from 4.2.2 to 4.2.3 in /src/web/client (#15)
 
 ## [0.5.1] - 2023-05-23
+
+### Added
+
+- feat: rename eval: to fn: for custom js fnc tests (#11)
 
 ### Changed
 
 - Fix issue with running promptfoo without `OPENAI_API_KEY` set
+- Add glob support (#13)
 
 ## [0.5.0] - 2023-05-22
 
@@ -7701,6 +8489,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Add support for local LLMs like Llama, Alpaca, Vicuna, GPT4All, etc. via LocalAI
 - Improved error handling
 - Improved word wrapping in CLI output
+- Add support for grading by semantic similarity (#7)
 
 ## [0.4.0] - 2023-05-13
 
@@ -7709,6 +8498,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Web viewer for eval results
 - Support for OPENAI_STOP to set OpenAI stopwords
 - Increase default request timeout
+- Browser UI for eval results (#5)
 
 ## [0.3.0] - 2023-05-07
 
@@ -7722,6 +8512,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Ability to override OPENAI_API_HOST environment variable
 - Ability to set an API call timeout via `REQUEST_TIMEOUT_MS` environment variable
 - Improve readability of HTML table output
+- Ability for LLM to grade its own outputs (#4)
 
 ## [0.2.2] - 2023-05-04
 
@@ -7738,5 +8529,3 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Add `promptfoo init` command
 - Improve custom provider loading and add example
-
-

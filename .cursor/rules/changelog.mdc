@@ -11,7 +11,9 @@ All user-facing changes must be documented in `CHANGELOG.md`. This is enforced b
 
 ## When to Update
 
-Update the changelog for ANY PR that affects users:
+**IMPORTANT: ALL PRs must update the changelog. No exceptions.**
+
+Update the changelog for EVERY pull request, including:
 
 - New features or functionality
 - Bug fixes
@@ -21,17 +23,20 @@ Update the changelog for ANY PR that affects users:
 - Configuration changes
 - Performance improvements
 - Deprecated features
+- Dependency updates (ALL of them)
+- Test changes (ALL of them)
+- CI/CD changes
+- Build configuration changes
+- Code style/formatting changes
+- Documentation updates
+- Refactors and improvements
 
-## Exemptions
+## Bypass Labels
 
-PRs are automatically exempt if:
+PRs can bypass changelog requirements with one of these labels:
 
-1. PR has the `no-changelog` label, OR
-2. PR title starts with (case-insensitive):
-   - `chore(deps):` - Dependency updates
-   - `style:` - Code formatting only
-   - `build:` - Build configuration
-   - `test:` - Test-only changes
+1. `no-changelog` - For exceptional cases (automated bot PRs, reverts of unmerged changes)
+2. `dependencies` - For automated dependency updates (Dependabot, Renovate, etc.)
 
 ## Format Requirements
 
@@ -84,11 +89,11 @@ Each entry MUST:
 ### Categories
 
 - **Added**: New features, capabilities, or functionality
-- **Changed**: Modifications to existing functionality (refactors, improvements)
+- **Changed**: Modifications to existing functionality (refactors, improvements, chores, CI/CD)
 - **Fixed**: Bug fixes and corrections
-- **Dependencies**: Important dependency updates (breaking changes, security fixes, or notable upgrades)
+- **Dependencies**: ALL dependency updates
 - **Documentation**: Documentation additions, updates, or fixes
-- **Tests**: Test additions, updates, or improvements
+- **Tests**: ALL test additions, updates, or improvements
 - **Removed**: Removed features or functionality (usually breaking changes)
 
 ## Common Scopes
@@ -193,8 +198,8 @@ The GitHub Action `.github/workflows/changelog-check.yml` will:
 
 1. ✅ Pass if CHANGELOG.md is modified
 2. ✅ Pass if PR has `no-changelog` label
-3. ✅ Pass if PR title matches exemption pattern
-4. ❌ Fail otherwise and require changelog update
+3. ✅ Pass if PR has `dependencies` label
+4. ❌ Fail otherwise
 
 ## Tips
 
@@ -208,10 +213,10 @@ The GitHub Action `.github/workflows/changelog-check.yml` will:
 
 ## When Unsure
 
-- **Not sure if user-facing?** → Add entry (better safe than sorry)
 - **Not sure which category?** → Use "Changed"
 - **Not sure about scope?** → Use the most specific relevant scope
-- **Dependency update?** → Only include if breaking or security-related
+- **Dependency update?** → ALL dependencies go in "Dependencies" category
+- **Test change?** → ALL tests go in "Tests" category
 - **Multiple related changes?** → One entry per logical change, multiple bullets OK
 
 ## References
