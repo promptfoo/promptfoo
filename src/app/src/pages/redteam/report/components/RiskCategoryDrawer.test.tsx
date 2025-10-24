@@ -9,16 +9,6 @@ vi.mock('react-router-dom', () => ({
   useNavigate: vi.fn(),
 }));
 
-vi.mock('@promptfoo/redteam/constants', () => ({
-  categoryAliases: {
-    'test-category': 'Test Category',
-  },
-  displayNameOverrides: {},
-  strategyDescriptions: {
-    'test-strategy': 'Test strategy description',
-  },
-}));
-
 vi.mock('../../../eval/components/EvalOutputPromptDialog', () => ({
   default: () => null,
 }));
@@ -66,7 +56,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
   const defaultProps = {
     open: true,
     onClose: vi.fn(),
-    category: 'test-category',
+    category: 'bola',
     failures: [
       {
         prompt: 'Test prompt',
@@ -76,7 +66,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
           score: 0,
           reason: 'Failed test',
         },
-        result: createMockEvaluateResult({ pluginId: 'test-plugin' }),
+        result: createMockEvaluateResult({ pluginId: 'bola' }),
       },
     ],
     passes: [],
@@ -102,7 +92,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test normal click - should use navigate
     fireEvent.click(viewAllLogsButton);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=test-plugin');
+    expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=bola');
     expect(window.open).not.toHaveBeenCalled();
   });
 
@@ -114,7 +104,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test Ctrl+click - should open new tab
     fireEvent.click(viewAllLogsButton, { ctrlKey: true });
 
-    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?plugin=test-plugin', '_blank');
+    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?plugin=bola', '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
 
     // Reset mocks
@@ -123,7 +113,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Test Cmd+click (Mac) - should also open new tab
     fireEvent.click(viewAllLogsButton, { metaKey: true });
 
-    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?plugin=test-plugin', '_blank');
+    expect(window.open).toHaveBeenCalledWith('/eval/test-eval-123?plugin=bola', '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
