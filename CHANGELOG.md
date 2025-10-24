@@ -58,6 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
+- docs(blog): add blog post on RLVR (Reinforcement Learning with Verifiable Rewards) (#5987)
 - docs: configuring inference (#5983)
 - docs(site): update about page (#5971)
 - docs: add export formats (#5958)
