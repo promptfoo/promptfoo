@@ -1,0 +1,64 @@
+name: Changelog Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  check-changelog:
+    name: Check Changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check changelog update
+        id: check
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HAS_NO_CHANGELOG_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          # PR details are passed via environment variables for security
+
+          # Check if CHANGELOG.md was modified
+          git fetch origin "$BASE_REF"
+          CHANGELOG_MODIFIED=$(git diff --name-only origin/"$BASE_REF"...HEAD | grep -c "^CHANGELOG.md$" || true)
+
+          if [ "$CHANGELOG_MODIFIED" -gt 0 ]; then
+            echo "✅ CHANGELOG.md has been updated"
+            exit 0
+          fi
+
+          # Check if PR has no-changelog label
+          if [ "$HAS_NO_CHANGELOG_LABEL" = "true" ]; then
+            echo "✅ PR has 'no-changelog' label"
+            exit 0
+          fi
+
+          # Check if PR title matches exemption patterns (case-insensitive)
+          PR_TITLE_LOWER=$(echo "$PR_TITLE" | tr '[:upper:]' '[:lower:]')
+
+          if [[ "$PR_TITLE_LOWER" =~ ^chore\(deps\): ]] || \
+             [[ "$PR_TITLE_LOWER" =~ ^style: ]] || \
+             [[ "$PR_TITLE_LOWER" =~ ^build: ]] || \
+             [[ "$PR_TITLE_LOWER" =~ ^test: ]]; then
+            echo "✅ PR title matches exemption pattern: $PR_TITLE"
+            exit 0
+          fi
+
+          # No exemption found, require changelog
+          echo "❌ Changelog update required"
+          echo ""
+          echo "This PR requires a changelog entry. Please update CHANGELOG.md under the 'Unreleased' section."
+          echo ""
+          echo "To skip this check, add the 'no-changelog' label to this PR."
+          echo ""
+          echo "Automatic exemptions apply to PRs with titles starting with:"
+          echo "  - chore(deps):"
+          echo "  - style:"
+          echo "  - build:"
+          echo "  - test:"
+          exit 1
