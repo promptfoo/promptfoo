@@ -1,34 +1,7 @@
-import { validate as isUUID } from 'uuid';
 import { sha256 } from '../../../util/createHash';
 import { type Policy, PolicyObject, PolicyObjectSchema } from '../../types';
 import { POLICY_METRIC_PREFIX } from './constants';
-
-/**
- * Checks whether a policy ID is a valid reusable policy ID.
- * @param id - The policy ID to check.
- * @returns True if the policy ID is a valid reusable policy ID, false otherwise.
- */
-export function isValidReusablePolicyId(id: string): boolean {
-  return isUUID(id);
-}
-
-/**
- * Checks whether a policy ID is a valid inline policy ID.
- * @param id - The policy ID to check.
- * @returns True if the policy ID is a valid inline policy ID, false otherwise.
- */
-export function isValidInlinePolicyId(id: string): boolean {
-  return /^[0-9a-f]{12}$/i.test(id);
-}
-
-/**
- * Checks whether a policy ID is a valid policy ID.
- * @param id - The policy ID to check.
- * @returns True if the policy ID is a valid policy ID, false otherwise.
- */
-export function isValidPolicyId(id: string): boolean {
-  return isValidReusablePolicyId(id) || isValidInlinePolicyId(id);
-}
+import { isValidReusablePolicyId } from './validators';
 
 /**
  * Checks if a metric is a policy metric.
