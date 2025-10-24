@@ -12,7 +12,7 @@ import TabItem from '@theme/TabItem';
 # Getting started
 
 ## Verify installation
-[Install](/docs/installation) promptfoo here first.
+Install promptfoo using the [installation guide](/docs/installation) first.
 
 ```bash
 promptfoo --version
