@@ -484,7 +484,7 @@ As a maintainer, when you are ready to release a new version:
 
 All PRs should include an entry in `CHANGELOG.md` under the `## [Unreleased]` section. This is enforced by a GitHub Action.
 
-We follow the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format with these categories:
+We follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with these categories:
 
 - **Added**: New features
 - **Changed**: Changes to existing functionality

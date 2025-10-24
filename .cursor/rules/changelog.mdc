@@ -40,7 +40,7 @@ PRs can bypass changelog requirements with one of these labels:
 
 ## Format Requirements
 
-Follow [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format:
+Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format:
 
 ### Structure
 
@@ -221,7 +221,7 @@ The GitHub Action `.github/workflows/changelog-check.yml` will:
 
 ## References
 
-- Keep a Changelog: https://keepachangelog.com/en/1.0.0/
+- Keep a Changelog: https://keepachangelog.com/en/1.1.0/
 - Conventional Commits: https://www.conventionalcommits.org/
 - See `CLAUDE.md` for full documentation
 - See `site/docs/contributing.md` for contributor guidelines
