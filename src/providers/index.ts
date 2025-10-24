@@ -9,7 +9,7 @@ import logger from '../logger';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
-import { renderTemplatesInObject } from '../util/index';
+import { renderVarsInObject } from '../util/index';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
 
@@ -25,8 +25,9 @@ export async function loadApiProvider(
   const { options = {}, basePath, env } = context;
 
   // Render templates in config and id (e.g., {{ env.AZURE_ENDPOINT }}, {{ env.MY_DEPLOYMENT }})
-  const renderedConfig = options.config ? renderTemplatesInObject(options.config) : undefined;
-  const renderedId = options.id ? renderTemplatesInObject(options.id) : undefined;
+  // Using empty object {} allows Nunjucks globals (like env vars) to be accessible
+  const renderedConfig = options.config ? renderVarsInObject(options.config, {}) : undefined;
+  const renderedId = options.id ? renderVarsInObject(options.id, {}) : undefined;
 
   const providerOptions: ProviderOptions = {
     id: renderedId,
