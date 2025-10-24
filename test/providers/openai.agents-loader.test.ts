@@ -26,10 +26,19 @@ jest.mock('../../src/cliState', () => ({
 }));
 
 describe('agents-loader', () => {
-  const { importModule } = require('../../src/esm');
+  // Get mock after jest.mock() has been processed
+  let importModule: jest.MockedFunction<typeof import('../../src/esm').importModule>;
+
+  beforeAll(() => {
+    const esm = require('../../src/esm');
+    importModule = esm.importModule as jest.MockedFunction<typeof import('../../src/esm').importModule>;
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Set up default mock implementation
+    importModule.mockResolvedValue({ default: {} });
   });
 
   afterEach(() => {

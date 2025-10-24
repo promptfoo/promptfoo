@@ -16,10 +16,19 @@ jest.mock('../../src/logger', () => ({
 }));
 
 describe('OTLPTracingExporter', () => {
-  const { fetchWithProxy } = require('../../src/util/fetch');
+  // Get mock after jest.mock() has been processed
+  let fetchWithProxy: jest.MockedFunction<typeof import('../../src/util/fetch').fetchWithProxy>;
+
+  beforeAll(() => {
+    const fetchModule = require('../../src/util/fetch');
+    fetchWithProxy = fetchModule.fetchWithProxy as jest.MockedFunction<typeof import('../../src/util/fetch').fetchWithProxy>;
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Set up default mock implementation
+    fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as any);
   });
 
   afterEach(() => {
@@ -57,7 +66,7 @@ describe('OTLPTracingExporter', () => {
     });
 
     it('should export spans to OTLP endpoint', async () => {
-      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as any);
 
       const mockSpan: Span<any> = {
         type: 'trace.span',
@@ -108,7 +117,7 @@ describe('OTLPTracingExporter', () => {
     });
 
     it('should filter out non-span items', async () => {
-      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as any);
 
       const mockTrace: Trace = { type: 'trace', traceId: 'trace_123' } as any;
       const mockSpan: Span<any> = {
@@ -125,8 +134,8 @@ describe('OTLPTracingExporter', () => {
       const exporter = new OTLPTracingExporter();
       await exporter.export([mockTrace, mockSpan]);
 
-      const callArg = fetchWithProxy.mock.calls[0][1];
-      const payload = JSON.parse(callArg.body);
+      const callArg = fetchWithProxy.mock.calls[0][1] as any;
+      const payload = JSON.parse(callArg.body as string);
 
       // Should only have 1 span, not the trace item
       expect(payload.resourceSpans[0].scopeSpans[0].spans).toHaveLength(1);
@@ -135,7 +144,7 @@ describe('OTLPTracingExporter', () => {
 
   describe('OTLP transformation', () => {
     it('should transform span to OTLP format', async () => {
-      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as any);
 
       const mockSpan: Span<any> = {
         type: 'trace.span',
@@ -160,8 +169,8 @@ describe('OTLPTracingExporter', () => {
 
       await exporter.export([mockSpan]);
 
-      const callArg = fetchWithProxy.mock.calls[0][1];
-      const payload = JSON.parse(callArg.body);
+      const callArg = fetchWithProxy.mock.calls[0][1] as any;
+      const payload = JSON.parse(callArg.body as string);
 
       expect(payload).toMatchObject({
         resourceSpans: [
@@ -193,7 +202,7 @@ describe('OTLPTracingExporter', () => {
     });
 
     it('should handle span with error', async () => {
-      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as any);
 
       const mockSpan: Span<any> = {
         type: 'trace.span',
@@ -210,8 +219,8 @@ describe('OTLPTracingExporter', () => {
       const exporter = new OTLPTracingExporter();
       await exporter.export([mockSpan]);
 
-      const callArg = fetchWithProxy.mock.calls[0][1];
-      const payload = JSON.parse(callArg.body);
+      const callArg = fetchWithProxy.mock.calls[0][1] as any;
+      const payload = JSON.parse(callArg.body as string);
       const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
 
       expect(span.status).toEqual({
@@ -221,7 +230,7 @@ describe('OTLPTracingExporter', () => {
     });
 
     it('should strip trace_ and span_ prefixes from IDs', async () => {
-      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as any);
 
       const mockSpan: Span<any> = {
         type: 'trace.span',
@@ -237,8 +246,8 @@ describe('OTLPTracingExporter', () => {
       const exporter = new OTLPTracingExporter();
       await exporter.export([mockSpan]);
 
-      const callArg = fetchWithProxy.mock.calls[0][1];
-      const payload = JSON.parse(callArg.body);
+      const callArg = fetchWithProxy.mock.calls[0][1] as any;
+      const payload = JSON.parse(callArg.body as string);
       const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
 
       // IDs should be base64 encoded after stripping prefixes
@@ -248,7 +257,7 @@ describe('OTLPTracingExporter', () => {
     });
 
     it('should convert timestamps to nanoseconds', async () => {
-      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as any);
 
       const startTime = new Date('2024-01-01T00:00:00.000Z');
       const endTime = new Date('2024-01-01T00:00:01.000Z');
@@ -268,8 +277,8 @@ describe('OTLPTracingExporter', () => {
       const exporter = new OTLPTracingExporter();
       await exporter.export([mockSpan]);
 
-      const callArg = fetchWithProxy.mock.calls[0][1];
-      const payload = JSON.parse(callArg.body);
+      const callArg = fetchWithProxy.mock.calls[0][1] as any;
+      const payload = JSON.parse(callArg.body as string);
       const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
 
       // Convert ms to ns (multiply by 1,000,000)
@@ -278,7 +287,7 @@ describe('OTLPTracingExporter', () => {
     });
 
     it('should map span attributes', async () => {
-      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as any);
 
       const mockSpan: Span<any> = {
         type: 'trace.span',
@@ -299,8 +308,8 @@ describe('OTLPTracingExporter', () => {
       const exporter = new OTLPTracingExporter();
       await exporter.export([mockSpan]);
 
-      const callArg = fetchWithProxy.mock.calls[0][1];
-      const payload = JSON.parse(callArg.body);
+      const callArg = fetchWithProxy.mock.calls[0][1] as any;
+      const payload = JSON.parse(callArg.body as string);
       const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
 
       // Should have attributes for all span data (excluding name and type)
@@ -313,7 +322,7 @@ describe('OTLPTracingExporter', () => {
     });
 
     it('should handle missing endTime', async () => {
-      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+      fetchWithProxy.mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as any);
 
       const mockSpan: Span<any> = {
         type: 'trace.span',
@@ -330,8 +339,8 @@ describe('OTLPTracingExporter', () => {
       const exporter = new OTLPTracingExporter();
       await exporter.export([mockSpan]);
 
-      const callArg = fetchWithProxy.mock.calls[0][1];
-      const payload = JSON.parse(callArg.body);
+      const callArg = fetchWithProxy.mock.calls[0][1] as any;
+      const payload = JSON.parse(callArg.body as string);
       const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
 
       expect(span.endTimeUnixNano).toBeUndefined();

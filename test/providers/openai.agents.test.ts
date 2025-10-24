@@ -40,19 +40,32 @@ jest.mock('../../src/cache', () => ({
 }));
 
 describe('OpenAiAgentsProvider', () => {
+  // Get mocks after jest.mock() has been processed
+  let importModule: jest.MockedFunction<typeof import('../../src/esm').importModule>;
+  let agentsRun: jest.MockedFunction<typeof import('@openai/agents').run>;
+  let getOrCreateTrace: jest.MockedFunction<typeof import('@openai/agents').getOrCreateTrace>;
+  let startTraceExportLoop: jest.MockedFunction<typeof import('@openai/agents').startTraceExportLoop>;
+
+  beforeAll(() => {
+    const esm = require('../../src/esm');
+    const agentsModule = require('@openai/agents');
+    importModule = esm.importModule as any;
+    agentsRun = agentsModule.run as any;
+    getOrCreateTrace = agentsModule.getOrCreateTrace as any;
+    startTraceExportLoop = agentsModule.startTraceExportLoop as any;
+  });
+
   const mockAgent: Agent<any, any> = {
     name: 'Test Agent',
     instructions: 'Test instructions',
   } as any;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
 
     // Set up default mock implementations
-    // Mock importModule to return agent when loading from file
-    (esmModule.importModule as any).mockResolvedValue({ default: mockAgent });
-
-    (agents.run as any).mockResolvedValue({
+    importModule.mockResolvedValue({ default: mockAgent });
+    agentsRun.mockResolvedValue({
       finalOutput: 'Test response',
       newItems: [],
       usage: {
@@ -60,7 +73,7 @@ describe('OpenAiAgentsProvider', () => {
         promptTokens: 50,
         completionTokens: 50,
       },
-    });
+    } as any);
   });
 
   afterEach(() => {
@@ -160,7 +173,7 @@ describe('OpenAiAgentsProvider', () => {
           execute: async () => ({}),
         },
       ];
-      (esmModule.importModule as any).mockResolvedValue(mockTools);
+      importModule.mockResolvedValue(mockTools);
 
       const provider = new OpenAiAgentsProvider('test-agent', {
         config: {
@@ -181,7 +194,7 @@ describe('OpenAiAgentsProvider', () => {
           description: 'Handoff to agent',
         },
       ];
-      (esmModule.importModule as any).mockResolvedValue(mockHandoffs);
+      importModule.mockResolvedValue(mockHandoffs);
 
       const provider = new OpenAiAgentsProvider('test-agent', {
         config: {
@@ -312,7 +325,7 @@ describe('OpenAiAgentsProvider', () => {
     });
 
     it('should handle agent run errors', async () => {
-      (agents.run as any).mockRejectedValue(new Error('Agent run failed'));
+      agentsRun.mockRejectedValue(new Error('Agent run failed'));
 
       const provider = new OpenAiAgentsProvider('test-agent', {
         config: {
@@ -334,14 +347,14 @@ describe('OpenAiAgentsProvider', () => {
     });
 
     it('should extract token usage from result', async () => {
-      (agents.run as any).mockResolvedValue({
+      agentsRun.mockResolvedValue({
         finalOutput: 'Response',
         usage: {
           totalTokens: 200,
           promptTokens: 100,
           completionTokens: 100,
         },
-      });
+      } as any);
 
       const provider = new OpenAiAgentsProvider('test-agent', {
         config: {
@@ -359,10 +372,10 @@ describe('OpenAiAgentsProvider', () => {
     });
 
     it('should handle missing token usage', async () => {
-      (agents.run as any).mockResolvedValue({
+      agentsRun.mockResolvedValue({
         finalOutput: 'Response',
         usage: undefined,
-      });
+      } as any);
 
       const provider = new OpenAiAgentsProvider('test-agent', {
         config: {
@@ -438,7 +451,7 @@ describe('OpenAiAgentsProvider', () => {
     });
 
     it('should not fail if tracing setup fails', async () => {
-      (agents.startTraceExportLoop as any).mockImplementation(() => {
+      startTraceExportLoop.mockImplementation(() => {
         throw new Error('Tracing failed');
       });
 
