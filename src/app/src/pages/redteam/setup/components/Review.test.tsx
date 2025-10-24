@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { callApi } from '@app/utils/api';
-import type { ApiHealthStatus } from '@app/hooks/useApiHealth';
+import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 // Mock the dependencies
 vi.mock('@app/hooks/useEmailVerification', () => ({
@@ -31,22 +32,15 @@ vi.mock('@app/utils/api', () => ({
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
-// Mock the useApiHealth hook
-let apiHealthStatus: {
-  status: ApiHealthStatus;
-  checkHealth: ReturnType<typeof vi.fn>;
-  message: string | null;
-  isChecking: boolean;
-} = {
-  status: 'connected',
-  checkHealth: vi.fn(),
-  message: null,
-  isChecking: false,
-};
-
 vi.mock('@app/hooks/useApiHealth', () => ({
-  useApiHealth: () => apiHealthStatus,
+  useApiHealth: vi.fn(),
 }));
+
+vi.mocked(useApiHealth).mockReturnValue({
+  data: { status: 'connected', message: null },
+  refetch: vi.fn(),
+  isLoading: false,
+} as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
 vi.mock('@app/pages/eval-creator/components/YamlEditor', () => ({
   default: ({ initialYaml }: { initialYaml: string }) => (
@@ -99,12 +93,14 @@ describe('Review Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    apiHealthStatus = {
-      status: 'connected',
-      checkHealth: vi.fn(),
-      message: null,
-      isChecking: false,
-    };
+
+    // Reset the mock to return a connected state by default
+    vi.mocked(useApiHealth).mockReturnValue({
+      data: { status: 'connected', message: null },
+      refetch: vi.fn(),
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultConfig,
       updateConfig: mockUpdateConfig,
@@ -302,9 +298,12 @@ Application Details:
   });
 
   describe('Run Now Button - API Health Integration', () => {
-    it('should call checkHealth on component mount', () => {
-      const checkHealthMock = vi.fn();
-      apiHealthStatus.checkHealth = checkHealthMock;
+    it('should read API health status from context on mount', () => {
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -314,11 +313,18 @@ Application Details:
         />,
       );
 
-      expect(checkHealthMock).toHaveBeenCalled();
+      // Component should render without errors and read the status
+      // The ApiHealthProvider handles polling automatically
+      const runButton = screen.getByRole('button', { name: /run now/i });
+      expect(runButton).toBeInTheDocument();
     });
 
     it('should enable the Run Now button when API status is connected', () => {
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -333,7 +339,11 @@ Application Details:
     });
 
     it('should disable the Run Now button when API status is blocked', () => {
-      apiHealthStatus.status = 'blocked';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'blocked', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -348,7 +358,11 @@ Application Details:
     });
 
     it('should disable the Run Now button when API status is disabled', () => {
-      apiHealthStatus.status = 'disabled';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'disabled', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -363,7 +377,11 @@ Application Details:
     });
 
     it('should disable the Run Now button when API status is unknown', () => {
-      apiHealthStatus.status = 'unknown';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'unknown', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -378,7 +396,11 @@ Application Details:
     });
 
     it('should enable the Run Now button when API status is loading', () => {
-      apiHealthStatus.status = 'loading';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'loading', message: null },
+        refetch: vi.fn(),
+        isLoading: true,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -393,7 +415,11 @@ Application Details:
     });
 
     it('should show tooltip message when hovering over disabled button due to blocked API', async () => {
-      apiHealthStatus.status = 'blocked';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'blocked', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -415,7 +441,11 @@ Application Details:
     });
 
     it('should display warning alert when API is blocked', () => {
-      apiHealthStatus.status = 'blocked';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'blocked', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -434,7 +464,11 @@ Application Details:
     });
 
     it('should display warning alert when API is disabled', () => {
-      apiHealthStatus.status = 'disabled';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'disabled', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -451,7 +485,11 @@ Application Details:
     });
 
     it('should display warning alert when API is unknown', () => {
-      apiHealthStatus.status = 'unknown';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'unknown', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -466,7 +504,11 @@ Application Details:
     });
 
     it('should not display warning alert when API is connected', () => {
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -483,7 +525,11 @@ Application Details:
     });
 
     it('should not display warning alert when API is loading', () => {
-      apiHealthStatus.status = 'loading';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'loading', message: null },
+        refetch: vi.fn(),
+        isLoading: true,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -500,7 +546,11 @@ Application Details:
     });
 
     it('should show tooltip message when hovering over disabled button due to disabled API', async () => {
-      apiHealthStatus.status = 'disabled';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'disabled', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -522,7 +572,11 @@ Application Details:
     });
 
     it('should show tooltip message when hovering over disabled button due to unknown API status', async () => {
-      apiHealthStatus.status = 'unknown';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'unknown', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -544,7 +598,11 @@ Application Details:
     });
 
     it('should not show tooltip when API is connected', async () => {
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -571,7 +629,11 @@ Application Details:
     });
 
     it('should not show tooltip when API is loading', async () => {
-      apiHealthStatus.status = 'loading';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'loading', message: null },
+        refetch: vi.fn(),
+        isLoading: true,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       render(
         <Review
@@ -600,6 +662,13 @@ Application Details:
 
   describe('Run Now Button - isRunning Integration', () => {
     beforeEach(() => {
+      // Reset to connected state
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
       // Mock successful job status check and run API calls
       vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
         if (url === '/redteam/status') {
@@ -625,7 +694,11 @@ Application Details:
     });
 
     it('should disable button when isRunning is true regardless of API status', async () => {
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
       vi.mocked(useEmailVerification).mockReturnValue({
@@ -658,7 +731,11 @@ Application Details:
     });
 
     it('should show "Running..." text when isRunning is true', async () => {
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
       vi.mocked(useEmailVerification).mockReturnValue({
@@ -687,7 +764,11 @@ Application Details:
     });
 
     it('should show Cancel button when isRunning is true', async () => {
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
       vi.mocked(useEmailVerification).mockReturnValue({
@@ -717,7 +798,11 @@ Application Details:
     });
 
     it('should not show tooltip when button is disabled due to isRunning', async () => {
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
       vi.mocked(useEmailVerification).mockReturnValue({
@@ -758,7 +843,11 @@ Application Details:
 
     it('should disable button when both isRunning is true and API is blocked', async () => {
       // Start with API connected so we can trigger running state
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       // Mock email verification to proceed
       vi.mocked(useEmailVerification).mockReturnValue({
@@ -782,7 +871,11 @@ Application Details:
       });
 
       // Now simulate API becoming blocked while running
-      apiHealthStatus.status = 'blocked';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'blocked', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       rerender(
         <Review
@@ -800,7 +893,11 @@ Application Details:
 
   describe('Run Now Button - State Transitions', () => {
     it('should update button state when API health status changes', () => {
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       const { rerender } = render(
         <Review
@@ -814,7 +911,12 @@ Application Details:
       expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
 
       // Change API status to blocked
-      apiHealthStatus.status = 'blocked';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'blocked', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
       rerender(
         <Review
           navigateToPlugins={vi.fn()}
@@ -827,7 +929,12 @@ Application Details:
       expect(screen.getByRole('button', { name: /run now/i })).toBeDisabled();
 
       // Change API status back to connected
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
       rerender(
         <Review
           navigateToPlugins={vi.fn()}
@@ -841,7 +948,11 @@ Application Details:
     });
 
     it('should update alert visibility when API health status changes', () => {
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       const { rerender } = render(
         <Review
@@ -856,7 +967,12 @@ Application Details:
       expect(screen.queryByText(/Remote generation is disabled/)).not.toBeInTheDocument();
 
       // Change API status to blocked
-      apiHealthStatus.status = 'blocked';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'blocked', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
       rerender(
         <Review
           navigateToPlugins={vi.fn()}
@@ -873,7 +989,12 @@ Application Details:
       ).toBeInTheDocument();
 
       // Change API status to disabled
-      apiHealthStatus.status = 'disabled';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'disabled', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
       rerender(
         <Review
           navigateToPlugins={vi.fn()}
@@ -890,7 +1011,12 @@ Application Details:
       expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
 
       // Change API status back to connected
-      apiHealthStatus.status = 'connected';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
       rerender(
         <Review
           navigateToPlugins={vi.fn()}
@@ -905,7 +1031,11 @@ Application Details:
     });
 
     it('should update tooltip message when API health status changes', async () => {
-      apiHealthStatus.status = 'blocked';
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'blocked', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       const { rerender } = render(
         <Review
@@ -927,7 +1057,12 @@ Application Details:
         fireEvent.mouseOut(buttonWrapper);
 
         // Change to disabled state
-        apiHealthStatus.status = 'disabled';
+        vi.mocked(useApiHealth).mockReturnValue({
+          data: { status: 'disabled', message: null },
+          refetch: vi.fn(),
+          isLoading: false,
+        } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
         rerender(
           <Review
             navigateToPlugins={vi.fn()}
@@ -946,7 +1081,12 @@ Application Details:
         fireEvent.mouseOut(buttonWrapper);
 
         // Change to unknown state
-        apiHealthStatus.status = 'unknown';
+        vi.mocked(useApiHealth).mockReturnValue({
+          data: { status: 'unknown', message: null },
+          refetch: vi.fn(),
+          isLoading: false,
+        } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
         rerender(
           <Review
             navigateToPlugins={vi.fn()}

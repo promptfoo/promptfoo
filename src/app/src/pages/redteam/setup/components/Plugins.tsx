@@ -29,6 +29,7 @@ import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import InfoIcon from '@mui/icons-material/Info';
+import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 
 interface PluginsProps {
   onNext: () => void;
@@ -134,18 +135,16 @@ function TabPanel({ children, value, index }: TabPanelProps) {
 }
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
-  const { config } = useRedTeamConfig();
+  const { config, updatePlugins } = useRedTeamConfig();
   const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
   const { recordEvent } = useTelemetry();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
-  useEffect(() => {
-    // API health check
-    checkHealth();
-  }, [checkHealth]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
       config.plugins
@@ -202,6 +201,37 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       }
     }
   }, [config.plugins, hasUserInteracted, selectedPlugins]);
+
+  // Sync selectedPlugins to config after user interaction
+  useEffect(() => {
+    if (hasUserInteracted) {
+      // Get policy and intent plugins from existing config
+      const policyPlugins = config.plugins.filter(
+        (p) => typeof p === 'object' && p.id === 'policy',
+      );
+      const intentPlugins = config.plugins.filter(
+        (p) => typeof p === 'object' && p.id === 'intent',
+      );
+
+      // Convert selected plugins to config format with their configs
+      const regularPlugins = Array.from(selectedPlugins).map((plugin) => {
+        const existingConfig = pluginConfig[plugin];
+        if (existingConfig && Object.keys(existingConfig).length > 0) {
+          return {
+            id: plugin,
+            config: existingConfig,
+          };
+        }
+        return plugin;
+      });
+
+      // Combine all plugins
+      const allPlugins = [...regularPlugins, ...policyPlugins, ...intentPlugins];
+
+      // Update the global config
+      updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
+    }
+  }, [selectedPlugins, pluginConfig, hasUserInteracted, config.plugins, updatePlugins]);
 
   const handlePluginToggle = useCallback(
     (plugin: Plugin) => {
@@ -461,23 +491,25 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
       {/* Tabs component */}
       <Box sx={{ width: '100%', mb: 3 }}>
-        <Tabs value={activeTab} onChange={handleTabChange} aria-label="plugin configuration tabs">
-          <Tab
-            label={`Plugins (${selectedPlugins.size})`}
-            id="plugins-tab-0"
-            aria-controls="plugins-tabpanel-0"
-          />
-          <Tab
-            label={`Custom Intents (${customIntentsCount})`}
-            id="plugins-tab-1"
-            aria-controls="plugins-tabpanel-1"
-          />
-          <Tab
-            label={`Custom Policies (${customPoliciesCount})`}
-            id="plugins-tab-2"
-            aria-controls="plugins-tabpanel-2"
-          />
-        </Tabs>
+        <TestCaseGenerationProvider redTeamConfig={config}>
+          <Tabs value={activeTab} onChange={handleTabChange} aria-label="plugin configuration tabs">
+            <Tab
+              label={`Plugins (${selectedPlugins.size})`}
+              id="plugins-tab-0"
+              aria-controls="plugins-tabpanel-0"
+            />
+            <Tab
+              label={`Custom Intents (${customIntentsCount})`}
+              id="plugins-tab-1"
+              aria-controls="plugins-tabpanel-1"
+            />
+            <Tab
+              label={`Custom Policies (${customPoliciesCount})`}
+              id="plugins-tab-2"
+              aria-controls="plugins-tabpanel-2"
+            />
+          </Tabs>
+        </TestCaseGenerationProvider>
         <Divider />
       </Box>
 
@@ -489,7 +521,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           pluginConfig={pluginConfig}
           updatePluginConfig={updatePluginConfig}
           recentlyUsedPlugins={recentlyUsedSnapshot}
-          applicationDefinition={config.applicationDefinition}
           onUserInteraction={() => setHasUserInteracted(true)}
           isRemoteGenerationDisabled={isRemoteGenerationDisabled}
         />

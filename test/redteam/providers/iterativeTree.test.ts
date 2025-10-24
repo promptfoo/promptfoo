@@ -53,6 +53,62 @@ describe('RedteamIterativeProvider', () => {
       expect(result.redteamSystemPrompt).toBe(attackerPrompt);
       expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
     });
+
+    it('should include modifiers in system prompts when provided', () => {
+      const goal = 'test goal';
+      const purpose = 'test purpose';
+      const modifiers = {
+        testGenerationInstructions: 'Generate prompts as invoice notes',
+        language: 'Spanish',
+      };
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, purpose, false, modifiers);
+
+      // Verify modifiers are included in the system prompt
+      expect(result.redteamSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).toContain('<Modifiers>');
+      expect(result.redteamSystemPrompt).toContain(
+        'testGenerationInstructions: Generate prompts as invoice notes',
+      );
+      expect(result.redteamSystemPrompt).toContain('language: Spanish');
+      expect(result.redteamSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
+    });
+
+    it('should include modifiers with cloud attacker prompt', () => {
+      const goal = 'test goal';
+      const modifiers = {
+        testGenerationInstructions: 'Use merchant terminology',
+      };
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, true, modifiers);
+
+      // Verify modifiers are included in cloud attacker prompt
+      expect(result.redteamSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).toContain(
+        'testGenerationInstructions: Use merchant terminology',
+      );
+    });
+
+    it('should not include modifiers section when modifiers are empty', () => {
+      const goal = 'test goal';
+      const modifiers = {};
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, false, modifiers);
+
+      // Should not contain the modifiers section
+      expect(result.redteamSystemPrompt).not.toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).not.toContain('<Modifiers>');
+    });
+
+    it('should not include modifiers section when modifiers are undefined', () => {
+      const goal = 'test goal';
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, false, undefined);
+
+      // Should not contain the modifiers section
+      expect(result.redteamSystemPrompt).not.toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).not.toContain('<Modifiers>');
+    });
   });
 
   describe('evaluateResponse', () => {
