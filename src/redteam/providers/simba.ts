@@ -377,8 +377,29 @@ export default class SimbaProvider implements ApiProvider {
 
       let currentPhase = Phases.Reconnaissance;
 
+      // Calculate max iterations based on config with a high buffer to account for
+      // reconnaissance, probing, and attack planning phases
+      const maxIterations =
+        this.config.maxConversationRounds *
+        this.config.maxAttacksPerGoal *
+        this.config.goals.length *
+        10;
+      let iteration = 0;
+
+      logger.debug(
+        `${LOGGER_PREFIX} Starting conversation loop with max iterations: ${maxIterations}`,
+      );
+
       // Main conversation loop - similar to the existing Simba command
       while (true) {
+        iteration++;
+
+        if (iteration > maxIterations) {
+          logger.warn(
+            `${LOGGER_PREFIX} Reached maximum iterations, this is likely a bug in the provider. Stopping session`,
+          );
+          break;
+        }
         // Request next operations from Simba
         const nextRequest: SimbaNextRequest = {
           requestedCount: concurrency || 1,
