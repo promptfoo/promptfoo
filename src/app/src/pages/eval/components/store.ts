@@ -103,9 +103,7 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
   const strategyIds =
     strategies?.map((strategy) => (typeof strategy === 'string' ? strategy : strategy.id)) ?? [];
 
-  // Filter out 'multilingual' - it's now a pure config mechanism that lifts languages to global config
-  // Tests generated with language modifiers appear in 'basic' (Cross-Language Attack) section
-  return Array.from(new Set([...strategyIds, 'basic'])).filter((id) => id !== 'multilingual');
+  return Array.from(new Set([...strategyIds, 'basic']));
 }
 
 /**

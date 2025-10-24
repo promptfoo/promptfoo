@@ -423,7 +423,6 @@ export async function doGenerateRedteam(
   } = await synthesize({
     ...parsedConfig.data,
     purpose: enhancedPurpose,
-    language: parsedConfig.data.language, // Use parsed/transformed config, not original
     numTests: config.numTests,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
     maxConcurrency: config.maxConcurrency,
