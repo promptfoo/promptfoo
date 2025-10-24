@@ -76,17 +76,24 @@ function renderWithProviders({
   error = null,
   initialEntries = ['/'],
   theme = createTheme(),
+  showDatasetColumn = true,
 }: {
   data?: ServerPromptWithMetadata[];
   isLoading?: boolean;
   error?: string | null;
   initialEntries?: string[];
   theme?: ReturnType<typeof createTheme>;
+  showDatasetColumn?: boolean;
 }): RenderResult {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <ThemeProvider theme={theme}>
-        <Prompts data={data} isLoading={isLoading} error={error} />
+        <Prompts
+          data={data}
+          isLoading={isLoading}
+          error={error}
+          showDatasetColumn={showDatasetColumn}
+        />
       </ThemeProvider>
     </MemoryRouter>,
   );
@@ -263,5 +270,55 @@ describe('Prompts', () => {
 
     // Should show display text as fallback
     expect(screen.getByText('Display text')).toBeInTheDocument();
+  });
+
+  it("should display the prompt's raw text in the Label column when label and display are missing", () => {
+    const mockPromptsWithoutLabelAndDisplay: ServerPromptWithMetadata[] = [
+      {
+        id: 'prompt:no-label-no-display',
+        prompt: {
+          raw: 'Raw prompt text only',
+          label: '',
+        },
+        count: 1,
+        recentEvalDate: '2023-10-27T10:00:00.000Z',
+        recentEvalId: 'eval-123',
+        evals: [],
+      },
+    ];
+
+    renderWithProviders({ data: mockPromptsWithoutLabelAndDisplay });
+
+    const cells = screen.getAllByText('Raw prompt text only');
+
+    expect(cells[0]).toHaveAttribute('data-field', 'label');
+
+    expect(cells[1]).toHaveAttribute('data-field', 'prompt');
+
+    expect(cells).toHaveLength(2);
+  });
+
+  it('should render the Label column in DataGrid on very narrow viewport widths', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      writable: true,
+      configurable: true,
+      value: 400,
+    });
+
+    window.dispatchEvent(new Event('resize'));
+
+    renderWithProviders({ data: mockPrompts });
+
+    expect(screen.getByRole('columnheader', { name: 'Label' })).toBeInTheDocument();
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+  });
+
+  it('should render correctly when showDatasetColumn is false', () => {
+    renderWithProviders({ data: mockPrompts, showDatasetColumn: false });
+
+    expect(screen.getByText('Label')).toBeInTheDocument();
+
+    expect(screen.getAllByText('This is the first sample prompt.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('This is the second sample prompt.').length).toBeGreaterThan(0);
   });
 });
