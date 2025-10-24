@@ -115,7 +115,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiAgentsOptions; id?: string; env?: EnvOverrides }
+    options: { config?: OpenAiAgentsOptions; id?: string; env?: EnvOverrides },
   ) {
     super(modelName, options);
     this.agentConfig = this.parseAgentConfig(options.config);
@@ -182,11 +182,7 @@ export class OTLPTracingExporter implements TracingExporter {
   private evaluationId?: string;
   private testCaseId?: string;
 
-  constructor(options: {
-    otlpEndpoint?: string;
-    evaluationId?: string;
-    testCaseId?: string;
-  }) {
+  constructor(options: { otlpEndpoint?: string; evaluationId?: string; testCaseId?: string }) {
     this.otlpEndpoint = options.otlpEndpoint || 'http://localhost:4318';
     this.evaluationId = options.evaluationId;
     this.testCaseId = options.testCaseId;
@@ -215,24 +211,26 @@ export class OTLPTracingExporter implements TracingExporter {
     // Transform openai-agents-js trace/span format to OTLP JSON format
     // See: https://opentelemetry.io/docs/specs/otlp/#otlphttp-request
 
-    const spans = items
-      .filter(item => item.type === 'span')
-      .map(span => this.spanToOTLP(span));
+    const spans = items.filter((item) => item.type === 'span').map((span) => this.spanToOTLP(span));
 
     return {
-      resourceSpans: [{
-        resource: {
-          attributes: [
-            { key: 'service.name', value: { stringValue: 'promptfoo-agents' } },
-            { key: 'evaluation.id', value: { stringValue: this.evaluationId || 'unknown' } },
-            { key: 'test.case.id', value: { stringValue: this.testCaseId || 'unknown' } },
+      resourceSpans: [
+        {
+          resource: {
+            attributes: [
+              { key: 'service.name', value: { stringValue: 'promptfoo-agents' } },
+              { key: 'evaluation.id', value: { stringValue: this.evaluationId || 'unknown' } },
+              { key: 'test.case.id', value: { stringValue: this.testCaseId || 'unknown' } },
+            ],
+          },
+          scopeSpans: [
+            {
+              scope: { name: 'openai-agents-js', version: '0.1.0' },
+              spans,
+            },
           ],
         },
-        scopeSpans: [{
-          scope: { name: 'openai-agents-js', version: '0.1.0' },
-          spans,
-        }],
-      }],
+      ],
     };
   }
 
@@ -277,7 +275,7 @@ export class OTLPTracingExporter implements TracingExporter {
     } else if (typeof value === 'boolean') {
       return { boolValue: value };
     } else if (Array.isArray(value)) {
-      return { arrayValue: { values: value.map(v => this.valueToOTLP(v)) } };
+      return { arrayValue: { values: value.map((v) => this.valueToOTLP(v)) } };
     } else if (typeof value === 'object') {
       return { stringValue: JSON.stringify(value) };
     }
@@ -392,7 +390,7 @@ providers:
 
       # Agent execution config
       maxTurns: 10
-      executeTools: real  # or 'mock' or boolean
+      executeTools: real # or 'mock' or boolean
 
       # Tracing
       tracing: true
@@ -402,14 +400,14 @@ providers:
       model: gpt-4
 
 tests:
-  - description: "Weather query for Tokyo"
+  - description: 'Weather query for Tokyo'
     vars:
       city: Tokyo
     assert:
       - type: contains
-        value: "sunny"
+        value: 'sunny'
       - type: isSimilar
-        value: "The weather in Tokyo is pleasant"
+        value: 'The weather in Tokyo is pleasant'
 ```
 
 **Agent file (`agents/weather-agent.ts`):**
@@ -419,7 +417,8 @@ import { Agent } from '@openai/agents';
 
 export default new Agent({
   name: 'Weather Agent',
-  instructions: 'You are a helpful weather assistant. Use the available tools to get weather information.',
+  instructions:
+    'You are a helpful weather assistant. Use the available tools to get weather information.',
   model: 'gpt-4',
 });
 ```
@@ -464,19 +463,19 @@ providers:
             properties:
               timezone:
                 type: string
-          execute: "return new Date().toISOString()"
+          execute: 'return new Date().toISOString()'
 
       maxTurns: 5
       executeTools: mock
       toolMocks:
-        get_time: "2024-10-23T12:00:00Z"
+        get_time: '2024-10-23T12:00:00Z'
 
 tests:
   - vars:
-      query: "What time is it?"
+      query: 'What time is it?'
     assert:
       - type: contains
-        value: "2024-10-23"
+        value: '2024-10-23'
 ```
 
 ### Example 3: Multi-Agent Workflow with Handoffs
@@ -492,14 +491,14 @@ providers:
       tracing: true
 
 tests:
-  - description: "Escalate to billing specialist"
+  - description: 'Escalate to billing specialist'
     vars:
-      query: "I was charged twice for my subscription"
+      query: 'I was charged twice for my subscription'
     assert:
       - type: contains
-        value: "refund"
+        value: 'refund'
       - type: llm-rubric
-        value: "The response shows the issue was escalated to billing"
+        value: 'The response shows the issue was escalated to billing'
 ```
 
 ---
@@ -549,6 +548,7 @@ The OTLP exporter should include these key attributes:
 ### Phase 1: Core Provider (Week 1)
 
 **Tasks:**
+
 1. Create `src/providers/openai/agents.ts`
    - Implement `OpenAiAgentsProvider` class
    - Extend `OpenAiGenericProvider` for common OpenAI config
@@ -570,6 +570,7 @@ The OTLP exporter should include these key attributes:
    - Support both `.ts` and `.js` files via dynamic import
 
 **Testing:**
+
 - Unit test for provider initialization
 - Unit test for agent definition loading (file + inline)
 - Unit test for tool loading (file + inline)
@@ -578,6 +579,7 @@ The OTLP exporter should include these key attributes:
 ### Phase 2: Tracing Integration (Week 2)
 
 **Tasks:**
+
 1. Create `src/providers/openai/agents-tracing.ts`
    - Implement `OTLPTracingExporter` class
    - Implement OTLP format transformation
@@ -595,6 +597,7 @@ The OTLP exporter should include these key attributes:
    - Add validation for agent trace format
 
 **Testing:**
+
 - Unit test for OTLP transformation
 - Unit test for span attribute mapping
 - Integration test with OTLP receiver running
@@ -604,6 +607,7 @@ The OTLP exporter should include these key attributes:
 ### Phase 3: Tool Execution Modes (Week 2)
 
 **Tasks:**
+
 1. Implement tool execution modes
    - Add `executeTools` config option
    - Implement mock tool wrapper
@@ -620,6 +624,7 @@ The OTLP exporter should include these key attributes:
    - Add timeout handling for long-running tools
 
 **Testing:**
+
 - Unit test for mock tool execution
 - Unit test for real tool execution
 - Integration test for tool mocks
@@ -628,6 +633,7 @@ The OTLP exporter should include these key attributes:
 ### Phase 4: Examples and Documentation (Week 3)
 
 **Tasks:**
+
 1. Create example configurations
    - Simple single-agent example
    - Multi-agent with handoffs example
@@ -652,6 +658,7 @@ The OTLP exporter should include these key attributes:
    - "Multi-Agent Workflows" guide
 
 **Testing:**
+
 - Verify all examples run successfully
 - Verify documentation accuracy
 - Get user feedback on examples
@@ -659,6 +666,7 @@ The OTLP exporter should include these key attributes:
 ### Phase 5: Advanced Features (Week 4)
 
 **Tasks:**
+
 1. Caching support
    - Implement agent run caching
    - Cache based on agent config + input
@@ -680,6 +688,7 @@ The OTLP exporter should include these key attributes:
    - Retry logic for transient failures
 
 **Testing:**
+
 - Test caching behavior
 - Test guardrails
 - Performance benchmarks
@@ -698,7 +707,7 @@ describe('OpenAiAgentsProvider', () => {
   describe('initialization', () => {
     it('should load agent from file', async () => {
       const provider = new OpenAiAgentsProvider('test-agent', {
-        config: { agent: 'file://./test/fixtures/test-agent.ts' }
+        config: { agent: 'file://./test/fixtures/test-agent.ts' },
       });
       // Assert agent loaded correctly
     });
@@ -708,9 +717,9 @@ describe('OpenAiAgentsProvider', () => {
         config: {
           agent: {
             name: 'Test Agent',
-            instructions: 'You are a test'
-          }
-        }
+            instructions: 'You are a test',
+          },
+        },
       });
       // Assert agent created correctly
     });
@@ -719,7 +728,7 @@ describe('OpenAiAgentsProvider', () => {
   describe('callApi', () => {
     it('should run agent and return final output', async () => {
       const provider = new OpenAiAgentsProvider('test-agent', {
-        config: { agent: testAgentConfig }
+        config: { agent: testAgentConfig },
       });
 
       const response = await provider.callApi('Hello');
@@ -789,12 +798,14 @@ describe('OpenAiAgentsProvider Integration', () => {
 ### Example Tests
 
 Create examples that serve as tests:
+
 - `examples/openai-agents/basic/` - Simple agent with one tool
 - `examples/openai-agents/handoffs/` - Multi-agent with handoffs
 - `examples/openai-agents/customer-service/` - Complex workflow
 - `examples/openai-agents/mocked-tools/` - Using mocked tools
 
 Each example should have:
+
 - `promptfooconfig.yaml`
 - Agent definitions in `agents/`
 - Tool definitions in `tools/`
@@ -812,6 +823,7 @@ Run all examples in CI to ensure they work.
 **File:** `site/docs/providers/openai-agents.md`
 
 **Sections:**
+
 1. Overview
    - What is openai-agents-js
    - Why test agents
@@ -874,6 +886,7 @@ Run all examples in CI to ensure they work.
 **File:** `site/docs/guides/testing-ai-agents.md`
 
 **Sections:**
+
 1. Introduction to Agent Testing
 2. Setting Up Your First Agent Test
 3. Testing Tool Execution
@@ -906,6 +919,7 @@ Note: `zod` is a peer dependency of `@openai/agents`, but we should include it a
 ### Optional Dependencies
 
 The agent provider should work without these, but supports them if available:
+
 - Existing OpenAI configuration
 - Existing tracing infrastructure
 
@@ -916,6 +930,7 @@ The agent provider should work without these, but supports them if available:
 ### No Breaking Changes
 
 This integration introduces only new functionality:
+
 - New provider type: `openai:agents:*`
 - New configuration options
 - New tracing attributes
@@ -925,6 +940,7 @@ All existing providers and configurations continue to work unchanged.
 ### Opt-In Tracing
 
 Tracing is opt-in via:
+
 1. Test metadata: `tracingEnabled: true`
 2. Provider config: `tracing: true`
 3. Environment: `PROMPTFOO_TRACING_ENABLED=true`
@@ -936,6 +952,7 @@ If tracing not enabled, agent runs work normally without trace export.
 ## Implementation Phases
 
 ### Phase 1: MVP (Weeks 1-2)
+
 - ✅ Core provider implementation
 - ✅ File-based agent definitions
 - ✅ Basic tool support
@@ -946,6 +963,7 @@ If tracing not enabled, agent runs work normally without trace export.
 **Deliverable:** Working provider that can run simple agents with tracing
 
 ### Phase 2: Polish (Week 3)
+
 - ✅ Tool execution modes (real/mock)
 - ✅ Tool mocking system
 - ✅ Handoffs support
@@ -956,6 +974,7 @@ If tracing not enabled, agent runs work normally without trace export.
 **Deliverable:** Production-ready provider with examples and docs
 
 ### Phase 3: Advanced (Week 4)
+
 - ✅ Caching support
 - ✅ Guardrails support
 - ✅ Performance optimization
@@ -973,6 +992,7 @@ If tracing not enabled, agent runs work normally without trace export.
 **Question:** Should we cache loaded agent definitions between test cases?
 
 **Options:**
+
 - A) Cache by file path - faster but might miss changes
 - B) Always reload - slower but always fresh
 - C) Watch files and invalidate cache - complex but optimal
@@ -984,6 +1004,7 @@ If tracing not enabled, agent runs work normally without trace export.
 **Question:** Should we support streaming agent responses?
 
 **Options:**
+
 - A) No streaming in v1 - simpler implementation
 - B) Stream to console only - useful for debugging
 - C) Full streaming support - matches other providers
@@ -995,6 +1016,7 @@ If tracing not enabled, agent runs work normally without trace export.
 **Question:** Should we support continuing conversations across test cases?
 
 **Options:**
+
 - A) Each test case is independent - simpler, more isolated
 - B) Support optional conversation continuity - more flexible
 - C) Automatic conversation threading - too magical
@@ -1006,6 +1028,7 @@ If tracing not enabled, agent runs work normally without trace export.
 **Question:** How should users override tool behavior for testing?
 
 **Options:**
+
 - A) Config-based mocks (as designed) - declarative
 - B) Programmatic hooks - more flexible
 - C) Both - most powerful but complex
@@ -1063,40 +1086,43 @@ If tracing not enabled, agent runs work normally without trace export.
 
 ### Technical Risks
 
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
-| openai-agents-js API changes | High | Medium | Pin to specific version, monitor releases |
-| OTLP format incompatibility | Medium | Low | Extensive testing, validation layer |
-| Performance issues with tracing | Medium | Medium | Make tracing optional, optimize export |
-| File loading security issues | High | Low | Validate file paths, sanitize imports |
-| Tool execution side effects | Medium | Medium | Clear documentation, mock-by-default option |
+| Risk                            | Impact | Likelihood | Mitigation                                  |
+| ------------------------------- | ------ | ---------- | ------------------------------------------- |
+| openai-agents-js API changes    | High   | Medium     | Pin to specific version, monitor releases   |
+| OTLP format incompatibility     | Medium | Low        | Extensive testing, validation layer         |
+| Performance issues with tracing | Medium | Medium     | Make tracing optional, optimize export      |
+| File loading security issues    | High   | Low        | Validate file paths, sanitize imports       |
+| Tool execution side effects     | Medium | Medium     | Clear documentation, mock-by-default option |
 
 ### Product Risks
 
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
-| Users expect agent-specific features | Medium | High | Clear documentation of scope, future roadmap |
-| Complex agent configs hard to manage | Medium | Medium | Good examples, validation, error messages |
-| Debugging agent failures difficult | High | Medium | Excellent tracing, detailed error messages |
-| Performance issues with long agent runs | Medium | Medium | Timeouts, progress indicators, optimization |
+| Risk                                    | Impact | Likelihood | Mitigation                                   |
+| --------------------------------------- | ------ | ---------- | -------------------------------------------- |
+| Users expect agent-specific features    | Medium | High       | Clear documentation of scope, future roadmap |
+| Complex agent configs hard to manage    | Medium | Medium     | Good examples, validation, error messages    |
+| Debugging agent failures difficult      | High   | Medium     | Excellent tracing, detailed error messages   |
+| Performance issues with long agent runs | Medium | Medium     | Timeouts, progress indicators, optimization  |
 
 ---
 
 ## Success Metrics
 
 ### Technical Metrics
+
 - ✅ Unit test coverage > 80%
 - ✅ All integration tests passing
 - ✅ All examples run successfully
 - ✅ Zero P0/P1 bugs in first month
 
 ### Adoption Metrics
+
 - Target: 50+ agent provider uses in first month
 - Target: 5+ community examples/guides
 - Target: 10+ GitHub issues/discussions about agents
 - Target: Positive feedback in user interviews
 
 ### Performance Metrics
+
 - Agent run overhead < 100ms
 - Trace export overhead < 50ms
 - File loading overhead < 200ms
@@ -1111,6 +1137,7 @@ This design provides a **minimal, focused integration** of openai-agents-js into
 The phased approach allows for rapid MVP delivery while leaving room for advanced features based on user feedback. The emphasis on tracing ensures excellent observability and debugging capabilities from day one.
 
 **Next Steps:**
+
 1. Review and approve this design
 2. Set up development environment with openai-agents-js
 3. Begin Phase 1 implementation

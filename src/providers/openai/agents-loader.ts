@@ -3,12 +3,7 @@ import type { Agent } from '@openai/agents';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import cliState from '../../cliState';
-import type {
-  AgentDefinition,
-  ToolDefinition,
-  HandoffDefinition,
-  LoadedAgent,
-} from './agents-types';
+import type { AgentDefinition, ToolDefinition, HandoffDefinition } from './agents-types';
 
 /**
  * Load agent definition from file path or return inline definition
@@ -206,7 +201,7 @@ function isAgentInstance(value: any): value is Agent<any, any> {
  */
 function resolveFilePath(filePath: string): string {
   // Remove file:// prefix
-  let cleanPath = filePath.replace(/^file:\/\//, '');
+  const cleanPath = filePath.replace(/^file:\/\//, '');
 
   // If it's already absolute, return it
   if (path.isAbsolute(cleanPath)) {

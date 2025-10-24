@@ -58,7 +58,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       }
 
       // Setup tracing if enabled
-      this.setupTracingIfNeeded(context);
+      await this.setupTracingIfNeeded(context);
 
       // Run the agent
       const result = await this.runAgent(prompt, context, callApiOptions);
@@ -116,10 +116,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   /**
    * Setup tracing if enabled
    */
-  private setupTracingIfNeeded(context?: CallApiContextParams): void {
+  private async setupTracingIfNeeded(context?: CallApiContextParams): Promise<void> {
     const tracingEnabled =
       this.agentConfig.tracing === true ||
-      (context?.test?.metadata?.tracingEnabled === true) ||
+      context?.test?.metadata?.tracingEnabled === true ||
       process.env.PROMPTFOO_TRACING_ENABLED === 'true';
 
     if (!tracingEnabled) {
@@ -138,7 +138,11 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       });
 
       // Register with agent's tracing system
-      this.registerTracingExporter(this.tracingExporter);
+      await this.registerTracingExporter(this.tracingExporter);
+
+      // Start the trace export loop
+      const { startTraceExportLoop } = await import('@openai/agents');
+      startTraceExportLoop();
 
       logger.debug('[AgentsProvider] Tracing setup complete');
     } catch (error) {
@@ -180,7 +184,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
-      const { run } = await import('@openai/agents');
+      const { run, getOrCreateTrace } = await import('@openai/agents');
 
       logger.debug('[AgentsProvider] Running agent', {
         agentName: this.agent?.name,
@@ -204,8 +208,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         runOptions.modelSettings = this.agentConfig.modelSettings;
       }
 
-      // Run the agent
-      const result = await run(this.agent!, prompt, runOptions);
+      // Run the agent within a trace context to ensure proper trace ID generation
+      const result = await getOrCreateTrace(async () => {
+        return await run(this.agent!, prompt, runOptions);
+      });
 
       logger.debug('[AgentsProvider] Agent run result', {
         hasOutput: !!result.finalOutput,
@@ -247,7 +253,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   /**
    * Calculate cost from agent result
    */
-  private calculateCost(result: any): number | undefined {
+  private calculateCost(_result: any): number | undefined {
     // Cost calculation would depend on the model and usage
     // For now, return undefined as we don't have pricing info
     return undefined;

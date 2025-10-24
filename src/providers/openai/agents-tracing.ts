@@ -1,4 +1,5 @@
 import type { TracingExporter, Trace, Span } from '@openai/agents';
+import { fetchWithProxy } from '../../fetch';
 import logger from '../../logger';
 
 /**
@@ -12,11 +13,13 @@ export class OTLPTracingExporter implements TracingExporter {
   private evaluationId?: string;
   private testCaseId?: string;
 
-  constructor(options: {
-    otlpEndpoint?: string;
-    evaluationId?: string;
-    testCaseId?: string;
-  } = {}) {
+  constructor(
+    options: {
+      otlpEndpoint?: string;
+      evaluationId?: string;
+      testCaseId?: string;
+    } = {},
+  ) {
     this.otlpEndpoint = options.otlpEndpoint || 'http://localhost:4318';
     this.evaluationId = options.evaluationId;
     this.testCaseId = options.testCaseId;
@@ -42,7 +45,7 @@ export class OTLPTracingExporter implements TracingExporter {
         spanCount: otlpPayload.resourceSpans[0]?.scopeSpans[0]?.spans?.length || 0,
       });
 
-      const response = await fetch(url, {
+      const response = await fetchWithProxy(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -51,12 +54,12 @@ export class OTLPTracingExporter implements TracingExporter {
         signal,
       });
 
-      if (!response.ok) {
+      if (response.ok) {
+        logger.debug('[AgentsTracing] Successfully exported traces to OTLP');
+      } else {
         logger.error(
           `[AgentsTracing] OTLP export failed: ${response.status} ${response.statusText}`,
         );
-      } else {
-        logger.debug('[AgentsTracing] Successfully exported traces to OTLP');
       }
     } catch (error) {
       logger.error('[AgentsTracing] Failed to export traces to OTLP', { error });
@@ -112,9 +115,13 @@ export class OTLPTracingExporter implements TracingExporter {
     const startTime = span.startedAt ? new Date(span.startedAt).getTime() : Date.now();
     const endTime = span.endedAt ? new Date(span.endedAt).getTime() : undefined;
 
+    // Generate IDs if missing (openai-agents-js sometimes doesn't set them)
+    const traceId = span.traceId || this.generateTraceId();
+    const spanId = span.spanId || this.generateSpanId();
+
     return {
-      traceId: this.hexToBase64(span.traceId),
-      spanId: this.hexToBase64(span.spanId),
+      traceId: this.hexToBase64(traceId),
+      spanId: this.hexToBase64(spanId),
       parentSpanId: span.parentId ? this.hexToBase64(span.parentId) : undefined,
       name: this.getSpanName(span),
       kind: 1, // SPAN_KIND_INTERNAL
@@ -225,6 +232,7 @@ export class OTLPTracingExporter implements TracingExporter {
 
   /**
    * Convert hex string to base64 for OTLP format
+   * Handles openai-agents-js ID format (trace_XXX, span_XXX)
    */
   private hexToBase64(hex: string): string {
     if (!hex) {
@@ -232,10 +240,49 @@ export class OTLPTracingExporter implements TracingExporter {
     }
 
     try {
-      return Buffer.from(hex, 'hex').toString('base64');
+      // Strip prefixes if present (trace_, span_, group_)
+      let cleanHex = hex.replace(/^(trace_|span_|group_)/, '');
+
+      // Ensure hex is valid length (32 for trace, 16 for span)
+      // If it's longer, truncate. If shorter, pad with zeros.
+      const targetLength = hex.startsWith('span_') ? 16 : 32;
+      if (cleanHex.length > targetLength) {
+        cleanHex = cleanHex.substring(0, targetLength);
+      } else if (cleanHex.length < targetLength) {
+        cleanHex = cleanHex.padEnd(targetLength, '0');
+      }
+
+      return Buffer.from(cleanHex, 'hex').toString('base64');
     } catch (error) {
       logger.error(`[AgentsTracing] Failed to convert hex to base64: ${hex}`, { error });
-      return hex;
+      // Generate a fallback ID
+      return Buffer.from(this.generateRandomHex(16), 'hex').toString('base64');
     }
+  }
+
+  /**
+   * Generate a random trace ID (32 hex chars)
+   */
+  private generateTraceId(): string {
+    return this.generateRandomHex(32);
+  }
+
+  /**
+   * Generate a random span ID (16 hex chars)
+   */
+  private generateSpanId(): string {
+    return this.generateRandomHex(16);
+  }
+
+  /**
+   * Generate random hex string of specified length
+   */
+  private generateRandomHex(length: number): string {
+    const bytes = Math.ceil(length / 2);
+    const buffer = Buffer.alloc(bytes);
+    for (let i = 0; i < bytes; i++) {
+      buffer[i] = Math.floor(Math.random() * 256);
+    }
+    return buffer.toString('hex').substring(0, length);
   }
 }

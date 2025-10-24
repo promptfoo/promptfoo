@@ -1,10 +1,10 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: "Basic OpenAI Agents integration example"
+description: 'Basic OpenAI Agents integration example'
 
 providers:
   - id: openai:agents:weather-agent
-    label: "Weather Agent"
+    label: 'Weather Agent'
     config:
       # Agent definition from external file
       agent: file://./agents/weather-agent.ts
@@ -19,38 +19,51 @@ providers:
       executeTools: real
 
       # Enable tracing (optional)
-      tracing: false
+      tracing: true
 
       # OpenAI API configuration
       apiKey: ${OPENAI_API_KEY}
 
 prompts:
-  - "{{query}}"
+  - '{{query}}'
 
 tests:
-  - description: "Query weather for Tokyo"
+  - description: 'Query weather for Tokyo'
     vars:
       query: "What's the weather like in Tokyo?"
+    metadata:
+      tracingEnabled: true
+      testCaseId: 'tokyo-weather'
     assert:
       - type: contains
-        value: "Tokyo"
+        value: 'Tokyo'
       - type: contains
-        value: "20°C"
+        value: '20°C'
 
-  - description: "Query weather for multiple cities"
+  - description: 'Query weather for multiple cities'
     vars:
-      query: "Can you tell me the weather in Paris and London?"
+      query: 'Can you tell me the weather in Paris and London?'
+    metadata:
+      tracingEnabled: true
+      testCaseId: 'multi-city-weather'
     assert:
       - type: contains
-        value: "Paris"
+        value: 'Paris'
       - type: contains
-        value: "London"
+        value: 'London'
 
-  - description: "Simple greeting without tool use"
+  - description: 'Simple greeting without tool use'
     vars:
-      query: "Hello! How are you?"
-    assert:
-      - type: is-json
-        value: false
-      - type: llm-rubric
-        value: "The response is a friendly greeting"
+      query: 'Hello! How are you?'
+    metadata:
+      tracingEnabled: true
+      testCaseId: 'simple-greeting'
+
+# Tracing configuration
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats: ['json']

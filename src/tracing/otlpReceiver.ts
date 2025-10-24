@@ -102,15 +102,40 @@ export class OTLPReceiver {
         traces = this.parseOTLPJSONRequest(req.body);
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
 
-        // Group spans by trace ID
+        // Group spans by trace ID and extract metadata
         const spansByTrace = new Map<string, SpanData[]>();
+        const traceMetadata = new Map<string, { evaluationId: string; testCaseId: string }>();
+
         for (const trace of traces) {
           if (!spansByTrace.has(trace.traceId)) {
             spansByTrace.set(trace.traceId, []);
+
+            // Extract evaluation and test case IDs from span attributes
+            const evaluationId = trace.span.attributes?.['evaluation.id'] as string;
+            const testCaseId = trace.span.attributes?.['test.case.id'] as string;
+
+            if (evaluationId && testCaseId) {
+              traceMetadata.set(trace.traceId, { evaluationId, testCaseId });
+            }
           }
           spansByTrace.get(trace.traceId)!.push(trace.span);
         }
         logger.debug(`[OtlpReceiver] Grouped spans into ${spansByTrace.size} traces`);
+
+        // Create trace records first (required for foreign key constraints)
+        for (const [traceId, metadata] of traceMetadata) {
+          try {
+            logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
+            await this.traceStore.createTrace({
+              traceId,
+              evaluationId: metadata.evaluationId,
+              testCaseId: metadata.testCaseId,
+            });
+          } catch (error) {
+            // Trace might already exist, which is fine
+            logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
+          }
+        }
 
         // Store spans for each trace
         for (const [traceId, spans] of spansByTrace) {

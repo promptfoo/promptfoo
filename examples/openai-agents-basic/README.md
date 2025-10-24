@@ -13,6 +13,7 @@ This example includes:
 ## Prerequisites
 
 1. Install dependencies:
+
    ```bash
    npm install
    ```
@@ -45,6 +46,7 @@ The eval will test the weather agent with three scenarios:
 3. **Simple greeting**: Tests agent can respond without using tools
 
 The agent will:
+
 - Parse the user's query
 - Decide whether to use the `get_weather` tool
 - Call the tool with appropriate parameters
@@ -55,6 +57,7 @@ The agent will:
 ### Agent Configuration
 
 The agent is configured with:
+
 - `name`: Identifier for the agent
 - `instructions`: System prompt describing behavior
 - `model`: The LLM model to use (gpt-4o-mini)
@@ -62,6 +65,7 @@ The agent is configured with:
 ### Provider Configuration
 
 The provider (`openai:agents:weather-agent`) is configured with:
+
 - `agent`: Path to agent definition file
 - `tools`: Path to tools file
 - `maxTurns`: Maximum conversation turns (10)
@@ -126,7 +130,7 @@ export const getWeather = tool({
   }),
   execute: async ({ city }) => {
     const response = await fetch(
-      `https://api.weather.com/v1/current?city=${city}&apiKey=${process.env.WEATHER_API_KEY}`
+      `https://api.weather.com/v1/current?city=${city}&apiKey=${process.env.WEATHER_API_KEY}`,
     );
     return await response.json();
   },
