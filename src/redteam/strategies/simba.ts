@@ -3,19 +3,19 @@ import { strategyDisplayNames } from '../constants';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types';
 
-export async function addAdvancedRedteamAgentTestCases(
+export async function addSimbaTestCases(
   testCases: TestCaseWithPlugin[],
   injectVar: string,
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
-  logger.debug(`Adding ${strategyDisplayNames['advanced-redteam-agent']} test cases`);
+  logger.debug(`Adding ${strategyDisplayNames.simba} test cases`);
 
-  // Advanced Redteam Agent strategy creates only a single test case, regardless of input
+  // Simba strategy creates only a single test case, regardless of input
   if (testCases.length === 0) {
     return [];
   }
 
-  // Take the first test case as the base and create a single Advanced Redteam Agent test case
+  // Take the first test case as the base and create a single Simba test case
   const baseTestCase = testCases[0];
   const originalText = String(baseTestCase.vars![injectVar]);
 
@@ -23,7 +23,7 @@ export async function addAdvancedRedteamAgentTestCases(
     {
       ...baseTestCase,
       provider: {
-        id: 'promptfoo:redteam:advanced-redteam-agent',
+        id: 'promptfoo:redteam:simba',
         config: {
           injectVar,
           ...config,
@@ -31,11 +31,11 @@ export async function addAdvancedRedteamAgentTestCases(
       },
       assert: baseTestCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/'advanced-redteam-agent'`,
+        ...(assertion.metric ? { metric: `${assertion.metric}/simba` } : {}),
       })),
       metadata: {
         ...baseTestCase.metadata,
-        strategyId: 'advanced-redteam-agent',
+        strategyId: 'simba',
         originalText,
       },
     },

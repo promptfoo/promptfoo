@@ -413,14 +413,14 @@ describe('evaluator', () => {
         promptIdx: -1,
         testIdx: -1,
         testCase: { assert: [] },
-        promptId: 'advanced-redteam-agent-case',
+        promptId: 'simba-case',
         provider: {
-          id: 'promptfoo:redteam:advanced-redteam-agent',
-          label: strategyDisplayNames['advanced-redteam-agent'],
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
         },
         prompt: {
           raw: 'Test prompt',
-          label: strategyDisplayNames['advanced-redteam-agent'],
+          label: strategyDisplayNames.simba,
         },
         vars: {},
         failureReason: ResultFailureReason.NONE,
@@ -432,12 +432,12 @@ describe('evaluator', () => {
     ];
 
     const agentProvider = {
-      id: jest.fn().mockReturnValue('promptfoo:redteam:advanced-redteam-agent'),
-      label: strategyDisplayNames['advanced-redteam-agent'],
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
       delay: 0,
       callApi: jest.fn(),
       runSimba: jest.fn().mockImplementation(async () => {
-        callOrder.push('advanced-redteam-agent');
+        callOrder.push('simba');
         return runResults.map((result) => ({ ...result }));
       }),
     } as unknown as ApiProvider & { runSimba: jest.Mock };
@@ -459,9 +459,7 @@ describe('evaluator', () => {
     expect(agentProvider.callApi as jest.Mock).not.toHaveBeenCalled();
     expect(addResultSpy).toHaveBeenCalledTimes(2);
     expect(addResultSpy.mock.calls[0][0].provider.id).toBe('normal-provider');
-    expect(addResultSpy.mock.calls[1][0].provider.id).toBe(
-      'promptfoo:redteam:advanced-redteam-agent',
-    );
+    expect(addResultSpy.mock.calls[1][0].provider.id).toBe('promptfoo:redteam:simba');
   });
 
   it('evaluate with vars - no escaping', async () => {
@@ -3646,12 +3644,12 @@ describe('runEval', () => {
         promptIdx: -1,
         testIdx: -1,
         testCase: { assert: [] },
-        promptId: 'advanced-redteam-agent-case',
+        promptId: 'simba-case',
         provider: {
-          id: 'promptfoo:redteam:advanced-redteam-agent',
-          label: strategyDisplayNames['advanced-redteam-agent'],
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
         },
-        prompt: { raw: 'Advanced Redteam Agent prompt', label: 'advanced-redteam-agent-label' },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
         vars: {},
         failureReason: ResultFailureReason.NONE,
         success: true,
@@ -3663,8 +3661,8 @@ describe('runEval', () => {
 
     const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
     const agentProvider = {
-      id: jest.fn().mockReturnValue('promptfoo:redteam:advanced-redteam-agent'),
-      label: strategyDisplayNames['advanced-redteam-agent'],
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
       delay: 0,
       callApi: jest.fn(),
       runSimba: runSimbaMock,
@@ -3681,7 +3679,7 @@ describe('runEval', () => {
     const results = await runEval({
       ...options,
       provider: agentProvider,
-      prompt: { raw: 'Advanced Redteam Agent prompt', label: 'advanced-redteam-agent-label' },
+      prompt: { raw: 'Simba prompt', label: 'simba-label' },
       test: {},
       conversations: {},
       registers: {},
@@ -3691,7 +3689,7 @@ describe('runEval', () => {
     expect(runSimbaMock).toHaveBeenCalledTimes(1);
     expect(runSimbaMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: 'Advanced Redteam Agent prompt',
+        prompt: 'Simba prompt',
         context: expect.objectContaining({ vars: {} }),
         options: undefined,
         concurrency: 7,
@@ -3710,12 +3708,12 @@ describe('runEval', () => {
         promptIdx: -1,
         testIdx: -1,
         testCase: { assert: [] },
-        promptId: 'advanced-redteam-agent-case',
+        promptId: 'simba-case',
         provider: {
-          id: 'promptfoo:redteam:advanced-redteam-agent',
-          label: strategyDisplayNames['advanced-redteam-agent'],
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
         },
-        prompt: { raw: 'Advanced Redteam Agent prompt', label: 'advanced-redteam-agent-label' },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
         vars: {},
         failureReason: ResultFailureReason.NONE,
         success: true,
@@ -3727,8 +3725,8 @@ describe('runEval', () => {
 
     const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
     const agentProvider = {
-      id: jest.fn().mockReturnValue('promptfoo:redteam:advanced-redteam-agent'),
-      label: strategyDisplayNames['advanced-redteam-agent'],
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
       delay: 0,
       callApi: jest.fn(),
       runSimba: runSimbaMock,
@@ -3737,7 +3735,7 @@ describe('runEval', () => {
     const results = await runEval({
       ...defaultOptions,
       provider: agentProvider,
-      prompt: { raw: 'Advanced Redteam Agent prompt', label: 'advanced-redteam-agent-label' },
+      prompt: { raw: 'Simba prompt', label: 'simba-label' },
       test: {},
       conversations: {},
       registers: {},
@@ -3746,7 +3744,7 @@ describe('runEval', () => {
 
     expect(runSimbaMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: 'Advanced Redteam Agent prompt',
+        prompt: 'Simba prompt',
         context: expect.any(Object),
         options: undefined,
         concurrency: DEFAULT_MAX_CONCURRENCY,
@@ -3764,10 +3762,10 @@ describe('runEval', () => {
         testCase: { assert: [] },
         promptId: 'advanced-redteam-agent-case-1',
         provider: {
-          id: 'promptfoo:redteam:advanced-redteam-agent',
-          label: strategyDisplayNames['advanced-redteam-agent'],
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
         },
-        prompt: { raw: 'Advanced Redteam Agent prompt', label: 'advanced-redteam-agent-label' },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
         vars: {},
         failureReason: ResultFailureReason.NONE,
         success: true,
@@ -3781,10 +3779,10 @@ describe('runEval', () => {
         testCase: { assert: [] },
         promptId: 'advanced-redteam-agent-case-2',
         provider: {
-          id: 'promptfoo:redteam:advanced-redteam-agent',
-          label: strategyDisplayNames['advanced-redteam-agent'],
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
         },
-        prompt: { raw: 'Advanced Redteam Agent prompt', label: 'advanced-redteam-agent-label' },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
         vars: {},
         failureReason: ResultFailureReason.NONE,
         success: true,
@@ -3796,8 +3794,8 @@ describe('runEval', () => {
 
     const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
     const agentProvider = {
-      id: jest.fn().mockReturnValue('promptfoo:redteam:advanced-redteam-agent'),
-      label: strategyDisplayNames['advanced-redteam-agent'],
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
       delay: 0,
       callApi: jest.fn(),
       runSimba: runSimbaMock,
@@ -3808,7 +3806,7 @@ describe('runEval', () => {
       testIdx: 10,
       promptIdx: 3,
       provider: agentProvider,
-      prompt: { raw: 'Advanced Redteam Agent prompt', label: 'advanced-redteam-agent-label' },
+      prompt: { raw: 'Simba prompt', label: 'simba-label' },
       test: {},
       conversations: {},
       registers: {},

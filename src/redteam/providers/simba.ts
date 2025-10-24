@@ -41,7 +41,7 @@ const PhaseLabels: Record<Phases, string> = {
   [Phases.Failed]: 'Failed',
 };
 
-const LOGGER_PREFIX = `${strategyDisplayNames['advanced-redteam-agent']}`;
+const LOGGER_PREFIX = `${strategyDisplayNames.simba}`;
 
 interface Config {
   injectVar: string;
@@ -160,12 +160,12 @@ export function buildRedteamHistory(messages: Message[]): { prompt: string; outp
   return pairs;
 }
 
-export default class AdvancedRedteamAgentProvider implements ApiProvider {
+export default class SimbaProvider implements ApiProvider {
   readonly config: Config;
   private sessionId: string | null = null;
 
   id() {
-    return 'promptfoo:redteam:advanced-redteam-agent';
+    return 'promptfoo:redteam:simba';
   }
 
   constructor(options: ProviderOptions & ConfigOptions = {} as any) {
@@ -195,13 +195,11 @@ export default class AdvancedRedteamAgentProvider implements ApiProvider {
     _context?: CallApiContextParams,
     _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    throw new Error(
-      `${strategyDisplayNames['advanced-redteam-agent']} provider does not support callApi`,
-    );
+    throw new Error(`${strategyDisplayNames.simba} provider does not support callApi`);
   }
 
   get displayName() {
-    return strategyDisplayNames['advanced-redteam-agent'];
+    return strategyDisplayNames.simba;
   }
 
   private async callSimbaApi(
@@ -243,14 +241,14 @@ export default class AdvancedRedteamAgentProvider implements ApiProvider {
 
     const startRequest: SimbaStartRequest = {
       targetInfo: {
-        goals: this.config.goals ?? [],
-        purpose: this.config.purpose!,
+        goals: this.config.goals,
+        purpose: this.config.purpose,
         additionalAttackInstructions: this.config.additionalAttackInstructions,
       },
       config: {
-        maxConversationRounds: this.config.maxConversationRounds!,
-        maxAttacksPerGoal: this.config.maxAttacksPerGoal!,
-        concurrency: this.config.concurrency!,
+        maxConversationRounds: this.config.maxConversationRounds,
+        maxAttacksPerGoal: this.config.maxAttacksPerGoal,
+        concurrency: this.config.concurrency,
         email: email,
       },
       email,
@@ -517,12 +515,12 @@ export default class AdvancedRedteamAgentProvider implements ApiProvider {
         score: output.result.success ? 0 : 1,
         reason: output.result.summary,
         metadata: {
-          pluginId: 'advanced-redteam-agent',
-          strategyId: 'advanced-redteam-agent',
+          pluginId: 'simba',
+          strategyId: 'simba',
         },
       },
       namedScores: {
-        'advanced-redteam-agent': output.result.success ? 0 : 1,
+        simba: output.result.success ? 0 : 1,
       },
       tokenUsage: attackTokenUsage,
       metadata: {

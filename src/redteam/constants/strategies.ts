@@ -24,7 +24,7 @@ export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
 export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
-  'advanced-redteam-agent',
+  'simba',
   'crescendo',
   'goat',
   'custom',
@@ -48,7 +48,7 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
-  'advanced-redteam-agent',
+  'simba',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -56,7 +56,6 @@ export const ADDITIONAL_STRATEGIES = [
   'camelcase',
   'citation',
   'crescendo',
-  'custom',
   'custom',
   'emoji',
   'gcg',
@@ -67,7 +66,6 @@ export const ADDITIONAL_STRATEGIES = [
   'jailbreak:likert',
   'jailbreak:meta',
   'jailbreak:tree',
-  'jailbreak',
   'layer',
   'leetspeak',
   'math-prompt',

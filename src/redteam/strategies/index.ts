@@ -7,7 +7,6 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { strategyDisplayNames } from '../constants';
 import { isCustomStrategy } from '../constants/strategies';
-import { addAdvancedRedteamAgentTestCases } from './advancedRedteamAgent';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -29,6 +28,7 @@ import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
+import { addSimbaTestCases } from './simba';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
@@ -293,15 +293,13 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'advanced-redteam-agent',
+    id: 'simba',
     action: async (testCases, injectVar, config) => {
       logger.debug(
-        `Adding ${strategyDisplayNames['advanced-redteam-agent']} test cases to ${testCases.length} test cases`,
+        `Adding ${strategyDisplayNames.simba} test cases to ${testCases.length} test cases`,
       );
-      const newTestCases = await addAdvancedRedteamAgentTestCases(testCases, injectVar, config);
-      logger.debug(
-        `Added ${newTestCases.length} ${strategyDisplayNames['advanced-redteam-agent']} test cases`,
-      );
+      const newTestCases = await addSimbaTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} ${strategyDisplayNames.simba} test cases`);
       return newTestCases;
     },
   },

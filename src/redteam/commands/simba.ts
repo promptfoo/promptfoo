@@ -7,7 +7,7 @@ import { ApiProvider, CallApiContextParams, isApiProvider } from '../../types/pr
 import { resolveConfigs } from '../../util/config/load';
 import { setupEnv } from '../../util/index';
 import { strategyDisplayNames } from '../constants';
-import AdvancedRedteamAgentProvider from '../providers/advancedRedteamAgent';
+import SimbaProvider from '../providers/simba';
 
 const SimbaCommandSchema = z.object({
   config: z.union([z.string(), z.array(z.string())]).optional(),
@@ -58,14 +58,12 @@ function inferInjectVar(testSuite: TestSuite): string {
   const firstCandidate = candidateVars.values().next().value as string | undefined;
   if (firstCandidate) {
     logger.debug(
-      `Inferring ${strategyDisplayNames['advanced-redteam-agent']} injectVar as '${firstCandidate}' from test cases`,
+      `Inferring ${strategyDisplayNames.simba} injectVar as '${firstCandidate}' from test cases`,
     );
     return firstCandidate;
   }
 
-  logger.debug(
-    `Falling back to default ${strategyDisplayNames['advanced-redteam-agent']} injectVar "prompt"`,
-  );
+  logger.debug(`Falling back to default ${strategyDisplayNames.simba} injectVar "prompt"`);
   return 'prompt';
 }
 
@@ -74,14 +72,8 @@ function getTargetProvider(testSuite: TestSuite): ApiProvider {
     if (!isApiProvider(provider)) {
       continue;
     }
-
-    if (provider.id?.() === 'promptfoo:redteam:simba') {
-      continue;
-    }
-
     return provider;
   }
-
   throw new Error(
     'No valid target provider found. Ensure your configuration includes at least one provider.',
   );
@@ -104,7 +96,7 @@ async function runSimbaWithProvider(
   logger.info(chalk.blue(`Concurrency: ${concurrency}`));
   logger.info(chalk.blue(`Inject var: ${injectVar}`));
 
-  const simbaProvider = new AdvancedRedteamAgentProvider({
+  const simbaProvider = new SimbaProvider({
     injectVar,
     goals,
     purpose: options.purpose ?? 'Red team testing',
@@ -116,7 +108,7 @@ async function runSimbaWithProvider(
   });
 
   const context: CallApiContextParams = {
-    prompt: { raw: '', label: strategyDisplayNames['advanced-redteam-agent'] },
+    prompt: { raw: '', label: strategyDisplayNames.simba },
     vars: {},
     originalProvider: targetProvider,
     test: {
@@ -128,7 +120,7 @@ async function runSimbaWithProvider(
     } as any,
   };
 
-  logger.info(chalk.cyan(`Starting ${strategyDisplayNames['advanced-redteam-agent']} session...`));
+  logger.info(chalk.cyan(`Starting ${strategyDisplayNames.simba} session...`));
   const results = await simbaProvider.runSimba({
     prompt: goals.join('; '),
     context,
@@ -137,24 +129,20 @@ async function runSimbaWithProvider(
   });
 
   if (!results.length) {
-    logger.warn(`${strategyDisplayNames['advanced-redteam-agent']} did not return any results.`);
+    logger.warn(`${strategyDisplayNames.simba} did not return any results.`);
     return;
   }
 
   let successCount = 0;
   let errorCount = 0;
 
-  logger.info(chalk.bold(`\n=== ${strategyDisplayNames['advanced-redteam-agent']} Results ===`));
+  logger.info(chalk.bold(`\n=== ${strategyDisplayNames.simba} Results ===`));
   for (const result of results) {
     const planName = String(result.metadata?.attackPlan?.planName ?? result.promptId ?? 'Unknown');
 
     if (result.error) {
       errorCount += 1;
-      logger.error(
-        chalk.red(
-          `[${planName}] ${strategyDisplayNames['advanced-redteam-agent']} error: ${result.error}`,
-        ),
-      );
+      logger.error(chalk.red(`[${planName}] ${strategyDisplayNames.simba} error: ${result.error}`));
       continue;
     }
 
@@ -212,7 +200,7 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
     .option('-j, --concurrency <number>', 'Number of concurrent conversations (1-100)', '1')
     .option(
       '--inject-var <name>',
-      `Variable name to inject ${strategyDisplayNames['advanced-redteam-agent']} prompts into`,
+      `Variable name to inject ${strategyDisplayNames.simba} prompts into`,
     )
     .action(async (opts: any) => {
       setupEnv(opts.envPath);
@@ -221,8 +209,8 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
         const validatedOpts = SimbaCommandSchema.parse({
           ...opts,
           goals: opts.goals,
-          maxRounds: parseOptionalInt(opts.maxRounds),
-          maxVectors: parseOptionalInt(opts.maxVectors),
+          maxRounds: parseOptionalInt(opts.maxConversationRounds),
+          maxVectors: parseOptionalInt(opts.maxAttacksPerGoal),
           concurrency: parseOptionalInt(opts.concurrency),
         });
 
@@ -237,7 +225,7 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
           });
           process.exit(1);
         }
-        logger.error(`${strategyDisplayNames['advanced-redteam-agent']} command failed: ${error}`);
+        logger.error(`${strategyDisplayNames.simba} command failed: ${error}`);
         process.exit(1);
       }
     });

@@ -3,7 +3,7 @@ import path from 'path';
 import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
-import AdvancedRedteamAgentProvider from '../redteam/providers/advancedRedteamAgent';
+import SimbaProvider from '../redteam/providers/simba';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
@@ -1227,13 +1227,13 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:advanced-redteam-agent',
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:simba',
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      return new AdvancedRedteamAgentProvider(providerOptions.config);
+      return new SimbaProvider(providerOptions.config);
     },
   },
   {
