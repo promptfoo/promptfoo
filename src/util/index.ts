@@ -455,6 +455,33 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
 }
 
 /**
+ * Renders Nunjucks template strings in an object, including environment variables.
+ * This is used for rendering provider configs before they're passed to providers.
+ * Unlike renderVarsInObject, this doesn't require vars to be passed and will render
+ * environment variables and other globals available in the Nunjucks engine.
+ */
+export function renderTemplatesInObject<T>(obj: T): T {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return obj;
+  }
+  if (typeof obj === 'string') {
+    const nunjucksEngine = getNunjucksEngine();
+    return nunjucksEngine.renderString(obj, {}) as unknown as T;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => renderTemplatesInObject(item)) as unknown as T;
+  }
+  if (typeof obj === 'object' && obj !== null) {
+    const result: Record<string, unknown> = {};
+    for (const key in obj) {
+      result[key] = renderTemplatesInObject((obj as Record<string, unknown>)[key]);
+    }
+    return result as T;
+  }
+  return obj;
+}
+
+/**
  * Parses a file path or glob pattern to extract function names and file extensions.
  * Function names can be specified in the filename like this:
  * prompt.py:myFunction or prompts.js:myFunction.
