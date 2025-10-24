@@ -6,6 +6,71 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(app): persist inline-defined custom policy names (#5990)
+- feat: coppa plugin (#5997)
+- feat: error logs (#5992)
+- feat: add GDPR preset mappings for red team testing (#5986)
+- feat(app): show target response to generated red team plugin test case (#5869)
+- feat: add modifiers support to iterative strategies (#5972)
+- feat: authoritative markup injection strategy (#5961)
+- feat: wordplay red team plugin (#5889)
+- feat: adding support for Claude Haiku 4.5 (#5937)
+- feat: Add errors to eval progress bar (#5942)
+- feat: Improved error handling in CLI and error logging (#5930)
+
+### Changed
+
+- chore: remove "LLM Risk Assessment" prefix (#6004)
+- refactor(app): Reduce unnecessary API health requests (#5979)
+- chore: gray out strategies requiring remote generation when disabled (#5985)
+- chore: gray out remote plugins when remote generation is disabled (#5970)
+- refactor(webui): Organize red team plugins page into tabs with separate components (#5865)
+- chore: export GUARDRAIL_BLOCKED_REASON constant for external use (#5956)
+- chore: Improve test transform modal editor (#5962)
+- chore: add top-level redteam telemetry events (#5951)
+- chore(webui): add readOnly prop to EvalOutputPromptDialog (#5952)
+- chore: Add rendered request headers to http provider debug output (#5950)
+- chore: move dependencies to optional instead of peer (#5948)
+- chore: Further refactor transform code to avoid 'require' (#5943)
+- chore: move `natural` to optional dependency (#5946)
+- chore: revert "feat: Improved error handling in CLI and error logging" (#5939)
+- chore: Refactor createRequest/ResponseTransform functions into separate module (#5925)
+
+### Fixed
+
+- fix: Don't test session management if target is not stateful (#5989)
+- fix(internals): plugin selection (#5991)
+- fix: improve crescendo prompt example alignment with actual objective statements to increase accuracy. (#5964)
+- fix: improve MCP tool schema transformation for OpenAI compatibility (#5965)
+- fix: fewer dupe errors for invalid strategy and plugin ids (#5954)
+- fix(app): in red team setup, reset config button hidden by version banner (#5896)
+
+### Dependencies
+
+- chore: bump @aws-sdk/client-bedrock-runtime from 3.914.0 to 3.916.0 (#6008)
+- chore: bump pypdf from 6.0.0 to 6.1.3 in /examples/rag-full in the pip group across 1 directory (#5998)
+- chore: bump @aws-sdk/client-bedrock-runtime from 3.913.0 to 3.914.0 (#5996)
+- chore: bump @aws-sdk/client-bedrock-runtime from 3.911.0 to 3.913.0 (#5975)
+- chore: bump @anthropic-ai/sdk from 0.65.0 to 0.66.0 (#5944)
+- chore: bump @aws-sdk/client-bedrock-runtime from 3.910.0 to 3.911.0 (#5945)
+
+### Documentation
+
+- docs: configuring inference (#5983)
+- docs(site): update about page (#5971)
+- docs: add export formats (#5958)
+- docs: Update AWS Bedrock model access documentation (#5953)
+- docs: Example demonstrating conversation session id management using hooks (#5940)
+- docs(echo): add examples for evaluating logged production outputs (#5941)
+- docs(site): September release notes (#5712)
+
+### Tests
+
+- tests: remove redteam constants mocks from unit tests (#6010)
+- test: CoverBot: Added tests for evaluation UI components and hooks (`src/app`) (#5981)
+
 ## [0.118.17] - 2025-10-15
 
 ### Changed
@@ -3762,5 +3827,3916 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Documentation
 
 - docs(blog): unbounded consumption (#2521)
+
+## [0.103.2] - 2024-12-31
+
+### Changed
+
+- feat: run redteam from cloud config (#2503)
+- feat: divergent repetition plugin (#2517)
+- docs: guardrails ui (#2518)
+- feat: granular envars for memory control (#2509)
+- fix: use `default` when importing cjs module (#2506)
+- docs: readme overhaul (#2502)
+- chore(redteam): make numIterations configurable for iterative strategy (#2511)
+- chore(webui): enhance styling and responsiveness for StrategyStats component (#2485)
+- chore(providers): make number of retry attempts configurable for HTTP provider (#2512)
+- chore(providers): add configurable retry attempts for AWS Bedrock. Improve error handling (#2514)
+- chore(redteam): handle empty and refusal responses (#2516)
+- docs: divergent repetition to plugins table (#2519)
+
+### Fixed
+
+- fix(moderation): handle empty output to avoid false positives (#2508)
+- fix(fetch): correct retries logic to ensure at least one attempt (#2513)
+
+## [0.103.1] - 2024-12-24
+
+### Changed
+
+- fix: send config purpose when running in web ui (#2504)
+- fix: include `sharing` in generated redteam config (#2505)
+- docs: g-eval docs (#2501)
+
+## [0.103.0] - 2024-12-23
+
+### Added
+
+- feat(eval): Add sheet identifier to Google Sheets URL for saving eval results (#2348)
+- feat(eval): Add support for Hugging Face datasets (#2497)
+- feat(redteam): Ability to set the number of test cases per plugin (#2480)
+- feat(redteam): Beavertails plugin (#2500)
+- feat(redteam): Best-of-n jailbreak (#2495)
+- feat(redteam): Dedicated custom input section (#2493)
+- feat(redteam): Harmful:cybercrime:malicious-code (#2481)
+- feat(redteam): Recently used plugins (#2488)
+- feat(redteam): Support `intent` sequences (#2487)
+
+### Changed
+
+- chore(redteam): Add "View Probes" button (#2492)
+- chore(redteam): Enhance metadata tracking for iterative provider (#2482)
+- chore(redteam): Improve scoring in iterative providers (#2486)
+- chore(redteam): Record stateless telemetry (#2477)
+- chore(examples): Revert redteam-ollama example to previous version (#2499)
+- docs: Cyberseceval (#2494)
+- docs: Plugins overview (#2448)
+- docs: Strategy overview (#2449)
+
+### Fixed
+
+- fix(redteam): Ability to set custom target (#2483)
+- fix(redteam): Apply delay to redteam providers (#2498)
+- fix(redteam): Scroll to top when changing tabs (#2484)
+- fix(redteam): State management for raw HTTP requests (#2491)
+
+### Dependencies
+
+- chore(deps): Bump @aws-sdk/client-bedrock-runtime from 3.714.0 to 3.716.0 (#2479)
+
+### Documentation
+
+- docs(providers): Add new providers to documentation (#2496)
+
+## [0.102.4] - 2024-12-20
+
+### Changed
+
+- feat: add G-Eval assertion (#2436)
+- feat: ability to set delay from webui (#2474)
+- fix: resolve circular reference issue in groq provider (#2475)
+- chore: placeholder for ied (#2478)
+
+### Fixed
+
+- fix(provider): ensure system prompt is formatted correctly for amazon nova models (#2476)
+
+### Documentation
+
+- docs(red-team): update default strategy documentation (#2473)
+
+## [0.102.3] - 2024-12-19
+
+### Changed
+
+- feat: pliny plugin (#2469)
+- feat: meth plugin (#2470)
+
+### Fixed
+
+- fix(redteam): resolve prompt rendering issue in goat provider (#2472)
+
+### Dependencies
+
+- chore(deps): update dependencies to latest versions (#2442)
+
+## [0.102.2] - 2024-12-19
+
+### Added
+
+- feat(eval): Add metadata filtering to `promptfoo eval` (#2460)
+- feat(redteam): Implement `basic` strategy to skip strategy-less tests (#2461)
+- feat(redteam): Show messages for multi-turn providers (#2454)
+- feat(webui): Add search bar for reports (#2458)
+
+### Changed
+
+- chore(providers): Add new OpenAI O1 model versions (#2450)
+- chore(ci): Handle fork PRs without secrets correctly (#2443)
+- chore(ci): Update Node.js 22.x matrix configuration (#2444)
+- chore(ci): Move workflow assets to .github/assets (#2445)
+- chore(redteam): Update target handling for model-based strategies (#2466)
+- docs: Update RAG red team details (#2459)
+
+### Fixed
+
+- fix(providers): Fix O1 model detection (#2455)
+- fix(redteam): Handle invalid message from GOAT (#2462)
+- fix(redteam): Handle null target model responses in GOAT and improve safeJsonStringify (#2465)
+- fix(redteam): Improve logging and message handling in Crescendo and GOAT providers (#2467)
+- fix(redteam): Properly write target response to iterative (#2447)
+- fix(redteam): Skip iterative turn on refusal (#2464)
+
+### Dependencies
+
+- chore(deps): Bump @anthropic-ai/sdk from 0.32.1 to 0.33.1 (#2451)
+- chore(deps): Bump @aws-sdk/client-bedrock-runtime from 3.712.0 to 3.714.0 (#2446)
+- chore(deps): Bump openai from 4.76.3 to 4.77.0 (#2452)
+
+## [0.102.1] - 2024-12-17
+
+### Added
+
+- feat(redteam): ability to upload intents from csv (#2424)
+- feat(redteam): switch to rag example (#2432)
+
+### Changed
+
+- chore(cli): address punycode deprecation warning for Node.js 22 (#2440)
+- chore(redteam): format extraction prompts as chat messages (#2429)
+- chore(redteam): integration tests (#2413)
+- chore(redteam): move plugin collections out of plugin type (#2435)
+- chore(redteam): raise timeout on unaligned provider to 60s (#2434)
+- chore(redteam): update owasp mappings (#2316)
+- chore(redteam): update plugin and strategy display names and descriptions (#2387)
+- chore(redteam): minor styling improvements to TestTargetConfiguration (#2430)
+- chore(redteam): remove horizontal scroll from redteam setup tabs (#2420)
+
+### Fixed
+
+- fix(redteam): add support for entity merging in config (#2433)
+- fix(redteam): combine strategy configs for chained strategies (#2415)
+- fix(redteam): don't fall back if entity and purpose extraction fails (#2428)
+- fix(redteam): integration test (#2431)
+- fix(redteam): make cross-session-leak not default (#2427)
+- fix(redteam): remove duplicate `intent` plugin (#2426)
+- fix(redteam): dark mode in test targets ui (#2425)
+- fix(redteam): resolve invalid DOM nesting of ul elements in Strategies component (#2421)
+- fix(evaluator): handle circular references during error logging (#2441)
+
+### Dependencies
+
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.709.0 to 3.712.0 (#2418)
+- chore(deps): bump groq-sdk from 0.9.0 to 0.9.1 (#2416)
+- chore(deps): bump openai from 4.76.2 to 4.76.3 (#2417)
+
+## [0.102.0] - 2024-12-16
+
+### Added
+
+- feat(redteam): add api healthcheck to redteam generate  (#2398)
+
+### Changed
+
+- feat: add raw HTTP request support to Targets UI (#2407)
+- feat: add HTTP provider configuration generator (#2409)
+- feat: generate http config button (#2411)
+- feat: run redteam in web ui (#2025)
+- fix: exit codes and tests (#2414)
+- docs: add docs for model-graded metrics (#2406)
+
+## [0.101.2] - 2024-12-14
+
+### Added
+
+- feat(webui): implement cloud API health check functionality (#2397)
+- feat(webui): redteam attack flow chart (#2389)
+- feat(webui): strategy stats drawer (#2388)
+- feat(webui): Filter Results view by errors (#2394)
+
+### Changed
+
+- revert: refactor(evaluator): enhance variable resolution and prompt rendering (#2386)
+- chore(docker): add version info to docker build (#2401)
+- chore(docs): Update README.md (#2391)
+
+### Fixed
+
+- fix(redteam): improve error message for plugin validation (#2395)
+- fix(redteam): improve redteam strategy validation with detailed error messages (#2396)
+- fix(webui): hide "show failures" checkbox on 1-column evals (#2393)
+
+### Dependencies
+
+- chore(deps): bump openai from 4.76.1 to 4.76.2 (#2390)
+
+## [0.101.1] - 2024-12-13
+
+### Added
+
+- feat(eval): Separate errors from assert failures (#2214)
+- feat(eval): Support more than one multi-turn conversation in the same eval with conversationId metadata field (#2360)
+
+### Changed
+
+- fix: use safeJsonStringify (#2385)
+- chore(evaluator): Enhance variable resolution and prompt rendering (#2380)
+- chore(ci): Remove outdated package-lock.json after enabling workspaces in package.json (#2377)
+- chore(examples): Add Ollama red team example from blog post (#2374)
+
+### Fixed
+
+- fix(cli): Fix punycode deprecation warning (#2384)
+- fix(cli): Re-enable validation warning for invalid dereferenced configs (#2373)
+- fix(prompts): Restore behavior that delays YAML parsing until after variable substitution (#2383)
+- fix(redteam): Support file:// protocol for custom plugins (#2376)
+- fix(webui): Use injectVar in redteam report view (#2366)
+
+### Documentation
+
+- docs(configuration): Add documentation for shared variables in tests (#2379)
+
+## [0.101.0] - 2024-12-12
+
+### Added
+
+- feat(eval): Separate errors from assert failures (#2214)
+- feat(eval): Support more than one multi-turn conversation in the same eval with conversationId metadata field (#2360)
+
+### Changed
+
+- chore(evaluator): Enhance variable resolution and prompt rendering (#2380)
+- chore(ci): Remove outdated package-lock.json after enabling workspaces in package.json (#2377)
+- chore(examples): Add Ollama red team example from blog post (#2374)
+
+### Fixed
+
+- fix(cli): Fix punycode deprecation warning (#2384)
+- fix(cli): Re-enable validation warning for invalid dereferenced configs (#2373)
+- fix(prompts): Restore behavior that delays YAML parsing until after variable substitution (#2383)
+- fix(redteam): Support file:// protocol for custom plugins (#2376)
+- fix(webui): Use injectVar in redteam report view (#2366)
+
+### Documentation
+
+- docs(configuration): Add documentation for shared variables in tests (#2379)
+
+## [0.100.6] - 2024-12-11
+
+### Changed
+
+- chore: clean up invariant references (#2367)
+- chore: invariant (#2363)
+- chore(examples): add YAML schema and descriptions to config files (#2358)
+- chore(providers): add debugs and make provider invariants more detailed (#2365)
+- chore(redteam): add better error logging for multilingual (#2347)
+- chore(redteam): add getRemoteGenerationUrl mocks to redteam tests (#2349)
+- chore(redteam): Better error messaging for composite jailbreaks (#2372)
+- chore(redteam): fix composite jailbreak docs (#2370)
+- chore(redteam): respect --delay with redteam providers (#2369)
+- chore(webui): add "save YAML" option to Save Config dialog (#2356)
+- chore(webui): enhance redteam preset cards layout and styling (#2353)
+
+### Fixed
+
+- fix(providers): add regional model support to Bedrock (#2354)
+- fix(webui): redteam setup UI should support request body objects (#2355)
+- fix(providers): use Replicate moderation provider when OpenAI key not present (#2346)
+
+### Dependencies
+
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.706.0 to 3.709.0 (#2362)
+- chore(deps): bump openai from 4.76.0 to 4.76.1 (#2361)
+- chore(deps): update dependencies (#2350)
+
+### Documentation
+
+- docs(blog): new post on the EU AI Act (#2357)
+- docs(redteam): Update documentation to suggest a detailed purpose (#2345)
+- docs(troubleshooting): replace auto-generated index with custom overview (#2352)
+
+## [0.100.5] - 2024-12-09
+
+### Changed
+
+- feat: Show current redteam and save state by @sklein12 in [#2336](https://github.com/promptfoo/promptfoo/pull/2336)
+- fix: Our task API responds with a JSON object by @sklein12 in [#2337](https://github.com/promptfoo/promptfoo/pull/2337)
+- fix: Attempt to fix metrics after share to self-hosted by @GICodeWarrior in [#2338](https://github.com/promptfoo/promptfoo/pull/2338)
+- fix: Merge `defaultTest.vars` before applying `transformVars` by @mldangelo in [#2339](https://github.com/promptfoo/promptfoo/pull/2339)
+- fix: Catch errors on purpose extraction and continue by @sklein12 in [#2344](https://github.com/promptfoo/promptfoo/pull/2344)
+- chore: Allow overriding default and redteam providers globally by @sklein12 in [#2333](https://github.com/promptfoo/promptfoo/pull/2333)
+- chore(providers): Align `transformRequest` with `transformResponse` behavior by @mldangelo in [#2334](https://github.com/promptfoo/promptfoo/pull/2334)
+- chore: Update Node.js to v20.18.1 by @mldangelo in [#2342](https://github.com/promptfoo/promptfoo/pull/2342)
+- chore: Add support for multiple Google Sheets in `promptfooconfig` by @mldangelo in [#2343](https://github.com/promptfoo/promptfoo/pull/2343)
+
+## [0.100.4] - 2024-12-08
+
+### Changed
+
+- feat: "try example" in target configuration (#2335)
+- chore(webui): add a reset config button (#2328)
+- chore(redteam): add comments and schema to generated yaml (#2329)
+- chore(webui): add select all/none for all plugins (#2326)
+- chore: automate CITATION.cff version bump. Sort npm scripts (#2320)
+- docs: Fix docs to reflect non-root docker user (#2324)
+
+### Fixed
+
+- fix(cli): recommend npx if necessary (#2325)
+- fix(providers): use prompt config for structured outputs in azure (#2331)
+- fix(redteam): Use cloud api for remote harmful generation (#2323)
+- fix(webui): redteam bug where purpose was using old state (#2330)
+- fix(webui): redteam config persist between refreshes (#2327)
+
+### Dependencies
+
+- chore(deps): bump openai from 4.75.0 to 4.76.0 (#2321)
+
+## [0.100.3] - 2024-12-06
+
+### Changed
+
+- chore(providers): improve JSON schema support for openai azure (#2318)
+
+### Dependencies
+
+- chore(deps): bump the npm_and_yarn group with 2 updates (#2317)
+
+### Documentation
+
+- docs(aws-bedrock): add Nova model documentation and update examples (#2319)
+- docs(multilingual): add language code references (#2311)
+
+## [0.100.2] - 2024-12-06
+
+### Changed
+
+- **Multilingual Redteam Strategy:** Generates test cases across all strategies. [#2313](https://github.com/promptfoo/promptfoo/pull/2313) by [@sklein12](https://github.com/sklein12)  
+- **Multiline Editor:** Added multiline editor for HTTP request body. [#2314](https://github.com/promptfoo/promptfoo/pull/2314) by [@typpo](https://github.com/typpo)  
+- **Redteam Multilingual Strategy:** Preserved assertion types. [#2312](https://github.com/promptfoo/promptfoo/pull/2312) by [@mldangelo](https://github.com/mldangelo)  
+- **Crescendo Handling:** Prevented failures if the provider sends an incorrect response. [#2315](https://github.com/promptfoo/promptfoo/pull/2315) by [@sklein12](https://github.com/sklein12)  
+- **Dependency Updates:** Updated multiple package dependencies. [#2308](https://github.com/promptfoo/promptfoo/pull/2308) by [@mldangelo](https://github.com/mldangelo)  
+
+## [0.100.0] - 2024-12-05
+
+### Added
+
+- feat(providers): Add Amazon Nova models to Bedrock provider (#2300)
+- feat(providers): Support TypeScript custom providers (#2285)
+- feat(providers): Add transformRequest to HTTP provider. Rename responseParser to transformResponse (#2228)
+- feat(cli): Add configurable CSV delimiter support (#2294)
+- feat(redteam): Load `intents` plugin from file (#2283)
+- feat(webui): Ability to configure strategies in redteam setup (#2304)
+- feat(webui): Ability to upload YAML file to setup view (#2297)
+- feat(webui): Column selector (#2288)
+
+### Changed
+
+- chore(webui): Add YAML preview and strategies to redteamReview page (#2305)
+- chore(prompts): TypeScript for prompt functions (#2287)
+- chore(webui): Display # selected plugins in accordion text (#2298)
+- chore(redteam): Remote generation if logged into cloud (#2286)
+- chore(cli): Write `promptfoo-errors.log` on error (#2303)
+- chore(cli): Improve error message when attempting to share incomplete eval (#2301)
+- chore(redteam): Fix stateless warning (#2282)
+- chore(redteam): Plugin page UX (#2299)
+- chore(webui): Display average cost alongside total (#2274)
+- chore(webui): Remove prompt from redteam setup purpose page (#2295)
+- docs: Guide on LangChain PromptTemplates (#2235)
+
+### Fixed
+
+- fix(redteam): Do not store config hash if redteam generation failed (#2296)
+- fix(webui): Minor bugs in redteam config UI (#2278)
+- fix(cli): Replace process.exitCode with process.exit calls in share command (#2307)
+
+### Dependencies
+
+- chore(deps): Bump @aws-sdk/client-bedrock-runtime from 3.699.0 to 3.704.0 (#2279)
+- chore(deps): Bump @aws-sdk/client-bedrock-runtime from 3.704.0 to 3.705.0 (#2290)
+- chore(deps): Bump groq-sdk from 0.8.0 to 0.9.0 (#2291)
+- chore(deps): Bump openai from 4.73.1 to 4.74.0 (#2280)
+- chore(deps): Bump openai from 4.74.0 to 4.75.0 (#2289)
+
+### Documentation
+
+- docs(examples): Add redteam chatbot example (#2306)
+
+## [0.99.1] - 2024-12-02
+
+### Changed
+
+- chore(docs): update --config YAML file references to match actual behavior (#2170)
+- chore(providers): add *-latest models for Anthropic (#2262)
+- chore(providers): remove optional chaining in goat provider (#2253)
+- chore(redteam): ability to override severity (#2260)
+- chore(redteam): improve hijacking grader (#2251)
+- chore(redteam): improve overreliance grader (#2246)
+- chore(redteam): improve politics grader (#2258)
+- chore(redteam): move harmful specialized advice plugin to unaligned provider (#2239)
+- chore(redteam): move misinformation plugin from aligned to unaligned provider (#2232)
+- chore(redteam): shell injection grader improvement (25%) (#2277)
+- chore(redteam): update policy grader (#2244)
+- chore(site): improve architecture diagram dark mode (#2254)
+- chore(site): move careers link (#2242)
+- chore(tests): remove console.error debug statement (#2275)
+- chore(types): add Zod schema for assertion types (#2276)
+- chore(webui): ability to set image min/max height (#2268)
+- chore(webui): add metric column in assertions table (#2238)
+- chore(webui): add pointer cursor to report view (#2272)
+- chore(webui): add support for custom targets to redteam setup (#2215)
+- chore(webui): combine assertion context to eval output comment dialog (#2240)
+- chore(webui): improve back and next buttons for purpose/targets pages (#2269)
+- chore(webui): minor improvements to redteam setup strategy and plugin selection (#2247)
+- chore(webui): only show action buttons for the currently hovered cell, rather than both cells for that row (#2270)
+- chore(webui): preserve whitespace in TableCommentDialog (#2237)
+- chore(webui): prevent dialog from popping up repeatedly when component rerenders (#2273)
+- chore(webui): remove local dashboard (#2261)
+- chore(webui): select all/none in redteam setup plugins view (#2241)
+- docs: GitLab integration (#2234)
+
+### Fixed
+
+- fix(cli): improve debugging for fetchWithRetries (#2233)
+- fix(cli): refuse to share incomplete evals (#2259)
+- fix(webui): support sorting on pass/fail count & raw score (#2271)
+- fix(redteam): stringify non-string target provider responses in goat (#2252)
+
+### Dependencies
+
+- chore(deps): bump openai from 4.73.0 to 4.73.1 (#2243)
+- chore(deps): sync dependency versions with promptfoo cloud (#2256)
+- chore(deps): update dependencies (#2257)
+- chore(deps): update lock file for yanked dependency (#2250)
+
+## [0.99.0] - 2024-11-25
+
+### Added
+
+- feat(cli): `promptfoo debug` command (#2220)
+- feat(eval): Read variables from PDF (#2218)
+- feat(providers): Add `sequence` provider (#2217)
+- feat(redteam): Citation strategy (#2223)
+- feat(redteam): Composite jailbreak strategy (#2227)
+- feat(redteam): Ability to limit strategies to specific plugins (#2222)
+
+### Changed
+
+- chore(redteam): Attempt to reuse existing server for redteam init (#2210)
+- chore(redteam): Naive GOAT error handling (#2213)
+- chore(redteam): Improve competitors plugin and grading (#2208)
+
+### Fixed
+
+- fix(eval): CSV BOM parsing (#2230)
+- fix(redteam): Add missing entities field to redteam schema (#2226)
+- fix(redteam): Ensure numTests is properly inherited in config for all plugin types (#2229)
+- fix(redteam): Strip prompt asterisks (#2212)
+- fix(redteam): Validate plugins before starting (#2219)
+
+### Dependencies
+
+- chore(deps): Bump @aws-sdk/client-bedrock-runtime from 3.696.0 to 3.699.0 (#2231)
+
+### Documentation
+
+- docs(redteam): Ollama redteam blog (#2221)
+- docs(redteam): Add troubleshooting documentation (#2211)
+
+## [0.98.0] - 2024-11-22
+
+### Added
+
+- feat(providers): Maintain session-id in HTTP provider (#2101)
+- feat(redteam): Add custom strategy (#2166)
+- feat(webui): Add CSV download to report view (#2168)
+- feat(webui): Add image preview lightbox for base64 image strings (#2194)
+
+### Changed
+
+- chore(providers): Add GPT-4-0-2024-11-20 to supported models (#2203)
+- chore(providers): Add support for UUID in transformVars (#2204)
+- chore(cli): Display help for invalid args (#2196)
+- chore(redteam): Add `promptfoo redteam setup` (#2172)
+- chore(redteam): Init now opens web setup UI (#2191)
+- chore(redteam): Update purpose UI to capture better information (#2180)
+- chore(redteam): Instrument redteam setup (#2193)
+- chore(redteam): Remove OpenAI key requirement in onboarding (#2187)
+- chore(redteam): Remove overreliance from default (#2201)
+- chore(redteam): Remove redundant harmful plugin when all subcategories are selected (#2206)
+- chore(redteam): Reorganize plugins in setup (#2173)
+- chore(redteam): Session parsing in UI (#2192)
+- chore(redteam): Update docs for multi-turn strategies (#2182)
+- chore(redteam): Update redteam init instructions (#2190)
+- chore(redteam): Wrap more system purpose tags (#2202)
+- chore(redteam): Wrap purposes in <Purpose> tags (#2175)
+
+### Fixed
+
+- fix(prompts): Parse YAML files into JSON before Nunjucks template render (#2205)
+- fix(providers): Handle more response parser failures in HTTP provider (#2200)
+- fix(redteam): Attempt to fix undefined redteam testcase bug (#2186)
+- fix(redteam): Debug access plugin grader improvement (#2178)
+- fix(redteam): Handle missing prompts in indirect prompt injection setup (#2199)
+- fix(redteam): Pass isRedteam from eval database model (#2171)
+- fix(webui): Handle division by zero cases in CustomMetrics component (#2195)
+
+### Dependencies
+
+- chore(deps): Bump @aws-sdk/client-bedrock-runtime from 3.693.0 to 3.696.0 (#2176)
+- chore(deps): Update dependencies - resolve lock file issue (#2179)
+- chore(deps): Update dependencies (#2169)
+
+### Documentation
+
+- docs(examples): Add F-score example (#2198)
+- docs(examples): Modernize image classification example (#2197)
+- docs(site): Add red team Hugging Face model guide (#2181)
+- docs(site): Use `https` id with `url` config (#2189)
+
+## [0.97.0] - 2024-11-18
+
+### Added
+
+- feat(azure): adding AzureCliCredential as a fallback authentication option (#2149)
+
+### Changed
+
+- feat: report shows % framework compliance as progress bar (#2160)
+- feat: support for grader fewshot examples (#2162)
+- feat: add support for bedrock guardrails (#2163)
+- fix: crescendo feedback (#2145)
+- fix: handle null test cases in strategy generation (#2146)
+- refactor(redteam): extract parseGeneratedPrompts from redteam base class (#2155)
+- refactor(redteam): modularize and simplify harmful plugin (#2154)
+- chore: bump @aws-sdk/client-bedrock-runtime from 3.691.0 to 3.693.0 (#2147)
+- chore: bump @eslint/plugin-kit from 0.2.0 to 0.2.3 in the npm_and_yarn group (#2151)
+- chore: track token usage for redteam providers (#2150)
+- chore(providers): misc harmful completion provider enhancements  (#2153)
+- chore: display strategy used in report view (#2156)
+- chore: open result details in report view (#2159)
+- chore: add # requests to token usage (#2158)
+- chore: set redteamFinalPrompt in goat provider (#2161)
+- chore(redteam): refactor harmful plugin into aligned and unaligned modules (#2164)
+- chore(redteam): refactor unaligned inference API response handling (#2167)
+
+### Fixed
+
+- fix(share): update eval author to logged-in user when sharing (#2165)
+
+## [0.96.2] - 2024-11-14
+
+### Added
+
+- feat(redteam): redteam fewshot overrides (#2138)
+- feat(cli): make README.md file during onboarding init flow optional (#2054)
+
+### Changed
+
+- feat: helm chart for self hosted (#2003)
+
+### Fixed
+
+- fix(cli): remove validation warning on yaml files (#2137)
+- fix(providers): handle system messages correctly for bedrock Claude models (#2141)
+- fix(redteam): Config for all strategies (#2126)
+- fix(webui): potential divide by 0s (#2135)
+- fix(webui): restore token usage display (#2143)
+
+### Dependencies
+
+- chore(deps): clean up plugin action params (#2139)
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.687.0 to 3.691.0 (#2140)
+- chore(deps): update dependencies (#2133)
+
+## [0.96.1] - 2024-11-12
+
+### Added
+
+- feat(ui): Respect max text length in Markdown cells (#2109)
+
+### Changed
+
+- chore(assertions): split assertions into separate modules (#2116)* chore(blog): update API endpoint to canonical domain by @mldangelo in https://github.com/promptfoo/promptfoo/pull/2119
+- chore(cli): add promptfoo version header to all requests (#2121)
+- chore(redteam): allow goat to be used stateless or not (#2102)
+- chore(redteam): Break out Prompt Metrics Types (#2120)
+- chore(redteam): re-organize report categories (#2127)
+- chore(docs): Fix AWS default region to match documentation (#2117)
+
+### Fixed
+
+- fix(cli): validate config after dereferencing (#2129)
+- fix(providers): handle system messages correctly in anthropic parseMessages (#2128)
+
+### Dependencies
+
+- chore(deps): bump groq-sdk from 0.7.0 to 0.8.0 (#2131)
+- chore(deps): update multiple dependencies (#2118)
+
+## [0.96.0] - 2024-11-10
+
+### Added
+
+- feat(redteam): intent plugin (#2072)
+- feat(redteam): rag poisoning plugin (#2078)
+- feat(cli): --filter-sample on eval to randomly sample (#2115)
+- feat(providers): azure default provider (#2107)
+- feat(assertions): BLEU score (#2081)
+
+### Changed
+
+- chore(assertions): refactor JSON assertions (#2098)
+- chore(assertions): split assertions into separate files (#2089)
+- chore(cli): add --ids-only to list commands (#2076)
+- chore(cli): lazily init csv assertion regex (#2111)
+- chore(cli): validate json, yaml, js configs on load (#2114)
+- chore(lint): format lint (#2082)
+- chore(providers): add envar support for azure auth (#2106)
+- chore(providers): add support for Claude 3.5 Haiku model (#2066)
+- chore(providers): add support for external response_format in azure openai (#2092)
+- chore(providers): azureopenai -> azure (#2113)
+- chore(providers): Support AWS sessionToken and profile for authentication (#2085)
+- chore(redteam): improve rbac grader (#2067)
+- chore(redteam): pass context and options to target in iterativeTree provider (#2093)
+- chore(redteam): Use purpose in graders (#2077)
+- chore(webui): prevent unnecessary state resets in plugin configuration in redteam ui (#2071)
+-  chore: add yaml config validation tests (#2070)
+- chore(docs): goat-blog demo component usability improvements (#2095)
+- docs: use "provider" key in python prompt function (#2103)
+- docs: add GOAT blog post (#2068)
+
+### Fixed
+
+- fix(cli): keep eval id on `import` (#2112)
+- fix(providers): portkey provider and headers (#2088)
+- fix(redteam): provide target context (#2090)
+- fix(providers): ensure consistent message parsing for Anthropic Claude Vision (#2069)
+- fix(redteam): make remote generation URL dynamic to support dotenv loading (#2086)
+
+### Dependencies
+
+- chore(deps): bump @anthropic-ai/sdk from 0.31.0 to 0.32.0 (#2074)
+- chore(deps): bump @anthropic-ai/sdk from 0.32.0 to 0.32.1 (#2083)
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.686.0 to 3.687.0 (#2104)
+- chore(deps): bump openai from 4.70.2 to 4.71.0 (#2073)
+- chore(deps): bump openai from 4.71.0 to 4.71.1 (#2087)
+
+## [0.95.0] - 2024-11-04
+
+### Added
+
+- **feat(redteam):** goat (#2006)
+- **feat(webui):** add support for file providers in eval creation view via file upload by @mldangelo  in https://github.com/promptfoo/promptfoo/pull/2055
+
+### Changed
+
+- **feat:** save and load configs (#2044)
+- **feat:** index page for report view (#2048)
+- **fix:** competitors grader (#2042)
+- **fix:** llm rubric markup (#2043)
+- **fix:** OOM on large evals (#2049)
+- **chore:** migrate rag-full example to langchain 0.3.0 (#2041)
+- **chore:** add some loaders to webui pages (#2050)
+- **chore(providers):** add bedrock regional inference profile IDs (#2058)
+- **chore(webui):** optimize custom policy handling (#2061)
+- **chore:** bump @anthropic-ai/sdk from 0.30.1 to 0.31.0 (#2062)
+- **chore:** bump openai from 4.69.0 to 4.70.2 (#2063)
+
+### Fixed
+
+- **fix(webui):** preserve target label when switching target types (#2060)
+
+### Dependencies
+
+- **chore(deps):** bump langchain from 0.2.10 to 0.3.0 in /examples/rag-full (#2040)
+- **chore(deps):** bump openai from 4.68.4 to 4.69.0 (#2045)
+- **chore(deps):** update patch and minor dependencies (#2064)
+
+## [0.94.6] - 2024-10-30
+
+### Added
+
+- feat(webui): make table header sticky (#2001)
+
+### Changed
+
+- feat: `promptfoo auth whoami` (#2034)
+- fix: minor redteam run fixes (#2033)
+- fix: report issue counts (#2037)
+- fix: Integration backlink to portkey docs (#2039)
+- chore: add provider to assertion function context (#2036)
+- chore: add `--verbose` to redteam run (#2032)
+
+### Dependencies
+
+- chore(deps): bump elliptic from 6.5.7 to 6.6.0 in /src/app (#2031)
+
+## [0.94.5] - 2024-10-28
+
+### Changed
+
+- fix: bump version on fetch cache key (#2029)
+- fix: support browser back/forward in redteam setup (#2022)
+- chore: improve ui for plugin configs (#2024)
+- chore(webui): improve redteam plugin configuration UI (#2028)
+- chore: Add Missing Statuses to Risk Categories (#2030)
+
+### Fixed
+
+- fix(ci): add disk space cleanup steps to prevent runner failures (#2018)
+- fix(redteam): auto-extract injectVar from prompt template in redteam image provider (#2021)
+- fix(providers): adjust bedrock anthropic default temperature (#2027)
+- fix(webui): hide redteam setup dialog after seen (#2023)
+
+### Documentation
+
+- docs(provider): fix dalle-3 provider name (#2020)
+
+## [0.94.4] - 2024-10-27
+
+### Added
+
+- **Feature:** Add simulated user provider ([#2014](https://github.com/promptfoo/promptfoo/pull/2014) by [@typpo](https://github.com/typpo))
+
+### Changed
+
+- **Fix:** Handle basic auth credentials in fetch requests ([#2013](https://github.com/promptfoo/promptfoo/pull/2013) by [@mldangelo](https://github.com/mldangelo))
+- **Chore:** Add configuration option to disable template environment variables ([#2017](https://github.com/promptfoo/promptfoo/pull/2017) by [@mldangelo](https://github.com/mldangelo))
+- **Chore (Redteam):** Improve onboarding CLI plugin configuration handling ([#2015](https://github.com/promptfoo/promptfoo/pull/2015) by [@mldangelo](https://github.com/mldangelo))
+
+## [0.94.3] - 2024-10-26
+
+### Changed
+
+- feat: package import support improvements (#1995)
+- feat: add adaline gateway provider (#1980)
+- fix: template creation for `promptfoo init` and `promptfoo redteam init`
+- chore(providers): merge prompt and provider config in azure (#2011)
+
+## [0.94.2] - 2024-10-25
+
+### Added
+
+- feat(browser): `optional` arg on `click` commands (#1997)
+
+### Changed
+
+- feat: add browser support in redteam setup (#1998)
+- fix: test case descriptions (#2000)
+- fix: Http Provider parser (#1994)
+- chore: save user consent when logged in via webui (#1999)
+- chore: Constants are lower case (#2007)
+
+## [0.94.1] - 2024-10-24
+
+### Added
+
+- **feat(schema):** Add YAML schema validation to config files by [@mldangelo](https://github.com/mldangelo) in [#1990](https://github.com/promptfoo/promptfoo/pull/1990)
+
+### Changed
+
+- **chore:** Don't run Docker as root by [@typpo](https://github.com/typpo) in [#1884](https://github.com/promptfoo/promptfoo/pull/1884)
+- **chore(webui):** Move Snackbar out of component for reuse by [@sklein12](https://github.com/sklein12) in [#1989](https://github.com/promptfoo/promptfoo/pull/1989)
+- **chore(redteam):** Send version to remote endpoint by [@typpo](https://github.com/typpo) in [#1982](https://github.com/promptfoo/promptfoo/pull/1982)
+- **refactor(tests):** Reorganize test files into subdirectories by [@mldangelo](https://github.com/mldangelo) in [#1984](https://github.com/promptfoo/promptfoo/pull/1984)
+
+### Fixed
+
+- **fix(providers):** Better OpenAI rate limit handling by [@typpo](https://github.com/typpo) in [#1981](https://github.com/promptfoo/promptfoo/pull/1981)
+- **fix(providers):** Refusals are not failures by [@typpo](https://github.com/typpo) in [#1991](https://github.com/promptfoo/promptfoo/pull/1991)
+- **fix(redteam):** Better error handling in strategies by [@typpo](https://github.com/typpo) in [#1983](https://github.com/promptfoo/promptfoo/pull/1983)
+- **fix(redteam):** Better error on remote plugins when remote is disabled by [@typpo](https://github.com/typpo) in [#1979](https://github.com/promptfoo/promptfoo/pull/1979)
+
+### Dependencies
+
+- **chore(deps):** Bump @aws-sdk/client-bedrock-runtime from 3.677.0 to 3.678.0 by [@dependabot](https://github.com/dependabot) in [#1987](https://github.com/promptfoo/promptfoo/pull/1987)
+- **chore(deps):** Bump @anthropic-ai/sdk from 0.30.0 to 0.30.1 by [@dependabot](https://github.com/dependabot) in [#1986](https://github.com/promptfoo/promptfoo/pull/1986)
+- **chore(deps):** Bump OpenAI from 4.68.2 to 4.68.4 by [@dependabot](https://github.com/dependabot) in [#1985](https://github.com/promptfoo/promptfoo/pull/1985)
+
+## [0.94.0] - 2024-10-23
+
+### Added
+
+- feat(providers): add support for `github` provider (#1927)
+- feat(providers): add support for xAI (Grok) provider (#1967)
+- feat(providers): Update HTTP Provider to support any type of request (#1920)
+- feat(prompts): add context to python and javascript prompts  (#1974)
+- feat(webui): add ability to update eval author (#1951)
+- feat(webui): add login page (#1964)
+- feat(webui): add support for displaying base64-encoded images (#1937)
+- feat(cli): allow referencing specific gsheet (#1942)
+- feat(redteam): show passes and fails in report drawer (#1972)
+
+### Changed
+
+- chore(cli): disable database logging by default (#1953)
+- chore(cli): move db migrations up (#1975)
+- chore(cli): replace node-fetch with native fetch API (#1968)
+- chore(cli): warn on unsupported test format (#1945)
+- chore(providers): support AWS credentials in config file for bedrock provider (#1936)
+- chore(providers): support response_format in prompt config in openai provider (#1966)
+- chore(providers): update Claude 3.5 model version (#1973)
+- chore(providers): update implementation of togetherAI provider (#1934)
+- chore(redteam): Add redteam descriptions and display names (#1962)
+- chore(redteam): Better typing for the new constants (#1965)
+- chore(redteam): fix typing issue, don't return in route (#1933)
+- chore(redteam): move all redteam constants to one spot (#1952)
+- chore(redteam): remove providers from db (#1955)
+- chore(redteam): update providers to id by id or label (#1924)
+- chore(redteam): Use Provider Label as Unique ID for redteam targets (#1938)
+- chore(webui): add user email management endpoints (#1949)
+- chore(webui): create dedicated eval router (#1948)
+- chore(webui): expose redteam init ui in navigation dropdown menu (#1926)
+- chore(webui): improve max text length slider (#1939)
+- chore(webui): optimize Material-UI imports for better tree-shaking (#1928)
+- chore(webui): optionally record anonymous telemetry (#1940)
+- chore(webui): resolve fast refresh warning by separating useToast hook (#1941)
+- refactor(assertions): move utility functions to separate file (#1944)
+- chore: add citation generation script and update CITATION.cff (#1914)
+
+### Fixed
+
+- fix(cli): add metadata to EvaluateResult model (#1978)
+- fix(cli): check for python3 alias (#1971)
+- fix(cli): cli properly watches all types of configs (#1929)
+- fix(cli): resolve deep copy issue when using grader cli arg (#1943)
+- fix(eval): set author from getUserEmail when creating Eval (#1950)
+- fix(providers): improve Gemini format coercion and add tests (#1925)
+- fix(providers): maybeCoerceToGeminiFormat in palm provider - parse system_instruction (#1947)
+
+### Dependencies
+
+- chore(deps): bump aiohttp from 3.9.5 to 3.10.2 in /examples/rag-full (#1959)
+- chore(deps): bump certifi from 2023.11.17 to 2024.7.4 in /examples/python-provider (#1958)
+- chore(deps): bump idna from 3.6 to 3.7 in /examples/python-provider (#1957)
+- chore(deps): bump rollup from 4.21.3 to 4.24.0 in /src/app (#1961)
+- chore(deps): bump starlette from 0.37.2 to 0.40.0 in /examples/rag-full (#1956)
+- chore(deps): bump vite from 5.3.3 to 5.4.9 in /examples/jest-integration (#1960)
+- chore(deps): migrate drizzle (#1922)
+- chore(deps): update dependencies (#1913)
+
+### Documentation
+
+- docs(blog): adding fuzzing post (#1921)
+
+## [0.93.3] - 2024-10-17
+
+### Added
+
+- **feat(assertions):** Support array of files in assertion values by [@danpe](https://github.com/promptfoo/promptfoo/pull/1897)
+- **feat(redteam):** Math-prompt strategy by [@AISimplyExplained](https://github.com/promptfoo/promptfoo/pull/1907)
+
+### Changed
+
+- **chore(providers):** Add WatsonX bearer token auth and display model cost by [@gprem09](https://github.com/promptfoo/promptfoo/pull/1904)
+- **chore(redteam):** Rename math-prompt strategy and update docs by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1912)
+- **chore(webui):** Redesign navigation and dark mode components by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1903)
+- **chore(ci):** Correct GitHub Actions syntax for secret access by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1911)
+- **chore(ci):** Fix Docker build by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1910)
+- **chore(ci):** Test eval share for hosted container by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1908)
+- **chore(ci):** Test sharing to cloud by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1909)
+
+### Fixed
+
+- **fix(webui):** Navigating directly to an eval by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1905)
+
+### Documentation
+
+- **docs(redteam):** Add documentation for Custom and PII plugins by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1892)
+
+## [0.93.2] - 2024-10-16
+
+### Changed
+
+- **fix:** update cloud share URL path from 'results' to 'eval' by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1901)  
+- **fix:** gemini chat formatting by [@typpo](https://github.com/promptfoo/promptfoo/pull/1900)  
+- **fix:** sharing to hosted by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1902)  
+- **chore:** add `--filter-targets` to `redteam run` by [@typpo](https://github.com/promptfoo/promptfoo/pull/1893)  
+- **chore:** warn users about unknown arguments after 'eval' command by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1898)  
+
+### Dependencies
+
+- **chore(deps):** bump `@anthropic-ai/sdk` from 0.29.0 to 0.29.1 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1894)  
+
+## [0.93.1] - 2024-10-15
+
+### Changed
+
+- **feat:** Crisp chat on certain pages by [@typpo](https://github.com/promptfoo/promptfoo/pull/1880)
+- **feat:** Redteam HTTP target tester by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1883)
+- **fix:** Do not use default config when config is explicitly set by [@typpo](https://github.com/promptfoo/promptfoo/pull/1878)
+- **fix:** Delete all evals broken by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1891)
+- **docs:** Add RAG architecture blog post by [@vsauter](https://github.com/promptfoo/promptfoo/pull/1886)
+- **refactor(webui):** Move dashboard to redteam directory by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1890)
+
+## [0.93.0] - 2024-10-14
+
+### Added
+
+- feat(cli): add example download functionality to init command (#1875)
+- feat(redteam): introduce experimental redteam setup ui (#1872)
+- feat(providers): watsonx provider (#1869)
+- feat(providers): node package provider (#1855)
+
+### Changed
+
+- chore(webui): show tools in report view (#1871)
+
+### Fixed
+
+- fix(cli): only set redteam on combined configs when necessary (#1879)
+- fix(cli): disable remote grading with rubric prompt override (#1877)
+- fix(webui): rendering evals (#1881)
+
+## [0.92.3] - 2024-10-12
+
+### Changed
+
+- fix: request correct structure in prompt (#1851)
+- fix: Only persist custom API url in local storage if it's set through the UI (#1854)
+- fix: equality failure message (#1868)
+- fix: don't always persist providers (#1870)
+- feat: env variable to host pf at a different url path then base (#1853)
+- chore(redteam): improve custom plugin definition and validation (#1860)
+- chore: move skip logic to generate (#1834)
+- chore: add `--filter-targets` alias (#1863)
+- chore: Cloud sharing with new format (#1840)
+
+### Fixed
+
+- fix(webui): resolve undefined version display in InfoModal (#1856)
+
+### Dependencies
+
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.667.0 to 3.668.0 (#1857)
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.668.0 to 3.669.0 (#1865)
+
+## [0.92.2] - 2024-10-09
+
+### Changed
+
+- **ci(tests)**: Separate unit and integration tests in CI pipeline by [@mldangelo](https://github.com/mldangelo) in [#1849](https://github.com/promptfoo/promptfoo/pull/1849)
+  - Bump `@aws-sdk/client-bedrock-runtime` from 3.666.0 to 3.667.0 by [@dependabot](https://github.com/dependabot) in [#1845](https://github.com/promptfoo/promptfoo/pull/1845)
+  - Bump `@anthropic-ai/sdk` from 0.28.0 to 0.29.0 by [@dependabot](https://github.com/dependabot) in [#1846](https://github.com/promptfoo/promptfoo/pull/1846)
+  - Bump `openai` from 4.67.2 to 4.67.3 by [@dependabot](https://github.com/dependabot) in [#1844](https://github.com/promptfoo/promptfoo/pull/1844)
+
+### Fixed
+
+- **fix(providers)**: Dynamically import FAL-AI serverless client by [@mldangelo](https://github.com/mldangelo) in [#1850](https://github.com/promptfoo/promptfoo/pull/1850)
+
+### Dependencies
+
+- **chore(deps)**: 
+
+## [0.92.1] - 2024-10-08
+
+### Added
+
+- **feat(providers):** Add support for an optional `responseSchema` file to Google Gemini by [@aud](https://github.com/promptfoo/promptfoo/pull/1839)
+
+### Changed
+
+- **fix:** count could be off if there was a test that wasn't recorded by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1841)
+- **fix:** support relative paths by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1842)
+- **fix:** Prompt ordering on tables by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1843)
+- **chore:** delete empty file by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1829)
+- **chore:** rename tables by [@sklein12](https://github.com/promptfoo/promptfoo/pull/1831)
+
+### Fixed
+
+- **fix(provider):** fal prompt config overrides by [@drochetti](https://github.com/promptfoo/promptfoo/pull/1835)
+
+### Dependencies
+
+- **chore(deps):** bump openai from 4.67.1 to 4.67.2 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1837)
+- **chore(deps-dev):** bump @aws-sdk/client-bedrock-runtime from 3.665.0 to 3.666.0 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1836)
+
+### Documentation
+
+- **docs(contributing):** expand guide for adding new providers by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1833)
+
+## [0.92.0] - 2024-10-07
+
+### Changed
+
+- Normalize eval results in db (#1776)
+- foundation model blog post (#1823)
+- site: custom blog index page (#1824)
+- chore(build): allow-composite-ts (#1825)
+- chore(cli): improve validation for extension hooks (#1827)
+
+## [0.91.3] - 2024-10-04
+
+### Added
+
+- feat(redteam): add religion plugin (#1822)
+- feat(provider-fal): allow prompt config overrides (#1815)
+
+## [0.91.2] - 2024-10-04
+
+### Added
+
+- feat(cli): Add input validation to eval command (@mldangelo #1810)
+- feat(cli): Add real-time logging for Python script execution (@mldangelo #1818)
+- feat(providers): Add support for setting cookies in `browser` provider (@typpo #1809)
+
+### Changed
+
+- chore(ci): Move integration tests to separate job in GitHub Actions workflow (@mldangelo #1821)
+- chore(providers): Add support for file-based response parser for HTTP provider (@mldangelo #1808)
+- chore(providers): Improve error message for browser provider missing imports (67c5fed2 @typpo)
+- chore(redteam): Update to specific GPT-4 model (0be9c87f @mldangelo)
+- chore(site): Update intro cal.com link (ff36972e @typpo)
+- chore(webui): Remove 'use client' directives from React components (bc6f4214 @mldangelo)
+- docs: Add Streamlit application in browser documentation (855e80f4 @typpo)
+- docs: Escape tag in documentation (9c3ae83b @typpo)
+- docs: Remove responseparser from quickstart (fe17b837 @typpo)
+- docs: Remove responseParser from redteam template (feda3c60 @typpo)
+- docs: Update test case reference documentation (d7c7a507 @mldangelo)
+- docs: Update to use `redteam run` and `redteam report` (@typpo #1814)
+
+### Fixed
+
+- fix(redteam): Resolve cross-session templating issues (@typpo #1811)
+- fix(webui): Ensure weight is not 0 (@sklein12 #1817)
+
+### Dependencies
+
+- chore(deps-dev): Bump @aws-sdk/client-bedrock-runtime from 3.658.1 to 3.662.0 (@dependabot #1805)
+- chore(deps-dev): Bump @aws-sdk/client-bedrock-runtime from 3.663.0 to 3.664.0 (@dependabot #1819)
+- chore(deps): Bump openai from 4.66.1 to 4.67.0 (@dependabot #1804)
+- chore(deps): Bump replicate from 0.34.0 to 0.34.1 (@dependabot #1806)
+- chore(deps): Update dependencies (ec37ca4e @mldangelo)
+
+## [0.91.1] - 2024-10-01
+
+### Changed
+
+- feat: prompts as python classmethods (#1799)
+
+### Fixed
+
+- fix(redteam): read redteam config during redteam eval command (#1803)
+
+### Documentation
+
+- docs(custom-api): update documentation and improve typing (#1802)
+
+## [0.91.0] - 2024-10-01
+
+### Added
+
+- feat(cli): ask for email on public share by @typpo in #1798
+- feat(cli): support input transforms by @MrFlounder in #1704
+- feat(redteam): add `redteam run` command by @typpo in #1791
+- feat(webui): new Chart type on the eval page of web UI by @YingjiaLiu99 in #1147
+
+### Changed
+
+- fix: calc the same prompt id everywhere by @sklein12 in #1795
+- docs: add troubleshooting section for timeouts by @mldangelo
+- docs: fix indentation by @typpo
+- docs: provider index by @mldangelo in #1792
+- docs: update ts-config example README with tsx loader options by @mldangelo
+- site: misc redteam guide clarifications by @typpo
+- chore(cli): reorganize command structure and add program name by @mldangelo
+- chore(cli): simplify node version check by @mldangelo in #1794
+- chore(openai): use omni moderation by default by @typpo in #1797
+- chore(providers): add support for special chars in browser provider by @typpo in #1790
+- chore(providers): render provider label using Nunjucks by @mldangelo in #1789
+- chore(providers): warn on unknown provider types by @mldangelo in #1787
+- chore(redteam): include package version in redteam run hash by @typpo in 6d2d0c65
+- chore(redteam): rename and export base classes by @mldangelo in #1801
+- chore(redteam): serverside generation for indirect-prompt-injection by @mldangelo
+- chore(redteam): update adversarial generation to specific gpt-4o model by @typpo in 1f397f62
+- chore(cli): reorganize command structure and add program name by @mldangelo in 66781927
+  
+
+### Fixed
+
+- fix(build): remove ts-config path aliases until compilation works correctly by @sklein12 in #1796
+- fix(cli): don't ask for email when sharing in ci or without tty by @typpo
+- fix(package): use provider prompt map when running via Node package by @vsauter in #1788
+- fix(redteam): don't include entities if list is empty by @typpo
+- fix(redteam): OWASP aliases by @typpo in #1765
+
+### Dependencies
+
+- chore(deps): bump openai from 4.65.0 to 4.66.1 by @dependabot in #1800
+- chore(deps): update dependencies by @mldangelo
+
+## [0.90.3] - 2024-09-27
+
+### Changed
+
+- fix: browser provider ignores cert errors by @ianw_github in 9fcc9f5974d919291456292e187fba1b1bacb3e2
+
+## [0.90.2] - 2024-09-27
+
+### Changed
+
+- **feat:** Add fal.ai provider by [@drochetti](https://github.com/drochetti) in [#1778](https://github.com/promptfoo/promptfoo/pull/1778)
+- **feat:** Add install script for pre-built binary installation by [@mldangelo](https://github.com/mldangelo) in [#1755](https://github.com/promptfoo/promptfoo/pull/1755)
+- **fix:** Improve JSON parser handling for multiple braces by [@typpo](https://github.com/typpo) in [#1766](https://github.com/promptfoo/promptfoo/pull/1766)
+- **refactor(eval):** Reorganize and improve eval command options by [@mldangelo](https://github.com/mldangelo) in [#1762](https://github.com/promptfoo/promptfoo/pull/1762)
+- **chore(bedrock):** Improve support for LLAMA3.1 and LLAMA3.2 model configurations by [@mldangelo](https://github.com/mldangelo) in [#1777](https://github.com/promptfoo/promptfoo/pull/1777)
+- **chore(config):** Simplify config loading by [@mldangelo](https://github.com/mldangelo) in [#1779](https://github.com/promptfoo/promptfoo/pull/1779)
+- **chore(redteam):** Move select plugins for server-side generation by [@mldangelo](https://github.com/mldangelo) in [#1783](https://github.com/promptfoo/promptfoo/pull/1783)
+- **ci(nexe-build):** Add ARM64 support for nexe builds by [@mldangelo](https://github.com/mldangelo) in [#1780](https://github.com/promptfoo/promptfoo/pull/1780)
+- **ci(nexe-build):** Update runner selection for macOS and add Windows file extension by [@mldangelo](https://github.com/mldangelo) in [#1784](https://github.com/promptfoo/promptfoo/pull/1784)
+
+### Fixed
+
+- **fix(providers):** Correct data types for `responseParser` in HTTP provider by [@typpo](https://github.com/typpo) in [#1764](https://github.com/promptfoo/promptfoo/pull/1764)
+
+### Dependencies
+
+- **chore(deps-dev):** Bump `@aws-sdk/client-bedrock-runtime` from 3.658.0 to 3.658.1 by [@dependabot](https://github.com/dependabot) in [#1769](https://github.com/promptfoo/promptfoo/pull/1769)
+- **chore(deps):** Bump `replicate` from 0.33.0 to 0.34.0 by [@dependabot](https://github.com/dependabot) in [#1767](https://github.com/promptfoo/promptfoo/pull/1767)
+- **chore(deps):** Bump `openai` from 4.63.0 to 4.64.0 by [@dependabot](https://github.com/dependabot) in [#1768](https://github.com/promptfoo/promptfoo/pull/1768)
+
+## [0.90.1] - 2024-09-26
+
+### Changed
+
+- **chore(providers):** Updated Bedrock integration to support Llama 3.2 models. [#1763](https://github.com/promptfoo/promptfoo/pull/1763) by [@aristsakpinis93](https://github.com/aristsakpinis93)
+- **chore:** Added support for config objects in JavaScript and Python assertions. [#1729](https://github.com/promptfoo/promptfoo/pull/1729) by [@vedantr](https://github.com/vedantr)
+- **fix:** Improved prompts handling per provider. [#1757](https://github.com/promptfoo/promptfoo/pull/1757) by [@typpo](https://github.com/typpo)
+- **fix:** Updated `--no-interactive` description and added it to the documentation. [#1761](https://github.com/promptfoo/promptfoo/pull/1761) by [@kentyman23](https://github.com/kentyman23)
+
+### Dependencies
+
+- **chore(deps-dev):** Bumped `@aws-sdk/client-bedrock-runtime` from 3.654.0 to 3.658.0. [#1758](https://github.com/promptfoo/promptfoo/pull/1758) by [@dependabot](https://github.com/dependabot)
+
+## [0.90.0] - 2024-09-24
+
+### Changed
+
+- cli: Added 'pf' as an alias for the 'promptfoo' command (@mldangelo, #1745)
+- providers(bedrock): Added support for AI21 Jamba Models and Meta Llama 3.1 Models (@mldangelo, #1753)
+- providers(python): Added support for file:// syntax for Python providers (@mldangelo, #1748)
+- providers(http): Added support for raw requests (@typpo, #1749)
+- cli: implement cloud Login functionality for private sharing (@sklein12, #1719)
+- cli(redteam): aliased 'eval' in redteam namespace and prioritized redteam.yaml over promptfooconfig.yaml (@typpo, #1664)
+- providers(http): Added templating support for provider URLs (@mldangelo, #1747)
+- cli: read config files from directory paths (@andretran, #1721)
+- Added PROMPTFOO_EXPERIMENTAL environment variable (@typpo)
+- Simplified redteam consent process (@typpo)
+- Improved input handling for login prompts (@mldangelo)
+- Updated dependencies (@mldangelo)
+- webui: fix route to edit eval description(@sklein12, #1754)
+- cli: prevent logging of empty output paths (@mldangelo)
+- Added raw HTTP request example (@typpo)
+- Updated documentation to prefer prebuilt versions (@sklein12, #1752)
+- Triggered release step in nexe build for tagged branches (@mldangelo)
+- Updated release token in GitHub Actions workflow (@mldangelo)
+- Added continue-on-error to nexe-build job (@mldangelo)
+
+## [0.89.4] - 2024-09-23
+
+### Added
+
+- feat(webui): display suggestions (#1739)
+
+### Changed
+
+- feat: headless browser provider (#1736)
+- feat: suggestions (#1723)
+- feat: improvements to http and websocket providers (#1732)
+- fix: empty state for webui (#1727)
+- chore: add costs for OpenAI model "gpt-4o-2024-08-06" (#1728)
+- fix: catch errors when creating share url (#1726)https://github.com/promptfoo/promptfoo/pull/1725
+- fix: add missing outputPath (#1734)
+- fix: output path when PROMPTFOO_LIGHTWEIGHT_RESULTS is set (#1737)
+- chore: Move share action to server (#1743)
+- docs: Update documentation for Tree-based Jailbreaks Strategy by @vingiarrusso in 
+
+### Fixed
+
+- fix(prompts): add handling for function prompt (#1724)
+
+## [0.89.3] - 2024-09-20
+
+### Changed
+
+- **Bug Fixes:**
+  - Improved sanitization of generations ([#1713](https://github.com/promptfoo/promptfoo/pull/1713) by [@typpo](https://github.com/typpo))
+  - Reverted config changes to resolve prompt file bug ([#1722](https://github.com/promptfoo/promptfoo/pull/1722) by [@mldangelo](https://github.com/mldangelo))
+- **Docs**
+  - Added more information to the enterprise page ([#1714](https://github.com/promptfoo/promptfoo/pull/1714) by [@typpo](https://github.com/typpo))
+  - Updated the about page ([#1715](https://github.com/promptfoo/promptfoo/pull/1715) by [@typpo](https://github.com/typpo))
+  - Minor landing page updates ([#1718](https://github.com/promptfoo/promptfoo/pull/1718) by [@typpo](https://github.com/typpo))
+
+## [0.89.2] - 2024-09-18
+
+### Changed
+
+- **Dependencies**: Updated project dependencies (@mldangelo)
+- **Website**: Added truncate functionality to the site (@typpo)
+- Fixed Node cache dependency issue (@typpo)
+- Improved nexe build workflow artifact handling in CI pipeline (@mldangelo)
+- Bumped version to 0.89.2 (@typpo)
+- 
+
+## [0.89.1] - 2024-09-18
+
+### Added
+
+- **feat(provider/openai)**: support loading `response_format` from a file by [@albertlieyingadrian](https://github.com/albertlieyingadrian) in [#1711](https://github.com/promptfoo/promptfoo/pull/1711)
+- **feat(matchers)**: add external file loader for LLM rubric by [@albertlieyingadrian](https://github.com/albertlieyingadrian) in [#1698](https://github.com/promptfoo/promptfoo/pull/1698)
+
+### Changed
+
+- **feat**: Redteam dashboard by [@typpo](https://github.com/typpo) in [#1709](https://github.com/promptfoo/promptfoo/pull/1709)
+- **feat**: add WebSocket provider by [@typpo](https://github.com/typpo) in [#1712](https://github.com/promptfoo/promptfoo/pull/1712)
+- **docs**: GPT vs O1 guide by [@typpo](https://github.com/typpo) in [#1703](https://github.com/promptfoo/promptfoo/pull/1703)
+
+### Dependencies
+
+- **chore(deps)**: bump `openai` from `4.61.1` to `4.62.0` by [@dependabot](https://github.com/dependabot) in [#1706](https://github.com/promptfoo/promptfoo/pull/1706)
+- **chore(deps)**: bump `@azure/openai-assistants` from `1.0.0-beta.5` to `1.0.0-beta.6` by [@dependabot](https://github.com/dependabot) in [#1707](https://github.com/promptfoo/promptfoo/pull/1707)
+
+## [0.89.0] - 2024-09-17
+
+### Added
+
+- feat(util): add nunjucks template support for file path (#1688) by @albertlieyingadrian
+- feat(redteam): top level targets, plugins, strategies (#1689) by @typpo
+
+### Changed
+
+- feat: Migrate NextUI to a React App (#1637) by @sklein12
+- feat: add golang provider (#1693) by @typpo
+- feat: make config `prompts` optional (#1694) by @typpo
+- chore(redteam): plumb scores per plugin and strategy (#1684) by @typpo
+- chore(redteam): redteam init indent plugins and strategies by @typpo
+- chore(redteam): redteam onboarding updates (#1695) by @typpo
+- chore(redteam): update some framework mappings by @typpo
+- refactor(csv): improve assertion parsing and add warning for single underscore usage (#1692) by @mldangelo
+- docs: improve Python provider example with stub LLM function by @mldangelo
+
+### Fixed
+
+- fix(python): change PythonShell mode to binary to fix unicode encoding issues (#1671) by @mldangelo
+- fix(python): check --version for executable path validation (#1690) by @mldangelo
+- fix(providers): Mistral Error Reporting (#1691) by @GICodeWarrior
+
+### Dependencies
+
+- chore(deps): bump openai from 4.61.0 to 4.61.1 (#1696) by @dependabot
+- chore(deps): remove nexe dev dependency by @mldangelo
+- chore(deps): update eslint and related packages by @mldangelo
+
+## [0.88.0] - 2024-09-16
+
+### Changed
+
+- **Added** `--env-path` as an alias for the `--env-file` option in CLI (@mldangelo)
+- **Introduced** `PROMPTFOO_LIGHTWEIGHT_RESULTS` environment variable to optimize result storage (@typpo)
+- **Added** `validatePythonPath` function and improved error handling for Python scripts (@mldangelo)
+- **Displayed** custom named scores in the Web UI (@khp)
+- **Improved** support for structured outputs in the OpenAI provider (@mldangelo)
+- **Added** OpenAI Assistant's token usage statistics (@albertlieyingadrian)
+- **Added** pricing information for Azure OpenAI models (@mldangelo)
+- **Improved** API URL formatting for Azure OpenAI provider (@mldangelo)
+- **Fixed** prompt normalization when reading configurations (@mldangelo)
+- **Resolved** Docker image issues by adding Python, ensuring the `next` output directory exists, and disabling telemetry (@mldangelo)
+- **Improved** message parsing for the Anthropic provider (@mldangelo)
+- **Fixed** error in loading externally defined OpenAI function calls (@mldangelo)
+- **Corrected** latency assertion error for zero milliseconds latency (@albertlieyingadrian)
+- **Added** a new Red Team introduction and case studies to the documentation (@typpo)
+- **Updated** model references and default LLM models in the documentation (@mldangelo)
+- **Fixed** typos and broken image links in the documentation (@mldangelo, @typpo)
+- **Refactored** Red Team commands and types to improve code organization (@mldangelo)
+- **Moved** `evaluateOptions` initialization to `evalCommand` (@mldangelo)
+- **Centralized** cost calculation logic in providers (@mldangelo)
+
+### Tests
+
+- **Added** support for `file://` prefix for local file paths in the `tests:` field in configuration (@mldangelo)
+
+## [0.87.1] - 2024-09-12
+
+### Changed
+
+- **Add OpenAI `o1` pricing** by [@typpo](https://github.com/typpo) in [#1649](https://github.com/promptfoo/promptfoo/pull/1649)
+- **Add support for OpenAI `o1` max completion tokens** by [@mldangelo](https://github.com/mldangelo) in [#1650](https://github.com/promptfoo/promptfoo/pull/1650)
+- **Share link issue when self-hosting** by [@typpo](https://github.com/typpo) in [#1647](https://github.com/promptfoo/promptfoo/pull/1647)
+- **Fix OpenAI function tool callbacks handling** by [@mldangelo](https://github.com/mldangelo) in [#1648](https://github.com/promptfoo/promptfoo/pull/1648)
+- **Fix broken anchor links** by [@mldangelo](https://github.com/mldangelo) in [#1645](https://github.com/promptfoo/promptfoo/pull/1645)
+- **Add documentation for Echo provider** by [@mldangelo](https://github.com/mldangelo) in [#1646](https://github.com/promptfoo/promptfoo/pull/1646)
+
+## [0.87.0] - 2024-09-12
+
+### Changed
+
+- feat: remote strategy execution (#1592)
+- fix: run db migrations first thing in cli (#1638)
+- chore: add --remote to `eval` (#1639)
+- chore: ability to record when feature is used (#1643)
+- site: intro and image updates (#1636)
+
+### Dependencies
+
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.649.0 to 3.650.0 (#1640)
+- chore(deps): bump openai from 4.58.2 to 4.59.0 (#1641)
+
+## [0.86.1] - 2024-09-11
+
+### Changed
+
+- feat: cross-session leak plugin (#1631)
+- fix: quickswitcher (#1635)
+
+## [0.86.0] - 2024-09-11
+
+### Changed
+
+- **feat**: Added MITRE Atlas plugin aliases by [@typpo](https://github.com/typpo) in [#1629](https://github.com/promptfoo/promptfoo/pull/1629)
+- **chore**: Removed the NextAPI by [@sklein12](https://github.com/sklein12) in [#1599](https://github.com/promptfoo/promptfoo/pull/1599)
+- **fix**: Improved rate limiting handling by [@sinedied](https://github.com/sinedied) in [#1633](https://github.com/promptfoo/promptfoo/pull/1633)
+- **fix**: Ensured `name:value` pairs are unique, rather than just names, for tags by [@sklein12](https://github.com/sklein12) in [#1621](https://github.com/promptfoo/promptfoo/pull/1621)
+- **chore**: Fixed paths for `ts-node` by [@sklein12](https://github.com/sklein12) in [#1628](https://github.com/promptfoo/promptfoo/pull/1628)
+- **chore**: Standardized paths by [@sklein12](https://github.com/sklein12) in [#1627](https://github.com/promptfoo/promptfoo/pull/1627)
+
+### Dependencies
+
+- **chore(deps-dev)**: Bumped `@aws-sdk/client-bedrock-runtime` from 3.645.0 to 3.649.0 by [@dependabot](https://github.com/dependabot) in [#1632](https://github.com/promptfoo/promptfoo/pull/1632)
+- **chore(deps)**: Bumped `@anthropic-ai/sdk` from 0.27.2 to 0.27.3 by [@dependabot](https://github.com/dependabot) in [#1625](https://github.com/promptfoo/promptfoo/pull/1625)
+- **chore(deps)**: Bumped `openai` from 4.58.1 to 4.58.2 by [@dependabot](https://github.com/dependabot) in [#1624](https://github.com/promptfoo/promptfoo/pull/1624)
+
+## [0.85.2] - 2024-09-10
+
+### Changed
+
+- feat: compliance status in redteam reports (#1619)
+- fix: prompt parsing (#1620)
+
+## [0.85.1] - 2024-09-09
+
+### Changed
+
+- feat: add support for markdown prompts (#1616)
+- fix: Indirect Prompt Injection missing purpose and will only generate… (#1618)
+
+### Dependencies
+
+- chore(deps): bump openai from 4.58.0 to 4.58.1 (#1617)
+
+## [0.85.0] - 2024-09-06
+
+### Added
+
+- **feat(mistral):** Update chat models and add embedding provider by @mldangelo in [#1614](https://github.com/promptfoo/promptfoo/pull/1614)
+- **feat(templates):** Allow Nunjucks templating in grader context by @mldangelo in [#1606](https://github.com/promptfoo/promptfoo/pull/1606)
+- **feat(redteam):** Add remote generation for multilingual strategy by @mldangelo in [#1603](https://github.com/promptfoo/promptfoo/pull/1603)
+- **feat(redteam):** ASCII smuggling plugin by @typpo in [#1602](https://github.com/promptfoo/promptfoo/pull/1602)
+- **feat(redteam):** More direct prompt injections by @typpo in [#1600](https://github.com/promptfoo/promptfoo/pull/1600)
+- **feat(redteam):** Prompt injections for all test cases by @typpo in [commit 28605413](https://github.com/promptfoo/promptfoo/commit/28605413)
+
+### Changed
+
+- **refactor:** Improve project initialization and error handling by @mldangelo in [#1591](https://github.com/promptfoo/promptfoo/pull/1591)
+- **chore:** Warn if API keys are not present when running `promptfoo init` by @cristiancavalli in [#1577](https://github.com/promptfoo/promptfoo/pull/1577)
+- **chore:** Add info to contains-all and icontains-all error by @typpo in [#1596](https://github.com/promptfoo/promptfoo/pull/1596)
+- **chore(redteam):** Export graders by @sklein12 in [#1593](https://github.com/promptfoo/promptfoo/pull/1593)
+- **chore(redteam):** Export prompt generators by @sklein12 in [#1583](https://github.com/promptfoo/promptfoo/pull/1583)
+- **docs:** Add information on loading scenarios from external files by @mldangelo in [commit ddcc6e59](https://github.com/promptfoo/promptfoo/commit/ddcc6e59)
+
+### Fixed
+
+- **fix(redteam):** Correct metric name for misinfo/pii/etc plugins by @typpo in [#1605](https://github.com/promptfoo/promptfoo/pull/1605)
+- **fix(redteam):** Remove quotes and numbered results from generated prompts by @typpo in [#1601](https://github.com/promptfoo/promptfoo/pull/1601)
+- **fix(redteam):** Move purpose to the right place in redteam template by @typpo in [commit 00b2ed1c](https://github.com/promptfoo/promptfoo/commit/00b2ed1c)
+
+### Dependencies
+
+- **chore(deps):** Bump openai from 4.57.3 to 4.58.0 by @dependabot in [#1608](https://github.com/promptfoo/promptfoo/pull/1608)
+- **chore(deps):** Bump openai from 4.57.2 to 4.57.3 by @dependabot in [#1594](https://github.com/promptfoo/promptfoo/pull/1594)
+
+### Documentation
+
+- **docs(redteam):** Red team introduction by @typpo in [commit ba5fe14c](https://github.com/promptfoo/promptfoo/commit/ba5fe14c) and [commit 60624456](https://github.com/promptfoo/promptfoo/commit/60624456)
+- **docs(redteam):** Minor redteam update by @typpo in [commit 7cad8da5](https://github.com/promptfoo/promptfoo/commit/7cad8da5)
+
+### Tests
+
+- **test(redteam):** Enhance nested quotes handling in parseGeneratedPrompts by @mldangelo in [commit 36f6464a](https://github.com/promptfoo/promptfoo/commit/36f6464a)
+
+## [0.84.1] - 2024-09-04
+
+### Changed
+
+- fix: json parsing infinite loop (#1590)
+- fix: add cache and timeout to remote grading (#1589)
+
+## [0.84.0] - 2024-09-04
+
+### Changed
+
+- Support for remote `llm-rubric` (@typpo in #1585)
+- Resolve foreign key constraint in `deleteAllEvals` (@mldangelo in #1581)
+- Don't set OpenAI chat completion `seed=0` by default (@Sasja in #1580)
+- Improve strategy JSON parsing (@typpo in #1587)
+- Multilingual strategy now uses redteam provider (@typpo in #1586)
+- Handle redteam remote generation error (@typpo)
+- Redteam refusals are not failures for Vertex AI (@typpo)
+- Reorganize redteam exports and add Strategies (@mldangelo in #1588)
+- Update OpenAI config documentation (@mldangelo)
+- Improve Azure environment variables and configuration documentation (@mldangelo)
+- Bump dependencies and devDependencies (@mldangelo)
+- Set `stream: false` in Ollama provider (@typpo, #1568)
+- Bump openai from 4.57.0 to 4.57.1 (@dependabot in #1579)
+- Regenerate JSON schema based on type change (@mldangelo)
+- Synchronize EnvOverrides in types and validators (@mldangelo)
+
+## [0.83.2] - 2024-09-03
+
+## [0.83.1] - 2024-09-03
+
+## [0.83.0] - 2024-09-03
+
+### Changed
+
+- feat: add onboarding flow for http endpoint (#1572)
+- feat: remote generation on the cli (#1570)
+- docs: update YAML syntax for prompts and providers arrays (#1574)
+
+## [0.82.0] - 2024-09-02
+
+### Added
+
+- feat(redteam): add remote generation for purpose and entities by @mldangelo
+
+### Changed
+
+- feat: add `delay` option for redteam generate and refactor plugins by @typpo
+- fix: validate all plugins before running any by @typpo
+- fix: remove indirect prompt injection `config.systemPrompt` dependency by @typpo
+- fix: show all strategies on report by @typpo
+- fix: bfla grading by @typpo
+- chore: simplify redteam types by @typpo
+- chore: move redteam command locations by @typpo
+- chore: defaults for redteam plugins/strategies by @typpo
+- chore: clean up some redteam onboarding questions by @typpo
+- chore: export redteam plugins by @typpo
+- chore: rename envar by @typpo
+- chore: add `PROMPTFOO_NO_REDTEAM_MODERATION` envar by @typpo
+- chore(redteam): add progress bar to multilingual strategy by @mldangelo
+- chore(redteam): export extraction functions by @mldangelo
+- chore(docker): install peer dependencies during build by @mldangelo
+- docs: update file paths to use file:// prefix by @mldangelo
+
+### Dependencies
+
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.637.0 to 3.642.0 by @dependabot
+- chore(deps): bump replicate from 0.32.0 to 0.32.1 by @dependabot
+- chore(deps): bump openai from 4.56.1 to 4.57.0 by @dependabot
+- chore(deps): bump the github-actions group with 2 updates by @dependabot
+
+## [0.81.5] - 2024-08-30
+
+### Changed
+
+- feat: global `env` var in templates (#1553)
+- fix: harmful grader (#1554)
+- chore: include createdAt in getStandaloneEvals (#1550)
+- chore: write eval tags to database and add migration (#1551)
+- style: enforce object shorthand rule (#1557)
+
+## [0.81.4] - 2024-08-29
+
+### Changed
+
+- **fix:** redteam progress bar by @typpo in [#1548](https://github.com/promptfoo/promptfoo/pull/1548)
+- **fix:** redteam grading should use defaultTest by @typpo in [#1549](https://github.com/promptfoo/promptfoo/pull/1549)
+- **refactor:** move extractJsonObjects to json utility module by @mldangelo in [#1539](https://github.com/promptfoo/promptfoo/pull/1539)
+
+### Fixed
+
+- **fix(redteam):** fix modifier handling in PluginBase by @mldangelo in [#1538](https://github.com/promptfoo/promptfoo/pull/1538)
+- **fix(testCases):** improve test case generation with retry logic by @mldangelo in [#1544](https://github.com/promptfoo/promptfoo/pull/1544)
+- **fix(docker):** link peer dependencies in Docker build by @mldangelo in [#1545](https://github.com/promptfoo/promptfoo/pull/1545)
+- **fix(devcontainer):** simplify and standardize development environment by @mldangelo in [#1547](https://github.com/promptfoo/promptfoo/pull/1547)
+
+### Dependencies
+
+- **chore(deps):** update dependencies by @mldangelo in [#1540](https://github.com/promptfoo/promptfoo/pull/1540)
+- **chore(deps):** bump @anthropic-ai/sdk from 0.27.0 to 0.27.1 by @dependabot in [#1541](https://github.com/promptfoo/promptfoo/pull/1541)
+- **chore(deps):** bump openai from 4.56.0 to 4.56.1 by @dependabot in [#1542](https://github.com/promptfoo/promptfoo/pull/1542)
+
+## [0.81.3] - 2024-08-28
+
+### Changed
+
+- fix: use redteam provider in extractions (#1536)
+- feat: Indirect prompt injection plugin (#1518)
+- feat: add support for tags property in config (#1526)
+- feat: ability to reference external files in plugin config (#1530)
+- feat: custom redteam plugins (#1529)
+- fix: remove failure messages from output (#1531)
+- fix: reduce pii false positives (#1532)
+- fix: Addtl Pii false positives (#1533)
+- fix: RBAC plugin false positives (#1534)
+- fix: redteam providers should be overriddeable (#1516)
+- fix: dont use openai moderation if key not present (#1535)
+
+### Fixed
+
+- fix(redteam): update logic for json only response format in default provider (#1537)
+
+## [0.81.2] - 2024-08-27
+
+### Changed
+
+- fix: use redteam provider in extractions (#1536)
+- feat: Indirect prompt injection plugin (#1518)
+- feat: add support for tags property in config (#1526)
+- feat: ability to reference external files in plugin config (#1530)
+- feat: custom redteam plugins (#1529)
+- fix: remove failure messages from output (#1531)
+- fix: reduce pii false positives (#1532)
+- fix: Addtl Pii false positives (#1533)
+- fix: RBAC plugin false positives (#1534)
+- fix: redteam providers should be overriddeable (#1516)
+- fix: dont use openai moderation if key not present (#1535)
+
+## [0.81.1] - 2024-08-27
+
+### Changed
+
+- feat: Indirect prompt injection plugin (#1518)
+- feat: add support for `tags` property in config (#1526)
+- feat: ability to reference external files in plugin config (#1530)
+- feat: custom redteam plugins (#1529)
+- fix: remove failure messages from output (#1531)
+- fix: reduce pii false positives (#1532)
+- fix: Addtl Pii false positives (#1533)
+- fix: RBAC plugin false positives (#1534)
+- fix: redteam providers should be overriddeable (#1516)
+- fix: dont use openai moderation if key not present (#1535)
+- chore: Set jest command line setting for jest extension (#1527)
+
+## [0.81.0] - 2024-08-26
+
+### Added
+
+- feat(report): performance by strategy (#1524)
+- feat(ai21): Add AI21 Labs provider (#1514)
+- feat(docker): add Python runtime to final image (#1519)
+- feat(anthropic): add support for create message headers (prompt caching) (#1503)
+
+### Changed
+
+- feat: report view sidebar for previewing test failures (#1522)
+- chore: add plugin/strategy descriptions (#1520)
+- chore: add `promptfoo redteam plugins` command to list plugins (#1523)
+- chore: clear cache status messages (#1517)
+
+### Fixed
+
+- fix(scriptCompletionProvider): handle UTF-8 encoding in script output (#1515)
+- fix(config): support loading scenarios and tests from external files (#331)
+
+### Dependencies
+
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.635.0 to 3.637.0 (#1513)
+
+## [0.80.3] - 2024-08-22
+
+### Changed
+
+- **Add Support for Embeddings API (Cohere)**: Added support for the embeddings API. [#1502](https://github.com/promptfoo/promptfoo/pull/1502) by @typpo
+- **Improve Download Menu**: Enhanced the web UI by improving the download menu, adding an option to download human eval test cases, and adding tests. [#1500](https://github.com/promptfoo/promptfoo/pull/1500) by @mldangelo
+- **Python IPC Encoding**: Resolved an issue by ensuring that Python IPC uses UTF-8 encoding. [#1511](https://github.com/promptfoo/promptfoo/pull/1511) by @typpo
+- **Dependencies**:
+  - Bumped `@anthropic-ai/sdk` from `0.26.1` to `0.27.0`. [#1507](https://github.com/promptfoo/promptfoo/pull/1507) by @dependabot
+  - Upgraded Docusaurus to version `3.5.2`. [#1512](https://github.com/promptfoo/promptfoo/pull/1512) by @mldangelo
+
+## [0.80.2] - 2024-08-22
+
+### Changed
+
+- fix: remove prompt-extraction from base plugins (#1505)
+
+## [0.80.1] - 2024-08-21
+
+### Added
+
+- feat(redteam): improve test generation and reporting (#1481)
+- feat(eval)!: remove interactive providers option (#1487)
+
+### Changed
+
+- refactor(harmful): improve test generation and deduplication (#1480)
+- fix: hosted load shared eval (#1482)
+- fix: Generate correct url for hosted shared evals (#1484)
+- feat: multilingual strategy (#1483)
+- chore(eslint): add and configure eslint-plugin-unicorn (#1489)
+- fix: include vars in python provider cache key (#1493)
+- fix: Including prompt extraction broke redteam generation (#1494)
+- fix: floating point comparisons in matchers (#1486)
+- site: enterprise breakdown (#1495)
+- fix: Prompt setup during redteam generation (#1496)
+- fix: hardcoded injectVars in harmful plugin (#1498)
+- site: enterprise blog post (#1497)
+
+### Fixed
+
+- fix(assertions): update error messages for context-relevance and context-faithfulness (#1485)
+
+### Dependencies
+
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.632.0 to 3.635.0 (#1490)
+
+## [0.80.0] - 2024-08-21
+
+### Changed
+
+- **Multilingual Strategy**: Added multilingual strategy by @typpo in [#1483](https://github.com/promptfoo/promptfoo/pull/1483)
+- **Redteam**: Improved test generation and reporting by @mldangelo in [#1481](https://github.com/promptfoo/promptfoo/pull/1481)
+- **Evaluation**: Removed interactive providers option by @mldangelo in [#1487](https://github.com/promptfoo/promptfoo/pull/1487)
+- **Hosted Load**: Fixed hosted load shared eval by @sklein12 in [#1482](https://github.com/promptfoo/promptfoo/pull/1482)
+- **Shared Evals**: Generated correct URL for hosted shared evals by @sklein12 in [#1484](https://github.com/promptfoo/promptfoo/pull/1484)
+- **Assertions**: Updated error messages for context-relevance and context-faithfulness by @mldangelo in [#1485](https://github.com/promptfoo/promptfoo/pull/1485)
+- **Python Provider**: Included vars in Python provider cache key by @typpo in [#1493](https://github.com/promptfoo/promptfoo/pull/1493)
+- **Prompt Extraction**: Fixed prompt extraction during redteam generation by @sklein12 in [#1494](https://github.com/promptfoo/promptfoo/pull/1494)
+- **Matchers**: Fixed floating point comparisons in matchers by @typpo in [#1486](https://github.com/promptfoo/promptfoo/pull/1486)
+- **Redteam Generation**: Fixed prompt setup during redteam generation by @sklein12 in [#1496](https://github.com/promptfoo/promptfoo/pull/1496)
+- **Harmful Tests**: Improved test generation and deduplication by @mldangelo in [#1480](https://github.com/promptfoo/promptfoo/pull/1480)
+- **ESLint**: Added and configured eslint-plugin-unicorn by @mldangelo in [#1489](https://github.com/promptfoo/promptfoo/pull/1489)
+- **Dependencies**: Bumped @aws-sdk/client-bedrock-runtime from 3.632.0 to 3.635.0 by @dependabot in [#1490](https://github.com/promptfoo/promptfoo/pull/1490)
+- **Crescendo**: Crescendo now uses gpt-4o-mini instead of gpt-4o by @typpo 
+- **Environment Variables**: Added GROQ_API_KEY and alphabetized 3rd party environment variables by @mldangelo 
+- **Enterprise Breakdown**: Added enterprise breakdown by @typpo in [#1495](https://github.com/promptfoo/promptfoo/pull/1495)
+
+## [0.79.0] - 2024-08-20
+
+### Added
+
+- feat(groq): integrate native Groq SDK and update documentation by @mldangelo in #1479
+- feat(redteam): support multiple policies in redteam config by @mldangelo in #1470
+- feat(redteam): handle graceful exit on Ctrl+C during initialization by @mldangelo
+
+### Changed
+
+- feat: Prompt Extraction Redteam Plugin by @sklein12 in #1471
+- feat: nexe build artifacts by @typpo in #1472
+- fix: expand supported config file extensions by @mldangelo in #1473
+- fix: onboarding.ts should assume context.py by @typpo
+- fix: typo in onboarding example by @typpo
+- fix: reduce false positives in `policy` and `sql-injection` by @typpo
+- docs: remove references to optional Supabase environment variables by @mldangelo in #1474
+- docs: owasp llm top 10 updates by @typpo
+- test: mock logger in util test suite by @mldangelo
+- chore(workflow): change release trigger type from 'published' to 'created' in Docker workflow, remove pull request and push triggers by @mldangelo
+- chore(webui): update plugin display names by @typpo
+- chore: refine pass rate threshold logging by @mldangelo
+- ci: upload artifact by @typpo
+
+### Fixed
+
+- fix(devcontainer): improve Docker setup for development environment by @mldangelo
+- fix(devcontainer): update Dockerfile.dev for Node.js development by @mldangelo
+- fix(webui): truncate floating point scores by @typpo
+
+### Dependencies
+
+- chore(deps): update dependencies by @mldangelo in #1478
+- chore(deps): update dependencies including @swc/core, esbuild, @anthropic-ai/sdk, and openai by @mldangelo
+
+### Tests
+
+- test(config): run tests over example promptfoo configs by @mldangelo in #1475
+
+## [0.78.3] - 2024-08-19
+
+### Added
+
+- feat(redteam): add base path to CLI state for redteam generate by @mldangelo in [#1464](https://github.com/promptfoo/promptfoo/pull/1464)
+- feat(eval): add global pass rate threshold by @mldangelo in [#1443](https://github.com/promptfoo/promptfoo/pull/1443)
+
+### Changed
+
+- chore: check config.redteam instead of config.metadata.redteam by @mldangelo in [#1463](https://github.com/promptfoo/promptfoo/pull/1463)
+- chore: Add vscode settings for prettier formatting by @sklein12 in [#1469](https://github.com/promptfoo/promptfoo/pull/1469)
+- build: add defaults for supabase environment variables by @sklein12 in [#1468](https://github.com/promptfoo/promptfoo/pull/1468)
+- fix: smarter caching in exec provider by @typpo in [#1467](https://github.com/promptfoo/promptfoo/pull/1467)
+- docs: display consistent instructions for npx vs npm vs brew by @typpo in [#1465](https://github.com/promptfoo/promptfoo/pull/1465)
+
+### Dependencies
+
+- chore(deps): bump openai from 4.55.9 to 4.56.0 by @dependabot in [#1466](https://github.com/promptfoo/promptfoo/pull/1466)
+- chore(deps): replace rouge with js-rouge by @QuarkNerd in [#1420](https://github.com/promptfoo/promptfoo/pull/1420)
+
+## [0.78.2] - 2024-08-18
+
+### Changed
+
+- feat: multi-turn jailbreak (#1459)
+- feat: plugin aliases for owasp, nist (#1410)
+- refactor(redteam): aliase `generate redteam` to `redteam generate`. (#1461)
+- chore: strongly typed envars (#1452)
+- chore: further simplify redteam onboarding (#1462)
+- docs: strategies (#1460)
+
+## [0.78.1] - 2024-08-16
+
+### Changed
+
+- **feat:** Helicone integration by @maamalama in [#1434](https://github.com/promptfoo/promptfoo/pull/1434)
+- **fix:** is-sql assertion `databaseType` not `database` by @typpo in [#1451](https://github.com/promptfoo/promptfoo/pull/1451)
+- **chore:** Use temporary file for Python interprocess communication by @enkoder in [#1447](https://github.com/promptfoo/promptfoo/pull/1447)
+- **chore:** Redteam onboarding updates by @typpo in [#1453](https://github.com/promptfoo/promptfoo/pull/1453)
+- **site:** Add blog post by @typpo in [#1444](https://github.com/promptfoo/promptfoo/pull/1444)
+
+### Fixed
+
+- **fix(redteam):** Improve iterative tree-based red team attack provider by @mldangelo in [#1458](https://github.com/promptfoo/promptfoo/pull/1458)
+
+### Dependencies
+
+- **chore(deps):** Update various dependencies by @mldangelo in [#1442](https://github.com/promptfoo/promptfoo/pull/1442)
+- **chore(deps):** Bump `@aws-sdk/client-bedrock-runtime` from 3.629.0 to 3.631.0 by @dependabot in [#1448](https://github.com/promptfoo/promptfoo/pull/1448)
+- **chore(deps):** Bump `@aws-sdk/client-bedrock-runtime` from 3.631.0 to 3.632.0 by @dependabot in [#1455](https://github.com/promptfoo/promptfoo/pull/1455)
+- **chore(deps):** Bump `@anthropic-ai/sdk` from 0.25.2 to 0.26.0 by @dependabot in [#1449](https://github.com/promptfoo/promptfoo/pull/1449)
+- **chore(deps):** Bump `@anthropic-ai/sdk` from 0.26.0 to 0.26.1 by @dependabot in [#1456](https://github.com/promptfoo/promptfoo/pull/1456)
+- **chore(deps):** Bump `openai` from 4.55.7 to 4.55.9 by @dependabot in [#1457](https://github.com/promptfoo/promptfoo/pull/1457)
+
+## [0.78.0] - 2024-08-14
+
+### Changed
+
+- **Web UI**: Added ability to choose prompt/provider column in report view by @typpo in [#1426](https://github.com/promptfoo/promptfoo/pull/1426)
+- **Eval**: Support loading scenarios and tests from external files by @mldangelo in [#1432](https://github.com/promptfoo/promptfoo/pull/1432)
+- **Redteam**: Added language support for generated tests by @mldangelo in [#1433](https://github.com/promptfoo/promptfoo/pull/1433)
+- **Transform**: Support custom function names in file transforms by @mldangelo in [#1435](https://github.com/promptfoo/promptfoo/pull/1435)
+- **Extension Hook API**: Introduced extension hook API by @aantn in [#1249](https://github.com/promptfoo/promptfoo/pull/1249)
+- **Report**: Hide unused plugins in report by @typpo in [#1425](https://github.com/promptfoo/promptfoo/pull/1425)
+- **Memory**: Optimize memory usage in `listPreviousResults` by not loading all results into memory by @typpo in [#1439](https://github.com/promptfoo/promptfoo/pull/1439)
+- **TypeScript**: Added TypeScript `promptfooconfig` example by @mldangelo in [#1427](https://github.com/promptfoo/promptfoo/pull/1427)
+- **Tests**: Moved `evaluatorHelpers` tests to a separate file by @mldangelo in [#1437](https://github.com/promptfoo/promptfoo/pull/1437)
+- **Dev**: Bumped `@aws-sdk/client-bedrock-runtime` from 3.624.0 to 3.629.0 by @dependabot in [#1428](https://github.com/promptfoo/promptfoo/pull/1428)
+- **SDK**: Bumped `@anthropic-ai/sdk` from 0.25.1 to 0.25.2 by @dependabot in [#1429](https://github.com/promptfoo/promptfoo/pull/1429)
+- **SDK**: Bumped `openai` from 4.55.4 to 4.55.7 by @dependabot in [#1436](https://github.com/promptfoo/promptfoo/pull/1436)
+
+## [0.77.0] - 2024-08-12
+
+### Added
+
+- feat(assertions): add option to disable AJV strict mode (#1415)
+
+### Changed
+
+- feat: ssrf plugin (#1411)
+- feat: `basic` strategy to represent raw payloads only (#1417)
+- refactor: transform function (#1423)
+- fix: suppress docker lint (#1412)
+- fix: update eslint config and resolve unused variable warnings (#1413)
+- fix: handle retries for harmful generations (#1422)
+- docs: add plugin documentation (#1421)
+
+### Fixed
+
+- fix(redteam): plugins respect config-level numTest (#1409)
+
+### Dependencies
+
+- chore(deps): bump openai from 4.55.3 to 4.55.4 (#1418)
+
+### Documentation
+
+- docs(faq): expand and restructure FAQ content (#1416)
+
+## [0.76.1] - 2024-08-11
+
+## [0.76.0] - 2024-08-10
+
+### Changed
+
+- feat: add `delete eval latest` and `delete eval all` (#1383)
+- feat: bfla and bofa plugins (#1406)
+- feat: Support loading tools from multiple files (#1384)
+- feat: `promptfoo eval --description` override (#1399)
+- feat: add `default` strategy and remove `--add-strategies` (#1401)
+- feat: assume unrecognized openai models are chat models (#1404)
+- feat: excessive agency grader looks at tools  (#1403)
+- fix: dont check SSL certs (#1396)
+- fix: reduce rbac and moderation false positives (#1400)
+- fix: `redteam` property was not read in config (#1407)
+- fix: Do not ignored derived metrics (#1381)
+- fix: add indexes for sqlite (#1382)
+
+### Fixed
+
+- fix(types): allow boolean values in VarsSchema (#1386)
+
+### Dependencies
+
+- chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.623.0 to 3.624.0 (#1379)
+- chore(deps): bump openai from 4.54.0 to 4.55.0 (#1387)
+- chore(deps): bump openai from 4.55.0 to 4.55.1 (#1392)
+- chore(deps): bump @anthropic-ai/sdk from 0.25.0 to 0.25.1 (#1397)
+- chore(deps): bump openai from 4.55.1 to 4.55.3 (#1398)
+
+## [0.75.2] - 2024-08-06
+
+### Changed
+
+- fix: Update "Edit Comment" dialog background for the dark mode (#1374)
+- fix: undefined var in hallucination template (#1375)
+- fix: restore harmCategory var (#1380)
+
+## [0.75.1] - 2024-08-05
+
+### Changed
+
+- fix: temporarily disable nunjucks strict mode by @typpo 
+
+### Dependencies
+
+- chore(deps): update dependencies (#1373)
+
+## [0.75.0] - 2024-08-05
+
+### Added
+
+- feat(webui): Download report as PDF by @typpo in #1348
+- feat(redteam): Add custom policy plugin by @mldangelo in #1346
+- feat(config): Add writePromptfooConfig function and orderKeys utility by @mldangelo in #1360
+- feat(redteam): Add purpose and entities to defaultTest metadata by @mldangelo in #1359
+- feat(webui): Show metadata in details dialog by @typpo in #1362
+- feat(redteam): Add some simple requested strategies by @typpo in #1364
+
+### Changed
+
+- feat: Implement defaultTest metadata in tests and scenarios by @mldangelo in #1361
+- feat!: Add `default` plugin collection and remove --add-plugins by @typpo in #1369
+- fix: Moderation assert and iterative provider handle output objects by @typpo in #1353
+- fix: Improve PII grader by @typpo in #1354
+- fix: Improve RBAC grading by @typpo in #1347
+- fix: Make graders set assertion value by @typpo in #1355
+- fix: Allow falsy provider response outputs by @typpo in #1356
+- fix: Improve entity extraction and enable for PII by @typpo in #1358
+- fix: Do not dereference external tool files by @typpo in #1357
+- fix: Google sheets output by @typpo in #1367
+- docs: How to red team RAG applications by @typpo in #1368
+- refactor(redteam): Consolidate graders and plugins by @mldangelo in #1370
+- chore(redteam): Collect user consent for harmful generation by @typpo in #1365
+
+### Dependencies
+
+- chore(deps): Bump openai from 4.53.2 to 4.54.0 by @dependabot in #1349
+- chore(deps-dev): Bump @aws-sdk/client-bedrock-runtime from 3.622.0 to 3.623.0 by @dependabot in #1372
+
+## [0.74.0] - 2024-08-01
+
+### Changed
+
+- **feat**: Split types vs validators for prompts, providers, and redteam [#1325](https://github.com/promptfoo/promptfoo/pull/1325) by [@typpo](https://github.com/typpo)
+- **feat**: Load provider `tools` and `functions` from external file [#1342](https://github.com/promptfoo/promptfoo/pull/1342) by [@typpo](https://github.com/typpo)
+- **fix**: Show gray icon when there are no tests in report [#1335](https://github.com/promptfoo/promptfoo/pull/1335) by [@typpo](https://github.com/typpo)
+- **fix**: numTests calculation for previous evals [#1336](https://github.com/promptfoo/promptfoo/pull/1336) by [@onyck](https://github.com/onyck)
+- **fix**: Only show the number of tests actually run in the eval [#1338](https://github.com/promptfoo/promptfoo/pull/1338) by [@typpo](https://github.com/typpo)
+- **fix**: better-sqlite3 in arm64 docker image [#1344](https://github.com/promptfoo/promptfoo/pull/1344) by [@cmrfrd](https://github.com/cmrfrd)
+- **fix**: Correct positive example in DEFAULT_GRADING_PROMPT [#1337](https://github.com/promptfoo/promptfoo/pull/1337) by [@tbuckley](https://github.com/tbuckley)
+- **chore**: Integrate red team evaluation into promptfoo init [#1334](https://github.com/promptfoo/promptfoo/pull/1334) by [@mldangelo](https://github.com/mldangelo)
+- **chore**: Enforce consistent type imports [#1341](https://github.com/promptfoo/promptfoo/pull/1341) by [@mldangelo](https://github.com/mldangelo)
+- **refactor(redteam)**: Update plugin architecture and improve error handling [#1343](https://github.com/promptfoo/promptfoo/pull/1343) by [@mldangelo](https://github.com/mldangelo)
+- **docs**: Expand installation instructions in README and docs [#1345](https://github.com/promptfoo/promptfoo/pull/1345) by [@mldangelo](https://github.com/mldangelo)
+
+### Dependencies
+
+- **chore(deps)**: Bump @azure/identity from 4.4.0 to 4.4.1 [#1340](https://github.com/promptfoo/promptfoo/pull/1340) by [@dependabot](https://github.com/dependabot)
+- **chore(deps)**: Bump the github-actions group with 3 updates [#1339](https://github.com/promptfoo/promptfoo/pull/1339) by [@dependabot](https://github.com/dependabot)
+
+## [0.73.9] - 2024-07-30
+
+### Changed
+
+- **Features:**
+  - feat: handle rate limits in generic fetch path by @typpo in https://github.com/promptfoo/promptfoo/pull/1324
+- **Fixes:**
+  - fix: show default vars in table by @typpo in https://github.com/promptfoo/promptfoo/pull/1306
+  - fix: chain provider and test transform by @fvdnabee in https://github.com/promptfoo/promptfoo/pull/1316
+- **Refactors:**
+  - refactor(redteam): extract entity and purpose logic, update imitation plugin by @mldangelo in https://github.com/promptfoo/promptfoo/pull/1301
+- **Chores:**
+  - chore(deps): bump openai from 4.53.1 to 4.53.2 by @dependabot in https://github.com/promptfoo/promptfoo/pull/1314
+  - chore: set page titles by @typpo in https://github.com/promptfoo/promptfoo/pull/1315
+  - chore: add devcontainer setup by @cmrfrd in https://github.com/promptfoo/promptfoo/pull/1317
+  - chore(webui): persist column selection in evals view by @mldangelo in https://github.com/promptfoo/promptfoo/pull/1302
+  - chore(redteam): allow multiple provider selection by @mldangelo in https://github.com/promptfoo/promptfoo/pull/1319
+  - chore(deps): bump @anthropic-ai/sdk from 0.24.3 to 0.25.0 by @dependabot in https://github.com/promptfoo/promptfoo/pull/1326
+  - chore(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.620.0 to 3.620.1 by @dependabot in https://github.com/promptfoo/promptfoo/pull/1327
+  - chore(deps): update dev dependencies and minor package versions by @mldangelo in https://github.com/promptfoo/promptfoo/pull/1331
+- **CI/CD:**
+  - ci: add assets generation job and update json schema by @mldangelo in https://github.com/promptfoo/promptfoo/pull/1321
+  - docs: add CITATION.cff file by @mldangelo in https://github.com/promptfoo/promptfoo/pull/1322
+  - docs: update examples and docs to use gpt-4o and gpt-4o-mini models by @mldangelo in https://github.com/promptfoo/promptfoo/pull/1323
+
+### Documentation
+
+- **Documentation:**
+
+## [0.73.8] - 2024-07-29
+
+### Added
+
+- feat(webui): tooltip with provider config on hover (#1312)
+
+### Changed
+
+- feat: Imitation redteam plugin (#1163)
+- fix: report cached tokens from assertions (#1299)
+- fix: trim model-graded-closedqa response (#1309)
+- refactor(utils): move transform logic to separate file (#1310)
+- chore(cli): add option to strip auth info from shared URLs (#1304)
+
+### Fixed
+
+- fix(webui): make it easier to select text without toggling cell (#1295)
+- fix(docker): add sqlite-dev to runtime dependencies (#1297)
+- fix(redteam): update CompetitorsGrader rubric (#1298)
+- fix(redteam): improve plugin and strategy selection UI (#1300)
+- fix(redteam): decrease false positives in hallucination grader (#1305)
+- fix(redteam): misc fixes in grading and calculations (#1313)
+
+## [0.73.7] - 2024-07-26
+
+### Changed
+
+- **Standalone graders for redteam** by [@typpo](https://github.com/typpo) in [#1256](https://github.com/promptfoo/promptfoo/pull/1256)
+- **Punycode deprecation warning on node 22** by [@typpo](https://github.com/typpo) in [#1287](https://github.com/promptfoo/promptfoo/pull/1287)
+- **Improve iterative providers and update provider API interface to pass original prompt** by [@mldangelo](https://github.com/mldangelo) in [#1293](https://github.com/promptfoo/promptfoo/pull/1293)
+- **Add issue templates** by [@typpo](https://github.com/typpo) in [#1288](https://github.com/promptfoo/promptfoo/pull/1288)
+- **Support TS files for prompts providers and assertions** by [@benasher44](https://github.com/benasher44) in [#1286](https://github.com/promptfoo/promptfoo/pull/1286)
+- **Update dependencies** by [@mldangelo](https://github.com/mldangelo) in [#1292](https://github.com/promptfoo/promptfoo/pull/1292)
+- **Move circular dependency check to style-check job** by [@mldangelo](https://github.com/mldangelo) in [#1291](https://github.com/promptfoo/promptfoo/pull/1291)
+- **Add examples for embedding and classification providers** by [@Luca-Hackl](https://github.com/Luca-Hackl) in [#1296](https://github.com/promptfoo/promptfoo/pull/1296)
+
+## [0.73.6] - 2024-07-25
+
+### Added
+
+- feat(ci): add Docker image publishing to GitHub Container Registry (#1263)
+- feat(webui): add yaml upload button (#1264)
+
+### Changed
+
+- docs: fix javascript configuration guide variable example (#1268)
+- site(careers): update application instructions and preferences (#1270)
+- chore(python): enhance documentation, tests, formatting, and CI (#1282)
+- fix: treat .cjs and .mjs files as javascript vars (#1267)
+- fix: add xml tags for better delineation in `llm-rubric`, reduce `harmful` plugin false positives (#1269)
+- fix: improve handling of json objects in http provider (#1274)
+- fix: support provider json filepath (#1279)
+- chore(ci): implement multi-arch Docker image build and push (#1266)
+- chore(docker): add multi-arch image description (#1271)
+- chore(eslint): add new linter rules and improve code quality (#1277)
+- chore: move types files (#1278)
+- refactor(redteam): rename strategies and improve type safety (#1275)
+- ci: re-enable Node 22.x in CI matrix (#1272)
+
+### Dependencies
+
+- chore(deps): update ajv-formats from 2.1.1 to 3.0.1 (#1276)
+- chore(deps): update @swc/core to version 1.7.1 (#1285)
+
+## [0.73.5] - 2024-07-24
+
+### Added
+
+- **feat(cli):** Add the ability to share a specific eval by [@typpo](https://github.com/promptfoo/promptfoo/pull/1250)
+- **feat(webui):** Hide long metrics lists by [@typpo](https://github.com/promptfoo/promptfoo/pull/1262)
+
+### Changed
+
+- **fix:** Resolve node-fetch TypeScript errors by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1254)
+- **fix:** Correct color error in local `checkNodeVersion` test by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1255)
+- **fix:** Multiple Docker fixes by [@typpo](https://github.com/promptfoo/promptfoo/pull/1257)
+- **fix:** Improve `--add-strategies` validation error messages by [@typpo](https://github.com/promptfoo/promptfoo/pull/1260)
+- **chore:** Warn when a variable is named `assert` by [@typpo](https://github.com/promptfoo/promptfoo/pull/1259)
+- **chore:** Update Llama examples and add support for chat-formatted prompts in Replicate by [@typpo](https://github.com/promptfoo/promptfoo/pull/1261)
+
+### Fixed
+
+- **fix(redteam):** Allow arbitrary `injectVar` name for redteam providers by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1253)
+
+## [0.73.4] - 2024-07-24
+
+### Changed
+
+- **schema**: Update config schema for strategies by @mldangelo in [#1244](https://github.com/promptfoo/promptfoo/pull/1244)
+- **defaultTest**: Fix scenario assert merging by @onyck in [#1251](https://github.com/promptfoo/promptfoo/pull/1251)
+- **webui**: Handle port already in use error by @mldangelo in [#1246](https://github.com/promptfoo/promptfoo/pull/1246)
+- **webui**: Update provider list in `ProviderSelector` and add tests by @mldangelo in [#1245](https://github.com/promptfoo/promptfoo/pull/1245)
+- **site**: Add blog post by @typpo in [#1247](https://github.com/promptfoo/promptfoo/pull/1247)
+- **site**: Improve navigation and consistency by @mldangelo in [#1248](https://github.com/promptfoo/promptfoo/pull/1248)
+- **site**: Add careers page by @mldangelo in [#1222](https://github.com/promptfoo/promptfoo/pull/1222)
+- **docs**: Full RAG example by @typpo in [#1228](https://github.com/promptfoo/promptfoo/pull/1228)
+
+## [0.73.3] - 2024-07-23
+
+### Changed
+
+- **WebUI:** Make eval switcher more obvious by @typpo in [#1232](https://github.com/promptfoo/promptfoo/pull/1232)
+- **Redteam:** Add iterative tree provider and strategy by @mldangelo in [#1238](https://github.com/promptfoo/promptfoo/pull/1238)
+- Improve `CallApiFunctionSchema`/`ProviderFunction` type by @aloisklink in [#1235](https://github.com/promptfoo/promptfoo/pull/1235)
+- **Redteam:** CLI nits, plugins, provider functionality, and documentation by @mldangelo in [#1231](https://github.com/promptfoo/promptfoo/pull/1231)
+- **Redteam:** PII false positives by @typpo in [#1233](https://github.com/promptfoo/promptfoo/pull/1233)
+- **Redteam:** `--add-strategies` flag didn't work by @typpo in [#1234](https://github.com/promptfoo/promptfoo/pull/1234)
+- Cleanup logging and fix nextui TS error by @mldangelo in [#1243](https://github.com/promptfoo/promptfoo/pull/1243)
+- **CI:** Add registry URL to npm publish workflow by @mldangelo in [#1241](https://github.com/promptfoo/promptfoo/pull/1241)
+- Remove redundant chalk invocations by @mldangelo in [#1240](https://github.com/promptfoo/promptfoo/pull/1240)
+- Update dependencies by @mldangelo in [#1242](https://github.com/promptfoo/promptfoo/pull/1242)
+- Update some images by @typpo in [#1236](https://github.com/promptfoo/promptfoo/pull/1236)
+- More image updates by @typpo in [#1237](https://github.com/promptfoo/promptfoo/pull/1237)
+- Update capitalization of Promptfoo and fix site deprecation warning by @mldangelo in [#1239](https://github.com/promptfoo/promptfoo/pull/1239)
+
+## [0.73.2] - 2024-07-23
+
+### Changed
+
+- fix: add support for anthropic bedrock tools (#1229)
+- chore(redteam): add a warning for no openai key set (#1230)
+
+## [0.73.1] - 2024-07-22
+
+### Changed
+
+- fix: dont try to parse yaml content on load (#1226)
+
+## [0.73.0] - 2024-07-22
+
+### Added
+
+- feat(redteam): add 4 new basic plugins (#1201)
+- feat(redteam): improve test generation logic and add batching by @mldangelo in 
+- feat(redteam): settings dialog (#1215)https://github.com/promptfoo/promptfoo/pull/1208
+- feat(redteam): introduce redteam section for promptfooconfig.yaml  (#1192)
+
+### Changed
+
+- fix: gpt-4o-mini price (#1218)
+- chore(openai): update model list (#1219)
+- test: improve type safety and resolve TypeScript errors (#1216)
+- refactor: resolve circular dependencies and improve code organization (#1212)
+- docs: fix broken links (#1211)
+- site: image updates and bugfixes (#1217)
+- site: improve human readability of validator errors (#1221)
+- site: yaml/json config validator for promptfoo configs (#1207)
+
+### Fixed
+
+- fix(validator): fix errors in default example (#1220)
+- fix(webui): misc fixes and improvements to webui visuals (#1213)
+- fix(redteam): mismatched categories and better overall scoring (#1214)
+- fix(gemini): improve error handling (#1193)
+
+### Dependencies
+
+- chore(deps): update multiple dependencies to latest minor and patch versions (#1210)
+
+## [0.72.2] - 2024-07-19
+
+### Added
+
+- **feat(openai):** add GPT-4o-mini models by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1196)
+
+### Changed
+
+- **feat:** add schema validation to `promptfooconfig.yaml` by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1185)
+- **fix:** base path for custom filter resolution by [@onyck](https://github.com/promptfoo/promptfoo/pull/1198)
+- **chore(redteam):** refactor PII categories and improve plugin handling by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1191)
+- **build(deps-dev):** bump `@aws-sdk/client-bedrock-runtime` from 3.614.0 to 3.616.0 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1203)
+- **docs:** add guide for comparing GPT-4o vs GPT-4o-mini by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1200)
+- **site:** contact page by [@typpo](https://github.com/promptfoo/promptfoo/pull/1190)
+- **site:** newsletter form by [@typpo](https://github.com/promptfoo/promptfoo/pull/1194)
+- **site:** miscellaneous images and improvements by [@typpo](https://github.com/promptfoo/promptfoo/pull/1199)
+
+### Fixed
+
+- **fix(webui):** eval ID not being properly set by [@typpo](https://github.com/promptfoo/promptfoo/pull/1195)
+- **fix(Dockerfile):** install curl for healthcheck by [@orange-anjou](https://github.com/promptfoo/promptfoo/pull/1204)
+
+### Tests
+
+- **test(webui):** add unit tests for `InfoModal` component by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1187)
+
+## [0.72.1] - 2024-07-18
+
+### Changed
+
+- Fix: Consider model name when caching Bedrock responses by @fvdnabee in [#1181](https://github.com/promptfoo/promptfoo/pull/1181)
+- Fix: Parsing of the model name tag in Ollama embeddings provider by @minamijoyo in [#1189](https://github.com/promptfoo/promptfoo/pull/1189)
+- Refactor (redteam): Simplify CLI command structure and update provider options by @mldangelo in [#1174](https://github.com/promptfoo/promptfoo/pull/1174)
+- Refactor (types): Convert interfaces to Zod schemas by @mldangelo in [#1178](https://github.com/promptfoo/promptfoo/pull/1178)
+- Refactor (redteam): Improve type safety and simplify code structure by @mldangelo in [#1175](https://github.com/promptfoo/promptfoo/pull/1175)
+- Chore (redteam): Another injection by @typpo in [#1173](https://github.com/promptfoo/promptfoo/pull/1173)
+- Chore (deps): Upgrade inquirer to v10 by @mldangelo in [#1176](https://github.com/promptfoo/promptfoo/pull/1176)
+- Chore (redteam): Update CLI for test case generation by @mldangelo in [#1177](https://github.com/promptfoo/promptfoo/pull/1177)
+- Chore: Include hostname in share confirmation by @typpo in [#1183](https://github.com/promptfoo/promptfoo/pull/1183)
+- Build (deps-dev): Bump @azure/identity from 4.3.0 to 4.4.0 by @dependabot in [#1180](https://github.com/promptfoo/promptfoo/pull/1180)
+
+## [0.72.0] - 2024-07-17
+
+### Added
+
+- feat(webui): add about component with helpful links (#1149)
+- feat(webui): Ability to compare evals (#1148)
+
+### Changed
+
+- feat: manual input provider (#1168)
+- chore(mistral): add codestral-mamba (#1170)
+- chore: static imports for iterative providers (#1169)
+
+### Fixed
+
+- fix(webui): dark mode toggle (#1171)
+- fix(redteam): set harmCategory label for harmful tests (#1172)
+
+## [0.71.1] - 2024-07-15
+
+### Added
+
+- feat(redteam): specify the default number of test cases to generate per plugin (#1154)
+
+### Changed
+
+- feat: add image classification example and xml assertions (#1153)
+
+### Fixed
+
+- fix(redteam): fix dynamic import paths (#1162)
+
+## [0.71.0] - 2024-07-15
+
+### Changed
+
+- **Eval picker for web UI** by [@typpo](https://github.com/typpo) in [#1143](https://github.com/promptfoo/promptfoo/pull/1143)
+- **Update default model providers to Claude 3.5** by [@mldangelo](https://github.com/mldangelo) in [#1157](https://github.com/promptfoo/promptfoo/pull/1157)
+- **Allow provider customization for dataset generation** by [@mldangelo](https://github.com/mldangelo) in [#1158](https://github.com/promptfoo/promptfoo/pull/1158)
+- **Predict Redteam injectVars** by [@mldangelo](https://github.com/mldangelo) in [#1141](https://github.com/promptfoo/promptfoo/pull/1141)
+- **Fix JSON prompt escaping in HTTP provider and add LM Studio example** by [@mldangelo](https://github.com/mldangelo) in [#1156](https://github.com/promptfoo/promptfoo/pull/1156)
+- **Fix poor performing harmful test generation** by [@mldangelo](https://github.com/mldangelo) in [#1124](https://github.com/promptfoo/promptfoo/pull/1124)
+- **Update overreliance grading prompt** by [@mldangelo](https://github.com/mldangelo) in [#1146](https://github.com/promptfoo/promptfoo/pull/1146)
+- **Move multiple variables warning to before progress bar** by [@typpo](https://github.com/typpo) in [#1160](https://github.com/promptfoo/promptfoo/pull/1160)
+- **Add contributing guide** by [@mldangelo](https://github.com/mldangelo) in [#1150](https://github.com/promptfoo/promptfoo/pull/1150)
+- **Refactor and optimize injection and iterative methods** by [@mldangelo](https://github.com/mldangelo) in [#1138](https://github.com/promptfoo/promptfoo/pull/1138)
+- **Update plugin base class to support multiple assertions** by [@mldangelo](https://github.com/mldangelo) in [#1139](https://github.com/promptfoo/promptfoo/pull/1139)
+- **Structural refactor, abstract plugin and method actions** by [@mldangelo](https://github.com/mldangelo) in [#1140](https://github.com/promptfoo/promptfoo/pull/1140)
+- **Move CLI commands into individual files** by [@mldangelo](https://github.com/mldangelo) in [#1155](https://github.com/promptfoo/promptfoo/pull/1155)
+- **Update Jest linter rules** by [@mldangelo](https://github.com/mldangelo) in [#1161](https://github.com/promptfoo/promptfoo/pull/1161)
+- **Bump openai from 4.52.4 to 4.52.5** by [@dependabot](https://github.com/dependabot) in [#1137](https://github.com/promptfoo/promptfoo/pull/1137)
+- **Bump @aws-sdk/client-bedrock-runtime from 3.613.0 to 3.614.0** by [@dependabot](https://github.com/dependabot) in [#1136](https://github.com/promptfoo/promptfoo/pull/1136)
+- **Bump openai from 4.52.5 to 4.52.7** by [@dependabot](https://github.com/dependabot) in [#1142](https://github.com/promptfoo/promptfoo/pull/1142)
+- **Update documentation and MUI dependencies** by [@mldangelo](https://github.com/mldangelo) in [#1152](https://github.com/promptfoo/promptfoo/pull/1152)
+- **Update Drizzle dependencies and configuration** by [@mldangelo](https://github.com/mldangelo) in [#1151](https://github.com/promptfoo/promptfoo/pull/1151)
+- **Bump dependencies with patch and minor version updates** by [@mldangelo](https://github.com/mldangelo) in [#1159](https://github.com/promptfoo/promptfoo/pull/1159)
+
+## [0.70.1] - 2024-07-11
+
+### Changed
+
+- **provider**: put provider in outer loop to reduce model swap by @typpo in [#1132](https://github.com/promptfoo/promptfoo/pull/1132)
+- **evaluator**: ensure unique prompt handling with labeled and unlabeled providers by @mldangelo in [#1134](https://github.com/promptfoo/promptfoo/pull/1134)
+- **eval**: validate --output file extension before running eval by @mldangelo in [#1135](https://github.com/promptfoo/promptfoo/pull/1135)
+- **deps-dev**: bump @aws-sdk/client-bedrock-runtime from 3.609.0 to 3.613.0 by @dependabot in [#1126](https://github.com/promptfoo/promptfoo/pull/1126)
+- fix pythonCompletion test by @mldangelo in [#1133](https://github.com/promptfoo/promptfoo/pull/1133)
+
+## [0.70.0] - 2024-07-10
+
+### Changed
+
+- feat: Add `promptfoo redteam init` command  (#1122)
+- chore: refactor eval and generate commands out of main.ts (#1121)
+- build(deps): bump openai from 4.52.3 to 4.52.4 (#1118)
+- refactor(redteam): relocate harmful and pii plugins from legacy directory (#1123)
+- refactor(redteam): Migrate harmful test generators to plugin-based architecture (#1116)
+
+### Fixed
+
+- fix(redteam): use final prompt in moderation instead of original (#1117)
+
+## [0.69.2] - 2024-07-08
+
+### Changed
+
+- feat: add support for nested grading results (#1101)
+- fix: issue that caused harmful prompts to not save (#1112)
+- fix: resolve relative paths for prompts (#1110)
+- ci: compress images in PRs (#1108)
+- site: landing page updates (#1096)
+
+## [0.69.1] - 2024-07-06
+
+### Changed
+
+- **feat**: Add Zod schema validation for providers in `promptfooconfig` by @mldangelo in [#1102](https://github.com/promptfoo/promptfoo/pull/1102)
+- **fix**: Re-add provider context in prompt functions by @mldangelo in [#1106](https://github.com/promptfoo/promptfoo/pull/1106)
+- **fix**: Add missing `gpt-4-turbo-2024-04-09` by @aloisklink in [#1100](https://github.com/promptfoo/promptfoo/pull/1100)
+- **chore**: Update minor and patch versions of several packages by @mldangelo in [#1107](https://github.com/promptfoo/promptfoo/pull/1107)
+- **chore**: Format Python code and add check job to GitHub Actions workflow by @mldangelo in [#1105](https://github.com/promptfoo/promptfoo/pull/1105)
+- **chore**: Bump version to 0.69.1 by @mldangelo
+- **docs**: Add example and configuration guide for using `llama.cpp` by @mldangelo in [#1104](https://github.com/promptfoo/promptfoo/pull/1104)
+- **docs**: Add Vitest integration guide by @mldangelo in [#1103](https://github.com/promptfoo/promptfoo/pull/1103)
+
+## [0.69.0] - 2024-07-05
+
+### Added
+
+- feat(redteam): `extra-jailbreak` plugin that applies jailbreak to all probes (#1085)
+- feat(webui): show metrics as % in column header (#1087)
+
+### Changed
+
+- feat: `llm-rubric` uses tools API for model-grading anthropic evals (#1079)
+- feat: `--filter-providers` eval option (#1089)
+- feat: add `author` field to evals (#1045)
+- fix: improper path resolution for file:// prefixes (#1094)
+- chore(webui): small changes to styling (#1088)
+- docs: guide on how to do sandboxed evals on generated code (#1097)
+- build(deps): bump replicate from 0.30.2 to 0.31.0 (#1090)
+
+### Fixed
+
+- fix(webui): Ability to toggle visibility of description column (#1095)
+
+## [0.68.3] - 2024-07-04
+
+### Changed
+
+- **Features:**
+  - Added support for attachments in OpenAI assistants by [@typpo](https://github.com/promptfoo/promptfoo/pull/1080)
+- **Fixes:**
+  - Removed test mutation for classifier and select-best assertion types by [@typpo](https://github.com/promptfoo/promptfoo/pull/1083)
+  - Treated non-existent files as prompt strings by [@typpo](https://github.com/promptfoo/promptfoo/pull/1084)
+  - Fixed assertion result mock pollution by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1086)
+- **Dependencies:**
+  - Bumped `openai` from 4.52.2 to 4.52.3 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1073)
+  - Bumped `@aws-sdk/client-bedrock-runtime` from 3.606.0 to 3.609.0 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1072)
+
+## [0.68.2] - 2024-07-03
+
+### Added
+
+- feat(webui): add scenarios to test suite configuration in yaml editor (#1071)
+
+## [0.68.1] - 2024-07-02
+
+### Changed
+
+- **feat:** Support calling specific function from Python provider by [@typpo](https://github.com/promptfoo/promptfoo/pull/1053)
+- **fix:** Resolve issues with relative prompt paths by [@mldangelo](https://github.com/promptfoo/promptfoo/pull/1066)
+- **fix:** Handle replicate IDs without version by [@typpo](https://github.com/promptfoo/promptfoo/pull/1059)
+- **build(deps):** Bump `@anthropic-ai/sdk` from 0.24.2 to 0.24.3 by [@dependabot](https://github.com/promptfoo/promptfoo/pull/1062)
+
+## [0.68.0] - 2024-07-01
+
+### Added
+
+- feat(webui): Add support for markdown tables and other extras by @typpo in [#1042](https://github.com/promptfoo/promptfoo/pull/1042)
+
+### Changed
+
+- feat: support for image model redteaming by @typpo in [#1051](https://github.com/promptfoo/promptfoo/pull/1051)
+- feat: prompt syntax for bedrock llama3 by @fvdnabee in [#1038](https://github.com/promptfoo/promptfoo/pull/1038)
+- fix: http provider returns the correct response format by @typpo in [#1027](https://github.com/promptfoo/promptfoo/pull/1027)
+- fix: handle when stdout columns are not set by @typpo in [#1029](https://github.com/promptfoo/promptfoo/pull/1029)
+- fix: support additional models via AWS Bedrock and update documentation by @mldangelo in [#1034](https://github.com/promptfoo/promptfoo/pull/1034)
+- fix: handle imported single test case by @typpo in [#1041](https://github.com/promptfoo/promptfoo/pull/1041)
+- fix: dereference promptfoo test files by @fvdnabee in [#1035](https://github.com/promptfoo/promptfoo/pull/1035)
+- chore: expose runAssertion and runAssertions to node package by @typpo in [#1026](https://github.com/promptfoo/promptfoo/pull/1026)
+- chore: add Node.js version check to ensure compatibility by @mldangelo in [#1030](https://github.com/promptfoo/promptfoo/pull/1030)
+- chore: enable '@typescript-eslint/no-use-before-define' linter rule by @mldangelo in [#1043](https://github.com/promptfoo/promptfoo/pull/1043)
+- docs: fix broken documentation links by @mldangelo in [#1033](https://github.com/promptfoo/promptfoo/pull/1033)
+- docs: update anthropic.md by @Codeshark-NET in [#1036](https://github.com/promptfoo/promptfoo/pull/1036)
+- ci: add GitHub Action for automatic version tagging by @mldangelo in [#1046](https://github.com/promptfoo/promptfoo/pull/1046)
+- ci: npm publish workflow by @typpo in [#1044](https://github.com/promptfoo/promptfoo/pull/1044)
+- build(deps): bump openai from 4.52.1 to 4.52.2 by @dependabot in [#1057](https://github.com/promptfoo/promptfoo/pull/1057)
+- build(deps): bump @anthropic-ai/sdk from 0.24.1 to 0.24.2 by @dependabot in [#1056](https://github.com/promptfoo/promptfoo/pull/1056)
+- build(deps-dev): bump @aws-sdk/client-bedrock-runtime from 3.602.0 to 3.606.0 by @dependabot in [#1055](https://github.com/promptfoo/promptfoo/pull/1055)
+- build(deps): bump docker/setup-buildx-action from 2 to 3 in the github-actions group by @dependabot in [#1054](https://github.com/promptfoo/promptfoo/pull/1054)
+
+## [0.67.0] - 2024-06-27
+
+### Added
+
+- feat(bedrock): add proxy support for AWS SDK (#1021)
+- feat(redteam): Expose modified prompt for iterative jailbreaks (#1024)
+
+### Changed
+
+- feat: add support for gemini embeddings via vertex (#1004)
+- feat: normalize prompt input formats, introduce single responsibility handlers, improve test coverage, and fix minor bugs (#994)
+- fix: more robust json extraction for llm-rubric (#1019)
+- build(deps): bump openai from 4.52.0 to 4.52.1 (#1015)
+- build(deps): bump @anthropic-ai/sdk from 0.24.0 to 0.24.1 (#1016)
+- chore: sort imports (#1006)
+- chore: switch to smaller googleapis dependency (#1009)
+- chore: add config telemetry (#1005)
+- docs: update GitHub urls to reflect promptfoo github org repository location (#1011)
+- docs: fix incorrect yaml ref in guide (#1018)
+
+## [0.66.0] - 2024-06-24
+
+### Changed
+
+- `config get/set` commands, ability for users to set their email by [@typpo](https://github.com/typpo) in [#971](https://github.com/promptfoo/promptfoo/pull/971)
+- **webui**: Download as CSV by [@typpo](https://github.com/typpo) in [#1000](https://github.com/promptfoo/promptfoo/pull/1000)
+- Add support for Gemini default grader if credentials are present by [@typpo](https://github.com/typpo) in [#998](https://github.com/promptfoo/promptfoo/pull/998)
+- **redteam**: Allow arbitrary providers by [@mldangelo](https://github.com/mldangelo) in [#1002](https://github.com/promptfoo/promptfoo/pull/1002)
+- Derived metrics by [@typpo](https://github.com/typpo) in [#985](https://github.com/promptfoo/promptfoo/pull/985)
+- Python provider can import modules with same name as built-ins by [@typpo](https://github.com/typpo) in [#989](https://github.com/promptfoo/promptfoo/pull/989)
+- Include error text in all cases by [@typpo](https://github.com/typpo) in [#990](https://github.com/promptfoo/promptfoo/pull/990)
+- Ensure tests inside scenarios are filtered by filter patterns by [@mldangelo](https://github.com/mldangelo) in [#996](https://github.com/promptfoo/promptfoo/pull/996)
+- Anthropic message API support for env vars by [@typpo](https://github.com/typpo) in [#997](https://github.com/promptfoo/promptfoo/pull/997)
+- Add build documentation workflow and fix typos by [@mldangelo](https://github.com/mldangelo) in [#993](https://github.com/promptfoo/promptfoo/pull/993)
+- Block network calls in tests by [@typpo](https://github.com/typpo) in [#972](https://github.com/promptfoo/promptfoo/pull/972)
+- Export `AnthropicMessagesProvider` from providers by [@greysteil](https://github.com/greysteil) in [#975](https://github.com/promptfoo/promptfoo/pull/975)
+- Add Claude 3.5 sonnet pricing by [@typpo](https://github.com/typpo) in [#976](https://github.com/promptfoo/promptfoo/pull/976)
+- Pass `tool_choice` to Anthropic when set in config by [@greysteil](https://github.com/greysteil) in [#977](https://github.com/promptfoo/promptfoo/pull/977)
+- Fixed according to Ollama API specifications by [@keishidev](https://github.com/keishidev) in [#981](https://github.com/promptfoo/promptfoo/pull/981)
+- Add Dependabot config and update provider dependencies by [@mldangelo](https://github.com/mldangelo) in [#984](https://github.com/promptfoo/promptfoo/pull/984)
+- Don't commit `.env` to Git by [@will-holley](https://github.com/will-holley) in [#991](https://github.com/promptfoo/promptfoo/pull/991)
+- Update Docker base image to Node 20, improve self-hosting documentation, and add CI action for Docker build by [@mldangelo](https://github.com/mldangelo) in [#995](https://github.com/promptfoo/promptfoo/pull/995)
+- Allow variable cells to scroll instead of exploding the table height by [@grrowl](https://github.com/grrowl) in [#973](https://github.com/promptfoo/promptfoo/pull/973)
+
+## [0.65.2] - 2024-06-20
+
+### Added
+
+- feat(redteam): make it easier to add non default plugins (#958)
+
+### Changed
+
+- feat: contains-sql assert (#964)
+- fix: handle absolute paths for js providers (#966)
+- fix: label not showing problem when using eval with config option (#928)
+- fix: should return the whole message if the OpenAI return the content and the function call/tools at the same time. (#968)
+- fix: label support for js prompts (#970)
+- docs: Add CLI delete command to docs (#959)
+- docs: text to sql validation guide (#962)
+
+### Fixed
+
+- fix(redteam): wire ui to plugins (#965)
+- fix(redteam): reduce overreliance, excessive-agency false positive rates (#963)
+
+## [0.65.1] - 2024-06-18
+
+## [0.65.0] - 2024-06-17
+
+### Added
+
+- feat(webui): show pass/fail toggle (#938)
+- feat(webui): carousel for multiple failure reasons (#939)
+- feat(webui): clicking metric pills filters by nonzero only (#941)
+- feat(redteam): political statements (#944)
+- feat(redteam): indicate performance with moderation filter (#933)
+
+### Changed
+
+- feat: add hf to onboarding flow (#947)
+- feat: add support for `promptfoo export latest` (#948)
+- fix: serialize each item in `vars` when its type is a string (#823) (#943)
+- chore(webui): split ResultsTable into separate files (#942)
+
+### Fixed
+
+- fix(redteam): more aggressive contract testing (#946)
+
+### Dependencies
+
+- chore(deps): update dependencies without breaking changes  (#937) 
+
+## [0.64.0] - 2024-06-15
+
+### Added
+
+- feat(redteam): add unintended contracts test (#934)
+- feat(anthropic): support tool use (#932)
+
+### Changed
+
+- feat: export `promptfoo.cache` to node package (#923)
+- feat: add Voyage AI embeddings provider (#931)
+- feat: Add more Portkey header provider options and create headers automatically (#909)
+- fix: handle openai chat-style messages better in `moderation` assert (#930)
+- ci: add next.js build caching (#908)
+- chore(docs): update installation and GitHub Actions guides (#935)
+- chore(dependencies): bump LLM providers in package.json (#936)
+
+### Fixed
+
+- fix(bedrock): support cohere embeddings (#924)
+
+### Dependencies
+
+- chore(deps): bump braces from 3.0.2 to 3.0.3 (#918)
+
+## [0.63.2] - 2024-06-10
+
+### Fixed
+
+- fix(bedrock): default value for configs (#917)
+
+## [0.63.1] - 2024-06-10
+
+### Fixed
+
+- fix(vertex): correct handling of system instruction (#911)
+- fix(bedrock): support for llama, cohere command and command-r, mistral (#915)
+
+## [0.63.0] - 2024-06-09
+
+### Added
+
+- feat(bedrock): Add support for mistral, llama, cohere (#885)
+- feat(ollama): add OLLAMA_API_KEY to support authentication (#883)
+- feat(redteam): add test for competitor recommendations (#877)
+- feat(webui): Show the number of passes and failures (#888)
+- feat(webui): show manual grading record in test details view (#906)
+- feat(webui): use indexeddb instead of localstorage (#905)
+
+### Changed
+
+- feat: ability to set test case metric from csv (#889)
+- feat: interactive onboarding (#886)
+- feat: support `threshold` param from csv (#903)
+- feat: support array of values for `similar` assertion (#895)
+- fix: Prompt variable reads unprocessed spaces on both sides (#887)
+- fix: windows node 22 flake (#907)
+- [fix: ci passing despite failing build (](https://github.com/promptfoo/promptfoo/commit/ce6090be5d70fbe71c6da0a5ec1a73253a9d8a0e)https://github.com/promptfoo/promptfoo/pull/876[)](https://github.com/promptfoo/promptfoo/commit/ce6090be5d70fbe71c6da0a5ec1a73253a9d8a0e)
+- [fix: incorrect migrations path in docker build](https://github.com/promptfoo/promptfoo/commit/6a1eef4e4b006b32de9ce6e5e2d7c0bd3b9fa95a) https://github.com/promptfoo/promptfoo/issues/861
+- chore(ci): add `workflow_dispatch` trigger (#897)
+- chore: add more gemini models (#894)
+- chore: introduce eslint (#904)
+- chore: switch to SWC for faster Jest tests (#899)
+- chore: update to prettier 3 (#901)
+- [chore(openai): add tool_choice required type](https://github.com/promptfoo/promptfoo/commit/e97ce63221b0e06f7e03f46c466da36c5b713017)
+
+### Fixed
+
+- fix(vertex): support var templating in system instruction (#902)
+- [fix(webui): display latency when available](https://github.com/promptfoo/promptfoo/commit/bb335efbe9e8d6b23526c837402787a1cbba9969)
+
+### Dependencies
+
+- chore(deps): update most dependencies to latest stable versions (#898)
+
+## [0.62.1] - 2024-06-06
+
+### Added
+
+- feat(webui): Ability to suppress browser open on `promptfoo view` (#881)
+- feat(anthropic): add support for base url (#850)
+- feat(openai): Support function/tool callbacks (#830)
+- feat(vertex/gemini): add support for toolConfig and systemInstruction (#841)
+- feat(webui): Ability to filter to highlighted cells (#852)
+- feat(webui): ability to click to filter metric (#849)
+- feat(webui): add copy and highlight cell actions (#847)
+
+### Changed
+
+- fix: migrate database before writing results (#882)
+- chore: upgrade default graders to gpt-4o (#848)
+- ci: Introduce jest test coverage reports (#868)
+- ci: add support for node 22, remove support for node 16 (#836)
+- docs: Addresses minor typographical errors (#845)
+- docs: Help description of default `--output` (#844)
+- feat: Add Red Team PII Tests (#862)
+- feat: Support custom gateway URLs in Portkey (#840)
+- feat: add support for python embedding and classification providers (#864)
+- feat: add support for titan premier on bedrock (#839)
+- feat: pass evalId in results (#758)
+- fix: Broken types (#854)
+- fix: Fix broken progress callback in web ui (#860)
+- fix: Fix formatting and add style check to CI (#872)
+- fix: Fix type error eval page.tsx (#867)
+- fix: Improve Error Handling for Python Assertions and Provider Exceptions (#863)
+- fix: Pass evaluateOptions from web ui yaml (#859)
+- fix: Render multiple result images with markdown, if markdown contains multiple images (#873)
+- fix: The values of defaultTest and evaluateOptions are not set when editing the eval yaml file. (#834)
+- fix: crash on db migration when cache is disabled on first run (#842)
+- fix: csv and html outputs include both prompt and provider labels (#851)
+- fix: docker build and prepublish script (#846)
+- fix: show labels for custom provider (#875)
+
+## [0.62.0] - 2024-06-05
+
+### Added
+
+- feat(anthropic): add support for base url (#850)
+- feat(openai): Support function/tool callbacks (#830)
+- feat(vertex/gemini): add support for toolConfig and systemInstruction (#841)
+- feat(webui): Ability to filter to highlighted cells (#852)
+- feat(webui): ability to click to filter metric (#849)
+- feat(webui): add copy and highlight cell actions (#847)
+
+### Changed
+
+- feat: Add Red Team PII Tests (#862)
+- feat: Support custom gateway URLs in Portkey (#840)
+- feat: add support for python embedding and classification providers (#864)
+- feat: add support for titan premier on bedrock (#839)
+- feat: pass evalId in results (#758)
+- feat: upgrade default graders to gpt-4o (#848)
+- fix: Broken types (#854)
+- fix: Fix broken progress callback in web ui (#860)
+- fix: Fix formatting and add style check to CI (#872)
+- fix: Fix type error eval page.tsx (#867)
+- fix: Improve Error Handling for Python Assertions and Provider Exceptions (#863)
+- fix: Pass evaluateOptions from web ui yaml (#859)
+- fix: Render multiple result images with markdown, if markdown contains multiple images (#873)
+- fix: The values of defaultTest and evaluateOptions are not set when editing the eval yaml file. (#834)
+- fix: crash on db migration when cache is disabled on first run (#842)
+- fix: csv and html outputs include both prompt and provider labels (#851)
+- fix: docker build and prepublish script (#846)
+- fix: show labels for custom provider (#875)
+- ci: Introduce jest test coverage reports (#868)
+- ci: add support for node 22, remove support for node 16 (#836)
+- docs: Addresses minor typographical errors (#845)
+- docs: Help description of default `--output` (#844)
+
+## [0.61.0] - 2024-05-30
+
+### Changed
+
+- feat: `moderation` assert type (#821)
+- feat: general purpose http/https provider (#822)
+- feat: add portkey provider (#819)
+- feat: Add Cloudflare AI Provider (#817)
+- fix: Remove duplicate logging line (#825)
+- fix: The ‘defaultTest’ option has no effect during evaluation. (#829)
+- fix: Improve Error Handling in Python Script Execution (#833)
+- docs: How to red team LLMs (#828)
+- chore(mistral): add codestral (#831)
+
+## [0.60.0] - 2024-05-25
+
+### Added
+
+- feat(webui): Add image viewer (#816)
+
+### Changed
+
+- feat: redteam testset generation (#804)
+- feat: support for deep equality check in equals assertion (#805)
+- feat: Allow functions in renderVarsInObject (#813)
+- feat: ability to reference previous llm outputs via storeOutputAs (#808)
+- feat: support for prompt objects (#818)
+- fix: huggingface api key handling (#809)
+- docs: Restore ProviderResponse class name (#806)
+- docs: Fix typo in local build command (#811)
+
+## [0.59.1] - 2024-05-18
+
+### Changed
+
+- [fix: handle null result timestamp when writing to db.](https://github.com/promptfoo/promptfoo/commit/40e1ebfbfd512fea56761b4cbdfff0cd25d61ae1) https://github.com/promptfoo/promptfoo/issues/800
+
+## [0.59.0] - 2024-05-18
+
+### Added
+
+- feat(webui): add --filter-description option to `promptfoo view` (#780)
+- feat(bedrock): add support for embeddings models (#797)
+
+### Changed
+
+- fix: python prompts break when using whole file (#784)
+- Langfuse need to compile variables (#779)
+- chore(webui): display prompt and completion tokens (#794)
+- chore: include full error response in openai errors (#791)
+- chore: add logprobs to assertion context (#790)
+- feat: support var interpolation in function calls (#792)
+- chore: add timestamp to EvaluateSummary (#785)
+- fix: render markdown in variables too (#796)
+
+### Fixed
+
+- fix(vertex): remove leftover dependency on apiKey (#798)
+
+## [0.58.1] - 2024-05-14
+
+### Changed
+
+- fix: improve GradingResult validation (#772)
+- [fix: update python ProviderResponse error message and docs.](https://github.com/promptfoo/promptfoo/commit/258013080809bc782afe3de51c9309230cb5cdb2) https://github.com/promptfoo/promptfoo/issues/769
+- [chore(openai): add gpt-4o models (](https://github.com/promptfoo/promptfoo/commit/ff4655d31d3588972522bb162733cb61e460f36f)https://github.com/promptfoo/promptfoo/pull/776[)](https://github.com/promptfoo/promptfoo/commit/ff4655d31d3588972522bb162733cb61e460f36f)
+
+### Fixed
+
+- fix(langfuse): Check runtime type of `getPrompt`, stringify the result (#774)
+
+## [0.58.0] - 2024-05-09
+
+### Changed
+
+- feat: assert-set (#765)
+- feat: add comma-delimited string support for array-type assertion values (#755)
+- fix: Resolve JS assertion paths relative to configuration file (#756)
+- fix: not-equals assertion (#763)
+- fix: upgrade rouge package and limit to strings (#764)
+
+## [0.57.1] - 2024-05-02
+
+### Changed
+
+- fix: do not serialize js objects to non-js providers (#754)
+- **[See 0.57.0 release notes](https://github.com/promptfoo/promptfoo/releases/tag/0.57.0)**
+
+## [0.57.0] - 2024-05-01
+
+### Changed
+
+- feat: ability to override provider per test case (#725)
+- feat: eval tests matching pattern (#735)
+- feat: add `-n` limit arg for `promptfoo list` (#749)
+- feat: `promptfoo import` and `promptfoo export` commands (#750)
+- feat: add support for `--var name=value` cli option (#745)
+- feat: promptfoo eval --filter-failing outputFile.json (#742)
+- fix: eval --first-n arg (#734)
+- chore: Update openai package to 3.48.5 (#739)
+- chore: include logger and cache utils in javascript provider context (#748)
+- chore: add `PROMPTFOO_FAILED_TEST_EXIT_CODE` envar (#751)
+- docs: Document `python:` prefix when loading assertions in CSV (#731)
+- docs: update README.md (#733)
+- docs: Fixes to Python docs (#728)
+- docs: Update to include --filter-* cli args (#747)
+
+## [0.56.0] - 2024-04-28
+
+### Added
+
+- feat(webui): improved comment dialog (#713)
+
+### Changed
+
+- feat: Intergration with Langfuse (#707)
+- feat: Support IBM Research BAM provider (#711)
+- fix: Make errors uncached in Python completion. (#706)
+- fix: include python tracebacks in python errors (#724)
+- fix: `getCache` should return a memory store when disk caching is disabled (#715)
+- chore(webui): improve eval view performance (#719)
+- chore(webui): always show provider in header (#721)
+- chore: add support for OPENAI_BASE_URL envar (#717)
+
+### Fixed
+
+- fix(vertex/gemini): support nested generationConfig (#714)
+
+## [0.55.0] - 2024-04-24
+
+### Changed
+
+- [Docs] Add llama3 example to ollama docs (#695)
+- bugfix in answer-relevance (#697)
+- feat: add support for provider `transform` property (#696)
+- feat: add support for provider-specific delays (#699)
+- feat: portkey.ai integration (#698)
+- feat: `eval -n` arg for running the first n test cases (#700)
+- feat: ability to write outputs to google sheet (#701)
+- feat: first-class support for openrouter (#702)
+- Fix concurrent cache request behaviour (#703)
+
+## [0.54.1] - 2024-04-20
+
+### Changed
+
+- Add support for Mixtral 8x22B (#687)
+- fix: google sheets async loading (#688)
+- fix: trim spaces in csv assertions that can have file:// prefixes (#689)
+- fix: apply thresholds to custom python asserts (#690)
+- fix: include detail from external python assertion (#691)
+- chore(webui): allow configuration of results per page (#694)
+- fix: ability to override rubric prompt for all model-graded metrics (#692)
+
+## [0.54.0] - 2024-04-18
+
+### Changed
+
+- feat: support for authenticated google sheets access (#686)
+- fix: bugs in `Answer-relevance` calculation (#683)
+- fix: Add tool calls to response from azure openai (#685)
+
+## [0.53.0] - 2024-04-16
+
+### Changed
+
+- fix!: make `javascript` assert function call consistent with external js function call (#674)
+- fix: node library supports prompt files (#668)
+- feat: Enable post-hoc evaluations through defining and using output value in TestSuite (#671)
+- feat: Allow local files to define providerOutput value for TestCase (#675)
+- feat: detect suitable anthropic default provider (#677)
+- feat: Ability to delete evals (#676)
+- feat: ability to create derived metrics (#670)
+
+## [0.52.0] - 2024-04-12
+
+### Added
+
+- feat(webui): add pagination (#649)
+
+### Changed
+
+- feat: support for inline yaml for is-json, contains-json in csv (#651)
+- feat: run providers 1 at a time with --interactive-providers (#645)
+- feat: --env-file arg (#615)
+- fix: Do not fail with api error when azure datasource is used (#644)
+- fix: allow loading of custom provider in windows (#518) (#652)
+- fix: don't show telemetry message without telemtry (#658)
+- fix: `E2BIG` error during the execution of Python asserts (#660)
+- fix: support relative filepaths for non-code assert values (#664)
+
+### Fixed
+
+- fix(webui): handle invalid search regexes (#663)
+
+## [0.51.0] - 2024-04-07
+
+### Added
+
+- feat(webui): store settings in localstorage (#617)
+- feat(azureopenai): apiKeyEnvar support (#628)
+- feat(webui): "progress" page that shows provider/prompt pairs (#631)
+
+### Changed
+
+- chore: improve json parsing errors (#620)
+- feat: ability to override path to python binary (#619)
+- Add documentation for openai vision (#637)
+- Support claude vision and images (#639)
+- fix: assertion files use relative path (#624)
+- feat: add provider reference to prompt function (#633)
+- feat: ability to import vars using glob (#641)
+- feat!: return values directly in python assertions (#638)
+
+### Fixed
+
+- fix(webui): ability to save defaultTest and evaluateOptions in yaml editor (#629)
+
+## [0.50.1] - 2024-04-02
+
+### Changed
+
+- fix: compiled esmodule interop (#613)
+- fix: downgrade var resolution failure to warning (#614)
+- fix: glob behavior on windows (#612)
+
+## [0.50.0] - 2024-04-01
+
+### Added
+
+- feat(webui): download button (#482)
+- feat(webui): toggle for showing full prompt in output cell (#603)
+
+### Changed
+
+- feat: support .mjs external imports (#601)
+- feat: load .env from cli (#602)
+- feat: ability to use js files as `transform` (#605)
+- feat: ability to reference vars from other vars (#607)
+- fix: handling for nonscript assertion files (#608)
+
+### Fixed
+
+- fix(selfhost): add support for prompts and datasets api endpoints (#600)
+- fix(selfhost): Consolidate to `NEXT_PUBLIC_PROMPTFOO_REMOTE_BASE_URL` (#609)
+
+## [0.49.3] - 2024-03-29
+
+### Changed
+
+- fix: bedrock model parsing (#593)
+- [fix: make llm-rubric more resilient to bad json responses.](https://github.com/promptfoo/promptfoo/commit/93fd059a13454ed7a251a90a33306fb1f3c81895) https://github.com/promptfoo/promptfoo/issues/596
+- feat: display progress bar for each parallel execution (#597)
+
+## [0.49.2] - 2024-03-27
+
+### Changed
+
+- fix: support relative paths for custom providers (#589)
+- fix: gemini generationConfig and safetySettings (#590)
+- feat: cli watch for vars and providers (#591)
+
+## [0.49.1] - 2024-03-25
+
+### Changed
+
+- fix: lazy import of azure peer dependency (#586)
+
+## [0.49.0] - 2024-03-23
+
+### Added
+
+- feat(vertexai): use gcloud application default credentials (#580)
+
+### Changed
+
+- feat: Add support for huggingface token classification (#574)
+- feat: Mistral provider support for URL and API key envar (#570)
+- feat: run assertions in parallel (#575)
+- feat: support for azure openai assistants (#577)
+- feat: ability to set tags on standalone assertion llm outputs (#581)
+- feat: add support for claude3 on bedrock (#582)
+- fix: load file before running prompt function (#583)
+- [fix: broken ansi colors on cli table](https://github.com/promptfoo/promptfoo/commit/bbb0157b09c0ffb5366d3cbd112438ca3d2d61c9)
+- [fix: remove duplicate instruction output](https://github.com/promptfoo/promptfoo/commit/fb095617d36102f5b6256e9718e736378c0a5cea)
+- chore: better error messages when expecting json but getting text (#576)
+
+### Fixed
+
+- fix(selfhost): handle sqlite db in docker image and build (#568)
+
+### Dependencies
+
+- chore(deps): bump webpack-dev-middleware from 5.3.3 to 5.3.4 in /site (#579)
+
+## [0.48.0] - 2024-03-18
+
+### Added
+
+- feat(csv): add support for `__description` field (#556)
+
+### Changed
+
+- feat: migrate filesystem storage to sqlite db (#558)
+  * **When you first run `eval` or `view` with 0.48.0, your saved evals will be migrated from `.json` files to a sqlite db.  Please open an issue if you run into problems.**
+  * Restoration: By default, the migration process runs on the promptfoo output directory `~/.promptfoo/output`.  This directory is backed up at `~/.promptfoo/output-backup-*` and you can restore it and use a previous version by renaming that directory back to `output`
+- feat: Add anthropic:messages and replicate:mistral as default providers to web ui (#562)
+- feat: add label field to provider options (#563)
+- docs: adjust configuration for python provider (#565)
+- chore: db migration and cleanup (#564)
+
+### Fixed
+
+- fix(azureopenai): add support for `max_tokens` and `seed` (#561)
+
+## [0.47.0] - 2024-03-14
+
+### Changed
+
+- feat: improve python inline asserts to not require printing (#542)
+- feat: add tools and tool_choice config parameters to azure openai provider (#550)
+- feat: Add support for Claude 3 Haiku (#552)
+- fix: validate custom js function return values (#548)
+- fix: dedupe prompts from combined configs (#554)
+
+### Fixed
+
+- fix(replicate): support non-array outputs (#547)
+
+## [0.46.0] - 2024-03-08
+
+### Added
+
+- feat(self-host): run evals via web ui (#540)
+- feat(self-host): Persist changes on self-deployed UI without sharing a new link (#538)
+- feat(webui): ability to change eval name (#537)
+
+### Changed
+
+- feat: add support for calling specific functions for python prompt (#533)
+- fix: openai tools and function checks handle plaintext responses (#541)
+
+### Fixed
+
+- fix(anthropic): wrap text if prompt supplied as json (#536)
+
+## [0.45.2] - 2024-03-07
+
+### Changed
+
+- fix: python provider handles relative script paths correctly (#535)
+
+## [0.45.1] - 2024-03-06
+
+### Changed
+
+- fix: json and yaml vars files (#531)
+
+### Fixed
+
+- fix(python): deserialize objects from json (#532)
+
+## [0.45.0] - 2024-03-06
+
+### Added
+
+- feat(anthropic): Add Claude 3 support (#526)
+
+### Changed
+
+- feat: ability to load `vars` values at runtime (#496)
+  // Example logic to return a value based on the varName
+  if (varName === 'context') {
+  return `Processed ${otherVars.input} for prompt: ${prompt}`;
+  }
+  return {
+  output: 'default value',
+  };
+  // Handle potential errors
+  // return { error: 'Error message' }
+  # Example logic to dynamically generate variable content
+  if var_name == 'context':
+  return {
+  'output': f"Context for {other_vars['input']} in prompt: {prompt}"
+  }
+  return {'output': 'default context'}
+  # Handle potential errors
+  # return { 'error': 'Error message' }
+
+## [0.44.0] - 2024-03-04
+
+### Added
+
+- feat(mistral): Add new models, JSON mode, and update pricing (#500)
+
+### Changed
+
+- fix: Print incorrect response from factuality checker (#503)
+- fix: Support missing open parenthesis (fixes #504) (#505)
+- feat: include prompt in transform (#512)
+- feat: Support csv and json files in the `tests` array (#520)
+
+### Fixed
+
+- fix(ollama): dont send invalid options for `OllamaChatProvider` (#506)
+- fix(huggingface): do not pass through non-hf parameters (#519)
+
+## [0.43.1] - 2024-02-25
+
+### Changed
+
+- fix: pass through PROMPTFOO_* variables from docker run (#498)
+- docs: clean up python provider header
+
+### Fixed
+
+- fix(huggingface): support `apiKey` config param (#494)
+- fix(bedrock): transform model output from cache. #474
+
+### Documentation
+
+- docs(huggingface): example of private huggingface inference endpoint (#497)
+
+## [0.43.0] - 2024-02-23
+
+### Added
+
+- feat(webui): Display test suite description (#487)
+- feat(webui): Add upload testcase csv to eval page (#484)
+
+### Changed
+
+- feat: pass `test` to assertion context (#485)
+- fix: Change variable name to what the prompt template expects (#489)
+- (docs): Replace references to deprecated postprocess option (#483)
+- chore: update replicate library and add new common params (#491)
+
+### Fixed
+
+- fix(self-hosting): remove supabase dependency from webui eval view (#492)
+
+## [0.42.0] - 2024-02-19
+
+### Added
+
+- feat(webview): toggle for prettifying json outputs (#472)
+- feat(openai): support handling OpenAI Assistant functions tool calls (#473)
+
+### Changed
+
+- feat: add support for claude 2.1 on bedrock (#470)
+- feat: support for overriding `select-best` provider (#478)
+- feat: ability to disable var expansion (#476)
+- fix: improve escaping for python prompt shell (#481)
+
+## [0.41.0] - 2024-02-12
+
+### Added
+
+- feat(openai)!: Allow apiBaseUrl to override /v1 endpoint (#464)
+
+### Changed
+
+- feat: add support for async python providers (#465)
+- fix: pass config to python provider (#460)
+- chore: include progress output in debug logs (#461)
+- docs: perplexity example (#463)
+
+### Fixed
+
+- fix(factuality): make factuality output case-insensitive (#468)
+
+## [0.40.0] - 2024-02-06
+
+### Added
+
+- feat(mistral): Add Mistral provider (#455)
+- feat(openai): add support for `apiKeyEnvar` (#456)
+- feat(azureopenai): add apiBaseUrl config (#459)
+
+### Changed
+
+- feat: cohere api support (#457)
+- feat: ability to override select-best prompt. #289
+- fix: support for gemini generationConfig and safetySettings (#454)
+
+### Fixed
+
+- fix(vertex/gemini): add support for llm-rubric and other OpenAI-formatted prompts (#450)
+
+### Documentation
+
+- documentation: update python.md typo in yaml (#446)
+
+## [0.39.1] - 2024-02-02
+
+### Changed
+
+- fix: func => function in index.ts (#443)
+- feat: add support for google ai studio gemini (#445)
+
+## [0.39.0] - 2024-02-01
+
+### Changed
+
+- feat: Add DefaultGradingJsonProvider to improve `llm-rubric` reliability (#432)
+- feat: add caching for exec and python providers (#435)
+- feat: add `--watch` option to eval command (#439)
+- feat: ability to transform output on per-assertion level (#437)
+- feat: compare between multiple outputs with `select-best` (#438)
+- fix: pass through cost to runAssertion
+- fix: pass through cost to runAssertion
+
+## [0.38.0] - 2024-01-29
+
+### Added
+
+- feat(openai): Jan 25 model updates (#416)
+- feat(webui): eval deeplinks (#426)
+- feat(huggingface): Support sentence similarity inference API (#425)
+
+### Changed
+
+- fix: Only open previous results when necessary (uses lots of memory) (#418)
+- fix: html output (#430)
+- feat: add a `python` provider that supports native python function calls (#419)
+- feat: support for image models such as dall-e (#406)
+- feat: support for `PROMPTFOO_PROMPT_SEPARATOR envar. #424
+
+## [0.37.1] - 2024-01-26
+
+### Changed
+
+- fix: do not require token usage info on openai provider (#414)
+
+## [0.37.0] - 2024-01-24
+
+### Added
+
+- feat(webui): add markdown support (#403)
+
+### Changed
+
+- feat: standalone share server (#408)
+- feat: `PROMPTFOO_DISABLE_TEMPLATING` disables nunjucks templates (#405)
+
+## [0.36.0] - 2024-01-18
+
+### Added
+
+- feat(webui): Ability to comment on outputs (#395)
+- feat(azure): Add response_format support (#402)
+- feat(azure): add support for `passthrough` and `apiVersion` (#399)
+
+### Changed
+
+- feat: add `promptfoo generate dataset` (#397)
+- fix: typo (#401)
+
+## [0.35.1] - 2024-01-12
+
+### Added
+
+- feat(bedrock): introduce amazon titan models as another option for Bedrock (#380)
+- feat(openai): add support for `passthrough` request args (#388)
+- feat(azure): add support for client id/secret auth (#389)
+- feat(webui): label evals using `description` field (#391)
+
+### Changed
+
+- fix: proper support for multiple types of test providers (#386)
+- feat: update CSV and HTML outputs with more details (#393)
+
+## [0.35.0] - 2024-01-07
+
+### Added
+
+- feat(webview): add regex search (#378)
+
+### Changed
+
+- feat: support standalone assertions on CLI (#368)
+- feat: add perplexity-score metric (#377)
+- feat: add logprobs support for azure openai (#376)
+- fix: use relative paths consistently and handle object formats (#375)
+- [fix: restore __prefix and __suffix column handlers when loading test csv](https://github.com/promptfoo/promptfoo/commit/3a058684b3389693f4c5899f786fb090b04e3c93)
+
+## [0.34.0] - 2024-01-02
+
+### Changed
+
+- feat: Support for evaluating cost of LLM inference (#358)
+- feat: save manual edits to test outputs in webview (#362)
+- feat: add `cost` assertion type (#367)
+- fix: handle huggingface text generation returning dict (#357)
+- fix: disable cache when using repeat (#361)
+- fix: do not dereference tools and functions in config (#365)
+- docs: optimize docs of openai tool usage (#355)
+
+## [0.33.2] - 2023-12-23
+
+### Changed
+
+- fix: bad indentation for inline python sript (#353)
+- [fix: truncate CLI table headers](https://github.com/promptfoo/promptfoo/commit/9aa9106cc9bc1660df40117d3c8f053f361fa09c)
+- feat: add openai tool parameter (#350)
+- feat: add `is-valid-openai-tools-call` assertion type (#354)
+
+## [0.33.1] - 2023-12-18
+
+### Changed
+
+- [fix: pass env to providers when using CLI](https://github.com/promptfoo/promptfoo/commit/e8170a7f0e9d4033ef219169115f6474d978f1a7) 
+- [fix: correctly handle bedrock models containing :](https://github.com/promptfoo/promptfoo/commit/4469b693993934192fee2e84cc27c21e31267e5f)
+- feat: add latency assertion type (#344)
+- feat: add perplexity assertion type (#346)
+- feat: add support for ollama chat API (#342)
+- feat: retry when getting internal server error with PROMPTFOO_RETRY_5XX envar (#327)
+- fix: properly escape arguments for external python assertions (#338)
+- fix: use execFile/spawn for external processes (#343)
+- [fix: handle null score in custom metrics](https://github.com/promptfoo/promptfoo/commit/514feed49e2f83f3e04d3e167e5833dc075e6c10)
+- [fix: increment failure counter for script errors.](https://github.com/promptfoo/promptfoo/commit/61d1b068f26c63f3234dc49c9d5f5104b9cf1cda) 
+
+## [0.33.0] - 2023-12-17
+
+### Changed
+
+- feat: add latency assertion type (#344)
+- feat: add perplexity assertion type (#346)
+- feat: add support for ollama chat API (#342)
+- feat: retry when getting internal server error with PROMPTFOO_RETRY_5XX envar (#327)
+- fix: properly escape arguments for external python assertions (#338)
+- fix: use execFile/spawn for external processes (#343)
+- [fix: handle null score in custom metrics](https://github.com/promptfoo/promptfoo/commit/514feed49e2f83f3e04d3e167e5833dc075e6c10)
+- [fix: increment failure counter for script errors.](https://github.com/promptfoo/promptfoo/commit/61d1b068f26c63f3234dc49c9d5f5104b9cf1cda) 
+
+## [0.32.0] - 2023-12-14
+
+### Added
+
+- feat(webview): Layout and styling improvements (#333)
+
+### Changed
+
+- feat: add support for Google Gemini model (#336)
+- feat: add download yaml button in config modal. Related to #330 (#332)
+- fix: set process exit code on failure
+
+## [0.31.2] - 2023-12-11
+
+### Added
+
+- feat(webview): Show aggregated named metrics at top of column (#322)
+
+### Changed
+
+- fix: sharing option is degraded  (#325)
+
+## [0.31.1] - 2023-12-04
+
+### Changed
+
+- fix: issues when evaling multiple config files
+- feat: support for web viewer running remotely (#321)
+
+## [0.31.0] - 2023-12-02
+
+### Added
+
+- feat(openai): Adds support for function call validation (#316)
+
+### Changed
+
+- feat: add support for ajv formats (#314)
+- feat: support prompt functions via nodejs interface (#315)
+- fix: webview handling of truncated cell contents with html (#318)
+- docs: Merge docs into main repo (#317)
+
+## [0.30.1] - 2023-11-29
+
+### Changed
+
+- feat: add bedrock in webui setup (#301)
+- feat: add support for custom metrics (#305)
+- feat: show table by default, even with --output (#306)
+- fix: handle multiple configs that import multiple prompts (#304)
+- fix: remove use of dangerouslySetInnerHTML in results table (#309)
+
+### Fixed
+
+- fix(openai): add support for overriding api key, host, baseurl, org in Assistants API (#311)
+
+## [0.30.0] - 2023-11-29
+
+### Changed
+
+- feat: add bedrock in webui setup (#301)
+- feat: add support for custom metrics (#305)
+- feat: show table by default, even with --output (#306)
+- fix: handle multiple configs that import multiple prompts (#304)
+- fix: remove use of dangerouslySetInnerHTML in results table (#309)
+
+## [0.29.0] - 2023-11-28
+
+### Changed
+
+- feat: Add support for external provider configs via file:// (#296)
+- feat: Add support for HTTP proxies (#299)
+- feat: claude-based models on amazon bedrock (#298)
+
+## [0.28.2] - 2023-11-27
+
+### Added
+
+- feat(azureopenai): Warn when test provider should be overwritten with azure (#293)
+- feat(webview): Display test descriptions if available (#294)
+- feat(webview): Ability to set test scores manually (#295)
+
+### Changed
+
+- feat: add support for self-hosted huggingface text generation inference (#290)
+- fix: prevent duplicate asserts with `defaultTest` (#287)
+- fix: multiple configs handle external test and prompt files correctly (#291)
+
+## [0.28.0] - 2023-11-19
+
+### Changed
+
+- feat: Add support for multiple "__expected" columns (#284)
+- feat: Support for OpenAI assistants API (#283)
+- feat: Ability to combine multiple configs into a single eval (#285)
+
+## [0.27.1] - 2023-11-14
+
+### Added
+
+- [feat(node-package): Add support for raw objects in prompts](https://github.com/promptfoo/promptfoo/commit/e6a5fe2fa7c05aabd2f52bd4fa143d957a7953dd)
+- feat(openai): Add support for OpenAI `seed` param (#275)
+- [feat(openai): Add support for OpenAI response_format](https://github.com/promptfoo/promptfoo/commit/12781f11f495bed21db1070e987f1b40a43b72e3)
+- [feat(webview): Round score in details modal](https://github.com/promptfoo/promptfoo/commit/483c31d79486a75efc497508b9a42257935585cf)
+
+### Changed
+
+- fix: Set `vars._conversation` only if it is used in prompt (#282)
+- feat: Add new RAG metrics (answer-relevance, context-recall, context-relevance, context-faithfulness) (#279)
+- feat: throw error correctly when invalid api key is passed for OpenAI (#276)
+- Bump langchain from 0.0.325 to 0.0.329 in /examples/langchain-python (#278)
+- Provide the prompt in the context to external assertion scripts (#277)
+- fix the following error : 'List should have at least 1 item after val… (#280)
+- [chore: Add HuggingFace debug output](https://github.com/promptfoo/promptfoo/commit/2bae118e3fa7f8164fd78d29a3a30d187026bf13)
+
+## [0.27.0] - 2023-11-14
+
+### Added
+
+- [feat(node-package): Add support for raw objects in prompts](https://github.com/promptfoo/promptfoo/commit/e6a5fe2fa7c05aabd2f52bd4fa143d957a7953dd)
+- feat(openai): Add support for OpenAI `seed` param (#275)
+- [feat(openai): Add support for OpenAI response_format](https://github.com/promptfoo/promptfoo/commit/12781f11f495bed21db1070e987f1b40a43b72e3)
+- [feat(webview): Round score in details modal](https://github.com/promptfoo/promptfoo/commit/483c31d79486a75efc497508b9a42257935585cf)
+
+### Changed
+
+- feat: Add new RAG metrics (answer-relevance, context-recall, context-relevance, context-faithfulness) (#279)
+- feat: throw error correctly when invalid api key is passed for OpenAI (#276)
+- Bump langchain from 0.0.325 to 0.0.329 in /examples/langchain-python (#278)
+- Provide the prompt in the context to external assertion scripts (#277)
+- fix the following error : 'List should have at least 1 item after val… (#280)
+- [chore: Add HuggingFace debug output](https://github.com/promptfoo/promptfoo/commit/2bae118e3fa7f8164fd78d29a3a30d187026bf13)
+
+## [0.26.5] - 2023-11-10
+
+### Changed
+
+- feat: Support for Azure OpenAI Cognitive Search (#274)
+- [feat: Add PROMPTFOO_PYTHON environment variable](https://github.com/promptfoo/promptfoo/commit/33ecca3dab9382f063e68529c047cfd3fbd959e5)
+
+## [0.26.3] - 2023-11-08
+
+### Added
+
+- [feat(AzureOpenAI): Add support for deployment_id and dataSources](https://github.com/promptfoo/promptfoo/commit/3f6dee99b4ef860af1088c4ceda1a74726070f37)
+
+### Changed
+
+- [Stringify output display string if output is a JSON object](https://github.com/promptfoo/promptfoo/commit/e6eff1fb75e09bfd602c08edd89ec154e3e61bf9)
+- [Add JSON schema dereferencing support for JSON configs](https://github.com/promptfoo/promptfoo/commit/c32f9b051a51ee6e1ee08738e0921b4e05a5c23d)
+
+### Fixed
+
+- fix(openai): Improve handling for function call responses (#270)
+
+## [0.26.2] - 2023-11-07
+
+### Changed
+
+- [Fix issue with named prompt function imports](https://github.com/promptfoo/promptfoo/commit/18a4d751af15b996310eceafc5a75e114ce1bf56)
+- [Fix OpenAI finetuned model parsing](https://github.com/promptfoo/promptfoo/commit/b52de61c6e1fd0a9e67d2476a9f3f9153084ad61)
+- [Add new OpenAI models](https://github.com/promptfoo/promptfoo/commit/d9432d3b5747516aea1a7e8a744167fbd10a69d2)
+- Fix: Broken custom api host for OpenAI. (#261)
+- Add `classifier` assert type (#263)
+- Send provider options and test context to ScriptCompletion (exec) provider (#268)
+- Support for loading JSON schema from external file (#266)
+
+## [0.26.1] - 2023-11-01
+
+### Changed
+
+- Fix broken default config for OpenAI evals created in web app (#255)
+- Fix prompt per provider (#253)
+- Add support for custom config directory (#257)
+- Add latency and token metrics per prompt (#258)
+- Add caching support to Anthropic provider (#259)
+- webview: Preserve formatting of LLM outputs 
+- Bump langchain from 0.0.317 to 0.0.325 in /examples/langchain-python (#254)
+
+## [0.26.0] - 2023-10-28
+
+### Changed
+
+- cli: Add support for raw text prompts (#252)
+- Ensure the directory for the output file is created if it does not exist
+
+## [0.25.2] - 2023-10-26
+
+### Changed
+
+- allow Python in tests.csv (#237)
+- Improve escaping in matchers (#242)
+- Add support for nunjucks filters (#243)
+- Fix issue where outputPath from the configuration file is not used when `-c` option is provided
+- Add envar PROMPTFOO_DISABLE_CONVERSATION_VAR
+- Resolve promises in external assert files
+
+## [0.25.1] - 2023-10-19
+
+### Changed
+
+- Fix issue with loading google sheets directly. (#222)
+- Add _conversation variable for testing multiple-turn chat conversations (#224)
+- Allow multiple output formats simultaneously with `outputPath` (#229)
+- Fall back to default embedding model if provided model doesn't support embeddings
+- Various fixes and improvements
+
+## [0.25.0] - 2023-10-10
+
+### Changed
+
+- Add support for icontains-any and icontains-all (#210)
+- Bump langchain from 0.0.279 to 0.0.308 in /examples/langchain-python (#213)
+- Add support for .cjs file extensions (#214)
+- Add Prompts and Datasets pages (#211)
+- Add CLI commands for listing and showing evals, prompts, and datasets  (#218)
+- Add support for `config` object in webhook provider payload. (#217)
+- Other misc changes and improvements
+
+## [0.24.4] - 2023-10-01
+
+### Changed
+
+- Fix bug in custom function boolean return value score (#208)
+- Fix ollama provider with `--no-cache` and improve error handling
+- Add support for HuggingFace Inference API (text generation) (#205)
+- Add `apiHost` config key to Azure provider
+
+## [0.24.3] - 2023-09-28
+
+### Changed
+
+- Better LocalAI/Ollama embeddings traversal failure (#191)
+- `OPENAI_API_HOST` to `OPENAI_API_BASE_URL` (#187)
+- Ability to include files as assertion values (#180)
+- Add hosted db for evals (#149)
+- Webview details pane improvements (#196)
+- Add support for ollama options (#199)
+- Adding TXT and HTML to `--output` help/error message (#201)
+
+## [0.24.2] - 2023-09-23
+
+### Changed
+
+- Specify repo in package.json (#174)
+- Add support for parsing multiple json blobs in responses (#178)
+- Updated node version update of Google Colab notebook example (#171)
+- Fix arg escaping for external python prompts on Windows (#179)
+- Better OpenAI embeddings traversal failure (#190)
+- Adds embeddings providers for LocalAI and Oolama (#189)
+- Add `noindex` to shared results
+- Many other misc fixes and improvements
+
+## [0.24.1] - 2023-09-21
+
+### Changed
+
+- Fix prompt errors caused by leading and trailing whitespace for var file imports
+- Fix an issue with response parsing in LocalAI chat
+- Fix issue preventing custom provider for similarity check (#152)
+- Fix escaping in python asserts (#156)
+- Fix README link to providers docs (#153)
+- Allow object with function name as a value for function_call (#158)
+- Add a -y/--yes option to `promptfoo view` command to skip confirmation (#166)
+- Other misc fixes and improvements
+
+## [0.24.0] - 2023-09-18
+
+### Changed
+
+- Support for custom functions as prompts (#147)
+- Refactor parts of util into more descriptive files (#148)
+- Misc fixes and improvements
+
+## [0.23.1] - 2023-09-14
+
+### Changed
+
+- Improvements to custom grading (#140)
+- Support for Google Vertex and PaLM chat APIs (#131)
+- Add support for including files in defaultTest (#137)
+- Add support for disabling cache in evaluate() options (#135)
+- Add support for loading vars directly from file (#139)
+- Include `provider` in `EvaluateResult`
+- Other misc improvements and fixes
+
+## [0.23.0] - 2023-09-14
+
+### Changed
+
+- Improvements to custom grading (#140)
+- Support for Google Vertex and PaLM chat APIs (#131)
+- Add support for including files in defaultTest (#137)
+- Add support for disabling cache in evaluate() options (#135)
+- Add support for loading vars directly from file (#139)
+- Include `provider` in `EvaluateResult`
+- Other misc improvements and fixes
+
+## [0.22.0] - 2023-09-04
+
+### Changed
+
+- Add OpenAI factuality and closed-QA graders (#126).  These new graders implement OpenAI's eval methodology.
+- Auto-escape vars when prompt is a JSON object (#127).
+- Improvements to custom providers - Pass context including `vars` to callApi and make `TestCase` generic for ease of typing
+- Add `prompt` to Javascript, Python, and Webhook assertion context
+- Fix llama.cpp usage of provider config overrides
+- Fix ollama provider parsing for llama versions like llama:13b, llama:70b etc.
+- Trim var strings in CLI table (prevents slowness during CLI table output)
+
+## [0.21.4] - 2023-09-01
+
+### Changed
+
+- Add support for test case threshold value (#125)
+- Add support for pass/fail threshold for javascript and python numeric return values
+
+## [0.21.3] - 2023-09-01
+
+### Changed
+
+- Increase request backoff and add optional delay between API calls (#122)
+
+## [0.21.2] - 2023-08-31
+
+### Changed
+
+- Fix symlink bug on Windows
+
+## [0.21.1] - 2023-08-30
+
+### Changed
+
+- Consistent envars and configs across providers (#119)
+- Add configuration for API keys in WebUI (#120)
+- Add CodeLlama to WebUI
+- Fix issue with numeric values in some assert types
+- Add support for running specific prompts for specific providers using `{id, prompts, config}` format
+- Add a feedback command
+
+## [0.21.0] - 2023-08-28
+
+### Changed
+
+- Add webhook provider (#117)
+- Add support for editing config in web view (#115)
+- Standalone server with database with self-hosting support (#118)
+- Add support for custom llm-rubric grading via `rubricPrompt` in Assertion objects
+- Add support for `vars` in `rubricPrompt`, making it easier to pass expected values per test case
+- Add a handful of new supported parameters to OpenAI, Azure, Anthropic, and Replicate providers
+- Allow setting `config` on `provider` attached to Assertion or TestCase
+- Add/improve support for custom providers in matchesSimilarity and matchesLlmRubric
+
+## [0.20.1] - 2023-08-18
+
+### Changed
+
+- Fix issue when there's not enough data to display useful charts
+- Add charts to web viewer (#112)
+- Add support for multiline javascript asserts
+- Add support for Levenshtein distance assert type (#111)
+
+## [0.20.0] - 2023-08-18
+
+### Changed
+
+- Add charts to web viewer (#112)
+- Add support for multiline javascript asserts
+- Add support for Levenshtein distance assert type (#111)
+
+## [0.19.3] - 2023-08-17
+
+### Changed
+
+- llm-rubric provider fixes (#110)
+- New diff viewer for evals
+- Web UI for running evals (#103)
+- Add support for OpenAI organization (#106)
+- function call azure fix (#95)
+- Add support for JSON schema validation for is-json and contains-json (#108)
+- Other misc fixes and API improvements
+
+## [0.19.2] - 2023-08-15
+
+### Changed
+
+- function call azure fix (#95)
+- Add support for JSON schema validation for is-json and contains-json (#108)
+- New diff viewer for evals
+- Web UI for running evals (#103)
+- Add support for OpenAI organization (#106)
+- Other misc fixes and API improvements
+
+## [0.19.1] - 2023-08-14
+
+### Changed
+
+- Add support for OpenAI organization (#106)
+- New diff viewer for evals
+- Web UI for running evals (#103)
+- Other misc fixes and API improvements
+
+## [0.19.0] - 2023-08-14
+
+### Changed
+
+- New diff viewer for evals
+- Web UI for running evals (#103)
+- Other misc fixes and API improvements
+
+## [0.18.4] - 2023-08-11
+
+### Changed
+
+- Fix bug in Ollama provider breaking on empty line
+
+## [0.18.3] - 2023-08-08
+
+### Changed
+
+- Disable nunjucks autoescaping by default (#101)
+- Add ollama provider (#102)
+- Fix potential issues with writing latest results
+- Default to not forcing line breaks in web view
+
+## [0.18.2] - 2023-08-08
+
+### Changed
+
+- testing providers w/ same model diff params (#83)
+- Add assertions in webview (#100)
+- Fix error with provider map parsing when `providers` is just a string
+- Fix `share` command
+- Don't short circuit test failures by default and introduce `PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES` envar
+
+## [0.18.1] - 2023-08-06
+
+### Changed
+
+- Fix issue with writing latest results
+- Add support for llama.cpp server (#94)
+
+## [0.18.0] - 2023-07-28
+
+### Changed
+
+- Promptfoo Theoriesby @Skylertodd in https://github.com/promptfoo/promptfoo/pull/89 - allow datasets to be associated with specific set of tests allowing the ability to execute many data driven tests without the requirement of copying a test over and over for each data set.
+- Add `python` assertion type that runs python code and returns the output (#78)
+- Add support for native function ApiProviders and Assertions (#93)
+- Fix ANSI escape codes in console table
+- Fix broken symlink handling for latest output
+- Fix eval history cleanup
+
+## [0.17.9] - 2023-07-24
+
+### Changed
+
+- Record latency in results (#85)
+- Add support for loading test cases from file/directory path (#88)
+- Fix filepath compatibility issue on Windows
+
+## [0.17.8] - 2023-07-22
+
+### Changed
+
+- Additional OpenAI params (#81)
+- Show recent runs in web viewer (#82)
+- Add support for postprocessing in test cases (#84)
+- Fix issue where timeouts for noncritical things (like version check) would crash with error
+- Fix bug in evaluator where empty tests were not supported (e.g. when comparing a static prompt on multiple models)
+
+## [0.17.7] - 2023-07-20
+
+### Changed
+
+- Add support for provider-specific prompts in the test suite configuration (#76)
+- Improvements to ReplicateProvider
+- Add llama vs gpt bechmark example
+- Fixes to llm-rubric prompt grading
+
+## [0.17.6] - 2023-07-20
+
+### Changed
+
+- Add "repeat" option to CLI and EvaluateOptions (#71)
+- Move OpenAI yaml support into shared providers util (#74)
+- ReplicateProvider implementation (#75)
+- Web viewer: add support for hiding identical rows
+- Darkmode fixes
+- Fix colab notebook support
+
+## [0.17.5] - 2023-07-14
+
+### Changed
+
+- Add starts-with assertion type (#64)
+- Add support for YAML-formatted OpenAI prompts (#67)
+- Add Azure OpenAI Provider (#66)
+- Allow option to disable sharing (#69)
+- Require confirmation before sharing in `promptfoo share`
+- Add `PROMPTFOO_DISABLE_UPDATE` environment variable
+
+## [0.17.4] - 2023-07-13
+
+### Changed
+
+- Add telemetry notice (#39)
+- Fix environments that do not have process.stdout.columns (colab)
+- Fix `init` output 
+- Don't crash when npm is down (latest version check)
+
+## [0.17.3] - 2023-07-10
+
+### Changed
+
+- Add Anthropic provider (#58)
+- Fix a handful of `promptfoo init` onboarding issues
+- Fix ordering of CLI table headers
+- Fix compatibility with Node 14
+
+## [0.17.2] - 2023-07-07
+
+### Changed
+
+- Improve support for running external scripts as providers (#55)
+
+## [0.17.1] - 2023-07-07
+
+### Changed
+
+- Fix issue with outputs displaying in web viewer
+
+## [0.17.0] - 2023-07-06
+
+### Changed
+
+- added gpt-3.5-16k and checkpoints (#51)
+- Add ability to view raw prompts in web viewer (#54)
+- OpenAI chat completion fails on invalid JSON.  Enable with envar `PROMPTFOO_REQUIRE_JSON_PROMPTS`
+- Ability to view raw prompts in web viewer
+- Update default suggestion provider
+- Add `script` provider prefix for custom providers
+- Add a `cache clear` command
+- Fix: allow number values for `contains` and `icontains` assertions
+- FIx: Don't create asserts from empty __expected columns
+
+## [0.16.0] - 2023-06-28
+
+### Changed
+
+- update docs/Question (#46)
+- Add retries for failed HTTP requests (#47)
+- Add support for var objects that can be manipulated in nunjucks templates (#50)
+
+## [0.15.0] - 2023-06-26
+
+### Changed
+
+- Add support for continuous scoring by @typpo in https://github.com/typpo/promptfoo/pull/44
+- Add support for assertion weights
+- Fix: defaultTest is properly set when config is loaded
+
+## [0.14.2] - 2023-06-24
+
+## [0.14.1] - 2023-06-19
+
+### Changed
+
+- Fix: [Use basepath only in case where path was supplied in config file](https://github.com/typpo/promptfoo/commit/e67918b3824ac59576eec56bdae4a700cf527352)
+
+## [0.14.0] - 2023-06-18
+
+### Changed
+
+- Breaking: Make files in config yaml resolve from config location, not working directory
+- Breaking: output `json` and `yaml` formats have moved results into the `results` property.  Now also include `config` and `shareableUrl`
+- Add shareable urls and `promptfoo share` command by @typpo in https://github.com/typpo/promptfoo/pull/42
+- Add new CLI args for `eval`: --no-table, --no-progress-bar, --share
+- Other misc bugfixes and improvements
+
+## [0.13.1] - 2023-06-17
+
+### Changed
+
+- [Command arguments override config in all cases](https://github.com/typpo/promptfoo/commit/c425d3ae8c4ddb932ba4c1380889a01b47b5ce57)
+
+## [0.13.0] - 2023-06-16
+
+### Changed
+
+- Add support for OpenAI functions and custom provider args by @typpo in https://github.com/typpo/promptfoo/pull/34
+- extract and export generateTable() by @tizmagik in https://github.com/typpo/promptfoo/pull/37
+- Add JSONL prompt file support by @typpo in https://github.com/typpo/promptfoo/pull/40
+
+## [0.12.0] - 2023-06-12
+
+### Changed
+
+- Add support for sharing by @typpo in https://github.com/typpo/promptfoo/pull/33
+- Warn user if they are using an out-of-date version by @typpo in https://github.com/typpo/promptfoo/pull/31
+- Add basic telemetry
+
+## [0.11.0] - 2023-06-11
+
+### Changed
+
+- feat: Add many new assertion types: contains, icontains, contains-some, contains-any, regex, webhook, rouge-n
+- feat: all assertion types can be negated be prefixing `not-`
+- feat: more debugging info for custom function failures
+- feat: custom functions are passed a context object that contains vars
+- feat: web table view improvements, including the ability to filter only failures, toggle word break mode, etc
+- Misc fixes and small improvements
+
+## [0.10.0] - 2023-06-09
+
+### Changed
+
+- fix: Rename OPENAI_MAX_TEMPERATURE to OPENAI_TEMPERATURE
+- fix: defaultTest properly works in configs loaded by CLI
+- chore: add native ts-node compatibility by @MentalGear in https://github.com/typpo/promptfoo/pull/25
+- fix parsing of env vars for OPENAI_MAX_TOKENS and OPENAI_MAX_TEMPERATURE by @abi in https://github.com/typpo/promptfoo/pull/29
+- feat: Add support for named prompts by @typpo in https://github.com/typpo/promptfoo/pull/28
+- feat: Better visual distinction in web view
+- Other misc fixes and improvements
+
+## [0.9.0] - 2023-06-05
+
+### Changed
+
+- Add support for var arrays by @typpo in https://github.com/typpo/promptfoo/pull/21
+- Minor fixes and improvements
+
+## [0.8.3] - 2023-05-31
+
+### Changed
+
+- Fix: cache setup on first usage
+- Fix: better error on malformed config file
+
+## [0.8.2] - 2023-05-30
+
+### Changed
+
+- Fix cache behavior edge case
+
+## [0.8.1] - 2023-05-30
+
+### Changed
+
+- Fix some issues with `--vars` and `--tests` backwards compatibility
+
+## [0.8.0] - 2023-05-30
+
+### Changed
+
+- Simplify API and add support for unified test suite definition by @typpo in https://github.com/typpo/promptfoo/pull/14
+- The following options have moved inside `evaluateOptions`: `maxConcurrency`, `showProgressBar`, `generateSuggestions`.  
+- The following options have moved inside `commandLineOptions`: `write`, `cache`, `verbose`, `view`, and similar.
+
+## [0.7.0] - 2023-05-29
+
+### Changed
+
+- Improve caching and cache all requests by default 
+
+## [0.6.0] - 2023-05-28
+
+### Changed
+
+-  Add support for open-source LLMs like Llama, Alpaca, Vicuna, GPT4All via LocalAI
+- Add glob support 
+- Jest and mocha integrations
+- Rename eval: to fn: for custom js fnc tests by @MentalGear 
+- Add exports for types and useful utility functions
+- Support non-es module requires
+- Web viewer dark mode
+- Improved handling of third-party API errors 
+- Many other fixes and improvements 
+
+## [0.5.1] - 2023-05-23
+
+### Changed
+
+- Fix issue with running promptfoo without `OPENAI_API_KEY` set
+
+## [0.5.0] - 2023-05-22
+
+### Changed
+
+- Add support for grading by semantic similarity
+- Add support for local LLMs like Llama, Alpaca, Vicuna, GPT4All, etc. via LocalAI
+- Improved error handling
+- Improved word wrapping in CLI output
+
+## [0.4.0] - 2023-05-13
+
+### Changed
+
+- Web viewer for eval results
+- Support for OPENAI_STOP to set OpenAI stopwords
+- Increase default request timeout
+
+## [0.3.0] - 2023-05-07
+
+### Added
+
+- Feature: LLM automatic grading of outputs by LLM https://github.com/typpo/promptfoo/pull/4
+
+### Changed
+
+- Improve how test results are shown (PASS/FAIL is shown in matrix view, rather than its own column)
+- Ability to override OPENAI_API_HOST environment variable
+- Ability to set an API call timeout via `REQUEST_TIMEOUT_MS` environment variable
+- Improve readability of HTML table output
+
+## [0.2.2] - 2023-05-04
+
+### Changed
+
+- Fix error in `promptfoo init` output
+- Fix ordering issue when building table concurrently
+- Output more useful errors when API calls fail
+- Add `promptfoo --version` output
+
+## [0.2.0] - 2023-05-04
+
+### Changed
+
+- Add `promptfoo init` command
+- Improve custom provider loading and add example
 
 
