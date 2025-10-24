@@ -57,14 +57,16 @@ export async function handleStreamingTTS(
   };
 
   return new Promise((resolve, reject) => {
-    let completionTimeout: NodeJS.Timeout;
+    let completionTimeout: NodeJS.Timeout | undefined;
     const audioChunks: Buffer[] = [];
     let totalChunks = 0;
 
     // Set up message handler
     client.onMessage((message: StreamingMessage) => {
       // Reset timeout on any message
-      clearTimeout(completionTimeout);
+      if (completionTimeout) {
+        clearTimeout(completionTimeout);
+      }
       completionTimeout = setTimeout(() => {
         logger.debug('[ElevenLabs Streaming] Stream complete (timeout)');
         resolve(session);
@@ -140,7 +142,9 @@ export async function handleStreamingTTS(
         resolve(session);
       }, 5000); // 5 second initial timeout
     } catch (error) {
-      clearTimeout(completionTimeout);
+      if (completionTimeout) {
+        clearTimeout(completionTimeout);
+      }
       reject(error);
     }
   });

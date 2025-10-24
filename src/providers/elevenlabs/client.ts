@@ -179,7 +179,7 @@ export class ElevenLabsClient {
     const url = `${this.baseUrl}${endpoint}`;
 
     const formData = new FormData();
-    formData.append('file', new Blob([file]), fileName);
+    formData.append('file', new Blob([new Uint8Array(file)]), fileName);
 
     for (const [key, value] of Object.entries(additionalFields)) {
       if (value !== undefined && value !== null) {
