@@ -275,7 +275,9 @@ describe('FrameworkCard', () => {
     expect(cardElement).toHaveClass('non-compliant');
 
     // Verify the summary chip shows correct counts
-    const summaryChip = screen.getByText(`${nonCompliantPlugins.length} / ${nonCompliantPlugins.length} failed`);
+    const summaryChip = screen.getByText(
+      `${nonCompliantPlugins.length} / ${nonCompliantPlugins.length} failed`,
+    );
     expect(summaryChip).toBeInTheDocument();
 
     // Verify at least some plugins are displayed
