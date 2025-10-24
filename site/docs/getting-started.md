@@ -12,12 +12,14 @@ import TabItem from '@theme/TabItem';
 # Getting started
 
 ## Verify installation
+
 Install promptfoo using the [installation guide](/docs/installation) first.
 
 ```bash
 promptfoo --version
 promptfoo eval --help
 ```
+
 If this fails, see [Troubleshooting](/docs/usage/troubleshooting/).
 
 Once installation is complete, you can set up your first config file in two ways:
