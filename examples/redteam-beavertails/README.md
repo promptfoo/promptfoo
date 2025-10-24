@@ -1,6 +1,6 @@
 # BeaverTails Red Team Testing
 
-This example demonstrates how to use the BeaverTails plugin for red team testing with subcategory filtering.
+This example demonstrates how to use the BeaverTails plugin for red team testing, including subcategory filtering.
 
 ## Overview
 
@@ -14,32 +14,54 @@ You can run this example with:
 npx promptfoo@latest init --example redteam-beavertails
 ```
 
+## Configuration Files
+
+This example includes two configuration files:
+
+1. **`promptfooconfig.yaml`** - Basic evaluation using HuggingFace dataset directly
+2. **`promptfooconfig-subcategories.yaml`** - Red team generation with subcategory filtering
+
 ## Setup
 
-1. Set up your HuggingFace API token:
+1. Set up your HuggingFace API token (required for both configs):
 
    ```bash
    export HF_TOKEN=your_huggingface_token
    ```
 
 2. Set up your provider API key:
+
    ```bash
    export OPENAI_API_KEY=your_openai_api_key
    ```
 
-## Generate Red Team Tests
+## Usage
+
+### Basic Evaluation
+
+Run the basic evaluation using the BeaverTails-Evaluation dataset:
+
+```bash
+promptfoo eval
+```
+
+View results:
+
+```bash
+promptfoo view
+```
+
+### Red Team with Subcategory Filtering
 
 Generate test cases with subcategory filtering:
 
 ```bash
-promptfoo redteam generate
+promptfoo redteam generate -c promptfooconfig-subcategories.yaml
 ```
 
 This will create a `redteam.yaml` file with filtered test cases.
 
-## Run Evaluation
-
-Evaluate your model against the generated tests:
+Then evaluate your model:
 
 ```bash
 promptfoo eval
@@ -53,7 +75,7 @@ promptfoo view
 
 ## Subcategory Filtering
 
-The example configuration shows two approaches:
+The `promptfooconfig-subcategories.yaml` configuration shows two approaches:
 
 1. **Basic usage** - Tests all harmful categories:
 
@@ -63,6 +85,7 @@ The example configuration shows two approaches:
    ```
 
 2. **Filtered usage** - Tests only specific subcategories:
+
    ```yaml
    - id: beavertails
      numTests: 5
