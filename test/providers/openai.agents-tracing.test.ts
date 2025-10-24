@@ -21,7 +21,9 @@ describe('OTLPTracingExporter', () => {
 
   beforeAll(() => {
     const fetchModule = require('../../src/util/fetch');
-    fetchWithProxy = fetchModule.fetchWithProxy as jest.MockedFunction<typeof import('../../src/util/fetch').fetchWithProxy>;
+    fetchWithProxy = fetchModule.fetchWithProxy as jest.MockedFunction<
+      typeof import('../../src/util/fetch').fetchWithProxy
+    >;
   });
 
   beforeEach(() => {

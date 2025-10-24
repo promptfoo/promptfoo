@@ -31,7 +31,9 @@ describe('agents-loader', () => {
 
   beforeAll(() => {
     const esm = require('../../src/esm');
-    importModule = esm.importModule as jest.MockedFunction<typeof import('../../src/esm').importModule>;
+    importModule = esm.importModule as jest.MockedFunction<
+      typeof import('../../src/esm').importModule
+    >;
   });
 
   beforeEach(() => {

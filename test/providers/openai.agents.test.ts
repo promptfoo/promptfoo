@@ -44,7 +44,9 @@ describe('OpenAiAgentsProvider', () => {
   let importModule: jest.MockedFunction<typeof import('../../src/esm').importModule>;
   let agentsRun: jest.MockedFunction<typeof import('@openai/agents').run>;
   let getOrCreateTrace: jest.MockedFunction<typeof import('@openai/agents').getOrCreateTrace>;
-  let startTraceExportLoop: jest.MockedFunction<typeof import('@openai/agents').startTraceExportLoop>;
+  let startTraceExportLoop: jest.MockedFunction<
+    typeof import('@openai/agents').startTraceExportLoop
+  >;
 
   beforeAll(() => {
     const esm = require('../../src/esm');
