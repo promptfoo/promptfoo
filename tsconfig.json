@@ -32,9 +32,6 @@
     "src/workers/**/*",
     "src/app/**/*",
     "test/app/**/*",
-    "test/site/",
-    "test/providers/openai.agents.test.ts",
-    "test/providers/openai.agents-loader.test.ts",
-    "test/providers/openai.agents-tracing.test.ts"
+    "test/site/"
   ]
 }
