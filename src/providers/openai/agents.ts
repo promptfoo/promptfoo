@@ -1,4 +1,11 @@
 import type { Agent } from '@openai/agents';
+import {
+  run,
+  getOrCreateTrace,
+  startTraceExportLoop,
+  addTraceProcessor,
+  BatchTraceProcessor,
+} from '@openai/agents';
 import logger from '../../logger';
 import { OpenAiGenericProvider } from './index';
 import { OTLPTracingExporter } from './agents-tracing';
@@ -141,7 +148,6 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       await this.registerTracingExporter(this.tracingExporter);
 
       // Start the trace export loop
-      const { startTraceExportLoop } = await import('@openai/agents');
       startTraceExportLoop();
 
       logger.debug('[AgentsProvider] Tracing setup complete');
@@ -156,8 +162,6 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
    */
   private async registerTracingExporter(exporter: OTLPTracingExporter): Promise<void> {
     try {
-      const { addTraceProcessor, BatchTraceProcessor } = await import('@openai/agents');
-
       // Create batch processor with our exporter
       const processor = new BatchTraceProcessor(exporter, {
         maxQueueSize: 100,
@@ -184,8 +188,6 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
-      const { run, getOrCreateTrace } = await import('@openai/agents');
-
       logger.debug('[AgentsProvider] Running agent', {
         agentName: this.agent?.name,
         maxTurns: this.agentConfig.maxTurns || 10,
