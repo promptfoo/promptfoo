@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate using AWS Bedrock Converse API
+
+# This example demonstrates using AWS Bedrock's Converse API, which provides
+# a unified interface across all Bedrock models with improved capabilities like
+# streaming, tool use, and better guardrails integration.
+#
+# URL Format:
+#   bedrock-converse:MODEL_ID
+#
+# Converse API benefits:
+#   - Unified API across all Bedrock models
+#   - Native prompt management integration
+#   - Streaming support
+#   - Tool use (function calling)
+#   - Better guardrails integration
+
+prompts:
+  # Test with both bedrock:// prompts and regular text
+  - bedrock://V2RPG4OT1K
+  - 'Create a {{genre}} playlist with {{number}} songs. List the song titles.'
+
+providers:
+  # Anthropic Claude via Converse API
+  - id: bedrock-converse:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      region: us-east-1
+      temperature: 0.7
+      max_tokens: 500
+
+  # Amazon Titan via Converse API
+  - id: bedrock-converse:amazon.titan-text-premier-v1:0
+    config:
+      region: us-east-1
+      temperature: 0.7
+      max_tokens: 500
+
+  # AI21 Jamba via Converse API
+  - id: bedrock-converse:ai21.jamba-1-5-large-v1:0
+    config:
+      region: us-east-1
+      temperature: 0.7
+      max_tokens: 500
+
+  # Optional: Compare with traditional invokeModel approach
+  # - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+
+tests:
+  - vars:
+      genre: pop
+      number: 5
+    assert:
+      - type: llm-rubric
+        value: Response contains a list of 5 song titles
+
+  - vars:
+      genre: rock
+      number: 3
+    assert:
+      - type: llm-rubric
+        value: Response contains exactly 3 rock song titles
+
+  - vars:
+      genre: jazz
+      number: 7
+    assert:
+      - type: contains
+        value: jazz
+
+  - vars:
+      genre: classical
+      number: 10
+    assert:
+      - type: llm-rubric
+        value: Response is a playlist of classical music with 10 songs

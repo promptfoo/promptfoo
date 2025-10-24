@@ -356,6 +356,18 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('bedrock-converse:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.substring('bedrock-converse:'.length);
+      const { AwsBedrockConverseProvider } = await import('./bedrock/converse');
+      return new AwsBedrockConverseProvider(modelName, providerOptions);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('sagemaker:'),
     create: async (
       providerPath: string,

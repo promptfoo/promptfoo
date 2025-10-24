@@ -49,7 +49,7 @@ export type BedrockModelFamily =
   | 'openai'
   | 'qwen';
 
-interface BedrockOptions {
+export interface BedrockOptions {
   accessKeyId?: string;
   apiKey?: string;
   profile?: string;
