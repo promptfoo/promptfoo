@@ -1,6 +1,4 @@
 import { jest } from '@jest/globals';
-import fs from 'fs';
-import path from 'path';
 import type { Agent } from '@openai/agents';
 import {
   loadAgentDefinition,
