@@ -126,6 +126,125 @@ If you're unsure about how to implement something, feel free to open a draft PR 
 
 Don't hesitate to ask for help. We're here to support you. If you're worried about whether your PR will be accepted, please talk to us first (see [Getting Help](#getting-help)).
 
+## Changelog
+
+All user-facing changes must be documented in `CHANGELOG.md`. This is enforced by a GitHub Action that runs on every pull request.
+
+### When to Update the Changelog
+
+Update the changelog for any PR that affects users, including:
+
+- New features or functionality
+- Bug fixes
+- Breaking changes
+- API changes
+- Provider additions or updates
+- Configuration changes
+- Performance improvements
+- Deprecated features
+
+### Exemptions
+
+Your PR is automatically exempt from changelog updates if:
+
+1. It has the `no-changelog` label, OR
+2. The PR title starts with (case-insensitive):
+   - `chore(deps):` - Dependency updates
+   - `style:` - Code formatting only
+   - `build:` - Build configuration
+   - `test:` - Test-only changes
+
+### Changelog Format
+
+We follow the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format. All entries go in the `## [Unreleased]` section at the top of the file:
+
+```markdown
+## [Unreleased]
+
+### Added
+
+- feat(providers): add new provider for XYZ (#1234)
+
+### Fixed
+
+- fix(evaluator): correct scoring for edge case (#1235)
+```
+
+### Entry Requirements
+
+Each changelog entry must:
+
+1. **Include the PR number** in format `(#1234)`
+2. **Start with conventional commit prefix**: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, or `refactor:`
+3. **Be concise** - one line describing the change
+4. **Go in the correct category**:
+   - **Added**: New features
+   - **Changed**: Changes to existing functionality
+   - **Fixed**: Bug fixes
+   - **Dependencies**: Important dependency updates
+   - **Documentation**: Documentation changes
+   - **Tests**: Test additions or changes
+   - **Removed**: Removed features (rare, usually breaking)
+
+### Examples
+
+Good entries:
+
+```markdown
+### Added
+
+- feat(providers): add TrueFoundry LLM Gateway provider (#5839)
+- feat(redteam): add test button for transforms in UI (#5482)
+
+### Fixed
+
+- fix(evaluator): support `defaultTest.options.provider` for assertions (#5931)
+- fix(webui): improve email validation handling (#5932)
+```
+
+Bad entries:
+
+```markdown
+### Added
+
+- Added new feature
+- Updated provider
+```
+
+### How to Update
+
+1. Before creating your PR, add an entry to `CHANGELOG.md` under `## [Unreleased]`
+2. Choose the appropriate category (Added, Fixed, Changed, etc.)
+3. Include your PR number (you can use a placeholder like `(#XXXX)` initially)
+4. Use the conventional commit prefix that matches your PR title
+
+Example workflow:
+
+```bash
+# 1. Make your changes
+git checkout -b feat/new-provider
+
+# 2. Update CHANGELOG.md
+# Add under ## [Unreleased] -> ### Added:
+# - feat(providers): add new provider for XYZ (#XXXX)
+
+# 3. Commit everything together
+git add CHANGELOG.md src/providers/xyz.ts
+git commit -m "feat(providers): add new provider for XYZ"
+
+# 4. Push and create PR
+git push -u origin feat/new-provider
+```
+
+:::tip
+
+If you forget to update the changelog, the GitHub Action will remind you on your PR. You can either:
+
+- Add the changelog entry in a new commit
+- Add the `no-changelog` label if the change doesn't warrant a changelog entry
+
+:::
+
 ## Tests
 
 ### Running Tests
