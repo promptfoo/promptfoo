@@ -71,7 +71,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { recordEvent } = useTelemetry();
   const theme = useTheme();
   const toast = useToast();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
   const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
@@ -84,10 +86,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
   }, [recordEvent]);
-
-  useEffect(() => {
-    checkHealth();
-  }, [checkHealth]);
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 

@@ -92,6 +92,7 @@ const redTeamSidebar = [
           },
           'red-team/plugins/beavertails',
           'red-team/plugins/contracts',
+          'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
           'red-team/plugins/harmbench',

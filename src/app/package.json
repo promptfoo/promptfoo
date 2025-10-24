@@ -22,6 +22,7 @@
     "@mui/system": "^7.3.3",
     "@mui/x-charts": "^7.29.1",
     "@mui/x-data-grid": "^7.29.9",
+    "@tanstack/react-query": "^5.90.5",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/table-core": "^8.21.3",
     "@testing-library/dom": "^10.4.1",
