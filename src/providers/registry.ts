@@ -34,6 +34,7 @@ import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere'
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
+import { ElevenLabsTTSProvider } from './elevenlabs';
 import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
@@ -502,6 +503,31 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new EchoProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('elevenlabs:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const capability = splits[1]; // tts, stt, agent, etc.
+      const _additionalId = splits.length > 2 ? splits.slice(2).join(':') : undefined;
+
+      // For now, only TTS is implemented
+      if (capability === 'tts') {
+        return new ElevenLabsTTSProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
+      // Future: STT, Agents, and other capabilities
+      throw new Error(
+        `ElevenLabs capability "${capability}" is not yet implemented. Currently supported: tts`,
+      );
     },
   },
   {
