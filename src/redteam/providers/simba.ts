@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
@@ -14,6 +13,7 @@ import {
   TokenUsage,
 } from '../../types';
 import { fetchWithRetries } from '../../util/fetch';
+import invariant from '../../util/invariant';
 import {
   accumulateResponseTokenUsage,
   accumulateTokenUsage,

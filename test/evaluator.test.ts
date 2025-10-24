@@ -381,7 +381,7 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
-  it('runs Advanced Redteam Agent test cases after other providers during evaluate', async () => {
+  it('runs Simba test cases after other providers during evaluate', async () => {
     const callOrder: string[] = [];
 
     const normalProvider: ApiProvider = {
@@ -453,7 +453,7 @@ describe('evaluator', () => {
 
     await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
 
-    expect(callOrder).toEqual(['normal', 'advanced-redteam-agent']);
+    expect(callOrder).toEqual(['normal', 'simba']);
     expect(normalProvider.callApi).toHaveBeenCalledTimes(1);
     expect(agentProvider.runSimba as jest.Mock).toHaveBeenCalledTimes(1);
     expect(agentProvider.callApi as jest.Mock).not.toHaveBeenCalled();
@@ -3638,7 +3638,7 @@ describe('runEval', () => {
     expect(results[0].response?.output).toBe('original-provider-test');
   });
 
-  it('delegates Advanced Redteam Agent providers to runSimba using evaluateOptions maxConcurrency', async () => {
+  it('delegates Simba providers to runSimba using evaluateOptions maxConcurrency', async () => {
     const runSimbaResults = [
       {
         promptIdx: -1,
@@ -3702,7 +3702,7 @@ describe('runEval', () => {
     expect(results[0].success).toBe(true);
   });
 
-  it('uses default Advanced Redteam Agent concurrency when evaluateOptions are not provided', async () => {
+  it('uses default Simba concurrency when evaluateOptions are not provided', async () => {
     const runSimbaResults = [
       {
         promptIdx: -1,
@@ -3760,7 +3760,7 @@ describe('runEval', () => {
         promptIdx: -1,
         testIdx: -1,
         testCase: { assert: [] },
-        promptId: 'advanced-redteam-agent-case-1',
+        promptId: 'simba-case-1',
         provider: {
           id: 'promptfoo:redteam:simba',
           label: strategyDisplayNames.simba,
@@ -3777,7 +3777,7 @@ describe('runEval', () => {
         promptIdx: -1,
         testIdx: -1,
         testCase: { assert: [] },
-        promptId: 'advanced-redteam-agent-case-2',
+        promptId: 'simba-case-2',
         provider: {
           id: 'promptfoo:redteam:simba',
           label: strategyDisplayNames.simba,
