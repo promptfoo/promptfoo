@@ -60,9 +60,7 @@ describe('agents-loader', () => {
       const result = await loadAgentDefinition('file://./agents/test-agent.ts');
 
       expect(result).toEqual(mockAgent);
-      expect(importModule).toHaveBeenCalledWith(
-        expect.stringContaining('agents/test-agent.ts'),
-      );
+      expect(importModule).toHaveBeenCalledWith(expect.stringContaining('agents/test-agent.ts'));
     });
 
     it('should load agent from module export', async () => {
@@ -100,9 +98,7 @@ describe('agents-loader', () => {
     });
 
     it('should throw error for invalid configuration', async () => {
-      await expect(loadAgentDefinition(123 as any)).rejects.toThrow(
-        'Invalid agent configuration',
-      );
+      await expect(loadAgentDefinition(123 as any)).rejects.toThrow('Invalid agent configuration');
     });
 
     it('should throw error if file does not export Agent', async () => {
@@ -137,9 +133,7 @@ describe('agents-loader', () => {
 
       await loadAgentDefinition('file://./relative/agent.ts');
 
-      expect(importModule).toHaveBeenCalledWith(
-        expect.stringContaining('test/base/path'),
-      );
+      expect(importModule).toHaveBeenCalledWith(expect.stringContaining('test/base/path'));
     });
   });
 
@@ -246,9 +240,7 @@ describe('agents-loader', () => {
     });
 
     it('should throw error for invalid configuration', async () => {
-      await expect(loadHandoffs(123 as any)).rejects.toThrow(
-        'Invalid handoffs configuration',
-      );
+      await expect(loadHandoffs(123 as any)).rejects.toThrow('Invalid handoffs configuration');
     });
   });
 });

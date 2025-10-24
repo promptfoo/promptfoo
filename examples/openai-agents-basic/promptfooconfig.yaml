@@ -1,69 +1,65 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-
-description: 'Basic OpenAI Agents integration example'
-
-providers:
-  - id: openai:agents:weather-agent
-    label: 'Weather Agent'
-    config:
-      # Agent definition from external file
-      agent: file://./agents/weather-agent.ts
-
-      # Tools from external file
-      tools: file://./tools/weather-tools.ts
-
-      # Maximum agent turns
-      maxTurns: 10
-
-      # Execute tools for real (not mocked)
-      executeTools: real
-
-      # Enable tracing (optional)
-      tracing: true
-
-      # OpenAI API configuration
-      apiKey: ${OPENAI_API_KEY}
+description: Interactive text adventure with AI Dungeon Master
 
 prompts:
   - '{{query}}'
 
+providers:
+  - id: openai:agents:dungeon-master
+    config:
+      agent: file://./agents/weather-agent.ts
+      tools: file://./tools/weather-tools.ts
+      maxTurns: 10
+      tracing: true
+
 tests:
-  - description: 'Query weather for Tokyo'
+  - description: Dragon combat encounter
     vars:
-      query: "What's the weather like in Tokyo?"
-    metadata:
-      tracingEnabled: true
-      testCaseId: 'tokyo-weather'
+      query: 'I draw my sword and charge at the dragon!'
+    assert:
+      - type: llm-rubric
+        value: Response includes dice roll for attack and describes combat outcome
+      - type: javascript
+        value: |
+          // Should use roll_dice tool
+          return output.toLowerCase().includes('roll') ||
+                 output.toLowerCase().includes('d20') ||
+                 output.toLowerCase().includes('dice');
+
+  - description: Search for hidden treasure
+    vars:
+      query: 'I search the dusty chest in the corner'
+    assert:
+      - type: llm-rubric
+        value: Response describes what is found with creative detail
+
+  - description: Check inventory mid-adventure
+    vars:
+      query: 'What items do I have?'
     assert:
       - type: contains
-        value: 'Tokyo'
+        value: Rusty Sword
       - type: contains
-        value: '20°C'
+        value: Health Potion
+      - type: javascript
+        value: |
+          // Should use check_inventory tool
+          return output.includes('gold');
 
-  - description: 'Query weather for multiple cities'
+  - description: Enter mysterious dungeon
     vars:
-      query: 'Can you tell me the weather in Paris and London?'
-    metadata:
-      tracingEnabled: true
-      testCaseId: 'multi-city-weather'
+      query: 'I cautiously enter the dark dungeon'
     assert:
-      - type: contains
-        value: 'Paris'
-      - type: contains
-        value: 'London'
+      - type: llm-rubric
+        value: Response paints atmospheric scene and presents choices
+      - type: javascript
+        value: |
+          // Should use describe_scene tool
+          return output.length > 80;
 
-  - description: 'Simple greeting without tool use'
+  - description: Attempt ridiculous action
     vars:
-      query: 'Hello! How are you?'
-    metadata:
-      tracingEnabled: true
-      testCaseId: 'simple-greeting'
-
-# Tracing configuration
-tracing:
-  enabled: true
-  otlp:
-    http:
-      enabled: true
-      port: 4318
-      acceptFormats: ['json']
+      query: 'I try to befriend the treasure chest by singing to it'
+    assert:
+      - type: llm-rubric
+        value: DM responds with humor while keeping adventure engaging

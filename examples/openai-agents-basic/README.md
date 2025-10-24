@@ -1,145 +1,294 @@
-# OpenAI Agents Basic Example
+# openai-agents-basic (Interactive Text Adventure with AI Dungeon Master)
 
-This example demonstrates how to use the OpenAI Agents SDK with promptfoo for testing multi-turn agent workflows.
+This example demonstrates how to use the OpenAI Agents SDK with promptfoo to create an interactive text adventure game powered by an AI Dungeon Master.
 
-## Overview
+## What This Example Shows
 
-This example includes:
-
-- **Agent Definition** (`agents/weather-agent.ts`): A simple weather agent that uses tools
-- **Tools** (`tools/weather-tools.ts`): A `get_weather` tool that returns mock weather data
-- **Test Configuration** (`promptfooconfig.yaml`): Test cases for the agent
+- **Multi-turn Adventures**: Agent manages ongoing narrative across multiple turns
+- **Multiple Tools**: Agent uses `roll_dice`, `check_inventory`, and `describe_scene` tools
+- **Dynamic Storytelling**: Agent responds creatively to player actions
+- **File-based Configuration**: Agent and tools organized in separate TypeScript files
+- **Comprehensive Testing**: Test cases verify narrative quality, tool usage, and edge cases
 
 ## Prerequisites
 
-1. Install dependencies:
+- Node.js 20+ (use `nvm use` to align with `.nvmrc`)
+- OpenAI API key
+- The `@openai/agents` SDK (installed via npm)
 
-   ```bash
-   npm install
-   ```
+## Environment Variables
 
-2. Set your OpenAI API key:
-   ```bash
-   export OPENAI_API_KEY=your-key-here
-   ```
+This example requires:
+
+- `OPENAI_API_KEY` - Your OpenAI API key
+
+You can set it in a `.env` file or directly in your environment:
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+## Installation
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example openai-agents-basic
+```
+
+Or if you've cloned the repo:
+
+```bash
+cd examples/openai-agents-basic
+npm install
+```
 
 ## Running the Example
 
-From this directory, run:
+### Evaluate the Dungeon Master
 
 ```bash
-promptfoo eval
+npx promptfoo eval
 ```
 
-Or from the project root:
+This runs test cases simulating player actions and validates the DM's responses.
+
+### View Results
 
 ```bash
-npm run local -- eval -c examples/openai-agents-basic/promptfooconfig.yaml
+npx promptfoo view
 ```
 
-## What to Expect
+Opens the evaluation results in a web interface showing how the DM handled different scenarios.
 
-The eval will test the weather agent with three scenarios:
+### Test Custom Adventures
 
-1. **Single city query**: Tests tool usage for one city
-2. **Multiple cities query**: Tests tool usage for multiple cities
-3. **Simple greeting**: Tests agent can respond without using tools
-
-The agent will:
-
-- Parse the user's query
-- Decide whether to use the `get_weather` tool
-- Call the tool with appropriate parameters
-- Synthesize a response based on the tool results
-
-## Configuration
-
-### Agent Configuration
-
-The agent is configured with:
-
-- `name`: Identifier for the agent
-- `instructions`: System prompt describing behavior
-- `model`: The LLM model to use (gpt-4o-mini)
-
-### Provider Configuration
-
-The provider (`openai:agents:weather-agent`) is configured with:
-
-- `agent`: Path to agent definition file
-- `tools`: Path to tools file
-- `maxTurns`: Maximum conversation turns (10)
-- `executeTools`: Whether to execute tools (`real` or `mock`)
-- `tracing`: Whether to enable tracing (false by default)
-
-## Extending the Example
-
-### Adding More Tools
-
-Edit `tools/weather-tools.ts` to add more tools:
-
-```typescript
-export const getForecast = tool({
-  name: 'get_forecast',
-  description: 'Get 5-day forecast for a city',
-  parameters: z.object({
-    city: z.string(),
-  }),
-  execute: async ({ city }) => {
-    return {
-      city,
-      forecast: ['Sunny', 'Cloudy', 'Rainy', 'Sunny', 'Sunny'],
-    };
-  },
-});
-
-export default [getWeather, getForecast];
-```
-
-### Enabling Tracing
-
-Set `tracing: true` in the provider config to enable OTLP tracing:
+Modify `promptfooconfig.yaml` to add your own scenarios:
 
 ```yaml
-providers:
-  - id: openai:agents:weather-agent
-    config:
-      tracing: true
-      # ... other config
+tests:
+  - description: Custom adventure scenario
+    vars:
+      query: 'I investigate the mysterious glowing runes'
+    assert:
+      - type: llm-rubric
+        value: Response describes runes and presents meaningful choices
 ```
 
-Then view traces in the promptfoo web UI:
+## Project Structure
 
-```bash
-promptfoo view
+```
+openai-agents-basic/
+├── agents/
+│   └── weather-agent.ts      # Dungeon Master agent definition
+├── tools/
+│   └── weather-tools.ts      # Game mechanic tools (dice, inventory, scenes)
+├── promptfooconfig.yaml      # Test scenarios
+├── package.json
+└── README.md
 ```
 
-### Using Real Weather Data
+## How It Works
 
-Replace the mock implementation in `tools/weather-tools.ts` with a real weather API call:
+### Dungeon Master Agent (`agents/weather-agent.ts`)
+
+The DM agent orchestrates the adventure:
 
 ```typescript
-import { tool } from '@openai/agents';
-import { z } from 'zod';
+export default new Agent({
+  name: 'Dungeon Master',
+  instructions: `You are an enthusiastic Dungeon Master...
+  - Use roll_dice for combat and skill checks
+  - Use check_inventory to see what items players have
+  - Use describe_scene to paint vivid pictures
+  - Be creative and keep the adventure engaging`,
+  model: 'gpt-4o-mini',
+  tools: dmTools,
+});
+```
 
-export const getWeather = tool({
-  name: 'get_weather',
-  description: 'Get the current weather for a given city',
+### Game Tools (`tools/weather-tools.ts`)
+
+Three core tools power the game mechanics:
+
+**1. roll_dice** - Simulates dice rolls for combat and skill checks:
+
+```typescript
+export const rollDice = tool({
+  name: 'roll_dice',
+  description: 'Roll dice for combat, skill checks, and other game mechanics',
   parameters: z.object({
-    city: z.string(),
+    sides: z.number().describe('Number of sides (e.g., 6 for d6, 20 for d20)'),
+    count: z.number().default(1).describe('Number of dice to roll'),
   }),
-  execute: async ({ city }) => {
-    const response = await fetch(
-      `https://api.weather.com/v1/current?city=${city}&apiKey=${process.env.WEATHER_API_KEY}`,
-    );
-    return await response.json();
+  execute: async ({ sides, count }) => {
+    // Returns rolls array and total
   },
 });
+```
+
+**2. check_inventory** - Manages player items and resources:
+
+```typescript
+export const checkInventory = tool({
+  name: 'check_inventory',
+  description: 'Check what items the player has',
+  parameters: z.object({
+    playerId: z.string(),
+  }),
+  execute: async ({ playerId }) => {
+    // Returns items, gold, and equipment
+  },
+});
+```
+
+**3. describe_scene** - Generates atmospheric descriptions:
+
+```typescript
+export const describeScene = tool({
+  name: 'describe_scene',
+  description: 'Generate detailed descriptions of locations',
+  parameters: z.object({
+    location: z.string().describe('Type of location (dungeon, forest, tavern)'),
+    mood: z.string().describe('Atmosphere (ominous, peaceful, exciting)'),
+  }),
+  execute: async ({ location, mood }) => {
+    // Returns vivid scene description
+  },
+});
+```
+
+### Test Scenarios (`promptfooconfig.yaml`)
+
+The config includes engaging test cases:
+
+```yaml
+tests:
+  - description: Dragon combat encounter
+    vars:
+      query: 'I draw my sword and charge at the dragon!'
+    assert:
+      - type: llm-rubric
+        value: Response includes dice roll and describes combat outcome
+
+  - description: Attempt ridiculous action
+    vars:
+      query: 'I try to befriend the chest by singing to it'
+    assert:
+      - type: llm-rubric
+        value: DM responds with humor while keeping adventure engaging
+```
+
+## Customizing Your Adventure
+
+### Add New Tools
+
+Extend the game with new mechanics:
+
+```typescript
+export const castSpell = tool({
+  name: 'cast_spell',
+  description: 'Cast a magical spell',
+  parameters: z.object({
+    spell: z.string(),
+    target: z.string(),
+  }),
+  execute: async ({ spell, target }) => {
+    // Spell implementation
+  },
+});
+
+export default [rollDice, checkInventory, describeScene, castSpell];
+```
+
+### Customize the Dungeon Master
+
+Modify `agents/weather-agent.ts` to change DM personality:
+
+```typescript
+instructions: `You are a dramatic Dungeon Master inspired by high fantasy epics.
+- Describe everything with cinematic flair
+- Include plot twists and unexpected turns
+- Reference classic fantasy tropes with a twist`,
+```
+
+### Create Adventure Scenarios
+
+Add complex multi-step scenarios:
+
+```yaml
+- description: Multi-step dungeon puzzle
+  vars:
+    query: 'I examine the ancient mechanism blocking the door'
+  assert:
+    - type: llm-rubric
+      value: Response describes puzzle clearly and hints at solution
+    - type: javascript
+      value: output.length > 100 # Ensures detailed description
+```
+
+## Tracing and Debugging
+
+Tracing is enabled to monitor agent decisions:
+
+```yaml
+config:
+  tracing: true # Exports to http://localhost:4318
+```
+
+View traces to see:
+
+- Which tools the DM used
+- Dice roll results
+- Decision-making flow
+- Token usage per turn
+
+Compatible with Jaeger, Zipkin, or Grafana Tempo.
+
+## Example Interactions
+
+**Combat Scenario:**
+
+```
+Player: "I attack the goblin with my rusty sword!"
+DM: *rolls 1d20* You rolled a 16! Your blade strikes true,
+    dealing *rolls 1d6* 4 damage. The goblin staggers back...
+```
+
+**Inventory Check:**
+
+```
+Player: "What do I have?"
+DM: You rummage through your pack:
+    - Rusty Sword (1d6 damage)
+    - Health Potion (3 uses, restores 2d4+2 HP)
+    - Mysterious Map
+    - Torch (5 uses)
+    You also have 47 gold pieces.
+```
+
+**Scene Description:**
+
+```
+Player: "I enter the dungeon"
+DM: *describes ominous dungeon scene* The stone corridor stretches
+    into darkness. Water drips from the ceiling, and the air smells
+    of decay. You hear distant echoes of something moving in the shadows.
+
+    What do you do?
 ```
 
 ## Next Steps
 
-- Explore multi-agent workflows with handoffs
-- Add guardrails for input/output validation
-- Use tracing to debug agent behavior
-- Test with real weather APIs
+- Add more tools: casting spells, crafting items, trading
+- Implement persistent inventory across sessions
+- Create branching storylines with handoffs to specialized agents
+- Integrate with image generation for scene visualization
+- Add multiplayer support with team-based adventures
+- Connect to real game databases for persistent worlds
+
+## Learn More
+
+- [OpenAI Agents SDK Documentation](https://github.com/openai/openai-agents-js)
+- [Promptfoo Documentation](https://promptfoo.dev)
+- [Promptfoo OpenAI Agents Provider](https://promptfoo.dev/docs/providers/openai-agents)
