@@ -11,7 +11,7 @@ import {
 } from './assertions/index';
 import { getCache } from './cache';
 import cliState from './cliState';
-import { FILE_METADATA_KEY } from './constants';
+import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
@@ -21,6 +21,7 @@ import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { ADVANCED_REDTEAM_AGENT_DISPLAY_NAME } from './redteam/constants/advancedRedteamAgent';
 import { getSessionId, isSimbaTestCase } from './redteam/util';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -199,8 +200,6 @@ class ProgressBarManager {
   }
 }
 
-export const DEFAULT_MAX_CONCURRENCY = 4;
-
 /**
  * Update token usage metrics with assertion token usage
  */
@@ -368,11 +367,11 @@ export async function runEval({
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      // Handle Simba providers specially - they use runSimba instead of callApi
+      // Handle Advanced Redteam Agent providers specially - they use runSimba instead of callApi
       if (activeProvider.id() === 'promptfoo:redteam:simba') {
         const simbaProvider = activeProvider as any;
         if (simbaProvider.runSimba) {
-          // Simba returns EvaluateResult[] directly, so we need to return early
+          // Advanced Redteam Agent returns EvaluateResult[] directly, so we need to return early
           const simbaResults: EvaluateResult[] = await simbaProvider.runSimba({
             prompt: renderedPrompt,
             context: callApiContext,
@@ -380,7 +379,7 @@ export async function runEval({
             concurrency: evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
           });
 
-          // Update results with proper indices for Simba
+          // Update results with proper indices for Advanced Redteam Agent
           for (const result of simbaResults) {
             result.promptIdx = promptIdx;
             result.testIdx = testIdx++;
@@ -388,7 +387,7 @@ export async function runEval({
 
           return simbaResults;
         } else {
-          throw new Error('Simba provider does not have runSimba method');
+          throw new Error('Advanced Redteam Agent provider does not have runSimba method');
         }
       } else {
         response = await activeProvider.callApi(
@@ -1432,7 +1431,7 @@ class Evaluator {
       }
     };
 
-    // Separate serial, concurrent, and Simba eval options
+    // Separate serial, concurrent, and Advanced Redteam Agent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const concurrentRunEvalOptions: RunEvalOptions[] = [];
     const simbaRunEvalOptions: RunEvalOptions[] = [];
@@ -1490,7 +1489,7 @@ class Evaluator {
         await this.evalRecord.addPrompts(prompts);
       });
 
-      // Finally run Simba evaluations sequentially (they have their own internal concurrency)
+      // Finally run Advanced Redteam Agent evaluations sequentially (they have their own internal concurrency)
       if (simbaRunEvalOptions.length > 0) {
         if (progressBarManager) {
           progressBarManager.complete();
@@ -1502,7 +1501,7 @@ class Evaluator {
             const provider = evalStep.provider.label || evalStep.provider.id();
             const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
             logger.info(
-              `[${numComplete}/${runEvalOptions.length}] Running Simba ${provider} with vars: ${vars}`,
+              `[${numComplete}/${runEvalOptions.length}] Running ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} ${provider} with vars: ${vars}`,
             );
           }
           checkAbort();

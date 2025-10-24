@@ -2,17 +2,17 @@ import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
-
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
-import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
+import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { TestCase } from '../../types/index';
 import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
+
+import type { TestCase } from '../../types/index';
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 

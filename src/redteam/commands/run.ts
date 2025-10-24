@@ -3,7 +3,7 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
-import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
+import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util/index';

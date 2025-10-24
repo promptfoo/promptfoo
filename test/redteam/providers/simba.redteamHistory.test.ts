@@ -31,4 +31,3 @@ describe('buildRedteamHistory', () => {
     ]);
   });
 });
-

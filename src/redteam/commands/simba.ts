@@ -7,6 +7,10 @@ import { ApiProvider, CallApiContextParams, isApiProvider } from '../../types/pr
 import { resolveConfigs } from '../../util/config/load';
 import { setupEnv } from '../../util/index';
 import SimbaProvider from '../providers/simba';
+import {
+  ADVANCED_REDTEAM_AGENT_DISPLAY_NAME,
+  ADVANCED_REDTEAM_AGENT_PROMPT_LABEL,
+} from '../constants/advancedRedteamAgent';
 
 const SimbaCommandSchema = z.object({
   config: z.union([z.string(), z.array(z.string())]).optional(),
@@ -31,11 +35,11 @@ function parseOptionalInt(value: unknown): number | undefined {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
-function normalizeGoals(goal: SimbaCommandOptions['goal']): string[] {
-  if (Array.isArray(goal)) {
-    return goal;
+function normalizeGoals(goals: SimbaCommandOptions['goals']): string[] {
+  if (Array.isArray(goals)) {
+    return goals;
   }
-  return [goal];
+  return [goals];
 }
 
 function inferInjectVar(testSuite: TestSuite): string {
@@ -56,11 +60,13 @@ function inferInjectVar(testSuite: TestSuite): string {
 
   const firstCandidate = candidateVars.values().next().value as string | undefined;
   if (firstCandidate) {
-    logger.debug(`Inferring Simba injectVar as '${firstCandidate}' from test cases`);
+    logger.debug(
+      `Inferring ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} injectVar as '${firstCandidate}' from test cases`,
+    );
     return firstCandidate;
   }
 
-  logger.debug('Falling back to default Simba injectVar "prompt"');
+  logger.debug(`Falling back to default ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} injectVar "prompt"`);
   return 'prompt';
 }
 
@@ -91,7 +97,7 @@ async function runSimbaWithProvider(
   }
 
   const targetProvider = getTargetProvider(testSuite);
-  const goals = normalizeGoals(options.goal);
+  const goals = normalizeGoals(options.goals);
   const injectVar = options.injectVar ?? inferInjectVar(testSuite);
   const concurrency = options.concurrency ?? 1;
 
@@ -111,7 +117,7 @@ async function runSimbaWithProvider(
   });
 
   const context: CallApiContextParams = {
-    prompt: { raw: '', label: 'Simba' },
+    prompt: { raw: '', label: ADVANCED_REDTEAM_AGENT_PROMPT_LABEL },
     vars: {},
     originalProvider: targetProvider,
     test: {
@@ -123,7 +129,7 @@ async function runSimbaWithProvider(
     } as any,
   };
 
-  logger.info(chalk.cyan('Starting Simba session...'));
+  logger.info(chalk.cyan(`Starting ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} session...`));
   const results = await simbaProvider.runSimba({
     prompt: goals.join('; '),
     context,
@@ -132,20 +138,22 @@ async function runSimbaWithProvider(
   });
 
   if (!results.length) {
-    logger.warn('Simba did not return any results.');
+    logger.warn(`${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} did not return any results.`);
     return;
   }
 
   let successCount = 0;
   let errorCount = 0;
 
-  logger.info(chalk.bold('\n=== Simba Results ==='));
+  logger.info(chalk.bold(`\n=== ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} Results ===`));
   for (const result of results) {
     const planName = String(result.metadata?.attackPlan?.planName ?? result.promptId ?? 'Unknown');
 
     if (result.error) {
       errorCount += 1;
-      logger.error(chalk.red(`[${planName}] Simba error: ${result.error}`));
+      logger.error(
+        chalk.red(`[${planName}] ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} error: ${result.error}`),
+      );
       continue;
     }
 
@@ -201,7 +209,10 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
     .option('--additional-instructions <text>', 'Additional attack instructions')
     .option('-s, --session-id <id>', 'Session ID to continue')
     .option('-j, --concurrency <number>', 'Number of concurrent conversations (1-100)', '1')
-    .option('--inject-var <name>', 'Variable name to inject Simba prompts into')
+    .option(
+      '--inject-var <name>',
+      `Variable name to inject ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} prompts into`,
+    )
     .action(async (opts: any) => {
       setupEnv(opts.envPath);
 
@@ -225,7 +236,7 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
           });
           process.exit(1);
         }
-        logger.error(`Simba command failed: ${error}`);
+        logger.error(`${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} command failed: ${error}`);
         process.exit(1);
       }
     });

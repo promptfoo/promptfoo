@@ -1,5 +1,5 @@
 import invariant from 'tiny-invariant';
-import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
+import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
@@ -19,6 +19,13 @@ import {
   accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import {
+  ADVANCED_REDTEAM_AGENT_DISPLAY_NAME,
+  ADVANCED_REDTEAM_AGENT_LOGGER_PREFIX,
+  ADVANCED_REDTEAM_AGENT_PROMPT_LABEL,
+  ADVANCED_REDTEAM_AGENT_PROVIDER_ID,
+  ADVANCED_REDTEAM_AGENT_RESULT_PROMPT_LABEL,
+} from '../constants/advancedRedteamAgent';
 import { buildRemoteUrl } from '../remoteGeneration';
 import { Message } from './shared';
 
@@ -39,6 +46,9 @@ const SimbaSessionPhaseLabels: Record<SimbaSessionPhase, string> = {
   [SimbaSessionPhase.Completed]: 'Completed',
   [SimbaSessionPhase.Failed]: 'Failed',
 };
+
+const LOGGER_PREFIX = ADVANCED_REDTEAM_AGENT_LOGGER_PREFIX;
+const PROVIDER_ERROR_PREFIX = `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} provider error`;
 
 interface SimbaConfig {
   injectVar: string;
@@ -145,7 +155,7 @@ function getLastMessageByRole(messages: Message[], role: Message['role']): Messa
   return undefined;
 }
 
-function buildRedteamHistory(messages: Message[]): { prompt: string; output: string }[] {
+export function buildRedteamHistory(messages: Message[]): { prompt: string; output: string }[] {
   const pairs: { prompt: string; output: string }[] = [];
   for (let index = 0; index < messages.length; index += 2) {
     const userMessage = messages[index];
@@ -162,7 +172,7 @@ export default class SimbaProvider implements ApiProvider {
   private sessionId: string | null = null;
 
   id() {
-    return 'promptfoo:redteam:simba';
+    return ADVANCED_REDTEAM_AGENT_PROVIDER_ID;
   }
 
   constructor(options: ProviderOptions & SimbaConfigOptions = {} as any) {
@@ -184,7 +194,7 @@ export default class SimbaProvider implements ApiProvider {
       concurrency: options.concurrency || DEFAULT_MAX_CONCURRENCY,
     };
     this.sessionId = options.sessionId || null;
-    logger.debug(`[Redteam Agent] Constructor options: ${JSON.stringify(this.config)}`);
+    logger.debug(`${LOGGER_PREFIX} Constructor options: ${JSON.stringify(this.config)}`);
   }
 
   callApi(
@@ -192,7 +202,7 @@ export default class SimbaProvider implements ApiProvider {
     _context?: CallApiContextParams,
     _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    throw new Error('Simba provider does not support callApi');
+    throw new Error(`${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} provider does not support callApi`);
   }
 
   private async callSimbaApi(
@@ -217,7 +227,13 @@ export default class SimbaProvider implements ApiProvider {
     );
 
     if (!response.ok) {
-      throw new Error(`Simba API request failed: ${response.status} ${response.statusText}`);
+      logger.error(
+        `${LOGGER_PREFIX} API request to redteam provider failed with status ${response.status} ${response.statusText}`,
+        { response },
+      );
+      throw new Error(
+        `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} API request failed: ${response.status} ${response.statusText}`,
+      );
     }
 
     return response.json();
@@ -242,7 +258,7 @@ export default class SimbaProvider implements ApiProvider {
     };
 
     const response: SimbaStartResponse = await this.callSimbaApi('/start', startRequest);
-    logger.debug(`[Redteam Agent] Started session with ID: ${response.sessionId}`);
+    logger.debug(`${LOGGER_PREFIX} Started session with ID: ${response.sessionId}`);
 
     return response.sessionId;
   }
@@ -263,7 +279,7 @@ export default class SimbaProvider implements ApiProvider {
     name: string,
   ): AttackEntry {
     if (!attacks[conversationId]) {
-      logger.info(`[Redteam Agent] Starting a new attack: ${name}`);
+      logger.info(`${LOGGER_PREFIX} Starting a new attack: ${name}`);
       attacks[conversationId] = {
         messages: [],
         tokenUsage: createEmptyTokenUsage(),
@@ -282,10 +298,10 @@ export default class SimbaProvider implements ApiProvider {
     attacks: Record<string, AttackEntry>,
     nextResponses: Record<string, string>,
   ): Promise<void> {
-    logger.debug(`[Redteam Agent][${this.sessionId}] ${operation.logMessage}`);
+    logger.debug(`${LOGGER_PREFIX}[${this.sessionId}] ${operation.logMessage}`);
 
     if (!operation.nextQuestion) {
-      logger.debug(`[Redteam Agent][${operation.conversationId}] ${operation.logMessage}`);
+      logger.debug(`${LOGGER_PREFIX}[${operation.conversationId}] ${operation.logMessage}`);
       return;
     }
 
@@ -307,7 +323,7 @@ export default class SimbaProvider implements ApiProvider {
     }
 
     if (targetResponse.error) {
-      logger.error(`[Redteam Agent][${this.sessionId}] Target error`, {
+      logger.error(`${LOGGER_PREFIX}[${this.sessionId}] Target error`, {
         error: targetResponse.error,
         conversationId: operation.conversationId,
         nextQuestion: operation.nextQuestion,
@@ -342,20 +358,23 @@ export default class SimbaProvider implements ApiProvider {
     concurrency?: number;
   }): Promise<EvaluateResult[]> {
     try {
-      if (!this.config.purpose) {
-        this.config.purpose = context?.test?.metadata?.purpose;
+      const metadataPurpose = context?.test?.metadata?.purpose;
+      if (metadataPurpose) {
+        this.config.purpose = metadataPurpose;
       }
 
       if (!this.sessionId) {
         this.sessionId = await this.startSession();
       }
       const attacks: Record<string, AttackEntry> = {};
-      logger.info(`[Redteam Agent] Starting session with ID: ${this.sessionId}`);
+      logger.info(`${LOGGER_PREFIX} Starting session with ID: ${this.sessionId}`);
 
       // Get the target provider to interact with
       const targetProvider = context?.originalProvider;
       if (!targetProvider) {
-        throw new Error('Simba provider requires originalProvider in context');
+        throw new Error(
+          `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} provider requires originalProvider in context`,
+        );
       }
 
       const email = (await getUserEmail()) || 'demo@promptfoo.dev';
@@ -384,17 +403,17 @@ export default class SimbaProvider implements ApiProvider {
 
         if (latestPhase !== currentPhase) {
           logger.info(
-            `[Redteam Agent] Phase changed from ${SimbaSessionPhaseLabels[currentPhase]} to ${SimbaSessionPhaseLabels[latestPhase]}`,
+            `${LOGGER_PREFIX} Phase changed from ${SimbaSessionPhaseLabels[currentPhase]} to ${SimbaSessionPhaseLabels[latestPhase]}`,
           );
           currentPhase = latestPhase;
         }
 
         logger.info(
-          `[Redteam Agent] Progress update: ${SimbaSessionPhaseLabels[latestPhase]} ${batchResponse.operations.reduce((acc, operation) => acc + operation.round, 0)} probes`,
+          `${LOGGER_PREFIX} Progress update: ${SimbaSessionPhaseLabels[latestPhase]} ${batchResponse.operations.reduce((acc, operation) => acc + operation.round, 0)} probes`,
         );
 
         if (batchResponse.completed) {
-          logger.debug(`[Redteam Agent][${this.sessionId}] Session completed`, {
+          logger.debug(`${LOGGER_PREFIX}[${this.sessionId}] Session completed`, {
             sessionId: this.sessionId,
             batchResponse,
           });
@@ -402,7 +421,7 @@ export default class SimbaProvider implements ApiProvider {
         }
 
         if (batchResponse.operations.length === 0) {
-          logger.debug(`[Redteam Agent][${this.sessionId}] No more operations available`, {
+          logger.debug(`${LOGGER_PREFIX}[${this.sessionId}] No more operations available`, {
             sessionId: this.sessionId,
             batchResponse,
           });
@@ -438,17 +457,17 @@ export default class SimbaProvider implements ApiProvider {
 
       return evaluateResults;
     } catch (error) {
-      logger.error(`[Redteam Agent Simba] Critical error exiting run loop`, { error });
+      logger.error(`${LOGGER_PREFIX} Critical error exiting run loop`, { error });
       return [
         {
           promptIdx: 0,
           testIdx: 0,
           testCase: { vars: {}, assert: [] },
           promptId: `simba-error-${Date.now()}`,
-          provider: { id: this.id(), label: 'Simba' },
-          prompt: { raw: prompt, label: 'Simba Attack' },
+          provider: { id: this.id(), label: ADVANCED_REDTEAM_AGENT_DISPLAY_NAME },
+          prompt: { raw: prompt, label: ADVANCED_REDTEAM_AGENT_PROMPT_LABEL },
           vars: {},
-          error: `Simba provider error: ${error instanceof Error ? error.message : String(error)}`,
+          error: `${PROVIDER_ERROR_PREFIX}: ${error instanceof Error ? error.message : String(error)}`,
           success: false,
           score: 0,
           latencyMs: 0,
@@ -482,8 +501,11 @@ export default class SimbaProvider implements ApiProvider {
         assert: [],
       },
       promptId: `simba-${this.sessionId}-${index}`,
-      provider: { id: this.id(), label: 'Simba' },
-      prompt: { raw: lastUserMessage?.content || '', label: 'Redteam Agent Simba' },
+      provider: { id: this.id(), label: ADVANCED_REDTEAM_AGENT_DISPLAY_NAME },
+      prompt: {
+        raw: lastUserMessage?.content || '',
+        label: ADVANCED_REDTEAM_AGENT_RESULT_PROMPT_LABEL,
+      },
       vars: {},
       response: {
         output: responseOutput,

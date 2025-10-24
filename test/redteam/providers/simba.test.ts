@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
+  ADVANCED_REDTEAM_AGENT_DISPLAY_NAME,
+  ADVANCED_REDTEAM_AGENT_LOGGER_PREFIX,
+  ADVANCED_REDTEAM_AGENT_PROMPT_LABEL,
+  ADVANCED_REDTEAM_AGENT_RESULT_PROMPT_LABEL,
+} from '../../../src/redteam/constants/advancedRedteamAgent';
+import {
   type ApiProvider,
   type CallApiContextParams,
   type ProviderResponse,
@@ -9,13 +15,15 @@ import {
 import type * as TokenUsageUtilsModule from '../../../src/util/tokenUsageUtils';
 
 const mockGetUserEmail = jest.fn();
+const mockGetUserId = jest.fn().mockReturnValue('test-user');
 jest.mock('../../../src/globalConfig/accounts', () => ({
   getUserEmail: mockGetUserEmail,
+  getUserId: mockGetUserId,
 }));
 
-const mockFetchWithProxy = jest.fn<(...args: any[]) => Promise<any>>();
+const mockFetchWithRetries = jest.fn<(...args: any[]) => Promise<any>>();
 jest.mock('../../../src/util/fetch', () => ({
-  fetchWithProxy: mockFetchWithProxy,
+  fetchWithRetries: mockFetchWithRetries,
 }));
 
 const mockBuildRemoteUrl = jest.fn();
@@ -79,8 +87,10 @@ describe('SimbaProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFetchWithProxy.mockReset();
+    mockFetchWithRetries.mockReset();
     mockGetUserEmail.mockReset();
+    mockGetUserId.mockReset();
+    mockGetUserId.mockReturnValue('test-user');
     mockBuildRemoteUrl.mockReset();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     mockBuildRemoteUrl.mockReturnValue('https://mocked-base');
@@ -101,16 +111,18 @@ describe('SimbaProvider', () => {
     expect(provider.config.maxConversationRounds).toBe(10);
     expect(provider.config.maxAttacksPerGoal).toBe(5);
     expect(mockLogger.debug).toHaveBeenCalledWith(
-      expect.stringContaining('[Simba] Constructor options:'),
+      expect.stringContaining(`${ADVANCED_REDTEAM_AGENT_LOGGER_PREFIX} Constructor options:`),
     );
   });
 
   it('throws when callApi is used directly', () => {
     const provider = new SimbaProvider({ injectVar: 'prompt' });
-    expect(() => provider.callApi('prompt')).toThrow('Simba provider does not support callApi');
+    expect(() => provider.callApi('prompt')).toThrow(
+      `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} provider does not support callApi`,
+    );
   });
 
-  it('runs Simba attack flow and maps results into EvaluateResult', async () => {
+  it('runs Advanced Redteam Agent attack flow and maps results into EvaluateResult', async () => {
     mockGetUserEmail.mockReturnValue('user@example.com');
 
     const provider = new SimbaProvider({ injectVar: 'prompt' });
@@ -138,6 +150,7 @@ describe('SimbaProvider', () => {
       name: 'vector-1',
       round: 1,
       stage: 'attack',
+      phase: 'attacking',
     };
 
     const finalOutputs = [
@@ -173,7 +186,7 @@ describe('SimbaProvider', () => {
       createMockResponse(finalOutputs),
     ];
 
-    mockFetchWithProxy.mockImplementation(async () => {
+    mockFetchWithRetries.mockImplementation(async () => {
       const next = fetchQueue.shift();
       if (!next) {
         throw new Error('Unexpected fetch call');
@@ -195,31 +208,33 @@ describe('SimbaProvider', () => {
       '/api/v1/simba',
       'https://api.promptfoo.app/api/v1/simba',
     );
-    expect(mockFetchWithProxy).toHaveBeenCalledTimes(4);
+    expect(mockFetchWithRetries).toHaveBeenCalledTimes(4);
 
-    const startCall = mockFetchWithProxy.mock.calls[0];
+    const startCall = mockFetchWithRetries.mock.calls[0];
     expect(startCall[0]).toBe('https://mocked-base/start');
     const startBody = JSON.parse((startCall[1] as { body: string }).body);
     expect(startBody.email).toBe('user@example.com');
     expect(startBody.config).toEqual({
-      maxConversationRounds: 20,
-      maxAttackVectors: 5,
+      maxConversationRounds: provider.config.maxConversationRounds,
+      maxAttacksPerGoal: provider.config.maxAttacksPerGoal,
+      concurrency: provider.config.concurrency,
+      email: 'user@example.com',
     });
     expect(startBody.targetInfo.goals).toEqual(provider.config.goals);
     expect(startBody.targetInfo.purpose).toBe('Guard the system');
 
-    const firstNextCall = mockFetchWithProxy.mock.calls[1];
+    const firstNextCall = mockFetchWithRetries.mock.calls[1];
     expect(firstNextCall[0]).toBe('https://mocked-base/sessions/session-123/next');
     const firstNextBody = JSON.parse((firstNextCall[1] as { body: string }).body);
     expect(firstNextBody.email).toBe('user@example.com');
-    expect(firstNextBody.requestedCount).toBe(2);
+    expect(firstNextBody.requestedCount).toBe(1);
     expect(firstNextBody.responses).toEqual({});
 
-    const secondNextCall = mockFetchWithProxy.mock.calls[2];
+    const secondNextCall = mockFetchWithRetries.mock.calls[2];
     const secondNextBody = JSON.parse((secondNextCall[1] as { body: string }).body);
     expect(secondNextBody.responses).toEqual({ 'conversation-1': 'target answer' });
 
-    const finalCall = mockFetchWithProxy.mock.calls[3];
+    const finalCall = mockFetchWithRetries.mock.calls[3];
     expect(finalCall[0]).toBe('https://mocked-base/sessions/session-123?format=attackPlans');
     expect((finalCall[1] as { method: string }).method).toBe('GET');
 
@@ -229,10 +244,12 @@ describe('SimbaProvider', () => {
     expect(provider.config.purpose).toBe('Guard the system');
     expect(result.promptId).toBe('simba-session-123-0');
     expect(result.provider.id).toBe('promptfoo:redteam:simba');
+    expect(result.provider.label).toBe(ADVANCED_REDTEAM_AGENT_DISPLAY_NAME);
     expect(result.testCase.vars).toEqual({ prompt: 'final question' });
     expect(result.prompt.raw).toBe('final question');
+    expect(result.prompt.label).toBe(ADVANCED_REDTEAM_AGENT_RESULT_PROMPT_LABEL);
     expect(result.response?.output).toBe('final content');
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
     expect(result.score).toBe(0);
     expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
     expect(result.metadata?.attackPlan.planId).toBe('plan-1');
@@ -240,8 +257,9 @@ describe('SimbaProvider', () => {
     expect(result.metadata?.successfulJailbreaks).toBe('vector-1\nvector-2');
     expect(result.metadata?.redteamHistory).toEqual([
       { prompt: 'initial prompt', output: 'initial answer' },
+      { prompt: 'final question', output: 'final content' },
     ]);
-    expect(result.namedScores.attack_success).toBe(0);
+    expect(result.namedScores.redteam_agent_simba).toBe(0);
     expect(result.response?.tokenUsage).toEqual(actualTokenUsageUtils.createEmptyTokenUsage());
     expect(result.tokenUsage).toEqual(actualTokenUsageUtils.createEmptyTokenUsage());
 
@@ -298,7 +316,7 @@ describe('SimbaProvider', () => {
       createMockResponse(finalOutputs),
     ];
 
-    mockFetchWithProxy.mockImplementation(async () => {
+    mockFetchWithRetries.mockImplementation(async () => {
       const next = fetchQueue.shift();
       if (!next) {
         throw new Error('Unexpected fetch call');
@@ -316,12 +334,12 @@ describe('SimbaProvider', () => {
     const results = await provider.runSimba({ prompt: 'fallback prompt', context });
 
     expect(mockGetUserEmail).toHaveBeenCalledTimes(2);
-    expect(mockFetchWithProxy).toHaveBeenCalledTimes(3);
+    expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
 
-    const startBody = JSON.parse((mockFetchWithProxy.mock.calls[0][1] as { body: string }).body);
+    const startBody = JSON.parse((mockFetchWithRetries.mock.calls[0][1] as { body: string }).body);
     expect(startBody.email).toBe('demo@promptfoo.dev');
 
-    const nextBody = JSON.parse((mockFetchWithProxy.mock.calls[1][1] as { body: string }).body);
+    const nextBody = JSON.parse((mockFetchWithRetries.mock.calls[1][1] as { body: string }).body);
     expect(nextBody.email).toBe('demo@promptfoo.dev');
     expect(nextBody.responses).toEqual({});
 
@@ -336,7 +354,7 @@ describe('SimbaProvider', () => {
   it('returns error result when original provider is missing', async () => {
     mockGetUserEmail.mockReturnValue('user@example.com');
 
-    mockFetchWithProxy.mockResolvedValueOnce(createMockResponse({ sessionId: 'session-789' }));
+    mockFetchWithRetries.mockResolvedValueOnce(createMockResponse({ sessionId: 'session-789' }));
 
     const provider = new SimbaProvider({ injectVar: 'prompt' });
 
@@ -351,18 +369,19 @@ describe('SimbaProvider', () => {
     expect(results).toHaveLength(1);
     const [errorResult] = results;
     expect(errorResult.error).toBe(
-      'Simba provider error: Simba provider requires originalProvider in context',
+      `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} provider error: ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} provider requires originalProvider in context`,
     );
     expect(errorResult.success).toBe(false);
     expect(errorResult.failureReason).toBe(ResultFailureReason.ERROR);
-    expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+    expect(errorResult.prompt?.label).toBe(ADVANCED_REDTEAM_AGENT_PROMPT_LABEL);
+    expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     expect(accumulateResponseTokenUsageMock).not.toHaveBeenCalled();
   });
 
-  it('wraps Simba API failures in the returned result', async () => {
+  it('wraps Advanced Redteam Agent API failures in the returned result', async () => {
     mockGetUserEmail.mockReturnValue('user@example.com');
 
-    mockFetchWithProxy.mockResolvedValueOnce(
+    mockFetchWithRetries.mockResolvedValueOnce(
       createMockResponse(null, {
         ok: false,
         status: 500,
@@ -389,11 +408,12 @@ describe('SimbaProvider', () => {
     expect(results).toHaveLength(1);
     const [errorResult] = results;
     expect(errorResult.error).toBe(
-      'Simba provider error: Simba API request failed: 500 Internal Server Error',
+      `${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} provider error: ${ADVANCED_REDTEAM_AGENT_DISPLAY_NAME} API request failed: 500 Internal Server Error`,
     );
     expect(errorResult.success).toBe(false);
     expect(errorResult.failureReason).toBe(ResultFailureReason.ERROR);
-    expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
+    expect(errorResult.prompt?.label).toBe(ADVANCED_REDTEAM_AGENT_PROMPT_LABEL);
+    expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     expect(targetProvider.callApi).not.toHaveBeenCalled();
   });
 });
