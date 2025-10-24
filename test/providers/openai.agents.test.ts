@@ -7,7 +7,7 @@ import { OpenAiAgentsProvider } from '../../src/providers/openai/agents';
 // Mock dependencies
 jest.mock('@openai/agents', () => ({
   run: jest.fn(),
-  getOrCreateTrace: jest.fn((fn) => fn()), // Pass through by default
+  getOrCreateTrace: jest.fn((fn: () => any) => fn()), // Pass through by default
   startTraceExportLoop: jest.fn(),
   addTraceProcessor: jest.fn(),
   BatchTraceProcessor: jest.fn(),
@@ -50,9 +50,9 @@ describe('OpenAiAgentsProvider', () => {
 
     // Set up default mock implementations
     // Mock importModule to return agent when loading from file
-    (esmModule.importModule as jest.Mock).mockResolvedValue({ default: mockAgent });
+    (esmModule.importModule as any).mockResolvedValue({ default: mockAgent });
 
-    (agents.run as jest.Mock).mockResolvedValue({
+    (agents.run as any).mockResolvedValue({
       finalOutput: 'Test response',
       newItems: [],
       usage: {
@@ -160,7 +160,7 @@ describe('OpenAiAgentsProvider', () => {
           execute: async () => ({}),
         },
       ];
-      (esmModule.importModule as jest.Mock).mockResolvedValue(mockTools);
+      (esmModule.importModule as any).mockResolvedValue(mockTools);
 
       const provider = new OpenAiAgentsProvider('test-agent', {
         config: {
@@ -181,7 +181,7 @@ describe('OpenAiAgentsProvider', () => {
           description: 'Handoff to agent',
         },
       ];
-      (esmModule.importModule as jest.Mock).mockResolvedValue(mockHandoffs);
+      (esmModule.importModule as any).mockResolvedValue(mockHandoffs);
 
       const provider = new OpenAiAgentsProvider('test-agent', {
         config: {
@@ -222,14 +222,15 @@ describe('OpenAiAgentsProvider', () => {
       });
 
       await provider.callApi('Test prompt', {
-        vars: { city: 'Tokyo', temperature: 20 },
+        vars: { city: 'Tokyo', temperature: '20' },
+        prompt: {} as any,
       });
 
       expect(agents.run).toHaveBeenCalledWith(
         mockAgent,
         'Test prompt',
         expect.objectContaining({
-          context: { city: 'Tokyo', temperature: 20 },
+          context: { city: 'Tokyo', temperature: '20' },
         }),
       );
     });
@@ -311,7 +312,7 @@ describe('OpenAiAgentsProvider', () => {
     });
 
     it('should handle agent run errors', async () => {
-      (agents.run as jest.Mock).mockRejectedValue(new Error('Agent run failed'));
+      (agents.run as any).mockRejectedValue(new Error('Agent run failed'));
 
       const provider = new OpenAiAgentsProvider('test-agent', {
         config: {
@@ -333,7 +334,7 @@ describe('OpenAiAgentsProvider', () => {
     });
 
     it('should extract token usage from result', async () => {
-      (agents.run as jest.Mock).mockResolvedValue({
+      (agents.run as any).mockResolvedValue({
         finalOutput: 'Response',
         usage: {
           totalTokens: 200,
@@ -358,7 +359,7 @@ describe('OpenAiAgentsProvider', () => {
     });
 
     it('should handle missing token usage', async () => {
-      (agents.run as jest.Mock).mockResolvedValue({
+      (agents.run as any).mockResolvedValue({
         finalOutput: 'Response',
         usage: undefined,
       });
@@ -437,7 +438,7 @@ describe('OpenAiAgentsProvider', () => {
     });
 
     it('should not fail if tracing setup fails', async () => {
-      (agents.startTraceExportLoop as jest.Mock).mockImplementation(() => {
+      (agents.startTraceExportLoop as any).mockImplementation(() => {
         throw new Error('Tracing failed');
       });
 

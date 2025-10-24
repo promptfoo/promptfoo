@@ -449,6 +449,7 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 
 ## Related Documentation
 
-- [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions
+- [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety
 - [Assertions](/docs/configuration/expected-outputs) - Validate agent responses
+- [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) - Official SDK documentation
