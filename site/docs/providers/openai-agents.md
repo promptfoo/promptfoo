@@ -1,12 +1,22 @@
 ---
 title: OpenAI Agents
-description: Configure and test OpenAI Agents in promptfoo, including multi-turn workflows, tools, handoffs, and OpenTelemetry tracing.
+description: Test multi-turn OpenAI Agents with tools, handoffs, and tracing in promptfoo.
+keywords:
+  [
+    openai agents,
+    multi-turn workflows,
+    agent tools,
+    agent handoffs,
+    agentic systems,
+    function calling,
+    opentelemetry tracing,
+  ]
 sidebar_label: OpenAI Agents
 ---
 
 # OpenAI Agents
 
-The OpenAI Agents provider enables you to test and evaluate multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. OpenAI Agents orchestrates complex tasks by breaking them down into steps, using tools, and managing handoffs between specialized agents.
+Test multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. This provider lets you evaluate agents that use tools, hand off between specialists, and handle complex multi-step tasks.
 
 ## Prerequisites
 
@@ -28,7 +38,7 @@ providers:
 
 ## Full Configuration Options
 
-The OpenAI Agents provider supports comprehensive agent configuration:
+All available configuration options:
 
 ```yaml
 providers:
@@ -97,7 +107,7 @@ providers:
 
 ### Multi-Turn Conversations
 
-Agents automatically handle multi-turn workflows, breaking down complex requests:
+Agents handle multi-turn workflows automatically:
 
 ```yaml
 tests:
@@ -113,7 +123,7 @@ tests:
 
 ### Tools and Function Calling
 
-Define tools that agents can use to accomplish tasks:
+Define tools for your agents:
 
 **Inline Tool Definition:**
 
@@ -213,7 +223,7 @@ tests:
 
 ### File-Based Agent Definitions
 
-Organize complex agents in separate files for better maintainability:
+Keep agent definitions in separate files:
 
 **agents/research-agent.ts:**
 
@@ -269,7 +279,7 @@ Context variables are accessible in the agent's execution environment.
 
 ### OpenTelemetry Tracing
 
-Enable detailed tracing for debugging and observability:
+Enable tracing for debugging:
 
 ```yaml
 providers:
@@ -311,7 +321,13 @@ providers:
 
 ## Example: Customer Support Agent
 
-Complete example with tools and handoffs:
+Full example with tools and handoffs:
+
+:::tip
+
+Try the interactive example: `npx promptfoo@latest init --example openai-agents-basic`
+
+:::
 
 **agents/support-agent.ts:**
 
@@ -421,10 +437,15 @@ tests:
 
 ## Limitations
 
-- Agent definitions in files must use TypeScript or JavaScript
-- Tools must be async functions
-- File paths use `file://` prefix (relative paths are resolved from config file location)
-- Maximum 10 turns by default (configurable via `maxTurns`)
+:::warning
+
+Tools must be async functions. Synchronous tools will cause runtime errors.
+
+:::
+
+- Agent definition files must be TypeScript or JavaScript
+- File paths require `file://` prefix (relative paths resolve from config file location)
+- Default maximum: 10 turns (configure with `maxTurns`)
 
 ## Related Documentation
 
