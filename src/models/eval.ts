@@ -551,10 +551,10 @@ export default class Eval {
             // Skip invalid metric filters
             return;
           }
-          
+
           const escapedField = escapeJsonPathKey(metricKey);
           const sanitizedValue = sanitizeValue(value);
-          
+
           if (operator === 'is_defined' || (operator === 'equals' && !field)) {
             // 'is_defined': new operator that checks if metric exists
             // 'equals' without field: old format for backward compatibility
