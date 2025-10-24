@@ -89,10 +89,22 @@ export async function fetchAllDatasets(
   config?: BeaverTailsPluginConfig,
 ): Promise<BeaverTailsTestCase[]> {
   try {
+    const subcategorySet =
+      config?.subcategories && config.subcategories.length > 0
+        ? new Set(config.subcategories.map((sub) => sub.toLowerCase()))
+        : null;
+
+    if (subcategorySet && config?.subcategories) {
+      logger.debug(`[beavertails] Filtering by subcategories: ${config.subcategories.join(', ')}`);
+    }
+
+    // When filtering by subcategories, fetch a much larger sample to ensure we get enough matches
+    // This prevents getting 0 results when the requested subcategory is rare
+    // We use 20x multiplier which should give good coverage without overwhelming the API
+    const fetchLimit = subcategorySet ? limit * 20 : limit * 5;
+
     const allTestCases = await Promise.all(
-      DATASETS.map((dataset) =>
-        fetchHuggingFaceDataset(dataset, limit * 5 /* leave room for filtering */),
-      ),
+      DATASETS.map((dataset) => fetchHuggingFaceDataset(dataset, fetchLimit)),
     );
 
     // Flatten array of arrays and filter out empty test cases
@@ -112,7 +124,7 @@ export async function fetchAllDatasets(
       return 'prompt' in vars && typeof vars.prompt === 'string';
     });
 
-    // Log available categories for debugging
+    // Log available categories for debugging (before subcategory filtering)
     const availableCategories = Array.from(
       new Set(
         validTestCases
@@ -123,10 +135,7 @@ export async function fetchAllDatasets(
     logger.debug(`[beavertails] Available categories: ${availableCategories.join(', ')}`);
 
     // Filter by subcategory if specified
-    if (config?.subcategories && config.subcategories.length > 0) {
-      const subcategorySet = new Set(config.subcategories.map((sub) => sub.toLowerCase()));
-      logger.debug(`[beavertails] Filtering by subcategories: ${config.subcategories.join(', ')}`);
-
+    if (subcategorySet) {
       validTestCases = validTestCases.filter((test) => {
         const category = extractCategory(test.vars);
         if (!category) {
@@ -139,6 +148,12 @@ export async function fetchAllDatasets(
       logger.debug(
         `[beavertails] Filtered to ${validTestCases.length} records after subcategory filtering`,
       );
+
+      if (validTestCases.length === 0 && config?.subcategories) {
+        logger.warn(
+          `[beavertails] No test cases found matching subcategories: ${config.subcategories.join(', ')}. Available categories: ${availableCategories.join(', ')}`,
+        );
+      }
     }
 
     // Convert TestCase to BeaverTailsTestCase, preserving category information
