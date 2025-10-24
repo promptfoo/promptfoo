@@ -635,18 +635,46 @@ export default function ResultsView({
                   )}
                   {filters.appliedCount > 0 &&
                     Object.values(filters.values).map((filter) => {
-                      // For metadata filters, both field and value must be present
-                      if (
-                        filter.type === 'metadata' ? !filter.value || !filter.field : !filter.value
-                      ) {
+                      // For metadata filters with exists operator, only field is required
+                      // For metric filters with is_defined operator, only field is required
+                      // For other filters, check field and value requirements
+                      if (filter.type === 'metadata' && filter.operator === 'exists') {
+                        if (!filter.field) {
+                          return null;
+                        }
+                      } else if (filter.type === 'metric' && filter.operator === 'is_defined') {
+                        if (!filter.field) {
+                          return null;
+                        }
+                      } else if (filter.type === 'metadata' || filter.type === 'metric') {
+                        if (!filter.value || !filter.field) {
+                          return null;
+                        }
+                      } else if (!filter.value) {
                         return null;
                       }
+
                       const truncatedValue =
                         filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
 
                       let label: string;
                       if (filter.type === 'metric') {
-                        label = `Metric: ${truncatedValue}`;
+                        // Show metric field and operator with value (if applicable)
+                        const operatorSymbols: Record<string, string> = {
+                          is_defined: 'is defined',
+                          eq: '==',
+                          neq: '!=',
+                          gt: '>',
+                          gte: '≥',
+                          lt: '<',
+                          lte: '≤',
+                        };
+                        const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
+                        if (filter.operator === 'is_defined') {
+                          label = `${filter.field} ${operatorDisplay}`;
+                        } else {
+                          label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
+                        }
                       } else if (filter.type === 'plugin') {
                         const displayName =
                           displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||

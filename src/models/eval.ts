@@ -543,11 +543,41 @@ export default class Eval {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
-        if (type === 'metric' && operator === 'equals') {
-          const escapedValue = escapeJsonPathKey(value);
-          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
-          // in double quotes.
-          condition = `json_extract(named_scores, '$."${escapedValue}"') IS NOT NULL`;
+        if (type === 'metric') {
+          // For backward compatibility: old filters use 'value' for metric name with 'equals' operator
+          // New filters use 'field' for metric name with comparison operators
+          const metricKey = field || value;
+          if (!metricKey) {
+            // Skip invalid metric filters
+            return;
+          }
+          
+          const escapedField = escapeJsonPathKey(metricKey);
+          const sanitizedValue = sanitizeValue(value);
+          
+          if (operator === 'is_defined' || (operator === 'equals' && !field)) {
+            // 'is_defined': new operator that checks if metric exists
+            // 'equals' without field: old format for backward compatibility
+            condition = `json_extract(named_scores, '$."${escapedField}"') IS NOT NULL`;
+          } else if (operator === 'eq') {
+            // Numeric equality: check that value exists AND equals the target
+            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${sanitizedValue}`;
+          } else if (operator === 'neq') {
+            // Numeric inequality: check that value exists AND does not equal the target
+            condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${sanitizedValue})`;
+          } else if (operator === 'gt') {
+            // Greater than: check that value exists AND is greater than target
+            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${sanitizedValue}`;
+          } else if (operator === 'gte') {
+            // Greater than or equal: check that value exists AND is >= target
+            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${sanitizedValue}`;
+          } else if (operator === 'lt') {
+            // Less than: check that value exists AND is less than target
+            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${sanitizedValue}`;
+          } else if (operator === 'lte') {
+            // Less than or equal: check that value exists AND is <= target
+            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${sanitizedValue}`;
+          }
         } else if (type === 'metadata' && field) {
           const sanitizedValue = sanitizeValue(value);
           const escapedField = escapeJsonPathKey(field);
