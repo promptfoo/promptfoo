@@ -161,3 +161,14 @@ export function getDefaultNFanout(strategyId: FanOutStrategy): number {
 export function isFanoutStrategy(strategyId: string): strategyId is FanOutStrategy {
   return strategyId in DEFAULT_N_FAN_OUT_BY_STRATEGY;
 }
+
+// Strategies that require remote generation to function
+// These strategies will be disabled in the UI when PROMPTFOO_DISABLE_REMOTE_GENERATION is set
+export const STRATEGIES_REQUIRING_REMOTE = [
+  'audio',
+  'citation',
+  'gcg',
+  'goat',
+  'jailbreak:composite',
+  'jailbreak:likert',
+] as const;

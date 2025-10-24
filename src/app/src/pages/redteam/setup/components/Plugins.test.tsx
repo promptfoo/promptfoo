@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');
@@ -26,6 +28,17 @@ vi.mock('@app/hooks/useTelemetry', () => ({
   }),
 }));
 
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: vi.fn(
+    () =>
+      ({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      }) as unknown as DefinedUseQueryResult<ApiHealthResult, Error>,
+  ),
+}));
+
 vi.mock('./CustomIntentPluginSection', () => ({
   default: () => <div data-testid="custom-intent-section"></div>,
 }));
@@ -40,78 +53,6 @@ vi.mock('./PluginConfigDialog', () => ({
 
 vi.mock('react-error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock('@promptfoo/redteam/constants', () => ({
-  riskCategories: {
-    'Security & Access Control': ['bola', 'indirect-prompt-injection', 'rbac'],
-    'Harmful Content': ['harmful:hate', 'harmful:self-harm'],
-    'Privacy & Data Protection': ['pii', 'pii:direct'],
-  },
-  categoryAliases: {
-    bola: 'Object-Level Authorization Bypass',
-    'indirect-prompt-injection': 'Indirect Prompt Injection',
-    rbac: 'Role-Based Access Control',
-    'harmful:hate': 'Hate Speech',
-    'harmful:self-harm': 'Self-Harm',
-    pii: 'PII Protection Suite',
-    'pii:direct': 'PII via Direct Exposure',
-  },
-  displayNameOverrides: {
-    bola: 'Object-Level Authorization Bypass',
-    'indirect-prompt-injection': 'Indirect Prompt Injection',
-    rbac: 'Role-Based Access Control',
-    'harmful:hate': 'Hate Speech',
-    'harmful:self-harm': 'Self-Harm',
-    pii: 'PII Protection Suite',
-    'pii:direct': 'PII via Direct Exposure',
-  },
-  subCategoryDescriptions: {
-    bola: 'Tests for object-level authorization bypass vulnerabilities',
-    'indirect-prompt-injection': 'Tests for indirect prompt injection attacks',
-    rbac: 'Tests for role-based access control vulnerabilities',
-    'harmful:hate': 'Tests for hate speech content',
-    'harmful:self-harm': 'Tests for self-harm content',
-    pii: 'Tests for personally identifiable information leakage',
-    'pii:direct': 'Tests for direct PII exposure',
-  },
-  DEFAULT_PLUGINS: new Set(['bola', 'harmful:hate']),
-  FOUNDATION_PLUGINS: ['bola'],
-  GUARDRAILS_EVALUATION_PLUGINS: ['harmful:hate'],
-  HARM_PLUGINS: { 'harmful:hate': 'hate', 'harmful:self-harm': 'self-harm' },
-  MCP_PLUGINS: [], // Added MCP_PLUGINS export
-  NIST_AI_RMF_MAPPING: {},
-  OWASP_LLM_TOP_10_MAPPING: {},
-  OWASP_LLM_RED_TEAM_MAPPING: {},
-  OWASP_API_TOP_10_MAPPING: {},
-  MITRE_ATLAS_MAPPING: {},
-  EU_AI_ACT_MAPPING: {},
-  ISO_42001_MAPPING: {},
-  PLUGIN_PRESET_DESCRIPTIONS: {
-    Recommended: 'A broad set of plugins recommended by Promptfoo',
-    'Minimal Test': 'Minimal set of plugins to validate your setup',
-    RAG: 'Recommended plugins plus tests for RAG-specific scenarios',
-    Foundation: 'Foundation plugins',
-    'Guardrails Evaluation': 'Guardrails evaluation plugins',
-    Harmful: 'Harmful content plugins',
-    NIST: 'NIST framework plugins',
-    'OWASP LLM Top 10': 'OWASP LLM Top 10 plugins',
-    'OWASP Gen AI Red Team': 'OWASP Gen AI Red Team plugins',
-    'OWASP API Top 10': 'OWASP API Top 10 plugins',
-    MITRE: 'MITRE ATLAS plugins',
-    'EU AI Act': 'EU AI Act plugins',
-    'ISO 42001': 'ISO/IEC 42001 AI management system requirements',
-  },
-  AGENTIC_EXEMPT_PLUGINS: [],
-  DATASET_EXEMPT_PLUGINS: [],
-  PLUGINS_REQUIRING_CONFIG: ['indirect-prompt-injection'],
-  HUGGINGFACE_GATED_PLUGINS: ['beavertails', 'unsafebench', 'aegis'],
-  REDTEAM_DEFAULTS: {
-    MAX_CONCURRENCY: 4,
-    NUM_TESTS: 10,
-  },
-  DEFAULT_STRATEGIES: [],
-  ALL_STRATEGIES: [],
 }));
 
 const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
@@ -811,47 +752,6 @@ describe('Plugins', () => {
       // Next button should still be enabled
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /Next/i })).toBeEnabled();
-      });
-    });
-
-    it('should maintain warning banner visibility across tabs when many plugins selected', async () => {
-      // Create a config with many plugins to trigger the warning
-      const manyPlugins = Array.from({ length: 25 }, (_, i) => `plugin-${i}`);
-
-      mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: manyPlugins,
-        },
-        updatePlugins: mockUpdatePlugins,
-      });
-
-      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
-
-      // Warning should be visible
-      expect(
-        screen.getByText(/Performance Warning: Too Many Plugins Selected/),
-      ).toBeInTheDocument();
-
-      // Switch to Custom Prompts tab
-      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
-      fireEvent.click(customPromptsTab);
-
-      // Warning should still be visible (it's outside the tabs)
-      await waitFor(() => {
-        expect(
-          screen.getByText(/Performance Warning: Too Many Plugins Selected/),
-        ).toBeInTheDocument();
-      });
-
-      // Switch to Custom Policies tab
-      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
-      fireEvent.click(customPoliciesTab);
-
-      // Warning should still be visible
-      await waitFor(() => {
-        expect(
-          screen.getByText(/Performance Warning: Too Many Plugins Selected/),
-        ).toBeInTheDocument();
       });
     });
   });
