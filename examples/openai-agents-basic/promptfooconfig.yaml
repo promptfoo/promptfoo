@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: "Basic OpenAI Agents integration example"
+
+providers:
+  - id: openai:agents:weather-agent
+    label: "Weather Agent"
+    config:
+      # Agent definition from external file
+      agent: file://./agents/weather-agent.ts
+
+      # Tools from external file
+      tools: file://./tools/weather-tools.ts
+
+      # Maximum agent turns
+      maxTurns: 10
+
+      # Execute tools for real (not mocked)
+      executeTools: real
+
+      # Enable tracing (optional)
+      tracing: false
+
+      # OpenAI API configuration
+      apiKey: ${OPENAI_API_KEY}
+
+prompts:
+  - "{{query}}"
+
+tests:
+  - description: "Query weather for Tokyo"
+    vars:
+      query: "What's the weather like in Tokyo?"
+    assert:
+      - type: contains
+        value: "Tokyo"
+      - type: contains
+        value: "20°C"
+
+  - description: "Query weather for multiple cities"
+    vars:
+      query: "Can you tell me the weather in Paris and London?"
+    assert:
+      - type: contains
+        value: "Paris"
+      - type: contains
+        value: "London"
+
+  - description: "Simple greeting without tool use"
+    vars:
+      query: "Hello! How are you?"
+    assert:
+      - type: is-json
+        value: false
+      - type: llm-rubric
+        value: "The response is a friendly greeting"
