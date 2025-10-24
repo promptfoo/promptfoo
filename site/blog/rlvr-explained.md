@@ -15,11 +15,9 @@ keywords:
     verifier design,
     model evaluation,
   ]
-date: 2025-10-20
+date: 2025-10-24
 image: /img/blog/rlvr/rlvr-header.jpg
 ---
-
-# Reinforcement Learning with Verifiable Rewards Makes Models Faster, Not Smarter
 
 If your model can solve a problem in 8 tries, RLVR trains it to succeed in 1 try. [Recent research](https://arxiv.org/abs/2504.13837) shows this is primarily search compression, not expanded reasoning capability. Training concentrates probability mass on paths the base model could already sample.
 
@@ -368,7 +366,7 @@ def math_verifier(output: str, expected_answer: float) -> float:
 #### Pattern: Unit Test Execution
 
 ```python
-# CRITICAL: Never exec() untrusted code in production without sandboxing.
+# CRITICAL: Never use `exec` with untrusted code in production without sandboxing.
 # Use Docker containers, gVisor, or hermetic runners with:
 # - No network access
 # - No file I/O
