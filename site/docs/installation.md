@@ -98,11 +98,7 @@ After installation, you can start using promptfoo by running:
 
 This will create a `promptfooconfig.yaml` placeholder in your current directory.
 
-Having issues? See [Troubleshooting](/docs/usage/troubleshooting/).
-
 **Next:** To configure your first eval, follow our [Getting Started guide](./getting-started.md).
 
-## See Also
-
-- [Getting Started](./getting-started.md)
-- [Contributing](./contributing.md)
+Having issues? See [Troubleshooting](/docs/usage/troubleshooting/).
+Want to contribute? See [Contributing](./contributing.md)
