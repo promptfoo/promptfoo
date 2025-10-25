@@ -4,7 +4,12 @@
  * Extracts clean speech from audio with background noise
  */
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse, EnvOverrides } from '../../../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderResponse,
+  EnvOverrides,
+} from '../../../types';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { promises as fs } from 'fs';
@@ -30,6 +35,7 @@ export class ElevenLabsIsolationProvider implements ApiProvider {
     options: {
       config?: Partial<AudioIsolationConfig>;
       id?: string;
+      label?: string;
       env?: EnvOverrides;
     } = {},
   ) {
@@ -152,6 +158,7 @@ export class ElevenLabsIsolationProvider implements ApiProvider {
     options: {
       config?: Partial<AudioIsolationConfig>;
       id?: string;
+      label?: string;
       env?: EnvOverrides;
     },
   ): AudioIsolationConfig {
@@ -163,7 +170,7 @@ export class ElevenLabsIsolationProvider implements ApiProvider {
       baseUrl: config?.baseUrl,
       timeout: config?.timeout || 120000,
       outputFormat: config?.outputFormat,
-      label: config?.label || options.id,
+      label: options.label || config?.label || options.id,
     };
   }
 }

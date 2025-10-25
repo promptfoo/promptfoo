@@ -55,7 +55,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
       baseUrl: config?.baseUrl || 'https://api.elevenlabs.io/v1',
       timeout: config?.timeout || 120000,
       retries: config?.retries || 3,
-      label: config?.label,
+      label: options.label || config?.label,
     };
 
     const apiKey = this.getApiKey();
@@ -70,7 +70,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
   }
 
   id(): string {
-    return `elevenlabs:stt:${this.config.modelId}`;
+    return this.config.label || `elevenlabs:stt:${this.config.modelId}`;
   }
 
   toString(): string {

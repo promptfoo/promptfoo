@@ -4,17 +4,18 @@
  * Multi-language dubbing with speaker separation
  */
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse, EnvOverrides } from '../../../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderResponse,
+  EnvOverrides,
+} from '../../../types';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { promises as fs } from 'fs';
 import { ElevenLabsClient } from '../client';
 import { encodeAudio } from '../tts/audio';
-import type {
-  DubbingConfig,
-  DubbingCreateResponse,
-  DubbingStatusResponse,
-} from './types';
+import type { DubbingConfig, DubbingCreateResponse, DubbingStatusResponse } from './types';
 
 /**
  * Provider for multi-language dubbing
@@ -35,6 +36,7 @@ export class ElevenLabsDubbingProvider implements ApiProvider {
     options: {
       config?: Partial<DubbingConfig>;
       id?: string;
+      label?: string;
       env?: EnvOverrides;
     } = {},
   ) {
@@ -78,7 +80,8 @@ export class ElevenLabsDubbingProvider implements ApiProvider {
 
     if (!sourceFile && !sourceUrl) {
       return {
-        error: 'Source file or URL is required. Provide via prompt, context.vars.sourceFile, or context.vars.sourceUrl',
+        error:
+          'Source file or URL is required. Provide via prompt, context.vars.sourceFile, or context.vars.sourceUrl',
       };
     }
 
@@ -230,7 +233,9 @@ export class ElevenLabsDubbingProvider implements ApiProvider {
       dubbingId,
     });
 
-    const response = await this.client.get<ArrayBuffer>(`/dubbing/${dubbingId}/audio/${this.config.targetLanguage}`);
+    const response = await this.client.get<ArrayBuffer>(
+      `/dubbing/${dubbingId}/audio/${this.config.targetLanguage}`,
+    );
 
     // Encode audio
     const audioBuffer = Buffer.from(response);
@@ -258,6 +263,7 @@ export class ElevenLabsDubbingProvider implements ApiProvider {
     options: {
       config?: Partial<DubbingConfig>;
       id?: string;
+      label?: string;
       env?: EnvOverrides;
     },
   ): DubbingConfig {
@@ -273,7 +279,7 @@ export class ElevenLabsDubbingProvider implements ApiProvider {
       numSpeakers: config?.numSpeakers,
       watermark: config?.watermark,
       useProfenitiesFilter: config?.useProfenitiesFilter,
-      label: config?.label || options.id,
+      label: options.label || config?.label || options.id,
     };
   }
 }

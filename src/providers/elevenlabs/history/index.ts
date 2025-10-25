@@ -4,7 +4,12 @@
  * Retrieves and manages past agent conversation data
  */
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse, EnvOverrides } from '../../../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderResponse,
+  EnvOverrides,
+} from '../../../types';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { ElevenLabsClient } from '../client';
@@ -29,6 +34,7 @@ export class ElevenLabsHistoryProvider implements ApiProvider {
     options: {
       config?: Partial<ConversationHistoryConfig>;
       id?: string;
+      label?: string;
       env?: EnvOverrides;
     } = {},
   ) {
@@ -126,7 +132,8 @@ export class ElevenLabsHistoryProvider implements ApiProvider {
 
     if (!agentId) {
       return {
-        error: 'Agent ID is required to list conversations. Provide agentId in config or context.vars',
+        error:
+          'Agent ID is required to list conversations. Provide agentId in config or context.vars',
       };
     }
 
@@ -157,9 +164,7 @@ export class ElevenLabsHistoryProvider implements ApiProvider {
       // Fetch conversations
       const queryString = new URLSearchParams(params as Record<string, string>).toString();
       const url = `/convai/agents/${agentId}/conversations${queryString ? `?${queryString}` : ''}`;
-      const response = await this.client.get<{ conversations: ConversationHistoryResponse[] }>(
-        url,
-      );
+      const response = await this.client.get<{ conversations: ConversationHistoryResponse[] }>(url);
 
       const latency = Date.now() - startTime;
 
@@ -217,6 +222,7 @@ export class ElevenLabsHistoryProvider implements ApiProvider {
     options: {
       config?: Partial<ConversationHistoryConfig>;
       id?: string;
+      label?: string;
       env?: EnvOverrides;
     },
   ): ConversationHistoryConfig {
@@ -228,7 +234,7 @@ export class ElevenLabsHistoryProvider implements ApiProvider {
       baseUrl: config?.baseUrl,
       timeout: config?.timeout || 30000,
       agentId: config?.agentId,
-      label: config?.label || options.id,
+      label: options.label || config?.label || options.id,
     };
   }
 }

@@ -4,7 +4,12 @@
  * Time-aligns transcripts to audio for subtitle generation
  */
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse, EnvOverrides } from '../../../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderResponse,
+  EnvOverrides,
+} from '../../../types';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { promises as fs } from 'fs';
@@ -30,6 +35,7 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
     options: {
       config?: Partial<ForcedAlignmentConfig>;
       id?: string;
+      label?: string;
       env?: EnvOverrides;
     } = {},
   ) {
@@ -165,7 +171,7 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
       const nextWord = response.word_alignments[i + 1];
 
       // Group words into subtitle chunks (max 10 words or 2 seconds)
-      const chunkWords: typeof word[] = [word];
+      const chunkWords: (typeof word)[] = [word];
       let j = i + 1;
 
       while (
@@ -236,6 +242,7 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
     options: {
       config?: Partial<ForcedAlignmentConfig>;
       id?: string;
+      label?: string;
       env?: EnvOverrides;
     },
   ): ForcedAlignmentConfig {
@@ -246,7 +253,7 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
       apiKeyEnvar: config?.apiKeyEnvar || 'ELEVENLABS_API_KEY',
       baseUrl: config?.baseUrl,
       timeout: config?.timeout || 120000,
-      label: config?.label || options.id,
+      label: options.label || config?.label || options.id,
     };
   }
 }
