@@ -4,10 +4,12 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
@@ -302,6 +304,33 @@ export default function PluginConfigDialog({
             </Typography>
           </Box>
         );
+      case 'beavertails':
+      case 'unsafebench':
+      case 'aegis':
+        return (
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {getGuardrailPluginDescription(plugin)}
+            </Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={localConfig.includeSafe || false}
+                  onChange={(e) =>
+                    setLocalConfig({ ...localConfig, includeSafe: e.target.checked })
+                  }
+                />
+              }
+              label="Include safe prompts to test for over-blocking"
+              sx={{ my: 2 }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              When enabled, tests will include a 50/50 split of safe and unsafe prompts. Safe
+              prompts test whether your guardrails are too strict and incorrectly block legitimate
+              requests (over-blocking/false positives).
+            </Typography>
+          </Box>
+        );
       default:
         return null;
     }
@@ -352,5 +381,18 @@ const arrayKeyToLabel = (key: string) => {
       return 'Target System';
     case 'targetUrls':
       return 'Target URL';
+  }
+};
+
+const getGuardrailPluginDescription = (plugin: string) => {
+  switch (plugin) {
+    case 'beavertails':
+      return 'BeaverTails tests your model against 330,000+ harmful prompts from the PKU-Alignment dataset, covering categories like abuse, criminal activity, hate speech, and violence.';
+    case 'unsafebench':
+      return 'UnsafeBench tests your multimodal model with unsafe images across categories like violence, sexual content, hate speech, and illegal activities.';
+    case 'aegis':
+      return "Aegis tests your model using NVIDIA's professionally annotated dataset of 26,000+ interactions, covering 13 critical safety categories including harassment, threats, and privacy violations.";
+    default:
+      return '';
   }
 };

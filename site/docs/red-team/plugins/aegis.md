@@ -1,4 +1,5 @@
 ---
+title: Aegis
 sidebar_label: Aegis
 description: Red team LLM content safety using NVIDIA's Aegis dataset to detect harmful outputs across 13 risk categories including hate speech, violence, and exploitation
 ---
@@ -60,6 +61,26 @@ redteam:
     - id: aegis
       numTests: 25 # Default is 5
 ```
+
+### Testing for Over-Blocking
+
+By default, Aegis tests unsafe and "needs caution" prompts to ensure your model handles harmful content appropriately. You can also test for over-blocking (false positives) by including safe prompts:
+
+```yaml
+redteam:
+  plugins:
+    - id: aegis
+      config:
+        includeSafe: true
+      numTests: 20
+```
+
+When `includeSafe: true` is set:
+
+- Test cases are split 50/50 between safe and unsafe/needs-caution prompts
+- Safe prompts use inverted grading logic: they SHOULD be answered (not refused)
+- This helps identify if your guardrails are too strict and block legitimate requests
+- Metadata includes `isSafe` and `safetyLabel` fields for filtering and analysis
 
 ## Grading
 
