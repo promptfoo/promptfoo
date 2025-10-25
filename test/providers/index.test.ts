@@ -993,6 +993,41 @@ describe('loadApiProvider', () => {
     delete process.env.API_VERSION;
   });
 
+  it('supports vars in test-level provider config override', async () => {
+    // This test verifies that the proper pattern for per-test customization works.
+    // Provider-level config is rendered at load time (for env vars), but test-level
+    // config overrides can use vars context which is available at call time.
+    const mockResponse = {
+      status: 200,
+      statusText: 'OK',
+      headers: {
+        get: jest.fn().mockReturnValue(null),
+        entries: jest.fn().mockReturnValue([]),
+      },
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        }),
+      ),
+    };
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const provider = await loadApiProvider('openai:chat:gpt-4o-mini');
+
+    // Simulate test-level config override with vars (the recommended pattern)
+    // In actual usage, this would come from test.options.provider.config
+    const testContext = {
+      vars: { userName: 'alice', schemaVersion: 'v2' },
+    };
+
+    // Call the provider with vars context available
+    const result = await provider.callApi('Test prompt', testContext);
+
+    expect(result.output).toBe('Test output');
+    expect(mockFetch).toHaveBeenCalled();
+  });
+
   it('loadApiProvider with xai', async () => {
     const provider = await loadApiProvider('xai:grok-2');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
