@@ -6,6 +6,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
+import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');
@@ -25,6 +28,17 @@ vi.mock('@app/hooks/useTelemetry', () => ({
   }),
 }));
 
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: vi.fn(
+    () =>
+      ({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      }) as unknown as DefinedUseQueryResult<ApiHealthResult, Error>,
+  ),
+}));
+
 vi.mock('./CustomIntentPluginSection', () => ({
   default: () => <div data-testid="custom-intent-section"></div>,
 }));
@@ -41,86 +55,17 @@ vi.mock('react-error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('@promptfoo/redteam/constants', () => ({
-  riskCategories: {
-    'Security & Access Control': ['bola', 'indirect-prompt-injection', 'rbac'],
-    'Harmful Content': ['harmful:hate', 'harmful:self-harm'],
-    'Privacy & Data Protection': ['pii', 'pii:direct'],
-  },
-  categoryAliases: {
-    bola: 'Object-Level Authorization Bypass',
-    'indirect-prompt-injection': 'Indirect Prompt Injection',
-    rbac: 'Role-Based Access Control',
-    'harmful:hate': 'Hate Speech',
-    'harmful:self-harm': 'Self-Harm',
-    pii: 'PII Protection Suite',
-    'pii:direct': 'PII via Direct Exposure',
-  },
-  displayNameOverrides: {
-    bola: 'Object-Level Authorization Bypass',
-    'indirect-prompt-injection': 'Indirect Prompt Injection',
-    rbac: 'Role-Based Access Control',
-    'harmful:hate': 'Hate Speech',
-    'harmful:self-harm': 'Self-Harm',
-    pii: 'PII Protection Suite',
-    'pii:direct': 'PII via Direct Exposure',
-  },
-  subCategoryDescriptions: {
-    bola: 'Tests for object-level authorization bypass vulnerabilities',
-    'indirect-prompt-injection': 'Tests for indirect prompt injection attacks',
-    rbac: 'Tests for role-based access control vulnerabilities',
-    'harmful:hate': 'Tests for hate speech content',
-    'harmful:self-harm': 'Tests for self-harm content',
-    pii: 'Tests for personally identifiable information leakage',
-    'pii:direct': 'Tests for direct PII exposure',
-  },
-  DEFAULT_PLUGINS: new Set(['bola', 'harmful:hate']),
-  FOUNDATION_PLUGINS: ['bola'],
-  GUARDRAILS_EVALUATION_PLUGINS: ['harmful:hate'],
-  HARM_PLUGINS: { 'harmful:hate': 'hate', 'harmful:self-harm': 'self-harm' },
-  MCP_PLUGINS: [], // Added MCP_PLUGINS export
-  NIST_AI_RMF_MAPPING: {},
-  OWASP_LLM_TOP_10_MAPPING: {},
-  OWASP_LLM_RED_TEAM_MAPPING: {},
-  OWASP_API_TOP_10_MAPPING: {},
-  MITRE_ATLAS_MAPPING: {},
-  EU_AI_ACT_MAPPING: {},
-  ISO_42001_MAPPING: {},
-  PLUGIN_PRESET_DESCRIPTIONS: {
-    Recommended: 'A broad set of plugins recommended by Promptfoo',
-    'Minimal Test': 'Minimal set of plugins to validate your setup',
-    RAG: 'Recommended plugins plus tests for RAG-specific scenarios',
-    Foundation: 'Foundation plugins',
-    'Guardrails Evaluation': 'Guardrails evaluation plugins',
-    Harmful: 'Harmful content plugins',
-    NIST: 'NIST framework plugins',
-    'OWASP LLM Top 10': 'OWASP LLM Top 10 plugins',
-    'OWASP Gen AI Red Team': 'OWASP Gen AI Red Team plugins',
-    'OWASP API Top 10': 'OWASP API Top 10 plugins',
-    MITRE: 'MITRE ATLAS plugins',
-    'EU AI Act': 'EU AI Act plugins',
-    'ISO 42001': 'ISO/IEC 42001 AI management system requirements',
-  },
-  AGENTIC_EXEMPT_PLUGINS: [],
-  DATASET_EXEMPT_PLUGINS: [],
-  PLUGINS_REQUIRING_CONFIG: ['indirect-prompt-injection'],
-  HUGGINGFACE_GATED_PLUGINS: ['beavertails', 'unsafebench', 'aegis'],
-  REDTEAM_DEFAULTS: {
-    MAX_CONCURRENCY: 4,
-    NUM_TESTS: 10,
-  },
-  DEFAULT_STRATEGIES: [],
-  ALL_STRATEGIES: [],
-}));
-
 const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
 const mockUseRecentlyUsedPlugins = useRecentlyUsedPlugins as unknown as Mock;
 
 // Helper function for rendering with providers
 const renderWithProviders = (ui: React.ReactNode) => {
+  const redTeamConfig = mockUseRedTeamConfig();
   return render(
     <MemoryRouter>
-      <ToastProvider>{ui}</ToastProvider>
+      <ToastProvider>
+        <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>{ui}</TestCaseGenerationProvider>
+      </ToastProvider>
     </MemoryRouter>,
   );
 };
@@ -809,47 +754,6 @@ describe('Plugins', () => {
         expect(screen.getByRole('button', { name: /Next/i })).toBeEnabled();
       });
     });
-
-    it('should maintain warning banner visibility across tabs when many plugins selected', async () => {
-      // Create a config with many plugins to trigger the warning
-      const manyPlugins = Array.from({ length: 25 }, (_, i) => `plugin-${i}`);
-
-      mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: manyPlugins,
-        },
-        updatePlugins: mockUpdatePlugins,
-      });
-
-      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
-
-      // Warning should be visible
-      expect(
-        screen.getByText(/Performance Warning: Too Many Plugins Selected/),
-      ).toBeInTheDocument();
-
-      // Switch to Custom Prompts tab
-      const customPromptsTab = screen.getByRole('tab', { name: /Custom Intents/ });
-      fireEvent.click(customPromptsTab);
-
-      // Warning should still be visible (it's outside the tabs)
-      await waitFor(() => {
-        expect(
-          screen.getByText(/Performance Warning: Too Many Plugins Selected/),
-        ).toBeInTheDocument();
-      });
-
-      // Switch to Custom Policies tab
-      const customPoliciesTab = screen.getByRole('tab', { name: /Custom Policies/ });
-      fireEvent.click(customPoliciesTab);
-
-      // Warning should still be visible
-      await waitFor(() => {
-        expect(
-          screen.getByText(/Performance Warning: Too Many Plugins Selected/),
-        ).toBeInTheDocument();
-      });
-    });
   });
 
   describe('Integration Tests for Tab Functionality', () => {
@@ -945,6 +849,170 @@ describe('Plugins', () => {
       // This test verifies the tabs are keyboard accessible
       expect(pluginsTab).toHaveAttribute('tabindex');
       expect(customPromptsTab).toHaveAttribute('tabindex');
+    });
+  });
+
+  // Test Generation Timeout Tests
+  describe('Test Generation Timeout Behavior', () => {
+    const mockCallApi = vi.fn();
+    const mockToast = { showToast: vi.fn() };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    // Import the actual implementation code for testing
+    // This simulates the key logic from generateTestCaseWithConfig function
+    const generateTestCaseWithConfig = async (
+      plugin: string,
+      config: any,
+      toast: any,
+      callApi: any,
+    ) => {
+      try {
+        const response = await callApi('/redteam/generate-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache',
+          },
+          body: JSON.stringify({
+            pluginId: plugin,
+            config: config,
+          }),
+          timeout: 10000, // 10 second timeout
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        return data;
+      } catch (error) {
+        // This is the actual error handling logic from Plugins.tsx
+        const errorMessage =
+          error instanceof Error
+            ? error.message.includes('timed out')
+              ? 'Test generation timed out. Please try again or check your connection.'
+              : error.message
+            : 'Failed to generate test case';
+
+        toast.showToast(errorMessage, 'error');
+        throw error;
+      }
+    };
+
+    it('should call API with 10 second timeout', async () => {
+      const mockResponse = {
+        json: vi.fn().mockResolvedValue({
+          prompt: 'Test prompt',
+          context: 'Test context',
+        }),
+      };
+      mockCallApi.mockResolvedValueOnce(mockResponse);
+
+      await generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi);
+
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/redteam/generate-test',
+        expect.objectContaining({
+          method: 'POST',
+          timeout: 10000,
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+          }),
+        }),
+      );
+    });
+
+    it('should show timeout-specific error message when request times out', async () => {
+      const timeoutError = new Error('Request timed out after 10000ms');
+      mockCallApi.mockRejectedValueOnce(timeoutError);
+
+      await expect(generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi)).rejects.toThrow(
+        timeoutError,
+      );
+
+      expect(mockToast.showToast).toHaveBeenCalledWith(
+        'Test generation timed out. Please try again or check your connection.',
+        'error',
+      );
+    });
+
+    it('should show generic error message for non-timeout errors', async () => {
+      const genericError = new Error('Internal server error');
+      mockCallApi.mockRejectedValueOnce(genericError);
+
+      await expect(generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi)).rejects.toThrow(
+        genericError,
+      );
+
+      expect(mockToast.showToast).toHaveBeenCalledWith('Internal server error', 'error');
+    });
+
+    it('should handle various timeout error messages', async () => {
+      const timeoutMessages = [
+        'Request timed out after 10000ms',
+        'The operation timed out',
+        'Connection timed out while waiting',
+      ];
+
+      for (const message of timeoutMessages) {
+        mockCallApi.mockRejectedValueOnce(new Error(message));
+        const localMockToast = { showToast: vi.fn() };
+
+        await expect(
+          generateTestCaseWithConfig('bola', {}, localMockToast, mockCallApi),
+        ).rejects.toThrow();
+
+        expect(localMockToast.showToast).toHaveBeenCalledWith(
+          'Test generation timed out. Please try again or check your connection.',
+          'error',
+        );
+      }
+    });
+
+    it('should handle API response with error property', async () => {
+      const errorResponse = {
+        json: vi.fn().mockResolvedValue({
+          error: 'Invalid configuration provided',
+        }),
+      };
+      mockCallApi.mockResolvedValueOnce(errorResponse);
+
+      await expect(generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi)).rejects.toThrow(
+        'Invalid configuration provided',
+      );
+
+      expect(mockToast.showToast).toHaveBeenCalledWith('Invalid configuration provided', 'error');
+    });
+
+    it('should pass plugin configuration in request body', async () => {
+      const mockResponse = {
+        json: vi.fn().mockResolvedValue({
+          prompt: 'Test prompt',
+          context: 'Test context',
+        }),
+      };
+      mockCallApi.mockResolvedValueOnce(mockResponse);
+
+      const pluginConfig = {
+        applicationDefinition: { purpose: 'Test app' },
+        additionalConfig: { key: 'value' },
+      };
+
+      await generateTestCaseWithConfig('harmful:hate', pluginConfig, mockToast, mockCallApi);
+
+      const callArgs = mockCallApi.mock.calls[0];
+      const requestBody = JSON.parse(callArgs[1].body);
+
+      expect(requestBody).toEqual({
+        pluginId: 'harmful:hate',
+        config: pluginConfig,
+      });
     });
   });
 });

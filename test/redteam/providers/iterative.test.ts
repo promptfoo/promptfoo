@@ -516,6 +516,73 @@ describe('RedteamIterativeProvider', () => {
       expect(additionalRubricArg).toContain('series of different approaches');
     });
 
+    it('should include modifiers in system prompt from test metadata', async () => {
+      const test: AtomicTestCase = {
+        vars: {},
+        metadata: {
+          pluginId: 'test-plugin',
+          goal: 'test goal',
+          purpose: 'payment processing system',
+          modifiers: {
+            testGenerationInstructions: 'Generate prompts as merchant account queries',
+            language: 'English',
+          },
+        },
+      };
+
+      // Capture the FIRST system prompt that gets sent (attacker, not judge)
+      let capturedSystemPrompt = '';
+      let firstSystemCapture = false;
+      mockRedteamProvider.callApi.mockImplementation(async (prompt: string) => {
+        const input = JSON.parse(prompt);
+        if (Array.isArray(input) && input[0]?.role === 'system' && !firstSystemCapture) {
+          capturedSystemPrompt = input[0].content;
+          firstSystemCapture = true;
+          return {
+            output: JSON.stringify({
+              improvement: 'test improvement',
+              prompt: 'test prompt',
+            }),
+          };
+        }
+        // For subsequent calls (judge), return judge response
+        return {
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'moderate' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        };
+      });
+
+      await runRedteamConversation({
+        context: {
+          prompt: { raw: '', label: '' },
+          vars: {},
+          test,
+        },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      // Verify modifiers were included in the attacker system prompt
+      expect(capturedSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+      expect(capturedSystemPrompt).toContain('<Modifiers>');
+      expect(capturedSystemPrompt).toContain(
+        'testGenerationInstructions: Generate prompts as merchant account queries',
+      );
+      expect(capturedSystemPrompt).toContain('language: English');
+      expect(capturedSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
+    });
+
     it('should not include additional rubric when no goal is present', async () => {
       const mockGrader = {
         getResult: jest.fn<any>().mockResolvedValue({
@@ -937,6 +1004,173 @@ describe('RedteamIterativeProvider', () => {
       expect(result.tokenUsage.prompt).toBe(60);
       expect(result.tokenUsage.completion).toBe(40);
       expect(result.tokenUsage.numRequests).toBe(2);
+    });
+  });
+
+  describe('sessionId handling', () => {
+    beforeEach(() => {
+      mockGetTargetResponse.mockRestore?.();
+    });
+
+    it('should collect sessionIds from all iterations', async () => {
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'response 1',
+          sessionId: 'session-iter-1',
+        })
+        .mockResolvedValueOnce({
+          output: 'response 2',
+          sessionId: 'session-iter-2',
+        })
+        .mockResolvedValueOnce({
+          output: 'response 3',
+          sessionId: 'session-iter-3',
+        });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 3,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.metadata.sessionIds).toEqual([
+        'session-iter-1',
+        'session-iter-2',
+        'session-iter-3',
+      ]);
+    });
+
+    it('should extract sessionId from targetResponse', async () => {
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'response',
+        sessionId: 'response-session-123',
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.metadata.sessionIds).toEqual(['response-session-123']);
+    });
+
+    it('should extract sessionId from iterationContext.vars as fallback', async () => {
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'response',
+        // No sessionId in response
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: { sessionId: 'vars-session-456' } },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal', sessionId: 'vars-session-456' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.metadata.sessionIds).toEqual(['vars-session-456']);
+    });
+
+    it('should handle missing sessionId gracefully', async () => {
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'response',
+        // No sessionId
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      // sessionIds array should be empty when no sessionIds are found
+      expect(result.metadata.sessionIds).toEqual([]);
+    });
+
+    it('should include sessionIds in metadata with other metadata fields', async () => {
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'response 1',
+          sessionId: 'session-1',
+        })
+        .mockResolvedValueOnce({
+          output: 'response 2',
+          sessionId: 'session-2',
+        });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.metadata.sessionIds).toEqual(['session-1', 'session-2']);
+      expect(result.metadata.finalIteration).toBeDefined();
+      expect(result.metadata.highestScore).toBeDefined();
+      expect(result.metadata.stopReason).toBeDefined();
+    });
+
+    it('should prioritize response sessionId over vars sessionId', async () => {
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'response',
+        sessionId: 'response-priority',
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: { sessionId: 'vars-ignored' } },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal', sessionId: 'vars-ignored' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.metadata.sessionIds).toEqual(['response-priority']);
+      expect(result.metadata.sessionIds).not.toContain('vars-ignored');
     });
   });
 });
