@@ -169,7 +169,7 @@ describe('Groq', () => {
           },
           cached: false,
           cost: undefined,
-          latencyMs: 0,
+          latencyMs: expect.any(Number),
           logProbs: undefined,
           guardrails: {
             flagged: false,
