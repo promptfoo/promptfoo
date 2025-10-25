@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- feat(cli): improve eval summary output with compact layout and better UX (#5967)
 - chore(examples): consolidate Ollama examples into unified directory (#5977)
 - chore(webui): add label column to prompts table (#6002)
 - chore: remove "LLM Risk Assessment" prefix (#6004)
