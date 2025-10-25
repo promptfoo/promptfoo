@@ -19,7 +19,6 @@ import { Strategies, validateStrategies } from '../../src/redteam/strategies';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 
-import type { TestCaseWithPlugin } from '../../src/types/index';
 import { stripAnsi } from '../util/utils';
 
 jest.mock('cli-progress');
@@ -1340,5 +1339,287 @@ describe('getTestCount', () => {
     };
     const result = getTestCount(strategy, 10, []);
     expect(result).toBe(10);
+  });
+});
+
+describe('Language configuration', () => {
+  const mockProvider = {
+    callApi: jest.fn(),
+    generate: jest.fn(),
+    id: () => 'test-provider',
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Set up logger mocks
+    jest.mocked(logger.info).mockReturnValue(logger as any);
+    jest.mocked(logger.warn).mockReturnValue(logger as any);
+    jest.mocked(logger.error).mockReturnValue(logger as any);
+    jest.mocked(logger.debug).mockReturnValue(logger as any);
+
+    // Set up templates mock
+    jest.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+
+    jest.mocked(extractEntities).mockResolvedValue(['entity1', 'entity2']);
+    jest.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
+    jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    jest.mocked(validateStrategies).mockImplementation(async () => {});
+    jest.mocked(cliProgress.SingleBar).mockReturnValue({
+      increment: jest.fn(),
+      start: jest.fn(),
+      stop: jest.fn(),
+      update: jest.fn(),
+    } as any);
+    jest.mocked(shouldGenerateRemote).mockReturnValue(false);
+    jest.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
+    jest.mocked(checkRemoteHealth).mockResolvedValue({
+      status: 'OK',
+      cached: false,
+      message: 'OK',
+    });
+
+    // Mock plugin action to return test cases
+    const mockPluginAction = jest.fn().mockResolvedValue([
+      { vars: { query: 'test1' } },
+      { vars: { query: 'test2' } },
+    ]);
+    jest.spyOn(Plugins, 'find').mockReturnValue({
+      action: mockPluginAction,
+      key: 'mockPlugin',
+    });
+  });
+
+  describe('calculateTotalTests with language', () => {
+    it('should calculate correct test count for single language', () => {
+      const plugins = [
+        { id: 'plugin1', numTests: 2 },
+        { id: 'plugin2', numTests: 3 },
+      ];
+      const result = calculateTotalTests(plugins, [], 'en');
+      expect(result).toEqual({
+        totalTests: 5,
+        totalPluginTests: 5,
+        effectiveStrategyCount: 0,
+        includeBasicTests: true,
+      });
+    });
+
+    it('should calculate correct test count for multiple languages', () => {
+      const plugins = [
+        { id: 'plugin1', numTests: 2 },
+        { id: 'plugin2', numTests: 3 },
+      ];
+      // With 3 languages, we expect 5 tests * 3 = 15 tests
+      const result = calculateTotalTests(plugins, [], ['en', 'fr', 'de']);
+      expect(result).toEqual({
+        totalTests: 15,
+        totalPluginTests: 15,
+        effectiveStrategyCount: 0,
+        includeBasicTests: true,
+      });
+    });
+
+    it('should calculate correct test count with strategies and multiple languages', () => {
+      const plugins = [
+        { id: 'plugin1', numTests: 2 },
+        { id: 'plugin2', numTests: 3 },
+      ];
+      const strategies = [{ id: 'rot13' }];
+      // Base tests: 5 * 3 languages = 15
+      // Strategy tests: 5 * 3 languages = 15
+      // Total: 30
+      const result = calculateTotalTests(plugins, strategies, ['en', 'fr', 'de']);
+      expect(result).toEqual({
+        totalTests: 30,
+        totalPluginTests: 15,
+        effectiveStrategyCount: 1,
+        includeBasicTests: true,
+      });
+    });
+
+    it('should handle layer strategy with multiple languages', () => {
+      const plugins = [{ id: 'plugin1', numTests: 5 }];
+      const strategies = [
+        {
+          id: 'layer',
+          config: {
+            steps: ['base64', 'rot13'],
+          },
+        },
+      ];
+      // With 2 languages, plugin tests: 5 * 2 = 10
+      // Layer strategy adds 10 more tests
+      const result = calculateTotalTests(plugins, strategies, ['en', 'fr']);
+      expect(result).toEqual({
+        totalTests: 20,
+        totalPluginTests: 10,
+        effectiveStrategyCount: 1,
+        includeBasicTests: true,
+      });
+    });
+
+    it('should handle retry strategy with multiple languages', () => {
+      const plugins = [{ id: 'plugin1', numTests: 2 }];
+      const strategies = [{ id: 'retry', config: { numTests: 2 } }];
+      // With 3 languages: 2 * 3 = 6 base tests
+      // Retry adds 2 tests per base test: 6 + 2 = 8
+      const result = calculateTotalTests(plugins, strategies, ['en', 'fr', 'de']);
+      expect(result).toEqual({
+        totalTests: 8,
+        totalPluginTests: 6,
+        effectiveStrategyCount: 1,
+        includeBasicTests: true,
+      });
+    });
+  });
+
+  describe('synthesize with language configuration', () => {
+    it('should generate test cases with single language', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 2,
+        plugins: [{ id: 'test-plugin', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(2);
+      expect(result.testCases.every((tc) => tc.metadata?.language === 'en')).toBe(true);
+    });
+
+    it('should generate test cases for each language when multiple languages specified', async () => {
+      const result = await synthesize({
+        language: ['en', 'fr'],
+        numTests: 2,
+        plugins: [{ id: 'test-plugin', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      // Should generate 2 tests * 2 languages = 4 test cases
+      expect(result.testCases).toHaveLength(4);
+
+      // Check that we have tests for both languages
+      const languageCounts = result.testCases.reduce(
+        (acc, tc) => {
+          const lang = tc.metadata?.language || 'en';
+          acc[lang] = (acc[lang] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+
+      expect(languageCounts).toEqual({
+        en: 2,
+        fr: 2,
+      });
+    });
+
+    it('should apply strategies to multilingual test cases', async () => {
+      // Mock strategy action
+      const mockStrategyAction = jest.fn().mockImplementation((testCases) => {
+        return testCases.map((tc: any) => ({
+          ...tc,
+          vars: { ...tc.vars, query: `transformed: ${tc.vars.query}` },
+          metadata: { ...tc.metadata, strategyId: 'rot13' },
+        }));
+      });
+
+      jest.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'rot13',
+        action: mockStrategyAction,
+      });
+
+      const result = await synthesize({
+        language: ['en', 'fr'],
+        numTests: 2,
+        plugins: [{ id: 'test-plugin', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'rot13' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Base tests: 2 * 2 languages = 4
+      // Strategy tests: 2 * 2 languages = 4
+      // Total: 8
+      expect(result.testCases.length).toBeGreaterThanOrEqual(4);
+
+      // Verify strategy was applied to tests in both languages
+      const strategyTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'rot13');
+      expect(strategyTests.length).toBeGreaterThan(0);
+    });
+
+    it('should include language in test metadata', async () => {
+      // Mock plugin to return only 1 test case instead of 2
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test1' } }]);
+      jest.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'mockPlugin',
+      });
+
+      const result = await synthesize({
+        language: ['en', 'es', 'zh'],
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(3);
+
+      // Each test case should have language metadata
+      for (const testCase of result.testCases) {
+        expect(testCase.metadata?.language).toBeDefined();
+        expect(['en', 'es', 'zh']).toContain(testCase.metadata?.language);
+      }
+    });
+
+    it('should handle plugin-level language configuration', async () => {
+      const result = await synthesize({
+        language: 'en', // Global default
+        numTests: 2,
+        plugins: [
+          {
+            id: 'test-plugin',
+            numTests: 2,
+            config: {
+              language: ['fr', 'de'], // Plugin-specific override
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      // Should generate 2 tests * 2 plugin languages = 4 test cases
+      expect(result.testCases).toHaveLength(4);
+
+      // All tests should be in plugin-specified languages
+      const languages = result.testCases.map((tc) => tc.metadata?.language);
+      expect(languages.every((lang) => ['fr', 'de'].includes(lang || ''))).toBe(true);
+    });
+
+    it('should handle when no language is specified', async () => {
+      const result = await synthesize({
+        // No language specified - will use undefined which plugins interpret as 'en'
+        numTests: 2,
+        plugins: [{ id: 'test-plugin', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(2);
+      // Check that all tests have the same language
+      const languages = result.testCases.map((tc) => tc.metadata?.language);
+      const uniqueLanguages = [...new Set(languages)];
+      expect(uniqueLanguages.length).toBe(1); // Only one language used
+    });
   });
 });
