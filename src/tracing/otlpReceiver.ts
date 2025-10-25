@@ -135,8 +135,8 @@ export class OTLPReceiver {
             logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
             await this.traceStore.createTrace({
               traceId,
-              evaluationId: info.evaluationId,
-              testCaseId: info.testCaseId,
+              evaluationId: info.evaluationId || '',
+              testCaseId: info.testCaseId || '',
             });
           } catch (error) {
             // Trace might already exist, which is fine

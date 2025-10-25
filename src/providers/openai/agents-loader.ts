@@ -117,7 +117,7 @@ async function loadAgentFromFile(filePath: string): Promise<Agent<any, any>> {
     return agent;
   } catch (error) {
     logger.error('[AgentsLoader] Failed to load agent from file', { path: resolvedPath, error });
-    throw new Error(`Failed to load agent from ${resolvedPath}`, { cause: error as Error });
+    throw new Error(`Failed to load agent from ${resolvedPath}: ${error}`);
   }
 }
 
@@ -139,7 +139,7 @@ async function loadToolsFromFile(filePath: string): Promise<ToolDefinition[]> {
     return tools;
   } catch (error) {
     logger.error('[AgentsLoader] Failed to load tools from file', { path: resolvedPath, error });
-    throw new Error(`Failed to load tools from ${resolvedPath}`, { cause: error as Error });
+    throw new Error(`Failed to load tools from ${resolvedPath}: ${error}`);
   }
 }
 
@@ -164,7 +164,7 @@ async function loadHandoffsFromFile(filePath: string): Promise<HandoffDefinition
       path: resolvedPath,
       error,
     });
-    throw new Error(`Failed to load handoffs from ${resolvedPath}`, { cause: error as Error });
+    throw new Error(`Failed to load handoffs from ${resolvedPath}: ${error}`);
   }
 }
 
@@ -201,7 +201,7 @@ async function createAgentFromDefinition(definition: AgentDefinition): Promise<A
       handoffCount: definition?.handoffs?.length,
       error,
     });
-    throw new Error('Failed to create agent from definition', { cause: error as Error });
+    throw new Error(`Failed to create agent from definition: ${error}`);
   }
 }
 
