@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - feat(app): persist inline-defined custom policy names (#5990)
 - feat: coppa plugin (#5997)
-- feat: error logs (#5992)
+- feat: Log all errors in a log file and message to the console (#5992)
 - feat: add GDPR preset mappings for red team testing (#5986)
 - feat(app): show target response to generated red team plugin test case (#5869)
 - feat: add modifiers support to iterative strategies (#5972)
@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat: adding support for Claude Haiku 4.5 (#5937)
 - feat: Add errors to eval progress bar (#5942)
 - feat: Improved error handling in CLI and error logging (#5930)
+- feat: Add pluginId, strategyId, sessionId, and sessionIds to red team metadata columns in CSV export (#6016)
 
 ### Changed
 
@@ -47,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix: improve MCP tool schema transformation for OpenAI compatibility (#5965)
 - fix: fewer dupe errors for invalid strategy and plugin ids (#5954)
 - fix(app): in red team setup, reset config button hidden by version banner (#5896)
+- fix: sessionId now properly stored in metadata for providers that use server side generated sessionIds. (#6016)
 
 ### Dependencies
 
@@ -1996,73 +1998,73 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **feat:** Display audio file variables in result table  
+- **feat:** Display audio file variables in result table
   [#3864](https://github.com/promptfoo/promptfoo/pull/3864) by @faizanminhas
   [#4244](https://github.com/promptfoo/promptfoo/pull/4244) by @faizanminhas
-- **fix:** Resolve model-graded assertion providers from providerMap  
+- **fix:** Resolve model-graded assertion providers from providerMap
   [#4273](https://github.com/promptfoo/promptfoo/pull/4273) by @mldangelo
-- **fix:** File content not being loaded when referenced with `file://` prefix in vars  
+- **fix:** File content not being loaded when referenced with `file://` prefix in vars
   [#3793](https://github.com/promptfoo/promptfoo/pull/3793) by @adityabharadwaj198
-- **fix:** Use array as type for vars  
+- **fix:** Use array as type for vars
   [#4281](https://github.com/promptfoo/promptfoo/pull/4281) by @sklein12
-- **test:** Add unit test for `src/globalConfig/accounts.ts`  
+- **test:** Add unit test for `src/globalConfig/accounts.ts`
   [#4259](https://github.com/promptfoo/promptfoo/pull/4259) by @gru-agent
-- **test:** Add unit test for `src/util/config/manage.ts`  
+- **test:** Add unit test for `src/util/config/manage.ts`
   [#4258](https://github.com/promptfoo/promptfoo/pull/4258) by @gru-agent
-- **test:** Add vitest coverage for frontend pages  
+- **test:** Add vitest coverage for frontend pages
   [#4274](https://github.com/promptfoo/promptfoo/pull/4274) by @mldangelo
-- **test:** Add unit test for `renderVarsInObject` formatting  
+- **test:** Add unit test for `renderVarsInObject` formatting
   [#4254](https://github.com/promptfoo/promptfoo/pull/4254) by @mldangelo
-- **test:** Add unit test for `src/redteam/plugins/base.ts`  
+- **test:** Add unit test for `src/redteam/plugins/base.ts`
   [#4233](https://github.com/promptfoo/promptfoo/pull/4233) by @gru-agent
-- **test:** Add unit test for `src/redteam/providers/crescendo/index.ts`  
+- **test:** Add unit test for `src/redteam/providers/crescendo/index.ts`
   [#4211](https://github.com/promptfoo/promptfoo/pull/4211)
   [#4214](https://github.com/promptfoo/promptfoo/pull/4214) by @gru-agent
-- **test:** Add unit test for `src/redteam/providers/crescendo/prompts.ts`  
+- **test:** Add unit test for `src/redteam/providers/crescendo/prompts.ts`
   [#4213](https://github.com/promptfoo/promptfoo/pull/4213) by @gru-agent
-- **docs:** Add job board  
+- **docs:** Add job board
   [#4264](https://github.com/promptfoo/promptfoo/pull/4264) by @typpo
-- **docs:** Add custom policy to sidebar  
+- **docs:** Add custom policy to sidebar
   [#4272](https://github.com/promptfoo/promptfoo/pull/4272) by @typpo
-- **docs:** Add native build guidance to troubleshooting section  
+- **docs:** Add native build guidance to troubleshooting section
   [#4253](https://github.com/promptfoo/promptfoo/pull/4253) by @mldangelo
-- **docs:** Add anchor links to press page section headings  
+- **docs:** Add anchor links to press page section headings
   [#4265](https://github.com/promptfoo/promptfoo/pull/4265) by @mldangelo
-- **docs:** Add JSON schema to example  
+- **docs:** Add JSON schema to example
   [#4276](https://github.com/promptfoo/promptfoo/pull/4276) by @ladyofcode
-- **docs:** Add schema header to example configs  
+- **docs:** Add schema header to example configs
   [#4277](https://github.com/promptfoo/promptfoo/pull/4277) by @mldangelo
-- **docs:** Unify formatting across site  
+- **docs:** Unify formatting across site
   [#4270](https://github.com/promptfoo/promptfoo/pull/4270) by @mldangelo
-- **chore:** Fix open handles in readline tests preventing graceful Jest exit  
+- **chore:** Fix open handles in readline tests preventing graceful Jest exit
   [#4242](https://github.com/promptfoo/promptfoo/pull/4242) by @mldangelo
-- **chore:** Add external file loading support for `response_format` in OpenAI API  
+- **chore:** Add external file loading support for `response_format` in OpenAI API
   [#4240](https://github.com/promptfoo/promptfoo/pull/4240) by @mldangelo
-- **chore:** Always have unique redteam file when running live  
+- **chore:** Always have unique redteam file when running live
   [#4237](https://github.com/promptfoo/promptfoo/pull/4237) by @sklein12
-- **chore:** Add metadata to generated `redteam.yaml`  
+- **chore:** Add metadata to generated `redteam.yaml`
   [#4257](https://github.com/promptfoo/promptfoo/pull/4257) by @typpo
-- **chore:** Bump `openai` from 4.103.0 to 5.0.1  
+- **chore:** Bump `openai` from 4.103.0 to 5.0.1
   [#4250](https://github.com/promptfoo/promptfoo/pull/4250) by @dependabot
-- **chore:** Redteam → red team  
+- **chore:** Redteam → red team
   [#4268](https://github.com/promptfoo/promptfoo/pull/4268) by @typpo
-- **chore:** Improve dark mode highlight styling for eval cell views  
+- **chore:** Improve dark mode highlight styling for eval cell views
   [#4269](https://github.com/promptfoo/promptfoo/pull/4269) by @mldangelo
-- **chore:** Update dependencies to latest minor/patch versions  
+- **chore:** Update dependencies to latest minor/patch versions
   [#4271](https://github.com/promptfoo/promptfoo/pull/4271) by @mldangelo
-- **chore:** Clarify wording  
+- **chore:** Clarify wording
   [#4278](https://github.com/promptfoo/promptfoo/pull/4278) by @typpo
-- **chore:** Format estimated probes  
+- **chore:** Format estimated probes
   [#4279](https://github.com/promptfoo/promptfoo/pull/4279) by @typpo
-- **chore:** Update grader for malicious code  
+- **chore:** Update grader for malicious code
   [#4286](https://github.com/promptfoo/promptfoo/pull/4286) by @MrFlounder
-- **chore:** Add back example config to red team create flow  
+- **chore:** Add back example config to red team create flow
   [#4282](https://github.com/promptfoo/promptfoo/pull/4282) by @faizanminhas
-- **chore:** Bump version 0.114.3  
+- **chore:** Bump version 0.114.3
   [#4287](https://github.com/promptfoo/promptfoo/pull/4287) by @sklein12
-- **chore(webui):** Hide diff filter option on /eval when single column  
+- **chore(webui):** Hide diff filter option on /eval when single column
   [#4246](https://github.com/promptfoo/promptfoo/pull/4246) by @mldangelo
-- **chore(webui):** Allow toggling highlight on eval outputs  
+- **chore(webui):** Allow toggling highlight on eval outputs
   [#4252](https://github.com/promptfoo/promptfoo/pull/4252) by @mldangelo
 
 ## [0.114.2] - 2025-05-29
