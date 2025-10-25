@@ -1,0 +1,246 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: ElevenLabs Supporting APIs showcase
+
+prompts:
+  # Conversation History prompts
+  - 'conv_example_123' # Specific conversation ID
+
+  # Audio Isolation prompts (file paths)
+  - './audio/noisy-recording.mp3'
+
+  # Forced Alignment prompts (transcripts)
+  - 'Welcome to ElevenLabs. This demonstration shows forced alignment capabilities.'
+  - |
+    In this example, we will generate subtitles for a video.
+    The transcript must match the audio exactly for accurate timing.
+    Punctuation and capitalization are preserved in the output.
+
+  # Dubbing prompts (file paths or URLs)
+  - './video/english-content.mp4'
+
+providers:
+  # Conversation History - Retrieve specific conversation
+  - id: elevenlabs:history
+    label: History - Get Conversation
+    # Note: This requires a valid conversation ID from a previous agent interaction
+
+  # Conversation History - List conversations for agent
+  - id: elevenlabs:history
+    label: History - List Conversations
+    config:
+      agentId: agent_example_456 # Replace with your agent ID
+
+  # Audio Isolation - Remove background noise
+  - id: elevenlabs:isolation
+    label: Audio Isolation (MP3 128kbps)
+    config:
+      outputFormat: mp3_44100_128
+
+  # Audio Isolation - High quality output
+  - id: elevenlabs:isolation
+    label: Audio Isolation (MP3 192kbps)
+    config:
+      outputFormat: mp3_44100_192
+
+  # Forced Alignment - JSON format
+  - id: elevenlabs:alignment
+    label: Alignment - JSON Output
+    # Returns complete alignment data with word and character timestamps
+
+  # Forced Alignment - SRT subtitles
+  - id: elevenlabs:alignment
+    label: Alignment - SRT Subtitles
+    # Returns SRT format suitable for video subtitles
+
+  # Forced Alignment - VTT subtitles
+  - id: elevenlabs:alignment
+    label: Alignment - VTT Subtitles
+    # Returns WebVTT format for web players
+
+  # Dubbing - Spanish
+  - id: elevenlabs:dubbing:es
+    label: Dubbing - English to Spanish
+    config:
+      targetLanguage: es
+      sourceLanguage: en # Optional but recommended
+      numSpeakers: 1
+
+  # Dubbing - French
+  - id: elevenlabs:dubbing:fr
+    label: Dubbing - English to French
+    config:
+      targetLanguage: fr
+      sourceLanguage: en
+      numSpeakers: 1
+
+  # Dubbing - German
+  - id: elevenlabs:dubbing:de
+    label: Dubbing - English to German
+    config:
+      targetLanguage: de
+      sourceLanguage: en
+      numSpeakers: 1
+      watermark: false # No watermark for production
+
+# Test variables for demonstration
+# In real usage, these would be provided via --vars or context
+defaultTest:
+  vars:
+    # For conversation history
+    conversationId: conv_example_123
+    agentId: agent_example_456
+
+    # For audio isolation
+    audioFile: ./audio/noisy-recording.mp3
+
+    # For forced alignment
+    audioFile: ./audio/speech.mp3
+    transcript: Welcome to ElevenLabs. This is a test.
+    format: srt # json, srt, or vtt
+
+    # For dubbing
+    sourceFile: ./video/english-content.mp4
+    # sourceUrl: https://www.youtube.com/watch?v=example
+
+tests:
+  # Conversation History Tests
+  - description: Conversation retrieval succeeds
+    vars:
+      conversationId: conv_example_123
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.conversationId || result.conversation_id;
+
+  - description: Conversation list returns results
+    vars:
+      agentId: agent_example_456
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.total_conversations !== undefined;
+
+  # Audio Isolation Tests
+  - description: Audio isolation completes successfully
+    vars:
+      audioFile: ./audio/noisy-recording.mp3
+    assert:
+      - type: javascript
+        value: output.includes('isolated successfully') || output.includes('audio')
+      - type: latency
+        threshold: 60000 # 1 minute for audio processing
+
+  - description: Isolated audio is smaller than original
+    vars:
+      audioFile: ./audio/noisy-recording.mp3
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.metadata?.isolatedSizeBytes < result.metadata?.originalSizeBytes;
+
+  # Forced Alignment Tests
+  - description: Alignment generates word timestamps
+    vars:
+      audioFile: ./audio/speech.mp3
+      transcript: Welcome to ElevenLabs
+      format: json
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.word_alignments && result.word_alignments.length > 0;
+
+  - description: SRT format is valid
+    vars:
+      audioFile: ./audio/speech.mp3
+      transcript: Welcome to ElevenLabs
+      format: srt
+    assert:
+      - type: javascript
+        value: |
+          // SRT should have sequence numbers and timestamps
+          return output.includes('-->') && /^\d+$/m.test(output);
+
+  - description: VTT format includes header
+    vars:
+      audioFile: ./audio/speech.mp3
+      transcript: Welcome to ElevenLabs
+      format: vtt
+    assert:
+      - type: javascript
+        value: output.startsWith('WEBVTT')
+
+  - description: Alignment latency is reasonable
+    vars:
+      audioFile: ./audio/speech.mp3
+      transcript: Welcome to ElevenLabs
+    assert:
+      - type: latency
+        threshold: 120000 # 2 minutes for alignment
+
+  # Dubbing Tests
+  - description: Dubbing completes successfully
+    vars:
+      sourceFile: ./video/english-content.mp4
+    assert:
+      - type: javascript
+        value: output.includes('Dubbed') || output.includes('successfully')
+
+  - description: Dubbing returns target language metadata
+    vars:
+      sourceFile: ./video/english-content.mp4
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.metadata?.targetLanguage !== undefined;
+
+  - description: Dubbing cost is reasonable
+    vars:
+      sourceFile: ./video/short-clip.mp4
+    assert:
+      - type: cost
+        threshold: 2.00 # Max $2 for short clip
+
+  - description: Dubbing completes within timeout
+    vars:
+      sourceFile: ./video/short-clip.mp4
+    assert:
+      - type: latency
+        threshold: 300000 # 5 minutes for dubbing
+
+# Advanced: Pipeline tests
+  - description: 'Pipeline: Isolation → STT works'
+    # First isolate audio, then transcribe
+    vars:
+      audioFile: ./audio/noisy-recording.mp3
+    assert:
+      - type: javascript
+        value: |
+          // Check that isolation metadata is present
+          const result = JSON.parse(output);
+          return result.metadata?.isolatedSizeBytes > 0;
+
+  - description: 'Pipeline: TTS → Alignment works'
+    # Generate audio, then create subtitles
+    vars:
+      audioFile: ./audio/generated-speech.mp3
+      transcript: This is generated speech from ElevenLabs TTS
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.word_alignments?.length > 0 || output.includes('-->');
+
+  - description: 'Pipeline: Agent → History works'
+    # Run agent conversation, then retrieve history
+    vars:
+      conversationId: conv_recent_123
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.history || result.conversation_id;
