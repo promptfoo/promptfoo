@@ -4,11 +4,12 @@
  * Provides access to ElevenLabs AI audio capabilities:
  * - Text-to-Speech (TTS): Generate high-quality voice synthesis
  * - Speech-to-Text (STT): Transcribe audio with speaker diarization
- * - Conversational Agents: Test voice AI agents with LLM backends (coming soon)
+ * - Conversational Agents: Test voice AI agents with LLM backends
  */
 
 export { ElevenLabsTTSProvider } from './tts';
 export { ElevenLabsSTTProvider } from './stt';
+export { ElevenLabsAgentsProvider } from './agents';
 export { ElevenLabsClient } from './client';
 export { ElevenLabsWebSocketClient } from './websocket-client';
 export { ElevenLabsCache } from './cache';
@@ -73,3 +74,39 @@ export type { VoiceInfo } from './tts/voices';
 export type { WebSocketClientConfig, StreamingMessage } from './websocket-client';
 export type { PronunciationDictionary } from './tts/pronunciation';
 export type { GeneratedVoice } from './tts/voice-design';
+export type {
+  ElevenLabsAgentsConfig,
+  AgentConfig,
+  AgentTool,
+  SimulatedUser,
+  EvaluationCriterion,
+  ToolMockConfig,
+  LLMCascadeConfig,
+  CustomLLMConfig,
+  MCPConfig,
+  MultiVoiceConfig,
+  PostCallWebhookConfig,
+  PhoneConfig,
+  AgentSimulationResponse,
+  ConversationTurn,
+  ToolCall,
+  ConversationAnalysis,
+  EvaluationResult,
+} from './agents/types';
+export {
+  COMMON_EVALUATION_CRITERIA,
+  buildCriteriaFromPresets,
+} from './agents/evaluation';
+export { COMMON_AGENT_TOOLS } from './agents/tools';
+export {
+  LLM_CASCADE_PRESETS,
+  getLLMCascadePreset,
+} from './agents/llm-cascading';
+export {
+  MCP_APPROVAL_PRESETS,
+  getMCPApprovalPreset,
+} from './agents/mcp-integration';
+export {
+  MULTI_VOICE_PRESETS,
+  getMultiVoicePreset,
+} from './agents/multi-voice';
