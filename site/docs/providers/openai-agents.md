@@ -32,7 +32,7 @@ providers:
     config:
       agent:
         name: Customer Support Agent
-        model: gpt-4o-mini
+        model: gpt-5-mini
         instructions: You are a helpful customer support agent.
 ```
 
@@ -48,7 +48,7 @@ providers:
       # Inline agent definition
       agent:
         name: Support Agent
-        model: gpt-4o-mini
+        model: gpt-5-mini
         instructions: |
           You are a customer support agent. Help users with their questions.
           Use tools when needed to look up information.
@@ -82,7 +82,7 @@ providers:
       handoffs:
         - agent:
             name: Billing Agent
-            model: gpt-4o-mini
+            model: gpt-5-mini
             instructions: Handle billing and payment questions.
           description: Transfer to billing specialist for payment issues
 
@@ -91,7 +91,7 @@ providers:
 
       # Execution Options
       maxTurns: 10  # Maximum conversation turns (default: 10)
-      model: gpt-4o  # Override the model specified in agent definition
+      model: gpt-5  # Override the model specified in agent definition
 
       # Model Settings
       modelSettings:
@@ -133,7 +133,7 @@ providers:
     config:
       agent:
         name: Calculator Agent
-        model: gpt-4o-mini
+        model: gpt-5-mini
         instructions: Use the calculator tool to perform math operations.
       tools:
         - name: calculate
@@ -197,19 +197,19 @@ providers:
     config:
       agent:
         name: Triage Agent
-        model: gpt-4o-mini
+        model: gpt-5-mini
         instructions: |
           You are a triage agent. Route technical questions to the tech agent,
           billing questions to the billing agent.
       handoffs:
         - agent:
             name: Technical Support
-            model: gpt-4o-mini
+            model: gpt-5-mini
             instructions: Handle technical troubleshooting.
           description: Transfer to technical support for technical issues
         - agent:
             name: Billing Support
-            model: gpt-4o-mini
+            model: gpt-5-mini
             instructions: Handle billing and payment questions.
           description: Transfer to billing for payment issues
 
@@ -232,7 +232,7 @@ import { Agent } from '@openai/agents';
 
 const agent: Agent<any, any> = {
   name: 'Research Agent',
-  model: 'gpt-4o',
+  model: 'gpt-5',
   instructions: `You are a research agent. Your task is to:
 1. Break down research questions into sub-questions
 2. Use search tools to gather information
@@ -269,7 +269,7 @@ tests:
         config:
           agent:
             name: Weather Agent
-            model: gpt-4o-mini
+            model: gpt-5-mini
             instructions: |
               Provide weather information for the user's location.
               Use context.city and context.temperature.
@@ -314,9 +314,9 @@ providers:
     config:
       agent:
         name: My Agent
-        model: gpt-4o-mini
+        model: gpt-5-mini
         instructions: You are a helpful assistant.
-      model: gpt-4o  # Override to use gpt-4o instead
+      model: gpt-5  # Override to use gpt-5 instead
 ```
 
 ## Example: Customer Support Agent
@@ -336,7 +336,7 @@ import { Agent } from '@openai/agents';
 
 export default {
   name: 'Customer Support Agent',
-  model: 'gpt-4o-mini',
+  model: 'gpt-5-mini',
   instructions: `You are a customer support agent. Help customers with:
 - Order status lookups
 - Account questions
@@ -381,7 +381,7 @@ export default [
   {
     agent: {
       name: 'Billing Specialist',
-      model: 'gpt-4o-mini',
+      model: 'gpt-5-mini',
       instructions: 'Handle billing, payments, refunds, and invoices.',
     } as Agent<any, any>,
     description: 'Transfer to billing specialist for payment questions',
