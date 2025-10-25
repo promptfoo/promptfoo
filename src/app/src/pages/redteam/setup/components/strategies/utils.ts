@@ -35,7 +35,6 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'math-prompt': 1,
   'mischievous-user': 5,
   morse: 1,
-  multilingual: 3, // This won't matter, we multiply all probes by number of languages
   'other-encodings': 1,
   emoji: 1,
   piglatin: 1,
@@ -53,18 +52,14 @@ export function getEstimatedProbes(config: Config) {
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
-    // Don't add 1 since we handle multilingual separately
-    return total + (strategyId === 'multilingual' ? 0 : STRATEGY_PROBE_MULTIPLIER[strategyId]);
+    return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
   }, 0);
 
-  // Find if multilingual strategy is present and get number of languages
-  const multilingualStrategy = config.strategies.find(
-    (s) => (typeof s === 'string' ? s : s.id) === 'multilingual',
-  );
-
-  const numLanguages =
-    multilingualStrategy && typeof multilingualStrategy !== 'string'
-      ? ((multilingualStrategy.config?.languages as string[]) || []).length || 3
+  // Get number of languages from global language config
+  const numLanguages = Array.isArray(config.language)
+    ? config.language.length
+    : config.language
+      ? 1
       : 1;
 
   const strategyProbes = strategyMultiplier * baseProbes;
