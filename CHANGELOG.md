@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- chore(cli): show telemetryDisabled/telemetryDebug in `promptfoo debug` output (#6015)
 - chore(examples): consolidate Ollama examples into unified directory (#5977)
 - chore(webui): add label column to prompts table (#6002)
 - chore: remove "LLM Risk Assessment" prefix (#6004)
