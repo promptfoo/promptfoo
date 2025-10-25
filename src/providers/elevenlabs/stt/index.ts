@@ -82,10 +82,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
    */
   private getApiKey(): string {
     const apiKey =
-      this.config.apiKey ||
-      this.options.config?.apiKey ||
-      process.env.ELEVENLABS_API_KEY ||
-      '';
+      this.config.apiKey || this.options.config?.apiKey || process.env.ELEVENLABS_API_KEY || '';
 
     if (!apiKey) {
       throw new Error(
@@ -99,10 +96,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
   /**
    * Main API call method
    */
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const startTime = Date.now();
 
     try {
@@ -196,14 +190,18 @@ export class ElevenLabsSTTProvider implements ApiProvider {
   /**
    * Resolve audio file path from prompt or config
    */
-  private resolveAudioFilePath(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): string | undefined {
+  private resolveAudioFilePath(prompt: string, context?: CallApiContextParams): string | undefined {
     // Priority: prompt (if it's a file path) > config.audioFile > vars.audioFile
-    if (prompt && (prompt.endsWith('.mp3') || prompt.endsWith('.wav') || prompt.endsWith('.flac') ||
-                   prompt.endsWith('.m4a') || prompt.endsWith('.ogg') || prompt.endsWith('.opus') ||
-                   prompt.endsWith('.webm'))) {
+    if (
+      prompt &&
+      (prompt.endsWith('.mp3') ||
+        prompt.endsWith('.wav') ||
+        prompt.endsWith('.flac') ||
+        prompt.endsWith('.m4a') ||
+        prompt.endsWith('.ogg') ||
+        prompt.endsWith('.opus') ||
+        prompt.endsWith('.webm'))
+    ) {
       return prompt;
     }
 

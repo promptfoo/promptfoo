@@ -90,7 +90,9 @@ export class ElevenLabsClient {
 
         if (attempt < this.retries - 1) {
           const backoffMs = Math.pow(2, attempt) * 1000;
-          logger.debug(`[ElevenLabs Client] Retry ${attempt + 1}/${this.retries} after ${backoffMs}ms`);
+          logger.debug(
+            `[ElevenLabs Client] Retry ${attempt + 1}/${this.retries} after ${backoffMs}ms`,
+          );
           await new Promise((resolve) => setTimeout(resolve, backoffMs));
         }
       }

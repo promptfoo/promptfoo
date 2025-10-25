@@ -110,9 +110,7 @@ export async function getVoice(
       // If ID lookup fails, try searching by name
       logger.debug('[ElevenLabs Voices] ID lookup failed, searching by name');
       const allVoices = await getAvailableVoices(client);
-      const voice = allVoices.find(
-        (v) => v.name.toLowerCase() === voiceIdOrName.toLowerCase(),
-      );
+      const voice = allVoices.find((v) => v.name.toLowerCase() === voiceIdOrName.toLowerCase());
 
       if (voice) {
         logger.debug('[ElevenLabs Voices] Found voice by name', {
@@ -155,7 +153,9 @@ export function resolveVoiceId(voiceNameOrId: string): string {
 /**
  * Get recommended voice settings for a use case
  */
-export function getRecommendedSettings(useCase: 'podcast' | 'audiobook' | 'conversational' | 'dramatic') {
+export function getRecommendedSettings(
+  useCase: 'podcast' | 'audiobook' | 'conversational' | 'dramatic',
+) {
   const settings = {
     podcast: {
       stability: 0.7,

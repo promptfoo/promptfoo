@@ -104,7 +104,8 @@ describe('ElevenLabsClient', () => {
     });
 
     it('should retry on network error', async () => {
-      jest.mocked(fetchWithProxy)
+      jest
+        .mocked(fetchWithProxy)
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValueOnce({
           ok: true,

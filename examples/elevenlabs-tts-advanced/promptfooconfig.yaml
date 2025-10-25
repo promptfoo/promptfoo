@@ -22,7 +22,7 @@ providers:
     label: Baseline (No Custom Pronunciation)
     config:
       modelId: eleven_flash_v2_5
-      voiceId: 21m00Tcm4TlvDq8ikWAM  # Rachel
+      voiceId: 21m00Tcm4TlvDq8ikWAM # Rachel
 
   # 2. TTS with Pronunciation Dictionary
   - id: elevenlabs:tts:pronunciation
@@ -78,7 +78,7 @@ providers:
     label: Remixed Voice (Energetic Rachel)
     config:
       modelId: eleven_flash_v2_5
-      voiceId: 21m00Tcm4TlvDq8ikWAM  # Rachel
+      voiceId: 21m00Tcm4TlvDq8ikWAM # Rachel
       voiceRemix:
         style: energetic
         pacing: fast
@@ -89,7 +89,7 @@ providers:
     label: Remixed Voice (Calm & Deep)
     config:
       modelId: eleven_flash_v2_5
-      voiceId: 21m00Tcm4TlvDq8ikWAM  # Rachel
+      voiceId: 21m00Tcm4TlvDq8ikWAM # Rachel
       voiceRemix:
         style: calm
         pacing: slow
@@ -137,4 +137,4 @@ defaultTest:
     - type: not-contains
       value: error
     - type: cost
-      threshold: 0.10  # Max $0.10 per generation
+      threshold: 0.10 # Max $0.10 per generation

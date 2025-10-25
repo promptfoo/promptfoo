@@ -12,12 +12,14 @@ This example demonstrates how to use ElevenLabs STT provider for audio transcrip
 ## Setup
 
 1. **Set your API key**:
+
    ```bash
    export ELEVENLABS_API_KEY=your_api_key_here
    ```
 
 2. **Prepare audio files**:
    Create an `audio/` directory with your test audio files:
+
    ```bash
    mkdir -p audio
    # Place your audio files in the audio/ directory
@@ -37,7 +39,7 @@ providers:
   - id: elevenlabs:stt:basic
     config:
       modelId: eleven_speech_to_text_v1
-      language: en  # ISO 639-1 language code
+      language: en # ISO 639-1 language code
 ```
 
 ### Speaker Diarization
@@ -50,7 +52,7 @@ providers:
     config:
       modelId: eleven_speech_to_text_v1
       diarization: true
-      maxSpeakers: 3  # Optional: hint for expected number of speakers
+      maxSpeakers: 3 # Optional: hint for expected number of speakers
 ```
 
 The response will include speaker segments:
@@ -96,7 +98,7 @@ The response includes detailed WER metrics:
 
 ```json
 {
-  "wer": 0.05,  // 5% error rate
+  "wer": 0.05, // 5% error rate
   "substitutions": 1,
   "deletions": 0,
   "insertions": 0,
@@ -111,6 +113,7 @@ The response includes detailed WER metrics:
 ```
 
 **WER Interpretation**:
+
 - **0.00 - 0.05**: Excellent (95%+ accurate)
 - **0.05 - 0.10**: Good (90-95% accurate)
 - **0.10 - 0.20**: Fair (80-90% accurate)
@@ -118,15 +121,15 @@ The response includes detailed WER metrics:
 
 ## Supported Audio Formats
 
-| Format | Extension | Notes |
-|--------|-----------|-------|
-| MP3 | .mp3 | Widely compatible |
-| MP4 Audio | .mp4, .m4a | AAC/MPEG-4 audio |
-| WAV | .wav | Uncompressed, high quality |
-| FLAC | .flac | Lossless compression |
-| OGG | .ogg | Open format |
-| Opus | .opus | Modern, efficient codec |
-| WebM | .webm | Web-optimized |
+| Format    | Extension  | Notes                      |
+| --------- | ---------- | -------------------------- |
+| MP3       | .mp3       | Widely compatible          |
+| MP4 Audio | .mp4, .m4a | AAC/MPEG-4 audio           |
+| WAV       | .wav       | Uncompressed, high quality |
+| FLAC      | .flac      | Lossless compression       |
+| OGG       | .ogg       | Open format                |
+| Opus      | .opus      | Modern, efficient codec    |
+| WebM      | .webm      | Web-optimized              |
 
 ## Audio Input Methods
 
@@ -163,7 +166,7 @@ tests:
 tests:
   - assert:
       - type: cost
-        threshold: 0.05  # Max $0.05 per transcription
+        threshold: 0.05 # Max $0.05 per transcription
 ```
 
 ### Latency Threshold
@@ -172,7 +175,7 @@ tests:
 tests:
   - assert:
       - type: latency
-        threshold: 10000  # Max 10 seconds
+        threshold: 10000 # Max 10 seconds
 ```
 
 ### Transcription Quality
@@ -216,7 +219,7 @@ ElevenLabs STT supports 30+ languages. Specify using ISO 639-1 codes:
 
 ```yaml
 config:
-  language: en  # English
+  language: en # English
   # language: es  # Spanish
   # language: fr  # French
   # language: de  # German
@@ -232,6 +235,7 @@ config:
 ## Cost Information
 
 STT pricing is based on audio duration:
+
 - **Free tier**: 1 hour/month
 - **Paid tiers**: ~$0.10 per minute (~$0.00167 per second)
 
@@ -333,6 +337,7 @@ Error: Failed to read audio file: ENOENT: no such file or directory
 ```
 
 **Solution**: Use absolute paths or paths relative to the config file:
+
 ```yaml
 prompts:
   - /absolute/path/to/audio.mp3
@@ -346,6 +351,7 @@ Error: Unsupported audio format
 ```
 
 **Solution**: Convert your audio to a supported format (MP3, WAV, etc.) using tools like `ffmpeg`:
+
 ```bash
 ffmpeg -i input.video -vn -acodec mp3 output.mp3
 ```
@@ -353,6 +359,7 @@ ffmpeg -i input.video -vn -acodec mp3 output.mp3
 ### High WER on Clear Audio
 
 If you're getting unexpectedly high WER:
+
 1. **Check reference text** - ensure it exactly matches the audio (including punctuation)
 2. **Specify language** - auto-detection may choose the wrong language
 3. **Audio quality** - ensure audio is clear with minimal background noise
@@ -362,19 +369,19 @@ If you're getting unexpectedly high WER:
 
 ### Config Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `modelId` | string | `eleven_speech_to_text_v1` | STT model to use |
-| `language` | string | auto-detect | ISO 639-1 language code |
-| `diarization` | boolean | `false` | Enable speaker identification |
-| `maxSpeakers` | number | - | Expected number of speakers |
-| `audioFile` | string | - | Path to audio file |
-| `audioFormat` | string | auto-detect | Audio format override |
-| `referenceText` | string | - | Expected transcription for WER |
-| `calculateWER` | boolean | `false` | Calculate Word Error Rate |
-| `baseUrl` | string | `https://api.elevenlabs.io/v1` | API endpoint |
-| `timeout` | number | `120000` | Request timeout (ms) |
-| `retries` | number | `3` | Number of retry attempts |
+| Option          | Type    | Default                        | Description                    |
+| --------------- | ------- | ------------------------------ | ------------------------------ |
+| `modelId`       | string  | `eleven_speech_to_text_v1`     | STT model to use               |
+| `language`      | string  | auto-detect                    | ISO 639-1 language code        |
+| `diarization`   | boolean | `false`                        | Enable speaker identification  |
+| `maxSpeakers`   | number  | -                              | Expected number of speakers    |
+| `audioFile`     | string  | -                              | Path to audio file             |
+| `audioFormat`   | string  | auto-detect                    | Audio format override          |
+| `referenceText` | string  | -                              | Expected transcription for WER |
+| `calculateWER`  | boolean | `false`                        | Calculate Word Error Rate      |
+| `baseUrl`       | string  | `https://api.elevenlabs.io/v1` | API endpoint                   |
+| `timeout`       | number  | `120000`                       | Request timeout (ms)           |
+| `retries`       | number  | `3`                            | Number of retry attempts       |
 
 ## Related Examples
 

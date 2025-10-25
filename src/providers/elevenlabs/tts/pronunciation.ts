@@ -53,9 +53,7 @@ export async function createPronunciationDictionary(
       throw new Error('Each pronunciation rule must have a word');
     }
     if (!rule.phoneme && !rule.pronunciation) {
-      throw new Error(
-        `Rule for word "${rule.word}" must have either phoneme or pronunciation`,
-      );
+      throw new Error(`Rule for word "${rule.word}" must have either phoneme or pronunciation`);
     }
   }
 

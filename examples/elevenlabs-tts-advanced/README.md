@@ -1,6 +1,7 @@
 # ElevenLabs TTS Advanced Features Example
 
 This example demonstrates advanced TTS capabilities:
+
 - **Pronunciation Dictionaries** - Custom pronunciation for technical terms
 - **Voice Design** - Generate voices from text descriptions
 - **Voice Remixing** - Modify existing voices (style, pacing, gender, age)
@@ -46,6 +47,7 @@ providers:
 **Common Use Cases**:
 
 1. **Technical Content**
+
    ```yaml
    pronunciationRules:
      - word: JavaScript
@@ -61,6 +63,7 @@ providers:
    ```
 
 2. **Medical/Scientific Terms**
+
    ```yaml
    pronunciationRules:
      - word: COVID-19
@@ -97,7 +100,7 @@ providers:
         gender: female
         age: middle_aged
         accent: american
-        accentStrength: 0.5  # 0-2, subtle to strong
+        accentStrength: 0.5 # 0-2, subtle to strong
 ```
 
 **Voice Design Templates**:
@@ -168,11 +171,11 @@ providers:
   # Make a voice more energetic
   - id: elevenlabs:tts:energetic
     config:
-      voiceId: 21m00Tcm4TlvDq8ikWAM  # Rachel
+      voiceId: 21m00Tcm4TlvDq8ikWAM # Rachel
       voiceRemix:
         style: energetic
         pacing: fast
-        promptStrength: medium  # low, medium, high, max
+        promptStrength: medium # low, medium, high, max
 
   # Make a voice calmer and slower
   - id: elevenlabs:tts:calm
@@ -186,14 +189,14 @@ providers:
 
 **Remix Parameters**:
 
-| Parameter | Options | Use Case |
-|-----------|---------|----------|
-| `style` | energetic, calm, professional, casual, dramatic | Match voice to content mood |
-| `pacing` | slow, normal, fast | Adjust speech speed |
-| `gender` | male, female | Change voice gender |
-| `age` | young, middle_aged, old | Adjust perceived age |
-| `accent` | american, british, australian, etc. | Change accent |
-| `promptStrength` | low, medium, high, max | How strongly to apply changes |
+| Parameter        | Options                                         | Use Case                      |
+| ---------------- | ----------------------------------------------- | ----------------------------- |
+| `style`          | energetic, calm, professional, casual, dramatic | Match voice to content mood   |
+| `pacing`         | slow, normal, fast                              | Adjust speech speed           |
+| `gender`         | male, female                                    | Change voice gender           |
+| `age`            | young, middle_aged, old                         | Adjust perceived age          |
+| `accent`         | american, british, australian, etc.             | Change accent                 |
+| `promptStrength` | low, medium, high, max                          | How strongly to apply changes |
 
 **Common Remix Scenarios**:
 
@@ -242,6 +245,7 @@ providers:
 ```
 
 **Benefits**:
+
 - ~75ms first chunk latency
 - Custom pronunciation for technical terms
 - Ideal for live demos and interactive applications
@@ -268,15 +272,17 @@ providers:
 ## Cost Optimization
 
 All advanced features use the same character-based pricing as basic TTS:
+
 - ~$0.00002 per character (~$0.02 per 1000 characters)
 - Free tier: 10,000 characters/month
 
 **Cost Tracking**:
+
 ```yaml
 tests:
   - assert:
       - type: cost
-        threshold: 0.05  # Max $0.05 per test
+        threshold: 0.05 # Max $0.05 per test
 ```
 
 ## Testing Assertions
@@ -304,8 +310,8 @@ tests:
 tests:
   - description: Compare baseline vs custom pronunciation
     vars:
-      baseline: "{{providers[0].output}}"
-      custom: "{{providers[1].output}}"
+      baseline: '{{providers[0].output}}'
+      custom: '{{providers[1].output}}'
     assert:
       - type: javascript
         value: |
@@ -321,7 +327,7 @@ tests:
   - description: Ensure advanced features don't slow generation
     assert:
       - type: latency
-        threshold: 8000  # 8 seconds max
+        threshold: 8000 # 8 seconds max
 ```
 
 ## Real-World Use Cases
@@ -376,7 +382,7 @@ providers:
         accent: british
         accentStrength: 1.5
 
-# English with American accent
+  # English with American accent
   - id: elevenlabs:tts:en-us
     config:
       voiceDesign:
@@ -397,7 +403,7 @@ providers:
         style: energetic
         pacing: fast
 
-# Evening news (Calm)
+  # Evening news (Calm)
   - id: elevenlabs:tts:evening
     config:
       voiceId: news-anchor-voice
@@ -415,6 +421,7 @@ Error: Voice design failed
 ```
 
 **Solutions**:
+
 1. Ensure description is detailed (minimum 10 characters)
 2. Specify gender and age for better results
 3. Check API quota (voice design uses generation credits)
@@ -426,6 +433,7 @@ Warning: Pronunciation dictionary not found
 ```
 
 **Solutions**:
+
 1. Verify pronunciation rules syntax
 2. Ensure words match exactly (case-sensitive)
 3. Check that you're not using both `pronunciationDictionaryId` and `pronunciationRules`
@@ -437,6 +445,7 @@ Issue: Voice sounds the same after remix
 ```
 
 **Solutions**:
+
 1. Increase `promptStrength` from medium to high or max
 2. Make more significant parameter changes
 3. Some voices have limited remix range - try a different base voice
@@ -445,12 +454,13 @@ Issue: Voice sounds the same after remix
 
 ### Pronunciation Dictionary Options
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `pronunciationRules` | `PronunciationRule[]` | Array of pronunciation rules |
-| `pronunciationDictionaryId` | string | Use existing dictionary by ID |
+| Option                      | Type                  | Description                   |
+| --------------------------- | --------------------- | ----------------------------- |
+| `pronunciationRules`        | `PronunciationRule[]` | Array of pronunciation rules  |
+| `pronunciationDictionaryId` | string                | Use existing dictionary by ID |
 
 **PronunciationRule**:
+
 ```typescript
 {
   word: string;           // Word to customize
