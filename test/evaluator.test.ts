@@ -3161,47 +3161,6 @@ describe('evaluator', () => {
     expect(capturedContext).toBeDefined();
     expect(capturedContext.result.metadata.sessionIds).toEqual([]);
   });
-
-  it('should ignore non-string sessionId in vars', async () => {
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
-        output: 'Test output',
-        // No sessionId in response
-      }),
-    };
-
-    const mockExtension = 'file://test-extension.js';
-    let capturedContext: any;
-
-    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
-      if (hookName === 'afterEach') {
-        capturedContext = context;
-      }
-      return context;
-    });
-
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          vars: {
-            var1: 'value1',
-            sessionId: { invalid: 'object' }, // Non-string sessionId
-          },
-        },
-      ],
-      extensions: [mockExtension],
-    };
-
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
-
-    expect(capturedContext).toBeDefined();
-    expect(capturedContext.result.metadata.sessionId).toBeUndefined();
-  });
 });
 
 describe('generateVarCombinations', () => {

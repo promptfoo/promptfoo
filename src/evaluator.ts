@@ -1205,6 +1205,11 @@ class Evaluator {
           await writer.write(row);
         }
 
+        if (row.metadata?.simbaSessionId) {
+          this.evalRecord.config.metadata ??= {};
+          this.evalRecord.config.metadata.simbaSessionId = row.metadata.simbaSessionId;
+        }
+
         const { promptIdx } = row;
         const metrics = prompts[promptIdx].metrics;
         invariant(metrics, 'Expected prompt.metrics to be set');
