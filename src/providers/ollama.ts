@@ -115,6 +115,12 @@ interface OllamaChatJsonL {
     role: string;
     content: string;
     images: null;
+    tool_calls?: Array<{
+      function: {
+        name: string;
+        arguments: any; // Ollama returns object, but we'll normalize to string for OpenAI compatibility
+      };
+    }>;
   };
   done: boolean;
 
@@ -294,7 +300,7 @@ export class OllamaChatProvider implements ApiProvider {
       params.tools = maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
     }
 
-    logger.debug('Calling Ollama API', { params });
+    logger.debug('[Ollama Chat] Calling Ollama API', { params });
     let response;
     try {
       response = await fetchWithCache(
@@ -318,7 +324,10 @@ export class OllamaChatProvider implements ApiProvider {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };
     }
-    logger.debug(`\tOllama generate API response: ${response.data}`);
+    logger.debug('[Ollama Chat] API response received', {
+      status: response.status,
+      dataLength: response.data?.length,
+    });
     if (response.data.error) {
       return {
         error: `Ollama error: ${response.data.error}`,
@@ -331,18 +340,62 @@ export class OllamaChatProvider implements ApiProvider {
         .filter((line: string) => line.trim() !== '')
         .map((line: string) => JSON.parse(line) as OllamaChatJsonL);
 
-      const output = lines
+      // Find the final chunk (with done: true)
+      const finalChunk = lines.find((chunk: OllamaChatJsonL) => chunk.done);
+
+      // Collect all content chunks
+      const contentParts = lines
         .map((parsed: OllamaChatJsonL) => {
           if (parsed.message?.content) {
             return parsed.message.content;
           }
           return null;
         })
-        .filter((s: string | null) => s !== null)
-        .join('');
+        .filter((s: string | null) => s !== null);
+
+      const content = contentParts.join('');
+
+      // Find tool_calls from any chunk (they may appear before done: true)
+      const chunkWithToolCalls = lines.find(
+        (chunk: OllamaChatJsonL) =>
+          chunk.message?.tool_calls && chunk.message.tool_calls.length > 0,
+      );
+      let tool_calls = chunkWithToolCalls?.message?.tool_calls;
+
+      // Normalize tool_calls to match OpenAI format (arguments as JSON string, not object)
+      if (tool_calls && tool_calls.length > 0) {
+        tool_calls = tool_calls.map((call: { function: { name: string; arguments: any } }) => ({
+          function: {
+            name: call.function.name,
+            arguments:
+              typeof call.function.arguments === 'string'
+                ? call.function.arguments
+                : JSON.stringify(call.function.arguments),
+          },
+        }));
+      }
+
+      // Determine output based on message content and tool_calls
+      let output: any;
+      if (tool_calls && tool_calls.length > 0) {
+        // If there are tool calls, return them (similar to OpenAI behavior)
+        logger.debug('[Ollama Chat] Tool calls detected', {
+          toolCallCount: tool_calls.length,
+          hasContent: !!(content && content.trim()),
+        });
+        if (content && content.trim()) {
+          // If there's also content, return the full message object
+          output = { content, tool_calls };
+        } else {
+          // If only tool calls, return just the tool calls
+          output = tool_calls;
+        }
+      } else {
+        // No tool calls, return the content
+        output = content;
+      }
 
       // Extract token usage from the final chunk (where done: true)
-      const finalChunk = lines.find((chunk: OllamaChatJsonL) => chunk.done);
       let tokenUsage: Partial<TokenUsage> | undefined;
 
       if (

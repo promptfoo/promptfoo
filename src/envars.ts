@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
-
 import cliState from './cliState';
+
 import type { EnvOverrides } from './types/env';
 
 dotenv.config({ quiet: true });
@@ -22,6 +22,7 @@ type EnvVars = {
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
+  PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
   PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64?: boolean;
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;

@@ -114,12 +114,24 @@ export async function runRedteamConversation({
   // Generate goal-specific evaluation rubric
   const additionalRubric = getIterativeGoalRubric(goal);
 
+  const modifierSection =
+    test?.metadata?.modifiers && Object.keys(test.metadata.modifiers).length > 0
+      ? Object.entries(test.metadata.modifiers)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join('\n')
+      : undefined;
+
   const redteamSystemPrompt = excludeTargetOutputFromAgenticAttackGeneration
     ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, {
         goal,
         purpose: test?.metadata?.purpose,
+        modifierSection,
       })
-    : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose: test?.metadata?.purpose });
+    : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, {
+        goal,
+        purpose: test?.metadata?.purpose,
+        modifierSection,
+      });
 
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
