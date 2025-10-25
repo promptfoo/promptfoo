@@ -13,10 +13,10 @@ const getWeatherTool = tool({
 
     return {
       city,
-      temperature: "72°F",
-      conditions: "Sunny",
-      humidity: "45%",
-      timestamp: new Date().toISOString()
+      temperature: '72°F',
+      conditions: 'Sunny',
+      humidity: '45%',
+      timestamp: new Date().toISOString(),
     };
   },
 });
