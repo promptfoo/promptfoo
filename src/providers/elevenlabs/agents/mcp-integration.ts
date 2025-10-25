@@ -26,10 +26,12 @@ export async function setupMCPIntegration(
   await client.post(`/convai/agents/${agentId}/mcp`, {
     server_url: config.serverUrl,
     approval_policy: config.approvalPolicy || 'auto',
-    approval_conditions: config.approvalConditions ? {
-      require_approval_for_tools: config.approvalConditions.requireApprovalForTools || [],
-      require_approval_for_cost: config.approvalConditions.requireApprovalForCost,
-    } : undefined,
+    approval_conditions: config.approvalConditions
+      ? {
+          require_approval_for_tools: config.approvalConditions.requireApprovalForTools || [],
+          require_approval_for_cost: config.approvalConditions.requireApprovalForCost,
+        }
+      : undefined,
     timeout: config.timeout || 30000,
   });
 
@@ -105,7 +107,7 @@ export async function testMCPServer(serverUrl: string): Promise<{
     const response = await fetchWithProxy(`${serverUrl}/health`, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
       },
     });
 
@@ -166,11 +168,7 @@ export const MCP_APPROVAL_PRESETS = {
   conditionalPermissive: {
     approvalPolicy: 'conditional' as const,
     approvalConditions: {
-      requireApprovalForTools: [
-        'delete_all',
-        'drop_database',
-        'send_payment',
-      ],
+      requireApprovalForTools: ['delete_all', 'drop_database', 'send_payment'],
       requireApprovalForCost: 10.0, // $10 threshold
     },
   },
@@ -179,15 +177,8 @@ export const MCP_APPROVAL_PRESETS = {
   conditionalRestrictive: {
     approvalPolicy: 'conditional' as const,
     approvalConditions: {
-      requireApprovalForTools: [
-        'create',
-        'update',
-        'delete',
-        'send',
-        'execute',
-        'modify',
-      ],
-      requireApprovalForCost: 0.10, // $0.10 threshold
+      requireApprovalForTools: ['create', 'update', 'delete', 'send', 'execute', 'modify'],
+      requireApprovalForCost: 0.1, // $0.10 threshold
     },
   },
 };

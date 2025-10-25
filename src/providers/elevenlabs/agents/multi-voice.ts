@@ -124,9 +124,7 @@ export function matchSpeakersToCharacters(
 
   for (const speaker of speakers) {
     // Try exact match first
-    const exactMatch = characters.find(
-      (char) => char.name.toLowerCase() === speaker.toLowerCase(),
-    );
+    const exactMatch = characters.find((char) => char.name.toLowerCase() === speaker.toLowerCase());
 
     if (exactMatch) {
       speakerToVoice.set(speaker, exactMatch.voiceId);
@@ -134,9 +132,10 @@ export function matchSpeakersToCharacters(
     }
 
     // Try partial match
-    const partialMatch = characters.find((char) =>
-      char.name.toLowerCase().includes(speaker.toLowerCase()) ||
-      speaker.toLowerCase().includes(char.name.toLowerCase()),
+    const partialMatch = characters.find(
+      (char) =>
+        char.name.toLowerCase().includes(speaker.toLowerCase()) ||
+        speaker.toLowerCase().includes(char.name.toLowerCase()),
     );
 
     if (partialMatch) {

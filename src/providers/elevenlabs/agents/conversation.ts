@@ -127,7 +127,9 @@ export function buildSimulationRequest(
 /**
  * Format conversation history for display
  */
-export function formatConversationHistory(turns: Array<{ speaker: string; message: string }>): string {
+export function formatConversationHistory(
+  turns: Array<{ speaker: string; message: string }>,
+): string {
   return turns
     .map((turn) => {
       const role = turn.speaker.charAt(0).toUpperCase() + turn.speaker.slice(1);

@@ -67,7 +67,9 @@ export function validateToolCall(
     if (fieldSchema.type) {
       const actualType = Array.isArray(value) ? 'array' : typeof value;
       if (fieldSchema.type !== actualType) {
-        errors.push(`Argument ${fieldName} has wrong type: expected ${fieldSchema.type}, got ${actualType}`);
+        errors.push(
+          `Argument ${fieldName} has wrong type: expected ${fieldSchema.type}, got ${actualType}`,
+        );
       }
     }
   }

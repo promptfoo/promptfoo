@@ -75,14 +75,14 @@ export function isEvaluationPassed(
 /**
  * Generate evaluation summary report
  */
-export function generateEvaluationSummary(
-  results: Map<string, EvaluationResult>,
-): string {
+export function generateEvaluationSummary(results: Map<string, EvaluationResult>): string {
   const lines: string[] = [];
   const overallScore = calculateOverallScore(results);
   const passed = isEvaluationPassed(results);
 
-  lines.push(`Overall Score: ${(overallScore * 100).toFixed(1)}% - ${passed ? 'PASSED' : 'FAILED'}`);
+  lines.push(
+    `Overall Score: ${(overallScore * 100).toFixed(1)}% - ${passed ? 'PASSED' : 'FAILED'}`,
+  );
   lines.push('');
   lines.push('Criteria Results:');
 

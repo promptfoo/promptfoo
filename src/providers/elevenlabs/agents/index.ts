@@ -4,11 +4,7 @@
  * Test and evaluate voice AI agents with LLM backends
  */
 
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderResponse,
-} from '../../../types/providers';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../../types/providers';
 import type { EnvOverrides } from '../../../types/env';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
@@ -163,10 +159,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     }
   }
 
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for initialization
     if (this.initPromise) {
       await this.initPromise;
@@ -342,10 +335,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   /**
    * Build provider response from simulation result
    */
-  private buildResponse(
-    response: AgentSimulationResponse,
-    startTime: number,
-  ): ProviderResponse {
+  private buildResponse(response: AgentSimulationResponse, startTime: number): ProviderResponse {
     // Process evaluation results
     const evaluationResults = response.analysis?.evaluation_criteria_results
       ? processEvaluationResults(response.analysis.evaluation_criteria_results)
