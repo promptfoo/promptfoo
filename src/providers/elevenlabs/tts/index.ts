@@ -18,6 +18,8 @@ import {
   combineStreamingChunks,
   calculateStreamingMetrics,
 } from './streaming';
+import { createPronunciationDictionary, applyPronunciationDictionary } from './pronunciation';
+import { designVoice, remixVoice } from './voice-design';
 
 /**
  * ElevenLabs Text-to-Speech provider
@@ -67,6 +69,58 @@ export class ElevenLabsTTSProvider implements ApiProvider {
     if (id) {
       this.id = () => id;
     }
+
+    // Initialize advanced features (voice design, remix, pronunciation dictionaries)
+    // This is async but we handle it lazily on first callApi
+    this.initPromise = this.initializeAdvancedFeatures();
+  }
+
+  private initPromise: Promise<void> | null = null;
+
+  /**
+   * Initialize advanced features like voice design, remix, and pronunciation dictionaries
+   */
+  private async initializeAdvancedFeatures(): Promise<void> {
+    try {
+      // Handle voice design
+      if (this.config.voiceDesign) {
+        logger.debug('[ElevenLabs TTS] Designing voice from description');
+        const generatedVoice = await designVoice(this.client, this.config.voiceDesign);
+        this.config.voiceId = generatedVoice.voiceId;
+        logger.debug('[ElevenLabs TTS] Voice designed', { voiceId: generatedVoice.voiceId });
+      }
+
+      // Handle voice remix (only if no voice design)
+      if (this.config.voiceRemix && !this.config.voiceDesign) {
+        logger.debug('[ElevenLabs TTS] Remixing voice');
+        const remixedVoice = await remixVoice(
+          this.client,
+          this.config.voiceId,
+          this.config.voiceRemix,
+        );
+        this.config.voiceId = remixedVoice.voiceId;
+        logger.debug('[ElevenLabs TTS] Voice remixed', { voiceId: remixedVoice.voiceId });
+      }
+
+      // Handle pronunciation rules
+      if (this.config.pronunciationRules && this.config.pronunciationRules.length > 0) {
+        logger.debug('[ElevenLabs TTS] Creating pronunciation dictionary from rules');
+        const dictionary = await createPronunciationDictionary(
+          this.client,
+          `promptfoo-dict-${Date.now()}`,
+          this.config.pronunciationRules,
+        );
+        this.config.pronunciationDictionaryId = dictionary.id;
+        logger.debug('[ElevenLabs TTS] Pronunciation dictionary created', {
+          dictionaryId: dictionary.id,
+        });
+      }
+    } catch (error) {
+      logger.error('[ElevenLabs TTS] Advanced features initialization failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Don't throw - fall back to basic TTS without advanced features
+    }
   }
 
   id(): string {
@@ -82,6 +136,12 @@ export class ElevenLabsTTSProvider implements ApiProvider {
     _context?: CallApiContextParams,
     _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Wait for advanced features initialization (voice design, remix, pronunciation)
+    if (this.initPromise) {
+      await this.initPromise;
+      this.initPromise = null; // Only wait once
+    }
+
     const startTime = Date.now();
 
     logger.debug('[ElevenLabs TTS] Generating speech', {
@@ -114,6 +174,19 @@ export class ElevenLabsTTSProvider implements ApiProvider {
 
     // Make API call
     try {
+      // Prepare headers
+      const headers: Record<string, string> = {
+        Accept: 'audio/mpeg',
+      };
+
+      // Apply pronunciation dictionary if configured
+      if (this.config.pronunciationDictionaryId) {
+        Object.assign(headers, applyPronunciationDictionary(this.config.pronunciationDictionaryId));
+        logger.debug('[ElevenLabs TTS] Applying pronunciation dictionary', {
+          dictionaryId: this.config.pronunciationDictionaryId,
+        });
+      }
+
       const response = await this.client.post<ArrayBuffer>(
         `/text-to-speech/${this.config.voiceId}`,
         {
@@ -125,9 +198,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
           optimize_streaming_latency: this.config.optimizeStreamingLatency,
         },
         {
-          headers: {
-            Accept: 'audio/mpeg',
-          },
+          headers,
         },
       );
 
@@ -306,7 +377,10 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       const metrics = calculateStreamingMetrics(session, prompt.length);
 
       // Encode audio
-      const audioData = await encodeAudio(combinedAudio, this.config.outputFormat || 'mp3_44100_128');
+      const audioData = await encodeAudio(
+        combinedAudio,
+        this.config.outputFormat || 'mp3_44100_128',
+      );
 
       const ttsResponse: TTSResponse = {
         audio: audioData,

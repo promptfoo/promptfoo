@@ -1,0 +1,140 @@
+description: ElevenLabs TTS - Advanced Features (Pronunciation, Voice Design, Voice Remix)
+
+prompts:
+  # Technical content for pronunciation testing
+  - |
+    Welcome to the API documentation. This guide covers REST APIs, GraphQL endpoints,
+    and WebSocket connections. We'll use Python, JavaScript, and SQL for our examples.
+
+  # Product names and acronyms
+  - |
+    Our stack includes AWS Lambda, PostgreSQL databases, and Redis caching.
+    The frontend uses React with TypeScript, while the backend runs on Node.js.
+
+  # Creative content for voice design
+  - |
+    In a world where technology and nature coexist harmoniously,
+    the gentle hum of servers blends with the rustling of leaves.
+
+providers:
+  # 1. Basic TTS (baseline)
+  - id: elevenlabs:tts:baseline
+    label: Baseline (No Custom Pronunciation)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM  # Rachel
+
+  # 2. TTS with Pronunciation Dictionary
+  - id: elevenlabs:tts:pronunciation
+    label: Custom Tech Pronunciation
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      pronunciationRules:
+        # Programming languages
+        - word: API
+          pronunciation: A-P-I
+        - word: SQL
+          pronunciation: sequel
+        - word: PostgreSQL
+          pronunciation: post-gres-Q-L
+        - word: JavaScript
+          pronunciation: java-script
+        - word: TypeScript
+          pronunciation: type-script
+        - word: Python
+          pronunciation: pie-thon
+
+        # Cloud/Infrastructure
+        - word: AWS
+          pronunciation: A-W-S
+        - word: Redis
+          pronunciation: red-iss
+        - word: GraphQL
+          pronunciation: graph-Q-L
+        - word: WebSocket
+          pronunciation: web-socket
+
+        # Frameworks
+        - word: React
+          pronunciation: re-act
+        - word: Node.js
+          pronunciation: node-jay-ess
+
+  # 3. Voice Design from Description
+  - id: elevenlabs:tts:designed
+    label: Designed Voice (Warm & Professional)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceDesign:
+        description: A warm, professional voice with excellent clarity and a slight smile in the tone, perfect for technical documentation
+        gender: female
+        age: middle_aged
+        accent: american
+        accentStrength: 0.5
+
+  # 4. Voice Remix - Make Rachel more energetic
+  - id: elevenlabs:tts:remixed
+    label: Remixed Voice (Energetic Rachel)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM  # Rachel
+      voiceRemix:
+        style: energetic
+        pacing: fast
+        promptStrength: medium
+
+  # 5. Voice Remix - Make Rachel deeper and slower
+  - id: elevenlabs:tts:remixed-calm
+    label: Remixed Voice (Calm & Deep)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM  # Rachel
+      voiceRemix:
+        style: calm
+        pacing: slow
+        promptStrength: high
+
+  # 6. Streaming with Pronunciation
+  - id: elevenlabs:tts:streaming-pronunciation
+    label: Streaming + Pronunciation
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      streaming: true
+      pronunciationRules:
+        - word: API
+          pronunciation: A-P-I
+        - word: SQL
+          pronunciation: sequel
+
+tests:
+  - description: Pronunciation accuracy test
+    vars:
+      expectedTerms:
+        - API
+        - SQL
+        - PostgreSQL
+        - JavaScript
+    assert:
+      - type: cost
+        threshold: 0.02
+      - type: latency
+        threshold: 8000
+
+  - description: Voice quality comparison
+    assert:
+      - type: cost
+        threshold: 0.05
+      - type: javascript
+        value: |
+          // All voices should successfully generate
+          !output.includes('error')
+
+# Default assertions for all tests
+defaultTest:
+  assert:
+    - type: not-contains
+      value: error
+    - type: cost
+      threshold: 0.10  # Max $0.10 per generation

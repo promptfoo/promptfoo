@@ -22,6 +22,25 @@ export {
   getRecommendedSettings,
   getPopularVoicesByCategory,
 } from './tts/voices';
+export {
+  createPronunciationDictionary,
+  applyPronunciationDictionary,
+  applyPronunciationDictionaries,
+  getPronunciationDictionary,
+  listPronunciationDictionaries,
+  deletePronunciationDictionary,
+  createTechPronunciationDictionary,
+  COMMON_TECH_PRONUNCIATIONS,
+} from './tts/pronunciation';
+export {
+  designVoice,
+  remixVoice,
+  cloneVoice,
+  deleteVoice,
+  getVoiceGenerationStatus,
+  designVoiceFromTemplate,
+  VOICE_DESIGN_TEMPLATES,
+} from './tts/voice-design';
 export type {
   ElevenLabsBaseConfig,
   AudioData,
@@ -37,6 +56,9 @@ export type {
   TTSResponse,
   TTSStreamConfig,
   StreamingChunk,
+  PronunciationRule,
+  VoiceDesignConfig,
+  VoiceRemixConfig,
 } from './tts/types';
 export type {
   ElevenLabsSTTConfig,
@@ -49,3 +71,5 @@ export type {
 } from './stt/types';
 export type { VoiceInfo } from './tts/voices';
 export type { WebSocketClientConfig, StreamingMessage } from './websocket-client';
+export type { PronunciationDictionary } from './tts/pronunciation';
+export type { GeneratedVoice } from './tts/voice-design';
