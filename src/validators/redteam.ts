@@ -96,6 +96,10 @@ export const RedteamPluginSchema = z.union([
 
 export const strategyIdSchema = z.union([
   z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+    // Allow 'multilingual' for backward compatibility - it will be migrated to language config
+    if (val === 'multilingual') {
+      return;
+    }
     if (!ALL_STRATEGIES.includes(val as Strategy)) {
       ctx.addIssue({
         code: z.ZodIssueCode.invalid_enum_value,
@@ -107,6 +111,10 @@ export const strategyIdSchema = z.union([
   }),
   z.string().refine(
     (value) => {
+      // Allow 'multilingual' for backward compatibility
+      if (value === 'multilingual') {
+        return true;
+      }
       return value.startsWith('file://') && isJavascriptFile(value);
     },
     {

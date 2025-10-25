@@ -9,7 +9,6 @@ import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
   calculateTotalTests,
-  getMultilingualRequestedCount,
   getTestCount,
   resolvePluginConfig,
   synthesize,
@@ -17,7 +16,6 @@ import {
 import { Plugins } from '../../src/redteam/plugins';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies';
-import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 
@@ -1193,7 +1191,6 @@ describe('calculateTotalTests', () => {
       totalTests: 5,
       totalPluginTests: 5,
       effectiveStrategyCount: 0,
-      multilingualStrategy: undefined,
       includeBasicTests: true,
     });
   });
@@ -1205,7 +1202,6 @@ describe('calculateTotalTests', () => {
       totalTests: 5,
       totalPluginTests: 5,
       effectiveStrategyCount: 1,
-      multilingualStrategy: undefined,
       includeBasicTests: true,
     });
   });
@@ -1217,49 +1213,7 @@ describe('calculateTotalTests', () => {
       totalTests: 0,
       totalPluginTests: 5,
       effectiveStrategyCount: 0,
-      multilingualStrategy: undefined,
       includeBasicTests: false,
-    });
-  });
-
-  it('should handle multilingual strategy with default languages', () => {
-    const strategies = [{ id: 'multilingual' }];
-    const result = calculateTotalTests(mockPlugins, strategies);
-    expect(result).toEqual({
-      totalTests: 5 * DEFAULT_LANGUAGES.length,
-      totalPluginTests: 5,
-      effectiveStrategyCount: 1,
-      multilingualStrategy: strategies[0],
-      includeBasicTests: true,
-    });
-  });
-
-  it('should handle multilingual strategy with custom languages', () => {
-    const strategies = [
-      { id: 'multilingual', config: { languages: { en: true, es: true, fr: true } } },
-    ];
-    const result = calculateTotalTests(mockPlugins, strategies);
-    expect(result).toEqual({
-      totalTests: 15,
-      totalPluginTests: 5,
-      effectiveStrategyCount: 1,
-      multilingualStrategy: strategies[0],
-      includeBasicTests: true,
-    });
-  });
-
-  it('should handle combination of basic and multilingual strategies', () => {
-    const strategies = [
-      { id: 'basic' },
-      { id: 'multilingual', config: { languages: { en: true, es: true } } },
-    ];
-    const result = calculateTotalTests(mockPlugins, strategies);
-    expect(result).toEqual({
-      totalTests: 10,
-      totalPluginTests: 5,
-      effectiveStrategyCount: 2,
-      includeBasicTests: true,
-      multilingualStrategy: strategies[1],
     });
   });
 
@@ -1271,7 +1225,6 @@ describe('calculateTotalTests', () => {
       totalPluginTests: 5,
       effectiveStrategyCount: 1,
       includeBasicTests: true,
-      multilingualStrategy: undefined,
     });
   });
 
@@ -1283,22 +1236,17 @@ describe('calculateTotalTests', () => {
       totalPluginTests: 5,
       effectiveStrategyCount: 1,
       includeBasicTests: true,
-      multilingualStrategy: undefined,
     });
   });
 
   it('should handle retry strategy combined with other strategies', () => {
-    const strategies = [
-      { id: 'retry' },
-      { id: 'multilingual', config: { languages: { en: true, es: true } } },
-    ];
+    const strategies = [{ id: 'retry' }, { id: 'rot13' }];
     const result = calculateTotalTests(mockPlugins, strategies);
     expect(result).toEqual({
-      totalTests: 20,
+      totalTests: 15,
       totalPluginTests: 5,
       effectiveStrategyCount: 2,
       includeBasicTests: true,
-      multilingualStrategy: strategies[1],
     });
   });
 
@@ -1311,7 +1259,6 @@ describe('calculateTotalTests', () => {
       totalPluginTests: 50,
       effectiveStrategyCount: 1,
       includeBasicTests: true,
-      multilingualStrategy: undefined,
     });
   });
 
@@ -1323,23 +1270,17 @@ describe('calculateTotalTests', () => {
       totalPluginTests: 5,
       effectiveStrategyCount: 2,
       includeBasicTests: true,
-      multilingualStrategy: undefined,
     });
   });
 
-  it('should handle multiple strategies with multilingual applied last', () => {
-    const strategies = [
-      { id: 'morse' },
-      { id: 'piglatin' },
-      { id: 'multilingual', config: { languages: { en: true, es: true } } },
-    ];
+  it('should handle multiple strategies', () => {
+    const strategies = [{ id: 'morse' }, { id: 'piglatin' }, { id: 'rot13' }];
     const result = calculateTotalTests(mockPlugins, strategies);
     expect(result).toEqual({
-      totalTests: 30,
+      totalTests: 20,
       totalPluginTests: 5,
       effectiveStrategyCount: 3,
       includeBasicTests: true,
-      multilingualStrategy: strategies[2],
     });
   });
 
@@ -1355,54 +1296,7 @@ describe('calculateTotalTests', () => {
       totalPluginTests: 5,
       effectiveStrategyCount: 2,
       includeBasicTests: false,
-      multilingualStrategy: undefined,
     });
-  });
-});
-
-describe('getMultilingualRequestedCount', () => {
-  const testCases = [
-    { metadata: { pluginId: 'test1' } },
-    { metadata: { pluginId: 'test2' } },
-  ] as TestCaseWithPlugin[];
-
-  it('should calculate count with custom languages array', () => {
-    const strategy = {
-      id: 'multilingual',
-      config: { languages: ['en', 'es', 'fr'] },
-    };
-    const count = getMultilingualRequestedCount(testCases, strategy);
-    expect(count).toBe(6);
-  });
-
-  it('should use DEFAULT_LANGUAGES when no languages config provided', () => {
-    const strategy = { id: 'multilingual' };
-    const count = getMultilingualRequestedCount(testCases, strategy);
-    expect(count).toBe(2 * DEFAULT_LANGUAGES.length);
-  });
-
-  it('should handle empty languages array', () => {
-    const strategy = {
-      id: 'multilingual',
-      config: { languages: [] },
-    };
-    const count = getMultilingualRequestedCount(testCases, strategy);
-    expect(count).toBe(0);
-  });
-
-  it('should handle undefined config', () => {
-    const strategy = { id: 'multilingual' };
-    const count = getMultilingualRequestedCount(testCases, strategy);
-    expect(count).toBe(2 * DEFAULT_LANGUAGES.length);
-  });
-
-  it('should handle empty test cases', () => {
-    const strategy = {
-      id: 'multilingual',
-      config: { languages: ['en', 'es'] },
-    };
-    const count = getMultilingualRequestedCount([], strategy);
-    expect(count).toBe(0);
   });
 });
 
@@ -1417,15 +1311,6 @@ describe('getTestCount', () => {
     const strategy = { id: 'basic', config: { enabled: false } };
     const result = getTestCount(strategy, 10, []);
     expect(result).toBe(0);
-  });
-
-  it('should multiply by number of languages for multilingual strategy', () => {
-    const strategy = {
-      id: 'multilingual',
-      config: { languages: { en: true, es: true, fr: true } },
-    };
-    const result = getTestCount(strategy, 10, []);
-    expect(result).toBe(30);
   });
 
   it('should add configured number of tests for retry strategy', () => {
@@ -1445,17 +1330,8 @@ describe('getTestCount', () => {
     const result = getTestCount(strategy, 10, []);
     expect(result).toBe(10);
   });
-  it('should multiply by language count for layer strategy with multilingual step', () => {
-    const strategy = {
-      id: 'layer',
-      config: {
-        steps: ['base64', { id: 'multilingual', config: { languages: ['es', 'fr'] } }, 'rot13'],
-      },
-    };
-    const result = getTestCount(strategy, 10, []);
-    expect(result).toBe(20); // 10 * 2 languages
-  });
-  it('should return totalPluginTests for layer strategy without multilingual', () => {
+
+  it('should return totalPluginTests for layer strategy', () => {
     const strategy = {
       id: 'layer',
       config: {
