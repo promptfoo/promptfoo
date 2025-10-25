@@ -1376,7 +1376,6 @@ describe('Language configuration', () => {
     jest.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
     jest.mocked(checkRemoteHealth).mockResolvedValue({
       status: 'OK',
-      cached: false,
       message: 'OK',
     });
 
