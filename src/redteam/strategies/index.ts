@@ -4,10 +4,7 @@ import dedent from 'dedent';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type {
-  RedteamStrategyObject,
-  TestCase,
-} from '../../types/index';
+import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
@@ -28,10 +25,7 @@ import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
 import { addMultilingual } from './multilingual';
-import {
-  addOtherEncodings,
-  EncodingType,
-} from './otherEncodings';
+import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';

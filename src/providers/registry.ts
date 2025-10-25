@@ -4,8 +4,7 @@ import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
-import RedteamAuthoritativeMarkupInjectionProvider
-  from '../redteam/providers/authoritativeMarkupInjection';
+import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
 import RedteamCustomProvider from '../redteam/providers/custom';
@@ -16,16 +15,10 @@ import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import type { LoadApiProviderContext } from '../types/index';
-import type {
-  ApiProvider,
-  ProviderOptions,
-} from '../types/providers';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
-import {
-  AlibabaChatCompletionProvider,
-  AlibabaEmbeddingProvider,
-} from './alibaba';
+import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { ANTHROPIC_MODELS } from './anthropic/util';
@@ -36,17 +29,11 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
-import {
-  AwsBedrockCompletionProvider,
-  AwsBedrockEmbeddingProvider,
-} from './bedrock/index';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
-import {
-  CohereChatCompletionProvider,
-  CohereEmbeddingProvider,
-} from './cohere';
+import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
@@ -57,10 +44,7 @@ import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
-import {
-  VertexChatProvider,
-  VertexEmbeddingProvider,
-} from './google/vertex';
+import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
@@ -81,16 +65,9 @@ import {
 } from './localai';
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
-import {
-  MistralChatCompletionProvider,
-  MistralEmbeddingProvider,
-} from './mistral';
+import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { createNscaleProvider } from './nscale';
-import {
-  OllamaChatProvider,
-  OllamaCompletionProvider,
-  OllamaEmbeddingProvider,
-} from './ollama';
+import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';

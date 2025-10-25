@@ -7,25 +7,25 @@ export function addIterativeJailbreaks(
   config: Record<string, any>,
 ): TestCase[] {
   const providerName =
-    strategy === 'iterative' 
-      ? 'promptfoo:redteam:iterative' 
+    strategy === 'iterative'
+      ? 'promptfoo:redteam:iterative'
       : strategy === 'iterative:tree'
-      ? 'promptfoo:redteam:iterative:tree'
-      : 'promptfoo:redteam:iterative:meta';
-  
-  const metricSuffix = 
-    strategy === 'iterative' 
-      ? 'Iterative' 
+        ? 'promptfoo:redteam:iterative:tree'
+        : 'promptfoo:redteam:iterative:meta';
+
+  const metricSuffix =
+    strategy === 'iterative'
+      ? 'Iterative'
       : strategy === 'iterative:tree'
-      ? 'IterativeTree'
-      : 'IterativeMeta';
-  
-  const strategyId = 
-    strategy === 'iterative' 
-      ? 'jailbreak' 
+        ? 'IterativeTree'
+        : 'IterativeMeta';
+
+  const strategyId =
+    strategy === 'iterative'
+      ? 'jailbreak'
       : strategy === 'iterative:tree'
-      ? 'jailbreak:tree'
-      : 'jailbreak:meta';
+        ? 'jailbreak:tree'
+        : 'jailbreak:meta';
 
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);

@@ -21,10 +21,7 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import {
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -507,7 +504,8 @@ class RedteamIterativeProvider implements ApiProvider {
     this.injectVar = config.injectVar;
 
     // Use config value first, then fall back to environment variable
-    this.numIterations = Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
+    this.numIterations =
+      Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
