@@ -424,6 +424,7 @@ export async function doGenerateRedteam(
     ...parsedConfig.data,
     purpose: enhancedPurpose,
     numTests: config.numTests,
+    language: parsedConfig.data.language,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
     maxConcurrency: config.maxConcurrency,
     delay: config.delay,
