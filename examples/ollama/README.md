@@ -45,6 +45,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml
 ```
 
 **What this tests**:
+
 - Compares uncensored vs standard models
 - Tests with controversial/edge-case questions
 - Validates models don't refuse legitimate queries
@@ -65,6 +66,7 @@ npx promptfoo@latest eval -c promptfooconfig.function-calling.yaml
 ```
 
 **What this tests**:
+
 - Function calling with `llama3.2:1b` (tiny, fast model)
 - OpenAI-compatible tool format
 - Weather API function example with location extraction
@@ -81,12 +83,14 @@ Successes: 3
 Each test generates a tool call:
 
 ```json
-[{
-  "function": {
-    "name": "get_current_weather",
-    "arguments": "{\"location\":\"Boston\",\"unit\":\"celsius\"}"
+[
+  {
+    "function": {
+      "name": "get_current_weather",
+      "arguments": "{\"location\":\"Boston\",\"unit\":\"celsius\"}"
+    }
   }
-}]
+]
 ```
 
 **Supported models**: Models with function calling support include `llama3.2:1b`, `llama3.2:3b`, `llama3.1`, `llama3.3`, and `qwen2.5`.
@@ -96,6 +100,7 @@ Each test generates a tool call:
 ### For Comparison Example
 
 Edit the prompts and test cases in `promptfooconfig.yaml`. You can modify:
+
 - Models being compared
 - Test questions in the `tests` section
 - Assertions to validate different behaviors
@@ -104,6 +109,7 @@ Edit the prompts and test cases in `promptfooconfig.yaml`. You can modify:
 ### For Function Calling Example
 
 Edit `promptfooconfig.function-calling.yaml` to:
+
 - Change the test cities
 - Modify the tool definition in `get_current_weather.yaml`
 - Add additional functions
@@ -132,6 +138,7 @@ npx promptfoo@latest view
 ```
 
 This opens an interactive comparison showing:
+
 - Side-by-side model outputs
 - Pass/fail status for each assertion
 - Token usage and latency metrics
