@@ -864,8 +864,8 @@ export async function synthesize({
       const allPluginTests: TestCase[] = [];
       const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
 
-      const languagePromises = languages.map((lang) =>
-        action({
+      const languagePromises = languages.map(async (lang) => {
+        const pluginTests = await action({
           provider: redteamProvider,
           purpose,
           injectVar,
@@ -879,7 +879,8 @@ export async function synthesize({
               ...(plugin.config?.modifiers || {}),
             },
           },
-        }).then((pluginTests) => {
+        });
+        {
           const langKey = lang || 'en';
 
           if (Array.isArray(pluginTests) && pluginTests.length > 0) {
@@ -906,8 +907,8 @@ export async function synthesize({
             requested: plugin.numTests,
             generated: 0,
           };
-        }),
-      );
+        }
+      });
 
       const languageResults = await Promise.allSettled(languagePromises);
 
