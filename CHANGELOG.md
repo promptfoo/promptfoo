@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- chore(debug): show telemetry settings in debug command output
+- chore(cli): show telemetryDisabled/telemetryDebug in `promptfoo debug` output (#6015)
 - chore(webui): add label column to prompts table (#6002)
 - chore: remove "LLM Risk Assessment" prefix (#6004)
 - refactor(app): Reduce unnecessary API health requests (#5979)
