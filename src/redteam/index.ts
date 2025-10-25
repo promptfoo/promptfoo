@@ -18,6 +18,7 @@ import {
   getDefaultNFanout,
   HARM_PLUGINS,
   isFanoutStrategy,
+  isLanguageDisallowedStrategy,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
@@ -268,9 +269,46 @@ async function applyStrategies(
     }
 
     const targetPlugins = strategy.config?.plugins;
-    const applicableTestCases = testCases.filter((t) =>
+    let applicableTestCases = testCases.filter((t) =>
       pluginMatchesStrategyTargets(t, strategy.id, targetPlugins),
     );
+
+    // For language-disallowed strategies (audio, video, image, layer, math-prompt),
+    // only use test cases with the default language (typically 'en' or undefined)
+    // to avoid generating redundant variants
+    if (isLanguageDisallowedStrategy(strategy.id)) {
+      // Get all languages present in the test cases
+      const languagesInTests = new Set(applicableTestCases.map((t) => getLanguageForTestCase(t)));
+
+      // If there are multiple languages, filter to only use the most common one (likely 'en' or undefined)
+      if (languagesInTests.size > 1) {
+        // Count occurrences of each language
+        const languageCounts = new Map<string | undefined, number>();
+        for (const testCase of applicableTestCases) {
+          const lang = getLanguageForTestCase(testCase);
+          languageCounts.set(lang, (languageCounts.get(lang) || 0) + 1);
+        }
+
+        // Find the most common language (typically 'en' or undefined)
+        let defaultLanguage: string | undefined = 'en';
+        let maxCount = 0;
+        for (const [lang, count] of languageCounts.entries()) {
+          if (count > maxCount || (count === maxCount && (lang === 'en' || lang === undefined))) {
+            defaultLanguage = lang;
+            maxCount = count;
+          }
+        }
+
+        // Filter to only test cases with the default language
+        applicableTestCases = applicableTestCases.filter(
+          (t) => getLanguageForTestCase(t) === defaultLanguage,
+        );
+
+        logger.debug(
+          `[Language Filtering] Strategy '${strategy.id}' is language-disallowed. Filtered from ${testCases.length} to ${applicableTestCases.length} test cases (using language: ${defaultLanguage || 'default'})`,
+        );
+      }
+    }
 
     const strategyTestCases: TestCase[] = await strategyAction(
       applicableTestCases,

@@ -1381,10 +1381,9 @@ describe('Language configuration', () => {
     });
 
     // Mock plugin action to return test cases
-    const mockPluginAction = jest.fn().mockResolvedValue([
-      { vars: { query: 'test1' } },
-      { vars: { query: 'test2' } },
-    ]);
+    const mockPluginAction = jest
+      .fn()
+      .mockResolvedValue([{ vars: { query: 'test1' } }, { vars: { query: 'test2' } }]);
     jest.spyOn(Plugins, 'find').mockReturnValue({
       action: mockPluginAction,
       key: 'mockPlugin',
@@ -1620,6 +1619,192 @@ describe('Language configuration', () => {
       const languages = result.testCases.map((tc) => tc.metadata?.language);
       const uniqueLanguages = [...new Set(languages)];
       expect(uniqueLanguages.length).toBe(1); // Only one language used
+    });
+  });
+
+  describe('Language-disallowed strategies', () => {
+    it('should filter multilingual test cases for audio strategy', async () => {
+      // Mock strategy action for audio
+      const mockAudioAction = jest.fn().mockImplementation((testCases) => {
+        return testCases.map((tc: any) => ({
+          ...tc,
+          vars: { ...tc.vars, query: `audio: ${tc.vars.query}` },
+          metadata: { ...tc.metadata, strategyId: 'audio' },
+        }));
+      });
+
+      jest.spyOn(Strategies, 'find').mockImplementation((predicate) => {
+        if (typeof predicate === 'function') {
+          const strategies = [{ id: 'audio', action: mockAudioAction }];
+          return strategies.find(predicate);
+        }
+        return undefined;
+      });
+
+      const result = await synthesize({
+        language: ['en', 'fr', 'de'], // 3 languages
+        numTests: 2,
+        plugins: [{ id: 'test-plugin', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'audio' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Base tests: 2 * 3 languages = 6
+      // Audio strategy should only process one language variant (not all 3)
+      // So we expect 6 base tests + 2 audio tests (not 6)
+      expect(result.testCases.length).toBeGreaterThanOrEqual(6);
+
+      // Check that audio strategy was only applied to one language
+      const audioTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'audio');
+      expect(audioTests.length).toBe(2); // Only 2 tests, not 6
+    });
+
+    it('should filter multilingual test cases for video strategy', async () => {
+      const mockVideoAction = jest.fn().mockImplementation((testCases) => {
+        return testCases.map((tc: any) => ({
+          ...tc,
+          vars: { ...tc.vars, query: `video: ${tc.vars.query}` },
+          metadata: { ...tc.metadata, strategyId: 'video' },
+        }));
+      });
+
+      jest.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'video',
+        action: mockVideoAction,
+      });
+
+      const result = await synthesize({
+        language: ['en', 'es'], // 2 languages
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'video' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Base tests: 1 * 2 languages = 2 (but mock returns 2 tests per call)
+      // Video strategy should only process one language (2 test cases from mock, not 4)
+      const videoTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'video');
+      expect(videoTests.length).toBe(2); // Mock returns 2 tests
+      // Verify it's less than if all languages were processed (would be 4)
+      expect(videoTests.length).toBeLessThan(4);
+    });
+
+    it('should filter multilingual test cases for image strategy', async () => {
+      const mockImageAction = jest.fn().mockImplementation((testCases) => {
+        return testCases.map((tc: any) => ({
+          ...tc,
+          vars: { ...tc.vars, query: `image: ${tc.vars.query}` },
+          metadata: { ...tc.metadata, strategyId: 'image' },
+        }));
+      });
+
+      jest.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'image',
+        action: mockImageAction,
+      });
+
+      const result = await synthesize({
+        language: ['en', 'fr', 'de', 'es'], // 4 languages
+        numTests: 3,
+        plugins: [{ id: 'test-plugin', numTests: 3 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'image' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Image strategy should only process one language
+      const imageTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'image');
+      // Mock returns 2 tests (not 8 if all 4 languages were processed)
+      expect(imageTests.length).toBe(2);
+      expect(imageTests.length).toBeLessThan(8);
+    });
+
+    it('should filter multilingual test cases for layer strategy', async () => {
+      const mockLayerAction = jest.fn().mockImplementation((testCases) => {
+        return testCases.map((tc: any) => ({
+          ...tc,
+          vars: { ...tc.vars, query: `layered: ${tc.vars.query}` },
+          metadata: { ...tc.metadata, strategyId: 'layer' },
+        }));
+      });
+
+      jest.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'layer',
+        action: mockLayerAction,
+      });
+
+      const result = await synthesize({
+        language: ['en', 'fr'], // 2 languages
+        numTests: 2,
+        plugins: [{ id: 'test-plugin', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'layer', config: { steps: ['base64', 'rot13'] } }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Layer strategy should only process one language
+      const layerTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'layer');
+      expect(layerTests.length).toBe(2); // 2 tests (not 4)
+    });
+
+    it('should filter multilingual test cases for math-prompt strategy', async () => {
+      const mockMathPromptAction = jest.fn().mockImplementation((testCases) => {
+        return testCases.map((tc: any) => ({
+          ...tc,
+          vars: { ...tc.vars, query: `math: ${tc.vars.query}` },
+          metadata: { ...tc.metadata, strategyId: 'math-prompt' },
+        }));
+      });
+
+      jest.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'math-prompt',
+        action: mockMathPromptAction,
+      });
+
+      const result = await synthesize({
+        language: ['en', 'zh', 'hi'], // 3 languages
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'math-prompt' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Math-prompt strategy should only process one language
+      const mathTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'math-prompt');
+      // Mock returns 2 tests (not 6 if all 3 languages were processed)
+      expect(mathTests.length).toBe(2);
+      expect(mathTests.length).toBeLessThan(6);
+    });
+
+    it('should NOT filter multilingual test cases for non-disallowed strategies', async () => {
+      const mockRot13Action = jest.fn().mockImplementation((testCases) => {
+        return testCases.map((tc: any) => ({
+          ...tc,
+          vars: { ...tc.vars, query: `rot13: ${tc.vars.query}` },
+          metadata: { ...tc.metadata, strategyId: 'rot13' },
+        }));
+      });
+
+      jest.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'rot13',
+        action: mockRot13Action,
+      });
+
+      const result = await synthesize({
+        language: ['en', 'fr'], // 2 languages
+        numTests: 2,
+        plugins: [{ id: 'test-plugin', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'rot13' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Rot13 is NOT in the disallow list, so it should process all languages
+      const rot13Tests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'rot13');
+      expect(rot13Tests.length).toBe(4); // 2 tests * 2 languages = 4
     });
   });
 });

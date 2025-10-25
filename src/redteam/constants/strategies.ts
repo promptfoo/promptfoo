@@ -148,6 +148,28 @@ export function isEncodingStrategy(strategyId: string | undefined): boolean {
 }
 
 /**
+ * Strategies that should not have language configuration applied to them.
+ * These strategies either:
+ * - Generate their own audio/video/image content (audio, video, image)
+ * - Compose multiple strategies (layer)
+ * - Use mathematical notation that is language-independent (math-prompt)
+ */
+export const LANGUAGE_DISALLOWED_STRATEGIES = new Set([
+  'audio',
+  'video',
+  'image',
+  'layer',
+  'math-prompt',
+]);
+
+/**
+ * Determines if a strategy should not use language configuration
+ */
+export function isLanguageDisallowedStrategy(strategyId: string | undefined): boolean {
+  return strategyId ? LANGUAGE_DISALLOWED_STRATEGIES.has(strategyId) : false;
+}
+
+/**
  * Default 'n' fan out for strategies that can add additional test cases during generation
  */
 const DEFAULT_N_FAN_OUT_BY_STRATEGY = {
