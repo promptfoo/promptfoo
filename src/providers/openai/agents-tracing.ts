@@ -120,9 +120,9 @@ export class OTLPTracingExporter implements TracingExporter {
     const spanId = span.spanId || this.generateSpanId();
 
     return {
-      traceId: this.hexToBase64(traceId),
-      spanId: this.hexToBase64(spanId),
-      parentSpanId: span.parentId ? this.hexToBase64(span.parentId) : undefined,
+      traceId: this.hexToBase64(traceId, 'trace'),
+      spanId: this.hexToBase64(spanId, 'span'),
+      parentSpanId: span.parentId ? this.hexToBase64(span.parentId, 'span') : undefined,
       name: this.getSpanName(span),
       kind: 1, // SPAN_KIND_INTERNAL
       startTimeUnixNano: String(startTime * 1_000_000), // Convert ms to ns
@@ -233,8 +233,10 @@ export class OTLPTracingExporter implements TracingExporter {
   /**
    * Convert hex string to base64 for OTLP format
    * Handles openai-agents-js ID format (trace_XXX, span_XXX)
+   * @param hex - The hex string to convert
+   * @param kind - Whether this is a 'trace' (16 bytes) or 'span' (8 bytes) ID
    */
-  private hexToBase64(hex: string): string {
+  private hexToBase64(hex: string, kind: 'trace' | 'span'): string {
     if (!hex) {
       return '';
     }
@@ -243,9 +245,9 @@ export class OTLPTracingExporter implements TracingExporter {
       // Strip prefixes if present (trace_, span_, group_)
       let cleanHex = hex.replace(/^(trace_|span_|group_)/, '');
 
-      // Ensure hex is valid length (32 for trace, 16 for span)
+      // Ensure hex is valid length (32 hex chars = 16 bytes for trace, 16 hex chars = 8 bytes for span)
       // If it's longer, truncate. If shorter, pad with zeros.
-      const targetLength = hex.startsWith('span_') ? 16 : 32;
+      const targetLength = kind === 'span' ? 16 : 32;
       if (cleanHex.length > targetLength) {
         cleanHex = cleanHex.substring(0, targetLength);
       } else if (cleanHex.length < targetLength) {
@@ -255,8 +257,9 @@ export class OTLPTracingExporter implements TracingExporter {
       return Buffer.from(cleanHex, 'hex').toString('base64');
     } catch (error) {
       logger.error(`[AgentsTracing] Failed to convert hex to base64: ${hex}`, { error });
-      // Generate a fallback ID
-      return Buffer.from(this.generateRandomHex(16), 'hex').toString('base64');
+      // Generate a fallback ID with correct length
+      const fallbackLen = kind === 'span' ? 16 : 32;
+      return Buffer.from(this.generateRandomHex(fallbackLen), 'hex').toString('base64');
     }
   }
 

@@ -65,6 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
+- docs(providers): add OpenAI Agents provider documentation and example (#6009)
 - docs(blog): add blog post on RLVR (Reinforcement Learning with Verifiable Rewards) (#5987)
 - docs: configuring inference (#5983)
 - docs(site): update about page (#5971)
@@ -76,6 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
+- test(providers): add comprehensive tests for OpenAI Agents provider, loader, and tracing (#6009)
 - tests: remove redteam constants mocks from unit tests (#6010)
 - test: CoverBot: Added tests for evaluation UI components and hooks (`src/app`) (#5981)
 

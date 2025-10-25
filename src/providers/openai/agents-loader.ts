@@ -29,7 +29,16 @@ export async function loadAgentDefinition(
     return await createAgentFromDefinition(agentConfig as AgentDefinition);
   }
 
-  throw new Error(`Invalid agent configuration: ${JSON.stringify(agentConfig)}`);
+  logger.debug('[AgentsLoader] Invalid agent configuration', {
+    type: typeof agentConfig,
+    keys:
+      typeof agentConfig === 'object' && agentConfig !== null
+        ? Object.keys(agentConfig as any).slice(0, 5)
+        : undefined,
+  });
+  throw new Error(
+    'Invalid agent configuration: expected Agent instance, file:// URL, or inline definition',
+  );
 }
 
 /**
@@ -54,7 +63,11 @@ export async function loadTools(
     return toolsConfig;
   }
 
-  throw new Error(`Invalid tools configuration: ${JSON.stringify(toolsConfig)}`);
+  logger.debug('[AgentsLoader] Invalid tools configuration', {
+    type: typeof toolsConfig,
+    isArray: Array.isArray(toolsConfig),
+  });
+  throw new Error('Invalid tools configuration: expected file:// URL or array');
 }
 
 /**
@@ -79,7 +92,11 @@ export async function loadHandoffs(
     return handoffsConfig;
   }
 
-  throw new Error(`Invalid handoffs configuration: ${JSON.stringify(handoffsConfig)}`);
+  logger.debug('[AgentsLoader] Invalid handoffs configuration', {
+    type: typeof handoffsConfig,
+    isArray: Array.isArray(handoffsConfig),
+  });
+  throw new Error('Invalid handoffs configuration: expected file:// URL or array');
 }
 
 /**
@@ -100,7 +117,7 @@ async function loadAgentFromFile(filePath: string): Promise<Agent<any, any>> {
     return agent;
   } catch (error) {
     logger.error('[AgentsLoader] Failed to load agent from file', { path: resolvedPath, error });
-    throw new Error(`Failed to load agent from ${resolvedPath}: ${error}`);
+    throw new Error(`Failed to load agent from ${resolvedPath}`, { cause: error as Error });
   }
 }
 
@@ -122,7 +139,7 @@ async function loadToolsFromFile(filePath: string): Promise<ToolDefinition[]> {
     return tools;
   } catch (error) {
     logger.error('[AgentsLoader] Failed to load tools from file', { path: resolvedPath, error });
-    throw new Error(`Failed to load tools from ${resolvedPath}: ${error}`);
+    throw new Error(`Failed to load tools from ${resolvedPath}`, { cause: error as Error });
   }
 }
 
@@ -147,7 +164,7 @@ async function loadHandoffsFromFile(filePath: string): Promise<HandoffDefinition
       path: resolvedPath,
       error,
     });
-    throw new Error(`Failed to load handoffs from ${resolvedPath}: ${error}`);
+    throw new Error(`Failed to load handoffs from ${resolvedPath}`, { cause: error as Error });
   }
 }
 
@@ -177,8 +194,14 @@ async function createAgentFromDefinition(definition: AgentDefinition): Promise<A
 
     return agent;
   } catch (error) {
-    logger.error('[AgentsLoader] Failed to create agent from definition', { definition, error });
-    throw new Error(`Failed to create agent from definition: ${error}`);
+    logger.error('[AgentsLoader] Failed to create agent from definition', {
+      name: definition?.name,
+      model: definition?.model,
+      toolCount: definition?.tools?.length,
+      handoffCount: definition?.handoffs?.length,
+      error,
+    });
+    throw new Error('Failed to create agent from definition', { cause: error as Error });
   }
 }
 

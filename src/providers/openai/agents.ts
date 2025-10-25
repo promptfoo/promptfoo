@@ -9,7 +9,7 @@ import {
 import logger from '../../logger';
 import { OpenAiGenericProvider } from './index';
 import { OTLPTracingExporter } from './agents-tracing';
-import { loadAgentDefinition, loadTools, loadHandoffs } from './agents-loader';
+import { loadAgentDefinition } from './agents-loader';
 import type { OpenAiAgentsOptions } from './agents-types';
 import type {
   CallApiContextParams,
@@ -93,23 +93,8 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     }
 
     try {
-      // Load agent definition
+      // Load agent definition (includes tools and handoffs if specified in agent file)
       const agent = await loadAgentDefinition(this.agentConfig.agent);
-
-      // Load tools if specified
-      const tools = await loadTools(this.agentConfig.tools);
-      if (tools && tools.length > 0) {
-        logger.debug('[AgentsProvider] Adding tools to agent', { count: tools.length });
-        // Tools would be added during agent creation or via agent.tools
-        // For now, we assume they're included in the agent definition
-      }
-
-      // Load handoffs if specified
-      const handoffs = await loadHandoffs(this.agentConfig.handoffs);
-      if (handoffs && handoffs.length > 0) {
-        logger.debug('[AgentsProvider] Adding handoffs to agent', { count: handoffs.length });
-        // Handoffs would be added during agent creation or via agent.handoffs
-      }
 
       logger.debug('[AgentsProvider] Agent initialized successfully', { name: agent.name });
 

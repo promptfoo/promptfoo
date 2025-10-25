@@ -104,32 +104,39 @@ export class OTLPReceiver {
 
         // Group spans by trace ID and extract metadata
         const spansByTrace = new Map<string, SpanData[]>();
-        const traceMetadata = new Map<string, { evaluationId: string; testCaseId: string }>();
+        const traceInfoById = new Map<string, { evaluationId?: string; testCaseId?: string }>();
 
         for (const trace of traces) {
           if (!spansByTrace.has(trace.traceId)) {
             spansByTrace.set(trace.traceId, []);
 
-            // Extract evaluation and test case IDs from span attributes
-            const evaluationId = trace.span.attributes?.['evaluation.id'] as string;
-            const testCaseId = trace.span.attributes?.['test.case.id'] as string;
+            // Extract optional evaluation and test case IDs from span attributes
+            const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
+            const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
 
-            if (evaluationId && testCaseId) {
-              traceMetadata.set(trace.traceId, { evaluationId, testCaseId });
+            // Store info for this trace (even if IDs are missing)
+            const info = traceInfoById.get(trace.traceId) ?? {};
+            if (evaluationId) {
+              info.evaluationId = evaluationId;
             }
+            if (testCaseId) {
+              info.testCaseId = testCaseId;
+            }
+            traceInfoById.set(trace.traceId, info);
           }
           spansByTrace.get(trace.traceId)!.push(trace.span);
         }
         logger.debug(`[OtlpReceiver] Grouped spans into ${spansByTrace.size} traces`);
 
-        // Create trace records first (required for foreign key constraints)
-        for (const [traceId, metadata] of traceMetadata) {
+        // Create trace records for all traces (required for foreign key constraints)
+        // Include optional metadata when available
+        for (const [traceId, info] of traceInfoById) {
           try {
             logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
             await this.traceStore.createTrace({
               traceId,
-              evaluationId: metadata.evaluationId,
-              testCaseId: metadata.testCaseId,
+              evaluationId: info.evaluationId,
+              testCaseId: info.testCaseId,
             });
           } catch (error) {
             // Trace might already exist, which is fine
