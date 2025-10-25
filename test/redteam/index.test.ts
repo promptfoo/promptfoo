@@ -1619,6 +1619,46 @@ describe('Language configuration', () => {
       const uniqueLanguages = [...new Set(languages)];
       expect(uniqueLanguages.length).toBe(1); // Only one language used
     });
+
+    it('should pass testGenerationInstructions through modifiers to plugin action', async () => {
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      jest.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'test-plugin',
+            numTests: 1,
+            config: {
+              modifiers: {
+                tone: 'aggressive',
+              },
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetLabels: ['test-provider'],
+        testGenerationInstructions: 'Focus on edge cases',
+      });
+
+      // Verify action was called with correct config containing merged modifiers
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            modifiers: expect.objectContaining({
+              testGenerationInstructions: 'Focus on edge cases',
+              tone: 'aggressive',
+            }),
+          }),
+        }),
+      );
+    });
   });
 
   describe('Language-disallowed strategies', () => {
