@@ -5,11 +5,16 @@
  * - Text-to-Speech (TTS): Generate high-quality voice synthesis
  * - Speech-to-Text (STT): Transcribe audio with speaker diarization
  * - Conversational Agents: Test voice AI agents with LLM backends
+ * - Supporting APIs: Audio processing and conversation management
  */
 
 export { ElevenLabsTTSProvider } from './tts';
 export { ElevenLabsSTTProvider } from './stt';
 export { ElevenLabsAgentsProvider } from './agents';
+export { ElevenLabsHistoryProvider } from './history';
+export { ElevenLabsIsolationProvider } from './isolation';
+export { ElevenLabsAlignmentProvider } from './alignment';
+export { ElevenLabsDubbingProvider } from './dubbing';
 export { ElevenLabsClient } from './client';
 export { ElevenLabsWebSocketClient } from './websocket-client';
 export { ElevenLabsCache } from './cache';
@@ -110,3 +115,20 @@ export {
   MULTI_VOICE_PRESETS,
   getMultiVoicePreset,
 } from './agents/multi-voice';
+export type {
+  ConversationHistoryConfig,
+  ConversationHistoryResponse,
+} from './history/types';
+export type { AudioIsolationConfig } from './isolation/types';
+export type {
+  ForcedAlignmentConfig,
+  AlignmentResponse,
+  WordAlignment,
+  CharacterAlignment,
+} from './alignment/types';
+export type {
+  DubbingConfig,
+  DubbingCreateResponse,
+  DubbingStatusResponse,
+  DubbingMetadata,
+} from './dubbing/types';
