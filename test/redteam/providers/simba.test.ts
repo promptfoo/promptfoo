@@ -52,6 +52,17 @@ jest.mock('../../../src/util/tokenUsageUtils', () => {
   };
 });
 
+jest.mock('../../../src/redteam/providers/shared', () => {
+  const actual = jest.requireActual(
+    '../../../src/redteam/providers/shared',
+  ) as typeof import('../../../src/redteam/providers/shared');
+  return {
+    __esModule: true,
+    ...actual,
+    createIterationContext: jest.fn(actual.createIterationContext),
+  };
+});
+
 const tokenUsageUtils = jest.requireMock('../../../src/util/tokenUsageUtils') as jest.Mocked<
   typeof TokenUsageUtilsModule
 >;
@@ -62,6 +73,11 @@ const actualTokenUsageUtils = jest.requireActual(
 
 const { default: SimbaProvider } =
   require('../../../src/redteam/providers/simba') as typeof import('../../../src/redteam/providers/simba');
+const sharedModule =
+  require('../../../src/redteam/providers/shared') as typeof import('../../../src/redteam/providers/shared');
+const actualSharedModule = jest.requireActual(
+  '../../../src/redteam/providers/shared',
+) as typeof import('../../../src/redteam/providers/shared');
 
 describe('SimbaProvider', () => {
   const accumulateResponseTokenUsageMock =
@@ -117,7 +133,7 @@ describe('SimbaProvider', () => {
     );
   });
 
-  it('runs Advanced Redteam Agent attack flow and maps results into EvaluateResult', async () => {
+  it('runs Simba attack flow and maps results into EvaluateResult', async () => {
     mockGetUserEmail.mockReturnValue('user@example.com');
 
     const provider = new SimbaProvider({ injectVar: 'prompt' });
@@ -263,7 +279,235 @@ describe('SimbaProvider', () => {
       expect.any(Object),
       targetResponse,
     );
-    expect(targetProvider.callApi).toHaveBeenCalledWith(operation.nextQuestion, context, undefined);
+
+    expect(targetProvider.callApi).toHaveBeenCalledTimes(1);
+    const [callPrompt, callContext, callOptions] = (
+      targetProvider.callApi as jest.MockedFunction<ApiProvider['callApi']>
+    ).mock.calls[0];
+    expect(callPrompt).toBe(
+      JSON.stringify([
+        {
+          role: 'user',
+          content: operation.nextQuestion,
+        },
+      ]),
+    );
+    expect(callContext).toEqual(
+      expect.objectContaining({
+        prompt: context.prompt,
+        vars: expect.any(Object),
+      }),
+    );
+    expect(callOptions).toBeUndefined();
+  });
+
+  it('handles client-side session IDs across multiple conversations', async () => {
+    mockGetUserEmail.mockReturnValue('user@example.com');
+
+    const createIterationContextMock = sharedModule.createIterationContext as jest.MockedFunction<
+      typeof actualSharedModule.createIterationContext
+    >;
+    createIterationContextMock.mockImplementation(
+      async ({ context, originalVars, iterationNumber }) => {
+        if (!context) {
+          return undefined;
+        }
+        return {
+          ...context,
+          vars: { ...originalVars, clientSessionId: `client-${iterationNumber}` },
+        };
+      },
+    );
+
+    const provider = new SimbaProvider({ injectVar: 'prompt' });
+
+    const targetResponses = [
+      'first target answer',
+      'second target answer',
+      'third target answer',
+      'fourth target answer',
+    ];
+    const targetProvider: ApiProvider = {
+      id: () => 'target-provider',
+      callApi: jest.fn<ApiProvider['callApi']>().mockImplementation(async () => ({
+        output: targetResponses.shift() ?? 'default target answer',
+        tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
+      })),
+    };
+
+    const firstOperation = {
+      conversationId: 'attack-123',
+      nextQuestion: 'Question one',
+      logMessage: 'First operation',
+      phaseComplete: false,
+      name: 'vector-1',
+      round: 1,
+      phase: 'reconnaissance',
+    };
+
+    const secondOperation = {
+      conversationId: 'attack-123',
+      nextQuestion: 'Question two',
+      logMessage: 'Second operation',
+      phaseComplete: false,
+      name: 'vector-1',
+      round: 2,
+      phase: 'reconnaissance',
+    };
+
+    const thirdOperation = {
+      conversationId: 'attack-456',
+      nextQuestion: 'Question three',
+      logMessage: 'Third operation',
+      phaseComplete: false,
+      name: 'vector-2',
+      round: 1,
+      phase: 'reconnaissance',
+    };
+
+    const fourthOperation = {
+      conversationId: 'attack-456',
+      nextQuestion: 'Question four',
+      logMessage: 'Fourth operation',
+      phaseComplete: false,
+      name: 'vector-2',
+      round: 2,
+      phase: 'reconnaissance',
+    };
+
+    const finalOutputs = [
+      {
+        attackPlan: {
+          planId: 'attack-123',
+          planName: 'Plan',
+          planDescription: 'Description',
+          planStatus: 'COMPLETED',
+          successCriteria: 'None',
+          stopCriteria: 'Stop',
+          status: 'finished',
+        },
+        result: {
+          summary: 'Complete',
+          success: false,
+          dataExtracted: [],
+          successfulJailbreaks: [],
+        },
+        messages: [
+          { role: 'user', content: 'final question' },
+          { role: 'assistant', content: 'final answer' },
+        ],
+      },
+      {
+        attackPlan: {
+          planId: 'attack-456',
+          planName: 'Plan 2',
+          planDescription: 'Description 2',
+          planStatus: 'COMPLETED',
+          successCriteria: 'None',
+          stopCriteria: 'Stop',
+          status: 'finished',
+        },
+        result: {
+          summary: 'Complete',
+          success: false,
+          dataExtracted: [],
+          successfulJailbreaks: [],
+        },
+        messages: [
+          { role: 'user', content: 'final question 2' },
+          { role: 'assistant', content: 'final answer 2' },
+        ],
+      },
+    ];
+
+    const fetchQueue = [
+      createMockResponse({ sessionId: 'session-xyz' }),
+      createMockResponse({ operations: [firstOperation], completed: false }),
+      createMockResponse({ operations: [secondOperation, thirdOperation], completed: false }),
+      createMockResponse({ operations: [fourthOperation], completed: false }),
+      createMockResponse({ operations: [], completed: true }),
+      createMockResponse(finalOutputs),
+    ];
+
+    mockFetchWithRetries.mockImplementation(async () => {
+      const next = fetchQueue.shift();
+      if (!next) {
+        throw new Error('Unexpected fetch call');
+      }
+      return next;
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: targetProvider,
+      prompt: { raw: 'user prompt', label: 'Prompt Label' },
+      vars: { prompt: 'initial var' },
+      test: { metadata: { purpose: 'Guard the system' } } as any,
+    };
+
+    try {
+      await provider.runSimba({ prompt: 'ignored prompt', context });
+
+      expect(createIterationContextMock).toHaveBeenCalledTimes(2);
+      expect(createIterationContextMock.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ iterationNumber: 1, loggerTag: '[Simba]' }),
+      );
+      expect(createIterationContextMock.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ iterationNumber: 2, loggerTag: '[Simba]' }),
+      );
+    } finally {
+      createIterationContextMock.mockImplementation(actualSharedModule.createIterationContext);
+      createIterationContextMock.mockClear();
+    }
+
+    expect(targetProvider.callApi).toHaveBeenCalledTimes(4);
+    const mockCallApi = targetProvider.callApi as jest.MockedFunction<ApiProvider['callApi']>;
+    const firstCall = mockCallApi.mock.calls[0];
+    const secondCall = mockCallApi.mock.calls[1];
+    const thirdCall = mockCallApi.mock.calls[2];
+    const fourthCall = mockCallApi.mock.calls[3];
+
+    expect(firstCall[0]).toBe(
+      JSON.stringify([
+        {
+          role: 'user',
+          content: 'Question one',
+        },
+      ]),
+    );
+
+    const firstCallContext = firstCall[1];
+    expect(firstCallContext?.vars?.clientSessionId).toBe('client-1');
+
+    expect(secondCall[0]).toBe(
+      JSON.stringify([
+        { role: 'user', content: 'Question one' },
+        { role: 'assistant', content: 'first target answer' },
+        { role: 'user', content: 'Question two' },
+      ]),
+    );
+    expect(secondCall[1]).toBe(firstCallContext);
+    expect(secondCall[1]?.vars?.clientSessionId).toBe('client-1');
+
+    expect(thirdCall[0]).toBe(
+      JSON.stringify([
+        {
+          role: 'user',
+          content: 'Question three',
+        },
+      ]),
+    );
+    const thirdCallContext = thirdCall[1];
+    expect(thirdCallContext?.vars?.clientSessionId).toBe('client-2');
+
+    expect(fourthCall[0]).toBe(
+      JSON.stringify([
+        { role: 'user', content: 'Question three' },
+        { role: 'assistant', content: 'third target answer' },
+        { role: 'user', content: 'Question four' },
+      ]),
+    );
+    expect(fourthCall[1]).toBe(thirdCallContext);
+    expect(fourthCall[1]?.vars?.clientSessionId).toBe('client-2');
   });
 
   it('falls back to default email when user email is unavailable', async () => {
@@ -346,6 +590,179 @@ describe('SimbaProvider', () => {
     expect(result.response?.output).toBe('final answer');
   });
 
+  it('tracks server-provided session IDs across multiple conversations', async () => {
+    mockGetUserEmail.mockReturnValue('user@example.com');
+
+    const provider = new SimbaProvider({ injectVar: 'prompt' });
+
+    const callSnapshots: Array<{
+      prompt: string;
+      context?: {
+        vars?: Record<string, unknown>;
+      } & Partial<CallApiContextParams>;
+    }> = [];
+
+    const targetResponses = [
+      { output: 'target response 1', sessionId: 'server-session-123' },
+      { output: 'target response 2', sessionId: 'server-session-123' },
+      { output: 'target response 3', sessionId: 'server-session-456' },
+      { output: 'target response 4', sessionId: 'server-session-456' },
+    ];
+
+    const targetProvider: ApiProvider = {
+      id: () => 'target-provider',
+      callApi: jest.fn<ApiProvider['callApi']>().mockImplementation(async (prompt, ctx) => {
+        callSnapshots.push({
+          prompt,
+          context: ctx
+            ? {
+                ...ctx,
+                vars: ctx.vars ? { ...ctx.vars } : undefined,
+              }
+            : undefined,
+        });
+        const next = targetResponses.shift();
+        if (!next) {
+          throw new Error('Unexpected target call');
+        }
+        return {
+          output: next.output,
+          sessionId: next.sessionId,
+          tokenUsage: actualTokenUsageUtils.createEmptyTokenUsage(),
+        };
+      }),
+    };
+
+    const firstConversationFirstOperation = {
+      conversationId: 'attack-123',
+      nextQuestion: 'Provide response',
+      logMessage: 'Prompting first conversation',
+      phaseComplete: false,
+      name: 'vector-1',
+      round: 1,
+      phase: 'probing',
+    };
+
+    const firstConversationSecondOperation = {
+      conversationId: 'attack-123',
+      nextQuestion: 'Provide follow-up',
+      logMessage: 'Continuing first conversation',
+      phaseComplete: false,
+      name: 'vector-1',
+      round: 2,
+      phase: 'probing',
+    };
+
+    const secondConversationFirstOperation = {
+      conversationId: 'attack-456',
+      nextQuestion: 'Start second conversation',
+      logMessage: 'Prompting second conversation',
+      phaseComplete: false,
+      name: 'vector-2',
+      round: 1,
+      phase: 'probing',
+    };
+
+    const secondConversationSecondOperation = {
+      conversationId: 'attack-456',
+      nextQuestion: 'Follow-up second conversation',
+      logMessage: 'Continuing second conversation',
+      phaseComplete: false,
+      name: 'vector-2',
+      round: 2,
+      phase: 'probing',
+    };
+
+    const finalOutputs = [
+      {
+        attackPlan: {
+          planId: 'attack-123',
+          planName: 'Plan A',
+          planDescription: 'Description A',
+          planStatus: 'COMPLETED',
+          successCriteria: 'None',
+          stopCriteria: 'Stop',
+          status: 'finished',
+        },
+        result: {
+          summary: 'Outcome summary A',
+          success: false,
+          dataExtracted: [],
+          successfulJailbreaks: [],
+        },
+        messages: [
+          { role: 'user', content: 'final question A' },
+          { role: 'assistant', content: 'final answer A' },
+        ],
+      },
+      {
+        attackPlan: {
+          planId: 'attack-456',
+          planName: 'Plan B',
+          planDescription: 'Description B',
+          planStatus: 'COMPLETED',
+          successCriteria: 'None',
+          stopCriteria: 'Stop',
+          status: 'finished',
+        },
+        result: {
+          summary: 'Outcome summary B',
+          success: false,
+          dataExtracted: [],
+          successfulJailbreaks: [],
+        },
+        messages: [
+          { role: 'user', content: 'final question B' },
+          { role: 'assistant', content: 'final answer B' },
+        ],
+      },
+    ];
+
+    const fetchQueue = [
+      createMockResponse({ sessionId: 'session-abc' }),
+      createMockResponse({ operations: [firstConversationFirstOperation], completed: false }),
+      createMockResponse({
+        operations: [firstConversationSecondOperation, secondConversationFirstOperation],
+        completed: false,
+      }),
+      createMockResponse({ operations: [secondConversationSecondOperation], completed: false }),
+      createMockResponse({ operations: [], completed: true }),
+      createMockResponse(finalOutputs),
+    ];
+
+    mockFetchWithRetries.mockImplementation(async () => {
+      const next = fetchQueue.shift();
+      if (!next) {
+        throw new Error('Unexpected fetch call');
+      }
+      return next;
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: targetProvider,
+      prompt: { raw: 'base prompt', label: 'Base Label' },
+      vars: {},
+      test: { metadata: { purpose: 'Collect info' } } as any,
+    };
+
+    const results = await provider.runSimba({ prompt: 'base prompt', context });
+
+    expect(targetProvider.callApi).toHaveBeenCalledTimes(4);
+    const mockCallApi = targetProvider.callApi as jest.MockedFunction<ApiProvider['callApi']>;
+    expect(mockCallApi.mock.calls[0][1]).toBe(mockCallApi.mock.calls[1][1]);
+    expect(mockCallApi.mock.calls[2][1]).toBe(mockCallApi.mock.calls[3][1]);
+
+    expect(callSnapshots).toHaveLength(4);
+    expect(callSnapshots[0].context?.vars?.sessionId).toBeUndefined();
+    expect(callSnapshots[1].context?.vars?.sessionId).toBe('server-session-123');
+    expect(callSnapshots[2].context?.vars?.sessionId).toBeUndefined();
+    expect(callSnapshots[3].context?.vars?.sessionId).toBe('server-session-456');
+
+    expect(results).toHaveLength(2);
+    expect(results[0].metadata?.sessionId).toBe('server-session-123');
+    expect(results[1].metadata?.sessionId).toBe('server-session-456');
+  });
+
   it('returns error result when original provider is missing', async () => {
     mockGetUserEmail.mockReturnValue('user@example.com');
 
@@ -373,7 +790,7 @@ describe('SimbaProvider', () => {
     expect(accumulateResponseTokenUsageMock).not.toHaveBeenCalled();
   });
 
-  it('wraps Advanced Redteam Agent API failures in the returned result', async () => {
+  it('wraps Simba API failures in the returned result', async () => {
     mockGetUserEmail.mockReturnValue('user@example.com');
 
     mockFetchWithRetries.mockResolvedValueOnce(

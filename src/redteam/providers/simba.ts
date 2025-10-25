@@ -14,6 +14,7 @@ import {
 } from '../../types';
 import { fetchWithRetries } from '../../util/fetch';
 import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
 import {
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
@@ -21,7 +22,7 @@ import {
 } from '../../util/tokenUsageUtils';
 import { strategyDisplayNames } from '../constants';
 import { buildRemoteUrl } from '../remoteGeneration';
-import { Message } from './shared';
+import { createIterationContext, Message } from './shared';
 
 enum Phases {
   Reconnaissance = 'reconnaissance',
@@ -52,6 +53,7 @@ interface Config {
   maxAttacksPerGoal: number;
   concurrency: number;
   sessionId?: string;
+  stateful: boolean;
 }
 
 interface ConfigOptions {
@@ -63,6 +65,7 @@ interface ConfigOptions {
   maxAttacksPerGoal?: number;
   concurrency?: number;
   sessionId?: string;
+  stateful?: boolean;
 }
 
 interface SimbaStartRequest {
@@ -124,10 +127,13 @@ interface SimbaFinalResponse {
   messages: Message[];
 }
 
-interface AttackEntry {
+interface Conversation {
   messages: Message[];
   tokenUsage: TokenUsage;
   name: string;
+  phase: Phases;
+  context: CallApiContextParams | undefined;
+  options: CallApiOptionsParams | undefined;
 }
 
 function cloneTokenUsage(usage?: TokenUsage): Required<TokenUsage> {
@@ -185,6 +191,7 @@ export default class SimbaProvider implements ApiProvider {
       maxConversationRounds: options.maxConversationRounds || 10,
       maxAttacksPerGoal: options.maxAttacksPerGoal || 5,
       concurrency: options.concurrency || DEFAULT_MAX_CONCURRENCY,
+      stateful: options.stateful ?? false,
     };
     this.sessionId = options.sessionId || null;
     logger.debug(`${LOGGER_PREFIX} Constructor options: ${JSON.stringify(this.config)}`);
@@ -271,20 +278,26 @@ export default class SimbaProvider implements ApiProvider {
   }
 
   private getOrCreateAttack(
-    attacks: Record<string, AttackEntry>,
+    conversations: Record<string, Conversation>,
     conversationId: string,
     name: string,
-  ): AttackEntry {
-    if (!attacks[conversationId]) {
+    phase: Phases,
+    context: CallApiContextParams | undefined,
+    options: CallApiOptionsParams | undefined,
+  ): Conversation {
+    if (!conversations[conversationId]) {
       logger.info(`${LOGGER_PREFIX} Starting a new attack: ${name}`);
-      attacks[conversationId] = {
+      conversations[conversationId] = {
         messages: [],
         tokenUsage: createEmptyTokenUsage(),
         name,
+        phase,
+        context,
+        options,
       };
     }
 
-    return attacks[conversationId];
+    return conversations[conversationId];
   }
 
   private async processOperation(
@@ -292,7 +305,7 @@ export default class SimbaProvider implements ApiProvider {
     targetProvider: ApiProvider,
     context: CallApiContextParams | undefined,
     options: CallApiOptionsParams | undefined,
-    attacks: Record<string, AttackEntry>,
+    conversations: Record<string, Conversation>,
     nextResponses: Record<string, string>,
   ): Promise<void> {
     logger.debug(`${LOGGER_PREFIX}[${this.sessionId}] ${operation.logMessage}`);
@@ -302,22 +315,60 @@ export default class SimbaProvider implements ApiProvider {
       return;
     }
 
-    let attackEntry: AttackEntry | undefined;
-    if (operation.phase === Phases.Attacking) {
-      attackEntry = this.getOrCreateAttack(attacks, operation.conversationId, operation.name);
-    }
-
-    if (attackEntry) {
-      attackEntry.messages.push({
-        role: 'user',
-        content: operation.nextQuestion,
+    if (!conversations[operation.conversationId]) {
+      const iterationContext = await createIterationContext({
+        originalVars: context ? { ...context.vars } : {},
+        transformVarsConfig: context?.test?.options?.transformVars,
+        context,
+        iterationNumber: Object.keys(conversations).length + 1,
+        loggerTag: '[Simba]',
       });
+      conversations[operation.conversationId] = {
+        messages: [],
+        tokenUsage: createEmptyTokenUsage(),
+        name: operation.name,
+        phase: operation.phase,
+        context: iterationContext,
+        options,
+      };
     }
-    const targetResponse = await targetProvider.callApi(operation.nextQuestion, context, options);
 
-    if (attackEntry) {
-      accumulateResponseTokenUsage(attackEntry.tokenUsage, targetResponse);
+    const conversation = this.getOrCreateAttack(
+      conversations,
+      operation.conversationId,
+      operation.name,
+      operation.phase,
+      context,
+      options,
+    );
+
+    conversation.messages.push({
+      role: 'user',
+      content: operation.nextQuestion,
+    });
+
+    const targetPrompt = this.config.stateful
+      ? operation.nextQuestion
+      : JSON.stringify(conversation.messages);
+
+    const targetResponse = await targetProvider.callApi(
+      targetPrompt,
+      conversation.context,
+      conversation.options,
+    );
+
+    if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
+      logger.debug(`Sleeping for ${targetProvider.delay}ms`);
+      await sleep(targetProvider.delay);
     }
+    if (targetResponse.sessionId) {
+      conversation.context = conversation.context ?? {
+        vars: {},
+        prompt: { raw: '', label: 'target' },
+      };
+      conversation.context.vars.sessionId = targetResponse.sessionId;
+    }
+    accumulateResponseTokenUsage(conversation.tokenUsage, targetResponse);
 
     if (targetResponse.error) {
       logger.error(`${LOGGER_PREFIX}[${this.sessionId}] Target error`, {
@@ -333,12 +384,10 @@ export default class SimbaProvider implements ApiProvider {
         ? targetResponse.output
         : JSON.stringify(targetResponse.output);
 
-    if (attackEntry) {
-      attackEntry.messages.push({
-        role: 'assistant',
-        content: responseContent,
-      });
-    }
+    conversation.messages.push({
+      role: 'assistant',
+      content: responseContent,
+    });
 
     nextResponses[operation.conversationId] = responseContent;
   }
@@ -363,7 +412,7 @@ export default class SimbaProvider implements ApiProvider {
       if (!this.sessionId) {
         this.sessionId = await this.startSession();
       }
-      const attacks: Record<string, AttackEntry> = {};
+      const conversations: Record<string, Conversation> = {};
       logger.info(`${LOGGER_PREFIX} Starting session with ID: ${this.sessionId}`);
 
       // Get the target provider to interact with
@@ -454,7 +503,7 @@ export default class SimbaProvider implements ApiProvider {
               targetProvider,
               context,
               options,
-              attacks,
+              conversations,
               nextResponses,
             ),
           );
@@ -468,7 +517,7 @@ export default class SimbaProvider implements ApiProvider {
 
       for (let index = 0; index < finalOutput.length; index += 1) {
         const output = finalOutput[index];
-        evaluateResults.push(this.buildEvaluateResult(output, index, attacks));
+        evaluateResults.push(this.buildEvaluateResult(output, index, conversations));
       }
 
       return evaluateResults;
@@ -498,11 +547,11 @@ export default class SimbaProvider implements ApiProvider {
   private buildEvaluateResult(
     output: SimbaFinalResponse,
     index: number,
-    attacks: Record<string, AttackEntry>,
+    conversations: Record<string, Conversation>,
   ): EvaluateResult {
     const lastUserMessage = getLastMessageByRole(output.messages, 'user');
     const attackPlanId = output.attackPlan.planId;
-    const attack = attackPlanId ? attacks[attackPlanId] : undefined;
+    const attack = attackPlanId ? conversations[attackPlanId] : undefined;
     const attackTokenUsage = cloneTokenUsage(attack?.tokenUsage);
     const responseTokenUsage = cloneTokenUsage(attack?.tokenUsage);
     const finalAssistantMessage = getLastMessageByRole(output.messages, 'assistant');
@@ -550,6 +599,8 @@ export default class SimbaProvider implements ApiProvider {
         redteamHistory: redteamHistory,
         dataExtracted: output.result.dataExtracted.join('\n'),
         successfulJailbreaks: output.result.successfulJailbreaks.join('\n'),
+        sessionId: conversations[attackPlanId]?.context?.vars?.sessionId,
+        simbaSessionId: this.sessionId,
       },
     };
   }
