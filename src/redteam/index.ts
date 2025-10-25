@@ -188,6 +188,9 @@ function addLanguageToPluginMetadata(
   plugin: RedteamPluginObject,
   testGenerationInstructions?: string,
 ): TestCase {
+  const existingLanguage = getLanguageForTestCase(test);
+  const languageToAdd = lang && !existingLanguage ? { language: lang } : {};
+
   return {
     ...test,
     metadata: {
@@ -199,11 +202,11 @@ function addLanguageToPluginMetadata(
         ...(plugin.config?.modifiers || {}),
         ...test.metadata?.modifiers,
         // Add language to modifiers if not already present (respect existing)
-        ...(lang && !test.metadata?.modifiers?.language ? { language: lang } : {}),
+        ...languageToAdd,
       },
       ...test.metadata,
       // Hoist language to top-level metadata for backward compatibility and easier access
-      ...(lang && !test.metadata?.language ? { language: lang } : {}),
+      ...languageToAdd,
     },
   };
 }
@@ -269,46 +272,9 @@ async function applyStrategies(
     }
 
     const targetPlugins = strategy.config?.plugins;
-    let applicableTestCases = testCases.filter((t) =>
+    const applicableTestCases = testCases.filter((t) =>
       pluginMatchesStrategyTargets(t, strategy.id, targetPlugins),
     );
-
-    // For language-disallowed strategies (audio, video, image, layer, math-prompt),
-    // only use test cases with the default language (typically 'en' or undefined)
-    // to avoid generating redundant variants
-    if (isLanguageDisallowedStrategy(strategy.id)) {
-      // Get all languages present in the test cases
-      const languagesInTests = new Set(applicableTestCases.map((t) => getLanguageForTestCase(t)));
-
-      // If there are multiple languages, filter to only use the most common one (likely 'en' or undefined)
-      if (languagesInTests.size > 1) {
-        // Count occurrences of each language
-        const languageCounts = new Map<string | undefined, number>();
-        for (const testCase of applicableTestCases) {
-          const lang = getLanguageForTestCase(testCase);
-          languageCounts.set(lang, (languageCounts.get(lang) || 0) + 1);
-        }
-
-        // Find the most common language (typically 'en' or undefined)
-        let defaultLanguage: string | undefined = 'en';
-        let maxCount = 0;
-        for (const [lang, count] of languageCounts.entries()) {
-          if (count > maxCount || (count === maxCount && (lang === 'en' || lang === undefined))) {
-            defaultLanguage = lang;
-            maxCount = count;
-          }
-        }
-
-        // Filter to only test cases with the default language
-        applicableTestCases = applicableTestCases.filter(
-          (t) => getLanguageForTestCase(t) === defaultLanguage,
-        );
-
-        logger.debug(
-          `[Language Filtering] Strategy '${strategy.id}' is language-disallowed. Filtered from ${testCases.length} to ${applicableTestCases.length} test cases (using language: ${defaultLanguage || 'default'})`,
-        );
-      }
-    }
 
     const strategyTestCases: TestCase[] = await strategyAction(
       applicableTestCases,
@@ -623,6 +589,16 @@ export async function synthesize({
   });
 
   validateStrategies(strategies);
+
+  // If any language-disallowed strategies are present, force language to English only
+  const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
+  if (hasLanguageDisallowedStrategy && language) {
+    const originalLanguage = Array.isArray(language) ? language.join(', ') : language;
+    language = 'en';
+    logger.info(
+      `[Language Override] Detected language-disallowed strategy (audio/video/image/layer/math-prompt). Forcing language to 'en' (was: ${originalLanguage})`,
+    );
+  }
 
   const redteamProvider = await redteamProviderManager.getProvider({
     provider,
