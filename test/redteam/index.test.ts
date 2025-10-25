@@ -1649,14 +1649,21 @@ describe('Language configuration', () => {
         targetLabels: ['test-provider'],
       });
 
-      // Base tests: 2 * 3 languages = 6
-      // Audio strategy should only process one language variant (not all 3)
-      // So we expect 6 base tests + 2 audio tests (not 6)
-      expect(result.testCases.length).toBeGreaterThanOrEqual(6);
+      // With audio strategy present, language is forced to 'en' early in synthesize
+      // Base tests: 2 tests * 1 language = 2
+      // Audio strategy tests: 2 tests
+      // Total: 4 tests
+      expect(result.testCases.length).toBe(4);
 
-      // Check that audio strategy was only applied to one language
+      // Check that audio strategy was applied
       const audioTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'audio');
-      expect(audioTests.length).toBe(2); // Only 2 tests, not 6
+      expect(audioTests.length).toBe(2);
+
+      // All tests should be in English only
+      const allTests = result.testCases;
+      const languages = allTests.map((tc) => tc.metadata?.language || 'en');
+      expect(new Set(languages).size).toBe(1); // Only one language
+      expect(languages[0]).toBe('en');
     });
 
     it('should filter multilingual test cases for video strategy', async () => {
@@ -1682,12 +1689,14 @@ describe('Language configuration', () => {
         targetLabels: ['test-provider'],
       });
 
-      // Base tests: 1 * 2 languages = 2 (but mock returns 2 tests per call)
-      // Video strategy should only process one language (2 test cases from mock, not 4)
+      // With video strategy present, language is forced to 'en' early in synthesize
+      // Mock plugin always returns 2 tests (ignores numTests: 1)
+      // Base tests: 2 tests (from mock)
+      // Strategy transforms: 2 tests → 2 video tests
+      // Total: 2 base + 2 video = 4 tests
       const videoTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'video');
-      expect(videoTests.length).toBe(2); // Mock returns 2 tests
-      // Verify it's less than if all languages were processed (would be 4)
-      expect(videoTests.length).toBeLessThan(4);
+      expect(videoTests.length).toBe(2);
+      expect(result.testCases.length).toBe(4);
     });
 
     it('should filter multilingual test cases for image strategy', async () => {
@@ -1713,11 +1722,14 @@ describe('Language configuration', () => {
         targetLabels: ['test-provider'],
       });
 
-      // Image strategy should only process one language
+      // With image strategy present, language is forced to 'en' early in synthesize
+      // Mock plugin always returns 2 tests (ignores numTests: 3)
+      // Base tests: 2 tests (from mock)
+      // Strategy transforms: 2 tests → 2 image tests
+      // Total: 2 base + 2 image = 4 tests
       const imageTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'image');
-      // Mock returns 2 tests (not 8 if all 4 languages were processed)
       expect(imageTests.length).toBe(2);
-      expect(imageTests.length).toBeLessThan(8);
+      expect(result.testCases.length).toBe(4);
     });
 
     it('should filter multilingual test cases for layer strategy', async () => {
@@ -1743,9 +1755,13 @@ describe('Language configuration', () => {
         targetLabels: ['test-provider'],
       });
 
-      // Layer strategy should only process one language
+      // With layer strategy present, language is forced to 'en' early in synthesize
+      // Base tests: 2 tests * 1 language = 2
+      // Layer strategy tests: 2 tests
+      // Total: 4 tests
       const layerTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'layer');
-      expect(layerTests.length).toBe(2); // 2 tests (not 4)
+      expect(layerTests.length).toBe(2);
+      expect(result.testCases.length).toBe(4);
     });
 
     it('should filter multilingual test cases for math-prompt strategy', async () => {
@@ -1771,11 +1787,14 @@ describe('Language configuration', () => {
         targetLabels: ['test-provider'],
       });
 
-      // Math-prompt strategy should only process one language
+      // With math-prompt strategy present, language is forced to 'en' early in synthesize
+      // Mock plugin always returns 2 tests (ignores numTests: 1)
+      // Base tests: 2 tests (from mock)
+      // Strategy transforms: 2 tests → 2 math tests
+      // Total: 2 base + 2 math = 4 tests
       const mathTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'math-prompt');
-      // Mock returns 2 tests (not 6 if all 3 languages were processed)
       expect(mathTests.length).toBe(2);
-      expect(mathTests.length).toBeLessThan(6);
+      expect(result.testCases.length).toBe(4);
     });
 
     it('should NOT filter multilingual test cases for non-disallowed strategies', async () => {
