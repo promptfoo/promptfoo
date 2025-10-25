@@ -1018,6 +1018,10 @@ describe('loadApiProvider', () => {
     // Simulate test-level config override with vars (the recommended pattern)
     // In actual usage, this would come from test.options.provider.config
     const testContext = {
+      prompt: {
+        label: 'Test prompt',
+        raw: 'Test prompt',
+      },
       vars: { userName: 'alice', schemaVersion: 'v2' },
     };
 
