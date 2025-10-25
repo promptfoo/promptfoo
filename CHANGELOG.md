@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add function calling/tool support for Ollama chat provider (#5977)
 - feat(app): persist inline-defined custom policy names (#5990)
 - feat: coppa plugin (#5997)
 - feat: error logs (#5992)
@@ -23,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - chore(cli): show telemetryDisabled/telemetryDebug in `promptfoo debug` output (#6015)
+- chore(examples): consolidate Ollama examples into unified directory (#5977)
 - chore(webui): add label column to prompts table (#6002)
 - chore: remove "LLM Risk Assessment" prefix (#6004)
 - refactor(app): Reduce unnecessary API health requests (#5979)
