@@ -1598,13 +1598,16 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
-      ...(method !== 'GET' && {
-        body: contentTypeIsJson(headers)
-          ? typeof renderedConfig.body === 'string'
-            ? renderedConfig.body // Already a JSON string, use as-is
-            : JSON.stringify(renderedConfig.body) // Object, needs stringifying
-          : String(renderedConfig.body)?.trim(),
-      }),
+      ...(method !== 'GET' &&
+        renderedConfig.body != null && {
+          body: contentTypeIsJson(headers)
+            ? typeof renderedConfig.body === 'string'
+              ? renderedConfig.body // Already a JSON string, use as-is
+              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
+            : typeof renderedConfig.body === 'string'
+              ? renderedConfig.body.trim()
+              : String(renderedConfig.body),
+        }),
     };
 
     // Add HTTPS agent as dispatcher if configured
@@ -1642,7 +1645,10 @@ export class HttpProvider implements ApiProvider {
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
     }
-    logger.debug(`[HTTP Provider]: Response (HTTP ${status}): ${safeJsonStringify(data)}`);
+    logger.debug(`[HTTP Provider]: Response (HTTP ${status}) received`, {
+      length: typeof data === 'string' ? data.length : undefined,
+      cached,
+    });
 
     const ret: ProviderResponse = {};
     ret.raw = data;
@@ -1771,14 +1777,17 @@ export class HttpProvider implements ApiProvider {
         fetchOptions,
         REQUEST_TIMEOUT_MS,
         'text',
-        context?.debug,
+        context?.bustCache ?? context?.debug,
         this.config.maxRetries,
       ));
     } catch (err) {
       throw err;
     }
 
-    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(data)}`);
+    logger.debug('[HTTP Provider]: Response received', {
+      length: typeof data === 'string' ? data.length : undefined,
+      cached,
+    });
 
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);

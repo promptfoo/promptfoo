@@ -353,7 +353,8 @@ export class WatsonXProvider implements ApiProvider {
         logger.debug(
           `Watsonx: Returning cached response for prompt "${prompt}" with config "${configHash}": ${cachedResponse}`,
         );
-        return JSON.parse(cachedResponse as string) as ProviderResponse;
+        const resp = JSON.parse(cachedResponse as string) as ProviderResponse;
+        return { ...resp, cached: true };
       }
     }
 

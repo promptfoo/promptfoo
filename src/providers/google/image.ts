@@ -145,6 +145,7 @@ export class GoogleImageProvider implements ApiProvider {
         },
       };
 
+      const startTime = Date.now();
       const response = await this.withRetry(
         () =>
           client.request({
@@ -159,8 +160,9 @@ export class GoogleImageProvider implements ApiProvider {
           }),
         'Vertex AI API call',
       );
+      const latencyMs = Date.now() - startTime;
 
-      return this.processResponse(response.data, false);
+      return this.processResponse(response.data, false, latencyMs);
     } catch (err: any) {
       if (err.response?.data?.error) {
         return {
