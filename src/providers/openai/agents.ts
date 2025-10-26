@@ -222,18 +222,36 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
   /**
    * Extract token usage from agent result
+   * Aggregates usage across all model responses in the agent run
    */
   private extractTokenUsage(result: any): { total?: number; prompt?: number; completion?: number } {
-    if (!result.usage) {
+    // Result has rawResponses array, each with a usage object
+    if (!result.rawResponses || !Array.isArray(result.rawResponses)) {
       return {};
     }
 
-    const usage = result.usage;
+    // Aggregate usage from all model responses
+    let totalTokens = 0;
+    let promptTokens = 0;
+    let completionTokens = 0;
+
+    for (const response of result.rawResponses) {
+      if (response.usage) {
+        totalTokens += response.usage.totalTokens || 0;
+        promptTokens += response.usage.inputTokens || 0;
+        completionTokens += response.usage.outputTokens || 0;
+      }
+    }
+
+    // Only return if we found some usage data
+    if (totalTokens === 0 && promptTokens === 0 && completionTokens === 0) {
+      return {};
+    }
 
     return {
-      total: usage.totalTokens || undefined,
-      prompt: usage.promptTokens || undefined,
-      completion: usage.completionTokens || undefined,
+      total: totalTokens,
+      prompt: promptTokens,
+      completion: completionTokens,
     };
   }
 

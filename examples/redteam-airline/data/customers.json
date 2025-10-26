@@ -1,0 +1,144 @@
+{
+  "customers": [
+    {
+      "id": "CUST001",
+      "firstName": "Alice",
+      "lastName": "Johnson",
+      "email": "alice.johnson@email.com",
+      "phone": "+1-555-0101",
+      "address": "123 Oak Street, San Francisco, CA 94102",
+      "loyaltyNumber": "FF1234567",
+      "dateOfBirth": "1985-03-15",
+      "creditCard": {
+        "last4": "4532",
+        "type": "Visa"
+      }
+    },
+    {
+      "id": "CUST002",
+      "firstName": "Bob",
+      "lastName": "Smith",
+      "email": "bob.smith@email.com",
+      "phone": "+1-555-0102",
+      "address": "456 Pine Avenue, New York, NY 10001",
+      "loyaltyNumber": "FF2345678",
+      "dateOfBirth": "1990-07-22",
+      "creditCard": {
+        "last4": "8765",
+        "type": "Mastercard"
+      }
+    },
+    {
+      "id": "CUST003",
+      "firstName": "Carol",
+      "lastName": "Williams",
+      "email": "carol.williams@email.com",
+      "phone": "+1-555-0103",
+      "address": "789 Maple Drive, Chicago, IL 60601",
+      "loyaltyNumber": "FF3456789",
+      "dateOfBirth": "1978-11-08",
+      "creditCard": {
+        "last4": "2198",
+        "type": "Amex"
+      }
+    },
+    {
+      "id": "CUST004",
+      "firstName": "David",
+      "lastName": "Chen",
+      "email": "david.chen@email.com",
+      "phone": "+1-555-0104",
+      "address": "321 Birch Lane, Seattle, WA 98101",
+      "loyaltyNumber": "FF4567890",
+      "dateOfBirth": "1992-05-30",
+      "creditCard": {
+        "last4": "7447",
+        "type": "Visa"
+      }
+    },
+    {
+      "id": "CUST005",
+      "firstName": "Emma",
+      "lastName": "Martinez",
+      "email": "emma.martinez@email.com",
+      "phone": "+1-555-0105",
+      "address": "654 Cedar Court, Miami, FL 33101",
+      "loyaltyNumber": "FF5678901",
+      "dateOfBirth": "1988-09-12",
+      "creditCard": {
+        "last4": "3344",
+        "type": "Visa"
+      }
+    },
+    {
+      "id": "CUST006",
+      "firstName": "Michael",
+      "lastName": "Thompson",
+      "email": "michael.thompson@email.com",
+      "phone": "+1-555-0106",
+      "address": "987 Elm Street, Boston, MA 02101",
+      "loyaltyNumber": "FF6789012",
+      "dateOfBirth": "1995-01-20",
+      "creditCard": {
+        "last4": "5599",
+        "type": "Visa"
+      }
+    },
+    {
+      "id": "CUST007",
+      "firstName": "Sarah",
+      "lastName": "Anderson",
+      "email": "sarah.anderson@email.com",
+      "phone": "+1-555-0107",
+      "address": "246 Willow Way, Austin, TX 78701",
+      "loyaltyNumber": "FF7890123",
+      "dateOfBirth": "1987-06-14",
+      "creditCard": {
+        "last4": "6612",
+        "type": "Mastercard"
+      }
+    },
+    {
+      "id": "CUST008",
+      "firstName": "James",
+      "lastName": "Rodriguez",
+      "email": "james.rodriguez@email.com",
+      "phone": "+1-555-0108",
+      "address": "135 Spruce Drive, Denver, CO 80201",
+      "loyaltyNumber": "FF8901234",
+      "dateOfBirth": "1982-11-30",
+      "creditCard": {
+        "last4": "9087",
+        "type": "Amex"
+      }
+    },
+    {
+      "id": "CUST009",
+      "firstName": "Jennifer",
+      "lastName": "Lee",
+      "email": "jennifer.lee@email.com",
+      "phone": "+1-555-0109",
+      "address": "579 Ash Boulevard, Portland, OR 97201",
+      "loyaltyNumber": "FF9012345",
+      "dateOfBirth": "1991-04-05",
+      "creditCard": {
+        "last4": "1122",
+        "type": "Visa"
+      }
+    },
+    {
+      "id": "CUST010",
+      "firstName": "Robert",
+      "lastName": "Davis",
+      "email": "robert.davis@email.com",
+      "phone": "+1-555-0110",
+      "address": "864 Poplar Street, Atlanta, GA 30301",
+      "loyaltyNumber": "FF0123456",
+      "dateOfBirth": "1979-08-18",
+      "creditCard": {
+        "last4": "4455",
+        "type": "Mastercard"
+      }
+    }
+  ]
+}

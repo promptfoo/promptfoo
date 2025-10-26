@@ -1,0 +1,94 @@
+{
+  "accounts": [
+    {
+      "loyaltyNumber": "FF1234567",
+      "customerId": "CUST001",
+      "memberName": "Alice Johnson",
+      "tierStatus": "Gold",
+      "milesBalance": 125000,
+      "lifetimeMiles": 450000,
+      "memberSince": "2018-01-15"
+    },
+    {
+      "loyaltyNumber": "FF2345678",
+      "customerId": "CUST002",
+      "memberName": "Bob Smith",
+      "tierStatus": "Platinum",
+      "milesBalance": 250000,
+      "lifetimeMiles": 890000,
+      "memberSince": "2015-06-22"
+    },
+    {
+      "loyaltyNumber": "FF3456789",
+      "customerId": "CUST003",
+      "memberName": "Carol Williams",
+      "tierStatus": "Silver",
+      "milesBalance": 45000,
+      "lifetimeMiles": 180000,
+      "memberSince": "2020-03-10"
+    },
+    {
+      "loyaltyNumber": "FF4567890",
+      "customerId": "CUST004",
+      "memberName": "David Chen",
+      "tierStatus": "Diamond",
+      "milesBalance": 500000,
+      "lifetimeMiles": 1250000,
+      "memberSince": "2012-09-05"
+    },
+    {
+      "loyaltyNumber": "FF5678901",
+      "customerId": "CUST005",
+      "memberName": "Emma Martinez",
+      "tierStatus": "Basic",
+      "milesBalance": 12000,
+      "lifetimeMiles": 35000,
+      "memberSince": "2023-02-18"
+    },
+    {
+      "loyaltyNumber": "FF6789012",
+      "customerId": "CUST006",
+      "memberName": "Michael Thompson",
+      "tierStatus": "Gold",
+      "milesBalance": 87000,
+      "lifetimeMiles": 320000,
+      "memberSince": "2019-04-12"
+    },
+    {
+      "loyaltyNumber": "FF7890123",
+      "customerId": "CUST007",
+      "memberName": "Sarah Anderson",
+      "tierStatus": "Platinum",
+      "milesBalance": 180000,
+      "lifetimeMiles": 650000,
+      "memberSince": "2016-11-08"
+    },
+    {
+      "loyaltyNumber": "FF8901234",
+      "customerId": "CUST008",
+      "memberName": "James Rodriguez",
+      "tierStatus": "Diamond",
+      "milesBalance": 425000,
+      "lifetimeMiles": 1100000,
+      "memberSince": "2013-07-19"
+    },
+    {
+      "loyaltyNumber": "FF9012345",
+      "customerId": "CUST009",
+      "memberName": "Jennifer Lee",
+      "tierStatus": "Silver",
+      "milesBalance": 52000,
+      "lifetimeMiles": 210000,
+      "memberSince": "2021-01-25"
+    },
+    {
+      "loyaltyNumber": "FF0123456",
+      "customerId": "CUST010",
+      "memberName": "Robert Davis",
+      "tierStatus": "Gold",
+      "milesBalance": 95000,
+      "lifetimeMiles": 380000,
+      "memberSince": "2017-09-30"
+    }
+  ]
+}

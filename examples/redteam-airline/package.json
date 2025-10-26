@@ -1,0 +1,15 @@
+{
+  "name": "@promptfoo/redteam-airline-example",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Red team security CTF for AI agent vulnerabilities in airline customer service",
+  "type": "module",
+  "scripts": {
+    "eval": "promptfoo eval",
+    "view": "promptfoo view"
+  },
+  "dependencies": {
+    "@openai/agents": "^0.1.11",
+    "zod": "^3.25.40"
+  }
+}
