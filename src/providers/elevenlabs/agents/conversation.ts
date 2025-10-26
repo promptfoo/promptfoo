@@ -66,6 +66,18 @@ export function parseConversation(
 
 /**
  * Build simulation request for ElevenLabs Agents API
+ *
+ * API Format (v1/convai/agents/{id}/simulate-conversation):
+ * {
+ *   simulation_specification: {
+ *     simulated_user_config: { first_message, prompt, ... },
+ *     tool_mock_config: { [tool_name]: { default_return_value, default_is_error } },
+ *     partial_conversation_history: [...],
+ *     dynamic_variables: {...}
+ *   },
+ *   extra_evaluation_criteria: [...],
+ *   new_turns_limit: number
+ * }
  */
 export function buildSimulationRequest(
   conversation: ParsedConversation,
@@ -79,46 +91,73 @@ export function buildSimulationRequest(
     criteriaCount: evaluationCriteria?.length || 0,
   });
 
-  const request: Record<string, any> = {
-    // Conversation history
-    history: conversation.turns.map((turn) => ({
-      role: turn.speaker,
-      content: turn.message,
-    })),
+  // Build simulated_user_config (required by API)
+  const simulatedUserConfig: Record<string, any> = {
+    first_message: conversation.turns[0]?.message || 'Hello',
   };
 
-  // Add simulated user configuration
+  // Add simulated user prompt configuration
   if (simulatedUser) {
-    request.simulated_user = {
+    simulatedUserConfig.prompt = {
       prompt: simulatedUser.prompt || 'Act as a helpful, curious user asking questions.',
       temperature: simulatedUser.temperature ?? 0.7,
-      response_style: simulatedUser.responseStyle || 'casual',
+      // Optional: llm, max_tokens, tool_ids, etc.
     };
+
+    // Add language if specified
+    if (simulatedUser.language) {
+      simulatedUserConfig.language = simulatedUser.language;
+    }
   }
 
-  // Add evaluation criteria
-  if (evaluationCriteria && evaluationCriteria.length > 0) {
-    request.evaluation_criteria = evaluationCriteria.map((criterion) => ({
-      name: criterion.name,
-      description: criterion.description,
-      weight: criterion.weight ?? 1.0,
-      passing_threshold: criterion.passingThreshold ?? 0.7,
-    }));
+  // Build simulation_specification (required wrapper)
+  const simulationSpecification: Record<string, any> = {
+    simulated_user_config: simulatedUserConfig,
+  };
+
+  // Add partial conversation history (skip first turn as it's used in first_message)
+  if (conversation.turns.length > 1) {
+    simulationSpecification.partial_conversation_history = conversation.turns
+      .slice(1)
+      .map((turn, index) => ({
+        role: turn.speaker,
+        message: turn.message,
+        time_in_call_secs: (index + 1) * 5, // Estimate 5 seconds per turn
+      }));
   }
 
   // Add tool mocks
   if (toolMocks && Object.keys(toolMocks).length > 0) {
-    request.tool_mocks = Object.entries(toolMocks).map(([toolName, mockConfig]) => ({
-      tool_name: toolName,
-      return_value: mockConfig.returnValue,
-      error: mockConfig.error,
-      latency_ms: mockConfig.latencyMs,
-    }));
+    const toolMockConfig: Record<string, any> = {};
+
+    for (const [toolName, mockConfig] of Object.entries(toolMocks)) {
+      toolMockConfig[toolName] = {
+        default_return_value: mockConfig.returnValue || '',
+        default_is_error: mockConfig.error || false,
+      };
+    }
+
+    simulationSpecification.tool_mock_config = toolMockConfig;
   }
 
-  // Add metadata if present
-  if (conversation.metadata) {
-    request.metadata = conversation.metadata;
+  // Add dynamic variables if present in metadata
+  if (conversation.metadata?.dynamic_variables) {
+    simulationSpecification.dynamic_variables = conversation.metadata.dynamic_variables;
+  }
+
+  // Build main request object
+  const request: Record<string, any> = {
+    simulation_specification: simulationSpecification,
+  };
+
+  // Add extra evaluation criteria
+  if (evaluationCriteria && evaluationCriteria.length > 0) {
+    request.extra_evaluation_criteria = evaluationCriteria.map((criterion, index) => ({
+      id: criterion.id || `criterion_${index}`,
+      name: criterion.name,
+      conversation_goal_prompt: criterion.description || criterion.name,
+      use_knowledge_base: criterion.useKnowledgeBase ?? false,
+    }));
   }
 
   return request;

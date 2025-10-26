@@ -88,7 +88,7 @@ providers:
         firstMessage: Hello! How may I assist you today?
         language: en
         voiceId: 2EiwWnXFnvU5JabPnv8n
-        llmModel: claude-sonnet-4-5-20250929
+        llmModel: claude-sonnet-4-5
         temperature: 0.7
         maxTokens: 500
       evaluationCriteria:

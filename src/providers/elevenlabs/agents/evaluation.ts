@@ -9,27 +9,40 @@ import type { EvaluationResult } from './types';
  * Process evaluation results from agent simulation
  */
 export function processEvaluationResults(
-  results: Array<{
-    criterion: string;
-    score: number;
-    passed: boolean;
-    feedback?: string;
-    evidence?: string[];
-  }>,
+  results:
+    | Record<
+        string,
+        {
+          criteria_id: string;
+          result: 'success' | 'failure';
+          rationale?: string;
+        }
+      >
+    | any,
 ): Map<string, EvaluationResult> {
+  // Handle missing or invalid results
+  if (!results || typeof results !== 'object') {
+    logger.debug('[ElevenLabs Agents] No evaluation results or invalid format', {
+      resultsType: typeof results,
+    });
+    return new Map();
+  }
+
   logger.debug('[ElevenLabs Agents] Processing evaluation results', {
-    resultCount: results.length,
+    resultCount: Object.keys(results).length,
   });
 
   const processed = new Map<string, EvaluationResult>();
 
-  for (const result of results) {
-    processed.set(result.criterion, {
-      criterion: result.criterion,
-      score: result.score,
-      passed: result.passed,
-      feedback: result.feedback,
-      evidence: result.evidence,
+  // Results is an object with criterion IDs as keys
+  for (const [criterionId, result] of Object.entries(results)) {
+    const passed = result.result === 'success';
+    processed.set(criterionId, {
+      criterion: result.criteria_id || criterionId,
+      score: passed ? 1.0 : 0.0, // API doesn't provide numeric scores, map success/failure to 1.0/0.0
+      passed,
+      feedback: result.rationale,
+      evidence: undefined, // API doesn't provide evidence array in this format
     });
   }
 

@@ -191,17 +191,25 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
         this.config.toolMockConfig,
       );
 
-      // Add max turns
-      simulationRequest.max_turns = this.config.maxTurns || 10;
+      // Add new_turns_limit (API field name)
+      simulationRequest.new_turns_limit = this.config.maxTurns || 10;
 
-      // Add LLM cascading if configured
+      // Add LLM cascading if configured (inside simulation_specification)
       if (this.config.llmCascade) {
-        simulationRequest.llm_cascade = buildLLMCascadeConfig(this.config.llmCascade);
+        simulationRequest.simulation_specification.llm_cascade = buildLLMCascadeConfig(
+          this.config.llmCascade,
+        );
       }
+
+      // Debug: Log the request being sent
+      logger.debug('[ElevenLabs Agents] Request payload', {
+        endpoint: `/convai/agents/${agentId}/simulate-conversation`,
+        payload: JSON.stringify(simulationRequest, null, 2),
+      });
 
       // Run simulation
       const response = await this.client.post<AgentSimulationResponse>(
-        `/convai/agents/${agentId}/conversation-simulation`,
+        `/convai/agents/${agentId}/simulate-conversation`,
         simulationRequest,
       );
 
@@ -259,14 +267,29 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     // Create new ephemeral agent
     logger.debug('[ElevenLabs Agents] Creating ephemeral agent');
 
-    const agentConfig = {
-      ...this.config.agentConfig,
-      name: this.config.agentConfig?.name || `promptfoo-agent-${Date.now()}`,
+    const config = this.config.agentConfig;
+    const agentCreationRequest = {
+      name: config?.name || `promptfoo-agent-${Date.now()}`,
+      conversation_config: {
+        agent: {
+          prompt: {
+            prompt: config?.prompt || 'You are a helpful assistant.',
+            llm: config?.llmModel,
+            temperature: config?.temperature,
+            max_tokens: config?.maxTokens,
+          },
+          first_message: config?.firstMessage,
+          language: config?.language || 'en',
+        },
+        tts: {
+          voice_id: config?.voiceId,
+        },
+      },
     };
 
     const response = await this.client.post<{ agent_id: string }>(
       '/convai/agents/create',
-      agentConfig,
+      agentCreationRequest,
     );
 
     this.ephemeralAgentId = response.agent_id;
@@ -344,8 +367,11 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     const overallScore = calculateOverallScore(evaluationResults);
     const evaluationSummary = generateEvaluationSummary(evaluationResults);
 
+    // Get conversation history (API uses simulated_conversation)
+    const conversationHistory = response.simulated_conversation || response.history || [];
+
     // Extract and analyze tool calls
-    const toolCalls = extractToolCalls(response.history);
+    const toolCalls = extractToolCalls(conversationHistory);
     const toolUsageAnalysis = analyzeToolUsage(toolCalls);
     const toolUsageSummary = generateToolUsageSummary(toolCalls);
 
@@ -378,8 +404,8 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
         latency: Date.now() - startTime,
 
         // Conversation data
-        conversationHistory: response.history,
-        turnCount: response.history.length,
+        conversationHistory,
+        turnCount: conversationHistory.length,
 
         // Evaluation data
         evaluationResults: Array.from(evaluationResults.values()),
@@ -407,8 +433,9 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
    * Estimate conversation duration
    */
   private estimateDuration(response: AgentSimulationResponse): number {
-    // Estimate based on number of turns
-    const turns = response.history.length;
+    // Estimate based on number of turns (API uses simulated_conversation)
+    const history = response.simulated_conversation || response.history || [];
+    const turns = history.length;
     const avgSecondsPerTurn = 15; // Conservative estimate
     return (turns * avgSecondsPerTurn) / 60; // Convert to minutes
   }

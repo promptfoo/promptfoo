@@ -67,16 +67,19 @@ export interface SimulatedUser {
   prompt?: string; // Instructions for simulated user behavior
   temperature?: number; // User model temperature
   responseStyle?: 'concise' | 'verbose' | 'casual' | 'formal';
+  language?: string; // Language for simulated user (ISO 639-1 code)
 }
 
 /**
  * Evaluation criterion for agent performance
  */
 export interface EvaluationCriterion {
+  id?: string; // Unique criterion ID
   name: string;
   description: string;
-  weight?: number; // Relative importance (0-1)
-  passingThreshold?: number; // Minimum score to pass (0-1)
+  weight?: number; // Relative importance (0-1) - deprecated, use for compatibility
+  passingThreshold?: number; // Minimum score to pass (0-1) - deprecated, use for compatibility
+  useKnowledgeBase?: boolean; // Whether to use knowledge base for evaluation
 }
 
 /**
@@ -187,9 +190,10 @@ export interface PhoneConfig {
  * Agent simulation response
  */
 export interface AgentSimulationResponse {
-  conversation_id: string;
-  status: 'completed' | 'failed' | 'timeout';
-  history: ConversationTurn[];
+  conversation_id?: string;
+  status?: 'completed' | 'failed' | 'timeout';
+  simulated_conversation?: ConversationTurn[]; // API uses simulated_conversation, not history
+  history?: ConversationTurn[]; // Keep for backward compatibility
   analysis?: ConversationAnalysis;
   llm_usage?: {
     total_tokens: number;
