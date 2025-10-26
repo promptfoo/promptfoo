@@ -1,10 +1,10 @@
 ---
-description: 'Step-by-step tutorial for testing ElevenLabs voice AI with Promptfoo'
+description: 'Step-by-step guide for testing ElevenLabs voice AI with Promptfoo - from TTS quality testing to conversational agent evaluation'
 ---
 
-# ElevenLabs Tutorial: Building a Voice AI Test Suite
+# Evaluating ElevenLabs voice AI
 
-This tutorial walks you through testing ElevenLabs voice AI capabilities using Promptfoo, from basic TTS to advanced agent evaluation.
+This guide walks you through testing ElevenLabs voice AI capabilities using Promptfoo, from basic text-to-speech quality testing to advanced conversational agent evaluation.
 
 ## Prerequisites
 

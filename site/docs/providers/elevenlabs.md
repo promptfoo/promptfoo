@@ -6,6 +6,10 @@ description: 'Test ElevenLabs AI audio capabilities: Text-to-Speech, Speech-to-T
 
 The ElevenLabs provider integrates multiple AI audio capabilities for comprehensive voice AI testing and evaluation.
 
+:::tip
+For a comprehensive step-by-step tutorial, see the [Evaluating ElevenLabs voice AI guide](/docs/guides/evaluate-elevenlabs/).
+:::
+
 ## Quick Start
 
 Get started with ElevenLabs in 3 steps:
@@ -879,6 +883,12 @@ Complete working examples:
 - [Supporting APIs](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-supporting-apis) - Audio processing pipeline
 
 ## Learn More
+
+### Promptfoo Resources
+
+- [Evaluating ElevenLabs voice AI](/docs/guides/evaluate-elevenlabs/) - Step-by-step tutorial
+
+### ElevenLabs Resources
 
 - [ElevenLabs API Documentation](https://elevenlabs.io/docs/introduction)
 - [Voice Library](https://elevenlabs.io/voice-library) - Browse and preview voices
