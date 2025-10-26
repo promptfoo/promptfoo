@@ -165,21 +165,22 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
    */
   private formatAsSRT(response: AlignmentResponse): string {
     const lines: string[] = [];
+    let subtitleNumber = 1;
 
-    for (let i = 0; i < response.word_alignments.length; i++) {
-      const word = response.word_alignments[i];
-      const nextWord = response.word_alignments[i + 1];
+    for (let i = 0; i < response.words.length; i++) {
+      const word = response.words[i];
+      const nextWord = response.words[i + 1];
 
       // Group words into subtitle chunks (max 10 words or 2 seconds)
       const chunkWords: (typeof word)[] = [word];
       let j = i + 1;
 
       while (
-        j < response.word_alignments.length &&
+        j < response.words.length &&
         chunkWords.length < 10 &&
-        response.word_alignments[j].start - word.start < 2.0
+        response.words[j].start - word.start < 2.0
       ) {
-        chunkWords.push(response.word_alignments[j]);
+        chunkWords.push(response.words[j]);
         j++;
       }
 
@@ -190,11 +191,12 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
       );
 
       // Add subtitle entry
-      lines.push(`${lines.length / 3 + 1}`);
+      lines.push(`${subtitleNumber}`);
       lines.push(`${start} --> ${end}`);
-      lines.push(chunkWords.map((w) => w.word).join(' '));
+      lines.push(chunkWords.map((w) => w.text.trim()).filter(t => t).join(' '));
       lines.push(''); // Empty line between entries
 
+      subtitleNumber++;
       i = j - 1;
     }
 

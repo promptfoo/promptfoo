@@ -15,10 +15,10 @@ export interface ForcedAlignmentConfig extends ElevenLabsBaseConfig {
  * Alignment data for a single word
  */
 export interface WordAlignment {
-  word: string; // The word text
+  text: string; // The word text (API uses 'text', not 'word')
   start: number; // Start time in seconds
   end: number; // End time in seconds
-  confidence?: number; // Confidence score (0-1)
+  loss?: number; // Alignment loss/confidence metric
 }
 
 /**
