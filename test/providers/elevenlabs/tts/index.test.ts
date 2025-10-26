@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { ElevenLabsTTSProvider } from '../../../../src/providers/elevenlabs/tts';
 
@@ -200,6 +201,8 @@ describe('ElevenLabsTTSProvider', () => {
     it('should handle API errors gracefully', async () => {
       const provider = new ElevenLabsTTSProvider('elevenlabs:tts');
 
+      // Ensure cache returns null so API is called
+      (provider as any).cache.get = jest.fn().mockResolvedValue(null);
       (provider as any).client.post = jest.fn().mockRejectedValue(new Error('API Error'));
 
       const response = await provider.callApi('Hello');

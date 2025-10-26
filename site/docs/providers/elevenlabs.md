@@ -1,5 +1,5 @@
 ---
-description: "Test ElevenLabs AI audio capabilities: Text-to-Speech, Speech-to-Text, Conversational Agents, and audio processing tools"
+description: 'Test ElevenLabs AI audio capabilities: Text-to-Speech, Speech-to-Text, Conversational Agents, and audio processing tools'
 ---
 
 # ElevenLabs
@@ -21,7 +21,7 @@ Get started with ElevenLabs in 3 steps:
 
    ```yaml
    prompts:
-     - "Welcome to our customer service. How can I help you today?"
+     - 'Welcome to our customer service. How can I help you today?'
 
    providers:
      - id: elevenlabs:tts:rachel
@@ -173,22 +173,22 @@ All providers support these common parameters:
 | `timeout`      | Request timeout in milliseconds                   |
 | `cache`        | Enable response caching                           |
 | `cacheTTL`     | Cache time-to-live in seconds                     |
-| `enableLogging | Enable debug logging                                |
+| `enableLogging | Enable debug logging                              |
 | `retries`      | Number of retry attempts for failed requests      |
 
 ### TTS-Specific Parameters
 
-| Parameter               | Description                                                  |
-| ----------------------- | ------------------------------------------------------------ |
-| `modelId`               | TTS model (e.g., `eleven_flash_v2_5`)                        |
-| `voiceId`               | Voice ID or name (e.g., `21m00Tcm4TlvDq8ikWAM` or `rachel`)  |
-| `voiceSettings`         | Voice customization (stability, similarity, style, speed)    |
-| `outputFormat`          | Audio format (e.g., `mp3_44100_128`, `pcm_44100`)            |
-| `seed`                  | Seed for deterministic output                                |
-| `streaming`             | Enable WebSocket streaming for low latency                   |
-| `pronunciationDictionary` | Custom pronunciation rules                                 |
-| `voiceDesign`           | Generate voice from text description                         |
-| `voiceRemix`            | Modify voice characteristics (gender, accent, age)           |
+| Parameter                 | Description                                                 |
+| ------------------------- | ----------------------------------------------------------- |
+| `modelId`                 | TTS model (e.g., `eleven_flash_v2_5`)                       |
+| `voiceId`                 | Voice ID or name (e.g., `21m00Tcm4TlvDq8ikWAM` or `rachel`) |
+| `voiceSettings`           | Voice customization (stability, similarity, style, speed)   |
+| `outputFormat`            | Audio format (e.g., `mp3_44100_128`, `pcm_44100`)           |
+| `seed`                    | Seed for deterministic output                               |
+| `streaming`               | Enable WebSocket streaming for low latency                  |
+| `pronunciationDictionary` | Custom pronunciation rules                                  |
+| `voiceDesign`             | Generate voice from text description                        |
+| `voiceRemix`              | Modify voice characteristics (gender, accent, age)          |
 
 ### STT-Specific Parameters
 
@@ -202,20 +202,20 @@ All providers support these common parameters:
 
 ### Agent-Specific Parameters
 
-| Parameter              | Description                                  |
-| ---------------------- | -------------------------------------------- |
-| `agentId`              | Use existing agent ID                        |
-| `agentConfig`          | Ephemeral agent configuration                |
-| `simulatedUser`        | Automated user simulation settings           |
-| `evaluationCriteria`   | Evaluation criteria for agent performance    |
-| `toolMockConfig`       | Mock tool responses for testing              |
-| `maxTurns`             | Maximum conversation turns (default: 10)     |
-| `llmCascade`           | LLM fallback configuration                   |
-| `customLLM`            | Custom LLM endpoint configuration            |
-| `mcpConfig`            | Model Context Protocol integration           |
-| `multiVoice`           | Multi-voice conversation configuration       |
-| `postCallWebhook`      | Webhook notification after conversation      |
-| `phoneConfig`          | Twilio or SIP phone integration              |
+| Parameter            | Description                               |
+| -------------------- | ----------------------------------------- |
+| `agentId`            | Use existing agent ID                     |
+| `agentConfig`        | Ephemeral agent configuration             |
+| `simulatedUser`      | Automated user simulation settings        |
+| `evaluationCriteria` | Evaluation criteria for agent performance |
+| `toolMockConfig`     | Mock tool responses for testing           |
+| `maxTurns`           | Maximum conversation turns (default: 10)  |
+| `llmCascade`         | LLM fallback configuration                |
+| `customLLM`          | Custom LLM endpoint configuration         |
+| `mcpConfig`          | Model Context Protocol integration        |
+| `multiVoice`         | Multi-voice conversation configuration    |
+| `postCallWebhook`    | Webhook notification after conversation   |
+| `phoneConfig`        | Twilio or SIP phone integration           |
 
 ## Examples
 
@@ -223,7 +223,7 @@ All providers support these common parameters:
 
 ```yaml
 prompts:
-  - "Welcome to ElevenLabs. Our AI voice technology delivers natural-sounding speech."
+  - 'Welcome to ElevenLabs. Our AI voice technology delivers natural-sounding speech.'
 
 providers:
   - id: elevenlabs:tts:rachel
@@ -323,10 +323,10 @@ providers:
   - id: elevenlabs:tts:rachel
     config:
       pronunciationDictionary:
-        - word: "API"
-          pronunciation: "A P I"
-        - word: "OAuth"
-          phoneme: "əʊɔːθ"
+        - word: 'API'
+          pronunciation: 'A P I'
+        - word: 'OAuth'
+          phoneme: 'əʊɔːθ'
 ```
 
 ### Voice Design
@@ -434,16 +434,16 @@ tests:
 
 Common voice IDs and names:
 
-| Name     | ID                       | Description          |
-| -------- | ------------------------ | -------------------- |
-| Rachel   | 21m00Tcm4TlvDq8ikWAM     | Calm, clear female   |
-| Clyde    | 2EiwWnXFnvU5JabPnv8n     | Warm male            |
-| Drew     | 29vD33N1CtxCmqQRPOHJ     | Well-rounded male    |
-| Paul     | 5Q0t7uMcjvnagumLfvZi     | Casual male          |
-| Domi     | AZnzlk1XvdvUeBnXmlld     | Energetic female     |
-| Bella    | EXAVITQu4vr4xnSDxMaL     | Expressive female    |
-| Antoni   | ErXwobaYiN019PkySvjV     | Deep male            |
-| Elli     | MF3mGyEYCl7XYWbV9V6O     | Young female         |
+| Name   | ID                   | Description        |
+| ------ | -------------------- | ------------------ |
+| Rachel | 21m00Tcm4TlvDq8ikWAM | Calm, clear female |
+| Clyde  | 2EiwWnXFnvU5JabPnv8n | Warm male          |
+| Drew   | 29vD33N1CtxCmqQRPOHJ | Well-rounded male  |
+| Paul   | 5Q0t7uMcjvnagumLfvZi | Casual male        |
+| Domi   | AZnzlk1XvdvUeBnXmlld | Energetic female   |
+| Bella  | EXAVITQu4vr4xnSDxMaL | Expressive female  |
+| Antoni | ErXwobaYiN019PkySvjV | Deep male          |
+| Elli   | MF3mGyEYCl7XYWbV9V6O | Young female       |
 
 ## Common Workflows
 
@@ -453,7 +453,7 @@ Compare voice quality across models and voices:
 
 ```yaml
 prompts:
-  - "The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet."
+  - 'The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet.'
 
 providers:
   - id: flash-model
@@ -503,7 +503,7 @@ providers:
 
 tests:
   - vars:
-      referenceText: "The meeting is scheduled for Thursday at 2 PM in conference room B. Please bring your laptop and quarterly report."
+      referenceText: 'The meeting is scheduled for Thursday at 2 PM in conference room B. Please bring your laptop and quarterly report.'
     assert:
       - type: javascript
         value: |
@@ -563,61 +563,67 @@ tests:
 ### 2. Optimize Voice Settings
 
 **For natural conversation:**
+
 ```yaml
 voiceSettings:
-  stability: 0.5       # More variation
+  stability: 0.5 # More variation
   similarity_boost: 0.75
   speed: 1.0
 ```
 
 **For consistent narration:**
+
 ```yaml
 voiceSettings:
-  stability: 0.8       # Less variation
+  stability: 0.8 # Less variation
   similarity_boost: 0.85
   speed: 0.95
 ```
 
 **For expressiveness:**
+
 ```yaml
 voiceSettings:
-  stability: 0.3       # High variation
+  stability: 0.3 # High variation
   similarity_boost: 0.5
-  style: 0.8          # Amplify style
+  style: 0.8 # Amplify style
   speed: 1.1
 ```
 
 ### 3. Cost Optimization
 
 **Use caching for repeated phrases:**
+
 ```yaml
 providers:
   - id: elevenlabs:tts:rachel
     config:
       cache: true
-      cacheTTL: 86400  # 24 hours
+      cacheTTL: 86400 # 24 hours
 ```
 
 **Implement LLM cascading for agents:**
+
 ```yaml
 providers:
   - id: elevenlabs:agents
     config:
       llmCascade:
-        primary: gpt-4o-mini          # Cheaper first
+        primary: gpt-4o-mini # Cheaper first
         fallback:
-          - gpt-4o                     # Better fallback
+          - gpt-4o # Better fallback
         cascadeOnError: true
 ```
 
 **Test with shorter prompts during development:**
+
 ```yaml
 providers:
   - id: elevenlabs:tts:rachel
 tests:
   - vars:
-      shortPrompt: "Test"            # Use during dev
-      fullPrompt: "Full production message"
+      shortPrompt: 'Test' # Use during dev
+      fullPrompt: 'Full production message'
 ```
 
 ### 4. Agent Testing Strategy
@@ -658,7 +664,7 @@ evaluationCriteria:
 providers:
   - id: elevenlabs:tts:rachel
     config:
-      outputFormat: mp3_44100_128    # Good for web
+      outputFormat: mp3_44100_128 # Good for web
       # outputFormat: pcm_44100      # Better for phone systems
       # outputFormat: mp3_22050_32   # Smaller files for mobile
 ```
@@ -668,16 +674,16 @@ providers:
 ```yaml
 prompts:
   # Numbers and dates
-  - "Your appointment is on March 15th at 3:30 PM. Confirmation number: 4829."
+  - 'Your appointment is on March 15th at 3:30 PM. Confirmation number: 4829.'
 
   # Technical terms
-  - "The API returns a JSON response with OAuth2 authentication tokens."
+  - 'The API returns a JSON response with OAuth2 authentication tokens.'
 
   # Multi-language
-  - "Bonjour! Welcome to our multilingual support."
+  - 'Bonjour! Welcome to our multilingual support.'
 
   # Edge cases
-  - "Hello... um... can you hear me? Testing, 1, 2, 3."
+  - 'Hello... um... can you hear me? Testing, 1, 2, 3.'
 ```
 
 ### 6. Monitoring and Observability
@@ -721,7 +727,7 @@ providers:
     config:
       modelId: eleven_flash_v2_5
       voiceSettings:
-        stability: 0.6  # Tweaked setting
+        stability: 0.6 # Tweaked setting
 ```
 
 ## Troubleshooting
@@ -767,11 +773,12 @@ Solution: Add retry logic and respect rate limits:
 providers:
   - id: elevenlabs:tts:rachel
     config:
-      retries: 3                    # Retry failed requests
-      timeout: 30000                # Allow time for retries
+      retries: 3 # Retry failed requests
+      timeout: 30000 # Allow time for retries
 ```
 
 For high-volume testing, consider:
+
 - Spreading tests over time
 - Upgrading to a paid plan
 - Using caching to avoid redundant requests
@@ -786,7 +793,7 @@ Solution: Ensure audio files are accessible and in supported formats:
 providers:
   - id: elevenlabs:stt
     config:
-      audioFormat: mp3  # Supported: mp3, wav, flac, ogg, webm, m4a
+      audioFormat: mp3 # Supported: mp3, wav, flac, ogg, webm, m4a
 ```
 
 Verify file exists:
@@ -806,8 +813,8 @@ Solution: Adjust conversation limits:
 providers:
   - id: elevenlabs:agents
     config:
-      maxTurns: 20                  # Increase if needed
-      timeout: 120000               # 2 minutes
+      maxTurns: 20 # Increase if needed
+      timeout: 120000 # 2 minutes
 ```
 
 ### Memory Issues with Large Evals
@@ -853,6 +860,7 @@ curl -H "xi-api-key: $ELEVENLABS_API_KEY" https://api.elevenlabs.io/v1/voices
 **Issue: Cost estimates don't match billing**
 
 Solution: Cost tracking is estimated based on:
+
 - TTS: Character count × model rate
 - STT: Audio duration × per-minute rate
 - Agents: Conversation duration × LLM rates

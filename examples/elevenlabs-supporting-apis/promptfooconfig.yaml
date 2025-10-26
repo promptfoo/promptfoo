@@ -91,10 +91,10 @@ defaultTest:
     agentId: agent_example_456
 
     # For audio isolation
-    audioFile: ./audio/noisy-recording.mp3
+    isolationAudioFile: ./audio/noisy-recording.mp3
 
     # For forced alignment
-    audioFile: ./audio/speech.mp3
+    alignmentAudioFile: ./audio/speech.mp3
     transcript: Welcome to ElevenLabs. This is a test.
     format: srt # json, srt, or vtt
 
@@ -212,7 +212,7 @@ tests:
       - type: latency
         threshold: 300000 # 5 minutes for dubbing
 
-# Advanced: Pipeline tests
+  # Advanced: Pipeline tests
   - description: 'Pipeline: Isolation → STT works'
     # First isolate audio, then transcribe
     vars:

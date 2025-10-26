@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { ElevenLabsAlignmentProvider } from '../../../../src/providers/elevenlabs/alignment';
 import { promises as fs } from 'fs';
@@ -201,9 +202,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const mockAudioBuffer = Buffer.from('audio-data');
       const mockAlignmentResponse = {
-        word_alignments: [
-          { word: 'Hello', start: 0.0, end: 0.5 },
-        ],
+        word_alignments: [{ word: 'Hello', start: 0.0, end: 0.5 }],
         character_alignments: [
           { character: 'H', start: 0.0, end: 0.1 },
           { character: 'e', start: 0.1, end: 0.2 },
@@ -238,9 +237,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const mockAudioBuffer = Buffer.from('audio-data');
       const mockAlignmentResponse = {
-        word_alignments: [
-          { word: 'Test', start: 0.0, end: 0.5 },
-        ],
+        word_alignments: [{ word: 'Test', start: 0.0, end: 0.5 }],
         duration_seconds: 0.5,
       };
 

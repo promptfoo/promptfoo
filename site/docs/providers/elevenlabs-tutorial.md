@@ -1,5 +1,5 @@
 ---
-description: "Step-by-step tutorial for testing ElevenLabs voice AI with Promptfoo"
+description: 'Step-by-step tutorial for testing ElevenLabs voice AI with Promptfoo'
 ---
 
 # ElevenLabs Tutorial: Building a Voice AI Test Suite
@@ -30,7 +30,7 @@ export ELEVENLABS_API_KEY=your_api_key_here
 Create `promptfooconfig.yaml`:
 
 ```yaml
-description: "Compare ElevenLabs TTS models for customer service greetings"
+description: 'Compare ElevenLabs TTS models for customer service greetings'
 
 prompts:
   - "Thank you for calling TechSupport Inc. My name is Alex, and I'll be assisting you today. How can I help?"
@@ -95,12 +95,12 @@ Now let's optimize voice settings for different use cases.
 Update your config:
 
 ```yaml
-description: "Test voice settings for different scenarios"
+description: 'Test voice settings for different scenarios'
 
 prompts:
-  - "Welcome to our automated system."  # Formal announcement
-  - "Hey there! Thanks for reaching out." # Casual greeting
-  - "I understand your frustration. Let me help." # Empathetic response
+  - 'Welcome to our automated system.' # Formal announcement
+  - 'Hey there! Thanks for reaching out.' # Casual greeting
+  - 'I understand your frustration. Let me help.' # Empathetic response
 
 providers:
   - label: Professional Voice
@@ -108,7 +108,7 @@ providers:
     config:
       modelId: eleven_flash_v2_5
       voiceSettings:
-        stability: 0.8        # Consistent tone
+        stability: 0.8 # Consistent tone
         similarity_boost: 0.85
         speed: 0.95
 
@@ -117,9 +117,9 @@ providers:
     config:
       modelId: eleven_flash_v2_5
       voiceSettings:
-        stability: 0.4        # More variation
+        stability: 0.4 # More variation
         similarity_boost: 0.75
-        speed: 1.1            # Slightly faster
+        speed: 1.1 # Slightly faster
 
   - label: Empathetic Voice
     id: elevenlabs:tts:rachel
@@ -128,8 +128,8 @@ providers:
       voiceSettings:
         stability: 0.5
         similarity_boost: 0.7
-        style: 0.8            # More expressive
-        speed: 0.9            # Slower, calmer
+        style: 0.8 # More expressive
+        speed: 0.9 # Slower, calmer
 
 tests:
   - vars:
@@ -170,7 +170,7 @@ Test transcription accuracy by creating a TTS → STT pipeline.
 Create `transcription-test.yaml`:
 
 ```yaml
-description: "Test TTS → STT accuracy pipeline"
+description: 'Test TTS → STT accuracy pipeline'
 
 prompts:
   - |
@@ -199,10 +199,10 @@ tests:
 Now add STT to verify accuracy. Create a second config `stt-accuracy.yaml`:
 
 ```yaml
-description: "Test STT accuracy"
+description: 'Test STT accuracy'
 
 prompts:
-  - file://audio/generated-speech.mp3  # Audio from previous eval
+  - file://audio/generated-speech.mp3 # Audio from previous eval
 
 providers:
   - id: elevenlabs:stt
@@ -212,7 +212,7 @@ providers:
 
 tests:
   - vars:
-      referenceText: "The quarterly sales meeting is scheduled for Thursday, March 15th at 2:30 PM. Please bring your laptop, quarterly reports, and the Q4 projections spreadsheet. Conference room B has been reserved for this meeting."
+      referenceText: 'The quarterly sales meeting is scheduled for Thursday, March 15th at 2:30 PM. Please bring your laptop, quarterly reports, and the Q4 projections spreadsheet. Conference room B has been reserved for this meeting.'
     assert:
       - type: javascript
         value: |
@@ -240,7 +240,7 @@ Test a complete voice agent with evaluation criteria.
 Create `agent-test.yaml`:
 
 ```yaml
-description: "Test customer support agent performance"
+description: 'Test customer support agent performance'
 
 prompts:
   - |
@@ -265,7 +265,7 @@ providers:
           5. Maintain a professional, empathetic tone
 
           Never make promises you can't keep. Always set clear expectations.
-        voiceId: 21m00Tcm4TlvDq8ikWAM  # Rachel
+        voiceId: 21m00Tcm4TlvDq8ikWAM # Rachel
         llmModel: gpt-4o-mini
 
       # Define evaluation criteria
@@ -348,6 +348,7 @@ promptfoo view
 ```
 
 In the web UI, you'll see:
+
 - Full conversation transcript
 - Evaluation criteria scores
 - Pass/fail for each criterion
@@ -441,7 +442,7 @@ promptfoo eval -c agent-with-tools.yaml
 Create `cost-optimized-agent.yaml`:
 
 ```yaml
-description: "Cost-optimized agent with LLM cascading"
+description: 'Cost-optimized agent with LLM cascading'
 
 prompts:
   - |
@@ -459,9 +460,9 @@ providers:
 
       # LLM cascading: start cheap, fallback to expensive
       llmCascade:
-        primary: gpt-4o-mini        # Cheap, fast
+        primary: gpt-4o-mini # Cheap, fast
         fallback:
-          - gpt-4o                   # More capable
+          - gpt-4o # More capable
         cascadeOnError: true
         cascadeOnLatency:
           enabled: true
@@ -479,7 +480,7 @@ tests:
       query: business_hours
     assert:
       - type: cost
-        threshold: 0.20  # Should use gpt-4o-mini
+        threshold: 0.20 # Should use gpt-4o-mini
 
   - description: Complex question may use better model
     vars:
@@ -502,6 +503,7 @@ promptfoo eval -c cost-optimized-agent.yaml
 ## Next Steps
 
 You've learned to:
+
 - ✅ Compare TTS models and voices
 - ✅ Customize voice settings for different scenarios
 - ✅ Test STT accuracy with WER calculation
@@ -520,6 +522,7 @@ You've learned to:
 ### Example Projects
 
 Check out complete examples:
+
 - [examples/elevenlabs-tts-advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-tts-advanced)
 - [examples/elevenlabs-agents-advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-agents-advanced)
 
@@ -534,23 +537,27 @@ Check out complete examples:
 ### Common Issues
 
 **Agent conversations timeout:**
+
 - Increase `maxTurns` and `timeout` in config
 - Simplify evaluation criteria
 - Use faster LLM models
 
 **High costs during testing:**
+
 - Use `gpt-4o-mini` instead of `gpt-4o`
 - Enable caching for repeated tests
 - Implement LLM cascading
 - Test with shorter prompts first
 
 **Evaluation criteria always failing:**
+
 - Start with simple, objective criteria
 - Lower passing thresholds during development
 - Review agent transcript to understand behavior
 - Add more specific criteria descriptions
 
 **Audio quality issues:**
+
 - Try different `outputFormat` settings
 - Adjust voice settings (stability, similarity_boost)
 - Test with different models

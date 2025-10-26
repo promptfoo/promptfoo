@@ -74,7 +74,11 @@ export class ElevenLabsSTTProvider implements ApiProvider {
   }
 
   toString(): string {
-    return `[ElevenLabs STT Provider] ${this.config.modelId}`;
+    const parts = [`[ElevenLabs STT Provider] ${this.config.modelId}`];
+    if (this.config.diarization) {
+      parts.push('(diarization enabled)');
+    }
+    return parts.join(' ');
   }
 
   /**

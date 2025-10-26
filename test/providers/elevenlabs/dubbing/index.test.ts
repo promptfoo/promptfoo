@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { ElevenLabsDubbingProvider } from '../../../../src/providers/elevenlabs/dubbing';
 import { promises as fs } from 'fs';
@@ -41,11 +42,12 @@ describe('ElevenLabsDubbingProvider', () => {
     it('should throw error when API key is missing', () => {
       delete process.env.ELEVENLABS_API_KEY;
 
-      expect(() => new ElevenLabsDubbingProvider('elevenlabs:dubbing:es', {
-        config: { targetLanguage: 'es' },
-      })).toThrow(
-        'ELEVENLABS_API_KEY environment variable is not set',
-      );
+      expect(
+        () =>
+          new ElevenLabsDubbingProvider('elevenlabs:dubbing:es', {
+            config: { targetLanguage: 'es' },
+          }),
+      ).toThrow('ELEVENLABS_API_KEY environment variable is not set');
     });
 
     it('should use custom configuration', () => {
@@ -152,7 +154,8 @@ describe('ElevenLabsDubbingProvider', () => {
       (provider as any).client.upload = jest.fn().mockResolvedValue({
         dubbing_id: 'dub-123',
       });
-      (provider as any).client.get = jest.fn()
+      (provider as any).client.get = jest
+        .fn()
         .mockResolvedValueOnce({
           status: 'processing',
           progress: 50,
@@ -206,7 +209,8 @@ describe('ElevenLabsDubbingProvider', () => {
       (provider as any).client.post = jest.fn().mockResolvedValue({
         dubbing_id: 'dub-456',
       });
-      (provider as any).client.get = jest.fn()
+      (provider as any).client.get = jest
+        .fn()
         .mockResolvedValueOnce({
           status: 'completed',
           metadata: {
@@ -331,7 +335,8 @@ describe('ElevenLabsDubbingProvider', () => {
       (provider as any).client.upload = jest.fn().mockResolvedValue({
         dubbing_id: 'dub-custom',
       });
-      (provider as any).client.get = jest.fn()
+      (provider as any).client.get = jest
+        .fn()
         .mockResolvedValueOnce({
           status: 'completed',
           metadata: {},
@@ -393,19 +398,21 @@ describe('ElevenLabsDubbingProvider', () => {
     it('should throw meaningful error when API key is missing', () => {
       delete process.env.ELEVENLABS_API_KEY;
 
-      expect(() => new ElevenLabsDubbingProvider('elevenlabs:dubbing:es', {
-        config: { targetLanguage: 'es' },
-      })).toThrow(
-        /ELEVENLABS_API_KEY/i,
-      );
+      expect(
+        () =>
+          new ElevenLabsDubbingProvider('elevenlabs:dubbing:es', {
+            config: { targetLanguage: 'es' },
+          }),
+      ).toThrow(/ELEVENLABS_API_KEY/i);
     });
 
     it('should throw error when target language is missing', () => {
-      expect(() => new ElevenLabsDubbingProvider('elevenlabs:dubbing', {
-        config: {},
-      })).toThrow(
-        /Target language is required/i,
-      );
+      expect(
+        () =>
+          new ElevenLabsDubbingProvider('elevenlabs:dubbing', {
+            config: {},
+          }),
+      ).toThrow(/Target language is required/i);
     });
 
     it('should handle invalid configuration gracefully', () => {

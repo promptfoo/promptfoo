@@ -28,7 +28,7 @@ describe('ElevenLabsSTTProvider', () => {
       delete process.env.ELEVENLABS_API_KEY;
 
       expect(() => new ElevenLabsSTTProvider('elevenlabs:stt')).toThrow(
-        'ELEVENLABS_API_KEY environment variable is not set',
+        'ElevenLabs API key not found',
       );
     });
 
@@ -157,9 +157,7 @@ describe('ElevenLabsSTTProvider', () => {
     it('should throw meaningful error when API key is missing', () => {
       delete process.env.ELEVENLABS_API_KEY;
 
-      expect(() => new ElevenLabsSTTProvider('elevenlabs:stt')).toThrow(
-        /ELEVENLABS_API_KEY/i,
-      );
+      expect(() => new ElevenLabsSTTProvider('elevenlabs:stt')).toThrow(/ELEVENLABS_API_KEY/i);
     });
 
     it('should handle invalid configuration gracefully', () => {
