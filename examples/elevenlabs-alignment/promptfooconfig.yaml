@@ -1,0 +1,53 @@
+description: ElevenLabs Forced Alignment - Subtitle generation
+
+# Alignment uses audio files + transcripts - pass via vars
+prompts:
+  - '{{transcript}}'
+
+providers:
+  # Basic alignment (JSON output)
+  - id: elevenlabs:alignment:json
+    label: Alignment (JSON)
+
+  # SRT subtitle format
+  - id: elevenlabs:alignment:srt
+    label: Alignment (SRT Subtitles)
+
+tests:
+  - description: Align Armstrong moon landing speech
+    vars:
+      audioFile: examples/elevenlabs-stt/audio/sample1.mp3
+      transcript: "That's one small step for man, one giant leap for mankind."
+      format: json
+    assert:
+      - type: javascript
+        value: output.includes('word_alignments')
+      - type: not-contains
+        value: error
+
+  - description: Align Armstrong to SRT format
+    vars:
+      audioFile: examples/elevenlabs-stt/audio/sample1.mp3
+      transcript: "That's one small step for man, one giant leap for mankind."
+      format: srt
+    assert:
+      - type: javascript
+        value: output.includes('-->') && output.includes('small step')
+
+  - description: Align sample2 hello message
+    vars:
+      audioFile: examples/elevenlabs-stt/audio/sample2.wav
+      transcript: "Hello. What's today's date? Could you please let me know?"
+      format: json
+    assert:
+      - type: javascript
+        value: output.includes('word_alignments')
+      - type: not-contains
+        value: error
+
+# Default test configuration
+defaultTest:
+  # All tests will require alignment to complete
+  assert:
+    - type: not-contains
+      value: error

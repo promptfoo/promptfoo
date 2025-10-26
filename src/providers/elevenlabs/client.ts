@@ -183,8 +183,11 @@ export class ElevenLabsClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
 
+    // Detect MIME type from file extension
+    const mimeType = this.getMimeType(fileName);
+
     const formData = new FormData();
-    formData.append(fileFieldName, new Blob([new Uint8Array(file)]), fileName);
+    formData.append(fileFieldName, new Blob([new Uint8Array(file)], { type: mimeType }), fileName);
 
     for (const [key, value] of Object.entries(additionalFields)) {
       if (value !== undefined && value !== null) {
@@ -234,6 +237,31 @@ export class ElevenLabsClient {
       clearTimeout(timeoutId);
       throw error;
     }
+  }
+
+  /**
+   * Get MIME type from file extension
+   */
+  private getMimeType(fileName: string): string {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      // Audio formats
+      mp3: 'audio/mpeg',
+      wav: 'audio/wav',
+      flac: 'audio/flac',
+      ogg: 'audio/ogg',
+      opus: 'audio/opus',
+      m4a: 'audio/mp4',
+      aac: 'audio/aac',
+      webm: 'audio/webm',
+      // Video formats
+      mp4: 'video/mp4',
+      mov: 'video/quicktime',
+      avi: 'video/x-msvideo',
+      mkv: 'video/x-matroska',
+      webm: 'video/webm',
+    };
+    return mimeTypes[ext || ''] || 'application/octet-stream';
   }
 
   /**

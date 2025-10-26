@@ -1,0 +1,35 @@
+description: ElevenLabs Dubbing - Multi-language audio dubbing
+
+# Dubbing uses audio/video files - pass via vars
+prompts:
+  - '{{sourceFile}}'
+
+providers:
+  # Dub to Spanish
+  - id: elevenlabs:dubbing:es
+    label: Dubbing to Spanish
+    config:
+      targetLanguage: es
+      sourceLanguage: en
+
+  # Dub to French
+  - id: elevenlabs:dubbing:fr
+    label: Dubbing to French
+    config:
+      targetLanguage: fr
+      sourceLanguage: en
+
+tests:
+  - description: Dub sample1 to Spanish
+    vars:
+      sourceFile: examples/elevenlabs-stt/audio/sample1.mp3
+    assert:
+      - type: not-contains
+        value: error
+
+# Default test configuration
+defaultTest:
+  # All tests will require dubbing to complete
+  assert:
+    - type: not-contains
+      value: error
