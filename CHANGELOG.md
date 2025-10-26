@@ -66,15 +66,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
+- docs(contributing): Add changelog and GitHub Actions enforcement (#6012)
 - docs(providers): add OpenAI Agents provider documentation and example (#6009)
+- docs(site): remove dupe links (5aea733)
 - docs(blog): add blog post on RLVR (Reinforcement Learning with Verifiable Rewards) (#5987)
-- docs: configuring inference (#5983)
+- docs(site): configuring inference (#5983)
 - docs(site): update about page (#5971)
-- docs: add export formats (#5958)
-- docs: Update AWS Bedrock model access documentation (#5953)
-- docs: Example demonstrating conversation session id management using hooks (#5940)
+- docs(site): add export formats (#5958)
+- docs(providers): Update AWS Bedrock model access documentation (#5953)
+- docs(examples): Example demonstrating conversation session id management using hooks (#5940)
 - docs(echo): add examples for evaluating logged production outputs (#5941)
 - docs(site): September release notes (#5712)
+- docs(site): add red-team claude guidelines (616844d)
 
 ### Tests
 
@@ -252,10 +255,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore: bump version 0.118.12 (#5857)
 - chore(site): Adds Travis to team page (#5786)
 - docs: update readme.md (#5812)
-- docs: add CLAUDE.md context files for Claude Code (#5819)
-- docs: safety benchmark blog post (#5781)
-- docs: update IBM WatsonX model list (#5838)
-- docs: add warning against using commit --amend and force push (#5840)
+- docs(contributing): add CLAUDE.md context files for Claude Code (#5819)
+- docs(blog): safety benchmark blog post (#5781)
+- docs(providers): update IBM WatsonX model list (#5838)
+- docs(contributing): add warning against using commit --amend and force push (#5840)
 - test: fix vitest timeout error in EvalOutputPromptDialog tests (#5820)
 - test: fix flaky Python test failures on Windows (#5824)
 - test: add mock cleanup to Python provider tests (#5825)
@@ -383,20 +386,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **feat(webui):** populate keys in metadata filters dropdown by [@mldangelo](https://github.com/mldangelo) in [#5584](https://github.com/promptfoo/promptfoo/pull/5584)
+- feat(webui): populate metadata filter keys in results dropdown (#5584)
+
+### Fixed
+
+- fix: improve iterative judge parsing (#5691)
+- fix(cli): prevent promptfoo CLI from hanging after commands complete (#5698)
+- fix(dev): suppress noisy health check logs during local startup (#5667)
+- fix(prompts): tune prompt set to reduce model refusals (#5689)
 
 ### Changed
 
-- **fix:** iterative judge parsing by [@MrFlounder](https://github.com/MrFlounder) in [#5691](https://github.com/promptfoo/promptfoo/pull/5691)
-- **fix:** Promptfoo CLI hanging after command finishes by [@sklein12](https://github.com/sklein12) in [#5698](https://github.com/promptfoo/promptfoo/pull/5698)
-- **fix:** suppress noisy health check logs during dev startup by [@mldangelo](https://github.com/mldangelo) in [#5667](https://github.com/promptfoo/promptfoo/pull/5667)
-- **fix:** update more prompts to get less refusal by [@MrFlounder](https://github.com/MrFlounder) in [#5689](https://github.com/promptfoo/promptfoo/pull/5689)
-- **chore:** bump version 0.118.8 by [@sklein12](https://github.com/sklein12) in [#5699](https://github.com/promptfoo/promptfoo/pull/5699)
-- **docs:** release notes August by [@ladyofcode](https://github.com/ladyofcode) in [#5625](https://github.com/promptfoo/promptfoo/pull/5625)
+- chore: bump version 0.118.8 (#5699)
 
 ### Documentation
 
-- **docs(site):** add `linkedTargetId` documentation for custom provider linking by [@mldangelo](https://github.com/mldangelo) in [#5684](https://github.com/promptfoo/promptfoo/pull/5684)
+- docs(site): publish August release notes (#5625)
+- docs(site): document `linkedTargetId` usage for custom provider linking (#5684)
 
 ## [0.118.7] - 2025-09-22
 
@@ -425,9 +431,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
-- docs: clarify webhook issue meaning (#5679)
+- docs(site): clarify webhook issue meaning (#5679)
 - docs(examples): add HTTP provider streaming example (#5648)
-- docs: (blog) add autonomy and agency in AI article (#5512)
+- docs(blog): add autonomy and agency in AI article (#5512)
 
 ### Added
 
@@ -814,6 +820,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(CI): refactor docker build (#5353)
 - fix(internals): defaultTest.provider doesn't override (#5348)
+
+## [0.117.9] - 2025-08-22
+
+### Added
+
+- feat(ollama): support for `think` and passthrough parameters (#5341)
+- feat: Persist model audit scans (#5308)
+- feat: add support for Claude Opus 4.1 (#5183)
+- feat: support file:// in http provider `body` (#5321)
+
+### Fixed
+
+- fix(ui): prevent header dropdown collapse on hover (#5355)
+- fix(webui): Apply metric filters to eval results via url search params (#5332)
+- fix: loaders on all pages (#5339)
+- fix(internals): Pass `vars.output` and `vars.rubric` to LLM rubric grading call (#5315)
+- fix: resolve TypeScript errors in test files (7992892)
+- fix: validation for no target label set (#5318)
+
+### Changed
+
+- chore(webui): add navigation in redteam report from severity table to vulnerabilities table filtered by severity (#5320)
+- chore: dropdown menu design consistency (#5328)
+- chore: fix build (#5326)
+- chore: recursively resolve file:// references in json and yaml prompts (#5215)
+- chore(modelAudit): defer auth to modelaudit via environment variable (#5296)
+- chore: more share debug info on error (#5266)
+- chore: add stack trace to redteam error in web runner (#5319)
+- chore: copy for Review page (e957b5c)
+- chore: explain why things are disabled on the targets page (#5312)
+
+### Dependencies
+
+- chore: bump @aws-sdk/client-bedrock-runtime from 3.864.0 to 3.872.0 (#5323)
+- chore: bump openai from 5.13.1 to 5.15.0 (#5345)
+- chore(deps): run npm audit fix dependencies (#5343)
+- chore: bump openai from 5.12.2 to 5.13.1 (#5314)
+
+### Documentation
+
+- docs(site): add truncation marker to top-5-open-source-ai-red-teaming-tools-2025 blog post (#5351)
+- docs: add writing for promptfoo guidelines to sidebar (#5277)
+- docs(site): describe llm-rubric default grading providers (#5350)
+- docs: og image updates (#5324)
+- docs: red team data flow (#5325)
+- docs: modelaudit updates (#5322)
+- docs(site): Add GitHub Actions caching optimization tip (#5301)
+
+### Tests
+
+- test: Unit tests for fix: loaders on all pages (#5347)
 
 ## [0.117.8] - 2025-08-20
 
@@ -2264,13 +2321,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - test: add unit test for src/assertions/llmRubric.ts (#4096)
 - test: add unit test for src/telemetry.ts (#4094)
 
-### Changed
+## [0.112.9] - 2025-05-20
+
+### Fixed
 
 - fix: target purpose not making it into redteam config (#4097)
+
+### Changed
+
 - chore: Remove deprecated sharing setups (#4082)
 - chore: add vision grading example (#4090)
-- chore: bump version to 0.113.0 (#4099)
-- chore: bump version to 0.112.9 (#4098)
 
 ## [0.112.8] - 2025-05-20
 
@@ -4680,13 +4740,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.100.2] - 2024-12-06
 
+### Added
+
+- feat: multiline editor for http request body (#2314) by @typpo
+
+### Fixed
+
+- fix(redteam): Do not fail crescendo if the provider sends the wrong response (#2315) by @sklein12
+- fix: remove log line (c539341)
+
+## [0.100.1] - 2024-12-05
+
+### Added
+
+- feat(redteam): Multilingual generates test cases across all strats (#2313) by @sklein12
+
+### Fixed
+
+- fix(redteam): preserve assertion types in multilingual strategy (#2312) by @mldangelo
+
 ### Changed
 
-- **Multilingual Redteam Strategy:** Generates test cases across all strategies. [#2313](https://github.com/promptfoo/promptfoo/pull/2313) by [@sklein12](https://github.com/sklein12)
-- **Multiline Editor:** Added multiline editor for HTTP request body. [#2314](https://github.com/promptfoo/promptfoo/pull/2314) by [@typpo](https://github.com/typpo)
-- **Redteam Multilingual Strategy:** Preserved assertion types. [#2312](https://github.com/promptfoo/promptfoo/pull/2312) by [@mldangelo](https://github.com/mldangelo)
-- **Crescendo Handling:** Prevented failures if the provider sends an incorrect response. [#2315](https://github.com/promptfoo/promptfoo/pull/2315) by [@sklein12](https://github.com/sklein12)
-- **Dependency Updates:** Updated multiple package dependencies. [#2308](https://github.com/promptfoo/promptfoo/pull/2308) by [@mldangelo](https://github.com/mldangelo)
+- chore(redteam): Improve purpose output (779a8d4)
+- chore: re-reorder target setup page (7dd11ae)
+- chore: copy (158d841)
+- ci: increase Docker workflow timeout to 60 minutes (414db79)
+
+### Dependencies
+
+- chore(deps): update multiple package dependencies (#2308) by @mldangelo
+
+### Documentation
+
+- docs: fix multilingual (e78e77d)
 
 ## [0.100.0] - 2024-12-05
 
@@ -7729,6 +7815,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix: use relative paths consistently and handle object formats (#375)
 - [fix: restore **prefix and **suffix column handlers when loading test csv](https://github.com/promptfoo/promptfoo/commit/3a058684b3389693f4c5899f786fb090b04e3c93)
 
+## [0.34.1] - 2024-01-02
+
+### Added
+
+- feat(openai): add support for overriding provider cost (1be1072)
+
+### Fixed
+
+- fix(webview): increase the request payload size limit (ef4c30f)
+
 ## [0.34.0] - 2024-01-02
 
 ### Changed
@@ -7819,6 +7915,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat: support prompt functions via nodejs interface (#315)
 - fix: webview handling of truncated cell contents with html (#318)
 - docs: Merge docs into main repo (#317)
+
+## [0.30.2] - 2023-11-29
+
+### Changed
+
+- feat(cli): simplify onboarding and provide npx-specific instructions (f81bd88)
 
 ## [0.30.1] - 2023-11-29
 
@@ -7917,6 +8019,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - feat: Support for Azure OpenAI Cognitive Search (#274)
 - [feat: Add PROMPTFOO_PYTHON environment variable](https://github.com/promptfoo/promptfoo/commit/33ecca3dab9382f063e68529c047cfd3fbd959e5)
+
+## [0.26.4] - 2023-11-09
+
+### Fixed
+
+- fix(providers): use Azure OpenAI extensions endpoint when dataSources is set (2e5f14d)
+
+### Tests
+
+- test(assertions): add tests for object outputs (9e0909c)
 
 ## [0.26.3] - 2023-11-08
 
@@ -8079,6 +8191,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Include `provider` in `EvaluateResult`
 - Other misc improvements and fixes
 
+## [0.22.1] - 2023-09-14
+
+### Added
+
+- feat(vars): add support for loading vars directly from file (#139)
+- feat(config): add support for including files in defaultTest (#137)
+- feat(config): add support for disabling cache in evaluate() options (#135)
+- feat(providers): support for Google Vertex and PaLM chat APIs (#131)
+- feat(api): include provider in EvaluateResult (#130)
+
+### Changed
+
+- chore(providers): improve PaLM recognized model detection (2317eac)
+
+### Documentation
+
+- docs(examples): add conversation history example (#136)
+- docs(examples): update node-package example with context (#134)
+
 ## [0.22.0] - 2023-09-04
 
 ### Changed
@@ -8193,350 +8324,509 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.18.4] - 2023-08-11
 
-### Changed
+### Fixed
 
-- Fix bug in Ollama provider breaking on empty line
-- Bump certifi from 2023.5.7 to 2023.7.22 in /examples/langchain-python (#104)
+- fix(providers): resolve Ollama provider issue with empty line handling (c4d1e5f)
+
+### Dependencies
+
+- chore(deps): bump certifi from 2023.5.7 to 2023.7.22 in /examples/langchain-python (#104)
 
 ## [0.18.3] - 2023-08-08
 
+### Added
+
+- feat(providers): add Ollama provider (#102)
+
 ### Changed
 
-- Disable nunjucks autoescaping by default (#101)
-- Add ollama provider (#102)
-- Fix potential issues with writing latest results
-- Default to not forcing line breaks in web view
+- chore(webui): disable nunjucks autoescaping by default (#101)
+- chore(webui): stop forcing manual line breaks in results view (76d18f5)
+
+### Fixed
+
+- fix(history): remove stale `latest` symlinks before regenerating eval output (a603eee)
 
 ## [0.18.2] - 2023-08-08
 
+### Added
+
+- feat(webui): display assertion summaries in the results viewer (#100)
+
 ### Changed
 
-- testing providers w/ same model diff params (#83)
-- Add assertions in webview (#100)
-- Fix error with provider map parsing when `providers` is just a string
-- Fix `share` command
-- Don't short circuit test failures by default and introduce `PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES` envar
+- feat(providers): allow testing identical models with different parameters (#83)
+
+### Fixed
+
+- fix(cli): repair `promptfoo share` regression (01df513)
+- fix(config): handle provider map parsing when entries are strings (bdd1dea)
+- fix(scoring): keep weighted averages accurate by running all test cases (7854424)
 
 ## [0.18.1] - 2023-08-06
 
+### Added
+
+- feat(providers): add llama.cpp server support (#94)
+
 ### Changed
 
-- Fix issue with writing latest results
-- Add support for llama.cpp server (#94)
+- chore(providers): expose `LLAMA_BASE_URL` environment variable (f4b4c39)
+
+### Fixed
+
+- fix(history): repair symlink detection when writing latest results (e6aed7a)
 
 ## [0.18.0] - 2023-07-28
 
+### Added
+
+- feat(assertions): add `python` assertion type (#78)
+- feat(api): support native function ApiProviders and assertions (#93)
+- feat(evals): introduce Promptfoo scenarios for data-driven testing - allows datasets to be associated with specific tests, eliminating the need to copy tests for each dataset by @Skylertodd (#89)
+- feat(cli): allow specifying `outputPath` when using the Node evaluate helper (#91)
+
 ### Changed
 
-- Promptfoo Theoriesby @Skylertodd in https://github.com/promptfoo/promptfoo/pull/89 - allow datasets to be associated with specific set of tests allowing the ability to execute many data driven tests without the requirement of copying a test over and over for each data set.
-- Add `python` assertion type that runs python code and returns the output (#78)
-- Add support for native function ApiProviders and Assertions (#93)
-- Fix ANSI escape codes in console table
-- Fix broken symlink handling for latest output
-- Fix eval history cleanup
-- Promptfoo Theories (#89)
+- chore(evals): rename default "theories" concept to "scenarios" (aca0821)
+
+### Fixed
+
+- fix(history): repair symlink handling when persisting latest results (81a4a26)
+- fix(history): clean up stale eval history entries (253ae60)
+- fix(cli): restore ANSI escape code rendering in console tables (497b698)
 
 ## [0.17.9] - 2023-07-24
 
+### Added
+
+- feat(evals): load test cases from file or directory paths (#88)
+
 ### Changed
 
-- Record latency in results (#85)
-- Add support for loading test cases from file/directory path (#88)
-- Fix filepath compatibility issue on Windows
+- feat(metrics): record latency in eval results (#85)
+
+### Fixed
+
+- fix(windows): resolve path compatibility issues (8de6e12)
 
 ## [0.17.8] - 2023-07-22
 
+### Added
+
+- feat(evals): support post-processing hooks in test cases (#84)
+
 ### Changed
 
-- Additional OpenAI params (#81)
-- Show recent runs in web viewer (#82)
-- Add support for postprocessing in test cases (#84)
-- Fix issue where timeouts for noncritical things (like version check) would crash with error
-- Fix bug in evaluator where empty tests were not supported (e.g. when comparing a static prompt on multiple models)
+- feat(webui): show recent runs in the results viewer (#82)
+- feat(providers): expose additional OpenAI parameters (#81)
+
+### Fixed
+
+- fix(evaluator): support empty test suites without crashing (31fb876)
+- fix(network): ensure fetch timeouts bubble up correctly (9e4bf94)
 
 ## [0.17.7] - 2023-07-20
 
+### Added
+
+- feat(config): allow provider-specific prompts in test suites (#76)
+
 ### Changed
 
-- Add support for provider-specific prompts in the test suite configuration (#76)
-- Improvements to ReplicateProvider
-- Add llama vs gpt bechmark example
-- Fixes to llm-rubric prompt grading
+- chore(runtime): require Node.js 16 or newer (f7f85e3)
+- chore(providers): reuse context configuration for Replicate provider (48819a7)
+
+### Fixed
+
+- fix(providers): handle missing provider prompt maps gracefully (7c6bb35)
+- fix(grading): escape user input in grading prompts (4049b3f)
 
 ## [0.17.6] - 2023-07-20
 
+### Added
+
+- feat(cli): add `--repeat` support to evaluations (#71)
+- feat(providers): add Azure YAML prompt support (#72)
+- feat(providers): implement Replicate provider (#75)
+
 ### Changed
 
-- Add "repeat" option to CLI and EvaluateOptions (#71)
-- Move OpenAI yaml support into shared providers util (#74)
-- ReplicateProvider implementation (#75)
-- Web viewer: add support for hiding identical rows
-- Darkmode fixes
-- Fix colab notebook support
+- chore(providers): refine Replicate provider behaviour (57fa43f)
+- chore(cli): default `promptfoo share` prompt to Yes on enter (1a4c080)
+- chore(webui): simplify dark mode and hide identical rows in history (c244403)
 
 ## [0.17.5] - 2023-07-14
 
+### Added
+
+- feat(assertions): add starts-with assertion type (#64)
+- feat(providers): add Azure OpenAI provider (#66)
+
 ### Changed
 
-- Add starts-with assertion type (#64)
-- Add support for YAML-formatted OpenAI prompts (#67)
-- Add Azure OpenAI Provider (#66)
-- Allow option to disable sharing (#69)
-- Require confirmation before sharing in `promptfoo share`
-- Add `PROMPTFOO_DISABLE_UPDATE` environment variable
+- feat(providers): support YAML-formatted OpenAI prompts (#67)
+- chore(cli): allow disabling sharing prompts (#69)
+- chore(cli): require confirmation before running `promptfoo share` (f3de0e4)
+- chore(env): add `PROMPTFOO_DISABLE_UPDATE` environment variable (60fee72)
+
+### Fixed
+
+- fix(config): read prompts relative to the config directory (ddc370c)
 
 ## [0.17.4] - 2023-07-13
 
+### Added
+
+- feat(assertions): add `contains-any` assertion support (#61)
+
 ### Changed
 
-- Add telemetry notice (#39)
-- Fix environments that do not have process.stdout.columns (colab)
-- Fix `init` output
-- Don't crash when npm is down (latest version check)
+- chore(cli): handle npm outages without crashing (3177715)
+
+### Fixed
+
+- fix(cli): support terminals without `process.stdout.columns` (064dcb3)
+- fix(cli): correct `promptfoo init` output to reference YAML (404be34)
+
+### Documentation
+
+- docs: add telemetry notice (#39)
 
 ## [0.17.3] - 2023-07-10
 
+### Added
+
+- feat(providers): add Anthropic provider (#58)
+
 ### Changed
 
-- Add Anthropic provider (#58)
-- Fix a handful of `promptfoo init` onboarding issues
-- Fix ordering of CLI table headers
-- Fix compatibility with Node 14
+- chore(onboarding): refresh init onboarding content (992c0b6)
+
+### Fixed
+
+- fix(cli): maintain table header ordering (1e3a711)
+- fix(runtime): ensure compatibility with Node 14 (59e2bb1)
 
 ## [0.17.2] - 2023-07-07
 
 ### Changed
 
-- Improve support for running external scripts as providers (#55)
+- feat(providers): improve support for running external scripts (#55)
 
 ## [0.17.1] - 2023-07-07
 
-### Changed
+### Fixed
 
-- Fix issue with outputs displaying in web viewer
+- fix(webui): restore output rendering in results view (5ce5598)
 
 ## [0.17.0] - 2023-07-06
 
+### Added
+
+- feat(models): add gpt-3.5-16k checkpoints (#51)
+- feat(providers): add `script:` provider prefix for custom providers (bae14ec)
+- feat(webui): view raw prompts in the web viewer (#54)
+- feat(cli): add `cache clear` command (970ee67)
+
 ### Changed
 
-- added gpt-3.5-16k and checkpoints (#51)
-- Add ability to view raw prompts in web viewer (#54)
-- OpenAI chat completion fails on invalid JSON. Enable with envar `PROMPTFOO_REQUIRE_JSON_PROMPTS`
-- Ability to view raw prompts in web viewer
-- Update default suggestion provider
-- Add `script` provider prefix for custom providers
-- Add a `cache clear` command
-- Fix: allow number values for `contains` and `icontains` assertions
-- FIx: Don't create asserts from empty \_\_expected columns
+- chore(providers): change default suggestion provider (cc11e59)
+- chore(providers): ensure OpenAI chat completions fail on invalid JSON (c456c01)
+- chore(assertions): allow numeric values for contains/icontains assertions (dc04329)
+
+### Fixed
+
+- fix(evals): avoid creating assertions from empty expected columns (d398866)
 
 ## [0.16.0] - 2023-06-28
 
-### Changed
+### Added
 
-- update docs/Question (#46)
-- Add retries for failed HTTP requests (#47)
-- Add support for var objects that can be manipulated in nunjucks templates (#50)
+- feat(cli): retry failed HTTP requests to reduce transient failures (#47)
+- feat(templates): allow object vars inside nunjucks templates for richer prompts (#50)
+
+### Documentation
+
+- docs: refresh the Question reference page with updated guidance (#46)
 
 ## [0.15.0] - 2023-06-26
 
+### Added
+
+- feat(scoring): add continuous scoring support for evaluations (#44)
+- feat(assertions): introduce assertion weights to fine-tune scoring (0688a64)
+
 ### Changed
 
-- Add support for continuous scoring by @typpo in https://github.com/typpo/promptfoo/pull/44
-- Add support for assertion weights
-- Fix: defaultTest is properly set when config is loaded
+- chore(prompt): rename grading prompt field from `content` to `output` (fa20a25)
+- chore(webui): maintain backwards compatibility for row outputs in the viewer (b2fc084)
+
+### Fixed
+
+- fix(config): ensure `defaultTest` populates when configs load implicitly (44acb91)
 
 ## [0.14.2] - 2023-06-24
 
 ### Changed
 
-- Add support for continuous scoring (#44)
+- chore(assertions): switch the default grading provider to `gpt-4-0613` (0d26776)
+- chore(cli): trim stray progress-bar newlines for cleaner output (8d624d6)
+
+### Fixed
+
+- fix(cli): update cached table output correctly when results change (8fe5f84)
+- fix(cli): allow non-string result payloads during rendering (61d349e)
 
 ## [0.14.1] - 2023-06-19
 
-### Changed
+### Fixed
 
-- Fix: [Use basepath only in case where path was supplied in config file](https://github.com/typpo/promptfoo/commit/e67918b3824ac59576eec56bdae4a700cf527352)
+- fix(config): only apply the config base path when a path override is provided (e67918b)
 
 ## [0.14.0] - 2023-06-18
 
+### Added
+
+- feat(cli)!: add shareable URLs and the `promptfoo share` command by @typpo (#42)
+- feat(cli): add `--no-progress-bar` option to `promptfoo eval` (75adf8a)
+- feat(cli): add `--no-table` flag for evaluation output (ecf79a4)
+- feat(cli): add `--share` flag to automatically create shareable URLs (7987f6e)
+
 ### Changed
 
-- Breaking: Make files in config yaml resolve from config location, not working directory
-- Breaking: output `json` and `yaml` formats have moved results into the `results` property. Now also include `config` and `shareableUrl`
-- Add shareable urls and `promptfoo share` command by @typpo in https://github.com/typpo/promptfoo/pull/42
-- Add new CLI args for `eval`: --no-table, --no-progress-bar, --share
-- Other misc bugfixes and improvements
+- chore(cli)!: resolve config-relative file references from the config directory, not working directory (dffb091)
+- chore(api)!: restructure JSON/YAML output formats to include `results`, `config`, and `shareableUrl` properties (d1b7038)
+
+### Fixed
+
+- fix(cli): write the latest results before launching the viewer with `--view` (496f2fb)
 
 ## [0.13.1] - 2023-06-17
 
-### Changed
+### Fixed
 
-- [Command arguments override config in all cases](https://github.com/typpo/promptfoo/commit/c425d3ae8c4ddb932ba4c1380889a01b47b5ce57)
-- Add shareable urls and `promptfoo share` command (#42)
+- fix(cli): ensure command arguments override config values (c425d3a)
 
 ## [0.13.0] - 2023-06-16
 
+### Added
+
+- feat(providers): support OpenAI functions and custom provider arguments by @typpo (#34)
+- feat(cli): add JSONL prompt file support by @typpo (#40)
+- feat(cli): export `generateTable()` for external tooling reuse by @tizmagik (#37)
+- feat(openai): enable OpenAI ChatCompletion function calling (0f10cdd)
+
 ### Changed
 
-- Add support for OpenAI functions and custom provider args by @typpo in https://github.com/typpo/promptfoo/pull/34
-- extract and export generateTable() by @tizmagik in https://github.com/typpo/promptfoo/pull/37
-- Add JSONL prompt file support by @typpo in https://github.com/typpo/promptfoo/pull/40
-- Add JSONL prompt file support (#40)
+- chore(openai): add official support for OpenAI `*-0613` models (4d5f827)
+- chore(cli): allow optional configs when invoking the CLI (a9140d6)
+- chore(cli): respect the `LOG_LEVEL` environment variable in the logger (1f1f05f)
+- chore(cli): stabilize progress display when using var arrays (340da53)
+
+### Fixed
+
+- fix(build): fix HTML output generation in production builds (46a2233)
 
 ## [0.12.0] - 2023-06-12
 
+### Added
+
+- feat(share): publish evaluations with the `promptfoo share` workflow by @typpo (#33)
+- feat(telemetry): add basic usage telemetry for insight gathering (7e7e3ea)
+- feat(assertions): support CSV definitions for `rouge-n` and webhook assertions (7f8be15)
+
 ### Changed
 
-- Add support for sharing by @typpo in https://github.com/typpo/promptfoo/pull/33
-- Warn user if they are using an out-of-date version by @typpo in https://github.com/typpo/promptfoo/pull/31
-- Add basic telemetry
-- extract and export generateTable() (#37)
-- Add support for OpenAI functions and custom provider args (#34)
-- Add support for sharing (#33)
+- chore(build): resolve build output paths for the web client (#32)
+- chore(cli): notify users when a newer promptfoo release is available by @typpo (#31)
 
 ## [0.11.0] - 2023-06-11
 
+### Added
+
+- feat(assertions): add contains, icontains, contains-some, contains-any, regex, webhook, and rouge-n assertion types (#30)
+- feat(assertions): allow negating any assertion type with `not-` prefix (cc5fef1)
+- feat(assertions): pass context objects with vars to custom functions (1e4df7e)
+- feat(webui): add failure filtering and improved table layout (69189fe)
+- feat(webui): add word-break toggle to results (9c1fd3b)
+- feat(webui): highlight highest passing scores in matrix (6e2942f)
+
 ### Changed
 
-- feat: Add many new assertion types: contains, icontains, contains-some, contains-any, regex, webhook, rouge-n
-- feat: all assertion types can be negated be prefixing `not-`
-- feat: more debugging info for custom function failures
-- feat: custom functions are passed a context object that contains vars
-- feat: web table view improvements, including the ability to filter only failures, toggle word break mode, etc
-- Misc fixes and small improvements
-- Solve build path issues (#32)
-- Add check for latest package version (#31)
+- chore(cli): limit console table rows for readability (52a28c9)
+- chore(cli): add more detailed custom function failure output (6fcc37a)
+
+### Fixed
+
+- fix(config): respect CLI write/cache options from config (5b456ec)
+- fix(webui): improve dark mode colours and rating overflow (eb7bd54)
+- fix(config): parse YAML references correctly in configs (62561b5)
 
 ## [0.10.0] - 2023-06-09
 
+### Added
+
+- feat(prompts): add support for named prompts by @typpo (#28)
+
 ### Changed
 
-- fix: Rename OPENAI_MAX_TEMPERATURE to OPENAI_TEMPERATURE
-- fix: defaultTest properly works in configs loaded by CLI
-- chore: add native ts-node compatibility by @MentalGear in https://github.com/typpo/promptfoo/pull/25
-- fix parsing of env vars for OPENAI_MAX_TOKENS and OPENAI_MAX_TEMPERATURE by @abi in https://github.com/typpo/promptfoo/pull/29
-- feat: Add support for named prompts by @typpo in https://github.com/typpo/promptfoo/pull/28
-- feat: Better visual distinction in web view
-- Other misc fixes and improvements
-- chore: add native ts-node compatibility (#25)
-- Add many new assertion types (#30)
-- fix parsing of env vars for OPENAI_MAX_TOKENS and OPENAI_MAX_TEMPERATURE (#29)
-- Add support for named prompts (#28)
+- chore(env)!: rename `OPENAI_MAX_TEMPERATURE` to `OPENAI_TEMPERATURE` (4830557)
+- chore(config): read `.yml` files by default as configs (d5c179e)
+- chore(build): add native ts-node compatibility by @MentalGear (#25)
+- chore(openai): add chatml stopwords by default (561437f)
+- chore(webui): adjust column ordering and styling (27977c5)
+
+### Fixed
+
+- fix(config): support `defaultTest` overrides in CLI (59c3cbb)
+- fix(env): correctly parse `OPENAI_MAX_TOKENS` and `OPENAI_MAX_TEMPERATURE` by @abi (#29)
+- fix(cli): improve JSON formatting error messages (5f59900)
 
 ## [0.9.0] - 2023-06-05
 
+### Added
+
+- feat(vars): add support for var arrays by @typpo (#21)
+
 ### Changed
 
-- Add support for var arrays by @typpo in https://github.com/typpo/promptfoo/pull/21
-- Minor fixes and improvements
-- Add support for var arrays (#21)
+- chore(core): set a default semantic similarity threshold (4ebea73)
+- chore(cli): refresh `promptfoo init` output messaging (cdbf806)
+
+### Fixed
+
+- fix(cache): register cache manager types for TypeScript (1a82de7)
+- fix(evals): handle string interpolation issues in prompts (6b8c175)
 
 ## [0.8.3] - 2023-05-31
 
-### Changed
+### Fixed
 
-- Fix: cache setup on first usage
-- Fix: better error on malformed config file
+- fix(cache): create cache directory on first use (423f375)
+- fix(config): throw a clearer error for malformed default configs (0d759c4)
 
 ## [0.8.2] - 2023-05-30
 
-### Changed
+### Fixed
 
-- Fix cache behavior edge case
-- Simplify API and add support for unified test suite definition (#14)
+- fix(cache): only persist cache entries on successful API responses (71c10a6)
 
 ## [0.8.1] - 2023-05-30
 
-### Changed
+### Added
 
-- Fix some issues with `--vars` and `--tests` backwards compatibility
+- feat(data): add Google Sheets loader support (df900c3)
+
+### Fixed
+
+- fix(cli): restore backward compatibility for `-t/--tests` flags (aad1822)
 
 ## [0.8.0] - 2023-05-30
 
+### Added
+
+- feat(api)!: simplify the API and support unified test suite definitions by @typpo (#14)
+
 ### Changed
 
-- Simplify API and add support for unified test suite definition by @typpo in https://github.com/typpo/promptfoo/pull/14
-- The following options have moved inside `evaluateOptions`: `maxConcurrency`, `showProgressBar`, `generateSuggestions`.
-- The following options have moved inside `commandLineOptions`: `write`, `cache`, `verbose`, `view`, and similar.
+- chore(api)!: move evaluation settings under `evaluateOptions` (`maxConcurrency`, `showProgressBar`, `generateSuggestions`) (#14)
+- chore(api)!: move CLI flag defaults under `commandLineOptions` (`write`, `cache`, `verbose`, `view`) (#14)
 
 ## [0.7.0] - 2023-05-29
 
 ### Changed
 
-- Improve caching and cache all requests by default
+- chore(cache): improve caching defaults and enable caching by default (#17)
 
 ## [0.6.0] - 2023-05-28
 
+### Added
+
+- feat(providers): add LocalAI support for open-source LLMs like Llama, Alpaca, Vicuna, GPT4All (6541bb2)
+- feat(cli): add glob pattern support for prompts and tests (#13)
+- feat(assertions): rename `eval:` to `fn:` for custom JavaScript assertions by @MentalGear (#11)
+- feat(webui): add dark mode support (0a2bb49)
+- feat(api): add exports for types and useful utility functions (57ac4bb)
+- feat(tests): add Jest and Mocha integrations (00d9aa2)
+
 ### Changed
 
-- Add support for open-source LLMs like Llama, Alpaca, Vicuna, GPT4All via LocalAI
-- Add glob support
-- Jest and mocha integrations
-- Rename eval: to fn: for custom js fnc tests by @MentalGear
-- Add exports for types and useful utility functions
-- Support non-es module requires
-- Web viewer dark mode
-- Improved handling of third-party API errors
-- Many other fixes and improvements
-- Improve caching and cache all requests by default (#17)
-- Bump socket.io-parser from 4.2.2 to 4.2.3 in /src/web/client (#15)
+- chore(cli): improve error handling and word wrapping in CLI output (398f4b0)
+- chore(cli): support non-ES module requires (c451362)
+
+### Fixed
+
+- fix(cli): move API key validation into OpenAI subclasses (c451362)
+- fix(webui): correct HTML table rendering errors in the viewer (64c9161)
+- fix(providers): improve handling of third-party API errors (398f4b0)
+
+### Dependencies
+
+- chore(deps): bump socket.io-parser from 4.2.2 to 4.2.3 in /src/web/client (#15)
 
 ## [0.5.1] - 2023-05-23
 
-### Added
-
-- feat: rename eval: to fn: for custom js fnc tests (#11)
-
 ### Changed
 
-- Fix issue with running promptfoo without `OPENAI_API_KEY` set
-- Add glob support (#13)
+- chore(cli): add glob support for prompt selection (#13)
+
+### Fixed
+
+- fix(cli): prevent crashes when `OPENAI_API_KEY` is not set (c451362)
 
 ## [0.5.0] - 2023-05-22
 
+### Added
+
+- feat(assertions): add semantic similarity grading (#7)
+
 ### Changed
 
-- Add support for grading by semantic similarity
-- Add support for local LLMs like Llama, Alpaca, Vicuna, GPT4All, etc. via LocalAI
-- Improved error handling
-- Improved word wrapping in CLI output
-- Add support for grading by semantic similarity (#7)
+- chore(cli): improve error handling and word wrapping in CLI output (398f4b0)
 
 ## [0.4.0] - 2023-05-13
 
+### Added
+
+- feat(webui): add web viewer for evaluation results (#5)
+
 ### Changed
 
-- Web viewer for eval results
-- Support for OPENAI_STOP to set OpenAI stopwords
-- Increase default request timeout
-- Browser UI for eval results (#5)
+- chore(openai): support `OPENAI_STOP` environment variable for stopwords (79d590e)
+- chore(cli): increase the default request timeout (c73e055)
 
 ## [0.3.0] - 2023-05-07
 
 ### Added
 
-- Feature: LLM automatic grading of outputs by LLM https://github.com/typpo/promptfoo/pull/4
+- feat(grading): enable LLM automatic grading of outputs (#4)
+- feat(webui): improve how test results are shown - PASS/FAIL is shown in matrix view rather than its own column (2c3f489)
 
 ### Changed
 
-- Improve how test results are shown (PASS/FAIL is shown in matrix view, rather than its own column)
-- Ability to override OPENAI_API_HOST environment variable
-- Ability to set an API call timeout via `REQUEST_TIMEOUT_MS` environment variable
-- Improve readability of HTML table output
-- Ability for LLM to grade its own outputs (#4)
+- chore(config): allow overriding `OPENAI_API_HOST` environment variable (e390678)
+- chore(cli): add `REQUEST_TIMEOUT_MS` environment variable for API timeouts (644abf9)
+- chore(webui): improve HTML table output readability (2384c69)
 
 ## [0.2.2] - 2023-05-04
 
+### Added
+
+- feat(cli): add `promptfoo --version` output (77e862b)
+
 ### Changed
 
-- Fix error in `promptfoo init` output
-- Fix ordering issue when building table concurrently
-- Output more useful errors when API calls fail
-- Add `promptfoo --version` output
+- chore(cli): improve error messages when API calls fail (af2c8d3)
+
+### Fixed
+
+- fix(cli): correct `promptfoo init` output text (862d7a7)
+- fix(evals): preserve table ordering when building concurrently (2e3ddfa)
 
 ## [0.2.0] - 2023-05-04
 
-### Changed
+### Added
 
-- Add `promptfoo init` command
-- Improve custom provider loading and add example
+- feat(cli): add `promptfoo init` command (c6a3a59)
+- feat(providers): improve custom provider loading and add example (4f6b6e2)
