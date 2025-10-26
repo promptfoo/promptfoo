@@ -179,11 +179,12 @@ export class ElevenLabsClient {
     file: Buffer,
     fileName: string,
     additionalFields: Record<string, any> = {},
+    fileFieldName: string = 'file',
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
 
     const formData = new FormData();
-    formData.append('file', new Blob([new Uint8Array(file)]), fileName);
+    formData.append(fileFieldName, new Blob([new Uint8Array(file)]), fileName);
 
     for (const [key, value] of Object.entries(additionalFields)) {
       if (value !== undefined && value !== null) {
@@ -217,7 +218,18 @@ export class ElevenLabsClient {
         await this.handleErrorResponse(response, 0);
       }
 
-      return (await response.json()) as T;
+      // Check if response is JSON or binary
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        return (await response.json()) as T;
+      } else {
+        // Binary response (audio, video, etc.)
+        const data = await response.arrayBuffer();
+        logger.debug('[ElevenLabs Client] Binary response received from upload', {
+          size: data.byteLength,
+        });
+        return data as T;
+      }
     } catch (error) {
       clearTimeout(timeoutId);
       throw error;

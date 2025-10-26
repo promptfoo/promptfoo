@@ -14,6 +14,7 @@ import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { promises as fs } from 'fs';
 import { ElevenLabsClient } from '../client';
+import { CostTracker } from '../cost-tracker';
 import { encodeAudio } from '../tts/audio';
 import type { AudioIsolationConfig } from './types';
 
@@ -27,6 +28,7 @@ import type { AudioIsolationConfig } from './types';
  */
 export class ElevenLabsIsolationProvider implements ApiProvider {
   private client: ElevenLabsClient;
+  private costTracker: CostTracker;
   private env?: EnvOverrides;
   config: AudioIsolationConfig;
 
@@ -54,6 +56,8 @@ export class ElevenLabsIsolationProvider implements ApiProvider {
       baseUrl: this.config.baseUrl,
       timeout: this.config.timeout || 120000, // 2 minutes for audio processing
     });
+
+    this.costTracker = new CostTracker();
   }
 
   id(): string {
@@ -97,6 +101,7 @@ export class ElevenLabsIsolationProvider implements ApiProvider {
         audioBuffer,
         filename,
         {},
+        'audio', // Audio Isolation API expects 'audio' field
       );
 
       const latency = Date.now() - startTime;
@@ -114,6 +119,13 @@ export class ElevenLabsIsolationProvider implements ApiProvider {
         latency,
       });
 
+      // Track cost (roughly based on audio duration)
+      // Estimate duration from file size (rough approximation)
+      const estimatedDurationSeconds = audioBuffer.length / 32000; // ~32KB per second for typical MP3
+      const cost = this.costTracker.trackSTT(estimatedDurationSeconds, {
+        operation: 'audio_isolation',
+      });
+
       return {
         output: `Audio isolated successfully from ${filename}`,
         audio: isolatedAudio,
@@ -124,6 +136,7 @@ export class ElevenLabsIsolationProvider implements ApiProvider {
           format: isolatedAudio.format,
           latency,
         },
+        cost,
       };
     } catch (error) {
       logger.error('[ElevenLabs Isolation] Failed to isolate audio', {
