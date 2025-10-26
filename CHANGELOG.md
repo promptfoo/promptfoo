@@ -47,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(fetch): use consistent units in retry counter log messages - now shows attempt count vs total attempts (#6017)
 - fix(providers): render environment variables in provider config at load time (#6007)
 - fix: Don't test session management if target is not stateful (#5989)
 - fix(internals): plugin selection (#5991)
