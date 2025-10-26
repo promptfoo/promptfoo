@@ -515,7 +515,7 @@ You've learned to:
 
 - **Multi-voice conversations**: Different voices for different characters
 - **Phone integration**: Test with real Twilio/SIP calls
-- **Audio processing**: Use isolation, alignment, and dubbing
+- **Audio processing**: Use isolation and alignment
 - **Regression testing**: Track agent performance over time
 - **Production monitoring**: Set up continuous testing
 

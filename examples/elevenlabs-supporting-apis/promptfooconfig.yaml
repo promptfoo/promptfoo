@@ -45,31 +45,6 @@ providers:
     label: Alignment - VTT Subtitles
     # Returns WebVTT format for web players
 
-  # Dubbing - Spanish
-  - id: elevenlabs:dubbing:es
-    label: Dubbing - English to Spanish
-    config:
-      targetLanguage: es
-      sourceLanguage: en # Optional but recommended
-      numSpeakers: 1
-
-  # Dubbing - French
-  - id: elevenlabs:dubbing:fr
-    label: Dubbing - English to French
-    config:
-      targetLanguage: fr
-      sourceLanguage: en
-      numSpeakers: 1
-
-  # Dubbing - German
-  - id: elevenlabs:dubbing:de
-    label: Dubbing - English to German
-    config:
-      targetLanguage: de
-      sourceLanguage: en
-      numSpeakers: 1
-      watermark: false # No watermark for production
-
 # Test variables for demonstration
 # In real usage, these would be provided via --vars or context
 defaultTest:
@@ -167,37 +142,6 @@ tests:
     assert:
       - type: latency
         threshold: 120000 # 2 minutes for alignment
-
-  # Dubbing Tests
-  - description: Dubbing completes successfully
-    vars:
-      sourceFile: ./video/english-content.mp4
-    assert:
-      - type: javascript
-        value: output.includes('Dubbed') || output.includes('successfully')
-
-  - description: Dubbing returns target language metadata
-    vars:
-      sourceFile: ./video/english-content.mp4
-    assert:
-      - type: javascript
-        value: |
-          const result = JSON.parse(output);
-          return result.metadata?.targetLanguage !== undefined;
-
-  - description: Dubbing cost is reasonable
-    vars:
-      sourceFile: ./video/short-clip.mp4
-    assert:
-      - type: cost
-        threshold: 2.00 # Max $2 for short clip
-
-  - description: Dubbing completes within timeout
-    vars:
-      sourceFile: ./video/short-clip.mp4
-    assert:
-      - type: latency
-        threshold: 300000 # 5 minutes for dubbing
 
   # Advanced: Pipeline tests
   - description: 'Pipeline: Isolation → STT works'

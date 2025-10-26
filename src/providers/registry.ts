@@ -41,7 +41,6 @@ import {
   ElevenLabsHistoryProvider,
   ElevenLabsIsolationProvider,
   ElevenLabsAlignmentProvider,
-  ElevenLabsDubbingProvider,
 } from './elevenlabs';
 import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
@@ -521,7 +520,7 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
-      const capability = splits[1]; // tts, stt, agents, history, isolation, alignment, dubbing
+      const capability = splits[1]; // tts, stt, agents, history, isolation, alignment
       const _additionalId = splits.length > 2 ? splits.slice(2).join(':') : undefined;
 
       // Route to appropriate provider based on capability
@@ -556,14 +555,9 @@ export const providerMap: ProviderFactory[] = [
             ...providerOptions,
             env: context.env,
           });
-        case 'dubbing':
-          return new ElevenLabsDubbingProvider(providerPath, {
-            ...providerOptions,
-            env: context.env,
-          });
         default:
           throw new Error(
-            `ElevenLabs capability "${capability}" is not supported. Available: tts, stt, agents, history, isolation, alignment, dubbing`,
+            `ElevenLabs capability "${capability}" is not supported. Available: tts, stt, agents, history, isolation, alignment`,
           );
       }
     },

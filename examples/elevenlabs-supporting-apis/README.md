@@ -12,7 +12,6 @@ This reference demonstrates configuration for:
 - **Conversation History** (`elevenlabs:history`) - Retrieve past agent conversations
 - **Audio Isolation** (`elevenlabs:isolation`) - Remove background noise from audio
 - **Forced Alignment** (`elevenlabs:alignment`) - Generate subtitles from audio and transcript
-- **Dubbing** (`elevenlabs:dubbing`) - Multi-language dubbing with speaker preservation
 
 ## Configuration Patterns
 
@@ -96,7 +95,6 @@ providers:
 
 - Remove background noise from recordings
 - Clean audio before STT processing
-- Improve audio quality for dubbing
 - Extract speech from multi-track audio
 
 **Input:**
@@ -150,52 +148,6 @@ Welcome to ElevenLabs
 This is a test of forced alignment
 ```
 
-### 4. Dubbing
-
-Multi-language dubbing with speaker preservation:
-
-```yaml
-providers:
-  - id: elevenlabs:dubbing:es # Target language
-    config:
-      targetLanguage: es # Spanish
-      sourceLanguage: en # Optional (auto-detected if omitted)
-      numSpeakers: 2 # Optional hint
-      watermark: false # Optional
-```
-
-**Use cases:**
-
-- Dub videos to different languages
-- Preserve original speaker voices
-- Maintain timing and emotional tone
-- Create multilingual content at scale
-
-**Supported languages:**
-
-- Spanish (es), French (fr), German (de)
-- Portuguese (pt), Italian (it), Polish (pl)
-- Hindi (hi), Japanese (ja), Korean (ko)
-- Chinese (zh), Arabic (ar)
-- And 20+ more languages
-
-**Input:**
-
-- File: `context.vars.sourceFile` (MP4, MP3, WAV, etc.)
-- URL: `context.vars.sourceUrl` (YouTube, Vimeo, etc.)
-
-**Processing:**
-
-- Async processing (polls every 5 seconds)
-- Max wait time: 5 minutes
-- Returns dubbed audio when complete
-
-**Output:**
-
-- Dubbed audio in target language
-- Metadata: source language (detected), duration, speakers
-- Progress tracking during processing
-
 ## Testing Workflows
 
 ### Conversation Analysis Pipeline
@@ -234,27 +186,10 @@ providers:
   - id: elevenlabs:alignment
 ```
 
-### Localization Pipeline
-
-```yaml
-# 1. Generate English audio
-providers:
-  - id: elevenlabs:tts
-
-# 2. Dub to Spanish
-providers:
-  - id: elevenlabs:dubbing:es
-
-# 3. Dub to French
-providers:
-  - id: elevenlabs:dubbing:fr
-```
-
 ## Cost Considerations
 
 **Audio Isolation**: ~$0.10 per minute of audio
 **Forced Alignment**: ~$0.05 per minute of audio
-**Dubbing**: ~$0.50 per minute of audio (varies by language)
 **Conversation History**: Free (API call only)
 
 Costs are approximate and may vary based on audio quality and complexity.
@@ -273,13 +208,6 @@ Costs are approximate and may vary based on audio quality and complexity.
 - Include punctuation for better timing
 - Use SRT format for video subtitles, VTT for web
 
-### Dubbing
-
-- Provide `numSpeakers` hint for better speaker separation
-- Shorter videos (<5 min) process faster
-- Set `sourceLanguage` explicitly when possible (faster processing)
-- Use `watermark: false` for production content
-
 ### Conversation History
 
 - Implement pagination for large conversation lists
@@ -290,6 +218,5 @@ Costs are approximate and may vary based on audio quality and complexity.
 
 - [ElevenLabs Audio Isolation Docs](https://elevenlabs.io/docs/api-reference/audio-isolation)
 - [Forced Alignment Guide](https://elevenlabs.io/docs/api-reference/alignment)
-- [Dubbing Documentation](https://elevenlabs.io/docs/api-reference/dubbing)
 - [Conversational AI Docs](https://elevenlabs.io/docs/conversational-ai)
 - [Pricing](https://elevenlabs.io/pricing)

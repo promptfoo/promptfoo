@@ -163,7 +163,6 @@ Additional audio processing capabilities:
 - `elevenlabs:history` - Retrieve agent conversation history
 - `elevenlabs:isolation` - Remove background noise from audio
 - `elevenlabs:alignment` - Generate time-aligned subtitles
-- `elevenlabs:dubbing:<language>` - Multi-language dubbing
 
 ## Configuration Parameters
 
@@ -423,7 +422,6 @@ ElevenLabs usage is tracked automatically:
 
 - Audio Isolation: ~$0.10 per minute
 - Forced Alignment: ~$0.05 per minute
-- Dubbing: ~$0.50 per minute
 
 View costs in eval results:
 

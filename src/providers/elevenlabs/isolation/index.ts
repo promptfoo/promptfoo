@@ -24,7 +24,7 @@ import type { AudioIsolationConfig } from './types';
  * Usage:
  * - Remove background noise from audio
  * - Extract clean speech for further processing
- * - Improve audio quality for STT or dubbing
+ * - Improve audio quality for STT
  */
 export class ElevenLabsIsolationProvider implements ApiProvider {
   private client: ElevenLabsClient;

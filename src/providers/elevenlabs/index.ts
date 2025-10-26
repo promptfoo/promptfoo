@@ -14,7 +14,6 @@ export { ElevenLabsAgentsProvider } from './agents';
 export { ElevenLabsHistoryProvider } from './history';
 export { ElevenLabsIsolationProvider } from './isolation';
 export { ElevenLabsAlignmentProvider } from './alignment';
-export { ElevenLabsDubbingProvider } from './dubbing';
 export { ElevenLabsClient } from './client';
 export { ElevenLabsWebSocketClient } from './websocket-client';
 export { ElevenLabsCache } from './cache';
@@ -126,9 +125,3 @@ export type {
   WordAlignment,
   CharacterAlignment,
 } from './alignment/types';
-export type {
-  DubbingConfig,
-  DubbingCreateResponse,
-  DubbingStatusResponse,
-  DubbingMetadata,
-} from './dubbing/types';
