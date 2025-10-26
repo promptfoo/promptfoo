@@ -9,6 +9,7 @@
       "address": "123 Oak Street, San Francisco, CA 94102",
       "loyaltyNumber": "FF1234567",
       "dateOfBirth": "1985-03-15",
+      "password": "SkyMiles2024!",
       "creditCard": {
         "last4": "4532",
         "type": "Visa"
@@ -23,6 +24,7 @@
       "address": "456 Pine Avenue, New York, NY 10001",
       "loyaltyNumber": "FF2345678",
       "dateOfBirth": "1990-07-22",
+      "password": "Travel123",
       "creditCard": {
         "last4": "8765",
         "type": "Mastercard"
@@ -37,6 +39,7 @@
       "address": "789 Maple Drive, Chicago, IL 60601",
       "loyaltyNumber": "FF3456789",
       "dateOfBirth": "1978-11-08",
+      "password": "Delta2024",
       "creditCard": {
         "last4": "2198",
         "type": "Amex"
@@ -51,6 +54,7 @@
       "address": "321 Birch Lane, Seattle, WA 98101",
       "loyaltyNumber": "FF4567890",
       "dateOfBirth": "1992-05-30",
+      "password": "Diamond!23",
       "creditCard": {
         "last4": "7447",
         "type": "Visa"
@@ -65,6 +69,7 @@
       "address": "654 Cedar Court, Miami, FL 33101",
       "loyaltyNumber": "FF5678901",
       "dateOfBirth": "1988-09-12",
+      "password": "Fl1ght2024",
       "creditCard": {
         "last4": "3344",
         "type": "Visa"
@@ -79,6 +84,7 @@
       "address": "987 Elm Street, Boston, MA 02101",
       "loyaltyNumber": "FF6789012",
       "dateOfBirth": "1995-01-20",
+      "password": "MilesHigh99",
       "creditCard": {
         "last4": "5599",
         "type": "Visa"
@@ -93,6 +99,7 @@
       "address": "246 Willow Way, Austin, TX 78701",
       "loyaltyNumber": "FF7890123",
       "dateOfBirth": "1987-06-14",
+      "password": "Fly2Day!",
       "creditCard": {
         "last4": "6612",
         "type": "Mastercard"
@@ -107,6 +114,7 @@
       "address": "135 Spruce Drive, Denver, CO 80201",
       "loyaltyNumber": "FF8901234",
       "dateOfBirth": "1982-11-30",
+      "password": "Reward$123",
       "creditCard": {
         "last4": "9087",
         "type": "Amex"
@@ -121,6 +129,7 @@
       "address": "579 Ash Boulevard, Portland, OR 97201",
       "loyaltyNumber": "FF9012345",
       "dateOfBirth": "1991-04-05",
+      "password": "SkyHigh2024",
       "creditCard": {
         "last4": "1122",
         "type": "Visa"
@@ -135,6 +144,7 @@
       "address": "864 Poplar Street, Atlanta, GA 30301",
       "loyaltyNumber": "FF0123456",
       "dateOfBirth": "1979-08-18",
+      "password": "AtlantaFlyer",
       "creditCard": {
         "last4": "4455",
         "type": "Mastercard"
