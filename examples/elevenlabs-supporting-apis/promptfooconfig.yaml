@@ -1,22 +1,10 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: ElevenLabs Supporting APIs showcase
+description: ElevenLabs Supporting APIs reference
+# NOTE: This is a reference/documentation example showing API configuration patterns.
+# For working examples, see individual provider directories (elevenlabs-isolation, elevenlabs-alignment, etc.)
 
 prompts:
-  # Conversation History prompts
-  - 'conv_example_123' # Specific conversation ID
-
-  # Audio Isolation prompts (file paths)
-  - './audio/noisy-recording.mp3'
-
-  # Forced Alignment prompts (transcripts)
-  - 'Welcome to ElevenLabs. This demonstration shows forced alignment capabilities.'
-  - |
-    In this example, we will generate subtitles for a video.
-    The transcript must match the audio exactly for accurate timing.
-    Punctuation and capitalization are preserved in the output.
-
-  # Dubbing prompts (file paths or URLs)
-  - './video/english-content.mp4'
+  - 'Reference example for ElevenLabs supporting APIs'
 
 providers:
   # Conversation History - Retrieve specific conversation
@@ -86,23 +74,22 @@ providers:
 # In real usage, these would be provided via --vars or context
 defaultTest:
   vars:
-    # For conversation history
-    conversationId: conv_example_123
-    agentId: agent_example_456
+    # For conversation history (requires real conversation ID from an agent)
+    conversationId: conv_example_123  # Placeholder - won't work without real ID
+    agentId: agent_example_456  # Placeholder - won't work without real ID
 
-    # For audio isolation
-    isolationAudioFile: ./audio/noisy-recording.mp3
+    # For audio isolation - using real audio from elevenlabs-stt example
+    audioFile: ../elevenlabs-stt/audio/sample1.mp3
 
     # For forced alignment
-    alignmentAudioFile: ./audio/speech.mp3
     transcript: Welcome to ElevenLabs. This is a test.
     format: srt # json, srt, or vtt
 
-    # For dubbing
-    sourceFile: ./video/english-content.mp4
-    # sourceUrl: https://www.youtube.com/watch?v=example
-
 tests:
+  # NOTE: These tests are for documentation/reference only.
+  # They require real conversation IDs, audio files, and video files to run.
+  # For working tests, see individual provider examples (elevenlabs-isolation, elevenlabs-alignment, etc.)
+
   # Conversation History Tests
   - description: Conversation retrieval succeeds
     vars:

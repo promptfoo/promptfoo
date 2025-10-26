@@ -1,33 +1,43 @@
-# elevenlabs-supporting-apis (ElevenLabs Supporting APIs)
+# elevenlabs-supporting-apis (ElevenLabs Supporting APIs Reference)
 
-Test ElevenLabs supporting APIs for audio processing and conversation management.
+**Note:** This is a reference/documentation example showing configuration patterns for ElevenLabs supporting APIs. For working, runnable examples, see:
+- [elevenlabs-isolation](../elevenlabs-isolation/) - Audio noise removal
+- [elevenlabs-alignment](../elevenlabs-alignment/) - Subtitle generation
+- [elevenlabs-agents](../elevenlabs-agents/) - Agent conversations (includes history API)
 
-## What this tests
+## Supported APIs
 
-- **Conversation History**: Retrieve past agent conversations
-- **Audio Isolation**: Remove background noise from audio
-- **Forced Alignment**: Generate subtitles from audio and transcript
-- **Dubbing**: Multi-language dubbing with speaker preservation
+This reference demonstrates configuration for:
 
-## Setup
+- **Conversation History** (`elevenlabs:history`) - Retrieve past agent conversations
+- **Audio Isolation** (`elevenlabs:isolation`) - Remove background noise from audio
+- **Forced Alignment** (`elevenlabs:alignment`) - Generate subtitles from audio and transcript
+- **Dubbing** (`elevenlabs:dubbing`) - Multi-language dubbing with speaker preservation
 
-Set your ElevenLabs API key:
+## Configuration Patterns
+
+See `promptfooconfig.yaml` for examples of:
+- Provider configuration for each API type
+- Required variables (`audioFile`, `transcript`, `conversationId`, etc.)
+- Output format options (`json`, `srt`, `vtt`)
+- Test assertion patterns
+
+## Running Working Examples
+
+For actual testing, use the individual provider examples:
 
 ```bash
-export ELEVENLABS_API_KEY=your_api_key_here
-```
+# Audio isolation
+cd ../elevenlabs-isolation
+npx promptfoo@latest eval
 
-## Run the example
+# Forced alignment / subtitles
+cd ../elevenlabs-alignment
+npx promptfoo@latest eval
 
-```bash
-npx promptfoo@latest eval -c ./promptfooconfig.yaml
-```
-
-Or view in the UI:
-
-```bash
-npx promptfoo@latest eval -c ./promptfooconfig.yaml
-npx promptfoo@latest view
+# Conversational agents (includes history)
+cd ../elevenlabs-agents
+npx promptfoo@latest eval
 ```
 
 ## Features
