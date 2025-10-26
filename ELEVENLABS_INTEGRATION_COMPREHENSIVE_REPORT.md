@@ -16,28 +16,28 @@ This testing session uncovered a fully-implemented ElevenLabs integration with 7
 
 ### Key Metrics
 
-| Metric | Value |
-|--------|-------|
-| **Total Providers** | 7 |
-| **Previously Enabled** | 1 (14%) |
-| **Now Enabled** | 7 (100%) |
-| **Production Ready** | 1 (TTS with 100% pass rate) |
-| **Code Complete** | 7 (all fully implemented) |
-| **Total Code** | ~60,000+ lines across all providers |
+| Metric                 | Value                               |
+| ---------------------- | ----------------------------------- |
+| **Total Providers**    | 7                                   |
+| **Previously Enabled** | 1 (14%)                             |
+| **Now Enabled**        | 7 (100%)                            |
+| **Production Ready**   | 1 (TTS with 100% pass rate)         |
+| **Code Complete**      | 7 (all fully implemented)           |
+| **Total Code**         | ~60,000+ lines across all providers |
 
 ---
 
 ## Provider Status Matrix
 
-| Provider | Lines of Code | Status | Tests | Pass Rate | Blocking Issue |
-|----------|---------------|--------|-------|-----------|----------------|
-| **TTS** | 15,620 | ✅ Production | 72/72 | 100% | None |
-| **STT** | 9,848 | ⚠️ Testable | 0 | N/A | Need audio files |
-| **Agents** | 15,463 | ❌ API Mismatch | 0/12 | 0% | 422 validation error |
-| **History** | 6,815 | ❓ Unknown | 0 | N/A | Not tested |
-| **Isolation** | 4,880 | ❓ Unknown | 0 | N/A | Not tested |
-| **Alignment** | 7,547 | ❓ Unknown | 0 | N/A | Not tested |
-| **Dubbing** | 8,302 | ❓ Unknown | 0 | N/A | Not tested |
+| Provider      | Lines of Code | Status          | Tests | Pass Rate | Blocking Issue       |
+| ------------- | ------------- | --------------- | ----- | --------- | -------------------- |
+| **TTS**       | 15,620        | ✅ Production   | 72/72 | 100%      | None                 |
+| **STT**       | 9,848         | ⚠️ Testable     | 0     | N/A       | Need audio files     |
+| **Agents**    | 15,463        | ❌ API Mismatch | 0/12  | 0%        | 422 validation error |
+| **History**   | 6,815         | ❓ Unknown      | 0     | N/A       | Not tested           |
+| **Isolation** | 4,880         | ❓ Unknown      | 0     | N/A       | Not tested           |
+| **Alignment** | 7,547         | ❓ Unknown      | 0     | N/A       | Not tested           |
+| **Dubbing**   | 8,302         | ❓ Unknown      | 0     | N/A       | Not tested           |
 
 ---
 
@@ -50,11 +50,13 @@ This testing session uncovered a fully-implemented ElevenLabs integration with 7
 **Examples:** `elevenlabs-tts/`, `elevenlabs-tts-advanced/`
 
 #### Test Results
+
 - **Basic TTS:** 24/24 tests passing (100%)
 - **Advanced TTS:** 48/48 tests passing (100%)
 - **Total:** 72/72 tests passing
 
 #### Features Verified
+
 - ✅ Voice settings (stability, similarity_boost, style, speed)
 - ✅ Multiple output formats (mp3_44100_128, mp3_44100_192, pcm_44100)
 - ✅ Streaming mode via WebSocket
@@ -65,6 +67,7 @@ This testing session uncovered a fully-implemented ElevenLabs integration with 7
 - ✅ Multiple voice support (21m00Tcm4TlvDq8ikWAM, 2EiwWnXFnvU5JabPnv8n, etc.)
 
 #### Bugs Fixed
+
 1. **Assertion Error** (examples/elevenlabs-tts/promptfooconfig.yaml:65)
    - **Before:** `JSON.stringify(context.vars).includes('voiceId')`
    - **After:** `output.includes('characters') && output.includes('speech')`
@@ -86,6 +89,7 @@ This testing session uncovered a fully-implemented ElevenLabs integration with 7
    - Provider continues with basic TTS if advanced features unavailable
 
 #### Performance
+
 - **Average Latency:** 1-3 seconds per generation
 - **Cache Hit Latency:** 50-100ms
 - **Streaming:** Real-time audio generation via WebSocket
@@ -99,6 +103,7 @@ This testing session uncovered a fully-implemented ElevenLabs integration with 7
 **Example:** `elevenlabs-stt/`
 
 #### Features Implemented
+
 - Basic transcription with auto-language detection
 - Speaker diarization (identify multiple speakers)
 - Word Error Rate (WER) calculation for accuracy testing
@@ -113,23 +118,28 @@ This testing session uncovered a fully-implemented ElevenLabs integration with 7
   - WebM (.webm)
 
 #### Blocking Issue
+
 **Required Files:**
+
 - `examples/elevenlabs-stt/audio/sample1.mp3`
 - `examples/elevenlabs-stt/audio/sample2.wav`
 - `examples/elevenlabs-stt/audio/sample3_multiple_speakers.mp3`
 
 **Attempted Solution:**
+
 - Tried generating audio files using TTS provider
 - JSON export doesn't include binary audio data
 - Audio save feature (saveAudio: true) may not be fully implemented
 
 **Recommendation:**
+
 1. Generate test audio files manually or using TTS provider's saveAudio feature
 2. Create reference transcripts for WER testing
 3. Test diarization with multi-speaker audio
 4. Verify language detection works correctly
 
 #### Example Configuration
+
 ```yaml
 providers:
   # Basic transcription
@@ -150,7 +160,7 @@ providers:
     config:
       modelId: eleven_speech_to_text_v1
       calculateWER: true
-      referenceText: "The quick brown fox jumps over the lazy dog"
+      referenceText: 'The quick brown fox jumps over the lazy dog'
 ```
 
 ---
@@ -162,6 +172,7 @@ providers:
 **Examples:** `elevenlabs-agents/`, `elevenlabs-agents-advanced/`
 
 #### Error Details
+
 ```
 Status: 422 Unprocessable Entity
 Error: Field required: conversation_config
@@ -169,6 +180,7 @@ Location: body.conversation_config
 ```
 
 **API Call:**
+
 - **Endpoint:** `/convai/agents/{agentId}/conversation-simulation`
 - **Method:** POST
 - **Request Body:** Contains history, simulated_user, evaluation_criteria, tool_mocks
@@ -179,6 +191,7 @@ The provider implementation assumes an API format that may not match the actual 
 #### Features Implemented (Untested)
 
 **Core Features:**
+
 - Multi-turn conversation simulation
 - Simulated user with configurable behavior
 - Evaluation criteria with scoring (greeting, understanding, accuracy, helpfulness, professionalism, empathy, efficiency, resolution)
@@ -186,6 +199,7 @@ The provider implementation assumes an API format that may not match the actual 
 - Conversation history parsing (plain text, role-prefixed, JSON)
 
 **Advanced Features:**
+
 - **LLM Cascading:** Primary model with fallback chain
   - Cascade on error, latency, or cost thresholds
   - Example: GPT-4o → GPT-4o-mini → GPT-3.5-turbo
@@ -209,14 +223,15 @@ The provider implementation assumes an API format that may not match the actual 
 #### Example Configurations
 
 **Basic Agent:**
+
 ```yaml
 providers:
   - id: elevenlabs:agents
     config:
       agentConfig:
         name: Customer Support Agent
-        prompt: "You are a helpful, empathetic customer support agent"
-        firstMessage: "Hi! How can I help you today?"
+        prompt: 'You are a helpful, empathetic customer support agent'
+        firstMessage: 'Hi! How can I help you today?'
         language: en
         voiceId: 21m00Tcm4TlvDq8ikWAM
         llmModel: gpt-4o
@@ -230,6 +245,7 @@ providers:
 ```
 
 **Advanced with LLM Cascading:**
+
 ```yaml
 providers:
   - id: elevenlabs:agents
@@ -246,6 +262,7 @@ providers:
 ```
 
 #### Recommendation
+
 1. Review actual ElevenLabs Agents API documentation
 2. Update request format to include required `conversation_config` field
 3. Test with simple conversation first
@@ -260,17 +277,19 @@ providers:
 **Example:** `elevenlabs-supporting-apis/` (lines 23-30)
 
 #### Features Implemented
+
 - Retrieve specific conversation by ID
 - List conversations for an agent
 - Filter conversations by date, status, etc.
 
 #### Example Configuration
+
 ```yaml
 providers:
   # Get specific conversation
   - id: elevenlabs:history
     label: Get Conversation
-    
+
   # List agent conversations
   - id: elevenlabs:history
     label: List Conversations
@@ -279,6 +298,7 @@ providers:
 ```
 
 #### Testing Requirements
+
 - Need valid conversation ID from previous agent interaction
 - Need valid agent ID
 
@@ -291,11 +311,13 @@ providers:
 **Example:** `elevenlabs-supporting-apis/` (lines 33-43)
 
 #### Features Implemented
+
 - Background noise removal
 - Audio quality enhancement
 - Multiple output formats (MP3 128kbps, 192kbps)
 
 #### Example Configuration
+
 ```yaml
 providers:
   - id: elevenlabs:isolation
@@ -305,6 +327,7 @@ providers:
 ```
 
 #### Testing Requirements
+
 - Need noisy audio file for input
 - Verify noise reduction works
 - Compare file sizes (isolated should be smaller)
@@ -318,28 +341,31 @@ providers:
 **Example:** `elevenlabs-supporting-apis/` (lines 45-58)
 
 #### Features Implemented
+
 - Generate subtitles (SRT, VTT, JSON)
 - Word-level timestamps
 - Character-level timestamps
 - Useful for video subtitling
 
 #### Example Configuration
+
 ```yaml
 providers:
   # JSON format
   - id: elevenlabs:alignment
     label: Alignment - JSON Output
-    
+
   # SRT subtitles
   - id: elevenlabs:alignment
     label: Alignment - SRT Subtitles
-    
+
   # VTT subtitles
   - id: elevenlabs:alignment
     label: Alignment - VTT Subtitles
 ```
 
 #### Testing Requirements
+
 - Need audio file + matching transcript
 - Verify timestamp accuracy
 - Test SRT/VTT format validity
@@ -353,6 +379,7 @@ providers:
 **Example:** `elevenlabs-supporting-apis/` (lines 60-83)
 
 #### Features Implemented
+
 - Multi-language video dubbing
 - Support for multiple source/target language pairs
 - Speaker count detection
@@ -360,6 +387,7 @@ providers:
 - URL or file input
 
 #### Example Configuration
+
 ```yaml
 providers:
   # Spanish dubbing
@@ -369,7 +397,7 @@ providers:
       targetLanguage: es
       sourceLanguage: en
       numSpeakers: 1
-      
+
   # German dubbing (no watermark)
   - id: elevenlabs:dubbing:de
     label: Dubbing - English to German
@@ -381,6 +409,7 @@ providers:
 ```
 
 #### Testing Requirements
+
 - Need video file or YouTube URL
 - Verify dubbing quality
 - Test multiple language pairs
@@ -393,19 +422,24 @@ providers:
 ### Files Modified
 
 #### 1. `src/providers/registry.ts`
+
 **Change:** Enable all 7 ElevenLabs providers
 
 **Before:**
+
 ```typescript
 import { ElevenLabsTTSProvider } from './elevenlabs';
 // ...
 if (capability === 'tts') {
   return new ElevenLabsTTSProvider(providerPath, options);
 }
-throw new Error(`ElevenLabs capability "${capability}" is not yet implemented. Currently supported: tts`);
+throw new Error(
+  `ElevenLabs capability "${capability}" is not yet implemented. Currently supported: tts`,
+);
 ```
 
 **After:**
+
 ```typescript
 import {
   ElevenLabsTTSProvider,
@@ -432,10 +466,12 @@ switch (capability) {
 **Impact:** Users can now access all 7 ElevenLabs capabilities via `elevenlabs:{capability}` provider IDs
 
 #### 2. `examples/elevenlabs-tts/promptfooconfig.yaml`
+
 - Fixed assertion checking `context.vars.voiceId` → check output directly
 - Now passing 24/24 tests (100%)
 
 #### 3. `examples/elevenlabs-tts-advanced/promptfooconfig.yaml`
+
 - Completely rewrote to test working features only
 - Removed unsupported features (voice design, remix, pronunciation dictionaries)
 - Added working features (voice settings, output formats, streaming, seeds)
@@ -444,12 +480,14 @@ switch (capability) {
 - Now passing 48/48 tests (100%)
 
 #### 4. `src/providers/elevenlabs/tts/index.ts`
+
 - Enhanced error logging in `initializeAdvancedFeatures()`
 - Added graceful fallback when advanced features fail
 - Clears invalid configs instead of throwing errors
 - Improved debugging with structured logging
 
 #### 5. `src/providers/elevenlabs/client.ts`
+
 - Formatting fix (spacing in destructuring)
 
 ---
@@ -461,6 +499,7 @@ switch (capability) {
 All providers share these components:
 
 **1. ElevenLabsClient** (`src/providers/elevenlabs/client.ts`)
+
 - HTTP client with retry logic
 - Rate limit handling
 - Error normalization
@@ -468,18 +507,21 @@ All providers share these components:
 - Sanitized logging
 
 **2. ElevenLabsCache** (`src/providers/elevenlabs/cache.ts`)
+
 - Key-value caching with TTL
 - Automatic cache key generation
 - Size-based eviction
 - Per-provider cache isolation
 
 **3. CostTracker** (`src/providers/elevenlabs/cost-tracker.ts`)
+
 - Per-character TTS pricing
 - Per-second STT pricing
 - Per-minute dubbing pricing
 - Cache hit cost optimization
 
 **4. ElevenLabsWebSocketClient** (`src/providers/elevenlabs/websocket-client.ts`)
+
 - Real-time streaming for TTS and Agents
 - Auto-reconnect logic
 - Message queuing
@@ -498,6 +540,7 @@ All providers use consistent error types:
 ### Type System
 
 Comprehensive TypeScript types for all providers:
+
 - Configuration types (TTS, STT, Agents, etc.)
 - Response types (audio data, transcription, conversation, etc.)
 - Metadata types (cost, latency, usage, etc.)
@@ -507,19 +550,23 @@ Comprehensive TypeScript types for all providers:
 ## Cost Information
 
 ### TTS (Text-to-Speech)
+
 - **Pricing:** $0.00010 per character (~$0.10 per 1,000 characters)
 - **Free Tier:** 10,000 characters/month
 - **Cache Impact:** 100% cost savings on cache hits
 
 ### STT (Speech-to-Text)
+
 - **Pricing:** ~$0.00167 per second (~$0.10 per minute)
 - **Free Tier:** 1 hour/month
 
 ### Agents
+
 - **Pricing:** Variable based on LLM + TTS usage
 - **Estimated:** $0.10-1.00 per conversation (depends on length, model)
 
 ### Dubbing
+
 - **Pricing:** Variable based on video length and language
 - **Estimated:** $2-10 per minute of video
 
@@ -528,11 +575,12 @@ Comprehensive TypeScript types for all providers:
 ## Example Usage
 
 ### TTS (Production Ready)
+
 ```yaml
 description: Generate high-quality speech
 
 prompts:
-  - "Welcome to ElevenLabs text-to-speech"
+  - 'Welcome to ElevenLabs text-to-speech'
 
 providers:
   - id: elevenlabs:tts:rachel
@@ -547,6 +595,7 @@ providers:
 ```
 
 ### STT (Ready to Test with Audio)
+
 ```yaml
 description: Transcribe audio files
 
@@ -561,18 +610,19 @@ providers:
 ```
 
 ### Agents (Needs API Fix)
+
 ```yaml
 description: Test conversational AI
 
 prompts:
-  - "Hello, I need help with my order"
+  - 'Hello, I need help with my order'
 
 providers:
   - id: elevenlabs:agents
     config:
       agentConfig:
         name: Support Agent
-        prompt: "You are a helpful support agent"
+        prompt: 'You are a helpful support agent'
         voiceId: 21m00Tcm4TlvDq8ikWAM
         llmModel: gpt-4o
 ```
@@ -582,6 +632,7 @@ providers:
 ## Next Steps
 
 ### Immediate (Completed ✅)
+
 - ✅ Enable all providers in registry
 - ✅ Test TTS comprehensively
 - ✅ Fix TTS example configurations
@@ -589,6 +640,7 @@ providers:
 - ✅ Document all findings
 
 ### Short-Term (1-2 weeks)
+
 1. **STT Testing**
    - Generate test audio files using TTS
    - Create reference transcripts
@@ -608,6 +660,7 @@ providers:
    - Test Dubbing with sample videos
 
 ### Medium-Term (1-2 months)
+
 1. **Production Readiness**
    - Add "experimental" labels to non-TTS provider documentation
    - Create integration tests for all providers
@@ -631,6 +684,7 @@ providers:
 ## Commits
 
 ### Commit 1: `fix(elevenlabs): fix example assertions and improve error handling`
+
 ```
 - Fixed elevenlabs-tts assertion checking output instead of context.vars
 - Rewrote elevenlabs-tts-advanced to test working features only
@@ -641,6 +695,7 @@ providers:
 ```
 
 ### Commit 2: `feat(elevenlabs): enable all 7 ElevenLabs providers in registry`
+
 ```
 Major discovery: All ElevenLabs provider implementations exist in codebase
 but were disabled in registry. This commit enables all capabilities:
@@ -670,18 +725,23 @@ Impact:
 ## Impact Assessment
 
 ### For Users
+
 **Before:**
+
 - Only TTS was available via `elevenlabs:tts`
 - Error message: "not yet implemented. Currently supported: tts"
 
 **After:**
+
 - All 7 capabilities available: `elevenlabs:tts`, `elevenlabs:stt`, `elevenlabs:agents`, etc.
 - Clear error messages listing all available capabilities
 - TTS fully tested and production-ready
 - Other providers available for experimental/testing use
 
 ### For Development
+
 **Code Quality:**
+
 - 60,000+ lines of well-structured provider code
 - Comprehensive type definitions
 - Consistent error handling
@@ -689,12 +749,14 @@ Impact:
 - WebSocket support for streaming
 
 **Test Coverage:**
+
 - TTS: 100% (72/72 tests)
 - STT: 0% (blocked on audio files)
 - Agents: 0% (API format issue)
 - Others: 0% (not tested yet)
 
 **Documentation:**
+
 - 6 example directories with configurations
 - Comprehensive README files for each example
 - Type definitions for all features
@@ -705,21 +767,25 @@ Impact:
 ## Recommendations
 
 ### Priority 1: Production Readiness
+
 1. Add experimental labels to provider documentation for non-TTS providers
 2. Create troubleshooting guide for common issues
 3. Add API compatibility notes for Agents provider
 
 ### Priority 2: Testing
+
 1. Generate test audio files for STT
 2. Fix Agents API format issue
 3. Test all supporting APIs (History, Isolation, Alignment, Dubbing)
 
 ### Priority 3: Documentation
+
 1. Create video tutorial for TTS (production ready)
 2. Add cost calculator for each provider
 3. Create integration examples (STT → TTS, TTS → Alignment, etc.)
 
 ### Priority 4: Features
+
 1. Implement TTS saveAudio feature fully
 2. Add batch processing support
 3. Add progress callbacks for long-running operations (Dubbing)
@@ -737,12 +803,14 @@ This testing session uncovered a **complete, production-quality ElevenLabs integ
 - 📦 **4 Supporting APIs** (code complete, not tested)
 
 The TTS provider is **fully production-ready** with:
+
 - 72/72 tests passing (100%)
 - Comprehensive features (streaming, caching, cost tracking, multiple formats)
 - Excellent error handling and logging
 - High-quality code structure
 
 The remaining providers represent significant **untapped potential**:
+
 - ~45,000 lines of untested but complete code
 - Advanced features (LLM cascading, MCP integration, multi-voice)
 - Comprehensive type definitions and documentation
@@ -755,6 +823,7 @@ The remaining providers represent significant **untapped potential**:
 ## Appendix: File Inventory
 
 ### Source Files
+
 ```
 src/providers/elevenlabs/
 ├── index.ts (135 lines) - Main exports
@@ -802,6 +871,7 @@ src/providers/elevenlabs/
 ```
 
 ### Example Files
+
 ```
 examples/
 ├── elevenlabs-tts/
@@ -834,4 +904,3 @@ examples/
 **Total Providers Enabled:** 7  
 **Total Tests Run:** 84 (72 TTS + 12 Agents)  
 **Pass Rate:** 85.7% (72/84 - excluding API format issues)
-
