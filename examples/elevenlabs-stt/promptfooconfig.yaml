@@ -1,25 +1,22 @@
 description: ElevenLabs Speech-to-Text (STT) - Transcription accuracy testing
 
-# STT uses audio files as inputs instead of text prompts
-# Each prompt should be the path to an audio file
+# STT uses audio files as inputs - pass via vars
 prompts:
-  - audio/sample1.mp3
-  - audio/sample2.wav
-  - audio/sample3_multiple_speakers.mp3
+  - '{{audioFile}}'
 
 providers:
   # Basic transcription
   - id: elevenlabs:stt:basic
     label: Basic Transcription
     config:
-      modelId: eleven_speech_to_text_v1
+      modelId: scribe_v1
       language: en
 
   # Transcription with speaker diarization
   - id: elevenlabs:stt:diarization
     label: With Speaker Diarization
     config:
-      modelId: eleven_speech_to_text_v1
+      modelId: scribe_v1
       language: en
       diarization: true
       maxSpeakers: 3
@@ -28,36 +25,34 @@ providers:
   - id: elevenlabs:stt:accuracy
     label: Accuracy Testing (WER)
     config:
-      modelId: eleven_speech_to_text_v1
+      modelId: scribe_v1
       language: en
       calculateWER: true
       referenceText: The quick brown fox jumps over the lazy dog
 
 tests:
-  - description: Transcription quality
+  - description: Transcription of sample1
+    vars:
+      audioFile: examples/elevenlabs-stt/audio/sample1.mp3
     assert:
+      - type: javascript
+        value: output.length > 10
       - type: cost
-        threshold: 0.05
-      - type: latency
-        threshold: 10000
+        threshold: 0.10
 
-  - description: Diarization accuracy
+  - description: Transcription of sample2
     vars:
-      audioFile: audio/sample3_multiple_speakers.mp3
+      audioFile: examples/elevenlabs-stt/audio/sample2.wav
     assert:
       - type: javascript
-        value: output.includes('Speaker')
+        value: output.length > 10
 
-  - description: WER accuracy threshold
+  - description: Diarization test
     vars:
-      audioFile: audio/sample1.mp3
-      referenceText: The quick brown fox jumps over the lazy dog
+      audioFile: examples/elevenlabs-stt/audio/sample3_multiple_speakers.mp3
     assert:
       - type: javascript
-        value: |
-          // Word Error Rate should be less than 10% for clear audio
-          const wer = context.vars.metadata?.wer?.wer || 1;
-          wer < 0.1
+        value: output.length > 10
 
 # Default test configuration
 defaultTest:

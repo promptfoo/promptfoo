@@ -44,7 +44,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
     const config = options.config as ElevenLabsSTTConfig;
 
     this.config = {
-      modelId: config?.modelId || 'eleven_speech_to_text_v1',
+      modelId: config?.modelId || 'scribe_v1',
       language: config?.language,
       diarization: config?.diarization || false,
       maxSpeakers: config?.maxSpeakers,
