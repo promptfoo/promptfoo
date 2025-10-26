@@ -187,16 +187,34 @@ export class ElevenLabsTTSProvider implements ApiProvider {
         });
       }
 
+      // Build request body, filtering out undefined values
+      const requestBody: Record<string, any> = {
+        text: prompt,
+        model_id: this.config.modelId,
+      };
+
+      if (this.config.voiceSettings) {
+        requestBody.voice_settings = this.config.voiceSettings;
+      }
+      if (this.config.outputFormat) {
+        requestBody.output_format = this.config.outputFormat;
+      }
+      if (this.config.seed !== undefined) {
+        requestBody.seed = this.config.seed;
+      }
+      if (this.config.optimizeStreamingLatency !== undefined) {
+        requestBody.optimize_streaming_latency = this.config.optimizeStreamingLatency;
+      }
+
+      logger.debug('[ElevenLabs TTS] API request', {
+        endpoint: `/text-to-speech/${this.config.voiceId}`,
+        textLength: prompt?.length || 0,
+        modelId: this.config.modelId,
+      });
+
       const response = await this.client.post<ArrayBuffer>(
         `/text-to-speech/${this.config.voiceId}`,
-        {
-          text: prompt,
-          model_id: this.config.modelId,
-          voice_settings: this.config.voiceSettings,
-          output_format: this.config.outputFormat,
-          seed: this.config.seed,
-          optimize_streaming_latency: this.config.optimizeStreamingLatency,
-        },
+        requestBody,
         {
           headers,
         },

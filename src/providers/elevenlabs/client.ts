@@ -34,6 +34,7 @@ export class ElevenLabsClient {
     logger.debug('[ElevenLabs Client] POST request', {
       url,
       endpoint,
+      bodyKeys: body ? Object.keys(body) : [],
       // body is sanitized automatically by logger
     });
 
@@ -44,16 +45,17 @@ export class ElevenLabsClient {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+        const {headers: optionsHeaders, ...restOptions} = options || {};
         const response = await fetchWithProxy(url, {
           method: 'POST',
           headers: {
             'xi-api-key': this.apiKey,
             'Content-Type': 'application/json',
-            ...options?.headers,
+            ...optionsHeaders,
           },
           body: JSON.stringify(body),
           signal: controller.signal,
-          ...options,
+          ...restOptions,
         });
 
         clearTimeout(timeoutId);
@@ -238,7 +240,7 @@ export class ElevenLabsClient {
     logger.error('[ElevenLabs Client] Error response', {
       status: response.status,
       attempt,
-      // errorData is sanitized automatically
+      errorData, // errorData is sanitized automatically
     });
 
     // Handle specific error cases
