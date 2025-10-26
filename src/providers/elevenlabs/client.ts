@@ -45,7 +45,7 @@ export class ElevenLabsClient {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-        const {headers: optionsHeaders, ...restOptions} = options || {};
+        const { headers: optionsHeaders, ...restOptions } = options || {};
         const response = await fetchWithProxy(url, {
           method: 'POST',
           headers: {

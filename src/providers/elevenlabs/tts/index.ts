@@ -116,10 +116,28 @@ export class ElevenLabsTTSProvider implements ApiProvider {
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[ElevenLabs TTS] Advanced features initialization failed', {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
+        voiceDesign: !!this.config.voiceDesign,
+        voiceRemix: !!this.config.voiceRemix,
+        pronunciationRules: !!this.config.pronunciationRules,
       });
       // Don't throw - fall back to basic TTS without advanced features
+      // Clear the configs so we don't try to use them later
+      if (this.config.voiceDesign) {
+        logger.warn('[ElevenLabs TTS] Voice design failed, using default voiceId');
+        delete this.config.voiceDesign;
+      }
+      if (this.config.voiceRemix) {
+        logger.warn('[ElevenLabs TTS] Voice remix failed, using original voiceId');
+        delete this.config.voiceRemix;
+      }
+      if (this.config.pronunciationRules) {
+        logger.warn('[ElevenLabs TTS] Pronunciation dictionary failed, proceeding without it');
+        delete this.config.pronunciationRules;
+        delete this.config.pronunciationDictionaryId;
+      }
     }
   }
 
@@ -248,7 +266,11 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       return this.buildResponse(ttsResponse, false, prompt.length, Date.now() - startTime);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('[ElevenLabs TTS] API call failed', { error: errorMessage });
+      logger.error('[ElevenLabs TTS] API call failed', {
+        error: errorMessage,
+        voiceId: this.config.voiceId,
+        modelId: this.config.modelId,
+      });
 
       return {
         error: `ElevenLabs TTS API error: ${errorMessage}`,

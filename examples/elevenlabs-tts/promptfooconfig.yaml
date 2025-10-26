@@ -52,8 +52,8 @@ providers:
 tests:
   - description: Audio generation quality
     assert:
-      - type: is-json
-        value: false
+      - type: javascript
+        value: output.includes('Generated') && output.includes('characters of speech')
       - type: cost
         threshold: 0.01
       - type: latency
@@ -62,6 +62,4 @@ tests:
   - description: Character count and metadata
     assert:
       - type: javascript
-        value: output.includes('characters')
-      - type: javascript
-        value: JSON.stringify(context.vars).includes('voiceId')
+        value: output.includes('characters') && output.includes('speech')

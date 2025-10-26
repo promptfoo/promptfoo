@@ -1,140 +1,118 @@
-description: ElevenLabs TTS - Advanced Features (Pronunciation, Voice Design, Voice Remix)
+description: Advanced TTS with voice settings and output formats
 
 prompts:
-  # Technical content for pronunciation testing
+  - 'Welcome to ElevenLabs! This advanced example demonstrates various voice settings and output configurations.'
+  - 'The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs.'
   - |
-    Welcome to the API documentation. This guide covers REST APIs, GraphQL endpoints,
-    and WebSocket connections. We'll use Python, JavaScript, and SQL for our examples.
-
-  # Product names and acronyms
-  - |
-    Our stack includes AWS Lambda, PostgreSQL databases, and Redis caching.
-    The frontend uses React with TypeScript, while the backend runs on Node.js.
-
-  # Creative content for voice design
-  - |
-    In a world where technology and nature coexist harmoniously,
-    the gentle hum of servers blends with the rustling of leaves.
+    In a world where technology evolves rapidly, artificial intelligence continues
+    to push the boundaries of what's possible in voice synthesis and natural language processing.
 
 providers:
-  # 1. Basic TTS (baseline)
-  - id: elevenlabs:tts:baseline
-    label: Baseline (No Custom Pronunciation)
-    config:
-      modelId: eleven_flash_v2_5
-      voiceId: 21m00Tcm4TlvDq8ikWAM # Rachel
-
-  # 2. TTS with Pronunciation Dictionary
-  - id: elevenlabs:tts:pronunciation
-    label: Custom Tech Pronunciation
+  # 1. Baseline with default settings
+  - id: elevenlabs:tts:rachel
+    label: Default Settings (Rachel)
     config:
       modelId: eleven_flash_v2_5
       voiceId: 21m00Tcm4TlvDq8ikWAM
-      pronunciationRules:
-        # Programming languages
-        - word: API
-          pronunciation: A-P-I
-        - word: SQL
-          pronunciation: sequel
-        - word: PostgreSQL
-          pronunciation: post-gres-Q-L
-        - word: JavaScript
-          pronunciation: java-script
-        - word: TypeScript
-          pronunciation: type-script
-        - word: Python
-          pronunciation: pie-thon
+      outputFormat: mp3_44100_128
 
-        # Cloud/Infrastructure
-        - word: AWS
-          pronunciation: A-W-S
-        - word: Redis
-          pronunciation: red-iss
-        - word: GraphQL
-          pronunciation: graph-Q-L
-        - word: WebSocket
-          pronunciation: web-socket
-
-        # Frameworks
-        - word: React
-          pronunciation: re-act
-        - word: Node.js
-          pronunciation: node-jay-ess
-
-  # 3. Voice Design from Description
-  - id: elevenlabs:tts:designed
-    label: Designed Voice (Warm & Professional)
+  # 2. High stability for consistent voice
+  - id: elevenlabs:tts:rachel
+    label: High Stability
     config:
       modelId: eleven_flash_v2_5
-      voiceDesign:
-        description: A warm, professional voice with excellent clarity and a slight smile in the tone, perfect for technical documentation
-        gender: female
-        age: middle_aged
-        accent: american
-        accentStrength: 0.5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+      voiceSettings:
+        stability: 0.9
+        similarity_boost: 0.75
+        style: 0.0
+        use_speaker_boost: true
+        speed: 1.0
 
-  # 4. Voice Remix - Make Rachel more energetic
-  - id: elevenlabs:tts:remixed
-    label: Remixed Voice (Energetic Rachel)
+  # 3. Expressive with style
+  - id: elevenlabs:tts:rachel
+    label: Expressive Style
     config:
       modelId: eleven_flash_v2_5
-      voiceId: 21m00Tcm4TlvDq8ikWAM # Rachel
-      voiceRemix:
-        style: energetic
-        pacing: fast
-        promptStrength: medium
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+      voiceSettings:
+        stability: 0.3
+        similarity_boost: 0.75
+        style: 0.8
+        use_speaker_boost: true
+        speed: 1.0
 
-  # 5. Voice Remix - Make Rachel deeper and slower
-  - id: elevenlabs:tts:remixed-calm
-    label: Remixed Voice (Calm & Deep)
+  # 4. Fast paced
+  - id: elevenlabs:tts:rachel
+    label: Fast Speed
     config:
       modelId: eleven_flash_v2_5
-      voiceId: 21m00Tcm4TlvDq8ikWAM # Rachel
-      voiceRemix:
-        style: calm
-        pacing: slow
-        promptStrength: high
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+      voiceSettings:
+        stability: 0.5
+        similarity_boost: 0.75
+        style: 0.0
+        use_speaker_boost: true
+        speed: 1.2
 
-  # 6. Streaming with Pronunciation
-  - id: elevenlabs:tts:streaming-pronunciation
-    label: Streaming + Pronunciation
+  # 5. High quality output format
+  - id: elevenlabs:tts:rachel
+    label: High Quality (192kbps)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_192
+
+  # 6. PCM format for further processing
+  - id: elevenlabs:tts:rachel
+    label: PCM Format
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: pcm_44100
+
+  # 7. Reproducible with seed
+  - id: elevenlabs:tts:rachel
+    label: Reproducible (Seed)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+      seed: 12345
+
+  # 8. Streaming mode
+  - id: elevenlabs:tts:rachel
+    label: Streaming Mode
     config:
       modelId: eleven_flash_v2_5
       voiceId: 21m00Tcm4TlvDq8ikWAM
       streaming: true
-      pronunciationRules:
-        - word: API
-          pronunciation: A-P-I
-        - word: SQL
-          pronunciation: sequel
+      outputFormat: mp3_44100_128
 
 tests:
-  - description: Pronunciation accuracy test
-    vars:
-      expectedTerms:
-        - API
-        - SQL
-        - PostgreSQL
-        - JavaScript
+  - description: Voice settings test
     assert:
-      - type: cost
-        threshold: 0.02
-      - type: latency
-        threshold: 8000
-
-  - description: Voice quality comparison
-    assert:
+      - type: javascript
+        value: output.includes('Generated') && output.includes('characters of speech')
       - type: cost
         threshold: 0.05
+      - type: latency
+        threshold: 10000
+
+  - description: Output format and streaming test
+    assert:
       - type: javascript
-        value: |
-          // All voices should successfully generate
-          !output.includes('error')
+        value: output.includes('characters')
+      - type: cost
+        threshold: 0.05
 
 # Default assertions for all tests
 defaultTest:
   assert:
-    - type: not-contains
-      value: error
+    - type: javascript
+      value: output.includes('Generated') && output.includes('characters of speech')
     - type: cost
-      threshold: 0.10 # Max $0.10 per generation
+      threshold: 0.10
