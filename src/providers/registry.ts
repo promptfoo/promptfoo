@@ -34,7 +34,15 @@ import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere'
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
-import { ElevenLabsTTSProvider } from './elevenlabs';
+import {
+  ElevenLabsTTSProvider,
+  ElevenLabsSTTProvider,
+  ElevenLabsAgentsProvider,
+  ElevenLabsHistoryProvider,
+  ElevenLabsIsolationProvider,
+  ElevenLabsAlignmentProvider,
+  ElevenLabsDubbingProvider,
+} from './elevenlabs';
 import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
@@ -513,21 +521,51 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
-      const capability = splits[1]; // tts, stt, agent, etc.
+      const capability = splits[1]; // tts, stt, agents, history, isolation, alignment, dubbing
       const _additionalId = splits.length > 2 ? splits.slice(2).join(':') : undefined;
 
-      // For now, only TTS is implemented
-      if (capability === 'tts') {
-        return new ElevenLabsTTSProvider(providerPath, {
-          ...providerOptions,
-          env: context.env,
-        });
+      // Route to appropriate provider based on capability
+      switch (capability) {
+        case 'tts':
+          return new ElevenLabsTTSProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'stt':
+          return new ElevenLabsSTTProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'agents':
+          return new ElevenLabsAgentsProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'history':
+          return new ElevenLabsHistoryProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'isolation':
+          return new ElevenLabsIsolationProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'alignment':
+          return new ElevenLabsAlignmentProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'dubbing':
+          return new ElevenLabsDubbingProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        default:
+          throw new Error(
+            `ElevenLabs capability "${capability}" is not supported. Available: tts, stt, agents, history, isolation, alignment, dubbing`,
+          );
       }
-
-      // Future: STT, Agents, and other capabilities
-      throw new Error(
-        `ElevenLabs capability "${capability}" is not yet implemented. Currently supported: tts`,
-      );
     },
   },
   {
