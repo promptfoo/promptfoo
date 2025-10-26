@@ -124,9 +124,9 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const mockAudioBuffer = Buffer.from('audio-data');
       const mockAlignmentResponse = {
-        word_alignments: [
-          { word: 'Hello', start: 0.0, end: 0.5 },
-          { word: 'world', start: 0.6, end: 1.0 },
+        words: [
+          { text: 'Hello', start: 0.0, end: 0.5 },
+          { text: 'world', start: 0.6, end: 1.0 },
         ],
         duration_seconds: 1.0,
       };
@@ -139,7 +139,7 @@ describe('ElevenLabsAlignmentProvider', () => {
       });
 
       expect(response.error).toBeUndefined();
-      expect(response.output).toContain('"word_alignments"');
+      expect(response.output).toContain('"words"');
       expect(response.metadata).toMatchObject({
         sourceFile: '/path/to/audio.mp3',
         wordCount: 2,
@@ -154,9 +154,9 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const mockAudioBuffer = Buffer.from('audio-data');
       const mockAlignmentResponse = {
-        word_alignments: [
-          { word: 'Hello', start: 0.0, end: 0.5 },
-          { word: 'world', start: 0.6, end: 1.0 },
+        words: [
+          { text: 'Hello', start: 0.0, end: 0.5 },
+          { text: 'world', start: 0.6, end: 1.0 },
         ],
         duration_seconds: 1.0,
       };
@@ -178,9 +178,9 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const mockAudioBuffer = Buffer.from('audio-data');
       const mockAlignmentResponse = {
-        word_alignments: [
-          { word: 'Hello', start: 0.0, end: 0.5 },
-          { word: 'world', start: 0.6, end: 1.0 },
+        words: [
+          { text: 'Hello', start: 0.0, end: 0.5 },
+          { text: 'world', start: 0.6, end: 1.0 },
         ],
         duration_seconds: 1.0,
       };
@@ -202,10 +202,10 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const mockAudioBuffer = Buffer.from('audio-data');
       const mockAlignmentResponse = {
-        word_alignments: [{ word: 'Hello', start: 0.0, end: 0.5 }],
-        character_alignments: [
-          { character: 'H', start: 0.0, end: 0.1 },
-          { character: 'e', start: 0.1, end: 0.2 },
+        words: [{ text: 'Hello', start: 0.0, end: 0.5 }],
+        characters: [
+          { text: 'H', start: 0.0, end: 0.1 },
+          { text: 'e', start: 0.1, end: 0.2 },
         ],
         duration_seconds: 0.5,
       };
@@ -223,7 +223,7 @@ describe('ElevenLabsAlignmentProvider', () => {
       expect(response.error).toBeUndefined();
       expect(response.metadata?.characterCount).toBe(2);
       expect((provider as any).client.upload).toHaveBeenCalledWith(
-        '/audio-alignment',
+        '/forced-alignment',
         expect.any(Buffer),
         expect.any(String),
         expect.objectContaining({
@@ -237,7 +237,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const mockAudioBuffer = Buffer.from('audio-data');
       const mockAlignmentResponse = {
-        word_alignments: [{ word: 'Test', start: 0.0, end: 0.5 }],
+        words: [{ text: 'Test', start: 0.0, end: 0.5 }],
         duration_seconds: 0.5,
       };
 
@@ -250,11 +250,11 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       expect(response.error).toBeUndefined();
       expect((provider as any).client.upload).toHaveBeenCalledWith(
-        '/audio-alignment',
+        '/forced-alignment',
         expect.any(Buffer),
         expect.any(String),
         expect.objectContaining({
-          transcript: 'Test transcript',
+          text: 'Test transcript',
         }),
       );
     });
@@ -303,11 +303,11 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const mockAudioBuffer = Buffer.from('audio-data');
       const mockAlignmentResponse = {
-        word_alignments: [
-          { word: 'This', start: 0.0, end: 0.2 },
-          { word: 'is', start: 0.3, end: 0.4 },
-          { word: 'a', start: 0.5, end: 0.6 },
-          { word: 'test', start: 0.7, end: 1.0 },
+        words: [
+          { text: 'This', start: 0.0, end: 0.2 },
+          { text: 'is', start: 0.3, end: 0.4 },
+          { text: 'a', start: 0.5, end: 0.6 },
+          { text: 'test', start: 0.7, end: 1.0 },
         ],
         duration_seconds: 1.0,
       };
