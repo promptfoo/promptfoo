@@ -12,6 +12,17 @@ import type {
 import type { CallApiContextParams } from '../../../types/providers';
 
 /**
+ * Normalize speaker role to API-compatible format
+ * API expects: 'user' | 'agent' (lowercase)
+ * Supports: User, user, Customer, customer, Agent, agent, System, etc.
+ */
+function normalizeSpeakerRole(speaker: string): 'user' | 'agent' {
+  const normalized = speaker.toLowerCase();
+  // 'agent' maps to 'agent', everything else (user, customer, system) maps to 'user'
+  return normalized === 'agent' ? 'agent' : 'user';
+}
+
+/**
  * Parse conversation from prompt text
  *
  * Supports multiple formats:
@@ -31,8 +42,13 @@ export function parseConversation(
   try {
     const parsed = JSON.parse(prompt);
     if (parsed.turns && Array.isArray(parsed.turns)) {
+      // Normalize speaker roles to lowercase 'user' or 'agent'
+      const normalizedTurns = parsed.turns.map((turn: any) => ({
+        ...turn,
+        speaker: normalizeSpeakerRole(turn.speaker),
+      }));
       return {
-        turns: parsed.turns,
+        turns: normalizedTurns,
         metadata: parsed.metadata,
       };
     }
@@ -41,12 +57,12 @@ export function parseConversation(
   }
 
   // Try parsing multi-line with role prefixes
-  const rolePattern = /^(User|Agent|System):\s*(.+)$/gim;
+  const rolePattern = /^(User|Agent|System|Customer):\s*(.+)$/gim;
   const matches = [...prompt.matchAll(rolePattern)];
 
   if (matches.length > 0) {
     const turns = matches.map((match) => ({
-      speaker: match[1].toLowerCase() === 'agent' ? ('agent' as const) : ('user' as const),
+      speaker: normalizeSpeakerRole(match[1]),
       message: match[2].trim(),
     }));
 
@@ -131,8 +147,15 @@ export function buildSimulationRequest(
     const toolMockConfig: Record<string, any> = {};
 
     for (const [toolName, mockConfig] of Object.entries(toolMocks)) {
+      // API expects default_return_value as a string
+      // If returnValue is an object, stringify it
+      let returnValue = mockConfig.returnValue || '';
+      if (typeof returnValue === 'object') {
+        returnValue = JSON.stringify(returnValue);
+      }
+
       toolMockConfig[toolName] = {
-        default_return_value: mockConfig.returnValue || '',
+        default_return_value: returnValue,
         default_is_error: mockConfig.error || false,
       };
     }
