@@ -21,7 +21,7 @@ tests:
       format: json
     assert:
       - type: javascript
-        value: output.includes('word_alignments')
+        value: output.includes('words')
       - type: not-contains
         value: error
 
@@ -41,7 +41,7 @@ tests:
       format: json
     assert:
       - type: javascript
-        value: output.includes('word_alignments')
+        value: output.includes('words')
       - type: not-contains
         value: error
 

@@ -102,11 +102,11 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
 
       // Upload and process alignment
       const response = await this.client.upload<AlignmentResponse>(
-        '/audio-alignment',
+        '/forced-alignment',
         audioBuffer,
         filename,
         {
-          transcript,
+          text: transcript,
           include_character_alignments: context?.vars?.includeCharacterAlignments || false,
         },
       );
@@ -117,7 +117,7 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
       const output = this.formatAlignmentOutput(response, context?.vars?.format);
 
       logger.debug('[ElevenLabs Alignment] Alignment completed successfully', {
-        wordCount: response.word_alignments.length,
+        wordCount: response.words.length,
         duration: response.duration_seconds,
         latency,
       });
@@ -126,8 +126,8 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
         output,
         metadata: {
           sourceFile: audioFile,
-          wordCount: response.word_alignments.length,
-          characterCount: response.character_alignments?.length || 0,
+          wordCount: response.words.length,
+          characterCount: response.characters?.length || 0,
           durationSeconds: response.duration_seconds,
           latency,
         },

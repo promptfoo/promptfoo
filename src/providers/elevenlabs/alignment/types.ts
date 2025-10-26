@@ -25,7 +25,7 @@ export interface WordAlignment {
  * Alignment data for a character
  */
 export interface CharacterAlignment {
-  character: string; // Single character
+  text: string; // Single character (API uses 'text', not 'character')
   start: number; // Start time in seconds
   end: number; // End time in seconds
 }
@@ -34,8 +34,8 @@ export interface CharacterAlignment {
  * Response from forced alignment API
  */
 export interface AlignmentResponse {
-  word_alignments: WordAlignment[];
-  character_alignments?: CharacterAlignment[];
-  duration_seconds: number;
-  transcript: string;
+  words: WordAlignment[]; // API uses 'words', not 'word_alignments'
+  characters?: CharacterAlignment[]; // API uses 'characters', not 'character_alignments'
+  duration_seconds?: number; // Optional in API response
+  transcript?: string; // Optional in API response
 }
