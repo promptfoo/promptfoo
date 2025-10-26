@@ -452,14 +452,16 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
     let contextWithGuidance = undefined;
 
     if (category) {
-      const normalizedCategory = category.toLowerCase().replace(/_/g, '_');
+      const canonicalCategory = toCanonicalSubcategory(category);
+      const normalizedCategory = canonicalCategory ?? normalizeSubcategoryName(category);
       const guidance =
         this.categoryGuidance[normalizedCategory] ||
+        (canonicalCategory ? this.categoryGuidance[canonicalCategory] : undefined) ||
         this.categoryGuidance[category] ||
         this.defaultGuidance;
 
       contextWithGuidance = {
-        category,
+        category: canonicalCategory ?? category,
         categoryGuidance: guidance,
       };
     }
