@@ -14,8 +14,8 @@ redteam:
   numTests: 10
   plugins:
     # Basic usage - tests all harmful categories
-    - id: beavertails
-      numTests: 5
+    # - id: beavertails
+    #   numTests: 5
 
     # Advanced usage - filter by specific subcategories
     # This example focuses on self-harm and privacy violation tests
