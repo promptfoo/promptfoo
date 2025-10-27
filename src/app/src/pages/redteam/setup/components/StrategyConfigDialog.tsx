@@ -89,7 +89,6 @@ export default function StrategyConfigDialog({
     setGoals((prev) => prev.filter((g) => g !== goal));
   };
 
-
   const handleNumTestsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     const num = Number.parseInt(value, 10);
@@ -140,7 +139,6 @@ export default function StrategyConfigDialog({
         ...localConfig,
         goals,
       });
-
     } else if (strategy === 'retry') {
       const num = Number.parseInt(numTests, 10);
       if (num >= 1) {
