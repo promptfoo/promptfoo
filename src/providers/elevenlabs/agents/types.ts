@@ -20,14 +20,6 @@ export interface ElevenLabsAgentsConfig extends ElevenLabsBaseConfig {
   toolMockConfig?: ToolMockConfig;
   maxTurns?: number; // Maximum conversation turns (default: 10)
   label?: string; // Provider label
-
-  // Advanced features (v2.0)
-  llmCascade?: LLMCascadeConfig; // LLM fallback configuration
-  customLLM?: CustomLLMConfig; // Custom LLM endpoint
-  mcpConfig?: MCPConfig; // Model Context Protocol integration
-  multiVoice?: MultiVoiceConfig; // Multi-voice conversation support
-  postCallWebhook?: PostCallWebhookConfig; // Post-call notifications
-  phoneConfig?: PhoneConfig; // Phone integration (Twilio/SIP)
 }
 
 /**
@@ -90,99 +82,6 @@ export interface ToolMockConfig {
     returnValue?: any;
     error?: string;
     latencyMs?: number;
-  };
-}
-
-/**
- * LLM Cascading configuration
- */
-export interface LLMCascadeConfig {
-  primary: string; // Primary LLM (e.g., 'gpt-4o')
-  fallback: string[]; // Fallback LLMs (e.g., ['gpt-4o-mini', 'gpt-3.5-turbo'])
-  cascadeOnError?: boolean; // Fallback on primary errors (default: true)
-  cascadeOnLatency?: {
-    enabled: boolean;
-    maxLatencyMs: number; // Switch to fallback if primary exceeds this
-  };
-  cascadeOnCost?: {
-    enabled: boolean;
-    maxCostPerRequest: number; // Switch to fallback if cost exceeds this
-  };
-}
-
-/**
- * Custom LLM endpoint configuration
- */
-export interface CustomLLMConfig {
-  name: string; // Unique identifier for this LLM
-  url: string; // API endpoint URL
-  apiKey?: string; // API key (stored securely)
-  model?: string; // Model identifier
-  temperature?: number;
-  maxTokens?: number;
-  headers?: Record<string, string>; // Additional headers
-}
-
-/**
- * Model Context Protocol (MCP) integration
- */
-export interface MCPConfig {
-  serverUrl: string; // MCP server URL
-  approvalPolicy?: 'auto' | 'manual' | 'conditional'; // Tool approval policy
-  approvalConditions?: {
-    requireApprovalForTools?: string[]; // Tools requiring manual approval
-    requireApprovalForCost?: number; // Cost threshold for approval
-  };
-  timeout?: number; // Request timeout in ms
-}
-
-/**
- * Multi-voice conversation configuration
- */
-export interface MultiVoiceConfig {
-  characters: {
-    name: string; // Character name (referenced in conversation)
-    voiceId: string; // Voice ID for this character
-    role?: string; // Character role/description
-  }[];
-  defaultVoiceId?: string; // Fallback voice if character not found
-}
-
-/**
- * Post-call webhook configuration
- */
-export interface PostCallWebhookConfig {
-  url: string; // Webhook endpoint URL
-  method?: 'POST' | 'PUT'; // HTTP method (default: POST)
-  headers?: Record<string, string>; // Custom headers
-  includeTranscript?: boolean; // Include full transcript (default: true)
-  includeRecording?: boolean; // Include audio recording URL (default: false)
-  includeAnalysis?: boolean; // Include conversation analysis (default: true)
-}
-
-/**
- * Phone integration configuration
- */
-export interface PhoneConfig {
-  provider: 'twilio' | 'sip'; // Phone provider
-
-  // Twilio-specific
-  twilioAccountSid?: string;
-  twilioAuthToken?: string;
-  twilioPhoneNumber?: string;
-
-  // SIP-specific
-  sipUri?: string;
-  sipUsername?: string;
-  sipPassword?: string;
-
-  // Common
-  recordCalls?: boolean; // Record phone calls (default: false)
-  transcribeCalls?: boolean; // Real-time transcription (default: true)
-  batchCalling?: {
-    enabled: boolean;
-    phoneNumbers: string[];
-    concurrent?: number; // Max concurrent calls (default: 5)
   };
 }
 

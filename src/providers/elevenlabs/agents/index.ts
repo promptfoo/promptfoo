@@ -19,12 +19,6 @@ import {
   generateEvaluationSummary,
 } from './evaluation';
 import { extractToolCalls, analyzeToolUsage, generateToolUsageSummary } from './tools';
-import { buildLLMCascadeConfig, validateLLMCascadeConfig } from './llm-cascading';
-import { registerCustomLLM, validateCustomLLMConfig } from './custom-llm';
-import { setupMCPIntegration, validateMCPConfig } from './mcp-integration';
-import { configureMultiVoice, validateMultiVoiceConfig } from './multi-voice';
-import { registerPostCallWebhook, validateWebhookConfig } from './webhooks';
-import { setupPhoneIntegration, validatePhoneConfig } from './phone';
 
 /**
  * ElevenLabs Agents Provider Implementation
@@ -110,53 +104,8 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
    * Validate all advanced feature configurations
    */
   private validateConfigurations(): void {
-    // Validate LLM cascade config
-    if (this.config.llmCascade) {
-      const validation = validateLLMCascadeConfig(this.config.llmCascade);
-      if (!validation.valid) {
-        throw new Error(`LLM Cascade configuration invalid: ${validation.errors.join(', ')}`);
-      }
-    }
-
-    // Validate custom LLM config
-    if (this.config.customLLM) {
-      const validation = validateCustomLLMConfig(this.config.customLLM);
-      if (!validation.valid) {
-        throw new Error(`Custom LLM configuration invalid: ${validation.errors.join(', ')}`);
-      }
-    }
-
-    // Validate MCP config
-    if (this.config.mcpConfig) {
-      const validation = validateMCPConfig(this.config.mcpConfig);
-      if (!validation.valid) {
-        throw new Error(`MCP configuration invalid: ${validation.errors.join(', ')}`);
-      }
-    }
-
-    // Validate multi-voice config
-    if (this.config.multiVoice) {
-      const validation = validateMultiVoiceConfig(this.config.multiVoice);
-      if (!validation.valid) {
-        throw new Error(`Multi-voice configuration invalid: ${validation.errors.join(', ')}`);
-      }
-    }
-
-    // Validate webhook config
-    if (this.config.postCallWebhook) {
-      const validation = validateWebhookConfig(this.config.postCallWebhook);
-      if (!validation.valid) {
-        throw new Error(`Webhook configuration invalid: ${validation.errors.join(', ')}`);
-      }
-    }
-
-    // Validate phone config
-    if (this.config.phoneConfig) {
-      const validation = validatePhoneConfig(this.config.phoneConfig);
-      if (!validation.valid) {
-        throw new Error(`Phone configuration invalid: ${validation.errors.join(', ')}`);
-      }
-    }
+    // No advanced feature validations needed currently
+    // Future advanced features will be validated here
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -171,9 +120,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     try {
       // Get or create agent
       const agentId = await this.getOrCreateAgent();
-
-      // Set up advanced features for this agent
-      await this.setupAgentFeatures(agentId);
 
       logger.debug('[ElevenLabs Agents] Running simulation', {
         agentId,
@@ -194,13 +140,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       // Add new_turns_limit (API field name)
       simulationRequest.new_turns_limit = this.config.maxTurns || 10;
 
-      // Add LLM cascading if configured (inside simulation_specification)
-      if (this.config.llmCascade) {
-        simulationRequest.simulation_specification.llm_cascade = buildLLMCascadeConfig(
-          this.config.llmCascade,
-        );
-      }
-
       // Debug: Log the request being sent
       logger.debug('[ElevenLabs Agents] Request payload', {
         endpoint: `/convai/agents/${agentId}/simulate-conversation`,
@@ -212,21 +151,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
         `/convai/agents/${agentId}/simulate-conversation`,
         simulationRequest,
       );
-
-      // Register post-call webhook if configured
-      if (this.config.postCallWebhook && response.conversation_id) {
-        try {
-          await registerPostCallWebhook(
-            this.client,
-            response.conversation_id,
-            this.config.postCallWebhook,
-          );
-        } catch (error) {
-          logger.warn('[ElevenLabs Agents] Failed to register webhook', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
 
       // Process results
       return this.buildResponse(response, startTime);
@@ -300,59 +224,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     });
 
     return this.ephemeralAgentId;
-  }
-
-  /**
-   * Set up advanced features for agent
-   */
-  private async setupAgentFeatures(agentId: string): Promise<void> {
-    // Custom LLM
-    if (this.config.customLLM) {
-      try {
-        await registerCustomLLM(this.client, this.config.customLLM);
-        logger.debug('[ElevenLabs Agents] Custom LLM registered');
-      } catch (error) {
-        logger.warn('[ElevenLabs Agents] Custom LLM registration failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    // MCP integration
-    if (this.config.mcpConfig) {
-      try {
-        await setupMCPIntegration(this.client, agentId, this.config.mcpConfig);
-        logger.debug('[ElevenLabs Agents] MCP integration configured');
-      } catch (error) {
-        logger.warn('[ElevenLabs Agents] MCP setup failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    // Multi-voice
-    if (this.config.multiVoice) {
-      try {
-        await configureMultiVoice(this.client, agentId, this.config.multiVoice);
-        logger.debug('[ElevenLabs Agents] Multi-voice configured');
-      } catch (error) {
-        logger.warn('[ElevenLabs Agents] Multi-voice setup failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    // Phone integration
-    if (this.config.phoneConfig) {
-      try {
-        await setupPhoneIntegration(this.client, agentId, this.config.phoneConfig);
-        logger.debug('[ElevenLabs Agents] Phone integration configured');
-      } catch (error) {
-        logger.warn('[ElevenLabs Agents] Phone setup failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
   }
 
   /**
@@ -471,14 +342,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       toolMockConfig: config?.toolMockConfig,
       maxTurns: config?.maxTurns || 10,
       label: options.label || options.id,
-
-      // Advanced features
-      llmCascade: config?.llmCascade,
-      customLLM: config?.customLLM,
-      mcpConfig: config?.mcpConfig,
-      multiVoice: config?.multiVoice,
-      postCallWebhook: config?.postCallWebhook,
-      phoneConfig: config?.phoneConfig,
     };
   }
 

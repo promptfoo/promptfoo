@@ -355,7 +355,7 @@ In the web UI, you'll see:
 - Conversation duration and cost
 - Audio playback for each turn
 
-## Part 5: Advanced Agent Features
+## Part 5: Tool Mocking
 
 ### Step 9: Add Tool Mocking
 
@@ -435,71 +435,6 @@ Run with tool mocking:
 promptfoo eval -c agent-with-tools.yaml
 ```
 
-## Part 6: Cost Optimization
-
-### Step 10: Implement LLM Cascading
-
-Create `cost-optimized-agent.yaml`:
-
-```yaml
-description: 'Cost-optimized agent with LLM cascading'
-
-prompts:
-  - |
-    User: What are your business hours?
-  - |
-    User: I need help with a complex billing issue from 6 months ago
-
-providers:
-  - id: elevenlabs:agents
-    config:
-      agentConfig:
-        name: Cost-Optimized Agent
-        prompt: You are a helpful support agent.
-        voiceId: 21m00Tcm4TlvDq8ikWAM
-
-      # LLM cascading: start cheap, fallback to expensive
-      llmCascade:
-        primary: gpt-4o-mini # Cheap, fast
-        fallback:
-          - gpt-4o # More capable
-        cascadeOnError: true
-        cascadeOnLatency:
-          enabled: true
-          maxLatencyMs: 5000
-
-      evaluationCriteria:
-        - name: helpful
-          description: Agent provides helpful response
-          weight: 1.0
-          passingThreshold: 0.8
-
-tests:
-  - description: Simple question uses cheap model
-    vars:
-      query: business_hours
-    assert:
-      - type: cost
-        threshold: 0.20 # Should use gpt-4o-mini
-
-  - description: Complex question may use better model
-    vars:
-      query: complex_billing
-    assert:
-      - type: javascript
-        value: |
-          const result = JSON.parse(output);
-          console.log('Cost:', result.metadata?.cost);
-          // Verify agent responded helpfully
-          return result.analysis.evaluation_criteria_results[0].passed;
-```
-
-Run cost comparison:
-
-```sh
-promptfoo eval -c cost-optimized-agent.yaml
-```
-
 ## Next Steps
 
 You've learned to:
@@ -509,13 +444,10 @@ You've learned to:
 - ✅ Test STT accuracy with WER calculation
 - ✅ Evaluate conversational agents with criteria
 - ✅ Mock tools for agent testing
-- ✅ Optimize costs with LLM cascading
 
 ### Explore More
 
-- **Multi-voice conversations**: Different voices for different characters
-- **Phone integration**: Test with real Twilio/SIP calls
-- **Audio processing**: Use isolation and alignment
+- **Audio processing**: Use isolation for noise removal
 - **Regression testing**: Track agent performance over time
 - **Production monitoring**: Set up continuous testing
 
@@ -524,7 +456,7 @@ You've learned to:
 Check out complete examples:
 
 - [examples/elevenlabs-tts-advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-tts-advanced)
-- [examples/elevenlabs-agents-advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-agents-advanced)
+- [examples/elevenlabs-agents](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-agents)
 
 ### Resources
 
