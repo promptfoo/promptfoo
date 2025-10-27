@@ -1911,6 +1911,10 @@ class Evaluator {
         await sleep(1000);
       }
       await stopOtlpReceiverIfNeeded();
+
+      // Clean up Python worker pools to prevent resource leaks
+      const { providerRegistry } = await import('./providers/providerRegistry');
+      await providerRegistry.shutdownAll();
     }
   }
 }
