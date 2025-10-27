@@ -565,22 +565,22 @@ export default class Eval {
             // 'equals' without field: old format for backward compatibility
             condition = `json_extract(named_scores, '$."${escapedField}"') IS NOT NULL`;
           } else if (operator === 'eq') {
-            // Numeric equality: check that value exists AND equals the target
+            // Numeric equality
             condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${numericValue}`;
           } else if (operator === 'neq') {
-            // Numeric inequality: check that value exists AND does not equal the target
+            // Numeric inequality
             condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${numericValue})`;
           } else if (operator === 'gt') {
-            // Greater than: check that value exists AND is greater than target
+            // Greater than
             condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${numericValue}`;
           } else if (operator === 'gte') {
-            // Greater than or equal: check that value exists AND is >= target
+            // Greater than or equal
             condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${numericValue}`;
           } else if (operator === 'lt') {
-            // Less than: check that value exists AND is less than target
+            // Less than
             condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${numericValue}`;
           } else if (operator === 'lte') {
-            // Less than or equal: check that value exists AND is <= target
+            // Less than or equal
             condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${numericValue}`;
           }
         } else if (type === 'metadata' && field) {
