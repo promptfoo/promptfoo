@@ -332,21 +332,18 @@ Model configuration files can contain settings that lead to insecure behavior, s
 
 ## Text Scanner
 
-**File types:** `.txt`, `.md`, `.py`, `.sh`, `.yaml`, `.yml`, `.json`, `.toml`
+**File types:** `.txt`, `.md`, `.markdown`, `.rst`
 
-This scanner analyzes text-based files in ML model repositories for security issues.
+This scanner analyzes ML-specific text files like vocabulary lists, README files, and model documentation.
 
 **Key checks:**
 
-- Embedded credentials (API keys, tokens, passwords)
-- Hardcoded secrets in configuration or code files
-- Suspicious URLs or network endpoints
-- Shell commands or dangerous code patterns
-- Blacklisted model names or components
-- License compliance issues
+- Unusually large text files that may indicate data hiding
+- File type identification (vocabulary, labels, documentation)
+- Basic content validation for ML-related text files
 
 **Why it matters:**
-Text files in model repositories often contain configuration, documentation, or training scripts that may inadvertently expose secrets or reference malicious resources. These files are frequently overlooked but can contain critical security information.
+Text files in ML repositories like vocab.txt, labels.txt, and README files should follow expected patterns. Deviations may indicate tampering or hidden data.
 
 ## Jinja2 Template Scanner
 
