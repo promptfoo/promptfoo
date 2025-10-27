@@ -11,6 +11,8 @@ export interface ElevenLabsSTTConfig extends ElevenLabsBaseConfig {
   audioFile?: string; // Path to audio file
   audioFormat?: AudioFormat;
   label?: string;
+  apiKey?: string; // API key for authentication
+  apiKeyEnvar?: string; // Environment variable name for API key
 
   // Accuracy testing
   referenceText?: string; // Expected transcription for WER calculation
@@ -20,7 +22,7 @@ export interface ElevenLabsSTTConfig extends ElevenLabsBaseConfig {
 /**
  * Available STT models
  */
-export type STTModel = 'eleven_speech_to_text_v1';
+export type STTModel = 'scribe_v1';
 
 /**
  * Supported audio formats

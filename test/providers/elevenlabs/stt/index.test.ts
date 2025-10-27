@@ -21,7 +21,7 @@ describe('ElevenLabsSTTProvider', () => {
       const provider = new ElevenLabsSTTProvider('elevenlabs:stt');
 
       expect(provider).toBeDefined();
-      expect(provider.id()).toBe('elevenlabs:stt:eleven_speech_to_text_v1');
+      expect(provider.id()).toBe('elevenlabs:stt:scribe_v1');
     });
 
     it('should throw error when API key is missing', () => {
@@ -61,7 +61,7 @@ describe('ElevenLabsSTTProvider', () => {
     it('should return correct provider ID with model', () => {
       const provider = new ElevenLabsSTTProvider('elevenlabs:stt');
 
-      expect(provider.id()).toBe('elevenlabs:stt:eleven_speech_to_text_v1');
+      expect(provider.id()).toBe('elevenlabs:stt:scribe_v1');
     });
 
     it('should include custom model ID if configured', () => {
@@ -94,10 +94,10 @@ describe('ElevenLabsSTTProvider', () => {
   describe('configuration validation', () => {
     it('should accept valid model IDs', () => {
       const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
-        config: { modelId: 'eleven_speech_to_text_v1' },
+        config: { modelId: 'scribe_v1' },
       });
 
-      expect(provider.config.modelId).toBe('eleven_speech_to_text_v1');
+      expect(provider.config.modelId).toBe('scribe_v1');
     });
 
     it('should accept valid language codes', () => {
@@ -176,15 +176,15 @@ describe('ElevenLabsSTTProvider', () => {
     it('should use default model if not specified', () => {
       const provider = new ElevenLabsSTTProvider('elevenlabs:stt');
 
-      expect(provider.config.modelId).toBe('eleven_speech_to_text_v1');
+      expect(provider.config.modelId).toBe('scribe_v1');
     });
 
     it('should use custom model if specified', () => {
       const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
-        config: { modelId: 'eleven_speech_to_text_v1' },
+        config: { modelId: 'scribe_v1' },
       });
 
-      expect(provider.config.modelId).toBe('eleven_speech_to_text_v1');
+      expect(provider.config.modelId).toBe('scribe_v1');
     });
   });
 });

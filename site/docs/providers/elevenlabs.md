@@ -117,7 +117,7 @@ Transcribe audio with speaker diarization and accuracy metrics:
 providers:
   - id: elevenlabs:stt
     config:
-      modelId: eleven_speech_to_text_v1
+      modelId: scribe_v1
       diarization: true
       maxSpeakers: 3
 ```
@@ -195,12 +195,12 @@ All providers support these common parameters:
 
 ### STT-Specific Parameters
 
-| Parameter     | Description                                     |
-| ------------- | ----------------------------------------------- |
-| `modelId`     | STT model (default: `eleven_speech_to_text_v1`) |
-| `language`    | ISO 639-1 language code (e.g., `en`, `es`)      |
-| `diarization` | Enable speaker diarization                      |
-| `maxSpeakers` | Expected number of speakers (hint)              |
+| Parameter     | Description                                 |
+| ------------- | ------------------------------------------- |
+| `modelId`     | STT model (default: `scribe_v1`)            |
+| `language`    | ISO 639-1 language code (e.g., `en`, `es`) |
+| `diarization` | Enable speaker diarization                  |
+| `maxSpeakers` | Expected number of speakers (hint)          |
 | `audioFormat` | Input audio format                              |
 
 ### Agent-Specific Parameters

@@ -19,6 +19,8 @@ import type {
   ProviderOptions,
   CallApiContextParams,
 } from '../../../types/providers';
+import type { EnvOverrides } from '../../../types/env';
+import { getEnvString } from '../../../envars';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
 import type { ElevenLabsSTTConfig, STTResponse, WERResult } from './types';
@@ -35,6 +37,7 @@ interface STTCallContext {
 export class ElevenLabsSTTProvider implements ApiProvider {
   private client: ElevenLabsClient;
   private costTracker: CostTracker;
+  private env?: EnvOverrides;
   config: ElevenLabsSTTConfig;
 
   constructor(
@@ -42,6 +45,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
     private options: ProviderOptions = {},
   ) {
     const config = options.config as ElevenLabsSTTConfig;
+    this.env = options.env;
 
     this.config = {
       modelId: config?.modelId || 'scribe_v1',
@@ -56,6 +60,8 @@ export class ElevenLabsSTTProvider implements ApiProvider {
       timeout: config?.timeout || 120000,
       retries: config?.retries || 3,
       label: options.label || config?.label,
+      apiKey: config?.apiKey,
+      apiKeyEnvar: config?.apiKeyEnvar,
     };
 
     const apiKey = this.getApiKey();
@@ -83,10 +89,16 @@ export class ElevenLabsSTTProvider implements ApiProvider {
 
   /**
    * Get API key from config or environment
+   * Priority: config.apiKey > apiKeyEnvar in env > apiKeyEnvar in process.env > ELEVENLABS_API_KEY in env > ELEVENLABS_API_KEY in process.env
    */
   private getApiKey(): string {
     const apiKey =
-      this.config.apiKey || this.options.config?.apiKey || process.env.ELEVENLABS_API_KEY || '';
+      this.config.apiKey ||
+      (this.config.apiKeyEnvar && this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]) ||
+      (this.config.apiKeyEnvar && getEnvString(this.config.apiKeyEnvar as any)) ||
+      this.env?.ELEVENLABS_API_KEY ||
+      getEnvString('ELEVENLABS_API_KEY') ||
+      '';
 
     if (!apiKey) {
       throw new Error(
