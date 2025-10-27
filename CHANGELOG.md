@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add Python provider persistence for 10-100x performance improvement with persistent worker pools (#5968)
 - feat(redteam): add `jailbreak:meta` strategy with intelligent meta-agent that builds dynamic attack taxonomy and learns from full attempt history (#XXXX)
 - feat(providers): add OpenAI Agents SDK integration with support for agents, tools, handoffs, and OTLP tracing (#6009)
 - feat(providers): add function calling/tool support for Ollama chat provider (#5977)
