@@ -2,7 +2,7 @@
 title: ModelAudit Advanced Usage
 sidebar_label: Advanced Usage
 sidebar_position: 120
-description: Automate LLM model scanning across cloud providers with remote storage integration, CI/CD workflows, and programmatic controls for advanced security testing
+description: Automate LLM model auditing across cloud providers with remote storage integration, CI/CD workflows, and programmatic controls for advanced security testing
 ---
 
 # Advanced Usage
@@ -96,7 +96,7 @@ The following CLI flags have been **removed** and replaced by environment variab
 
 **Why the change?** Using environment variables is more secure than passing secrets as CLI flags, as it prevents them from being exposed in shell history or process lists. This aligns with industry best practices for managing credentials.
 
-## Remote Model Scanning
+## Remote Model Auditing
 
 ModelAudit can scan models directly from various remote sources without manual downloading.
 
