@@ -65,6 +65,7 @@ export type FetchWithCacheResult<T> = {
   status: number;
   statusText: string;
   headers?: Record<string, string>;
+  latencyMs?: number;
   deleteFromCache?: () => Promise<void>;
 };
 
@@ -77,7 +78,9 @@ export async function fetchWithCache<T = any>(
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
   if (!enabled || bust) {
+    const fetchStart = Date.now();
     const resp = await fetchWithRetries(url, options, timeout, maxRetries);
+    const fetchLatencyMs = Date.now() - fetchStart;
 
     const respText = await resp.text();
     try {
@@ -87,6 +90,7 @@ export async function fetchWithCache<T = any>(
         status: resp.status,
         statusText: resp.statusText,
         headers: Object.fromEntries(resp.headers.entries()),
+        latencyMs: fetchLatencyMs,
         deleteFromCache: async () => {
           // No-op when cache is disabled
         },
@@ -103,12 +107,15 @@ export async function fetchWithCache<T = any>(
 
   let cached = true;
   let errorResponse = null;
+  let fetchLatencyMs: number | undefined;
 
   // Use wrap to ensure that the fetch is only done once even for concurrent invocations
   const cachedResponse = await cache.wrap(cacheKey, async () => {
     // Fetch the actual data and store it in the cache
     cached = false;
+    const fetchStart = Date.now();
     const response = await fetchWithRetries(url, options, timeout, maxRetries);
+    fetchLatencyMs = Date.now() - fetchStart;
     const responseText = await response.text();
     const headers = Object.fromEntries(response.headers.entries());
 
@@ -119,6 +126,7 @@ export async function fetchWithCache<T = any>(
         status: response.status,
         statusText: response.statusText,
         headers,
+        latencyMs: fetchLatencyMs,
       });
       if (!response.ok) {
         if (responseText == '') {
@@ -127,6 +135,7 @@ export async function fetchWithCache<T = any>(
             status: response.status,
             statusText: response.statusText,
             headers,
+            latencyMs: fetchLatencyMs,
           });
         } else {
           errorResponse = data;
@@ -143,7 +152,7 @@ export async function fetchWithCache<T = any>(
         logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
         return data;
       }
-      logger.debug(`Storing ${url} response in cache: ${data}`);
+      logger.debug(`Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${data}`);
       return data;
     } catch (err) {
       throw new Error(
@@ -165,6 +174,7 @@ export async function fetchWithCache<T = any>(
     status: parsedResponse.status,
     statusText: parsedResponse.statusText,
     headers: parsedResponse.headers,
+    latencyMs: parsedResponse.latencyMs,
     deleteFromCache: async () => {
       await cache.del(cacheKey);
       logger.debug(`Evicted from cache: ${cacheKey}`);
