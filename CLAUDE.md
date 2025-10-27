@@ -392,10 +392,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Each entry should:
 
-1. **Include PR number**: Always add the PR number in format `(#1234)`
+1. **Include reference**: Add PR number `(#1234)` when available; use short commit hash `(abc1234)` only if no PR exists
 2. **Use conventional commit prefix**: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`
-3. **Be concise**: One line describing the change
-4. **Be user-focused**: Describe what changed, not how
+3. **Use `!` for breaking changes**: Add `!` after scope: `feat(api)!:`, `chore(cli)!:`
+4. **Include contributor attribution**: Add `by @username` before reference when contributor is known
+5. **Be concise**: One line describing the change
+6. **Be user-focused**: Describe what changed, not how
+
+### Recommended Scopes
+
+Use these standardized scopes for consistency (based on git history analysis):
+
+- **providers** - Provider implementations (OpenAI, Anthropic, LocalAI, etc.)
+- **webui** - Web interface and viewer
+- **cli** - Command-line interface
+- **assertions** - Assertion types and grading
+- **api** - Public API changes
+- **config** - Configuration handling
+- **deps** - Dependencies (or use Dependencies section)
+- **docs** - Documentation
+- **tests** - Test infrastructure
+- **examples** - Example configurations
+- **redteam** - Red team features (newer versions)
+- **site** - Documentation site
 
 ### Categories
 
@@ -416,32 +435,37 @@ Good entries:
 
 - feat(providers): add TrueFoundry LLM Gateway provider (#5839)
 - feat(redteam): add test button for request and response transforms in red-team setup UI (#5482)
+- feat(cli): add glob pattern support for prompts (a1b2c3d)
+- feat(api)!: simplify the API and support unified test suite definitions by @typpo (#14)
 
 ### Fixed
 
 - fix(evaluator): support `defaultTest.options.provider` for model-graded assertions (#5931)
 - fix(webui): improve UI email validation handling when email is invalid; add better tests (#5932)
+- fix(cache): ensure cache directory exists before first use (423f375)
 
 ### Changed
 
 - chore(providers): update Alibaba model support (#5919)
+- chore(env)!: rename `OPENAI_MAX_TEMPERATURE` to `OPENAI_TEMPERATURE` (4830557)
 - refactor(webui): improve EvalOutputPromptDialog with grouped dependency injection (#5845)
 ```
 
-Bad entries (missing PR number, too vague):
+Bad entries (missing reference, too vague, inconsistent format):
 
 ```markdown
 ### Added
 
 - Added new feature
 - Updated provider
+- New feature here
 ```
 
 ### Adding Entries
 
 1. **Add to Unreleased section**: All new entries go under `## [Unreleased]` at the top of the file
 2. **Choose correct category**: Added, Changed, Fixed, Dependencies, Documentation, Tests
-3. **Include PR number**: Format: `(#1234)`
+3. **Include reference**: PR number `(#1234)` when available, or short commit hash `(abc1234)` if no PR
 4. **Keep conventional commit prefix**: feat:, fix:, chore:, docs:, test:
 5. **One line per change**: Brief and descriptive
 

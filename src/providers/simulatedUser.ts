@@ -91,9 +91,25 @@ export class SimulatedUser implements ApiProvider {
     targetProvider: ApiProvider,
     context: CallApiContextParams,
   ): Promise<ProviderResponse> {
+    invariant(context?.prompt?.raw, 'Expected context.prompt.raw to be set');
+
+    // Include the assistant's prompt/instructions as a system message
+    const agentPrompt = context.prompt.raw;
+    const agentVars = context.vars;
+    const renderedPrompt = getNunjucksEngine().renderString(agentPrompt, agentVars);
+
+    // For stateful providers:
+    //   - First turn (no sessionId): send system prompt + user message to establish session
+    //   - Subsequent turns (sessionId exists): send only user message (provider maintains state)
+    // For non-stateful providers: always send system prompt + full conversation
     const targetPrompt = this.stateful
-      ? messages[messages.length - 1].content
-      : JSON.stringify(messages);
+      ? context.vars?.sessionId
+        ? JSON.stringify([{ role: 'user', content: messages[messages.length - 1].content }])
+        : JSON.stringify([
+            { role: 'system', content: renderedPrompt },
+            { role: 'user', content: messages[messages.length - 1].content },
+          ])
+      : JSON.stringify([{ role: 'system', content: renderedPrompt }, ...messages]);
 
     logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
 
@@ -114,7 +130,8 @@ export class SimulatedUser implements ApiProvider {
   }
 
   async callApi(
-    // NOTE: `prompt` is not used in this provider; `vars.instructions` is used instead.
+    // NOTE: The `prompt` parameter is not used directly; `context.prompt.raw` is used instead
+    // to extract the assistant's system instructions. The simulated user's instructions come from vars.
     _prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,

@@ -95,7 +95,11 @@ describe('LlamaProvider', () => {
 
       const provider = new LlamaProvider(modelName, { config });
       const result = await provider.callApi(prompt);
-      expect(result).toEqual({ output: response.data.content });
+      expect(result).toEqual({
+        output: response.data.content,
+        cached: false,
+        latencyMs: undefined,
+      });
     });
 
     it('should return an error if fetchWithCache throws an error', async () => {
