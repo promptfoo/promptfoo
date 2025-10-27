@@ -133,13 +133,15 @@ describe('Providers Routes', () => {
     });
 
     it('should return 400 for malformed body with extra fields', async () => {
-      const response = await request(app).post('/api/providers/test').send({
-        providerOptions: {
-          id: 'test-provider',
-          unexpectedField: 'should cause validation error',
-        },
-        prompt: 'Test',
-      });
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: {
+            id: 'test-provider',
+            unexpectedField: 'should cause validation error',
+          },
+          prompt: 'Test',
+        });
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual(
