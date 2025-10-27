@@ -184,6 +184,80 @@ describe('SimulatedUser', () => {
       expect(providerWithDelay.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).toHaveBeenCalledWith(100);
     });
+
+    it('should include sessionId from agentResponse in metadata', async () => {
+      const providerWithSessionId = {
+        id: () => 'test-agent',
+        callApi: jest.fn().mockImplementation(async () => ({
+          output: 'agent response',
+          sessionId: 'test-session-123',
+          tokenUsage: { numRequests: 1 },
+        })),
+      };
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: providerWithSessionId,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.metadata?.sessionId).toBe('test-session-123');
+    });
+
+    it('should include sessionId from context.vars as fallback', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions', sessionId: 'vars-session-456' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.metadata?.sessionId).toBe('vars-session-456');
+    });
+
+    it('should prioritize agentResponse.sessionId over context.vars.sessionId', async () => {
+      const providerWithSessionId = {
+        id: () => 'test-agent',
+        callApi: jest.fn().mockImplementation(async () => ({
+          output: 'agent response',
+          sessionId: 'response-session-priority',
+          tokenUsage: { numRequests: 1 },
+        })),
+      };
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: providerWithSessionId,
+        vars: { instructions: 'test instructions', sessionId: 'vars-session-ignored' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.metadata?.sessionId).toBe('response-session-priority');
+      expect(result.metadata?.sessionId).not.toBe('vars-session-ignored');
+    });
+
+    it('should handle missing sessionId gracefully', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.metadata?.sessionId).toBeUndefined();
+    });
+
+    it('should stringify non-string sessionId in vars', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions', sessionId: 123 as any },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.metadata?.sessionId).toBe('123');
+    });
   });
 
   describe('toString()', () => {

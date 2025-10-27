@@ -29,7 +29,7 @@ jest.mock('../src/util/transform', () => ({
     OUTPUT: 'output',
     VARS: 'vars',
   },
-  transform: jest.fn().mockImplementation(async (code, input, context, skipWrap, inputType) => {
+  transform: jest.fn().mockImplementation(async (code, input, context, _skipWrap, _inputType) => {
     if (typeof code === 'string' && code.includes('vars.transformed = true')) {
       return { ...input, transformed: true };
     }
@@ -199,7 +199,7 @@ jest.mock('../src/esm');
 
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
-  runExtensionHook: jest.fn().mockImplementation((extensions, hookName, context) => context),
+  runExtensionHook: jest.fn().mockImplementation((_extensions, _hookName, context) => context),
 }));
 
 jest.mock('../src/cliState', () => ({
@@ -233,7 +233,7 @@ jest.mock('../src/util/functions/loadFunction', () => ({
   ...jest.requireActual('../src/util/functions/loadFunction'),
   loadFunction: jest.fn().mockImplementation((options) => {
     if (options.filePath.includes('scoring')) {
-      return Promise.resolve((metrics: Record<string, number>) => ({
+      return Promise.resolve((_metrics: Record<string, number>) => ({
         pass: true,
         score: 0.75,
         reason: 'Custom scoring reason',
@@ -2331,7 +2331,7 @@ describe('evaluator', () => {
   it('should maintain separate conversation histories based on metadata.conversationId', async () => {
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockImplementation((prompt) => ({
+      callApi: jest.fn().mockImplementation((_prompt) => ({
         output: 'Test output',
       })),
     };
@@ -2893,7 +2893,7 @@ describe('evaluator', () => {
     let capturedContext: any;
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
       }
@@ -2931,7 +2931,7 @@ describe('evaluator', () => {
     let capturedContext: any;
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
       }
@@ -2969,7 +2969,7 @@ describe('evaluator', () => {
     let capturedContext: any;
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
       }
@@ -3007,7 +3007,7 @@ describe('evaluator', () => {
     let capturedContext: any;
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
       }
@@ -3052,7 +3052,7 @@ describe('evaluator', () => {
     let capturedContext: any;
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
       }
@@ -3078,47 +3078,6 @@ describe('evaluator', () => {
 
     expect(capturedContext).toBeDefined();
     expect(capturedContext.result.metadata.sessionIds).toEqual([]);
-  });
-
-  it('should ignore non-string sessionId in vars', async () => {
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
-        output: 'Test output',
-        // No sessionId in response
-      }),
-    };
-
-    const mockExtension = 'file://test-extension.js';
-    let capturedContext: any;
-
-    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
-      if (hookName === 'afterEach') {
-        capturedContext = context;
-      }
-      return context;
-    });
-
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          vars: {
-            var1: 'value1',
-            sessionId: { invalid: 'object' }, // Non-string sessionId
-          },
-        },
-      ],
-      extensions: [mockExtension],
-    };
-
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
-
-    expect(capturedContext).toBeDefined();
-    expect(capturedContext.result.metadata.sessionId).toBeUndefined();
   });
 });
 
@@ -3281,6 +3240,151 @@ describe('runEval', () => {
     const result = results[0];
     expect(result.success).toBe(true);
     expect(conversations).toHaveProperty('test-provider:custom-id:conv1');
+  });
+
+  it('should include sessionId from response in result metadata', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const providerWithSession: ApiProvider = {
+      id: jest.fn().mockReturnValue('session-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        sessionId: 'response-session-123',
+        metadata: { existing: 'value' },
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: providerWithSession,
+      prompt: { raw: 'Test prompt', label: 'session-label' },
+      test: { vars: {} },
+      conversations,
+      registers: {},
+    });
+
+    const [result] = results;
+    expect(result?.metadata).toMatchObject({
+      sessionId: 'response-session-123',
+      existing: 'value',
+    });
+  });
+
+  it('should include sessionId from vars in result metadata when response lacks sessionId', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const providerWithoutSession: ApiProvider = {
+      id: jest.fn().mockReturnValue('vars-session-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: providerWithoutSession,
+      prompt: { raw: 'Test prompt', label: 'vars-session-label' },
+      test: { vars: { sessionId: 'vars-session-456' } },
+      conversations,
+      registers: {},
+    });
+
+    const [result] = results;
+
+    expect(result.metadata).toMatchObject({ sessionId: 'vars-session-456' });
+  });
+
+  it('should include sessionId from response metadata when top-level sessionId is absent', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const providerWithMetadataSession: ApiProvider = {
+      id: jest.fn().mockReturnValue('metadata-session-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { sessionId: 'metadata-session-789', existing: 'keep-me' },
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: providerWithMetadataSession,
+      prompt: { raw: 'Test prompt', label: 'metadata-session-label' },
+      test: { vars: {} },
+      conversations,
+      registers: {},
+    });
+
+    expect(result.metadata).toMatchObject({
+      sessionId: 'metadata-session-789',
+      existing: 'keep-me',
+    });
+  });
+
+  it('should prioritize response metadata sessionId over vars sessionId', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const providerWithMetadataSession: ApiProvider = {
+      id: jest.fn().mockReturnValue('metadata-session-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { sessionId: 'metadata-session-priority' },
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: providerWithMetadataSession,
+      prompt: { raw: 'Test prompt', label: 'metadata-session-label' },
+      test: { vars: { sessionId: 'vars-session-ignored' } },
+      conversations,
+      registers: {},
+    });
+
+    expect(result.metadata).toMatchObject({ sessionId: 'metadata-session-priority' });
+  });
+
+  it('should include sessionIds from response metadata without adding sessionId fallback', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const providerWithSessionIds: ApiProvider = {
+      id: jest.fn().mockReturnValue('metadata-session-ids-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { sessionIds: ['session-a', 'session-b'] },
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: providerWithSessionIds,
+      prompt: { raw: 'Test prompt', label: 'metadata-session-ids-label' },
+      test: { vars: {} },
+      conversations,
+      registers: {},
+    });
+
+    expect(result.metadata).toMatchObject({ sessionIds: ['session-a', 'session-b'] });
+    expect(result.metadata).not.toHaveProperty('sessionId');
+  });
+
+  it('should include sessionId from test metadata when provider omits session details', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-metadata-session-label' },
+      test: { metadata: { sessionId: 'test-metadata-session' } },
+      conversations,
+      registers: {},
+    });
+
+    expect(result?.metadata).toMatchObject({ sessionId: 'test-metadata-session' });
   });
 
   it('should handle registers', async () => {
