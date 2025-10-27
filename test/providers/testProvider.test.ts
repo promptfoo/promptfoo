@@ -173,11 +173,13 @@ describe('Provider Test Functions', () => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              config: mockProvider.config,
-              providerResponse: mockResult.response!.raw,
-              parsedResponse: mockResult.response!.output,
-              error: null,
-              headers: { 'content-type': 'application/json' },
+              providerOptions: {
+                config: mockProvider.config,
+                providerResponse: mockResult.response!.raw,
+                parsedResponse: mockResult.response!.output,
+                error: null,
+                headers: { 'content-type': 'application/json' },
+              },
             }),
           }),
         );
@@ -426,11 +428,13 @@ describe('Provider Test Functions', () => {
           expect.objectContaining({
             method: 'POST',
             body: JSON.stringify({
-              config: mockProvider.config,
-              providerResponse: undefined,
-              parsedResponse: undefined,
-              error: 'Connection timeout',
-              headers: undefined,
+              providerOptions: {
+                config: mockProvider.config,
+                providerResponse: undefined,
+                parsedResponse: undefined,
+                error: 'Connection timeout',
+                headers: undefined,
+              },
             }),
           }),
         );
