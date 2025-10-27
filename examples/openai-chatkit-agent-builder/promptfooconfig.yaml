@@ -29,10 +29,9 @@ tests:
       query: "What's the status of my order #12345?"
     assert:
       - type: llm-rubric
-        value: Response acknowledges the order number and attempts to look it up
-      - type: is-json
-        # Check that response is not just an error
-        value: false
+        value: Response acknowledges the order number and provides order status information
+      - type: contains
+        value: "12345"
 
   - description: Refund request
     vars:

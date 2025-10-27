@@ -404,6 +404,7 @@ The backend logs show:
 
 ## Limitations
 
+- **Tool Call Events Not Captured**: The chatkit-python library's `stream_agent_response` function does not emit tool call events, so tool-specific assertions (`chatkit-tool-called`, etc.) are not currently supported. Tools execute successfully and their results appear in agent responses, but tool execution is not exposed as separate events.
 - Requires running a separate Python backend server
 - Agent Builder workflows must be exported to code (can't use workflow ID directly)
 - Slightly more setup than using Agents SDK provider directly
