@@ -85,6 +85,10 @@ describe('RedteamIterativeMetaProvider', () => {
     });
   });
 
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   // Note: Constructor tests omitted as they require complex module mocking
   // The provider requires cloud access, so testing focuses on the core function
 

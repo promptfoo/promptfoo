@@ -172,4 +172,5 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'goat',
   'jailbreak:composite',
   'jailbreak:likert',
+  'jailbreak:meta',
 ] as const;
