@@ -57,7 +57,15 @@ class ProviderRegistry {
   }
 
   async shutdownAll(): Promise<void> {
-    await Promise.all(Array.from(this.providers).map((p) => p.shutdown()));
+    const results = await Promise.allSettled(Array.from(this.providers).map((p) => p.shutdown()));
+
+    // Log any failures but don't throw - cleanup should be defensive
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.error(`Error shutting down provider: ${result.reason}`);
+      }
+    }
+
     this.providers.clear();
   }
 }
