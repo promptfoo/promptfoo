@@ -170,5 +170,6 @@ export interface ParsedConversation {
   metadata?: {
     topic?: string;
     context?: string;
+    dynamic_variables?: Record<string, any>;
   };
 }

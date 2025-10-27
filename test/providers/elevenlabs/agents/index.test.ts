@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
-import type {  AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
+import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
 
 // Mock dependencies
 jest.mock('../../../../src/providers/elevenlabs/client');
@@ -9,19 +9,9 @@ jest.mock('../../../../src/providers/elevenlabs/cache');
 jest.mock('../../../../src/providers/elevenlabs/cost-tracker');
 
 describe('ElevenLabsAgentsProvider', () => {
-  let mockClient: any;
-
   beforeEach(() => {
     jest.resetAllMocks();
     process.env.ELEVENLABS_API_KEY = 'test-api-key';
-
-    // Mock the ElevenLabsClient
-    const { ElevenLabsClient } = jest.requireMock('../../../../src/providers/elevenlabs/client');
-    mockClient = {
-      post: jest.fn(),
-      get: jest.fn(),
-    };
-    (ElevenLabsClient as jest.Mock).mockImplementation(() => mockClient);
   });
 
   afterEach(() => {
@@ -100,9 +90,7 @@ describe('ElevenLabsAgentsProvider', () => {
     });
   });
 
-  // Skip callApi tests due to complex mocking issues with ElevenLabsClient
-  // Agent functionality is tested via integration tests
-  describe.skip('callApi - happy path', () => {
+  describe('callApi - happy path', () => {
     it('should successfully simulate conversation with mocked API response', async () => {
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         config: {
@@ -158,21 +146,21 @@ describe('ElevenLabsAgentsProvider', () => {
         },
       };
 
-      mockClient.post.mockResolvedValue(mockApiResponse);
+      // Mock the client's post method on the provider instance
+      (provider as any).client.post = jest.fn().mockResolvedValue(mockApiResponse);
 
       const result = await provider.callApi('What is the weather like today?');
 
       // Verify the API was called with correct endpoint
-      expect(mockClient.post).toHaveBeenCalledWith(
+      expect((provider as any).client.post).toHaveBeenCalledWith(
         '/convai/agents/test-agent-123/simulate-conversation',
         expect.objectContaining({
-          conversation_history: expect.arrayContaining([
-            expect.objectContaining({
-              role: 'user',
-              content: 'What is the weather like today?',
-            }),
-          ]),
           new_turns_limit: 3,
+          simulation_specification: expect.objectContaining({
+            simulated_user_config: expect.objectContaining({
+              first_message: 'What is the weather like today?',
+            }),
+          }),
         }),
       );
 
@@ -183,23 +171,21 @@ describe('ElevenLabsAgentsProvider', () => {
 
       // Verify conversation data is present
       expect(result.metadata).toBeDefined();
-      expect(result.metadata.conversation).toBeDefined();
-      expect(result.metadata.conversation.length).toBe(4);
+      expect(result.metadata.conversationHistory).toBeDefined();
+      expect(result.metadata.conversationHistory.length).toBe(4);
 
       // Verify tool usage is tracked
-      expect(result.metadata.toolUsage).toBeDefined();
-      expect(result.metadata.toolUsage.get_weather).toEqual({
-        count: 1,
-        successful: 1,
-        failed: 0,
-      });
+      expect(result.metadata.toolUsageAnalysis).toBeDefined();
+      expect(result.metadata.toolUsageAnalysis.totalCalls).toBe(1);
+      expect(result.metadata.toolUsageAnalysis.successfulCalls).toBe(1);
+      expect(result.metadata.toolUsageAnalysis.failedCalls).toBe(0);
+      expect(result.metadata.toolUsageAnalysis.callsByTool.get('get_weather')).toBe(1);
 
       // Verify LLM usage is tracked
-      expect(result.metadata.llmUsage).toEqual({
-        total_tokens: 250,
-        prompt_tokens: 180,
-        completion_tokens: 70,
-        model: 'gpt-4o-mini',
+      expect(result.tokenUsage).toEqual({
+        total: 250,
+        prompt: 180,
+        completion: 70,
       });
 
       // Verify cost tracking
@@ -237,19 +223,18 @@ describe('ElevenLabsAgentsProvider', () => {
           },
         ],
         analysis: {
-          evaluation_results: [
-            {
-              name: 'Helpfulness',
-              score: 0.9,
-              reasoning: 'Agent was very helpful',
+          evaluation_criteria_results: {
+            Helpfulness: {
+              criteria_id: 'Helpfulness',
+              result: 'success',
+              rationale: 'Agent was very helpful',
             },
-            {
-              name: 'Accuracy',
-              score: 0.95,
-              reasoning: 'Information was accurate',
+            Accuracy: {
+              criteria_id: 'Accuracy',
+              result: 'success',
+              rationale: 'Information was accurate',
             },
-          ],
-          overall_score: 0.925,
+          },
         },
         llm_usage: {
           total_tokens: 100,
@@ -259,19 +244,37 @@ describe('ElevenLabsAgentsProvider', () => {
         },
       };
 
-      mockClient.post.mockResolvedValue(mockApiResponse);
+      // Mock the client's post method on the provider instance
+      (provider as any).client.post = jest.fn().mockResolvedValue(mockApiResponse);
 
       const result = await provider.callApi('Hello');
 
-      expect(result.metadata.evaluation).toBeDefined();
-      expect(result.metadata.evaluation.overall_score).toBe(0.925);
-      expect(result.metadata.evaluation.criteria.Helpfulness).toEqual({
-        score: 0.9,
-        reasoning: 'Agent was very helpful',
+      // Verify evaluation results are present
+      expect(result.metadata.evaluationResults).toBeDefined();
+      expect(result.metadata.evaluationResults).toHaveLength(2);
+      expect(result.metadata.overallScore).toBeDefined();
+
+      // Find specific evaluation results
+      const helpfulnessResult = result.metadata.evaluationResults.find(
+        (r: any) => r.criterion === 'Helpfulness',
+      );
+      expect(helpfulnessResult).toEqual({
+        criterion: 'Helpfulness',
+        score: 1.0,
+        passed: true,
+        feedback: 'Agent was very helpful',
+        evidence: undefined,
       });
-      expect(result.metadata.evaluation.criteria.Accuracy).toEqual({
-        score: 0.95,
-        reasoning: 'Information was accurate',
+
+      const accuracyResult = result.metadata.evaluationResults.find(
+        (r: any) => r.criterion === 'Accuracy',
+      );
+      expect(accuracyResult).toEqual({
+        criterion: 'Accuracy',
+        score: 1.0,
+        passed: true,
+        feedback: 'Information was accurate',
+        evidence: undefined,
       });
     });
 
@@ -300,36 +303,33 @@ describe('ElevenLabsAgentsProvider', () => {
         },
       };
 
-      mockClient.post.mockResolvedValue(mockApiResponse);
+      // Mock the client's post method on the provider instance
+      (provider as any).client.post = jest.fn().mockResolvedValue(mockApiResponse);
 
       await provider.callApi('Check weather');
 
       // Verify tool mocking was included in request
-      expect(mockClient.post).toHaveBeenCalledWith(
+      expect((provider as any).client.post).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           simulation_specification: expect.objectContaining({
-            tool_mocks: [
-              {
-                name: 'get_weather',
-                mock_response: { temperature: 72, condition: 'sunny' },
-              },
-            ],
+            tool_mock_config: expect.any(Object),
           }),
         }),
       );
     });
   });
 
-  // Skip error handling tests due to complex mocking issues with ElevenLabsClient
-  // Error handling is tested via integration tests
-  describe.skip('error handling', () => {
+  describe('error handling', () => {
     it('should handle API errors gracefully', async () => {
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         config: { agentId: 'test-agent-123' },
       });
 
-      mockClient.post.mockRejectedValue(new Error('API Error: Rate limit exceeded'));
+      // Mock the client's post method to reject
+      (provider as any).client.post = jest
+        .fn()
+        .mockRejectedValue(new Error('API Error: Rate limit exceeded'));
 
       const result = await provider.callApi('Test prompt');
 
@@ -348,11 +348,14 @@ describe('ElevenLabsAgentsProvider', () => {
         simulated_conversation: [],
       };
 
-      mockClient.post.mockResolvedValue(mockApiResponse);
+      // Mock the client's post method on the provider instance
+      (provider as any).client.post = jest.fn().mockResolvedValue(mockApiResponse);
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toContain('Agent configuration error');
+      expect(result.error).toContain(
+        'ElevenLabs Agents simulation failed: Agent configuration error',
+      );
     });
   });
 });

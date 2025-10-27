@@ -259,7 +259,6 @@ export class ElevenLabsClient {
       mov: 'video/quicktime',
       avi: 'video/x-msvideo',
       mkv: 'video/x-matroska',
-      webm: 'video/webm',
     };
     return mimeTypes[ext || ''] || 'application/octet-stream';
   }

@@ -195,13 +195,13 @@ All providers support these common parameters:
 
 ### STT-Specific Parameters
 
-| Parameter     | Description                                 |
-| ------------- | ------------------------------------------- |
-| `modelId`     | STT model (default: `scribe_v1`)            |
+| Parameter     | Description                                |
+| ------------- | ------------------------------------------ |
+| `modelId`     | STT model (default: `scribe_v1`)           |
 | `language`    | ISO 639-1 language code (e.g., `en`, `es`) |
-| `diarization` | Enable speaker diarization                  |
-| `maxSpeakers` | Expected number of speakers (hint)          |
-| `audioFormat` | Input audio format                              |
+| `diarization` | Enable speaker diarization                 |
+| `maxSpeakers` | Expected number of speakers (hint)         |
+| `audioFormat` | Input audio format                         |
 
 ### Agent-Specific Parameters
 

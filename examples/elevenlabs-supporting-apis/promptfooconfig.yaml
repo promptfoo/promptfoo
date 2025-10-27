@@ -50,8 +50,8 @@ providers:
 defaultTest:
   vars:
     # For conversation history (requires real conversation ID from an agent)
-    conversationId: conv_example_123  # Placeholder - won't work without real ID
-    agentId: agent_example_456  # Placeholder - won't work without real ID
+    conversationId: conv_example_123 # Placeholder - won't work without real ID
+    agentId: agent_example_456 # Placeholder - won't work without real ID
 
     # For audio isolation - using real audio from elevenlabs-stt example
     audioFile: ../elevenlabs-stt/audio/sample1.mp3

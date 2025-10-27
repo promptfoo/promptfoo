@@ -193,7 +193,12 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
       // Add subtitle entry
       lines.push(`${subtitleNumber}`);
       lines.push(`${start} --> ${end}`);
-      lines.push(chunkWords.map((w) => w.text.trim()).filter(t => t).join(' '));
+      lines.push(
+        chunkWords
+          .map((w) => w.text.trim())
+          .filter((t) => t)
+          .join(' '),
+      );
       lines.push(''); // Empty line between entries
 
       subtitleNumber++;

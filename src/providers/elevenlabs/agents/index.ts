@@ -152,6 +152,16 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
         simulationRequest,
       );
 
+      // Check for failed simulation
+      if (response.status === 'failed') {
+        return {
+          error: `ElevenLabs Agents simulation failed: ${response.error || 'Unknown error'}`,
+          metadata: {
+            latency: Date.now() - startTime,
+          },
+        };
+      }
+
       // Process results
       return this.buildResponse(response, startTime);
     } catch (error) {

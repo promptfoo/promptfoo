@@ -1,6 +1,7 @@
 # elevenlabs-supporting-apis (ElevenLabs Supporting APIs Reference)
 
 **Note:** This is a reference/documentation example showing configuration patterns for ElevenLabs supporting APIs. For working, runnable examples, see:
+
 - [elevenlabs-isolation](../elevenlabs-isolation/) - Audio noise removal
 - [elevenlabs-alignment](../elevenlabs-alignment/) - Subtitle generation
 - [elevenlabs-agents](../elevenlabs-agents/) - Agent conversations (includes history API)
@@ -16,6 +17,7 @@ This reference demonstrates configuration for:
 ## Configuration Patterns
 
 See `promptfooconfig.yaml` for examples of:
+
 - Provider configuration for each API type
 - Required variables (`audioFile`, `transcript`, `conversationId`, etc.)
 - Output format options (`json`, `srt`, `vtt`)

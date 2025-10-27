@@ -36,12 +36,13 @@ export function processEvaluationResults(
 
   // Results is an object with criterion IDs as keys
   for (const [criterionId, result] of Object.entries(results)) {
-    const passed = result.result === 'success';
+    const evaluationResult = result as any;
+    const passed = evaluationResult.result === 'success';
     processed.set(criterionId, {
-      criterion: result.criteria_id || criterionId,
+      criterion: evaluationResult.criteria_id || criterionId,
       score: passed ? 1.0 : 0.0, // API doesn't provide numeric scores, map success/failure to 1.0/0.0
       passed,
-      feedback: result.rationale,
+      feedback: evaluationResult.rationale,
       evidence: undefined, // API doesn't provide evidence array in this format
     });
   }
