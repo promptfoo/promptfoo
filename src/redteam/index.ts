@@ -631,20 +631,16 @@ export async function synthesize({
         strategies
           .filter((s) => !['basic', 'retry'].includes(s.id))
           .map((s) => {
-            // For non-basic, non-multilingual strategies, we want to show the additional tests they generate
+            // For non-basic strategies, we want to show the additional tests they generate
             let testCount = totalPluginTests;
-            if (s.id === 'multilingual') {
-              testCount = getTestCount(s, totalPluginTests, strategies);
-            } else {
-              // Apply fan-out multiplier if this is a fan-out strategy
-              let n = 1;
-              if (typeof s.config?.n === 'number') {
-                n = s.config.n;
-              } else if (isFanoutStrategy(s.id)) {
-                n = getDefaultNFanout(s.id);
-              }
-              testCount = totalPluginTests * n;
+            // Apply fan-out multiplier if this is a fan-out strategy
+            let n = 1;
+            if (typeof s.config?.n === 'number') {
+              n = s.config.n;
+            } else if (isFanoutStrategy(s.id)) {
+              n = getDefaultNFanout(s.id);
             }
+            testCount = totalPluginTests * n;
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
@@ -1032,12 +1028,12 @@ export async function synthesize({
     Object.assign(strategyResults, retryResults);
   }
 
-  // Check for abort signal or apply non-basic, non-multilingual strategies
+  // Check for abort signal or apply non-basic strategies
   checkAbort();
   const { testCases: strategyTestCases, strategyResults: otherStrategyResults } =
     await applyStrategies(
       pluginTestCases,
-      strategies.filter((s) => !['basic', 'multilingual', 'retry'].includes(s.id)),
+      strategies.filter((s) => !['basic', 'retry'].includes(s.id)),
       injectVar,
       excludeTargetOutputFromAgenticAttackGeneration,
     );
