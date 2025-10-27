@@ -21,6 +21,7 @@ import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides, severityDisplayNames } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import { useDebounce } from 'use-debounce';
+import { BaseNumberInput } from '../../../../components/form/input/BaseNumberInput';
 import { type ResultsFilter, useTableStore } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
@@ -553,6 +554,28 @@ function Filter({
                             ? selectedPolicyValues
                             : []
                 }
+              />
+            ) : value.type === 'metric' &&
+              ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(value.operator) ? (
+              <BaseNumberInput
+                id={`${index}-value-input`}
+                label="Value"
+                variant="outlined"
+                size="small"
+                value={value.value === '' ? undefined : Number(value.value)}
+                onChange={(numericValue) => {
+                  handleValueChange(numericValue === undefined ? '' : String(numericValue));
+                }}
+                allowDecimals={true}
+                step={0.1}
+                fullWidth
+                slotProps={{
+                  input: {
+                    sx: {
+                      py: 1,
+                    },
+                  },
+                }}
               />
             ) : (
               <DebouncedTextField
