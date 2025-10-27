@@ -48,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(fetch): use consistent units in retry counter log messages - now shows attempt count vs total attempts (#6017)
 - fix(fetch): include error details in final error message when rate limited (#6019)
 - fix(providers): simulated-user and mischievous-user now respect assistant system prompts in multi-turn conversations (#6020)
 - fix(providers): render environment variables in provider config at load time (#6007)
