@@ -11,9 +11,16 @@ interface CleanupProvider {
  * Global registry of Python providers for cleanup on process exit.
  * Ensures no zombie Python processes are left running.
  */
-class ProviderRegistry {
+type ProcessLike = {
+  once(event: NodeJS.Signals | 'beforeExit', listener: (...args: any[]) => void): any;
+  exit(code?: number): never;
+};
+
+export class ProviderRegistry {
   private providers: Set<CleanupProvider> = new Set();
   private shutdownRegistered: boolean = false;
+
+  constructor(private readonly proc: ProcessLike = process) {}
 
   register(provider: CleanupProvider): void {
     this.providers.add(provider);
@@ -31,7 +38,7 @@ class ProviderRegistry {
   private registerShutdownHandlers(): void {
     let shuttingDown = false;
 
-    const shutdown = async (signal: string) => {
+    const shutdown = async (signal: string, exitCode?: number) => {
       if (shuttingDown) {
         return; // Prevent duplicate shutdown
       }
@@ -48,12 +55,16 @@ class ProviderRegistry {
       );
 
       logger.debug('Python provider shutdown complete');
+
+      if (typeof exitCode === 'number') {
+        this.proc.exit(exitCode);
+      }
     };
 
-    process.once('SIGINT', () => void shutdown('SIGINT'));
-    process.once('SIGTERM', () => void shutdown('SIGTERM'));
+    this.proc.once('SIGINT', () => void shutdown('SIGINT', 130));
+    this.proc.once('SIGTERM', () => void shutdown('SIGTERM', 143));
     // Use beforeExit for async cleanup (exit event cannot await)
-    process.once('beforeExit', () => void shutdown('beforeExit'));
+    this.proc.once('beforeExit', () => void shutdown('beforeExit'));
   }
 
   async shutdownAll(): Promise<void> {
