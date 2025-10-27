@@ -177,10 +177,10 @@ plugins:
 
 ### Setting Languages
 
-You can set a top-level language that affects all plugins. You can also implement the [multi-lingual strategy](/docs/red-team/strategies/multilingual) to generate probes in specified languages.
+You can set a top-level language that affects all plugins. For more information, see the [language configuration](/docs/red-team/configuration/#language) section.
 
 ```yaml
-language: 'Spanish' # Top level language setting
+language: ['Spanish', 'French', 'German'] # Test in multiple languages
 plugins:
   - id: 'harmful:hate'
   - id: 'contracts'
