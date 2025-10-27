@@ -1,5 +1,10 @@
 import { runCompareAssertion } from '../../src/assertions/index';
-import type { ApiProvider, Assertion, AtomicTestCase, CallApiContextParams } from '../../src/types/index';
+import type {
+  ApiProvider,
+  Assertion,
+  AtomicTestCase,
+  CallApiContextParams,
+} from '../../src/types/index';
 
 describe('select-best context propagation', () => {
   it('should pass context with originalProvider to grading provider', async () => {
