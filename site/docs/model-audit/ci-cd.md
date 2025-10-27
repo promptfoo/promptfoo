@@ -114,7 +114,7 @@ jobs:
         if: steps.changed-files.outputs.has_changes == 'true'
         run: |
           CRITICAL_COUNT=$(jq -s '[.[] | select(.has_errors == true)] | length' scan_results/*.json)
-          WARNING_COUNT=$(jq -s '[.[] | select(.has_warnings == true)] | length' scan_results/*.json)
+          WARNING_COUNT=$(jq -s '[.[] | select(.issues | any(.severity == "warning"))] | length' scan_results/*.json)
 
           if [ "$CRITICAL_COUNT" -gt 0 ]; then
             echo "❌ Found critical security issues in $CRITICAL_COUNT file(s)"
@@ -232,8 +232,8 @@ jobs:
       - name: Check for critical issues
         id: check-issues
         run: |
-          CRITICAL=$(jq '.[] | select(.has_errors == true) | .scanner' scan_results.json || echo "")
-          if [ -n "$CRITICAL" ]; then
+          HAS_ERRORS=$(jq -r '.has_errors // false' scan_results.json)
+          if [ "$HAS_ERRORS" = "true" ]; then
             echo "critical=true" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -246,20 +246,20 @@ jobs:
             const fs = require('fs');
             const results = JSON.parse(fs.readFileSync('scan_results.json', 'utf8'));
 
-            const critical = results.filter(r => r.has_errors);
-            const issues = critical.flatMap(r =>
-              r.issues
+            if (results.has_errors && results.issues) {
+              const criticalIssues = results.issues
                 .filter(i => i.severity === 'critical')
-                .map(i => `- ${r.scanner}: ${i.message}`)
-            );
+                .map(i => `- ${i.message}`)
+                .join('\n');
 
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: '🚨 Critical Model Security Issues Detected',
-              body: `Weekly security scan found critical issues:\n\n${issues.join('\n')}`,
-              labels: ['security', 'critical', 'model-audit']
-            });
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '🚨 Critical Model Security Issues Detected',
+                body: `Weekly security scan found critical issues:\n\n${criticalIssues}`,
+                labels: ['security', 'critical', 'model-audit']
+              });
+            }
 
       - name: Upload artifacts
         if: always()
