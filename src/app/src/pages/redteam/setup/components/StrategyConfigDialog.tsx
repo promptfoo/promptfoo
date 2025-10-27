@@ -80,16 +80,12 @@ export default function StrategyConfigDialog({
         : Object.keys(DEFAULT_LANGUAGES),
     );
     setEnabled(nextConfig.enabled === undefined ? true : nextConfig.enabled);
-    setNumTests(
-      nextConfig.numTests !== undefined ? String(nextConfig.numTests) : '10',
-    );
+    setNumTests(nextConfig.numTests !== undefined ? String(nextConfig.numTests) : '10');
     setError('');
     setNewLanguage('');
     setNewGoal('');
     setGoals(
-      strategy === 'simba'
-        ? nextConfig.goals || DEFAULT_SIMBA_GOALS
-        : nextConfig.goals || [],
+      strategy === 'simba' ? nextConfig.goals || DEFAULT_SIMBA_GOALS : nextConfig.goals || [],
     );
   }, [open, strategy, config]);
 
