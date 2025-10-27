@@ -1,3 +1,4 @@
+import { getEnvInt } from 'src/envars';
 import { v4 as uuidv4 } from 'uuid';
 
 import { renderPrompt } from '../../evaluatorHelpers';
@@ -368,7 +369,8 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
-    this.numIterations = Number(config.numIterations) || 10;
+    this.numIterations =
+      Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 10);
 
     // Meta-agent strategy requires cloud
     if (!shouldGenerateRemote()) {
