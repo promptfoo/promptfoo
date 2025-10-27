@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- chore(internals): custom policy type def (#6037)
 - chore(changelog): organize and improve Unreleased section with consistent scoping and formatting (#6024)
 - chore(cli): show telemetryDisabled/telemetryDebug in `promptfoo debug` output (#6015)
 - chore(cli): improve error handling and error logging (#5930)
