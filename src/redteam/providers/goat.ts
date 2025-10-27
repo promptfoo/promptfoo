@@ -367,8 +367,8 @@ export default class GoatProvider implements ApiProvider {
             break;
           }
         }
-      } catch (err) {
-        logger.error(`Error in GOAT turn ${turn}: ${err}`);
+      } catch (error) {
+        logger.error(`[GOAT] Error in GOAT turn ${turn}`, { error });
       }
     }
 

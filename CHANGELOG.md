@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore(examples): consolidate Ollama examples into unified directory (#5977)
 - chore(deps): move dependencies to optional instead of peer (#5948)
 - chore(deps): move `natural` to optional dependency (#5946)
+- chore(redteam): improve GOAT and Crescendo error logs with additional error details for easier debugging (#6036)
 
 ### Fixed
 
