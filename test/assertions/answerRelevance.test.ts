@@ -37,7 +37,7 @@ describe('handleAnswerRelevance', () => {
         options: {},
       },
       baseType: 'answer-relevance',
-      context: {} as AssertionValueFunctionContext,
+      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
       providerResponse: {
@@ -86,7 +86,7 @@ describe('handleAnswerRelevance', () => {
         options: {},
       },
       baseType: 'answer-relevance',
-      context: {} as AssertionValueFunctionContext,
+      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
       providerResponse: {
@@ -126,7 +126,7 @@ describe('handleAnswerRelevance', () => {
           options: {},
         },
         baseType: 'answer-relevance',
-        context: {} as AssertionValueFunctionContext,
+        assertionValueContext: {} as AssertionValueFunctionContext,
         inverse: false,
         outputString: 'test output',
         providerResponse: {
@@ -150,7 +150,7 @@ describe('handleAnswerRelevance', () => {
           options: {},
         },
         baseType: 'answer-relevance',
-        context: {} as AssertionValueFunctionContext,
+        assertionValueContext: {} as AssertionValueFunctionContext,
         inverse: false,
         outputString: 'test output',
         providerResponse: {
@@ -180,7 +180,7 @@ describe('handleAnswerRelevance', () => {
         options: {},
       },
       baseType: 'answer-relevance',
-      context: {} as AssertionValueFunctionContext,
+      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
       outputString: 'test output',
       providerResponse: {

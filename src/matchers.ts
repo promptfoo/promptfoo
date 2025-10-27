@@ -72,6 +72,10 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
 /**
  * Helper to call provider with consistent context propagation pattern.
  * Spreads the optional context and merges with prompt label and vars.
+ *
+ * IMPORTANT: Spread order matters - context is spread first, then prompt/vars
+ * override. This ensures originalProvider from context is preserved while
+ * allowing this call to specify its own prompt metadata.
  */
 function callProviderWithContext(
   provider: ApiProvider,
@@ -507,7 +511,7 @@ export async function matchesLlmRubric(
   options?: {
     throwOnError?: boolean;
   },
-  context?: CallApiContextParams,
+  providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -552,7 +556,7 @@ export async function matchesLlmRubric(
       rubric,
       ...(vars || {}),
     },
-    context,
+    providerCallContext,
   );
   if (resp.error || !resp.output) {
     if (options?.throwOnError) {
@@ -668,7 +672,7 @@ export async function matchesFactuality(
   output: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-  context?: CallApiContextParams,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -702,7 +706,7 @@ export async function matchesFactuality(
       completion: tryParse(output),
       ...(vars || {}),
     },
-    context,
+    providerCallContext,
   );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
@@ -834,7 +838,7 @@ export async function matchesClosedQa(
   output: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-  context?: CallApiContextParams,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -866,7 +870,7 @@ export async function matchesClosedQa(
       completion: tryParse(output),
       ...(vars || {}),
     },
-    context,
+    providerCallContext,
   );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
@@ -911,7 +915,7 @@ export async function matchesGEval(
   output: string,
   threshold: number,
   grading?: GradingConfig,
-  context?: CallApiContextParams,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!input) {
     throw Error('No source text to estimate reply');
@@ -953,7 +957,7 @@ export async function matchesGEval(
     {
       criteria,
     },
-    context,
+    providerCallContext,
   );
   accumulateTokens(tokensUsed, respSteps.tokenUsage);
   let steps;
@@ -997,7 +1001,7 @@ export async function matchesGEval(
       input: tryParse(input),
       output: tryParse(output),
     },
-    context,
+    providerCallContext,
   );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   let result;
@@ -1021,7 +1025,7 @@ export async function matchesAnswerRelevance(
   output: string,
   threshold: number,
   grading?: GradingConfig,
-  context?: CallApiContextParams,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const embeddingProvider = await getAndCheckProvider(
     'embedding',
@@ -1061,7 +1065,7 @@ export async function matchesAnswerRelevance(
       {
         answer: tryParse(output),
       },
-      context,
+      providerCallContext,
     );
     accumulateTokens(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
@@ -1138,7 +1142,7 @@ export async function matchesContextRecall(
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-  callContext?: CallApiContextParams,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1166,7 +1170,7 @@ export async function matchesContextRecall(
       groundTruth,
       ...(vars || {}),
     },
-    callContext,
+    providerCallContext,
   );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
@@ -1228,7 +1232,7 @@ export async function matchesContextRelevance(
   context: string | string[],
   threshold: number,
   grading?: GradingConfig,
-  callContext?: CallApiContextParams,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1254,7 +1258,7 @@ export async function matchesContextRelevance(
       context: contextString,
       query: question,
     },
-    callContext,
+    providerCallContext,
   );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
@@ -1326,7 +1330,7 @@ export async function matchesContextFaithfulness(
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-  callContext?: CallApiContextParams,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1375,7 +1379,7 @@ export async function matchesContextFaithfulness(
       answer: tryParse(output),
       ...(vars || {}),
     },
-    callContext,
+    providerCallContext,
   );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
@@ -1403,7 +1407,7 @@ export async function matchesContextFaithfulness(
       statements,
       ...(vars || {}),
     },
-    callContext,
+    providerCallContext,
   );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
@@ -1441,7 +1445,7 @@ export async function matchesSelectBest(
   outputs: string[],
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-  context?: CallApiContextParams,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
     outputs.length >= 2,
@@ -1470,7 +1474,7 @@ export async function matchesSelectBest(
       outputs: outputs.map((o) => tryParse(o)),
       ...(vars || {}),
     },
-    context,
+    providerCallContext,
   );
   if (resp.error || !resp.output) {
     return new Array(outputs.length).fill(fail(resp.error || 'No output', resp.tokenUsage));

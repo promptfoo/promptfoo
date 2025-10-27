@@ -45,8 +45,8 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   const baseParams: AssertionParams = {
     assertion: { type: 'llm-rubric' as const },
     baseType: 'llm-rubric',
-    callApiContext: mockCallApiContext,
-    context: {
+    providerCallContext: mockCallApiContext,
+    assertionValueContext: {
       prompt: 'test prompt',
       vars: { testVar: 'value' },
       test: { vars: { testVar: 'value' } },
@@ -92,7 +92,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
 
       const params = {
         ...baseParams,
-        callApiContext: undefined,
+        providerCallContext: undefined,
         renderedValue: 'test rubric',
       };
 

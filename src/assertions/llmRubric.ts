@@ -8,7 +8,7 @@ export const handleLlmRubric = ({
   renderedValue,
   outputString,
   test,
-  callApiContext,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string' ||
@@ -30,6 +30,6 @@ export const handleLlmRubric = ({
     test.vars,
     assertion,
     undefined,
-    callApiContext,
+    providerCallContext,
   );
 };

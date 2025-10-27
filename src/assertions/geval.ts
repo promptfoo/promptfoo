@@ -9,7 +9,7 @@ export const handleGEval = async ({
   prompt,
   outputString,
   test,
-  callApiContext,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string' || Array.isArray(renderedValue),
@@ -28,7 +28,7 @@ export const handleGEval = async ({
         outputString,
         threshold,
         test.options,
-        callApiContext,
+        providerCallContext,
       );
 
       scores.push(resp.score);
@@ -50,7 +50,7 @@ export const handleGEval = async ({
       outputString,
       threshold,
       test.options,
-      callApiContext,
+      providerCallContext,
     );
 
     return {

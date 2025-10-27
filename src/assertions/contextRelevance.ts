@@ -20,7 +20,7 @@ export const handleContextRelevance = async ({
   output,
   prompt,
   providerResponse,
-  callApiContext,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(test.vars, 'context-relevance assertion requires a test with variables');
   invariant(
@@ -42,7 +42,7 @@ export const handleContextRelevance = async ({
     context,
     assertion.threshold ?? 0,
     test.options,
-    callApiContext,
+    providerCallContext,
   );
 
   return {

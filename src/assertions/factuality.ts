@@ -10,7 +10,7 @@ export const handleFactuality = async ({
   outputString,
   test,
   prompt,
-  callApiContext,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
@@ -32,7 +32,7 @@ export const handleFactuality = async ({
       outputString,
       test.options,
       test.vars,
-      callApiContext,
+      providerCallContext,
     )),
   };
 };

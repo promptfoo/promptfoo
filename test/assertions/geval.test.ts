@@ -31,7 +31,7 @@ describe('handleGEval', () => {
         options: {},
       },
       baseType: 'g-eval',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -106,7 +106,7 @@ describe('handleGEval', () => {
         options: {},
       },
       baseType: 'g-eval',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -166,7 +166,7 @@ describe('handleGEval', () => {
         options: {},
       },
       baseType: 'g-eval',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -218,7 +218,7 @@ describe('handleGEval', () => {
           options: {},
         },
         baseType: 'g-eval',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: {},
           test: {
@@ -269,7 +269,7 @@ describe('handleGEval', () => {
         options: {},
       },
       baseType: 'g-eval',
-      context: {
+      assertionValueContext: {
         prompt: undefined,
         vars: {},
         test: {
@@ -344,7 +344,7 @@ describe('handleGEval', () => {
         options: {},
       },
       baseType: 'g-eval',
-      context: {
+      assertionValueContext: {
         prompt: undefined,
         vars: {},
         test: {

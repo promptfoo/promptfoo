@@ -8,7 +8,7 @@ export const handleAnswerRelevance = async ({
   output,
   prompt,
   test,
-  callApiContext,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof output === 'string',
@@ -24,7 +24,7 @@ export const handleAnswerRelevance = async ({
       output,
       assertion.threshold ?? 0,
       test.options,
-      callApiContext,
+      providerCallContext,
     )),
   };
 };

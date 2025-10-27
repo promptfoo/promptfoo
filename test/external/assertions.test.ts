@@ -24,7 +24,7 @@ jest.mock('../../src/matchers', () => ({
 
 const defaultParams = {
   baseType: 'conversation-relevance' as const,
-  context: {
+  assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
     prompt: 'test prompt',
@@ -157,8 +157,8 @@ describe('handleConversationRelevance', () => {
 
     const params: AssertionParams = {
       ...defaultParams,
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         provider: createMockProvider('yes'),
       },
       assertion: {
@@ -197,8 +197,8 @@ describe('handleConversationRelevance', () => {
 
     const params: AssertionParams = {
       ...defaultParams,
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         provider: createMockProvider('yes'),
       },
       assertion: {

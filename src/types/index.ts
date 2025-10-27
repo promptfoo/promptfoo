@@ -583,8 +583,10 @@ export type AssertionValueFunctionResult = boolean | number | GradingResult;
 export interface AssertionParams {
   assertion: Assertion;
   baseType: AssertionType;
-  callApiContext?: CallApiContextParams;
-  context: AssertionValueFunctionContext;
+  /** Context passed to provider.callApi() for model-graded assertions */
+  providerCallContext?: CallApiContextParams;
+  /** Context passed to assertion value functions */
+  assertionValueContext: AssertionValueFunctionContext;
   cost?: number;
   inverse: boolean;
   logProbs?: number[];

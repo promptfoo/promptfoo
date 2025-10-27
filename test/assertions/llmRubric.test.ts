@@ -18,7 +18,7 @@ describe('handleLlmRubric', () => {
       value: 'test rubric',
     } as Assertion,
     baseType: 'llm-rubric',
-    context: {
+    assertionValueContext: {
       prompt: 'test prompt',
       vars: {},
       test: {

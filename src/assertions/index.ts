@@ -351,7 +351,7 @@ export async function runAssertion({
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
-  const callApiContext: CallApiContextParams | undefined = provider
+  const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
@@ -362,8 +362,8 @@ export async function runAssertion({
   const assertionParams: AssertionParams = {
     assertion,
     baseType: getAssertionBaseType(assertion),
-    callApiContext,
-    context,
+    providerCallContext,
+    assertionValueContext: context,
     cost,
     inverse: isAssertionInverse(assertion),
     latencyMs,

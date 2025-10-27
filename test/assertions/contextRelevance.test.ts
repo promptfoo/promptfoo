@@ -41,7 +41,7 @@ describe('handleContextRelevance', () => {
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {
           query: 'What is the capital of France?',
@@ -114,7 +114,7 @@ describe('handleContextRelevance', () => {
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {
           query: 'What is the capital of France?',
@@ -175,7 +175,7 @@ describe('handleContextRelevance', () => {
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { query: 'test query', context: 'test context' },
         test: { vars: { query: 'test query', context: 'test context' }, options: {} },
@@ -211,7 +211,7 @@ describe('handleContextRelevance', () => {
         output: 'test output',
         prompt: 'test prompt',
         baseType: 'context-relevance',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: {},
           test: { vars: undefined, options: {} },
@@ -239,7 +239,7 @@ describe('handleContextRelevance', () => {
         output: 'test output',
         prompt: 'test prompt',
         baseType: 'context-relevance',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: { context: 'test context' },
           test: { vars: { context: 'test context' }, options: {} },
@@ -271,7 +271,7 @@ describe('handleContextRelevance', () => {
         options: {},
       },
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'p',
         vars: {},
         test: { vars: { query: 'q' }, options: {} },
