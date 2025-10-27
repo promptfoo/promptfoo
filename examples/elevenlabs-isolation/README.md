@@ -21,6 +21,7 @@ npx promptfoo@latest eval
 ## How it works
 
 Audio isolation takes a noisy audio file and returns a cleaned version with:
+
 - Background noise removed
 - Speech preserved and enhanced
 - Consistent audio quality
@@ -39,6 +40,7 @@ Audio isolation takes a noisy audio file and returns a cleaned version with:
 **Input formats**: MP3, WAV, FLAC, OGG, M4A, OPUS, WebM
 
 **Output formats**:
+
 - `mp3_44100_128` - Standard quality (128kbps)
 - `mp3_44100_192` - High quality (192kbps)
 - `pcm_44100` - Uncompressed PCM
@@ -46,6 +48,7 @@ Audio isolation takes a noisy audio file and returns a cleaned version with:
 ## Configuration
 
 ### Basic isolation (MP3)
+
 ```yaml
 providers:
   - id: elevenlabs:isolation:basic
@@ -59,6 +62,7 @@ tests:
 ```
 
 ### High quality output
+
 ```yaml
 providers:
   - id: elevenlabs:isolation:hq
@@ -80,12 +84,13 @@ tests:
       - type: not-contains
         value: error
       - type: cost
-        threshold: 1.00  # Max $1.00 per file
+        threshold: 1.00 # Max $1.00 per file
 ```
 
 ## What to look for in results
 
 The response includes:
+
 - **Isolated audio**: Base64-encoded cleaned audio file
 - **Original size**: Size of input audio file
 - **Isolated size**: Size of cleaned audio (typically smaller)
@@ -103,6 +108,7 @@ The response includes:
 ## Audio Quality Comparison
 
 Isolation typically provides:
+
 - **Signal-to-Noise Ratio (SNR)**: 15-25 dB improvement
 - **File size reduction**: 10-30% smaller (noise-free)
 - **Speech clarity**: Enhanced intelligibility
@@ -111,6 +117,7 @@ Isolation typically provides:
 ## Cost Information
 
 Audio isolation pricing is based on audio duration:
+
 - ~$0.10 per minute of audio
 - Free tier: Varies by plan
 
@@ -121,6 +128,7 @@ The provider automatically tracks costs in evaluation results.
 ### "Audio isolated successfully" but quality unchanged
 
 **Possible causes:**
+
 - Source audio already very clean
 - Noise level too low to detect
 - Music/speech mixed with background (try manual editing)
@@ -130,14 +138,16 @@ The provider automatically tracks costs in evaluation results.
 ### Large file processing timeout
 
 **Solution**: Increase timeout in config:
+
 ```yaml
 config:
-  timeout: 180000  # 3 minutes
+  timeout: 180000 # 3 minutes
 ```
 
 ### Unsupported audio format
 
 **Solution**: Convert to supported format using ffmpeg:
+
 ```bash
 ffmpeg -i input.video -vn -acodec mp3 output.mp3
 ```
@@ -145,6 +155,7 @@ ffmpeg -i input.video -vn -acodec mp3 output.mp3
 ## Pipeline Integration
 
 ### Isolation → Transcription
+
 ```yaml
 # Step 1: Isolate noisy audio
 providers:
@@ -158,6 +169,7 @@ providers:
 ```
 
 ### Isolation → Alignment
+
 ```yaml
 # Step 1: Clean audio
 providers:

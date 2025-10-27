@@ -21,6 +21,7 @@ npx promptfoo@latest eval
 ## How it works
 
 Forced alignment takes two inputs:
+
 1. **Audio file**: Speech recording (MP3, WAV, etc.)
 2. **Transcript**: Text of what was spoken
 
@@ -37,17 +38,19 @@ It returns precise timestamps showing when each word was spoken, formatted as su
 ## Output Formats
 
 ### JSON (Raw alignment data)
+
 ```json
 {
   "alignment": [
-    {"char": "T", "start": 0.0, "end": 0.1},
-    {"char": "h", "start": 0.1, "end": 0.15}
+    { "char": "T", "start": 0.0, "end": 0.1 },
+    { "char": "h", "start": 0.1, "end": 0.15 }
   ],
   "characters": "That's one small step..."
 }
 ```
 
 ### SRT (Standard video subtitles)
+
 ```
 1
 00:00:00,000 --> 00:00:02,500
@@ -59,6 +62,7 @@ one giant leap for mankind
 ```
 
 ### VTT (WebVTT for web players)
+
 ```
 WEBVTT
 
@@ -74,6 +78,7 @@ one giant leap for mankind
 ## Configuration
 
 ### Basic alignment (JSON output)
+
 ```yaml
 providers:
   - id: elevenlabs:alignment:json
@@ -82,11 +87,12 @@ providers:
 tests:
   - vars:
       audioFile: path/to/audio.mp3
-      transcript: "Your transcript text here"
+      transcript: 'Your transcript text here'
       format: json
 ```
 
 ### SRT subtitles
+
 ```yaml
 providers:
   - id: elevenlabs:alignment:srt
@@ -95,11 +101,12 @@ providers:
 tests:
   - vars:
       audioFile: path/to/audio.mp3
-      transcript: "Your transcript text here"
+      transcript: 'Your transcript text here'
       format: srt
 ```
 
 ### VTT subtitles
+
 ```yaml
 providers:
   - id: elevenlabs:alignment:vtt
@@ -108,7 +115,7 @@ providers:
 tests:
   - vars:
       audioFile: path/to/audio.mp3
-      transcript: "Your transcript text here"
+      transcript: 'Your transcript text here'
       format: vtt
 ```
 
@@ -119,7 +126,7 @@ tests:
   # Verify alignment succeeds
   - assert:
       - type: javascript
-        value: output.includes('words')  # JSON format
+        value: output.includes('words') # JSON format
       - type: not-contains
         value: error
 
@@ -142,6 +149,7 @@ tests:
 ## Cost Information
 
 Forced alignment pricing is based on audio duration:
+
 - ~$0.05 per minute of audio
 
 The provider automatically tracks costs in evaluation results.
