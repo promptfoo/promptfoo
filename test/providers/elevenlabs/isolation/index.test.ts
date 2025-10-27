@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { ElevenLabsIsolationProvider } from '../../../../src/providers/elevenlabs/isolation';
 import { promises as fs } from 'fs';

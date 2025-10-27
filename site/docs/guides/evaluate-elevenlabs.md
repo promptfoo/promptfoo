@@ -1,4 +1,5 @@
 ---
+title: 'Evaluating ElevenLabs voice AI'
 description: 'Step-by-step guide for testing ElevenLabs voice AI with Promptfoo - from TTS quality testing to conversational agent evaluation'
 ---
 
@@ -68,7 +69,7 @@ promptfoo eval
 
 You'll see results comparing both models:
 
-```
+```text
 ┌─────────────────────────┬──────────┬──────────┐
 │ Prompt                  │ Flash    │ Turbo    │
 ├─────────────────────────┼──────────┼──────────┤

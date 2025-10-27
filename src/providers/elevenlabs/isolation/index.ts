@@ -13,6 +13,7 @@ import type {
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { promises as fs } from 'fs';
+import path from 'path';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
 import { encodeAudio } from '../tts/audio';
@@ -88,7 +89,7 @@ export class ElevenLabsIsolationProvider implements ApiProvider {
     try {
       // Read audio file
       const audioBuffer = await fs.readFile(audioFile);
-      const filename = audioFile.split('/').pop() || 'audio.mp3';
+      const filename = path.basename(audioFile) || 'audio.mp3';
 
       logger.debug('[ElevenLabs Isolation] Uploading audio for isolation', {
         filename,

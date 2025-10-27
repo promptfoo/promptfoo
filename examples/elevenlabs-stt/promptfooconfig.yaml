@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ElevenLabs Speech-to-Text (STT) - Transcription accuracy testing
 
 # STT uses audio files as inputs - pass via vars
@@ -30,6 +31,13 @@ providers:
       calculateWER: true
       referenceText: The quick brown fox jumps over the lazy dog
 
+# Default test configuration
+defaultTest:
+  # All tests will require transcription to complete
+  assert:
+    - type: not-contains
+      value: error
+
 tests:
   - description: Transcription of sample1
     vars:
@@ -53,10 +61,3 @@ tests:
     assert:
       - type: javascript
         value: output.length > 10
-
-# Default test configuration
-defaultTest:
-  # All tests will require transcription to complete
-  assert:
-    - type: not-contains
-      value: error

@@ -151,11 +151,22 @@ export function resolveVoiceId(voiceNameOrId: string): string {
 }
 
 /**
+ * Recommended voice settings for different use cases
+ */
+export interface RecommendedSettings {
+  stability: number;
+  similarity_boost: number;
+  style: number;
+  use_speaker_boost: boolean;
+  speed: number;
+}
+
+/**
  * Get recommended voice settings for a use case
  */
 export function getRecommendedSettings(
   useCase: 'podcast' | 'audiobook' | 'conversational' | 'dramatic',
-) {
+): RecommendedSettings {
   const settings = {
     podcast: {
       stability: 0.7,

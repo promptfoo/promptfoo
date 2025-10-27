@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ElevenLabs Audio Isolation - Background noise removal
 
 # Isolation uses audio files as inputs - pass via vars
@@ -16,6 +17,13 @@ providers:
     label: Audio Isolation (HQ)
     config:
       outputFormat: mp3_44100_192
+
+# Default test configuration
+defaultTest:
+  # All tests will require isolation to complete
+  assert:
+    - type: not-contains
+      value: error
 
 tests:
   - description: Isolate speech from sample1 (Armstrong)
@@ -40,10 +48,3 @@ tests:
     assert:
       - type: javascript
         value: output.includes('isolated successfully')
-
-# Default test configuration
-defaultTest:
-  # All tests will require isolation to complete
-  assert:
-    - type: not-contains
-      value: error

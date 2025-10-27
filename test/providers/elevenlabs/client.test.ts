@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { ElevenLabsClient } from '../../../src/providers/elevenlabs/client';
 import {

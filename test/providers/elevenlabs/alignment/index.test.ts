@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { ElevenLabsAlignmentProvider } from '../../../../src/providers/elevenlabs/alignment';
 import { promises as fs } from 'fs';
@@ -180,9 +179,23 @@ describe('ElevenLabsAlignmentProvider', () => {
       const mockAlignmentResponse = {
         words: [
           { text: 'Hello', start: 0.0, end: 0.5 },
-          { text: 'world', start: 0.6, end: 1.0 },
+          { text: 'world', start: 0.6, end: 1.1 },
         ],
-        duration_seconds: 1.0,
+        alignment: [
+          { char: 'H', start: 0.0, end: 0.1, start_char: 0, end_char: 0 },
+          { char: 'e', start: 0.1, end: 0.2, start_char: 1, end_char: 1 },
+          { char: 'l', start: 0.2, end: 0.3, start_char: 2, end_char: 2 },
+          { char: 'l', start: 0.3, end: 0.4, start_char: 3, end_char: 3 },
+          { char: 'o', start: 0.4, end: 0.5, start_char: 4, end_char: 4 },
+          { char: ' ', start: 0.5, end: 0.6, start_char: 5, end_char: 5 },
+          { char: 'w', start: 0.6, end: 0.7, start_char: 6, end_char: 6 },
+          { char: 'o', start: 0.7, end: 0.8, start_char: 7, end_char: 7 },
+          { char: 'r', start: 0.8, end: 0.9, start_char: 8, end_char: 8 },
+          { char: 'l', start: 0.9, end: 1.0, start_char: 9, end_char: 9 },
+          { char: 'd', start: 1.0, end: 1.1, start_char: 10, end_char: 10 },
+        ],
+        characters: 'Hello world',
+        duration_seconds: 1.1,
       };
 
       (fs.readFile as jest.Mock).mockResolvedValue(mockAudioBuffer);

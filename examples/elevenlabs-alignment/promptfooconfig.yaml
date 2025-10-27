@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ElevenLabs Forced Alignment - Subtitle generation
 
 # Alignment uses audio files + transcripts - pass via vars
@@ -12,6 +13,13 @@ providers:
   # SRT subtitle format
   - id: elevenlabs:alignment:srt
     label: Alignment (SRT Subtitles)
+
+# Default test configuration
+defaultTest:
+  # All tests will require alignment to complete
+  assert:
+    - type: not-contains
+      value: error
 
 tests:
   - description: Align Armstrong moon landing speech
@@ -44,10 +52,3 @@ tests:
         value: output.includes('words')
       - type: not-contains
         value: error
-
-# Default test configuration
-defaultTest:
-  # All tests will require alignment to complete
-  assert:
-    - type: not-contains
-      value: error

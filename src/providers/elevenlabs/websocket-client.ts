@@ -19,6 +19,7 @@ export class ElevenLabsWebSocketClient {
   private keepAliveInterval: number;
   private ws: WebSocket | null = null;
   private keepAliveTimer: NodeJS.Timeout | null = null;
+  private messageHandler: ((data: Buffer) => void) | null = null;
 
   constructor(config: WebSocketClientConfig) {
     this.apiKey = config.apiKey;
@@ -102,7 +103,13 @@ export class ElevenLabsWebSocketClient {
       throw new Error('WebSocket not initialized');
     }
 
-    this.ws.on('message', (data: Buffer) => {
+    // Remove previous handler to prevent multiple listeners
+    if (this.messageHandler) {
+      this.ws.off('message', this.messageHandler);
+    }
+
+    // Create and store new handler
+    this.messageHandler = (data: Buffer) => {
       try {
         const parsed = JSON.parse(data.toString());
 
@@ -121,17 +128,29 @@ export class ElevenLabsWebSocketClient {
             type: 'error',
             data: parsed.error,
           });
+        } else {
+          // Unknown message type - log for debugging
+          logger.debug('[ElevenLabs WebSocket] Received unknown message type', {
+            keys: Object.keys(parsed),
+          });
         }
       } catch (error) {
         logger.error('[ElevenLabs WebSocket] Failed to parse message', { error });
       }
-    });
+    };
+
+    this.ws.on('message', this.messageHandler);
   }
 
   close(): void {
     this.stopKeepAlive();
 
     if (this.ws) {
+      // Remove message handler to prevent memory leaks
+      if (this.messageHandler) {
+        this.ws.off('message', this.messageHandler);
+        this.messageHandler = null;
+      }
       this.ws.close();
       this.ws = null;
     }

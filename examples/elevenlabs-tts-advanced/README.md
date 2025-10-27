@@ -1,4 +1,4 @@
-# ElevenLabs TTS Advanced Features Example
+# elevenlabs-tts-advanced (ElevenLabs Advanced TTS Features)
 
 This example demonstrates advanced TTS capabilities:
 
@@ -10,8 +10,10 @@ This example demonstrates advanced TTS capabilities:
 ## Quick Start
 
 ```bash
+npx promptfoo@latest init --example elevenlabs-tts-advanced
+cd elevenlabs-tts-advanced
 export ELEVENLABS_API_KEY=your_api_key_here
-promptfoo eval
+npx promptfoo@latest eval
 ```
 
 ## Features Demonstrated

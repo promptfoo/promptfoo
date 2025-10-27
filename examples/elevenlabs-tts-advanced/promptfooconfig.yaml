@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Advanced TTS with voice settings and output formats
 
 prompts:
@@ -92,6 +93,14 @@ providers:
       streaming: true
       outputFormat: mp3_44100_128
 
+# Default assertions for all tests
+defaultTest:
+  assert:
+    - type: javascript
+      value: output.includes('Generated') && output.includes('characters of speech')
+    - type: cost
+      threshold: 0.10
+
 tests:
   - description: Voice settings test
     assert:
@@ -108,11 +117,3 @@ tests:
         value: output.includes('characters')
       - type: cost
         threshold: 0.05
-
-# Default assertions for all tests
-defaultTest:
-  assert:
-    - type: javascript
-      value: output.includes('Generated') && output.includes('characters of speech')
-    - type: cost
-      threshold: 0.10

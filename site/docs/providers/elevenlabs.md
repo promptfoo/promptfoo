@@ -1,4 +1,5 @@
 ---
+title: 'ElevenLabs'
 description: 'Test ElevenLabs AI audio capabilities: Text-to-Speech, Speech-to-Text, Conversational Agents, and audio processing tools'
 ---
 
@@ -7,7 +8,9 @@ description: 'Test ElevenLabs AI audio capabilities: Text-to-Speech, Speech-to-T
 The ElevenLabs provider integrates multiple AI audio capabilities for comprehensive voice AI testing and evaluation.
 
 :::tip
+
 For a comprehensive step-by-step tutorial, see the [Evaluating ElevenLabs voice AI guide](/docs/guides/evaluate-elevenlabs/).
+
 :::
 
 ## Quick Start
@@ -170,14 +173,14 @@ All providers support these common parameters:
 
 | Parameter      | Description                                       |
 | -------------- | ------------------------------------------------- |
-| `apiKey`       | Your ElevenLabs API key                           |
-| `apiKeyEnvar`  | Environment variable containing the API key       |
-| `baseUrl`      | Custom base URL for API (default: ElevenLabs API) |
-| `timeout`      | Request timeout in milliseconds                   |
-| `cache`        | Enable response caching                           |
-| `cacheTTL`     | Cache time-to-live in seconds                     |
-| `enableLogging | Enable debug logging                              |
-| `retries`      | Number of retry attempts for failed requests      |
+| `apiKey`        | Your ElevenLabs API key                           |
+| `apiKeyEnvar`   | Environment variable containing the API key       |
+| `baseUrl`       | Custom base URL for API (default: ElevenLabs API) |
+| `timeout`       | Request timeout in milliseconds                   |
+| `cache`         | Enable response caching                           |
+| `cacheTTL`      | Cache time-to-live in seconds                     |
+| `enableLogging` | Enable debug logging                              |
+| `retries`       | Number of retry attempts for failed requests      |
 
 ### TTS-Specific Parameters
 
@@ -459,14 +462,16 @@ prompts:
 
 providers:
   - id: flash-model
-    label: elevenlabs:tts:rachel
+    label: Flash Model (Fastest)
     config:
       modelId: eleven_flash_v2_5
+      voiceId: rachel
 
   - id: turbo-model
-    label: elevenlabs:tts:rachel
+    label: Turbo Model (Best Quality)
     config:
       modelId: eleven_turbo_v2_5
+      voiceId: rachel
 
 tests:
   - description: Flash model completes quickly

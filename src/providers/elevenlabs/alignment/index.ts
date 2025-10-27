@@ -212,8 +212,55 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
    * Format as WebVTT subtitle format
    */
   private formatAsVTT(response: AlignmentResponse): string {
-    const srt = this.formatAsSRT(response);
-    return `WEBVTT\n\n${srt}`;
+    const lines: string[] = ['WEBVTT', ''];
+
+    if (!response.alignment || response.alignment.length === 0) {
+      return lines.join('\n');
+    }
+
+    const { alignment, characters } = response;
+    const groupSize = 10; // Group words into 10-word chunks
+    let subtitleNumber = 1;
+
+    for (let i = 0; i < alignment.length; i += groupSize) {
+      const j = Math.min(i + groupSize, alignment.length);
+      const group = alignment.slice(i, j);
+
+      const startTime = group[0].start;
+      const endTime = group[group.length - 1].end;
+
+      // WebVTT uses optional cue identifiers
+      lines.push(`${subtitleNumber}`);
+
+      // WebVTT timestamps use dots instead of commas
+      lines.push(
+        `${this.formatVTTTimestamp(startTime)} --> ${this.formatVTTTimestamp(endTime)}`,
+      );
+
+      // Extract and join text
+      lines.push(
+        group
+          .map((item) => characters.substring(item.start_char, item.end_char + 1))
+          .join(' '),
+      );
+      lines.push(''); // Empty line between cues
+
+      subtitleNumber++;
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Format timestamp for WebVTT format (HH:MM:SS.mmm)
+   */
+  private formatVTTTimestamp(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const millis = Math.floor((seconds % 1) * 1000);
+
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
   }
 
   /**

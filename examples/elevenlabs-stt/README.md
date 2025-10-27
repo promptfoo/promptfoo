@@ -1,6 +1,15 @@
-# ElevenLabs Speech-to-Text (STT) Example
+# elevenlabs-stt (ElevenLabs Speech-to-Text)
 
 This example demonstrates how to use ElevenLabs STT provider for audio transcription testing.
+
+## Quick Start
+
+```bash
+npx promptfoo@latest init --example elevenlabs-stt
+cd elevenlabs-stt
+export ELEVENLABS_API_KEY=your_api_key_here
+npx promptfoo@latest eval
+```
 
 ## Features
 
