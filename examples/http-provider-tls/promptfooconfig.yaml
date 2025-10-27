@@ -60,7 +60,7 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-        X-API-Key: { { env.API_KEY } }
+        X-API-Key: '{{ env.API_KEY }}'
       body:
         input: '{{prompt}}'
       tls:
