@@ -1515,7 +1515,8 @@ class Evaluator {
       if (compareAssertion) {
         const outputs = resultsToCompare.map((r) => r.response?.output || '');
 
-        // Construct CallApiContextParams for model-graded select-best that needs originalProvider
+        // Provide context for grading providers that need originalProvider.
+        // For example, simulated-user requires originalProvider to access the target provider's configuration.
         const firstResult = resultsToCompare[0];
         const providerId = firstResult.provider.id;
         const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);

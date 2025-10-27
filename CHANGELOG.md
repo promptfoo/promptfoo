@@ -48,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(evaluator): propagate provider context to model-graded assertions that require originalProvider (#5973)
 - fix(providers): render environment variables in provider config at load time (#6007)
 - fix: Don't test session management if target is not stateful (#5989)
 - fix(internals): plugin selection (#5991)
