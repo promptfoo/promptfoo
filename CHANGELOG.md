@@ -24,10 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat: Improved error handling in CLI and error logging (#5930)
 - feat: Add pluginId, strategyId, sessionId, and sessionIds to red team metadata columns in CSV export (#6016)
 - feat: Ability to filter beavertails dataset by harm category for red teaming
+- feat(cache): preserve and display latency measurements when provider responses are cached (#5978)
 
 ### Changed
-
-- chore(cache): preserve and track latency measurements in cache layer, propagate cached latency through all providers (#945)
 - chore(cli): show telemetryDisabled/telemetryDebug in `promptfoo debug` output (#6015)
 - chore(examples): consolidate Ollama examples into unified directory (#5977)
 - chore(webui): add label column to prompts table (#6002)
