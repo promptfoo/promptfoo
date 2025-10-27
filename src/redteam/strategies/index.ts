@@ -1,12 +1,11 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
+import { strategyDisplayNames } from '../constants';
 import { isCustomStrategy } from '../constants/strategies';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
@@ -29,10 +28,13 @@ import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
+import { addSimbaTestCases } from './simba';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+
+import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
 
 export type { Strategy };
@@ -287,6 +289,17 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding ROT13 encoding to ${testCases.length} test cases`);
       const newTestCases = addRot13(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'simba',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(
+        `Adding ${strategyDisplayNames.simba} test cases to ${testCases.length} test cases`,
+      );
+      const newTestCases = await addSimbaTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} ${strategyDisplayNames.simba} test cases`);
       return newTestCases;
     },
   },

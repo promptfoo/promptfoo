@@ -12,7 +12,13 @@ export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'custom', 'mischievous-user'] as const;
+export const MULTI_TURN_STRATEGIES = [
+  'crescendo',
+  'goat',
+  'custom',
+  'mischievous-user',
+  'simba',
+] as const;
 
 // Helper function to check if a strategy is a custom variant
 export const isCustomStrategy = (strategyId: string): boolean => {
@@ -30,6 +36,7 @@ export const AGENTIC_STRATEGIES = [
   'jailbreak',
   'jailbreak:tree',
   'mischievous-user',
+  'simba',
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
@@ -47,7 +54,6 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
-  'layer',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -56,15 +62,16 @@ export const ADDITIONAL_STRATEGIES = [
   'citation',
   'crescendo',
   'custom',
+  'emoji',
   'gcg',
   'goat',
   'hex',
   'homoglyph',
   'image',
-  'emoji',
   'jailbreak:likert',
   'jailbreak:meta',
   'jailbreak:tree',
+  'layer',
   'leetspeak',
   'math-prompt',
   'mischievous-user',
@@ -74,6 +81,7 @@ export const ADDITIONAL_STRATEGIES = [
   'prompt-injection',
   'retry',
   'rot13',
+  'simba',
   'video',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
@@ -90,6 +98,7 @@ const _ALL_STRATEGIES = [
   ...DEFAULT_STRATEGIES,
   ...ADDITIONAL_STRATEGIES,
   ...STRATEGY_COLLECTIONS,
+  ...AGENTIC_STRATEGIES,
 ] as const;
 export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
@@ -106,6 +115,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'citation',
   'custom',
   'mischievous-user',
+  'simba',
 ] as const;
 
 export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];

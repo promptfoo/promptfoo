@@ -1,19 +1,7 @@
 import dedent from 'dedent';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
@@ -26,6 +14,18 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../types';
 
 interface ImageGenerationOutput {
   prompt: string;
@@ -253,13 +253,14 @@ async function runRedteamConversation({
   for (let i = 0; i < numIterations; i++) {
     try {
       // Use the shared utility function to create iteration context
-      const { iterationVars, iterationContext } = await createIterationContext({
+      const iterationContext = await createIterationContext({
         originalVars,
         transformVarsConfig,
         context,
         iterationNumber: i + 1,
         loggerTag: '[IterativeImage]',
       });
+      const iterationVars = iterationContext?.vars || {};
 
       const redteamBody = JSON.stringify(redteamHistory);
 

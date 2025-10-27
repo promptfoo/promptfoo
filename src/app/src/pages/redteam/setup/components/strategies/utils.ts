@@ -9,6 +9,7 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 }
 
 const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
+  simba: 10,
   audio: 1,
   'authoritative-markup-injection': 1,
   base64: 1,

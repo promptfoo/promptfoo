@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(redteam): add wordplay plugin (#5889)
 - feat(redteam): add pluginId, strategyId, sessionId, and sessionIds to metadata columns in CSV export (#6016)
 - feat(redteam): add subcategory filtering to BeaverTails plugin (a70372f)
+- feat(redteam): Add Simba Red Team Agent Strategy (#5795)
 - feat(webui): persist inline-defined custom policy names (#5990)
 - feat(webui): show target response to generated red team plugin test case (#5869)
 - feat(cli): log all errors in a log file and message to the console (#5992)
