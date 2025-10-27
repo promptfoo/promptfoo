@@ -79,6 +79,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   jailbreak: 'Single-shot optimization of safety bypass techniques',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
+  'jailbreak:meta':
+    'Meta-agent that builds its own attack taxonomy and learns from full attack history',
   'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
   leetspeak: 'Tests handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
@@ -254,6 +256,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
   'jailbreak:likert': 'Likert Scale Jailbreak',
+  'jailbreak:meta': 'Meta-Agent Strategic Jailbreak',
   'jailbreak:tree': 'Tree-Based Attack Search',
   leetspeak: 'Leetspeak Payload Encoding',
   'math-prompt': 'Mathematical Notation Attack',
@@ -847,6 +850,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   jailbreak: 'Optimizes single-turn attacks to bypass security controls',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
+  'jailbreak:meta':
+    'Meta-agent that dynamically builds attack taxonomy and strategically learns from full attack history',
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
@@ -883,6 +888,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:likert': 'Likert Scale Jailbreak',
+  'jailbreak:meta': 'Meta-Agent',
   'jailbreak:tree': 'Tree-based Optimization',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',

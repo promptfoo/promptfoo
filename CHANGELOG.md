@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(redteam): add `jailbreak:meta` strategy with intelligent meta-agent that builds dynamic attack taxonomy and learns from full attempt history (#XXXX)
 - feat(providers): add OpenAI Agents SDK integration with support for agents, tools, handoffs, and OTLP tracing (#6009)
 - feat(providers): add function calling/tool support for Ollama chat provider (#5977)
 - feat(app): persist inline-defined custom policy names (#5990)
@@ -48,7 +49,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(fetch): use consistent units in retry counter log messages - now shows attempt count vs total attempts (#6017)
+- fix(fetch): include error details in final error message when rate limited (#6019)
+- fix(providers): simulated-user and mischievous-user now respect assistant system prompts in multi-turn conversations (#6020)
 - fix(providers): render environment variables in provider config at load time (#6007)
+
+### Documentation
+
+- docs: fix apiKey environment variable syntax across provider docs and examples (#6018)
 - fix: Don't test session management if target is not stateful (#5989)
 - fix(internals): plugin selection (#5991)
 - fix: improve crescendo prompt example alignment with actual objective statements to increase accuracy. (#5964)
@@ -80,6 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
+- test(providers): add unit test verifying assistant system prompt inclusion for simulated-user provider (#6020)
 - test(providers): add comprehensive tests for OpenAI Agents provider, loader, and tracing (#6009)
 - tests: remove redteam constants mocks from unit tests (#6010)
 - test: CoverBot: Added tests for evaluation UI components and hooks (`src/app`) (#5981)
