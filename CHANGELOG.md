@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add ElevenLabs provider integration with support for TTS, STT, Conversational Agents, Audio Isolation, Forced Alignment, and History
 - feat(providers): add OpenAI Agents SDK integration with support for agents, tools, handoffs, and OTLP tracing (#6009)
 - feat(providers): add function calling/tool support for Ollama chat provider (#5977)
 - feat(app): persist inline-defined custom policy names (#5990)
@@ -47,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(providers): ElevenLabs API compatibility fixes for Agents (role normalization, tool mock values) and Forced Alignment (field names, SRT formatting)
 - fix(providers): render environment variables in provider config at load time (#6007)
 - fix: Don't test session management if target is not stateful (#5989)
 - fix(internals): plugin selection (#5991)
