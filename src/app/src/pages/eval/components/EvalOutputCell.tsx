@@ -339,9 +339,11 @@ function EvalOutputCell({
   let costDisplay;
 
   if (output.latencyMs) {
+    const isCached = output.response?.cached;
     latencyDisplay = (
       <span>
         {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
+        {isCached ? ' (cached)' : ''}
       </span>
     );
   }
@@ -349,7 +351,7 @@ function EvalOutputCell({
   // Check for token usage in both output.tokenUsage and output.response?.tokenUsage
   const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
 
-  if (tokenUsage?.completion) {
+  if (tokenUsage?.completion && output.latencyMs && output.latencyMs > 0) {
     const tokPerSec = tokenUsage.completion / (output.latencyMs / 1000);
     tokPerSecDisplay = (
       <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>

@@ -1,4 +1,11 @@
 import logger from '../logger';
+import { getSessionId } from '../redteam/util';
+import invariant from '../util/invariant';
+import { getNunjucksEngine } from '../util/templates';
+import { sleep } from '../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { PromptfooSimulatedUserProvider } from './promptfoo';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -7,11 +14,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
-import { sleep } from '../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 export type Message = {
   role: 'user' | 'assistant' | 'system';
@@ -89,9 +91,25 @@ export class SimulatedUser implements ApiProvider {
     targetProvider: ApiProvider,
     context: CallApiContextParams,
   ): Promise<ProviderResponse> {
+    invariant(context?.prompt?.raw, 'Expected context.prompt.raw to be set');
+
+    // Include the assistant's prompt/instructions as a system message
+    const agentPrompt = context.prompt.raw;
+    const agentVars = context.vars;
+    const renderedPrompt = getNunjucksEngine().renderString(agentPrompt, agentVars);
+
+    // For stateful providers:
+    //   - First turn (no sessionId): send system prompt + user message to establish session
+    //   - Subsequent turns (sessionId exists): send only user message (provider maintains state)
+    // For non-stateful providers: always send system prompt + full conversation
     const targetPrompt = this.stateful
-      ? messages[messages.length - 1].content
-      : JSON.stringify(messages);
+      ? context.vars?.sessionId
+        ? JSON.stringify([{ role: 'user', content: messages[messages.length - 1].content }])
+        : JSON.stringify([
+            { role: 'system', content: renderedPrompt },
+            { role: 'user', content: messages[messages.length - 1].content },
+          ])
+      : JSON.stringify([{ role: 'system', content: renderedPrompt }, ...messages]);
 
     logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
 
@@ -112,7 +130,8 @@ export class SimulatedUser implements ApiProvider {
   }
 
   async callApi(
-    // NOTE: `prompt` is not used in this provider; `vars.instructions` is used instead.
+    // NOTE: The `prompt` parameter is not used directly; `context.prompt.raw` is used instead
+    // to extract the assistant's system instructions. The simulated user's instructions come from vars.
     _prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
@@ -170,7 +189,12 @@ export class SimulatedUser implements ApiProvider {
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
-    return this.serializeOutput(messages, tokenUsage, agentResponse as ProviderResponse);
+    return this.serializeOutput(
+      messages,
+      tokenUsage,
+      agentResponse as ProviderResponse,
+      getSessionId(agentResponse, context),
+    );
   }
 
   toString() {
@@ -181,6 +205,7 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     tokenUsage: TokenUsage,
     finalTargetResponse: ProviderResponse,
+    sessionId?: string,
   ) {
     return {
       output: messages
@@ -191,6 +216,7 @@ export class SimulatedUser implements ApiProvider {
       tokenUsage,
       metadata: {
         messages,
+        sessionId,
       },
       guardrails: finalTargetResponse.guardrails,
     };

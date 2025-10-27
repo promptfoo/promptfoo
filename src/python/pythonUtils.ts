@@ -12,6 +12,20 @@ import { promisify } from 'util';
 const execFileAsync = promisify(execFile);
 import type { Options as PythonShellOptions } from 'python-shell';
 
+/**
+ * Gets an integer value from an environment variable.
+ * @param key - The environment variable name
+ * @returns The parsed integer value, or undefined if not set or not a valid integer
+ */
+export function getEnvInt(key: string): number | undefined {
+  const value = process.env[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? undefined : parsed;
+}
+
 export const state: {
   cachedPythonPath: string | null;
   validationPromise: Promise<string> | null;
