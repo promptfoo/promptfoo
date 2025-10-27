@@ -50,6 +50,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix(providers): simulated-user and mischievous-user now respect assistant system prompts in multi-turn conversations (#6020)
 - fix(providers): render environment variables in provider config at load time (#6007)
+
+### Documentation
+
+- docs: fix apiKey environment variable syntax across provider docs and examples (#6018)
 - fix: Don't test session management if target is not stateful (#5989)
 - fix(internals): plugin selection (#5991)
 - fix: improve crescendo prompt example alignment with actual objective statements to increase accuracy. (#5964)
