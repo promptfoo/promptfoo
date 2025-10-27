@@ -390,7 +390,7 @@ providers:
     label: 'My Custom Provider' # Optional display name
     config:
       # Any configuration your provider needs
-      api_key: ${CUSTOM_API_KEY}
+      api_key: '{{ env.CUSTOM_API_KEY }}'
       endpoint: https://api.example.com
       model_params:
         temperature: 0.7
