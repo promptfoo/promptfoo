@@ -20,7 +20,10 @@ const renderNavigation = (
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter {...routerProps}>
-        <Navigation onToggleDarkMode={props.onToggleDarkMode || (() => {})} darkMode={props.darkMode} />
+        <Navigation
+          onToggleDarkMode={props.onToggleDarkMode || (() => {})}
+          darkMode={props.darkMode}
+        />
       </MemoryRouter>
     </QueryClientProvider>,
   );
