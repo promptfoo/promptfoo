@@ -1,8 +1,11 @@
+import { randomUUID } from 'crypto';
 import dedent from 'dedent';
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
+import { getDb } from '../../database';
+import { evalResultsTable } from '../../database/tables';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import promptfoo from '../../index';
 import logger from '../../logger';
@@ -576,6 +579,110 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       Error: ${error}
       Body: ${JSON.stringify(body, null, 2)}`);
     res.status(500).json({ error: 'Failed to write eval to database' });
+  }
+});
+
+/**
+ * Copy evaluation results in batches to handle large evals efficiently
+ * Uses the EvalResult.findManyByEvalIdBatched generator for memory-efficient streaming
+ */
+async function copyEvalResultsBatched(
+  sourceEvalId: string,
+  targetEvalId: string,
+  batchSize: number = 500,
+): Promise<void> {
+  const db = getDb();
+  let totalCopied = 0;
+
+  // Use the async generator to stream results in batches
+  for await (const batch of EvalResult.findManyByEvalIdBatched(sourceEvalId, { batchSize })) {
+    if (batch.length === 0) {
+      break;
+    }
+
+    // Map to new eval with new IDs
+    const newResults = batch.map((result) => ({
+      ...result,
+      id: randomUUID(),
+      evalId: targetEvalId,
+    }));
+
+    await db.insert(evalResultsTable).values(newResults).run();
+
+    totalCopied += batch.length;
+
+    if (totalCopied % 5000 === 0) {
+      logger.info(`[Copy Eval] Progress: Copied ${totalCopied} results...`);
+    }
+  }
+
+  logger.info(`[Copy Eval] Completed: Copied ${totalCopied} total results`);
+}
+
+/**
+ * Copy an evaluation with a new name
+ */
+evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> => {
+  let newEval: Eval | null = null;
+
+  try {
+    const { id: sourceId } = req.params;
+
+    // Validate request body with Zod
+    const validationResult = ApiSchemas.Eval.Copy.Request.safeParse(req.body);
+    if (!validationResult.success) {
+      const validationError = fromZodError(validationResult.error);
+      res.status(400).json({ error: validationError.message });
+      return;
+    }
+
+    const { description } = validationResult.data;
+
+    // Find source eval
+    const sourceEval = await Eval.findById(sourceId);
+    if (!sourceEval) {
+      res.status(404).json({ error: 'Source eval not found' });
+      return;
+    }
+
+    logger.info(`[Copy Eval] Copying eval ${sourceId} with new name: ${description}`);
+
+    // Create new eval with updated config
+    const newConfig = {
+      ...sourceEval.config,
+      description: description.trim(),
+    };
+
+    const currentUser = getUserEmail() || undefined;
+    newEval = await Eval.create(newConfig, sourceEval.getPrompts(), {
+      author: currentUser,
+      createdAt: new Date(),
+      vars: sourceEval.vars,
+      runtimeOptions: sourceEval.runtimeOptions,
+      completedPrompts: sourceEval.prompts,
+    });
+
+    logger.info(`[Copy Eval] Created new eval ${newEval.id}, now copying results...`);
+
+    // Copy all results in batches
+    await copyEvalResultsBatched(sourceId, newEval.id);
+
+    logger.info(`[Copy Eval] Successfully copied eval ${sourceId} to ${newEval.id}`);
+
+    res.json({ id: newEval.id });
+  } catch (error) {
+    // Cleanup failed copy if eval was created
+    if (newEval) {
+      try {
+        await newEval.delete();
+        logger.warn(`[Copy Eval] Cleaned up failed copy ${newEval.id} after error`);
+      } catch (cleanupError) {
+        logger.error(`[Copy Eval] Failed to cleanup ${newEval.id}: ${cleanupError}`);
+      }
+    }
+
+    logger.error(`[Copy Eval] Failed to copy eval: ${error}`, { error });
+    res.status(500).json({ error: 'Failed to copy evaluation' });
   }
 });
 

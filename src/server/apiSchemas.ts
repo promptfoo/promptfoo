@@ -62,5 +62,13 @@ export const ApiSchemas = {
         keys: z.array(z.string()),
       }),
     },
+    Copy: {
+      Request: z.object({
+        description: z.string().min(1).max(200),
+      }),
+      Response: z.object({
+        id: z.string(),
+      }),
+    },
   },
 };

@@ -36,6 +36,7 @@ import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
+import CopyEvalMenuItem from './CopyEvalMenuItem';
 import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
@@ -745,6 +746,12 @@ export default function ResultsView({
                         Edit name
                       </MenuItem>
                     </Tooltip>
+                    {evalId && (
+                      <CopyEvalMenuItem
+                        evalId={evalId}
+                        currentDescription={config?.description || ''}
+                      />
+                    )}
                     <Tooltip title="Edit this eval in the web UI" placement="left">
                       <MenuItem
                         onClick={() => {
