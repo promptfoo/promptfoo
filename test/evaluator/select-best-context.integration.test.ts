@@ -1,25 +1,28 @@
 import { evaluate } from '../../src/evaluator';
 
 import type Eval from '../../src/models/eval';
-import type { ApiProvider, EvaluateOptions, TestSuite } from '../../src/types/index';
+import type { ApiProvider, EvaluateOptions, EvaluateResult, TestSuite } from '../../src/types/index';
 
 describe('select-best context propagation integration', () => {
   let mockEval: any;
+  let storedResults: EvaluateResult[];
 
   beforeEach(() => {
+    // Create a results array that will be shared across all mock methods
+    storedResults = [];
+
     // Create a mock eval that properly tracks results
-    const results: any[] = [];
     mockEval = {
       id: 'test-eval-id',
-      addResult: jest.fn((result) => {
-        results.push(result);
+      addResult: jest.fn(async (result: EvaluateResult) => {
+        storedResults.push(result);
       }),
       addPrompts: jest.fn(),
       fetchResultsByTestIdx: jest.fn((testIdx: number) => {
-        return results.filter((r) => r.testIdx === testIdx);
+        return storedResults.filter((r) => r.testIdx === testIdx);
       }),
       setVars: jest.fn(),
-      results,
+      results: storedResults,
       prompts: [],
       persisted: false,
       config: {
