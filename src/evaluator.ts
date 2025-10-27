@@ -20,6 +20,7 @@ import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { strategyDisplayNames } from './redteam/constants';
 import { getSessionId, isSimbaTestCase } from './redteam/util';
@@ -1913,7 +1914,6 @@ class Evaluator {
       await stopOtlpReceiverIfNeeded();
 
       // Clean up Python worker pools to prevent resource leaks
-      const { providerRegistry } = await import('./providers/providerRegistry');
       await providerRegistry.shutdownAll();
     }
   }
