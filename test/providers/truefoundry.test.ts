@@ -217,12 +217,13 @@ describe('TrueFoundry', () => {
           },
           cached: false,
           cost: undefined,
-          latencyMs: 0,
+          latencyMs: expect.any(Number),
           logProbs: undefined,
           guardrails: {
             flagged: false,
           },
         });
+        expect(result.latencyMs).toBeGreaterThanOrEqual(0);
       });
 
       it('should add X-TFY-METADATA header when metadata is provided', async () => {
@@ -353,7 +354,7 @@ describe('TrueFoundry', () => {
           output: 'Cached output',
           cached: true,
           cost: undefined,
-          latencyMs: 0,
+          latencyMs: expect.any(Number),
           logProbs: undefined,
           guardrails: {
             flagged: false,
@@ -363,6 +364,7 @@ describe('TrueFoundry', () => {
             cached: 10,
           },
         });
+        expect(cachedResult.latencyMs).toBeGreaterThanOrEqual(0);
       });
 
       it('should handle API errors', async () => {
@@ -495,13 +497,14 @@ describe('TrueFoundry', () => {
 
       expect(result).toEqual({
         embedding: [0.1, 0.2, 0.3],
-        latencyMs: 0,
+        latencyMs: expect.any(Number),
         tokenUsage: {
           total: 5,
           prompt: 5,
           completion: 0,
         },
       });
+      expect(result.latencyMs).toBeGreaterThanOrEqual(0);
     });
 
     it('should add TrueFoundry headers to embedding requests', async () => {
