@@ -62,7 +62,7 @@ class ProviderRegistry {
     // Log any failures but don't throw - cleanup should be defensive
     for (const result of results) {
       if (result.status === 'rejected') {
-        logger.error(`Error shutting down provider: ${result.reason}`);
+        logger.warn(`Error shutting down provider: ${result.reason}`);
       }
     }
 
