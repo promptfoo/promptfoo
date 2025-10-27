@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
+import { validatePythonPath } from './pythonUtils';
 
 export class PythonWorker {
   private process: PythonShell | null = null;
@@ -33,9 +34,15 @@ export class PythonWorker {
   private async startWorker(): Promise<void> {
     const wrapperPath = path.join(__dirname, 'persistent_wrapper.py');
 
+    // Validate and resolve Python path using smart detection (tries python3, then python)
+    const resolvedPythonPath = await validatePythonPath(
+      this.pythonPath || 'python',
+      typeof this.pythonPath === 'string',
+    );
+
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
-      pythonPath: this.pythonPath || 'python',
+      pythonPath: resolvedPythonPath,
       args: [this.scriptPath, this.functionName],
       stdio: ['pipe', 'pipe', 'pipe'],
     });
