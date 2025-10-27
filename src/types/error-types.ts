@@ -9,11 +9,7 @@ export type ErrorCategory =
   | 'internal'
   | 'network';
 
-export type ErrorType =
-  | 'provider_error'
-  | 'validation_error'
-  | 'timeout'
-  | 'tool_error';
+export type ErrorType = 'provider_error' | 'validation_error' | 'timeout' | 'tool_error';
 
 export interface EvalErrorInfo {
   type: ErrorType;
