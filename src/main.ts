@@ -39,6 +39,8 @@ import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors';
 import { setupEnv } from './util/index';
+import { diffCommand } from './commands/diff';
+import { baselineCommand } from './commands/baseline';
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -105,10 +107,12 @@ async function main() {
 
   // Alphabetical order
   authCommand(program);
+  baselineCommand(program);
   cacheCommand(program);
   configCommand(program);
   debugCommand(program, defaultConfig, defaultConfigPath);
   deleteCommand(program);
+  diffCommand(program);
   exportCommand(program);
   const generateCommand = program.command('generate').description('Generate synthetic data');
   feedbackCommand(program);
