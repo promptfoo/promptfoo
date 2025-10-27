@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
+- docs(model-audit): improve accuracy and clarity of ModelAudit documentation (#6023)
 - docs: fix apiKey environment variable syntax across provider docs and examples (#6018)
 - fix: Don't test session management if target is not stateful (#5989)
 - fix(internals): plugin selection (#5991)
