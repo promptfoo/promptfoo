@@ -54,7 +54,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(providers): simulated-user and mischievous-user now respect assistant system prompts in multi-turn conversations (#6020)
-- fix(providers): render environment variables in provider config at load time (#6007)
 - fix(providers): improve MCP tool schema transformation for OpenAI compatibility (#5965)
 - fix(providers): sessionId now properly stored in metadata for providers that use server side generated sessionIds (#6016)
 - fix(redteam): don't test session management if target is not stateful (#5989)
