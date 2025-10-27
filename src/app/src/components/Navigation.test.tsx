@@ -6,7 +6,7 @@ import Navigation from './Navigation';
 
 // Helper function to render Navigation with all required providers
 const renderNavigation = (
-  props: { onToggleDarkMode?: () => void; darkMode?: boolean } = {},
+  props: { onToggleDarkMode?: () => void } = {},
   routerProps: { initialEntries?: string[] } = {},
 ) => {
   const queryClient = new QueryClient({
@@ -20,10 +20,7 @@ const renderNavigation = (
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter {...routerProps}>
-        <Navigation
-          onToggleDarkMode={props.onToggleDarkMode || (() => {})}
-          darkMode={props.darkMode}
-        />
+        <Navigation onToggleDarkMode={props.onToggleDarkMode || (() => {})} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
