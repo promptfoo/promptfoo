@@ -123,6 +123,7 @@ export interface ProviderResponse {
   cost?: number;
   error?: string;
   logProbs?: number[];
+  latencyMs?: number;
   metadata?: {
     redteamFinalPrompt?: string;
     http?: {
@@ -163,6 +164,7 @@ export interface ProviderEmbeddingResponse {
   cost?: number;
   error?: string;
   embedding?: number[];
+  latencyMs?: number;
   tokenUsage?: Partial<TokenUsage>;
   metadata?: {
     transformed?: boolean;

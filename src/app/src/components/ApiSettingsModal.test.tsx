@@ -1,8 +1,9 @@
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
 import useApiConfig from '@app/stores/apiConfig';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ApiSettingsModal from './ApiSettingsModal';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: vi.fn(),
@@ -22,11 +23,10 @@ describe('ApiSettingsModal', () => {
     vi.clearAllMocks();
 
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'unknown',
-      message: null,
-      checkHealth: mockCheckHealth,
-      isChecking: false,
-    });
+      data: { status: 'unknown', message: '' },
+      refetch: mockCheckHealth,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
     vi.mocked(useApiConfig).mockReturnValue({
       apiBaseUrl: 'https://api.example.com',
@@ -65,11 +65,10 @@ describe('ApiSettingsModal', () => {
 
   it('shows loading state during health check', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'loading',
-      message: null,
-      checkHealth: mockCheckHealth,
-      isChecking: true,
-    });
+      data: { status: 'loading', message: '' },
+      refetch: mockCheckHealth,
+      isLoading: true,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
     render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Checking connection...')).toBeInTheDocument();
@@ -77,11 +76,10 @@ describe('ApiSettingsModal', () => {
 
   it('shows success state when connected', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'connected',
-      message: 'Cloud API is healthy',
-      checkHealth: mockCheckHealth,
-      isChecking: false,
-    });
+      data: { status: 'connected', message: 'Cloud API is healthy' },
+      refetch: mockCheckHealth,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
     render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Connected to promptfoo API')).toBeInTheDocument();
@@ -90,11 +88,10 @@ describe('ApiSettingsModal', () => {
 
   it('shows error state when blocked', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'blocked',
-      message: 'Failed to connect',
-      checkHealth: mockCheckHealth,
-      isChecking: false,
-    });
+      data: { status: 'blocked', message: 'Failed to connect' },
+      refetch: mockCheckHealth,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
     render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Cannot connect to promptfoo API')).toBeInTheDocument();
@@ -103,11 +100,10 @@ describe('ApiSettingsModal', () => {
 
   it('shows disabled state when remote generation is disabled', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'disabled',
-      message: 'Remote generation is disabled',
-      checkHealth: mockCheckHealth,
-      isChecking: false,
-    });
+      data: { status: 'disabled', message: 'Remote generation is disabled' },
+      refetch: mockCheckHealth,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
     render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     const statusText = screen
@@ -135,11 +131,10 @@ describe('ApiSettingsModal', () => {
 
   it('disables form controls during health check', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'loading',
-      message: null,
-      checkHealth: mockCheckHealth,
-      isChecking: true,
-    });
+      data: { status: 'loading', message: '' },
+      refetch: mockCheckHealth,
+      isLoading: true,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
     render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 

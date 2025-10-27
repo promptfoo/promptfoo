@@ -1,7 +1,7 @@
-import { validate as isUUID } from 'uuid';
 import { sha256 } from '../../../util/createHash';
 import { type Policy, PolicyObject, PolicyObjectSchema } from '../../types';
 import { POLICY_METRIC_PREFIX } from './constants';
+import { isValidReusablePolicyId } from './validators';
 
 /**
  * Checks if a metric is a policy metric.
@@ -47,7 +47,7 @@ export function makeCustomPolicyCloudUrl(cloudAppUrl: string, policyId: string):
  * @returns 'reusable' if the policy is a reusable policy, 'inline' if the policy is an inline policy.
  */
 export function determinePolicyTypeFromId(policyId: string): 'reusable' | 'inline' {
-  return isUUID(policyId) ? 'reusable' : 'inline';
+  return isValidReusablePolicyId(policyId) ? 'reusable' : 'inline';
 }
 
 /**
@@ -71,4 +71,11 @@ export function makeInlinePolicyId(policyText: string): string {
     // 0.18% chance of collision w/ 1M policies i.e. extremely unlikely
     12,
   );
+}
+
+/**
+ * Creates a default name for a (legacy) text-only inline custom policy.
+ */
+export function makeDefaultPolicyName(index: number): string {
+  return `Custom Policy ${index + 1}`;
 }

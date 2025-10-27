@@ -759,6 +759,8 @@ export const HttpProviderConfigSchema = z.object({
     .optional()
     .describe('Use HTTPS for the request. This only works with the raw request option'),
   sessionParser: z.union([z.string(), z.function()]).optional(),
+  sessionSource: z.enum(['client', 'server']).optional(),
+  stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
@@ -1382,6 +1384,7 @@ export class HttpProvider implements ApiProvider {
     if (shouldMeasureTTFT) {
       // Streaming path: Get raw response and process as stream
       // Note: Caching is disabled for streaming responses to ensure live TTFT measurement
+      const startTime = Date.now();
       const rawResponse = await fetchWithRetries(
         url,
         fetchOptions,
@@ -1390,6 +1393,7 @@ export class HttpProvider implements ApiProvider {
       );
 
       const streamingResponse = await processStreamingResponse(rawResponse);
+      const latencyMs = Date.now() - startTime;
 
       const response: FetchWithCacheResult<string> = {
         data: streamingResponse.text,
@@ -1397,6 +1401,7 @@ export class HttpProvider implements ApiProvider {
         status: rawResponse.status,
         statusText: rawResponse.statusText,
         headers: Object.fromEntries(rawResponse.headers.entries()),
+        latencyMs,
         deleteFromCache: async () => {}, // Streaming responses are not cached
       };
 
@@ -1664,13 +1669,16 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
-      ...(method !== 'GET' && {
-        body: contentTypeIsJson(headers)
-          ? typeof renderedConfig.body === 'string'
-            ? renderedConfig.body // Already a JSON string, use as-is
-            : JSON.stringify(renderedConfig.body) // Object, needs stringifying
-          : String(renderedConfig.body)?.trim(),
-      }),
+      ...(method !== 'GET' &&
+        renderedConfig.body != null && {
+          body: contentTypeIsJson(headers)
+            ? typeof renderedConfig.body === 'string'
+              ? renderedConfig.body // Already a JSON string, use as-is
+              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
+            : typeof renderedConfig.body === 'string'
+              ? renderedConfig.body.trim()
+              : String(renderedConfig.body),
+        }),
     };
 
     // Add HTTPS agent as dispatcher if configured
@@ -1692,24 +1700,27 @@ export class HttpProvider implements ApiProvider {
       isStreaming,
     );
 
-    if (!(await this.validateStatus)(response.status)) {
-      throw new Error(
-        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
-      );
+    const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
+
+    if (!(await this.validateStatus)(status)) {
+      throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
     }
-    logger.debug(
-      `[HTTP Provider]: Response (HTTP ${response.status}): ${safeJsonStringify(response.data)}`,
-    );
+    logger.debug(`[HTTP Provider]: Response (HTTP ${status}) received`, {
+      length: typeof data === 'string' ? data.length : undefined,
+      cached,
+    });
 
     const ret: ProviderResponse = {};
-    ret.raw = response.data;
+    ret.raw = data;
+    ret.latencyMs = latencyMs;
+    ret.cached = cached;
     ret.metadata = {
       http: {
-        status: response.status,
-        statusText: response.statusText,
-        headers: sanitizeObject(response.headers, { context: 'response headers' }),
+        status,
+        statusText,
+        headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         ...(context?.debug && {
-          requestHeaders: sanitizeObject(headers, { context: 'request headers' }),
+          requestHeaders: sanitizeObject(renderedConfig.headers, { context: 'request headers' }),
         }),
       },
     };
@@ -1723,7 +1734,7 @@ export class HttpProvider implements ApiProvider {
       ret.streamingMetrics = streamingMetrics;
     }
 
-    const rawText = response.data as string;
+    const rawText = data as string;
     let parsedData;
     try {
       parsedData = JSON.parse(rawText);
@@ -1735,17 +1746,19 @@ export class HttpProvider implements ApiProvider {
       const sessionId =
         this.sessionParser == null
           ? undefined
-          : (await this.sessionParser)({ headers: response.headers, body: parsedData ?? rawText });
+          : (await this.sessionParser)({ headers: responseHeaders, body: parsedData ?? rawText });
       if (sessionId) {
         ret.sessionId = sessionId;
       }
     } catch (err) {
       logger.error(
-        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(response.headers, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(responseHeaders, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
       );
       throw err;
     }
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
+      response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
+    });
 
     return this.processResponseWithTokenEstimation(
       ret,
@@ -1810,24 +1823,42 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    const response = await fetchWithCache(
-      url,
-      fetchOptions,
-      REQUEST_TIMEOUT_MS,
-      'text',
-      context?.debug,
-      this.config.maxRetries,
-    );
-
-    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
-
-    if (!(await this.validateStatus)(response.status)) {
-      throw new Error(
-        `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
-      );
+    let data,
+      cached = false,
+      status,
+      statusText,
+      responseHeaders,
+      latencyMs: number | undefined;
+    try {
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        headers: responseHeaders,
+        latencyMs,
+      } = await fetchWithCache(
+        url,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        'text',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      ));
+    } catch (err) {
+      throw err;
     }
 
-    const rawText = response.data as string;
+    logger.debug('[HTTP Provider]: Response received', {
+      length: typeof data === 'string' ? data.length : undefined,
+      cached,
+    });
+
+    if (!(await this.validateStatus)(status)) {
+      throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
+    }
+
+    const rawText = data as string;
     let parsedData;
     try {
       parsedData = JSON.parse(rawText);
@@ -1835,10 +1866,12 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
     const ret: ProviderResponse = {};
+    ret.latencyMs = latencyMs;
+    ret.cached = cached;
     if (context?.debug) {
-      ret.raw = response.data;
+      ret.raw = data;
       ret.metadata = {
-        headers: sanitizeObject(response.headers, { context: 'response headers' }),
+        headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         // If no transform was applied, show the final raw request body with nunjucks applied
         // Otherwise show the transformed prompt
         transformedRequest: this.config.transformRequest
@@ -1846,15 +1879,17 @@ export class HttpProvider implements ApiProvider {
           : parsedRequest.body?.text || renderedRequest.trim(),
         finalRequestBody: parsedRequest.body?.text,
         http: {
-          status: response.status,
-          statusText: response.statusText,
-          headers: sanitizeObject(response.headers, { context: 'response headers' }),
+          status,
+          statusText,
+          headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
           requestHeaders: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
         },
       };
     }
 
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText, { response });
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
+      response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
+    });
 
     return this.processResponseWithTokenEstimation(
       ret,

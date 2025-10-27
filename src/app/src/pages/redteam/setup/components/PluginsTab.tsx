@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -23,6 +23,7 @@ import {
   displayNameOverrides,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
+  GDPR_MAPPING,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   ISO_42001_MAPPING,
@@ -107,14 +108,9 @@ export default function PluginsTab({
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
   const [isCustomMode, setIsCustomMode] = useState(true);
 
-  // TODO: This effect is component-scoped, so `checkHealth` needs to be called redundantly in each
-  // component which needs to check API health. Instead, the hook should be backed by app-scoped
-  // context (e.g. via a Zustand store).
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
-
-  useEffect(() => {
-    checkHealth();
-  }, [checkHealth]);
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
 
   // Test case generation state - now from context
   const {
@@ -184,6 +180,10 @@ export default function PluginsTab({
       {
         name: 'ISO 42001',
         plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'GDPR',
+        plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
       },
     ],
     [],
@@ -533,7 +533,7 @@ export default function PluginsTab({
                   onClick={() => {
                     if (pluginDisabled) {
                       toast.showToast(
-                        'This plugin requires remote generation to be enabled. Set PROMPTFOO_DISABLE_REMOTE_GENERATION=false or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=false.',
+                        'This plugin requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
                         'error',
                       );
                       return;

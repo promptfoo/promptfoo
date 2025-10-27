@@ -22,6 +22,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   citation: 'Exploits academic authority bias to bypass content filters',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
+  coppa: "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations",
   crescendo: 'Multi-turn attack strategy that gradually escalates malicious intent',
   custom: 'User-defined multi-turn conversation strategy with custom instructions',
   'cross-session-leak': 'Tests for information leakage between user sessions',
@@ -78,6 +79,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   jailbreak: 'Single-shot optimization of safety bypass techniques',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
+  'jailbreak:meta':
+    'Meta-agent that builds its own attack taxonomy and learns from full attack history',
   'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
   leetspeak: 'Tests handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
@@ -176,6 +179,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   citation: 'Authority Bias Exploitation',
   competitors: 'Competitors',
   contracts: 'Unauthorized Commitments',
+  coppa: 'COPPA Compliance',
   crescendo: 'Multi-Turn Crescendo',
   custom: 'Custom',
   'cross-session-leak': 'Cross-Session Data Leakage',
@@ -252,6 +256,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
   'jailbreak:likert': 'Likert Scale Jailbreak',
+  'jailbreak:meta': 'Meta-Agent Strategic Jailbreak',
   'jailbreak:tree': 'Tree-Based Attack Search',
   leetspeak: 'Leetspeak Payload Encoding',
   'math-prompt': 'Mathematical Notation Attack',
@@ -337,6 +342,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:sycophancy': Severity.Low,
   competitors: Severity.Low,
   contracts: Severity.Medium,
+  coppa: Severity.High,
   'cross-session-leak': Severity.Medium,
   cyberseceval: Severity.Medium,
   donotanswer: Severity.Medium,
@@ -460,6 +466,7 @@ export const riskCategories: Record<string, Plugin[]> = {
 
   'Compliance & Legal': [
     'contracts',
+    'coppa',
     'harmful:chemical-biological-weapons',
     'harmful:copyright-violations',
     'harmful:cybercrime:malicious-code',
@@ -577,6 +584,7 @@ export const categoryAliases: Record<Plugin, string> = {
   cca: 'CCAEnforcement',
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
+  coppa: 'COPPACompliance',
   'cross-session-leak': 'CrossSessionLeak',
   cyberseceval: 'CyberSecEval',
   donotanswer: 'DoNotAnswer',
@@ -692,6 +700,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   competitors:
     'Assesses system protection against unauthorized competitor endorsements and brand security risks',
   contracts: 'Evaluates safeguards against unauthorized contractual commitments and legal exposure',
+  coppa:
+    "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations, ensuring proper protection of children's data and privacy",
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
@@ -840,6 +850,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   jailbreak: 'Optimizes single-turn attacks to bypass security controls',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
+  'jailbreak:meta':
+    'Meta-agent that dynamically builds attack taxonomy and strategically learns from full attack history',
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
@@ -876,6 +888,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:likert': 'Likert Scale Jailbreak',
+  'jailbreak:meta': 'Meta-Agent',
   'jailbreak:tree': 'Tree-based Optimization',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
@@ -892,11 +905,12 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
-  'EU AI Act': 'Plugins mapped to EU AI Act prohibited & high-risk requirements',
+  'EU AI Act': 'EU AI Act prohibited & high-risk requirements',
   Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
+  GDPR: 'Data protection and privacy requirements',
   'Guardrails Evaluation': 'Evaluate guardrail effectiveness against common risks',
   Harmful: 'Harmful content assessment using MLCommons and HarmBench taxonomies',
-  'ISO 42001': 'Plugins mapped to ISO/IEC 42001 AI management system requirements',
+  'ISO 42001': 'ISO/IEC 42001 AI management system requirements',
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
   NIST: 'NIST AI Risk Management Framework',

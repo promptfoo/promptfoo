@@ -198,7 +198,7 @@ export async function callOpenAiImageApi(
   body: Record<string, any>,
   headers: Record<string, string>,
   timeout: number,
-): Promise<{ data: any; cached: boolean; status: number; statusText: string }> {
+): Promise<{ data: any; cached: boolean; status: number; statusText: string; latencyMs?: number }> {
   return await fetchWithCache(
     url,
     {
@@ -217,6 +217,7 @@ export async function processApiResponse(
   cached: boolean,
   model: string,
   size: string,
+  latencyMs?: number,
   quality?: string,
   n: number = 1,
 ): Promise<ProviderResponse> {
@@ -238,6 +239,7 @@ export async function processApiResponse(
     return {
       output: formattedOutput,
       cached,
+      latencyMs,
       cost,
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
@@ -305,8 +307,9 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
     let data, status, statusText;
     let cached = false;
+    let latencyMs: number | undefined;
     try {
-      ({ data, cached, status, statusText } = await callOpenAiImageApi(
+      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
@@ -333,6 +336,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       cached,
       model,
       size,
+      latencyMs,
       config.quality,
       config.n || 1,
     );
