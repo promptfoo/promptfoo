@@ -46,6 +46,42 @@ export interface ProviderOptions {
   env?: EnvOverrides;
 }
 
+/**
+ * Context passed to a provider's startSession method.
+ * Provides information about the conversation/session being started.
+ */
+export interface SessionContext {
+  /**
+   * Unique identifier for this conversation.
+   * Multiple tests can share the same conversationId to maintain session continuity.
+   */
+  conversationId?: string;
+  /**
+   * The test case being executed, including metadata.
+   */
+  test?: AtomicTestCase;
+  /**
+   * Initial variables for the session.
+   */
+  vars?: Record<string, string | object>;
+}
+
+/**
+ * Response from a provider's startSession method.
+ * Contains the session ID that will be used for subsequent API calls.
+ */
+export interface SessionResponse {
+  /**
+   * Unique session identifier returned by the provider.
+   * This will be passed in the context of subsequent callApi calls.
+   */
+  sessionId: string;
+  /**
+   * Optional metadata about the session.
+   */
+  metadata?: Record<string, any>;
+}
+
 export interface CallApiContextParams {
   filters?: NunjucksFilterMap;
   getCache?: any;
@@ -66,6 +102,12 @@ export interface CallApiContextParams {
   // Evaluation metadata (for manual correlation if needed)
   evaluationId?: string;
   testCaseId?: string;
+
+  /**
+   * Session ID for conversational providers that maintain state across multiple calls.
+   * Set by the evaluator when a provider implements startSession.
+   */
+  sessionId?: string;
 }
 
 export interface CallApiOptionsParams {
@@ -93,6 +135,46 @@ export interface ApiProvider {
    * allocated, such as file handles, network connections, etc.
    */
   cleanup?: () => void | Promise<void>;
+
+  /**
+   * Called once when a new conversation/session begins.
+   * For conversational AI providers that need to maintain server-side session state.
+   * Returns a session ID that will be passed to subsequent callApi calls via context.sessionId.
+   *
+   * @param context - Information about the conversation being started
+   * @returns Session information including the sessionId to use for subsequent calls
+   *
+   * @example
+   * ```typescript
+   * async startSession(context: SessionContext): Promise<SessionResponse> {
+   *   const response = await fetch(`${this.baseUrl}/startSession`, {
+   *     method: 'POST',
+   *     body: JSON.stringify({ conversationId: context.conversationId })
+   *   });
+   *   const data = await response.json();
+   *   return { sessionId: data.sessionId };
+   * }
+   * ```
+   */
+  startSession?: (context: SessionContext) => Promise<SessionResponse>;
+
+  /**
+   * Called after all messages in a session are complete.
+   * Allows the provider to clean up server-side session state.
+   *
+   * @param sessionId - The session ID returned from startSession
+   *
+   * @example
+   * ```typescript
+   * async closeSession(sessionId: string): Promise<void> {
+   *   await fetch(`${this.baseUrl}/closeSession`, {
+   *     method: 'POST',
+   *     body: JSON.stringify({ sessionId })
+   *   });
+   * }
+   * ```
+   */
+  closeSession?: (sessionId: string) => Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {

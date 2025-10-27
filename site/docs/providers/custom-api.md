@@ -102,7 +102,8 @@ The `context` parameter contains:
   vars: {}, // Test case variables
   prompt: {}, // Original prompt template
   originalProvider: {}, // Used when provider is overridden
-  logger: {} // Winston logger instance
+  logger: {}, // Winston logger instance
+  sessionId: '', // Session ID (if provider implements session lifecycle)
 }
 ```
 
@@ -201,6 +202,103 @@ export default class TypedProvider implements ApiProvider {
   }
 }
 ```
+
+## Session Lifecycle (Optional)
+
+Conversational AI providers that maintain server-side session state can implement optional session lifecycle methods. Promptfoo automatically manages the session lifecycle when these methods are present.
+
+### When to Use Session Lifecycle
+
+Use session lifecycle methods when your API:
+
+- Requires explicit session initialization (e.g., `POST /sessions`)
+- Maintains conversation state server-side
+- Needs explicit cleanup/teardown (e.g., `DELETE /sessions/:id`)
+
+### Session Lifecycle Methods
+
+```typescript
+interface SessionContext {
+  conversationId?: string; // From test metadata
+  test?: object; // Test case
+  vars?: Record<string, any>; // Initial variables
+}
+
+interface SessionResponse {
+  sessionId: string; // Required: ID to use for subsequent calls
+  metadata?: object; // Optional: Additional session info
+}
+
+class SessionProvider implements ApiProvider {
+  // Called once before the first message in a conversation
+  async startSession(context: SessionContext): Promise<SessionResponse> {
+    const response = await fetch('https://api.example.com/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        conversationId: context.conversationId,
+      }),
+    });
+
+    const data = await response.json();
+    return {
+      sessionId: data.sessionId,
+      metadata: data.metadata,
+    };
+  }
+
+  // Called for each message - sessionId is automatically passed in context
+  async callApi(prompt: string, context: CallApiContextParams): Promise<ProviderResponse> {
+    const response = await fetch(`https://api.example.com/sessions/${context.sessionId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message: prompt }),
+    });
+
+    const data = await response.json();
+    return {
+      output: data.reply,
+      sessionId: context.sessionId,
+    };
+  }
+
+  // Called once after all messages complete (including on errors)
+  async closeSession(sessionId: string): Promise<void> {
+    await fetch(`https://api.example.com/sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+  }
+}
+```
+
+### Session Lifecycle Flow
+
+1. **Session Start**: When the first test with a `conversationId` runs, `startSession()` is called
+2. **Message Handling**: Each `callApi()` call receives `context.sessionId`
+3. **Session Close**: After all tests complete, `closeSession()` is called automatically (even if tests fail)
+
+### Configuration Example
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - file://./sessionProvider.js
+    label: chat-bot
+    config:
+      baseUrl: 'https://api.example.com'
+
+tests:
+  - description: First turn
+    metadata:
+      conversationId: 'conv-123' # Triggers session lifecycle
+    vars:
+      message: 'Hello!'
+
+  - description: Follow-up
+    metadata:
+      conversationId: 'conv-123' # Same session
+    vars:
+      message: 'Thanks!'
+```
+
+See the [session lifecycle example](https://github.com/promptfoo/promptfoo/tree/main/examples/session-provider) for a complete working implementation.
 
 ## Additional Capabilities
 
