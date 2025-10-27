@@ -156,7 +156,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             if (!policy) {
               return value;
             }
-            return formatPolicyIdentifierAsMetric(policy.name);
+            return formatPolicyIdentifierAsMetric(policy.name!);
           } else {
             return value;
           }
