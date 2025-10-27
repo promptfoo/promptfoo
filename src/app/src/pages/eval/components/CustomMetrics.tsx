@@ -135,7 +135,7 @@ const CustomMetrics = ({
             const policyId = deserializePolicyIdFromMetric(metric);
             const policy = policiesById[policyId];
             if (policy) {
-              displayLabel = formatPolicyIdentifierAsMetric(policy.name);
+              displayLabel = formatPolicyIdentifierAsMetric(policy.name!);
               tooltipContent = (
                 <>
                   <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 600, mb: 1 }}>
