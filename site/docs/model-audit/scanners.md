@@ -347,9 +347,9 @@ Text files in ML repositories like vocab.txt, labels.txt, and README files shoul
 
 ## Jinja2 Template Scanner
 
-**File types:** `.j2`, `.jinja`, `.jinja2`, `.template`
+**File types:** `.gguf`, `.json`, `.yaml`, `.yml`, `.jinja`, `.j2`, `.template`
 
-This scanner detects template injection vulnerabilities in Jinja2 templates used for model configuration or deployment.
+This scanner detects template injection vulnerabilities in Jinja2 templates embedded in model files and configurations.
 
 **Key checks:**
 
@@ -357,10 +357,10 @@ This scanner detects template injection vulnerabilities in Jinja2 templates used
 - Dangerous Jinja2 filters or functions (e.g., `eval`, `exec`, `import`)
 - Unrestricted variable access that could leak sensitive data
 - Code execution patterns in template expressions
-- Unsafe template inheritance or includes
+- CVE-2024-34359 exploitation in GGUF chat templates
 
 **Why it matters:**
-Jinja2 templates in ML pipelines can be exploited through template injection to execute arbitrary code on the server. If user input is rendered in templates without proper sanitization, attackers can gain full system access through specially crafted template expressions.
+Jinja2 templates in GGUF models, tokenizer configs, and deployment files can execute arbitrary code when processed. CVE-2024-34359 affects llama-cpp-python when loading malicious chat templates. Template injection allows full system compromise.
 
 ## Metadata Scanner
 
@@ -496,9 +496,9 @@ While SafeTensors is designed to be safer than pickle files, the metadata sectio
 
 ## PaddlePaddle Scanner
 
-**File types:** `.pdparams`, `.pdmodel`, `.pdopt`
+**File types:** `.pdmodel`, `.pdiparams`
 
-This scanner examines PaddlePaddle model files, including parameter files, model definitions, and optimizer states.
+This scanner examines PaddlePaddle model files, including model definitions and parameter files.
 
 **Key checks:**
 
@@ -513,7 +513,7 @@ PaddlePaddle models can contain custom operators and may use pickle serializatio
 
 ## XGBoost Scanner
 
-**File types:** `.bst`, `.json`, `.ubj` (XGBoost models)
+**File types:** `.bst`, `.model`, `.json`, `.ubj`
 
 This scanner examines XGBoost model files in binary, JSON, and UBJSON formats.
 
