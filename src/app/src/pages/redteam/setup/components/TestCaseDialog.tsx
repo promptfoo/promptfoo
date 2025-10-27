@@ -1,6 +1,8 @@
 import React from 'react';
 
+import AddIcon from '@mui/icons-material/Add';
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
+import RemoveIcon from '@mui/icons-material/Remove';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -27,6 +29,8 @@ interface TestCaseDialogProps {
   plugin: Plugin | string | null;
   isGenerating: boolean;
   generatedTestCase: { prompt: string; context?: string } | null;
+  targetResponse?: { output: string; error?: string } | null;
+  isRunningTest?: boolean;
   mode?: 'config' | 'result';
   config?: any;
   onConfigChange?: (config: any) => void;
@@ -42,6 +46,8 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   plugin,
   isGenerating,
   generatedTestCase,
+  targetResponse,
+  isRunningTest = false,
   mode = 'result',
   config,
   onConfigChange,
@@ -71,67 +77,198 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
       <DialogContent>
         {mode === 'config' && supportsConfig && !isGenerating && !generatedTestCase ? (
           <Box sx={{ pt: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {requiresConfig
+                ? 'This plugin requires configuration to generate relevant test cases.'
+                : 'This plugin supports configuration to generate more targeted test cases. Configuration is optional.'}
+            </Typography>
+
             {pluginName === 'indirect-prompt-injection' && (
               <TextField
-                label="Application definition (e.g., 'Customer support chatbot')"
                 fullWidth
-                value={config?.applicationDefinition || ''}
+                required
+                label="Indirect Injection Variable"
+                value={config?.indirectInjectionVar || ''}
                 onChange={(e) =>
-                  onConfigChange?.({ ...config, applicationDefinition: e.target.value })
+                  onConfigChange?.({ ...config, indirectInjectionVar: e.target.value })
                 }
-                margin="normal"
-                required={requiresConfig}
-                helperText={requiresConfig ? 'Required for this plugin' : 'Optional'}
+                placeholder="e.g., name, userContent, document"
+                helperText="Specify the variable name in your prompt that contains untrusted data"
+                sx={{ mb: 2 }}
               />
             )}
+
             {pluginName === 'prompt-extraction' && (
               <TextField
-                label="System prompt to extract"
                 fullWidth
+                required
+                label="System Prompt"
                 multiline
                 rows={4}
                 value={config?.systemPrompt || ''}
                 onChange={(e) => onConfigChange?.({ ...config, systemPrompt: e.target.value })}
-                margin="normal"
-                required={requiresConfig}
-                helperText={requiresConfig ? 'Required for this plugin' : 'Optional'}
+                placeholder="Enter your actual system prompt here..."
+                helperText="Provide your system prompt so the plugin can test if it can be extracted"
+                sx={{ mb: 2 }}
               />
             )}
-            {(pluginName === 'bfla' || pluginName === 'bola' || pluginName === 'ssrf') && (
+
+            {pluginName === 'bfla' && (
               <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Target URLs (one per line)
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  BFLA tests whether users can access functions they shouldn't. Leave empty for
+                  general testing.
                 </Typography>
-                {((config?.targetUrls as string[]) || ['']).map((url, index) => (
-                  <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                {((config?.targetIdentifiers as string[]) || ['']).map(
+                  (item: string, index: number) => (
+                    <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <TextField
+                        fullWidth
+                        label={`Target Identifier ${index + 1}`}
+                        variant="outlined"
+                        value={item}
+                        onChange={(e) => {
+                          const newArray = [...((config?.targetIdentifiers as string[]) || [''])];
+                          newArray[index] = e.target.value;
+                          onConfigChange?.({ ...config, targetIdentifiers: newArray });
+                        }}
+                        placeholder="e.g., getUserData, /api/admin/users, deleteUser"
+                        sx={{ mr: 1 }}
+                      />
+                      {((config?.targetIdentifiers as string[]) || ['']).length > 1 && (
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            const newArray = [...((config?.targetIdentifiers as string[]) || [''])];
+                            newArray.splice(index, 1);
+                            if (newArray.length === 0) {
+                              newArray.push('');
+                            }
+                            onConfigChange?.({ ...config, targetIdentifiers: newArray });
+                          }}
+                        >
+                          <RemoveIcon />
+                        </IconButton>
+                      )}
+                    </Box>
+                  ),
+                )}
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={() => {
+                    const currentArray = (config?.targetIdentifiers as string[]) || [''];
+                    onConfigChange?.({ ...config, targetIdentifiers: [...currentArray, ''] });
+                  }}
+                  variant="outlined"
+                  size="small"
+                  sx={{ mt: 1 }}
+                  disabled={((config?.targetIdentifiers as string[]) || ['']).some(
+                    (item) => item.trim() === '',
+                  )}
+                >
+                  Add
+                </Button>
+              </Box>
+            )}
+
+            {pluginName === 'bola' && (
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  BOLA tests whether users can access objects they shouldn't own. Leave empty for
+                  general testing.
+                </Typography>
+                {((config?.targetSystems as string[]) || ['']).map(
+                  (item: string, index: number) => (
+                    <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <TextField
+                        fullWidth
+                        label={`Target System ${index + 1}`}
+                        variant="outlined"
+                        value={item}
+                        onChange={(e) => {
+                          const newArray = [...((config?.targetSystems as string[]) || [''])];
+                          newArray[index] = e.target.value;
+                          onConfigChange?.({ ...config, targetSystems: newArray });
+                        }}
+                        placeholder="e.g., user_123, order_456, document_789"
+                        sx={{ mr: 1 }}
+                      />
+                      {((config?.targetSystems as string[]) || ['']).length > 1 && (
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            const newArray = [...((config?.targetSystems as string[]) || [''])];
+                            newArray.splice(index, 1);
+                            if (newArray.length === 0) {
+                              newArray.push('');
+                            }
+                            onConfigChange?.({ ...config, targetSystems: newArray });
+                          }}
+                        >
+                          <RemoveIcon />
+                        </IconButton>
+                      )}
+                    </Box>
+                  ),
+                )}
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={() => {
+                    const currentArray = (config?.targetSystems as string[]) || [''];
+                    onConfigChange?.({ ...config, targetSystems: [...currentArray, ''] });
+                  }}
+                  variant="outlined"
+                  size="small"
+                  sx={{ mt: 1 }}
+                  disabled={((config?.targetSystems as string[]) || ['']).some(
+                    (item) => item.trim() === '',
+                  )}
+                >
+                  Add
+                </Button>
+              </Box>
+            )}
+
+            {pluginName === 'ssrf' && (
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  SSRF tests whether your application can be tricked into making requests to
+                  unintended destinations. Leave empty for general testing.
+                </Typography>
+                {((config?.targetUrls as string[]) || ['']).map((item: string, index: number) => (
+                  <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                     <TextField
                       fullWidth
-                      value={url}
+                      label={`Target URL ${index + 1}`}
+                      variant="outlined"
+                      value={item}
                       onChange={(e) => {
-                        const newUrls = [...((config?.targetUrls as string[]) || [''])];
-                        newUrls[index] = e.target.value;
-                        onConfigChange?.({ ...config, targetUrls: newUrls });
+                        const newArray = [...((config?.targetUrls as string[]) || [''])];
+                        newArray[index] = e.target.value;
+                        onConfigChange?.({ ...config, targetUrls: newArray });
                       }}
-                      placeholder="https://example.com/api/endpoint"
-                      size="small"
+                      placeholder="e.g., http://internal-api.company.com, file:///etc/passwd"
+                      sx={{ mr: 1 }}
                     />
                     {((config?.targetUrls as string[]) || ['']).length > 1 && (
                       <IconButton
-                        onClick={() => {
-                          const newUrls = ((config?.targetUrls as string[]) || ['']).filter(
-                            (_, i) => i !== index,
-                          );
-                          onConfigChange?.({ ...config, targetUrls: newUrls });
-                        }}
                         size="small"
-                        color="error"
+                        onClick={() => {
+                          const newArray = [...((config?.targetUrls as string[]) || [''])];
+                          newArray.splice(index, 1);
+                          if (newArray.length === 0) {
+                            newArray.push('');
+                          }
+                          onConfigChange?.({ ...config, targetUrls: newArray });
+                        }}
                       >
-                        ×
+                        <RemoveIcon />
                       </IconButton>
                     )}
                   </Box>
                 ))}
                 <Button
+                  startIcon={<AddIcon />}
                   onClick={() => {
                     const currentArray = (config?.targetUrls as string[]) || [''];
                     onConfigChange?.({ ...config, targetUrls: [...currentArray, ''] });
@@ -178,10 +315,52 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                 fontSize: '0.875rem',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
+                mb: 3,
               }}
             >
               {generatedTestCase.prompt}
             </Box>
+
+            {isRunningTest ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
+                <CircularProgress sx={{ mb: 2 }} />
+                <Typography variant="body2" color="text.secondary">
+                  Running test against target...
+                </Typography>
+              </Box>
+            ) : targetResponse ? (
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Target Response:
+                </Typography>
+                <Box
+                  sx={{
+                    p: 2,
+                    backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {targetResponse.error ? (
+                    <Box>
+                      <Typography color="error" variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                        Error:
+                      </Typography>
+                      <Typography variant="body2" color="error">
+                        {targetResponse.error}
+                      </Typography>
+                    </Box>
+                  ) : (
+                    targetResponse.output
+                  )}
+                </Box>
+              </Box>
+            ) : null}
           </Box>
         ) : null}
       </DialogContent>
@@ -238,21 +417,24 @@ export const TestCaseGenerateButton: React.FC<{
   disabled?: boolean;
   isGenerating?: boolean;
   size?: 'small' | 'medium';
-}> = ({ onClick, disabled = false, isGenerating = false, size = 'small' }) => (
-  <Tooltip title="Generate test case">
-    <IconButton
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      disabled={disabled}
-      sx={{ color: 'text.secondary', ml: size === 'small' ? 0.5 : 1 }}
-    >
-      {isGenerating ? (
-        <CircularProgress size={size === 'small' ? 16 : 20} />
-      ) : (
-        <MagicWandIcon fontSize={size} />
-      )}
-    </IconButton>
+  tooltipTitle?: string;
+}> = ({ onClick, disabled = false, isGenerating = false, size = 'small', tooltipTitle }) => (
+  <Tooltip title={tooltipTitle || 'Generate test case'}>
+    <span>
+      <IconButton
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        disabled={disabled}
+        sx={{ color: 'text.secondary', ml: size === 'small' ? 0.5 : 1 }}
+      >
+        {isGenerating ? (
+          <CircularProgress size={size === 'small' ? 16 : 20} />
+        ) : (
+          <MagicWandIcon fontSize={size} />
+        )}
+      </IconButton>
+    </span>
   </Tooltip>
 );

@@ -35,6 +35,37 @@ This rule describes how to create branches, make commits, and open pull requests
 - Make atomic commits that represent single logical changes.
 - Verify all intended changes are staged before committing with `git diff --cached`.
 
+## Changelog
+
+- **All user-facing changes require a CHANGELOG.md entry** before creating a PR.
+- Add entries under `## [Unreleased]` in the appropriate category (Added, Changed, Fixed, Dependencies, Documentation, Tests).
+- Each entry must include the PR number in format `(#1234)` or use placeholder `(#XXXX)` initially.
+- Use conventional commit prefix matching your change: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`.
+- Entries should be concise, user-focused, and describe what changed, not how.
+
+### Exemptions
+
+Skip changelog updates if:
+
+- PR has the `no-changelog` label, OR
+- PR title starts with: `chore(deps):`, `style:`, `build:`, or `test:`
+
+### Example Entry
+
+```markdown
+## [Unreleased]
+
+### Added
+
+- feat(providers): add support for Anthropic Claude 4 (#1234)
+
+### Fixed
+
+- fix(evaluator): correct timeout handling for long-running evals (#1235)
+```
+
+See `CHANGELOG.md` or `CLAUDE.md` for full changelog guidelines.
+
 ## Pull Requests
 
 - Use `gh pr create --fill` to open a pull request against `main`.
