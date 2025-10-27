@@ -273,6 +273,7 @@ export interface StreamingMetrics {
   timeToFirstToken?: number;
   tokensPerSecond?: number;
   totalStreamTime?: number;
+  isActuallyStreaming?: boolean;
 }
 
 /**
@@ -292,11 +293,13 @@ export interface StreamingFetchOptions {
  * Process a streaming response and extract TTFT metrics
  *
  * @param response - The Response object to process as a stream
+ * @param requestStartTime - The timestamp when the request was initiated (for accurate TTFT)
  * @param onFirstToken - Optional callback triggered when first token is detected
  * @returns Object containing the full response text and streaming metrics
  */
 export async function processStreamingResponse(
   response: Response,
+  requestStartTime: number,
   onFirstToken?: FirstTokenCallback,
 ): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
   const streamStart = Date.now();
@@ -330,7 +333,9 @@ export async function processStreamingResponse(
       // comments, or other non-content chunks. More sophisticated detection
       // should be implemented in the provider's transformResponse function.
       if (!hasCalledFirstToken && chunk.trim().length > 0) {
-        firstTokenTime = Date.now() - streamStart;
+        // CRITICAL: Measure from request start, not stream start
+        // This includes network overhead (TCP handshake, TLS, HTTP headers)
+        firstTokenTime = Date.now() - requestStartTime;
         hasCalledFirstToken = true;
         if (onFirstToken) {
           onFirstToken();
@@ -350,14 +355,14 @@ export async function processStreamingResponse(
   const totalStreamTime = Date.now() - streamStart;
   const tokensPerSecond = totalStreamTime > 0 ? (tokenCount / totalStreamTime) * 1000 : 0;
 
-  // For non-streaming responses (single chunk), TTFT is essentially the entire response time
+  // For non-streaming responses (single chunk), TTFT is the time from request start to receiving the chunk
   if (chunkCount === 1 && !firstTokenTime) {
-    firstTokenTime = totalStreamTime;
+    firstTokenTime = Date.now() - requestStartTime;
   }
 
   // Ensure we always have a valid TTFT value for streaming metrics
-  // If no first token time was captured, use the total stream time
-  const finalTtft = firstTokenTime || totalStreamTime;
+  // If no first token time was captured, calculate from request start to now
+  const finalTtft = firstTokenTime || Date.now() - requestStartTime;
 
   return {
     text,
@@ -365,6 +370,7 @@ export async function processStreamingResponse(
       timeToFirstToken: finalTtft,
       tokensPerSecond,
       totalStreamTime,
+      isActuallyStreaming: chunkCount > 1,
     },
   };
 }

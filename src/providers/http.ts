@@ -1384,7 +1384,7 @@ export class HttpProvider implements ApiProvider {
     if (shouldMeasureTTFT) {
       // Streaming path: Get raw response and process as stream
       // Note: Caching is disabled for streaming responses to ensure live TTFT measurement
-      const startTime = Date.now();
+      const requestStartTime = Date.now();
       const rawResponse = await fetchWithRetries(
         url,
         fetchOptions,
@@ -1392,8 +1392,8 @@ export class HttpProvider implements ApiProvider {
         this.config.maxRetries,
       );
 
-      const streamingResponse = await processStreamingResponse(rawResponse);
-      const latencyMs = Date.now() - startTime;
+      const streamingResponse = await processStreamingResponse(rawResponse, requestStartTime);
+      const latencyMs = Date.now() - requestStartTime;
 
       const response: FetchWithCacheResult<string> = {
         data: streamingResponse.text,
