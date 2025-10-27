@@ -1,6 +1,6 @@
-import { getEnvInt } from 'src/envars';
 import { v4 as uuidv4 } from 'uuid';
 
+import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -96,13 +96,6 @@ export async function runMetaAgentRedteam({
 
   const goal = context?.test?.metadata?.goal || vars[injectVar];
   const additionalRubric = getIterativeMetaGoalRubric(goal);
-
-  const modifierSection =
-    test?.metadata?.modifiers && Object.keys(test.metadata.modifiers).length > 0
-      ? Object.entries(test.metadata.modifiers)
-          .map(([key, value]) => `${key}: ${value}`)
-          .join('\n')
-      : undefined;
 
   // Generate unique test run ID
   const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || uuidv4().slice(0, 8)}`;

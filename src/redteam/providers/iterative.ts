@@ -1,6 +1,6 @@
 import dedent from 'dedent';
-import { getEnvInt } from 'src/envars';
 
+import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
