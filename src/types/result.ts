@@ -1,20 +1,5 @@
-import type { ErrorCategory } from './errors';
-// Error categories (infra/runtime vs. logical assertion)
-export type ErrorType = 'provider_error' | 'tool_error' | 'validation_error' | 'timeout';
-
-// Rich error info for infra/runtime/validation/timeout
-export interface EvalErrorInfo {
-  type: ErrorType;
-  code?: ErrorCategory;
-  message: string;
-  hint?: string;
-  provider?: string;
-  requestId?: string;
-  raw?: unknown;
-  stack?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  cause?: any;
-}
+import type { EvalErrorInfo } from './error-types';
+export type { ErrorType, EvalErrorInfo } from './error-types';
 
 // Optional fine-grained assertion detail (for UI/debug)
 export interface AssertionDetail {
