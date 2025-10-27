@@ -156,7 +156,7 @@ Content-Type: application/json
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(selectedTarget),
+        body: JSON.stringify({ providerOptions: selectedTarget }),
       });
 
       if (response.ok) {
