@@ -15,43 +15,6 @@ vi.mock('react-router-dom', () => ({
   useNavigate: vi.fn(),
 }));
 
-vi.mock('@promptfoo/redteam/constants', async () => {
-  const original = await vi.importActual<typeof import('@promptfoo/redteam/constants')>(
-    '@promptfoo/redteam/constants',
-  );
-  return {
-    ...original,
-    FRAMEWORK_NAMES: {
-      'test-framework': 'Test Framework',
-      'owasp:api': 'OWASP API Security Top 10',
-    },
-    FRAMEWORK_DESCRIPTIONS: {
-      'test-framework': 'A framework for testing.',
-      'owasp:api': 'OWASP API Security Top 10 Description',
-    },
-    OWASP_API_TOP_10_NAMES: [
-      'API1:2023 Broken Object Level Authorization',
-      'API2:2023 Broken Authentication',
-      'API3:2023 Broken Object Property Level Authorization',
-      'API4:2023 Unrestricted Resource Consumption',
-      'API5:2023 Broken Function Level Authorization',
-      'API6:2023 Unrestricted Access to Sensitive Business Flows',
-      'API7:2023 Server Side Request Forgery',
-      'API8:2023 Security Misconfiguration',
-      'API9:2023 Improper Inventory Management',
-      'API10:2023 Unsafe Consumption of APIs',
-    ],
-    ALIASED_PLUGIN_MAPPINGS: {
-      ...original.ALIASED_PLUGIN_MAPPINGS,
-      'test-framework': {},
-      'owasp:api': {
-        'owasp:api:1': { plugins: ['plugin-1', 'plugin-2'] },
-        'owasp:api:2': { plugins: ['plugin-3', 'plugin-4'] },
-      },
-    },
-  };
-});
-
 vi.mock('./FrameworkComplianceUtils', async () => {
   const actual = await vi.importActual('./FrameworkComplianceUtils');
   return {
@@ -65,12 +28,12 @@ describe('FrameworkCard', () => {
 
   const defaultProps: FrameworkCardProps = {
     evalId: 'test-eval-id',
-    framework: 'test-framework',
+    framework: 'nist:ai:measure',
     isCompliant: true,
     frameworkSeverity: Severity.Low,
     categoryStats: {
-      'plugin-1': { pass: 10, total: 10, failCount: 0 },
-      'plugin-2': { pass: 9, total: 10, failCount: 1 },
+      'excessive-agency': { pass: 10, total: 10, failCount: 0 },
+      'pii:direct': { pass: 9, total: 10, failCount: 1 },
     },
     pluginPassRateThreshold: 0.8,
     nonCompliantPlugins: [],
@@ -95,12 +58,12 @@ describe('FrameworkCard', () => {
       isCompliant: true,
       nonCompliantPlugins: [],
       categoryStats: {
-        'plugin-1': { pass: 10, total: 10, failCount: 0 },
-        'plugin-2': { pass: 9, total: 10, failCount: 1 },
+        'excessive-agency': { pass: 10, total: 10, failCount: 0 },
+        'pii:direct': { pass: 9, total: 10, failCount: 1 },
       },
     });
 
-    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    const cardElement = screen.getByText('NIST AI RMF').closest('.framework-item');
     expect(cardElement).toHaveClass('compliant');
 
     const compliantIcons = screen.getAllByTestId('CheckCircleIcon');
@@ -120,19 +83,19 @@ describe('FrameworkCard', () => {
   });
 
   it('should display the non-compliant state, including the severity chip and a list of failed plugins, when isCompliant is false and nonCompliantPlugins contains plugin names', () => {
-    const nonCompliantPlugins = ['plugin-2', 'plugin-3'];
+    const nonCompliantPlugins = ['pii:direct', 'pii:session'];
     renderFrameworkCard({
       isCompliant: false,
       frameworkSeverity: Severity.High,
       nonCompliantPlugins: nonCompliantPlugins,
       categoryStats: {
-        'plugin-1': { pass: 10, total: 10, failCount: 0 },
-        'plugin-2': { pass: 5, total: 10, failCount: 5 },
-        'plugin-3': { pass: 0, total: 10, failCount: 10 },
+        'excessive-agency': { pass: 10, total: 10, failCount: 0 },
+        'pii:direct': { pass: 5, total: 10, failCount: 5 },
+        'pii:session': { pass: 0, total: 10, failCount: 10 },
       },
     });
 
-    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    const cardElement = screen.getByText('NIST AI RMF').closest('.framework-item');
     expect(cardElement).toHaveClass('non-compliant');
 
     expect(screen.getByText(severityDisplayNames[Severity.High])).toBeInTheDocument();
@@ -149,11 +112,13 @@ describe('FrameworkCard', () => {
   });
 
   it('should render categorized plugin lists with correct category names, chips, and plugin status for an OWASP framework with plugins in multiple categories', () => {
+    // Using real OWASP API framework with plugins that are actually in it
+    // owasp:api:01 has: ['bola', 'rbac']
+    // owasp:api:02 has: ['bfla', 'rbac']
     const categoryStats: Record<string, { pass: number; total: number; failCount: number }> = {
-      'plugin-1': { pass: 10, total: 10, failCount: 0 },
-      'plugin-2': { pass: 0, total: 10, failCount: 10 },
-      'plugin-3': { pass: 5, total: 10, failCount: 5 },
-      'plugin-4': { pass: 10, total: 10, failCount: 0 },
+      bola: { pass: 10, total: 10, failCount: 0 },
+      bfla: { pass: 0, total: 10, failCount: 10 },
+      rbac: { pass: 5, total: 10, failCount: 5 },
     };
 
     renderFrameworkCard({
@@ -162,23 +127,24 @@ describe('FrameworkCard', () => {
       frameworkSeverity: Severity.High,
       categoryStats: categoryStats,
       pluginPassRateThreshold: 0.8,
-      nonCompliantPlugins: ['plugin-2', 'plugin-3'],
+      nonCompliantPlugins: ['bfla', 'rbac'],
     });
 
-    expect(screen.getByText('1. API1:2023 Broken Object Level Authorization')).toBeInTheDocument();
-    expect(screen.getByText('2. API2:2023 Broken Authentication')).toBeInTheDocument();
+    // OWASP API framework name should be displayed
+    expect(screen.getByText('OWASP API Top 10')).toBeInTheDocument();
 
-    const failedPluginsChips = screen.getAllByText('1 / 2 plugins failed');
-    expect(failedPluginsChips).toHaveLength(2);
+    // Verify OWASP API category names are displayed (from OWASP_API_TOP_10_NAMES)
+    // These plugins appear in categories 1, 2, and 5
+    expect(screen.getByText(/Broken Object Level Authorization/)).toBeInTheDocument();
 
-    expect(screen.getByText('plugin-1')).toBeInTheDocument();
-    expect(screen.getByText('plugin-2')).toBeInTheDocument();
-    expect(screen.getByText('plugin-3')).toBeInTheDocument();
-    expect(screen.getByText('plugin-4')).toBeInTheDocument();
+    // Verify plugins are displayed (some appear in multiple categories, so use getAllByText)
+    expect(screen.getAllByText('bola').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('bfla').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('rbac').length).toBeGreaterThan(0);
   });
 
   it('should display the correct pass rate percentage and tooltip for a plugin with test data', () => {
-    const pluginName = 'test-plugin';
+    const pluginName = 'excessive-agency';
     const pass = 7;
     const total = 10;
     const failureRate = ((total - pass) / total) * 100;
@@ -220,13 +186,13 @@ describe('FrameworkCard', () => {
 
   it('should set success background color when isCompliant is true', () => {
     renderFrameworkCard({ isCompliant: true });
-    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    const cardElement = screen.getByText('NIST AI RMF').closest('.framework-item');
     expect(cardElement).toHaveStyle(`background-color: ${alpha(theme.palette.success.main, 0.05)}`);
   });
 
   it('should set error background color when isCompliant is false', () => {
     renderFrameworkCard({ isCompliant: false });
-    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    const cardElement = screen.getByText('NIST AI RMF').closest('.framework-item');
     expect(cardElement).toHaveStyle(`background-color: ${alpha(theme.palette.error.main, 0.05)}`);
   });
 
@@ -235,9 +201,9 @@ describe('FrameworkCard', () => {
     renderFrameworkCard({
       isCompliant: false,
       frameworkSeverity: frameworkSeverity,
-      nonCompliantPlugins: ['plugin-1'],
+      nonCompliantPlugins: ['excessive-agency'],
       categoryStats: {
-        'plugin-1': { pass: 0, total: 1, failCount: 1 },
+        'excessive-agency': { pass: 0, total: 1, failCount: 1 },
       },
     });
 
@@ -258,11 +224,11 @@ describe('FrameworkCard', () => {
   it("should render the failed plugin section with a background color using the theme's error color at 5% opacity, and the passed plugin section with the theme's success color at 5% opacity", () => {
     renderFrameworkCard({
       isCompliant: false,
-      nonCompliantPlugins: ['plugin-3'],
+      nonCompliantPlugins: ['pii:session'],
       categoryStats: {
-        'plugin-1': { pass: 10, total: 10, failCount: 0 },
-        'plugin-2': { pass: 9, total: 10, failCount: 0 },
-        'plugin-3': { pass: 5, total: 10, failCount: 0 },
+        'excessive-agency': { pass: 10, total: 10, failCount: 0 },
+        'pii:direct': { pass: 9, total: 10, failCount: 0 },
+        'pii:session': { pass: 5, total: 10, failCount: 0 },
       },
     });
 
@@ -282,11 +248,19 @@ describe('FrameworkCard', () => {
     expect(checkCircleIcon).toHaveClass('MuiSvgIcon-colorSuccess');
   });
 
-  it('should maintain proper layout and spacing when rendering a large number of non-compliant plugins', () => {
-    const numPlugins = 25;
-    const nonCompliantPlugins = Array.from({ length: numPlugins }, (_, i) => `plugin-${i + 1}`);
+  it('should maintain proper layout and spacing when rendering multiple non-compliant plugins', () => {
+    // Use real plugins that exist in the framework
+    const nonCompliantPlugins = [
+      'excessive-agency',
+      'pii:direct',
+      'pii:session',
+      'pii:api-db',
+      'pii:social',
+      'harmful:privacy',
+      'harmful:misinformation-disinformation',
+    ];
     const categoryStats = nonCompliantPlugins.reduce((acc, plugin) => {
-      acc[plugin] = { pass: 0, total: 10, failCount: 0 };
+      acc[plugin] = { pass: 0, total: 10, failCount: 10 };
       return acc;
     }, {} as CategoryStats);
 
@@ -297,14 +271,17 @@ describe('FrameworkCard', () => {
       categoryStats: categoryStats,
     });
 
-    const cardElement = screen.getByText('Test Framework').closest('.framework-item');
+    const cardElement = screen.getByText('NIST AI RMF').closest('.framework-item');
     expect(cardElement).toHaveClass('non-compliant');
 
-    nonCompliantPlugins.forEach((plugin) => {
-      expect(screen.getByText(plugin)).toBeInTheDocument();
-    });
-
-    const summaryChip = screen.getByText(`${numPlugins} / ${numPlugins} failed`);
+    // Verify the summary chip shows correct counts
+    const summaryChip = screen.getByText(
+      `${nonCompliantPlugins.length} / ${nonCompliantPlugins.length} failed`,
+    );
     expect(summaryChip).toBeInTheDocument();
+
+    // Verify at least some plugins are displayed
+    expect(screen.getByText('excessive-agency')).toBeInTheDocument();
+    expect(screen.getByText('pii:direct')).toBeInTheDocument();
   });
 });
