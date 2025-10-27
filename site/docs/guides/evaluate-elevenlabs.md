@@ -460,7 +460,7 @@ Check out complete examples:
 
 ### Resources
 
-- [ElevenLabs Provider Reference](./elevenlabs.md)
+- [ElevenLabs Provider Reference](/docs/providers/elevenlabs)
 - [Promptfoo Documentation](https://www.promptfoo.dev/docs/intro)
 - [ElevenLabs API Docs](https://elevenlabs.io/docs)
 

@@ -557,7 +557,7 @@ tests:
 
 ### 1. Choose the Right Model
 
-- **Flash v2.5**: Use for real-time applications, live streaming, or when latency is critical (<200ms)
+- **Flash v2.5**: Use for real-time applications, live streaming, or when latency is critical (&lt;200ms)
 - **Turbo v2.5**: Use for high-quality pre-recorded content where quality matters more than speed
 - **Multilingual v2**: Use for non-English languages or when switching between languages
 - **Monolingual v1**: Use for English-only content requiring the highest quality
