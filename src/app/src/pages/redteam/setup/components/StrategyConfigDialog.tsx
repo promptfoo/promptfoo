@@ -67,10 +67,31 @@ export default function StrategyConfigDialog({
   const [newGoal, setNewGoal] = React.useState<string>('');
 
   React.useEffect(() => {
-    if (strategy === 'simba') {
-      setGoals(config.goals || DEFAULT_SIMBA_GOALS);
+    if (!open || !strategy) {
+      return;
     }
-  }, [strategy]);
+
+    const nextConfig = config ?? {};
+
+    setLocalConfig({ ...nextConfig });
+    setLanguages(
+      Array.isArray(nextConfig.languages) && nextConfig.languages.length > 0
+        ? nextConfig.languages
+        : Object.keys(DEFAULT_LANGUAGES),
+    );
+    setEnabled(nextConfig.enabled === undefined ? true : nextConfig.enabled);
+    setNumTests(
+      nextConfig.numTests !== undefined ? String(nextConfig.numTests) : '10',
+    );
+    setError('');
+    setNewLanguage('');
+    setNewGoal('');
+    setGoals(
+      strategy === 'simba'
+        ? nextConfig.goals || DEFAULT_SIMBA_GOALS
+        : nextConfig.goals || [],
+    );
+  }, [open, strategy, config]);
 
   const handleAddLanguage = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && newLanguage.trim()) {
