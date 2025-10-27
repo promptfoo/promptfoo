@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add ElevenLabs provider integration with support for TTS, STT, Conversational Agents, Audio Isolation, Forced Alignment, and History (#6022)
+- feat(redteam): add `jailbreak:meta` strategy with intelligent meta-agent that builds dynamic attack taxonomy and learns from full attempt history (#6021)
 - feat(providers): add Python provider persistence for 10-100x performance improvement with persistent worker pools (#5968)
 - feat(providers): add OpenAI Agents SDK integration with support for agents, tools, handoffs, and OTLP tracing (#6009)
 - feat(providers): add function calling/tool support for Ollama chat provider (#5977)
@@ -51,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(providers): ElevenLabs API compatibility fixes for Agents (role normalization, tool mock values) and Forced Alignment (field names, SRT formatting) (#6022)
 - fix(providers): simulated-user and mischievous-user now respect assistant system prompts in multi-turn conversations (#6020)
 - fix(providers): render environment variables in provider config at load time (#6007)
 - fix(providers): improve MCP tool schema transformation for OpenAI compatibility (#5965)
@@ -77,6 +80,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - docs(model-audit): improve accuracy and clarity of ModelAudit documentation (#6023)
 - docs(contributing): add changelog and GitHub Actions enforcement (#6012)
+- docs(providers): add ElevenLabs provider documentation and examples (#6022)
+- docs(guides): add ElevenLabs evaluation guide (#6022)
 - docs(providers): add OpenAI Agents provider documentation and example (#6009)
 - docs(providers): update AWS Bedrock model access documentation (#5953)
 - docs(providers): fix apiKey environment variable syntax across provider docs and examples (#6018)
@@ -93,6 +98,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Tests
 
 - test(providers): fix flaky latencyMs assertions in TrueFoundry provider tests (#6026)
+- test(providers): add ElevenLabs provider unit and integration tests (#6022)
 - test(providers): add unit test verifying assistant system prompt inclusion for simulated-user provider (#6020)
 - test(providers): add comprehensive tests for OpenAI Agents provider, loader, and tracing (#6009)
 - test(redteam): remove redteam constants mocks from unit tests (#6010)
