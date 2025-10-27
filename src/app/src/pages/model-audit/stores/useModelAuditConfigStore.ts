@@ -225,8 +225,36 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
     }),
     {
       name: 'model-audit-config-store',
-      version: 1,
+      version: 2,
       skipHydration: true,
+      migrate: (persistedState: any, version: number) => {
+        // Handle migration from old 'model-audit-store' (version 0) to new 'model-audit-config-store' (version 2)
+        if (version === 0 || version === 1) {
+          // Try to load data from the old store name if it exists
+          try {
+            const oldStoreData = localStorage.getItem('model-audit-store');
+            if (oldStoreData) {
+              const parsed = JSON.parse(oldStoreData);
+              const oldState = parsed.state || {};
+
+              // Merge old state with persisted state, preserving new structure
+              return {
+                ...persistedState,
+                recentScans: oldState.recentScans || persistedState?.recentScans || [],
+                scanOptions: oldState.scanOptions ||
+                  persistedState?.scanOptions || {
+                    blacklist: [],
+                    timeout: 3600,
+                  },
+              };
+            }
+          } catch (error) {
+            // If migration fails, just use the persisted state
+            console.warn('Failed to migrate from old model-audit-store:', error);
+          }
+        }
+        return persistedState;
+      },
       partialize: (state) => ({
         // Only persist these fields
         recentScans: state.recentScans,

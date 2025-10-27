@@ -55,6 +55,10 @@ describe('ModelAuditSetupPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Attach persist.rehydrate to the hook function (Zustand persist API)
+    (mockUseModelAuditConfigStore as any).persist = {
+      rehydrate: vi.fn(),
+    };
     mockUseModelAuditConfigStore.mockReturnValue(defaultStoreState as any);
   });
 

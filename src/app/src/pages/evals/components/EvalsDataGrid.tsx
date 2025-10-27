@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
@@ -304,6 +304,7 @@ export default function EvalsDataGrid({
 
   // Track location changes for navigation-based refetching
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Create AbortController for this fetch
@@ -344,13 +345,13 @@ export default function EvalsDataGrid({
 
       if (evalType === 'modelaudit') {
         // Navigate to model audit result page
-        window.location.href = `/model-audit/${params.row.evalId}`;
+        navigate(`/model-audit/${params.row.evalId}`);
       } else {
         // Use the existing callback for regular evals and redteam
         onEvalSelected(params.row.evalId);
       }
     },
-    [onEvalSelected],
+    [navigate, onEvalSelected],
   );
 
   /**

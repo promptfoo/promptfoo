@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- refactor(webui): split model audit UI into multi-page architecture with dedicated routes for setup, history, latest results, and individual scans (#5595)
 - chore(cli): show telemetryDisabled/telemetryDebug in `promptfoo debug` output (#6015)
 - chore(examples): consolidate Ollama examples into unified directory (#5977)
 - chore(webui): add label column to prompts table (#6002)
