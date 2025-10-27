@@ -107,15 +107,19 @@ describe('select-best context propagation integration', () => {
     // Verify evaluation completed successfully
     expect(mockEval.addResult).toHaveBeenCalled();
 
-    // Get the first result call (provider-1)
-    const result1 = jest.mocked(mockEval.addResult).mock.calls[0][0];
-    expect(result1.success).toBe(true);
-    expect(result1.score).toBe(1);
+    // After select-best grading, results are updated in place
+    // Check the stored results (which should now have updated success/score)
+    expect(storedResults).toHaveLength(2);
+    expect(storedResults[0].testIdx).toBe(0);
+    expect(storedResults[1].testIdx).toBe(0);
 
-    // Get the second result call (provider-2)
-    const result2 = jest.mocked(mockEval.addResult).mock.calls[1][0];
-    expect(result2.success).toBe(false);
-    expect(result2.score).toBe(0);
+    // The first output should be marked as best (bestIndex: 0)
+    expect(storedResults[0].success).toBe(true);
+    expect(storedResults[0].score).toBe(1);
+
+    // The second output should not be best
+    expect(storedResults[1].success).toBe(false);
+    expect(storedResults[1].score).toBe(0);
   });
 
   it('should handle select-best with single provider', async () => {
@@ -250,10 +254,13 @@ describe('select-best context propagation integration', () => {
     // Verify results were added for all three providers
     expect(mockEval.addResult).toHaveBeenCalledTimes(3);
 
-    // Verify the middle provider (provider2) was marked as best
-    const results = (mockEval.addResult as jest.Mock).mock.calls.map((call) => call[0]);
-    expect(results[0].success).toBe(false); // provider-1: not best
-    expect(results[1].success).toBe(true); // provider-2: best
-    expect(results[2].success).toBe(false); // provider-3: not best
+    // Verify the middle provider (provider2) was marked as best (bestIndex: 1)
+    expect(storedResults).toHaveLength(3);
+    expect(storedResults[0].success).toBe(false); // provider-1: not best
+    expect(storedResults[0].score).toBe(0);
+    expect(storedResults[1].success).toBe(true); // provider-2: best
+    expect(storedResults[1].score).toBe(1);
+    expect(storedResults[2].success).toBe(false); // provider-3: not best
+    expect(storedResults[2].score).toBe(0);
   });
 });
