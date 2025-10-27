@@ -6,8 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added
-
+- feat(guardrails): add provider-agnostic guardrails with unified error handling and retry logic
+- feat(errors): unify EvalErrorInfo to a single source of truth; export canonical types from result.ts
+- docs(types): document new error taxonomy and guardrail integration
 - feat(providers): add OpenAI Agents SDK integration with support for agents, tools, handoffs, and OTLP tracing (#6009)
 - feat(providers): add function calling/tool support for Ollama chat provider (#5977)
 - feat(app): persist inline-defined custom policy names (#5990)
