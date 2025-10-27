@@ -199,6 +199,7 @@ export class PythonProvider implements ApiProvider {
           parsedResult.tokenUsage = {
             cached: total,
             total,
+            numRequests: parsedResult.tokenUsage.numRequests ?? 1,
           };
           logger.debug(
             `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
@@ -310,10 +311,18 @@ export class PythonProvider implements ApiProvider {
         );
       }
 
-      // Set cached=false on fresh results
+      // Set cached=false on fresh results and ensure numRequests is set
       if (typeof result === 'object' && result !== null && apiType === 'call_api') {
         logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
         result.cached = false;
+
+        // Ensure tokenUsage includes numRequests for fresh results
+        if (result.tokenUsage && !result.tokenUsage.numRequests) {
+          result.tokenUsage.numRequests = 1;
+          logger.debug(
+            `Added numRequests to fresh result token usage: ${JSON.stringify(result.tokenUsage)}`,
+          );
+        }
       }
 
       return result;
