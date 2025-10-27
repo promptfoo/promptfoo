@@ -65,7 +65,6 @@ import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
-import { OpenAiAgentsProvider } from './openai/agents';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -74,6 +73,7 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { OpenAIChatKitProvider } from './openai/chatkit';
 import { createOpenRouterProvider } from './openrouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
@@ -738,6 +738,32 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('openai:chatkit:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const workflowId = providerPath.substring('openai:chatkit:'.length);
+      if (!workflowId) {
+        throw new Error(
+          'ChatKit provider requires a workflow ID in format openai:chatkit:<workflow_id>',
+        );
+      }
+      return new OpenAIChatKitProvider(workflowId, {
+        ...providerOptions.config,
+        apiKey: providerOptions.config?.apiKey,
+        apiBaseUrl: providerOptions.config?.apiBaseUrl,
+        backendUrl: providerOptions.config?.backendUrl,
+        sessionConfig: providerOptions.config?.sessionConfig,
+        threadReuse: providerOptions.config?.threadReuse,
+        collectEvents: providerOptions.config?.collectEvents,
+        streamTimeout: providerOptions.config?.streamTimeout,
+        domainKey: providerOptions.config?.domainKey,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('openai:'),
     create: async (
       providerPath: string,
@@ -783,6 +809,7 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
+        const { OpenAiAgentsProvider } = await import('./openai/agents');
         return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
       }
       if (modelType === 'assistant') {

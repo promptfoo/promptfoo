@@ -422,6 +422,9 @@ export function isGradingResult(result: any): result is GradingResult {
 export const BaseAssertionTypesSchema = z.enum([
   'answer-relevance',
   'bleu',
+  'chatkit-tool-called',
+  'chatkit-widget-rendered',
+  'chatkit-workflow-executed',
   'classifier',
   'contains',
   'contains-all',

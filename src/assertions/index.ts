@@ -37,6 +37,11 @@ import { transform } from '../util/transform';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
+import {
+  handleChatKitToolCalled,
+  handleChatKitWidgetRendered,
+  handleChatKitWorkflowExecuted,
+} from './chatkit';
 import { handleClassifier } from './classifier';
 import {
   handleContains,
@@ -111,6 +116,9 @@ const ASSERTION_HANDLERS: Record<
 > = {
   'answer-relevance': handleAnswerRelevance,
   bleu: handleBleuScore,
+  'chatkit-tool-called': handleChatKitToolCalled,
+  'chatkit-widget-rendered': handleChatKitWidgetRendered,
+  'chatkit-workflow-executed': handleChatKitWorkflowExecuted,
   classifier: handleClassifier,
   contains: handleContains,
   'contains-all': handleContainsAll,

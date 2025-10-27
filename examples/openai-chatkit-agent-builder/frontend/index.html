@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatKit Agent Builder Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            height: 600px;
+            overflow: hidden;
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #c33;
+        }
+
+        .info {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #004085;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ChatKit Agent Builder Demo</h1>
+            <p>
+                This demo shows a customer support agent built with OpenAI Agents SDK and ChatKit.
+                The agent has access to tools for looking up orders, checking product info, processing refunds, and escalating to managers.
+            </p>
+        </div>
+
+        <div id="status"></div>
+
+        <div class="chat-container" id="chat-root">
+            <div class="loading">Loading ChatKit...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Check if backend is running
+        async function checkBackend() {
+            const statusDiv = document.getElementById('status');
+
+            try {
+                const response = await fetch('http://localhost:8000/health');
+                if (response.ok) {
+                    const data = await response.json();
+                    statusDiv.innerHTML = `
+                        <div class="info">
+                            <strong>✓ Backend Connected</strong><br>
+                            Agent: ${data.agent.name}<br>
+                            Model: ${data.agent.model}
+                        </div>
+                    `;
+                    return true;
+                } else {
+                    throw new Error('Backend returned error');
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="error">
+                        <strong>✗ Backend Not Running</strong><br>
+                        Please start the backend server first:<br>
+                        <code>cd backend && python server.py</code>
+                    </div>
+                `;
+                return false;
+            }
+        }
+
+        // Initialize ChatKit
+        async function initChatKit() {
+            const backendOk = await checkBackend();
+            if (!backendOk) {
+                document.getElementById('chat-root').innerHTML = '<div class="loading">Waiting for backend...</div>';
+                return;
+            }
+
+            // Load ChatKit React SDK
+            // Note: In production, you'd use npm/bundler. For demo, we'll show the structure.
+            document.getElementById('chat-root').innerHTML = `
+                <div class="info" style="margin: 20px;">
+                    <h3>ChatKit React Integration</h3>
+                    <p>To use the ChatKit React components, install:</p>
+                    <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-top: 10px;">npm install @openai/chatkit-react</pre>
+                    <p style="margin-top: 10px;">Then in your React app:</p>
+                    <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-top: 10px;">
+import { ChatKitProvider, Thread } from '@openai/chatkit-react';
+
+function App() {
+  return (
+    &lt;ChatKitProvider backendUrl="http://localhost:8000/chatkit"&gt;
+      &lt;Thread /&gt;
+    &lt;/ChatKitProvider&gt;
+  );
+}</pre>
+                    <p style="margin-top: 15px;"><strong>Backend Status:</strong> Ready and running on port 8000</p>
+                    <p style="margin-top: 10px;">
+                        For a complete React example, see the
+                        <a href="https://github.com/openai/chatkit-react" target="_blank">ChatKit React repository</a>.
+                    </p>
+                </div>
+            `;
+        }
+
+        // Initialize when page loads
+        initChatKit();
+
+        // Check backend every 5 seconds
+        setInterval(checkBackend, 5000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Test Agent Builder workflow via ChatKit
+
+prompts:
+  - '{{query}}'
+
+providers:
+  - id: openai:chatkit:support-agent
+    config:
+      backendUrl: 'http://localhost:8000/chatkit'
+      threadReuse: none
+      collectEvents: true
+
+tests:
+  - description: Basic customer support query
+    vars:
+      query: "Hello, I need help with my account"
+    assert:
+      - type: contains-any
+        value:
+          - "help"
+          - "assist"
+      - type: llm-rubric
+        value: Response is polite and offers to help
+
+  - description: Order status inquiry
+    vars:
+      query: "What's the status of my order #12345?"
+    assert:
+      - type: llm-rubric
+        value: Response acknowledges the order number and attempts to look it up
+      - type: is-json
+        # Check that response is not just an error
+        value: false
+
+  - description: Refund request
+    vars:
+      query: "I want a refund for order #12345. The product arrived damaged."
+    assert:
+      - type: llm-rubric
+        value: Response acknowledges the issue and explains refund process
+      - type: contains-any
+        value:
+          - "refund"
+          - "return"
+          - "damage"
+
+  - description: Product information request
+    vars:
+      query: "Tell me about the specs of product SKU-789"
+    assert:
+      - type: llm-rubric
+        value: Response attempts to provide product information or asks for clarification
+
+  - description: Edge case - Rude customer
+    vars:
+      query: "Your service is terrible! I demand to speak to a manager RIGHT NOW!"
+    assert:
+      - type: llm-rubric
+        value: Response remains professional and calm while addressing concerns
+      - type: not-contains
+        value: "rude"
+
+  - description: Multi-turn conversation
+    vars:
+      conversation:
+        - role: user
+          content: "I have a problem with my recent purchase"
+        - role: assistant
+          content: "I'm sorry to hear that. Can you provide your order number so I can look into this?"
+        - role: user
+          content: "It's order #54321"
+    assert:
+      - type: llm-rubric
+        value: Response uses the order number from context to help resolve the issue
+      - type: contains
+        value: "54321"

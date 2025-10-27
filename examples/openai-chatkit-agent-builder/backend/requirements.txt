@@ -1,0 +1,14 @@
+# ChatKit and Agents SDK (install from GitHub)
+git+https://github.com/openai/chatkit-python.git
+git+https://github.com/openai/openai-agents-python.git
+
+# Web server
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+
+# OpenAI SDK (required by Agents SDK)
+openai>=1.54.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.0.0

@@ -1,0 +1,21 @@
+{
+  "name": "openai-chatkit-agent-builder-example",
+  "version": "1.0.0",
+  "description": "Test Agent Builder workflows via ChatKit and promptfoo",
+  "private": true,
+  "scripts": {
+    "start": "cd backend && python server.py",
+    "install-backend": "pip install -r backend/requirements.txt",
+    "test": "promptfoo eval",
+    "view": "promptfoo view"
+  },
+  "keywords": [
+    "promptfoo",
+    "chatkit",
+    "openai",
+    "agent-builder",
+    "agents-sdk"
+  ],
+  "dependencies": {},
+  "devDependencies": {}
+}
