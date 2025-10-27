@@ -171,8 +171,8 @@ Additional audio processing capabilities:
 
 All providers support these common parameters:
 
-| Parameter      | Description                                       |
-| -------------- | ------------------------------------------------- |
+| Parameter       | Description                                       |
+| --------------- | ------------------------------------------------- |
 | `apiKey`        | Your ElevenLabs API key                           |
 | `apiKeyEnvar`   | Environment variable containing the API key       |
 | `baseUrl`       | Custom base URL for API (default: ElevenLabs API) |

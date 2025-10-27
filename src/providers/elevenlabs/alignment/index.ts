@@ -214,38 +214,48 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
   private formatAsVTT(response: AlignmentResponse): string {
     const lines: string[] = ['WEBVTT', ''];
 
-    if (!response.alignment || response.alignment.length === 0) {
+    if (!response.words || response.words.length === 0) {
       return lines.join('\n');
     }
 
-    const { alignment, characters } = response;
-    const groupSize = 10; // Group words into 10-word chunks
     let subtitleNumber = 1;
 
-    for (let i = 0; i < alignment.length; i += groupSize) {
-      const j = Math.min(i + groupSize, alignment.length);
-      const group = alignment.slice(i, j);
+    for (let i = 0; i < response.words.length; i++) {
+      const word = response.words[i];
+      const nextWord = response.words[i + 1];
 
-      const startTime = group[0].start;
-      const endTime = group[group.length - 1].end;
+      // Group words into subtitle chunks (max 10 words or 2 seconds)
+      const chunkWords: (typeof word)[] = [word];
+      let j = i + 1;
 
-      // WebVTT uses optional cue identifiers
-      lines.push(`${subtitleNumber}`);
+      while (
+        j < response.words.length &&
+        chunkWords.length < 10 &&
+        response.words[j].start - word.start < 2.0
+      ) {
+        chunkWords.push(response.words[j]);
+        j++;
+      }
 
-      // WebVTT timestamps use dots instead of commas
-      lines.push(
-        `${this.formatVTTTimestamp(startTime)} --> ${this.formatVTTTimestamp(endTime)}`,
+      // Format timestamp
+      const start = this.formatVTTTimestamp(word.start);
+      const end = this.formatVTTTimestamp(
+        nextWord ? nextWord.start : chunkWords[chunkWords.length - 1].end,
       );
 
-      // Extract and join text
+      // Add subtitle entry
+      lines.push(`${subtitleNumber}`);
+      lines.push(`${start} --> ${end}`);
       lines.push(
-        group
-          .map((item) => characters.substring(item.start_char, item.end_char + 1))
+        chunkWords
+          .map((w) => w.text.trim())
+          .filter((t) => t)
           .join(' '),
       );
-      lines.push(''); // Empty line between cues
+      lines.push(''); // Empty line between entries
 
       subtitleNumber++;
+      i = j - 1;
     }
 
     return lines.join('\n');
