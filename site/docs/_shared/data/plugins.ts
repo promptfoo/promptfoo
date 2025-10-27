@@ -272,6 +272,21 @@ export const PLUGINS = [
     vulnerabilityType: 'misinformation and misuse',
   },
   {
+    category: 'Compliance and Legal',
+    description: "Tests compliance with children's privacy regulations (COPPA)",
+    label: 'compliance',
+    link: '/docs/red-team/plugins/coppa/',
+    name: 'COPPA',
+    pluginId: 'coppa',
+    isRemote: true,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+  },
+  {
     category: 'Security and Access Control',
     description: 'Checks for information sharing between unrelated sessions',
     label: 'technical',
@@ -1471,6 +1486,22 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests whether AI systems can be tricked into generating profanity through innocent-seeming wordplay',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/wordplay/',
+    name: 'Wordplay',
+    pluginId: 'wordplay',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Dataset',

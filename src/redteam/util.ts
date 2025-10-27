@@ -1,9 +1,12 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { safeJsonStringify } from '../util/json';
 import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
 import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
+
+import type { CallApiContextParams, ProviderResponse } from '../types';
 
 /**
  * Normalizes different types of apostrophes to a standard single quote
@@ -284,4 +287,29 @@ export async function extractGoalFromPrompt(
     logger.warn(`Error extracting goal: ${error}`);
     return null;
   }
+}
+
+function toSessionIdString(value: any): string | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  // Stringify non-string values (numbers, objects, arrays, etc.)
+  try {
+    return safeJsonStringify(value);
+  } catch (error) {
+    logger.debug(`Failed to stringify sessionId: ${value}`, { error });
+    return undefined;
+  }
+}
+
+export function getSessionId(
+  response: ProviderResponse | undefined | null,
+  context: Pick<CallApiContextParams, 'vars'> | undefined,
+): string | undefined {
+  return toSessionIdString(response?.sessionId) ?? toSessionIdString(context?.vars?.sessionId);
 }

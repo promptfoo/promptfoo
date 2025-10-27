@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
 import * as ReactDOM from 'react-dom';
+import { v4 as uuidv4 } from 'uuid';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -16,11 +17,6 @@ vi.mock('./Citations', () => ({
 
 vi.mock('./DebuggingPanel', () => {
   const MockDebuggingPanel = vi.fn((props) => {
-    if (props.onTraceSectionVisibilityChange) {
-      queueMicrotask(() => {
-        props.onTraceSectionVisibilityChange(false);
-      });
-    }
     return (
       <div data-testid="mock-debugging-panel" data-prompt-index={props.promptIndex}>
         Mock DebuggingPanel
@@ -36,7 +32,13 @@ const mockOnClose = vi.fn();
 const mockAddFilter = vi.fn();
 const mockResetFilters = vi.fn();
 const mockReplayEvaluation = vi.fn();
-const mockFetchTraces = vi.fn();
+const mockFetchTraces = vi.fn().mockResolvedValue([
+  {
+    traceId: 'trace-1',
+    testCaseId: 'test-case-id',
+    spans: [{ spanId: 'span-1', name: 'test-span' }],
+  },
+]);
 
 const mockCloudConfig = {
   appUrl: 'https://cloud.example.com',
@@ -329,6 +331,11 @@ describe('EvalOutputPromptDialog', () => {
     const promptIndex = 5;
     render(<EvalOutputPromptDialog {...defaultProps} promptIndex={promptIndex} />);
 
+    // Wait for traces to be fetched
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
     const tracesTab = screen.getByText('Traces');
     await userEvent.click(tracesTab);
 
@@ -340,8 +347,13 @@ describe('EvalOutputPromptDialog', () => {
     );
   });
 
-  it('passes undefined promptIndex to DebuggingPanel when promptIndex is not provided', () => {
+  it('passes undefined promptIndex to DebuggingPanel when promptIndex is not provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} promptIndex={undefined} />);
+
+    // Wait for traces to be fetched
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
 
     const tracesTab = screen.getByRole('tab', { name: /traces/i });
     fireEvent.click(tracesTab);
@@ -350,11 +362,16 @@ describe('EvalOutputPromptDialog', () => {
     expect(debuggingPanel.getAttribute('data-prompt-index')).toBeNull();
   });
 
-  it('passes promptIndex to DebuggingPanel when testIndex is undefined', () => {
+  it('passes promptIndex to DebuggingPanel when testIndex is undefined', async () => {
     const promptIndex = 1;
     render(
       <EvalOutputPromptDialog {...defaultProps} testIndex={undefined} promptIndex={promptIndex} />,
     );
+
+    // Wait for traces to be fetched
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
 
     const tracesTab = screen.getByText('Traces');
     fireEvent.click(tracesTab);
@@ -365,16 +382,6 @@ describe('EvalOutputPromptDialog', () => {
       }),
       expect.anything(),
     );
-  });
-
-  it('hides trace section but keeps Traces tab visible when onTraceSectionVisibilityChange is called with false', async () => {
-    render(<EvalOutputPromptDialog {...defaultProps} />);
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    expect(screen.queryByTestId('mock-debugging-panel')).not.toBeInTheDocument();
-
-    expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
   });
 
   it('displays the main tab label as "Prompt" when there is no output content', () => {
@@ -434,15 +441,25 @@ describe('EvalOutputPromptDialog', () => {
     expect(screen.getByText('Original Output')).toBeInTheDocument();
   });
 
-  it('should transition PromptEditor from read-only to editable when evaluationId is updated', async () => {
-    const { rerender } = render(
-      <EvalOutputPromptDialog {...defaultProps} evaluationId={undefined} />,
-    );
+  it('should show Edit & Replay button when readOnly is false (default)', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+
+    expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
+  });
+
+  it('should hide Edit & Replay button when readOnly is true', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} readOnly={true} />);
+
+    expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
+  });
+
+  it('should transition PromptEditor from read-only to editable when readOnly prop changes', async () => {
+    const { rerender } = render(<EvalOutputPromptDialog {...defaultProps} readOnly={true} />);
 
     expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
 
     await act(async () => {
-      rerender(<EvalOutputPromptDialog {...defaultProps} evaluationId="test-eval-id" />);
+      rerender(<EvalOutputPromptDialog {...defaultProps} readOnly={false} />);
     });
 
     expect(screen.getByLabelText('Edit & Replay')).toBeInTheDocument();
@@ -823,7 +840,7 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
 });
 
 describe('EvalOutputPromptDialog cloud config', () => {
-  it('should pass cloudConfig to MetadataPanel', async () => {
+  it('Should not render policy link if policy is not reusable', async () => {
     const customCloudConfig = {
       appUrl: 'https://custom.cloud.com',
       isEnabled: true,
@@ -843,7 +860,30 @@ describe('EvalOutputPromptDialog cloud config', () => {
     });
 
     // Check that policy link is rendered (MetadataPanel uses cloudConfig)
-    expect(screen.getByText('View policy in Promptfoo Cloud')).toBeInTheDocument();
+    expect(screen.queryByTestId('pf-cloud-policy-detail-link')).not.toBeInTheDocument();
+  });
+
+  it('Should not render policy link if policy is not reusable', async () => {
+    const customCloudConfig = {
+      appUrl: 'https://custom.cloud.com',
+      isEnabled: true,
+    };
+    const propsWithCustomConfig = {
+      ...defaultProps,
+      cloudConfig: customCloudConfig,
+      metadata: {
+        policyName: 'Test Policy',
+        policyId: uuidv4(),
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCustomConfig} />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    // Check that policy link is rendered (MetadataPanel uses cloudConfig)
+    expect(screen.getByTestId('pf-cloud-policy-detail-link')).toBeInTheDocument();
   });
 
   it('should work without cloudConfig', async () => {
@@ -863,5 +903,91 @@ describe('EvalOutputPromptDialog cloud config', () => {
     // Should just show the policy name without link
     expect(screen.getByText('Test Policy')).toBeInTheDocument();
     expect(screen.queryByText('View policy in Promptfoo Cloud')).not.toBeInTheDocument();
+  });
+});
+
+describe('EvalOutputPromptDialog traces tab visibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should show Traces tab when fetchTraces returns trace data', async () => {
+    const propsWithTraces = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: vi.fn().mockResolvedValue([
+        {
+          traceId: 'trace-1',
+          testCaseId: 'test-case-id',
+          spans: [{ spanId: 'span-1', name: 'test-span' }],
+        },
+      ]),
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithTraces} />);
+
+    // Wait for traces to be fetched
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when fetchTraces returns empty array', async () => {
+    const propsWithoutTraces = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: vi.fn().mockResolvedValue([]),
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutTraces} />);
+
+    // Wait for traces to be fetched
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when fetchTraces is not provided', () => {
+    const propsWithoutFetchTraces = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: undefined,
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutFetchTraces} />);
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when evaluationId is not provided', () => {
+    const propsWithoutEvaluationId = {
+      ...defaultProps,
+      evaluationId: undefined,
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithoutEvaluationId} />);
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  it('should hide Traces tab when fetchTraces fails', async () => {
+    const propsWithFailedFetch = {
+      ...defaultProps,
+      evaluationId: 'test-eval-id',
+      fetchTraces: vi.fn().mockRejectedValue(new Error('Fetch failed')),
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithFailedFetch} />);
+
+    // Wait for traces fetch to fail
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
   });
 });

@@ -38,6 +38,7 @@ import './TestSuites.css';
 import {
   formatPolicyIdentifierAsMetric,
   isValidPolicyObject,
+  makeDefaultPolicyName,
   makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import {
@@ -128,6 +129,8 @@ const TestSuites = ({
   }, [plugins, pluginSeverityMap]);
 
   const rows = React.useMemo(() => {
+    let customPolicyIndex = 0;
+
     return (
       Object.entries(categoryStats)
         .filter(([_, stats]) => stats.total > 0)
@@ -180,12 +183,13 @@ const TestSuites = ({
               if (plugin.config.policy.text) {
                 description = plugin.config.policy.text;
               }
-            } else {
-              type = formatPolicyIdentifierAsMetric(
-                makeInlinePolicyId(plugin.config?.policy as string),
-              );
+            }
+            // Backwards compatibility w/ text-only inline policies.
+            else {
+              type = formatPolicyIdentifierAsMetric(makeDefaultPolicyName(customPolicyIndex));
               description = plugin.config?.policy as string;
             }
+            customPolicyIndex++;
           }
 
           return {

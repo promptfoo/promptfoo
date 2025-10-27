@@ -4,6 +4,7 @@ import { getEnvString, isCI } from '../../src/envars';
 import {
   checkEmailStatus,
   checkEmailStatusAndMaybeExit,
+  clearUserEmail,
   getAuthor,
   getUserEmail,
   getUserId,
@@ -153,6 +154,37 @@ describe('accounts', () => {
       setUserEmail(email);
       expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
         account: { email },
+      });
+    });
+  });
+
+  describe('clearUserEmail', () => {
+    it('should remove email from global config when email exists', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+      clearUserEmail();
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        account: {},
+      });
+    });
+
+    it('should handle clearing when no account exists', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      clearUserEmail();
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        account: {},
+      });
+    });
+
+    it('should handle clearing when global config is empty', () => {
+      jest.mocked(readGlobalConfig).mockReturnValue({});
+      clearUserEmail();
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        account: {},
       });
     });
   });

@@ -219,13 +219,15 @@ describe('Report Component Edge Cases', () => {
   });
 
   it('should render without error when vulnerabilitiesDataGridRef.current is null', async () => {
-    const { findByText } = render(<Report />);
+    const { findAllByText } = render(<Report />);
 
     await waitFor(() => {
       expect(Overview).toHaveBeenCalled();
       expect(TestSuites).toHaveBeenCalled();
     });
 
-    await findByText('LLM Risk Assessment');
+    // Should find the text in both the mobile and desktop headers
+    const elements = await findAllByText('Test eval');
+    expect(elements.length).toBeGreaterThanOrEqual(1);
   });
 });

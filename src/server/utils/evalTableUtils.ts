@@ -4,6 +4,30 @@ import { ResultFailureReason } from '../../types';
 import type { EvaluateTableRow, Prompt } from '../../types';
 
 /**
+ *
+ *
+ *
+ * Keep this in it's current order, as it is used to map the columns in the CSV, so it needs to be static.
+ *
+ *
+ * The keys are the names of the columns in the metadata object, and the values are the names of the columns in the CSV.
+ *
+ * This is imported by enterprise so it doesn't need to be copied.
+ *
+ */
+export const REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES = {
+  messages: 'Messages',
+  redteamHistory: 'RedteamHistory',
+  redteamTreeHistory: 'RedteamTreeHistory',
+  pluginId: 'pluginId',
+  strategyId: 'strategyId',
+  sessionId: 'sessionId',
+  sessionIds: 'sessionIds',
+};
+
+const REDTEAM_METADATA_COLUMNS = Object.values(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
+
+/**
  * Generates CSV data from evaluation table data
  * Includes grader reason, comment, and conversation columns similar to client-side implementation
  *
@@ -34,7 +58,7 @@ export function evalTableToCsv(
   ];
 
   if (isRedteam) {
-    headers.push('Messages', 'RedteamHistory', 'RedteamTreeHistory');
+    headers.push(...REDTEAM_METADATA_COLUMNS);
   }
   csvRows.push(headers);
 
@@ -48,7 +72,7 @@ export function evalTableToCsv(
           const emptyValues = ['', '', ''];
           if (isRedteam) {
             // handle message, redteamHistory, redteamTreeHistory columns
-            emptyValues.push('', '', '');
+            emptyValues.push(...Array(REDTEAM_METADATA_COLUMNS.length).fill(''));
           }
           return emptyValues;
         }
@@ -67,20 +91,11 @@ export function evalTableToCsv(
         ];
 
         if (isRedteam && output.metadata) {
-          baseValues.push(
-            // Messages column - for message-based providers (GOAT, Crescendo, SimulatedUser)
-            output.metadata.messages ? JSON.stringify(output.metadata.messages) : '',
-            // RedteamHistory column - for iterative provider (only if no messages)
-            output.metadata.redteamHistory && !output.metadata.messages
-              ? JSON.stringify(output.metadata.redteamHistory)
-              : '',
-            // RedteamTreeHistory column - for iterative tree provider (only if no messages)
-            output.metadata.redteamTreeHistory && !output.metadata.messages
-              ? JSON.stringify(output.metadata.redteamTreeHistory)
-              : '',
-          );
+          for (const column of Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES)) {
+            baseValues.push(output.metadata[column] ? JSON.stringify(output.metadata[column]) : '');
+          }
         } else if (isRedteam) {
-          baseValues.push('', '', '');
+          baseValues.push(...Array(REDTEAM_METADATA_COLUMNS.length).fill(''));
         }
 
         return baseValues;

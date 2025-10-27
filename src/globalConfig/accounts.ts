@@ -45,6 +45,14 @@ export function setUserEmail(email: string) {
   writeGlobalConfigPartial(config);
 }
 
+export function clearUserEmail() {
+  const globalConfig = readGlobalConfig();
+  const account = globalConfig?.account ?? {};
+  delete account.email;
+  const config: Partial<GlobalConfig> = { account };
+  writeGlobalConfigPartial(config);
+}
+
 export function getUserEmailNeedsValidation(): boolean {
   const globalConfig = readGlobalConfig();
   return globalConfig?.account?.emailNeedsValidation || false;

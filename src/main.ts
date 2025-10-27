@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
+import cliState from './cliState';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
@@ -36,6 +37,7 @@ import { simbaCommand } from './redteam/commands/simba';
 import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
+import { printErrorInformation } from './util/errors';
 import { setupEnv } from './util/index';
 
 /**
@@ -139,6 +141,10 @@ async function main() {
   simbaCommand(redteamBaseCommand, defaultConfig);
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
+
+  program.hook('postAction', () => {
+    printErrorInformation(cliState.errorLogFile, cliState.debugLogFile);
+  });
 
   program.parse();
 }

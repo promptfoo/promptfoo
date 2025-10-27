@@ -1,11 +1,14 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
+
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
+import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -30,8 +33,6 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
-
-import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
 
 export type { Strategy };
@@ -133,6 +134,19 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'authoritative-markup-injection',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Authoritative Markup Injection to ${testCases.length} test cases`);
+      const newTestCases = await addAuthoritativeMarkupInjectionTestCases(
+        testCases,
+        injectVar,
+        config,
+      );
+      logger.debug(`Added ${newTestCases.length} Authoritative Markup Injection test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'mischievous-user',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding mischievous user test cases to ${testCases.length} test cases`);
@@ -183,6 +197,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding experimental tree jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree', config);
       logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'jailbreak:meta',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
+      logger.debug(`Added ${newTestCases.length} meta-agent jailbreak test cases`);
       return newTestCases;
     },
   },

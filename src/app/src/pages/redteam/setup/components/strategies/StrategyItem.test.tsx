@@ -22,6 +22,8 @@ describe('StrategyItem', () => {
     it('renders strategy name and description', () => {
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={baseStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -36,6 +38,8 @@ describe('StrategyItem', () => {
     it('renders checkbox with correct state', () => {
       const { rerender } = render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={baseStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -48,6 +52,8 @@ describe('StrategyItem', () => {
 
       rerender(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={baseStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -68,6 +74,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={recommendedStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -86,6 +94,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={agenticStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -104,6 +114,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={multiModalStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -122,6 +134,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={multiCategoryStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -143,6 +157,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={configurableStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -161,6 +177,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={configurableStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -181,6 +199,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={nonConfigurableStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -198,6 +218,8 @@ describe('StrategyItem', () => {
     it('calls onToggle when card is clicked', () => {
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={baseStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -214,6 +236,8 @@ describe('StrategyItem', () => {
     it('calls onToggle when checkbox is clicked', () => {
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={baseStrategy}
           isSelected={false}
           onToggle={mockOnToggle}
@@ -235,6 +259,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={configurableStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -260,6 +286,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={configurableStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -279,6 +307,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={multiBadgeStrategy}
           isSelected={true}
           onToggle={mockOnToggle}
@@ -305,6 +335,8 @@ describe('StrategyItem', () => {
 
       render(
         <StrategyItem
+          isDisabled={false}
+          isRemoteGenerationDisabled={false}
           strategy={configurableStrategy}
           isSelected={true}
           onToggle={mockOnToggle}

@@ -23,8 +23,15 @@ jest.mock('../../../src/cliState', () => ({
 }));
 jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
+  getRemoteHealthUrl: jest.fn().mockReturnValue('http://test-health-url'),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
+}));
+jest.mock('../../../src/util/apiHealth', () => ({
+  checkRemoteHealth: jest.fn().mockResolvedValue({
+    status: 'OK',
+    message: 'API is healthy',
+  }),
 }));
 
 // Helper function to create mock fetch responses

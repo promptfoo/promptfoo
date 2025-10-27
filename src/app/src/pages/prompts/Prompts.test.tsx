@@ -76,33 +76,53 @@ function renderWithProviders({
   error = null,
   initialEntries = ['/'],
   theme = createTheme(),
+  showDatasetColumn = true,
 }: {
   data?: ServerPromptWithMetadata[];
   isLoading?: boolean;
   error?: string | null;
   initialEntries?: string[];
   theme?: ReturnType<typeof createTheme>;
+  showDatasetColumn?: boolean;
 }): RenderResult {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <ThemeProvider theme={theme}>
-        <Prompts data={data} isLoading={isLoading} error={error} />
+        <Prompts
+          data={data}
+          isLoading={isLoading}
+          error={error}
+          showDatasetColumn={showDatasetColumn}
+        />
       </ThemeProvider>
     </MemoryRouter>,
   );
 }
 
 describe('Prompts', () => {
+  it('should display the label column with correct values', () => {
+    renderWithProviders({ data: mockPrompts });
+
+    // Check that label column header exists
+    expect(screen.getByText('Label')).toBeInTheDocument();
+
+    // Check that label values are displayed (label is same as raw in mock data)
+    expect(screen.getAllByText('This is the first sample prompt.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('This is the second sample prompt.').length).toBeGreaterThan(0);
+  });
+
   it('should display a DataGrid with the provided data and open the PromptDialog with the correct prompt details when a row is clicked', async () => {
     renderWithProviders({ data: mockPrompts });
 
-    expect(screen.getByText('This is the first sample prompt.')).toBeInTheDocument();
-    const secondPromptCell = screen.getByText('This is the second sample prompt.');
-    expect(secondPromptCell).toBeInTheDocument();
+    // Text appears in both label and prompt columns
+    expect(screen.getAllByText('This is the first sample prompt.').length).toBeGreaterThan(0);
+    const secondPromptCells = screen.getAllByText('This is the second sample prompt.');
+    expect(secondPromptCells.length).toBeGreaterThan(0);
 
     expect(screen.queryByTestId('mock-prompt-dialog')).not.toBeInTheDocument();
 
-    fireEvent.click(secondPromptCell);
+    // Click the first occurrence (which will be in the label column)
+    fireEvent.click(secondPromptCells[0]);
 
     const dialog = await screen.findByTestId('mock-prompt-dialog');
     expect(dialog).toBeInTheDocument();
@@ -118,9 +138,10 @@ describe('Prompts', () => {
     const nextPageButton = screen.getByRole('button', { name: 'Go to next page' });
     fireEvent.click(nextPageButton);
 
-    const promptOnSecondPage = screen.getByText('This is prompt number 26.');
+    const promptsOnSecondPage = screen.getAllByText('This is prompt number 26.');
+    expect(promptsOnSecondPage.length).toBeGreaterThan(0);
 
-    fireEvent.click(promptOnSecondPage);
+    fireEvent.click(promptsOnSecondPage[0]);
 
     const dialog = await screen.findByTestId('mock-prompt-dialog');
     expect(dialog).toBeInTheDocument();
@@ -179,8 +200,8 @@ describe('Prompts', () => {
   it('should close the dialog when handleClose is called', async () => {
     renderWithProviders({ data: mockPrompts });
 
-    const firstPromptCell = screen.getByText('This is the first sample prompt.');
-    fireEvent.click(firstPromptCell);
+    const firstPromptCells = screen.getAllByText('This is the first sample prompt.');
+    fireEvent.click(firstPromptCells[0]);
 
     const dialog = await screen.findByTestId('mock-prompt-dialog');
     expect(dialog).toBeInTheDocument();
@@ -198,9 +219,8 @@ describe('Prompts', () => {
 
     const nonexistentId = 'prompt:nonexistent';
 
-    const promptsComponent = screen
-      .getByText('This is the first sample prompt.')
-      .closest('[data-rowid]');
+    const promptCells = screen.getAllByText('This is the first sample prompt.');
+    const promptsComponent = promptCells[0].closest('[data-rowid]');
     if (promptsComponent) {
       const handleRowClick = () => {
         const index = mockPrompts.findIndex((p) => p.id === nonexistentId);
@@ -227,6 +247,78 @@ describe('Prompts', () => {
     // After layout unification, the Container no longer has theme-specific background colors
     // This test now verifies the component renders without errors in dark mode
     expect(promptsContainer).toBeInTheDocument();
-    expect(screen.getByText('This is the first sample prompt.')).toBeInTheDocument();
+    expect(screen.getAllByText('This is the first sample prompt.').length).toBeGreaterThan(0);
+  });
+
+  it('should fallback to display or raw when label is missing', () => {
+    const mockPromptsWithoutLabel: ServerPromptWithMetadata[] = [
+      {
+        id: 'prompt:no-label',
+        prompt: {
+          raw: 'Raw prompt text',
+          display: 'Display text',
+          label: '', // Empty label
+        },
+        count: 1,
+        recentEvalDate: '2023-10-27T10:00:00.000Z',
+        recentEvalId: 'eval-123',
+        evals: [],
+      },
+    ];
+
+    renderWithProviders({ data: mockPromptsWithoutLabel });
+
+    // Should show display text as fallback
+    expect(screen.getByText('Display text')).toBeInTheDocument();
+  });
+
+  it("should display the prompt's raw text in the Label column when label and display are missing", () => {
+    const mockPromptsWithoutLabelAndDisplay: ServerPromptWithMetadata[] = [
+      {
+        id: 'prompt:no-label-no-display',
+        prompt: {
+          raw: 'Raw prompt text only',
+          label: '',
+        },
+        count: 1,
+        recentEvalDate: '2023-10-27T10:00:00.000Z',
+        recentEvalId: 'eval-123',
+        evals: [],
+      },
+    ];
+
+    renderWithProviders({ data: mockPromptsWithoutLabelAndDisplay });
+
+    const cells = screen.getAllByText('Raw prompt text only');
+
+    expect(cells[0]).toHaveAttribute('data-field', 'label');
+
+    expect(cells[1]).toHaveAttribute('data-field', 'prompt');
+
+    expect(cells).toHaveLength(2);
+  });
+
+  it('should render the Label column in DataGrid on very narrow viewport widths', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      writable: true,
+      configurable: true,
+      value: 400,
+    });
+
+    window.dispatchEvent(new Event('resize'));
+
+    renderWithProviders({ data: mockPrompts });
+
+    expect(screen.getByRole('columnheader', { name: 'Label' })).toBeInTheDocument();
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+  });
+
+  it('should render correctly when showDatasetColumn is false', () => {
+    renderWithProviders({ data: mockPrompts, showDatasetColumn: false });
+
+    expect(screen.getByText('Label')).toBeInTheDocument();
+
+    expect(screen.getAllByText('This is the first sample prompt.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('This is the second sample prompt.').length).toBeGreaterThan(0);
   });
 });

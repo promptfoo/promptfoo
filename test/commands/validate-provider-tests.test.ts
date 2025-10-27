@@ -125,6 +125,31 @@ describe('Validate Command Provider Tests', () => {
       );
     });
 
+    it('should skip session test when target is not stateful (stateful=false)', async () => {
+      const mockNonStatefulHttpProvider: ApiProvider = {
+        id: () => 'http://example.com',
+        callApi: jest.fn(),
+        config: { stateful: false },
+        constructor: { name: 'HttpProvider' },
+      } as any;
+
+      jest.mocked(loadApiProvider).mockResolvedValue(mockNonStatefulHttpProvider);
+      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
+        success: true,
+        message: 'Connectivity test passed',
+        providerResponse: { output: 'test' },
+        transformedRequest: {},
+      });
+
+      await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
+
+      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockNonStatefulHttpProvider);
+      expect(testProviderSession).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Skipping session management test (target is not stateful)'),
+      );
+    });
+
     it('should test non-HTTP provider with basic connectivity only when -t flag is provided', async () => {
       jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
 

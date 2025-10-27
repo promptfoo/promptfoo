@@ -14,7 +14,7 @@ interface DebuggingPanelProps {
   testCaseId?: string;
   testIndex?: number;
   promptIndex?: number;
-  fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
+  traces?: Trace[];
 }
 
 export function DebuggingPanel({
@@ -22,7 +22,7 @@ export function DebuggingPanel({
   testCaseId,
   testIndex,
   promptIndex,
-  fetchTraces,
+  traces = [],
 }: DebuggingPanelProps) {
   return (
     <Box>
@@ -37,7 +37,7 @@ export function DebuggingPanel({
               testCaseId={testCaseId}
               testIndex={testIndex}
               promptIndex={promptIndex}
-              fetchTraces={fetchTraces}
+              traces={traces}
             />
           </ErrorBoundary>
         </Box>

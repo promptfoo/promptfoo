@@ -3,7 +3,8 @@ import path from 'path';
 
 import chalk from 'chalk';
 import winston from 'winston';
-import { getEnvString } from './envars';
+import cliState from './cliState';
+import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
@@ -157,26 +158,6 @@ export const winstonLogger = winston.createLogger({
   ],
 });
 
-if (!getEnvString('PROMPTFOO_DISABLE_ERROR_LOG', '')) {
-  winstonLogger.on('data', (chunk) => {
-    if (
-      chunk.level === 'error' &&
-      !winstonLogger.transports.some((t) => t instanceof winston.transports.File)
-    ) {
-      // Only create the errors file if there are any errors
-      const fileTransport = new winston.transports.File({
-        filename: path.join(getEnvString('PROMPTFOO_LOG_DIR', '.'), 'promptfoo-errors.log'),
-        level: 'error',
-        format: winston.format.combine(winston.format.simple(), fileFormatter),
-      });
-      winstonLogger.add(fileTransport);
-
-      // Re-log the error that triggered this so it's written to the file
-      fileTransport.write(chunk);
-    }
-  });
-}
-
 export function getLogLevel(): LogLevel {
   return winstonLogger.transports[0].level as LogLevel;
 }
@@ -240,37 +221,43 @@ function setupLogDirectory(): string {
 /**
  * Creates a new log file for the current CLI run
  */
-function createRunLogFile(): string {
+function createRunLogFile(
+  level: 'debug' | 'error',
+  { date = new Date() }: { date?: Date } = {},
+): string {
   const logDir = setupLogDirectory();
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
-  const logFile = path.join(logDir, `promptfoo-${timestamp}.log`);
+  const timestamp = date.toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
+  const logFile = path.join(logDir, `promptfoo-${level}-${timestamp}.log`);
   return logFile;
 }
-
-// Create a file transport for the current run
-let runLogTransport: winston.transports.FileTransportInstance | null = null;
 
 /**
  * Initialize per-run logging
  */
 export function initializeRunLogging(): void {
-  if (runLogTransport) {
-    return;
-  }
-
   try {
-    const logFile = createRunLogFile();
-    runLogTransport = new winston.transports.File({
-      filename: logFile,
-      level: 'debug', // Capture all levels in the file
-      format: winston.format.combine(winston.format.simple(), fileFormatter),
-    });
+    const date = new Date();
+    if (!getEnvBool('PROMPTFOO_DISABLE_DEBUG_LOG', false)) {
+      cliState.debugLogFile = createRunLogFile('debug', { date });
+      const runLogTransport = new winston.transports.File({
+        filename: cliState.debugLogFile,
+        level: 'debug', // Capture all levels in the file
+        format: winston.format.combine(winston.format.simple(), fileFormatter),
+      });
+      winstonLogger.add(runLogTransport);
+    }
 
-    winstonLogger.add(runLogTransport);
+    if (!getEnvBool('PROMPTFOO_DISABLE_ERROR_LOG', false)) {
+      cliState.errorLogFile = createRunLogFile('error', { date });
+      const errorLogTransport = new winston.transports.File({
+        filename: cliState.errorLogFile,
+        level: 'error',
+        format: winston.format.combine(winston.format.simple(), fileFormatter),
+      });
+      winstonLogger.add(errorLogTransport);
+    }
   } catch (error) {
     logger.warn(`Error creating run log file: ${error}`);
-
-    runLogTransport = null;
   }
 }
 

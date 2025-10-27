@@ -51,17 +51,17 @@ const mockClient = {
   },
 };
 
-jest.mock('@azure/ai-projects', () => ({
-  AIProjectClient: jest.fn().mockImplementation(() => mockClient),
-}));
-
-jest.mock('@azure/identity', () => ({
-  DefaultAzureCredential: jest.fn(),
-}));
+// Don't mock the Azure packages directly since they're optional dependencies
+// Instead, we'll mock the initializeClient method below
 
 describe('Azure Foundry Agent Provider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Mock the initializeClient private method to return our mock client
+    jest
+      .spyOn(AzureFoundryAgentProvider.prototype as any, 'initializeClient')
+      .mockResolvedValue(mockClient);
   });
 
   describe('instantiation', () => {

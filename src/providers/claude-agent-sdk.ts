@@ -26,6 +26,10 @@ import type { EnvOverrides } from '../types/env';
 /**
  * Claude Agent SDK Provider
  *
+ * This provider requires the @anthropic-ai/claude-agent-sdk package, which has a
+ * proprietary license and is not installed by default. Users must install it separately:
+ *   npm install @anthropic-ai/claude-agent-sdk
+ *
  * Two default configurations:
  * - No working_dir: Runs in temp directory with no tools - behaves like plain chat API
  * - With working_dir: Runs in specified directory with read-only file tools (Read/Grep/Glob/LS)
@@ -56,9 +60,22 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
  * Uses the same pattern as other providers for resolving npm packages
  */
 async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
-  const require = createRequire(path.resolve(cliState.basePath || ''));
-  const claudeCodePath = require.resolve('@anthropic-ai/claude-agent-sdk');
-  return importModule(claudeCodePath);
+  try {
+    const require = createRequire(path.resolve(cliState.basePath || ''));
+    const claudeCodePath = require.resolve('@anthropic-ai/claude-agent-sdk');
+    return importModule(claudeCodePath);
+  } catch {
+    throw new Error(
+      dedent`The @anthropic-ai/claude-agent-sdk package is required but not installed.
+
+      This package has a proprietary license and is not installed by default.
+
+      To use the Claude Agent SDK provider, install it with:
+        npm install @anthropic-ai/claude-agent-sdk
+
+      For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
+    );
+  }
 }
 
 export interface ClaudeCodeOptions {

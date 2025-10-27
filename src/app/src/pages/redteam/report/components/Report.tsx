@@ -672,8 +672,7 @@ const App = () => {
                 pr: 2,
               }}
             >
-              LLM Risk Assessment
-              {evalData.config.description && `: ${evalData.config.description}`}
+              {evalData.config.description || 'Risk Assessment'}
             </Typography>
             <Box sx={{ display: 'flex', flexShrink: 0 }}>
               <ActionButtons />
@@ -692,8 +691,7 @@ const App = () => {
               <ActionButtons />
             </Box>
             <Typography variant="h4">
-              <strong>LLM Risk Assessment</strong>
-              {evalData.config.description && `: ${evalData.config.description}`}
+              <strong>{evalData.config.description || 'Risk Assessment'}</strong>
             </Typography>
             <Typography variant="subtitle1" mb={2}>
               {formatDataGridDate(evalData.createdAt)}

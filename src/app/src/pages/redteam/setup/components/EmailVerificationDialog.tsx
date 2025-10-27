@@ -28,7 +28,7 @@ export function EmailVerificationDialog({
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { saveEmail, checkEmailStatus } = useEmailVerification();
+  const { saveEmail, clearEmail, checkEmailStatus } = useEmailVerification();
   const { showToast } = useToast();
 
   const validateEmail = (email: string): boolean => {
@@ -60,21 +60,26 @@ export function EmailVerificationDialog({
     setEmailError('');
 
     try {
-      // Validate the email before saving
-      const statusResult = await checkEmailStatus({ validate: true });
-
-      if (statusResult.error) {
-        setEmailError(statusResult.error);
-        return;
-      }
       const result = await saveEmail(email);
 
       if (result.error) {
+        clearEmail();
         setEmailError(result.error || 'Failed to verify email');
         return;
       }
 
+      // Validate the email after saving
+      // Necessary because validation path depends on the email being set
+      const statusResult = await checkEmailStatus({ validate: true });
+
+      if (statusResult.error) {
+        clearEmail();
+        setEmailError(statusResult.error);
+        return;
+      }
+
       if (!statusResult.canProceed) {
+        clearEmail();
         setEmailError('Email validation failed. Please use a different email.');
         return;
       }

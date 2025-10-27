@@ -14,24 +14,10 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
-import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  TokenUsage,
-} from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -39,7 +25,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import type { BaseRedteamMetadata } from '../types';
+import { getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -52,6 +38,21 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+import type { Environment } from 'nunjucks';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  TokenUsage,
+} from '../../types';
+import type { BaseRedteamMetadata } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -112,6 +113,7 @@ function extractSessionIds(outputs: TreeSearchOutput[]): string[] {
  * @param goal - The goal or objective for the red team.
  * @param purpose - Optional purpose information for the system prompt.
  * @param excludeTargetOutputFromAgenticAttackGeneration - Whether to exclude target output from the attack generation process.
+ * @param modifiers - Optional modifiers to customize prompt generation (e.g., testGenerationInstructions).
  * @returns An object containing the rendered system prompts.
  */
 export function renderSystemPrompts(
@@ -119,14 +121,22 @@ export function renderSystemPrompts(
   goal: string,
   purpose?: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
+  modifiers?: Record<string, string>,
 ): {
   redteamSystemPrompt: string;
   judgeSystemPrompt: string;
 } {
+  const modifierSection =
+    modifiers && Object.keys(modifiers).length > 0
+      ? Object.entries(modifiers)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join('\n')
+      : undefined;
+
   return {
     redteamSystemPrompt: excludeTargetOutputFromAgenticAttackGeneration
-      ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal, purpose })
-      : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose }),
+      ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal, purpose, modifierSection })
+      : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose, modifierSection }),
     judgeSystemPrompt: nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal }),
   };
 }
@@ -459,6 +469,7 @@ async function runRedteamConversation({
     goal,
     test?.metadata?.purpose,
     excludeTargetOutputFromAgenticAttackGeneration,
+    test?.metadata?.modifiers,
   );
 
   const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
@@ -558,11 +569,7 @@ async function runRedteamConversation({
             score: 0,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           continue;
         }
@@ -675,11 +682,7 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: targetResponse.output,
@@ -712,11 +715,7 @@ async function runRedteamConversation({
             parentId: node.id,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
@@ -750,11 +749,7 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
@@ -795,11 +790,7 @@ async function runRedteamConversation({
           score,
           wasSelected: true,
           guardrails: targetResponse.guardrails,
-          sessionId:
-            targetResponse.sessionId ||
-            (typeof iterationContext?.vars?.sessionId === 'string'
-              ? iterationContext.vars.sessionId
-              : undefined),
+          sessionId: getSessionId(targetResponse, iterationContext),
         });
       }
     }
@@ -845,7 +836,7 @@ async function runRedteamConversation({
     parentId: bestNode.id,
     wasSelected: false,
     guardrails: finalTargetResponse.guardrails,
-    sessionId: finalTargetResponse.sessionId,
+    sessionId: getSessionId(finalTargetResponse, context),
   });
   return {
     output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),

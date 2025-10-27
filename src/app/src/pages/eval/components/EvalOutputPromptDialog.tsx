@@ -191,6 +191,7 @@ interface EvalOutputPromptDialogProps {
   onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
   fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
   cloudConfig?: CloudConfigData | null;
+  readOnly?: boolean;
 }
 
 export default function EvalOutputPromptDialog({
@@ -211,6 +212,7 @@ export default function EvalOutputPromptDialog({
   onReplay,
   fetchTraces,
   cloudConfig,
+  readOnly = false,
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -222,6 +224,7 @@ export default function EvalOutputPromptDialog({
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
+  const [traces, setTraces] = useState<Trace[]>([]);
 
   useEffect(() => {
     setCopied(false);
@@ -232,6 +235,37 @@ export default function EvalOutputPromptDialog({
     setReplayError(null);
     setActiveTab(0); // Reset to first tab when dialog opens
   }, [prompt]);
+
+  // Fetch traces once when evaluationId changes
+  useEffect(() => {
+    let isActive = true;
+    const controller = new AbortController();
+
+    const loadTraces = async () => {
+      if (!evaluationId || !fetchTraces) {
+        setTraces([]);
+        return;
+      }
+
+      try {
+        const fetchedTraces = await fetchTraces(evaluationId, controller.signal);
+        if (isActive) {
+          setTraces(fetchedTraces || []);
+        }
+      } catch (error) {
+        if (isActive && (error as Error).name !== 'AbortError') {
+          setTraces([]);
+        }
+      }
+    };
+
+    loadTraces();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [evaluationId, fetchTraces]);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -366,8 +400,8 @@ export default function EvalOutputPromptDialog({
     visibleTabs.push('metadata');
   }
 
-  // Always show traces tab when evaluationId exists - TraceView will handle empty state messaging
-  const hasTracesData = Boolean(evaluationId);
+  // Show traces tab only when there's actual trace data
+  const hasTracesData = traces.length > 0;
 
   if (hasTracesData) {
     visibleTabs.push('traces');
@@ -460,7 +494,7 @@ export default function EvalOutputPromptDialog({
                 onMouseLeave={() => setHoveredElement(null)}
                 CodeDisplay={CodeDisplay}
                 subtitleTypographySx={subtitleTypographySx}
-                readOnly={!evaluationId}
+                readOnly={readOnly}
               />
               {hasOutputContent && (
                 <OutputsPanel
@@ -521,7 +555,7 @@ export default function EvalOutputPromptDialog({
                 testCaseId={testCaseId}
                 testIndex={testIndex}
                 promptIndex={promptIndex}
-                fetchTraces={fetchTraces}
+                traces={traces}
               />
             </Box>
           )}

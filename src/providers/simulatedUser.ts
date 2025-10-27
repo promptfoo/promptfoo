@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { getSessionId } from '../redteam/util';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -171,7 +172,12 @@ export class SimulatedUser implements ApiProvider {
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
-    return this.serializeOutput(messages, tokenUsage, agentResponse as ProviderResponse);
+    return this.serializeOutput(
+      messages,
+      tokenUsage,
+      agentResponse as ProviderResponse,
+      getSessionId(agentResponse, context),
+    );
   }
 
   toString() {
@@ -182,6 +188,7 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     tokenUsage: TokenUsage,
     finalTargetResponse: ProviderResponse,
+    sessionId?: string,
   ) {
     return {
       output: messages
@@ -192,6 +199,7 @@ export class SimulatedUser implements ApiProvider {
       tokenUsage,
       metadata: {
         messages,
+        sessionId,
       },
       guardrails: finalTargetResponse.guardrails,
     };

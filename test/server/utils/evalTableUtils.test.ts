@@ -2,12 +2,7 @@ import { beforeEach, describe, expect, it } from '@jest/globals';
 import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalTableUtils';
 import { ResultFailureReason } from '../../../src/types';
 
-import type {
-  CompletedPrompt,
-  EvaluateTableOutput,
-  EvaluateTableRow,
-  UnifiedConfig,
-} from '../../../src/types';
+import type { CompletedPrompt, EvaluateTableOutput, EvaluateTableRow } from '../../../src/types';
 
 describe('evalTableUtils', () => {
   let mockTable: {
@@ -196,12 +191,6 @@ describe('evalTableUtils', () => {
     });
 
     describe('Red team CSV generation', () => {
-      const _redteamConfig: UnifiedConfig = {
-        redteam: {
-          strategies: ['jailbreak', 'crescendo'],
-        },
-      } as UnifiedConfig;
-
       it('should add Messages column for message-based providers', () => {
         const tableWithMessages = {
           ...mockTable,
@@ -295,6 +284,42 @@ describe('evalTableUtils', () => {
         expect(csv).toMatch(/Root -> Branch2 -> Leaf2/);
       });
 
+      it('should add pluginId, strategyId, sessionId, and sessionIds columns', () => {
+        const tableWithIds = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                {
+                  pass: false,
+                  text: 'Output',
+                  metadata: {
+                    pluginId: 'harmful:violent-crime',
+                    strategyId: 'jailbreak',
+                    sessionId: 'session-abc-123',
+                    sessionIds: ['session-abc-123', 'session-def-456'],
+                  },
+                } as unknown as EvaluateTableOutput,
+              ],
+            },
+          ],
+        };
+
+        const csv = evalTableToCsv(tableWithIds, { isRedteam: true });
+        const lines = csv.split('\n');
+
+        expect(lines[0]).toContain('pluginId');
+        expect(lines[0]).toContain('strategyId');
+        expect(lines[0]).toContain('sessionId');
+        expect(lines[0]).toContain('sessionIds');
+        expect(lines[1]).toContain('harmful:violent-crime');
+        expect(lines[1]).toContain('jailbreak');
+        expect(lines[1]).toContain('session-abc-123');
+        // sessionIds is an array, should be JSON stringified
+        expect(lines[1]).toMatch(/session-abc-123.*session-def-456/);
+      });
+
       it('should include all red team columns when multiple metadata types exist', () => {
         const tableWithAllMetadata = {
           ...mockTable,
@@ -309,6 +334,10 @@ describe('evalTableUtils', () => {
                     messages: [{ role: 'user', content: 'Test' }],
                     redteamHistory: ['Attempt 1'],
                     redteamTreeHistory: 'Tree structure',
+                    pluginId: 'test-plugin',
+                    strategyId: 'test-strategy',
+                    sessionId: 'session-123',
+                    sessionIds: ['session-123', 'session-456'],
                   },
                 } as unknown as EvaluateTableOutput,
                 {
@@ -329,6 +358,10 @@ describe('evalTableUtils', () => {
         expect(lines[0]).toContain('Messages');
         expect(lines[0]).toContain('RedteamHistory');
         expect(lines[0]).toContain('RedteamTreeHistory');
+        expect(lines[0]).toContain('pluginId');
+        expect(lines[0]).toContain('strategyId');
+        expect(lines[0]).toContain('sessionId');
+        expect(lines[0]).toContain('sessionIds');
       });
 
       it('should not add red team columns when config.redteam is not present', () => {
@@ -591,10 +624,6 @@ describe('evalTableUtils', () => {
             },
           ],
         };
-
-        const _redteamConfig: UnifiedConfig = {
-          redteam: { strategies: ['test'] },
-        } as UnifiedConfig;
 
         const csv = evalTableToCsv(tableWithComplexMetadata, {
           isRedteam: true,

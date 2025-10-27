@@ -32,6 +32,13 @@ export const ANTHROPIC_MODELS = [
       output: 15 / 1e6, // $15 / MTok
     },
   })),
+  ...['claude-haiku-4-5-20251001', 'claude-haiku-4-5-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1 / 1e6, // $1 / MTok
+      output: 5 / 1e6, // $5 / MTok
+    },
+  })),
 
   // NOTE: Claude 2.x models are deprecated and will be retired on July 21, 2025.
   ...['claude-2.0'].map((model) => ({

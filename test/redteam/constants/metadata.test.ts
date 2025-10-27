@@ -111,7 +111,7 @@ describe('metadata constants', () => {
       );
 
       if (missingPlugins.length > 0) {
-        fail(
+        throw new Error(
           `The following plugins are defined but missing from risk categories: ${missingPlugins.join(
             ', ',
           )}. Please add them to the appropriate category in riskCategories object in metadata.ts`,
