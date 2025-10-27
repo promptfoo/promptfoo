@@ -30,13 +30,13 @@ export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
 export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
-  'simba',
   'crescendo',
   'goat',
   'custom',
   'jailbreak',
   'jailbreak:tree',
   'mischievous-user',
+  'simba',
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
@@ -54,7 +54,6 @@ export const DATASET_PLUGINS = [
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
-  'simba',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -82,6 +81,7 @@ export const ADDITIONAL_STRATEGIES = [
   'prompt-injection',
   'retry',
   'rot13',
+  'simba',
   'video',
 ] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
@@ -104,7 +104,6 @@ export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
-  'simba',
   'layer',
   'multilingual',
   'best-of-n',
@@ -116,6 +115,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'citation',
   'custom',
   'mischievous-user',
+  'simba',
 ] as const;
 
 export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];

@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
+import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { z } from 'zod';
 import logger from '../../logger';
 import { TestSuite, UnifiedConfig } from '../../types/index';
@@ -23,14 +24,6 @@ const SimbaCommandSchema = z.object({
 });
 
 type SimbaCommandOptions = z.infer<typeof SimbaCommandSchema>;
-
-function parseOptionalInt(value: unknown): number | undefined {
-  if (value === undefined || value === null || value === '') {
-    return undefined;
-  }
-  const parsed = Number.parseInt(String(value), 10);
-  return Number.isNaN(parsed) ? undefined : parsed;
-}
 
 function normalizeGoals(goals: SimbaCommandOptions['goals']): string[] {
   if (Array.isArray(goals)) {
@@ -193,11 +186,20 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
     .requiredOption('-g, --goals <goals...>', 'The goals/objectives for the red team test')
     .option('-e, --email <email>', 'Email address for analytics')
     .option('--purpose <purpose>', 'Purpose of the target system', 'Red team testing')
-    .option('--max-conversation-rounds <number>', 'Maximum conversation rounds', '10')
-    .option('--max-attacks-per-goal <number>', 'Maximum attack vectors to try', '5')
+    .option('--max-conversation-rounds <number>', 'Maximum conversation rounds', (val) =>
+      Number.parseInt(val, 10),
+    )
+    .option('--max-attacks-per-goal <number>', 'Maximum attack vectors to try', (val) =>
+      Number.parseInt(val, 10),
+    )
     .option('--additional-instructions <text>', 'Additional attack instructions')
     .option('-s, --session-id <id>', 'Session ID to continue')
-    .option('-j, --concurrency <number>', 'Number of concurrent conversations (1-100)', '1')
+    .option(
+      '-j, --concurrency <number>',
+      'Number of concurrent conversations (1-100)',
+      (val) => Number.parseInt(val, 10),
+      DEFAULT_MAX_CONCURRENCY,
+    )
     .option(
       '--inject-var <name>',
       `Variable name to inject ${strategyDisplayNames.simba} prompts into`,
@@ -206,13 +208,7 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
       setupEnv(opts.envPath);
 
       try {
-        const validatedOpts = SimbaCommandSchema.parse({
-          ...opts,
-          goals: opts.goals,
-          maxRounds: parseOptionalInt(opts.maxConversationRounds),
-          maxVectors: parseOptionalInt(opts.maxAttacksPerGoal),
-          concurrency: parseOptionalInt(opts.concurrency),
-        });
+        const validatedOpts = SimbaCommandSchema.parse(opts);
 
         const { testSuite } = await resolveConfigs(opts, defaultConfig);
 

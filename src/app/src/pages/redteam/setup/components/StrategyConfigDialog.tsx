@@ -63,8 +63,14 @@ export default function StrategyConfigDialog({
   const [numTests, setNumTests] = React.useState<string>(config.numTests?.toString() || '10');
   const [newLanguage, setNewLanguage] = React.useState<string>('');
   const [error, setError] = React.useState<string>('');
-  const [goals, setGoals] = React.useState<string[]>(config.goals || DEFAULT_SIMBA_GOALS);
+  const [goals, setGoals] = React.useState<string[]>(config.goals || []);
   const [newGoal, setNewGoal] = React.useState<string>('');
+
+  React.useEffect(() => {
+    if (strategy === 'simba') {
+      setGoals(config.goals || DEFAULT_SIMBA_GOALS);
+    }
+  }, [strategy]);
 
   const handleAddLanguage = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && newLanguage.trim()) {
@@ -79,13 +85,13 @@ export default function StrategyConfigDialog({
 
   const handleAddGoal = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && newGoal.trim()) {
-      setGoals([...goals, newGoal.trim()]);
+      setGoals((prev) => [...prev, newGoal.trim()]);
       setNewGoal('');
     }
   };
 
   const handleRemoveGoal = (goal: string) => {
-    setGoals(goals.filter((g) => g !== goal));
+    setGoals((prev) => prev.filter((g) => g !== goal));
   };
 
   const handleNumTestsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
