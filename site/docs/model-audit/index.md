@@ -1,6 +1,6 @@
 ---
 title: ModelAudit - Static Security Scanner for ML Models
-description: Scan AI/ML models for security vulnerabilities, malicious code, and backdoors. Supports PyTorch, TensorFlow, ONNX, Keras, and 15+ model formats.
+description: Scan AI/ML models for security vulnerabilities, malicious code, and backdoors. Supports PyTorch, TensorFlow, ONNX, Keras, and 30+ model formats.
 keywords:
   [
     model security,
@@ -195,7 +195,7 @@ Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual 
 
 ## Supported Formats
 
-ModelAudit supports scanning 15+ model formats across major ML frameworks:
+ModelAudit supports scanning 30+ specialized file format scanners across major ML frameworks:
 
 ### Model Formats
 
