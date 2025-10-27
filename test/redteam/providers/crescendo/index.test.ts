@@ -191,6 +191,65 @@ describe('CrescendoProvider', () => {
     expect(crescendoProvider.id()).toBe('promptfoo:redteam:crescendo');
   });
 
+  it('should include sessionId from context vars when response is missing it', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 0,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: {
+        objective: 'test objective',
+        sessionId: 'context-session-id',
+      },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.metadata?.sessionId).toBe('context-session-id');
+  });
+
+  it('should include sessionId from target response when stateful is true', async () => {
+    jest.mocked(tryUnblocking).mockResolvedValue({ success: false });
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+    });
+
+    jest.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+      generatedQuestion: 'attack prompt',
+    });
+    jest.spyOn(provider as any, 'sendPrompt').mockResolvedValue({
+      output: 'target response',
+      sessionId: 'response-session-id',
+    });
+    jest.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+    jest.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+      value: false,
+      metadata: 0,
+      rationale: '',
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.metadata?.sessionId).toBe('response-session-id');
+  });
+
   describe('Unblocking functionality', () => {
     it('should detect blocking question and send unblocking response', async () => {
       const prompt = 'test prompt';

@@ -73,6 +73,7 @@ import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
+import { OpenAiAgentsProvider } from './openai/agents';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -839,6 +840,9 @@ export const providerMap: ProviderFactory[] = [
       if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
+      if (modelType === 'agents') {
+        return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+      }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
       }
@@ -847,7 +851,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },

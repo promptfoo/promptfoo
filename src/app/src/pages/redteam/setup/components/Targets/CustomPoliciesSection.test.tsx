@@ -500,4 +500,56 @@ describe('CustomPoliciesSection', () => {
       });
     });
   });
+
+  describe('Policy ID Stability', () => {
+    it('should maintain stable IDs based on policy content', async () => {
+      // Setup initial policies
+      const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [
+            { id: 'policy', config: { policy: 'Policy text one' } },
+            { id: 'policy', config: { policy: 'Policy text two' } },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      const { rerender } = renderComponent();
+
+      // Wait for policies to be displayed
+      await waitFor(() => {
+        expect(screen.getByText('Policy text one')).toBeInTheDocument();
+        expect(screen.getByText('Policy text two')).toBeInTheDocument();
+      });
+
+      // Reorder policies (swap them)
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [
+            { id: 'policy', config: { policy: 'Policy text two' } },
+            { id: 'policy', config: { policy: 'Policy text one' } },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      rerender(
+        <ThemeProvider theme={createTheme()}>
+          <ToastProvider>
+            <TestCaseGenerationProvider redTeamConfig={(mockUseRedTeamConfig as unknown as Mock)()}>
+              <CustomPoliciesSection />
+            </TestCaseGenerationProvider>
+          </ToastProvider>
+        </ThemeProvider>,
+      );
+
+      // Policies should still be displayed correctly despite reordering
+      // The IDs are based on content, not on position
+      await waitFor(() => {
+        expect(screen.getByText('Policy text one')).toBeInTheDocument();
+        expect(screen.getByText('Policy text two')).toBeInTheDocument();
+      });
+    });
+  });
 });

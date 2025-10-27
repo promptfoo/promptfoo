@@ -18,32 +18,6 @@ vi.mock('./RiskCategoryDrawer', () => ({
   }),
 }));
 
-vi.mock('@promptfoo/redteam/constants', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@promptfoo/redteam/constants')>();
-  const longName = 'this-is-an-extremely-long-test-type-name-that-should-wrap-correctly-in-the-ui';
-  return {
-    ...original,
-    displayNameOverrides: {
-      'sql-injection': 'SQL Injection',
-      xss: 'Cross-Site Scripting',
-      'no-failures': 'No Failures Test',
-      [longName]: longName,
-    },
-    categoryAliases: {
-      'sql-injection': 'SqlInjection',
-      xss: 'XSS',
-      'no-failures': 'NoFailures',
-      [longName]: longName,
-    },
-    subCategoryDescriptions: {
-      'sql-injection': 'Tests for SQL injection vulnerabilities',
-      xss: 'Tests for Cross-Site Scripting vulnerabilities',
-      'no-failures': 'Tests with no failures',
-      [longName]: 'Tests for extremely long test type names',
-    },
-  };
-});
-
 describe('RiskCard', () => {
   const mockUseReportStore = vi.mocked(useReportStore);
 
@@ -55,16 +29,16 @@ describe('RiskCard', () => {
     numTestsFailed: 10,
     testTypes: [
       { name: 'sql-injection', categoryPassed: false, numPassed: 5, numFailed: 5 },
-      { name: 'xss', categoryPassed: true, numPassed: 5, numFailed: 5 },
+      { name: 'ssrf', categoryPassed: true, numPassed: 5, numFailed: 5 },
     ],
     evalId: 'test-eval-id',
     failuresByPlugin: {
       'sql-injection': [{ prompt: 'prompt1', output: 'output1' }],
-      xss: [{ prompt: 'prompt2', output: 'output2' }],
+      ssrf: [{ prompt: 'prompt2', output: 'output2' }],
     },
     passesByPlugin: {
       'sql-injection': [{ prompt: 'prompt3', output: 'output3' }],
-      xss: [{ prompt: 'prompt4', output: 'output4' }],
+      ssrf: [{ prompt: 'prompt4', output: 'output4' }],
     },
   };
 
@@ -104,7 +78,7 @@ describe('RiskCard', () => {
     const props = createTestProps({
       testTypes: [
         { name: 'sql-injection', categoryPassed: false, numPassed: 0, numFailed: 0 },
-        { name: 'xss', categoryPassed: true, numPassed: 0, numFailed: 0 },
+        { name: 'ssrf', categoryPassed: true, numPassed: 0, numFailed: 0 },
       ],
     });
     const { container } = render(<RiskCard {...props} />);
@@ -129,13 +103,13 @@ describe('RiskCard', () => {
   it('should render a list of test types with their display names and pass/fail indicators for each filtered testType', () => {
     const testTypes = [
       { name: 'sql-injection', categoryPassed: true, numPassed: 8, numFailed: 2 },
-      { name: 'xss', categoryPassed: false, numPassed: 3, numFailed: 7 },
+      { name: 'ssrf', categoryPassed: false, numPassed: 3, numFailed: 7 },
     ];
 
     render(<RiskCard {...createTestProps({ testTypes })} />);
 
     expect(screen.getByText('SQL Injection')).toBeInTheDocument();
-    expect(screen.getByText('Cross-Site Scripting')).toBeInTheDocument();
+    expect(screen.getByText('SSRF Vulnerability')).toBeInTheDocument();
   });
 
   it('should open the RiskCategoryDrawer with the correct category and test data when a test type list item is clicked', () => {
@@ -167,16 +141,16 @@ describe('RiskCard', () => {
 
     const testTypes = [
       { name: 'sql-injection', categoryPassed: false, numPassed: 2, numFailed: 8 },
-      { name: 'xss', categoryPassed: true, numPassed: 7, numFailed: 3 },
+      { name: 'ssrf', categoryPassed: true, numPassed: 7, numFailed: 3 },
     ];
 
     render(<RiskCard {...createTestProps({ testTypes })} />);
 
     const expectedSqlInjectionPercentage = `${Math.round((2 / (2 + 8)) * 100)}%`;
-    const expectedXSSPercentage = `${Math.round((7 / (7 + 3)) * 100)}%`;
+    const expectedSsrfPercentage = `${Math.round((7 / (7 + 3)) * 100)}%`;
 
     expect(screen.getByText(expectedSqlInjectionPercentage)).toBeInTheDocument();
-    expect(screen.getByText(expectedXSSPercentage)).toBeInTheDocument();
+    expect(screen.getByText(expectedSsrfPercentage)).toBeInTheDocument();
   });
 
   it("should apply 'risk-card-percentage-high' class when percentage is greater than or equal to 0.8 and showPercentagesOnRiskCards is true", () => {
@@ -230,15 +204,18 @@ describe('RiskCard', () => {
   });
 
   it('should handle test types with extremely long names without breaking the UI layout', () => {
-    const longTestTypeName =
-      'this-is-an-extremely-long-test-type-name-that-should-wrap-correctly-in-the-ui';
+    // Using a real plugin with a longer display name
+    const longTestTypeName = 'harmful:misinformation-disinformation';
     const props = createTestProps({
       testTypes: [{ name: longTestTypeName, categoryPassed: true, numPassed: 1, numFailed: 0 }],
+      failuresByPlugin: {},
+      passesByPlugin: { [longTestTypeName]: [] },
     });
     render(<RiskCard {...props} />);
 
-    const listItemText = screen.getByText(longTestTypeName);
-    expect(listItemText).toBeInTheDocument();
+    // The component should render the display name from displayNameOverrides: "Disinformation Campaigns"
+    const listItem = screen.getByText('Disinformation Campaigns');
+    expect(listItem).toBeInTheDocument();
   });
 
   it('should render correctly when failuresByPlugin and passesByPlugin are empty objects', () => {
@@ -255,11 +232,13 @@ describe('RiskCard', () => {
 
   it('should open the RiskCategoryDrawer when a test type with no failures is clicked', () => {
     const props = createTestProps({
-      testTypes: [{ name: 'no-failures', categoryPassed: true, numPassed: 10, numFailed: 0 }],
+      testTypes: [{ name: 'rbac', categoryPassed: true, numPassed: 10, numFailed: 0 }],
+      failuresByPlugin: {},
+      passesByPlugin: { rbac: [] },
     });
     render(<RiskCard {...props} />);
 
-    const listItem = screen.getByText('No Failures Test').closest('li');
+    const listItem = screen.getByText('RBAC Implementation').closest('li');
     fireEvent.click(listItem as Element);
 
     expect(screen.getByTestId('mock-risk-category-drawer')).toBeInTheDocument();
