@@ -4,22 +4,28 @@ import type Eval from '../../src/models/eval';
 import type { ApiProvider, EvaluateOptions, TestSuite } from '../../src/types/index';
 
 describe('select-best context propagation integration', () => {
-  const mockEval = {
-    id: 'test-eval-id',
-    addResult: jest.fn(),
-    addPrompts: jest.fn(),
-    fetchResultsByTestIdx: jest.fn(),
-    setVars: jest.fn(),
-    results: [],
-    prompts: [],
-    persisted: false,
-    config: {
-      outputPath: undefined,
-    },
-  } as unknown as Eval;
+  let mockEval: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    // Create a mock eval that properly tracks results
+    const results: any[] = [];
+    mockEval = {
+      id: 'test-eval-id',
+      addResult: jest.fn((result) => {
+        results.push(result);
+      }),
+      addPrompts: jest.fn(),
+      fetchResultsByTestIdx: jest.fn((testIdx: number) => {
+        return results.filter((r) => r.testIdx === testIdx);
+      }),
+      setVars: jest.fn(),
+      results,
+      prompts: [],
+      persisted: false,
+      config: {
+        outputPath: undefined,
+      },
+    } as unknown as Eval;
   });
 
   it('should pass originalProvider context to grading provider in select-best', async () => {
@@ -109,21 +115,20 @@ describe('select-best context propagation integration', () => {
     expect(result2.score).toBe(0);
   });
 
-  it('should handle select-best when originalProvider lookup fails gracefully', async () => {
+  it('should handle select-best with single provider', async () => {
     // Create a grading provider
     const gradingProvider: ApiProvider = {
       id: () => 'test-grading-provider',
       callApi: jest.fn().mockResolvedValue({
         output: JSON.stringify({
-          reason: 'First output is best',
+          reason: 'Output is good',
           bestIndex: 0,
         }),
         tokenUsage: {},
       }),
     };
 
-    // Create a provider with an ID that won't be found in the providers list
-    const _provider1: ApiProvider = {
+    const provider1: ApiProvider = {
       id: () => 'provider-1',
       callApi: jest.fn().mockResolvedValue({
         output: 'Response from provider 1',
@@ -131,17 +136,9 @@ describe('select-best context propagation integration', () => {
       }),
     };
 
-    const provider2: ApiProvider = {
-      id: () => 'provider-2',
-      callApi: jest.fn().mockResolvedValue({
-        output: 'Response from provider 2',
-        tokenUsage: {},
-      }),
-    };
-
-    // Note: We don't include provider1 in the providers list to simulate a lookup failure
+    // With single provider, select-best won't be triggered (requires at least 2 outputs)
     const testSuite: TestSuite = {
-      providers: [provider2], // Only provider2, so provider1 lookup will fail
+      providers: [provider1],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
       tests: [
         {
@@ -166,24 +163,24 @@ describe('select-best context propagation integration', () => {
     // Run evaluation - should complete without throwing
     await expect(evaluate(testSuite, mockEval, options)).resolves.not.toThrow();
 
-    // Verify evaluation completed
+    // Verify evaluation completed with one result
     expect(mockEval.addResult).toHaveBeenCalled();
   });
 
-  it('should pass different originalProvider for each output being graded', async () => {
-    const capturedProviders: (ApiProvider | undefined)[] = [];
+  it('should pass originalProvider from first result in select-best comparison', async () => {
+    let receivedContext: any;
 
-    // Create a grading provider that captures originalProvider for each call
+    // Create a grading provider that captures the full context
     const gradingProvider: ApiProvider = {
       id: () => 'test-grading-provider',
       callApi: jest.fn(async (_prompt: string, context) => {
-        capturedProviders.push(context?.originalProvider);
+        receivedContext = context;
 
-        // Return a grading response
+        // Return a grading response selecting the middle option
         return {
           output: JSON.stringify({
-            reason: 'Grading output',
-            bestIndex: 0,
+            reason: 'Middle output is best',
+            bestIndex: 1,
           }),
           tokenUsage: {},
         };
@@ -240,12 +237,20 @@ describe('select-best context propagation integration', () => {
     // Run evaluation
     await evaluate(testSuite, mockEval, options);
 
-    // Verify we captured providers for each output
-    expect(capturedProviders.length).toBeGreaterThan(0);
+    // Verify grading provider was called
+    expect(gradingProvider.callApi).toHaveBeenCalled();
 
-    // The grading provider is called once for all outputs together
-    // So we should have captured one originalProvider (from the first result)
-    expect(capturedProviders[0]).toBeDefined();
-    expect(capturedProviders[0]?.id()).toBe('provider-1');
+    // The grading provider should receive originalProvider from the first result
+    expect(receivedContext?.originalProvider).toBeDefined();
+    expect(receivedContext.originalProvider.id()).toBe('provider-1');
+
+    // Verify results were added for all three providers
+    expect(mockEval.addResult).toHaveBeenCalledTimes(3);
+
+    // Verify the middle provider (provider2) was marked as best
+    const results = (mockEval.addResult as jest.Mock).mock.calls.map((call) => call[0]);
+    expect(results[0].success).toBe(false); // provider-1: not best
+    expect(results[1].success).toBe(true); // provider-2: best
+    expect(results[2].success).toBe(false); // provider-3: not best
   });
 });
