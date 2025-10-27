@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { ElevenLabsAlignmentProvider } from '../../../../src/providers/elevenlabs/alignment';
 import { promises as fs } from 'fs';

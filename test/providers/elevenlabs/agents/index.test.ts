@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
 import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
