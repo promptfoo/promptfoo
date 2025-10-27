@@ -95,8 +95,8 @@ describe('RedteamIterativeProvider', () => {
         injectVar: 'test',
         numIterations: '5',
       });
-      // The environment variable takes precedence
-      expect(provider['numIterations']).toBe(4);
+      // Config takes precedence over default
+      expect(provider['numIterations']).toBe(5);
     });
 
     it('should use environment variable for numIterations if set', () => {
