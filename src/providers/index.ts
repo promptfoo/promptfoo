@@ -9,6 +9,7 @@ import logger from '../logger';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
+import { renderVarsInObject } from '../util/index';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
 
@@ -22,10 +23,19 @@ export async function loadApiProvider(
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
+
+  // Render templates in config and id at load time to resolve environment variables
+  // (e.g., {{ env.AZURE_ENDPOINT }}, {{ env.MY_DEPLOYMENT }}).
+  // Note: Vars context is not available here since providers are loaded once and shared
+  // across all test cases. For per-test customization, use test-level `options.provider.config`.
+  // Environment variables are available via Nunjucks globals even with empty vars context.
+  const renderedConfig = options.config ? renderVarsInObject(options.config, {}) : undefined;
+  const renderedId = options.id ? renderVarsInObject(options.id, {}) : undefined;
+
   const providerOptions: ProviderOptions = {
-    id: options.id,
+    id: renderedId,
     config: {
-      ...options.config,
+      ...renderedConfig,
       basePath,
     },
     env,

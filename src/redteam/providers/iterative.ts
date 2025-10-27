@@ -23,6 +23,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -135,7 +136,11 @@ export async function runRedteamConversation({
 
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
-  const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
+  const redteamHistory: {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    metadata?: Record<string, any>;
+  }[] = [
     {
       role: 'system',
       content: redteamSystemPrompt,
@@ -161,6 +166,7 @@ export async function runRedteamConversation({
     score: number;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
+    metadata?: Record<string, any>;
   }[] = [];
 
   let lastResponse: TargetResponse | undefined = undefined;
@@ -276,10 +282,7 @@ export async function runRedteamConversation({
       // Continue processing - don't skip the iteration
     }
 
-    const responseSessionId = targetResponse.sessionId;
-    const varsSessionId = iterationContext?.vars?.sessionId;
-    const sessionId =
-      responseSessionId || (typeof varsSessionId === 'string' ? varsSessionId : undefined);
+    const sessionId = getSessionId(targetResponse, context);
 
     if (sessionId) {
       sessionIds.push(sessionId);
@@ -468,6 +471,9 @@ export async function runRedteamConversation({
       score: currentScore,
       graderPassed: storedGraderResult?.pass,
       guardrails: targetResponse.guardrails,
+      metadata: {
+        sessionId,
+      },
     });
 
     // Break after all processing is complete if we should exit early
@@ -503,7 +509,8 @@ class RedteamIterativeProvider implements ApiProvider {
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
-    this.numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
+    this.numIterations =
+      Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );

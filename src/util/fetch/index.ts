@@ -231,6 +231,7 @@ export async function fetchWithRetries(
         logger.debug(
           `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${maxRetries}`,
         );
+        lastErrorMessage = `Rate limited: ${response.status} ${response.statusText}`;
         await handleRateLimit(response);
         continue;
       }
