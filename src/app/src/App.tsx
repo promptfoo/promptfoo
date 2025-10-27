@@ -27,6 +27,7 @@ import NotFoundPage from './pages/NotFoundPage';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -92,10 +93,14 @@ const router = createBrowserRouter(
   { basename },
 );
 
+const queryClient = new QueryClient();
+
 function App() {
   return (
     <ToastProvider>
-      <RouterProvider router={router} />
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
     </ToastProvider>
   );
 }

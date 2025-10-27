@@ -21,6 +21,7 @@ import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { getSessionId } from './redteam/util';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -64,6 +65,7 @@ import type Eval from './models/eval';
 import type {
   EvalConversations,
   EvalRegisters,
+  PromptMetrics,
   ProviderOptions,
   ScoringFunction,
   TokenUsage,
@@ -104,7 +106,8 @@ class ProgressBarManager {
     // Create single progress bar
     this.progressBar = new cliProgress.SingleBar(
       {
-        format: 'Evaluating [{bar}] {percentage}% | {value}/{total} | {provider} {prompt} {vars}',
+        format:
+          'Evaluating [{bar}] {percentage}% | {value}/{total} (errors: {errors}) | {provider} {prompt} {vars}',
         hideCursor: true,
         gracefulExit: true,
       },
@@ -116,6 +119,7 @@ class ProgressBarManager {
       provider: '',
       prompt: '',
       vars: '',
+      errors: 0,
     });
   }
 
@@ -126,6 +130,7 @@ class ProgressBarManager {
     _index: number,
     evalStep: RunEvalOptions | undefined,
     _phase: 'serial' | 'concurrent' = 'concurrent',
+    metrics?: PromptMetrics,
   ): void {
     if (this.isWebUI || !evalStep || !this.progressBar) {
       return;
@@ -140,6 +145,7 @@ class ProgressBarManager {
       provider,
       prompt: prompt || '""',
       vars: vars || '',
+      errors: metrics?.testErrorCount ?? 0,
     });
   }
 
@@ -415,26 +421,6 @@ export async function runEval({
         ...test.metadata,
         ...response.metadata,
         [FILE_METADATA_KEY]: fileMetadata,
-        // Add session information to metadata
-        ...(() => {
-          // If sessionIds array exists from iterative providers, use it
-          if (test.metadata?.sessionIds) {
-            return { sessionIds: test.metadata.sessionIds };
-          }
-
-          // Otherwise, use single sessionId (prioritize response over vars)
-          if (response.sessionId) {
-            return { sessionId: response.sessionId };
-          }
-
-          // Check if vars.sessionId is a valid string
-          const varsSessionId = vars.sessionId;
-          if (typeof varsSessionId === 'string' && varsSessionId.trim() !== '') {
-            return { sessionId: varsSessionId };
-          }
-
-          return {};
-        })(),
       },
       promptIdx,
       testIdx,
@@ -442,6 +428,11 @@ export async function runEval({
       promptId: prompt.id || '',
       tokenUsage: createEmptyTokenUsage(),
     };
+
+    if (!ret.metadata?.sessionIds && !ret.metadata?.sessionId) {
+      ret.metadata ??= {};
+      ret.metadata.sessionId = getSessionId(response, { vars });
+    }
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
@@ -1409,7 +1400,7 @@ class Evaluator {
       } else if (progressBarManager) {
         // Progress bar update is handled by the manager
         const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
-        progressBarManager.updateProgress(index, evalStep, phase);
+        progressBarManager.updateProgress(index, evalStep, phase, metrics);
       } else if (ciProgressReporter) {
         // CI progress reporter update
         ciProgressReporter.update(numComplete);

@@ -414,7 +414,7 @@ All other [OpenAI provider](/docs/providers/openai) environment variables and co
 
 ## Using Client Credentials
 
-To use client credentials for authentication with Azure, first install the peer dependency:
+Install the `@azure/identity` package:
 
 ```sh
 npm i @azure/identity
@@ -774,7 +774,7 @@ To evaluate an OpenAI assistant on Azure:
 
 1. Create a deployment for the assistant in the Azure portal
 2. Create an assistant in the Azure web UI
-3. Install the peer dependency:
+3. Install the `@azure/openai-assistants` package:
 
 ```sh
 npm i @azure/openai-assistants

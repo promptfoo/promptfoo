@@ -49,6 +49,7 @@ export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 export const ADDITIONAL_STRATEGIES = [
   'layer',
   'audio',
+  'authoritative-markup-injection',
   'base64',
   'best-of-n',
   'camelcase',
@@ -62,6 +63,7 @@ export const ADDITIONAL_STRATEGIES = [
   'image',
   'emoji',
   'jailbreak:likert',
+  'jailbreak:meta',
   'jailbreak:tree',
   'leetspeak',
   'math-prompt',
@@ -160,3 +162,15 @@ export function getDefaultNFanout(strategyId: FanOutStrategy): number {
 export function isFanoutStrategy(strategyId: string): strategyId is FanOutStrategy {
   return strategyId in DEFAULT_N_FAN_OUT_BY_STRATEGY;
 }
+
+// Strategies that require remote generation to function
+// These strategies will be disabled in the UI when PROMPTFOO_DISABLE_REMOTE_GENERATION is set
+export const STRATEGIES_REQUIRING_REMOTE = [
+  'audio',
+  'citation',
+  'gcg',
+  'goat',
+  'jailbreak:composite',
+  'jailbreak:likert',
+  'jailbreak:meta',
+] as const;

@@ -1,17 +1,21 @@
+import dedent from 'dedent';
 import path from 'path';
 
-import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
+import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
 import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
 import RedteamCustomProvider from '../redteam/providers/custom';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
+import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
+import type { LoadApiProviderContext } from '../types/index';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -64,6 +68,7 @@ import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
+import { OpenAiAgentsProvider } from './openai/agents';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -90,15 +95,13 @@ import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
+import { createTrueFoundryProvider } from './truefoundry';
 import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
-
-import type { LoadApiProviderContext } from '../types/index';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -140,13 +143,24 @@ export const providerMap: ProviderFactory[] = [
       const providerName = splits[1];
       const modelType = splits[2];
       const modelName = splits[3];
-      const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
-        './adaline.gateway'
-      );
-      if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
+
+      try {
+        const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
+          './adaline.gateway'
+        );
+        if (modelType === 'embedding' || modelType === 'embeddings') {
+          return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
+        }
+        return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
+      } catch (error: any) {
+        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@adaline/')) {
+          throw new Error(
+            'The Adaline Gateway provider requires @adaline packages. Please install them with:\n' +
+              'npm install @adaline/anthropic @adaline/azure @adaline/gateway @adaline/google @adaline/groq @adaline/open-router @adaline/openai @adaline/provider @adaline/together-ai @adaline/types @adaline/vertex',
+          );
+        }
+        throw error;
       }
-      return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
     },
   },
   {
@@ -768,6 +782,9 @@ export const providerMap: ProviderFactory[] = [
       if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
+      if (modelType === 'agents') {
+        return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+      }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
       }
@@ -776,7 +793,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
@@ -860,6 +877,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createTogetherAiProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('truefoundry:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createTrueFoundryProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
@@ -1174,6 +1204,17 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) =>
+      providerPath === 'promptfoo:redteam:authoritative-markup-injection',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new RedteamAuthoritativeMarkupInjectionProvider(providerOptions.config);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath === 'promptfoo:redteam:mischievous-user',
     create: async (
       _providerPath: string,
@@ -1211,6 +1252,16 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new RedteamIterativeTreeProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:meta',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new RedteamIterativeMetaProvider(providerOptions.config);
     },
   },
   {
