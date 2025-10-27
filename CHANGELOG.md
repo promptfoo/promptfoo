@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - chore(internals): custom policy type def (#6037)
 - chore(changelog): organize and improve Unreleased section with consistent scoping and formatting (#6024)
+- refactor(redteam): migrate multilingual from per-strategy config to global language configuration; plugins now generate tests directly in target languages without post-generation translation (#5984)
 - chore(cli): show telemetryDisabled/telemetryDebug in `promptfoo debug` output (#6015)
 - chore(cli): improve error handling and error logging (#5930)
 - chore(cli): revert "feat: Improved error handling in CLI and error logging" (#5939)
@@ -95,6 +96,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - docs(model-audit): improve accuracy and clarity of ModelAudit documentation (#6023)
 - docs(contributing): add changelog and GitHub Actions enforcement (#6012)
+- docs(redteam): add global language configuration section to red team configuration docs; remove multilingual strategy documentation (#5984)
 - docs(providers): add OpenAI Agents provider documentation and example (#6009)
 - docs(providers): update AWS Bedrock model access documentation (#5953)
 - docs(providers): fix apiKey environment variable syntax across provider docs and examples (#6018)
@@ -114,6 +116,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - test(providers): fix flaky latencyMs assertions in TrueFoundry provider tests (#6026)
 - test(providers): add unit test verifying assistant system prompt inclusion for simulated-user provider (#6020)
 - test(providers): add comprehensive tests for OpenAI Agents provider, loader, and tracing (#6009)
+- test(redteam): update strategy and frontend tests for global language configuration migration (#5984)
 - test(redteam): remove redteam constants mocks from unit tests (#6010)
 - test(webui): add tests for evaluation UI components and hooks (#5981)
 
