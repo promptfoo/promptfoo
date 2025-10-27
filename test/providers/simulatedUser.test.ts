@@ -153,7 +153,9 @@ describe('SimulatedUser', () => {
 
       expect(result.output).toBeDefined();
       expect(originalProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"user","content":"user response"}'),
+        expect.stringContaining(
+          '[{"role":"system","content":"test"},{"role":"user","content":"user response"}',
+        ),
         expect.objectContaining({
           vars: expect.objectContaining({
             workflow_id: '123-workflow',
@@ -263,6 +265,81 @@ describe('SimulatedUser', () => {
   describe('toString()', () => {
     it('should return correct string representation', () => {
       expect(simulatedUser.toString()).toBe('AgentProvider');
+    });
+  });
+
+  describe('prompt handling', () => {
+    it('should include the assistant prompt/instructions when calling the agent', async () => {
+      const assistantPrompt =
+        'You are a helpful assistant. You must follow these specific instructions.';
+      const testContext = {
+        originalProvider,
+        vars: { instructions: 'test user instructions' },
+        prompt: { raw: assistantPrompt, display: assistantPrompt, label: 'test-prompt' },
+      };
+
+      await simulatedUser.callApi('test prompt', testContext);
+
+      const callApiCalls = jest.mocked(originalProvider.callApi).mock.calls;
+      expect(callApiCalls.length).toBeGreaterThan(0);
+
+      const firstCall = callApiCalls[0];
+      const promptArg = firstCall[0] as string;
+
+      // Verify the assistant prompt is included in the call to the agent
+      expect(promptArg).toContain(assistantPrompt);
+    });
+
+    it('should include system prompt on first turn only for stateful providers', async () => {
+      const providerWithSessionId = {
+        id: () => 'test-agent',
+        callApi: jest
+          .fn()
+          .mockImplementationOnce(async () => ({
+            output: 'first response',
+            sessionId: 'session-123',
+            tokenUsage: { numRequests: 1 },
+          }))
+          .mockImplementationOnce(async () => ({
+            output: 'second response',
+            sessionId: 'session-123',
+            tokenUsage: { numRequests: 1 },
+          })),
+      };
+
+      const statefulUser = new SimulatedUser({
+        id: 'stateful-agent',
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          stateful: true,
+        },
+      });
+
+      const assistantPrompt = 'You are a stateful assistant.';
+      const testContext = {
+        originalProvider: providerWithSessionId,
+        vars: { instructions: 'test user instructions' },
+        prompt: { raw: assistantPrompt, display: assistantPrompt, label: 'test-prompt' },
+      };
+
+      await statefulUser.callApi('test prompt', testContext);
+
+      const callApiCalls = jest.mocked(providerWithSessionId.callApi).mock.calls;
+      expect(callApiCalls.length).toBe(2);
+
+      // First turn: should send system + user (no sessionId yet)
+      const firstCall = callApiCalls[0];
+      const firstPrompt = JSON.parse(firstCall[0] as string);
+      expect(firstPrompt).toHaveLength(2);
+      expect(firstPrompt[0]).toEqual({ role: 'system', content: assistantPrompt });
+      expect(firstPrompt[1]).toEqual({ role: 'user', content: 'user response' });
+
+      // Second turn: should send only user (sessionId exists)
+      const secondCall = callApiCalls[1];
+      const secondPrompt = JSON.parse(secondCall[0] as string);
+      expect(secondPrompt).toHaveLength(1);
+      expect(secondPrompt[0]).toEqual({ role: 'user', content: 'user response' });
     });
   });
 });

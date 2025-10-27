@@ -505,7 +505,7 @@ export async function runEval({
           providerTransformedOutput,
         },
         test,
-        latencyMs: response.cached ? undefined : latencyMs,
+        latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
       });
