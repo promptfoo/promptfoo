@@ -66,6 +66,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(webui): pass extensions config when running eval from UI (#6006)
 - fix(webui): in red team setup, reset config button hidden by version banner (#5896)
 - fix(webui): sync selected plugins to global config in red team setup UI (#5991)
+- fix(webui): HTTP test agent (#6033)
 
 ### Dependencies
 
