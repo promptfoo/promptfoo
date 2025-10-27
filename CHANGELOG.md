@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(guardrails): add provider-agnostic guardrails with unified error handling and retry logic
 - feat(errors): unify EvalErrorInfo to a single source of truth; export canonical types from result.ts
 - docs(types): document new error taxonomy and guardrail integration
+
 ### Added
 
 - feat(providers): add Python provider persistence for 10-100x performance improvement with persistent worker pools (#5968)
