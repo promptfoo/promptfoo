@@ -1,8 +1,8 @@
-import type { ErrorType, EvalErrorInfo } from '../types/result';
+import type { ErrorCategory, ErrorType, EvalErrorInfo } from '../types/errors';
 
 export class AppError extends Error {
   type: ErrorType;
-  code?: string;
+  code?: ErrorCategory;
   hint?: string;
   provider?: string;
   requestId?: string;
