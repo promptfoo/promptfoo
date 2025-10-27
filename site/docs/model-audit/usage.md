@@ -3,6 +3,28 @@ title: ModelAudit Advanced Usage
 sidebar_label: Advanced Usage
 sidebar_position: 120
 description: Automate LLM model scanning across cloud providers with remote storage integration, CI/CD workflows, and programmatic controls for advanced security testing
+keywords:
+  [
+    modelaudit,
+    model scanning,
+    cloud storage,
+    remote model scanning,
+    huggingface,
+    s3 model scanning,
+    gcs model scanning,
+    mlflow,
+    jfrog artifactory,
+    dvc,
+    model authentication,
+    ci cd integration,
+    github actions,
+    gitlab ci,
+    programmatic scanning,
+    sarif output,
+    sbom generation,
+    custom scanners,
+    model security automation,
+  ]
 ---
 
 # Advanced Usage
