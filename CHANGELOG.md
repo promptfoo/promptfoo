@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(redteam): add `jailbreak:meta` strategy with intelligent meta-agent that builds dynamic attack taxonomy and learns from full attempt history (#XXXX)
 - feat(providers): add OpenAI Agents SDK integration with support for agents, tools, handoffs, and OTLP tracing (#6009)
 - feat(providers): add function calling/tool support for Ollama chat provider (#5977)
 - feat(app): persist inline-defined custom policy names (#5990)
@@ -22,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat: Add errors to eval progress bar (#5942)
 - feat: Improved error handling in CLI and error logging (#5930)
 - feat: Add pluginId, strategyId, sessionId, and sessionIds to red team metadata columns in CSV export (#6016)
+- feat: Ability to filter beavertails dataset by harm category for red teaming
 
 ### Changed
 
@@ -48,6 +50,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(providers): render environment variables in provider config at load time (#6007)
+
+### Documentation
+
+- docs: fix apiKey environment variable syntax across provider docs and examples (#6018)
 - fix: Don't test session management if target is not stateful (#5989)
 - fix(internals): plugin selection (#5991)
 - fix: improve crescendo prompt example alignment with actual objective statements to increase accuracy. (#5964)
