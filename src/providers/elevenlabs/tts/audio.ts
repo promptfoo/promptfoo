@@ -38,7 +38,9 @@ export async function saveAudioFile(
   }
 
   // Generate filename if not provided
-  const finalFilename = filename || `audio-${Date.now()}.${audioData.format}`;
+  const rawFilename = filename || `audio-${Date.now()}.${audioData.format}`;
+  // Sanitize filename to prevent path traversal attacks
+  const finalFilename = path.basename(rawFilename);
   const fullPath = path.join(outputPath, finalFilename);
 
   // Decode base64 and write to file
@@ -89,6 +91,17 @@ function estimateDuration(sizeBytes: number, format: OutputFormat): number {
       // PCM is 16-bit (2 bytes per sample), mono
       const samplesPerSecond = sampleRate;
       const bytesPerSecond = samplesPerSecond * 2;
+      return (sizeBytes / bytesPerSecond) * 1000; // Convert to milliseconds
+    }
+  }
+
+  // For ulaw format, use sample rate (1 byte per sample)
+  if (format.startsWith('ulaw_')) {
+    const sampleRateMatch = format.match(/ulaw_(\d+)/);
+    if (sampleRateMatch) {
+      const sampleRate = parseInt(sampleRateMatch[1]);
+      // ulaw is 8-bit (1 byte per sample), mono
+      const bytesPerSecond = sampleRate;
       return (sizeBytes / bytesPerSecond) * 1000; // Convert to milliseconds
     }
   }

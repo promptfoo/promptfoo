@@ -112,6 +112,10 @@ export interface TTSStreamConfig {
   baseUrl?: string;
   keepAliveInterval?: number;
   chunkLengthSchedule?: number[]; // Chunk sizes for streaming (default: [120, 160, 250, 290])
+  pronunciationDictionaryLocators?: Array<{
+    pronunciation_dictionary_id: string;
+    version_id?: string;
+  }>;
 }
 
 /**

@@ -46,14 +46,23 @@ export class ElevenLabsClient {
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
         const { headers: optionsHeaders, ...restOptions } = options || {};
+
+        // Handle FormData for multipart uploads
+        const isFormData = body instanceof FormData;
+        const headers: HeadersInit = {
+          'xi-api-key': this.apiKey,
+          ...(optionsHeaders || {}),
+        };
+
+        // Don't set Content-Type for FormData (fetch sets it automatically with boundary)
+        if (!isFormData) {
+          (headers as Record<string, string>)['Content-Type'] = 'application/json';
+        }
+
         const response = await fetchWithProxy(url, {
           method: 'POST',
-          headers: {
-            'xi-api-key': this.apiKey,
-            'Content-Type': 'application/json',
-            ...optionsHeaders,
-          },
-          body: JSON.stringify(body),
+          headers,
+          body: isFormData ? body : JSON.stringify(body),
           signal: controller.signal,
           ...restOptions,
         });

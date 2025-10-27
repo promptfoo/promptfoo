@@ -67,17 +67,22 @@ export async function createPronunciationDictionary(
     })
     .join('\n');
 
+  // Create FormData for multipart upload
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append(
+    'description',
+    description || `Auto-generated pronunciation dictionary - ${name}`,
+  );
+  formData.append('file', new Blob([dictionaryContent], { type: 'text/plain' }), 'dictionary.pls');
+
   // Create dictionary via API
   const response = await client.post<{
     id: string;
     name: string;
     version_id: string;
     created_at: string;
-  }>('/pronunciation-dictionaries/add-from-file', {
-    name,
-    description: description || `Auto-generated pronunciation dictionary - ${name}`,
-    file: dictionaryContent,
-  });
+  }>('/pronunciation-dictionaries/add-from-file', formData);
 
   logger.debug('[ElevenLabs Pronunciation] Dictionary created', {
     dictionaryId: response.id,

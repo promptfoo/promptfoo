@@ -399,6 +399,9 @@ export class ElevenLabsTTSProvider implements ApiProvider {
         modelId: this.config.modelId,
         voiceSettings: this.config.voiceSettings,
         baseUrl: this.config.baseUrl?.replace('https:', 'wss:').replace('http:', 'ws:'),
+        pronunciationDictionaryLocators: this.config.pronunciationDictionaryId
+          ? [{ pronunciation_dictionary_id: this.config.pronunciationDictionaryId }]
+          : undefined,
       };
 
       // Create WebSocket connection

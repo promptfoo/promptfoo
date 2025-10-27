@@ -7,6 +7,7 @@ export interface StreamingSession {
   chunks: StreamingChunk[];
   alignments: any[];
   errors: string[];
+  startTime: number;
 }
 
 /**
@@ -27,7 +28,7 @@ export async function createStreamingConnection(
   const endpoint = `/v1/text-to-speech/${voiceId}/stream-input?model_id=${config.modelId}`;
 
   // Initial configuration
-  const streamConfig = {
+  const streamConfig: Record<string, any> = {
     text: ' ',
     voice_settings: config.voiceSettings,
     generation_config: {
@@ -35,6 +36,11 @@ export async function createStreamingConnection(
     },
     xi_api_key: apiKey,
   };
+
+  // Add pronunciation dictionary locators if provided
+  if (config.pronunciationDictionaryLocators) {
+    streamConfig.pronunciation_dictionary_locators = config.pronunciationDictionaryLocators;
+  }
 
   await client.connect(endpoint, streamConfig);
 
@@ -49,11 +55,13 @@ export async function handleStreamingTTS(
   text: string,
   onChunk?: (chunk: StreamingChunk) => void,
 ): Promise<StreamingSession> {
+  const startTime = Date.now();
   const session: StreamingSession = {
     client,
     chunks: [],
     alignments: [],
     errors: [],
+    startTime,
   };
 
   return new Promise((resolve, reject) => {
@@ -175,8 +183,8 @@ export function calculateStreamingMetrics(session: StreamingSession, textLength:
   const firstChunk = session.chunks[0];
   const lastChunk = session.chunks[session.chunks.length - 1];
 
-  const firstChunkLatency = firstChunk.timestamp - firstChunk.timestamp; // Relative to start
-  const totalLatency = lastChunk.timestamp - firstChunk.timestamp;
+  const firstChunkLatency = firstChunk.timestamp - session.startTime;
+  const totalLatency = lastChunk.timestamp - session.startTime;
   const avgChunkLatency = totalLatency / session.chunks.length;
   const charactersPerSecond = totalLatency > 0 ? (textLength / totalLatency) * 1000 : 0;
 

@@ -46,6 +46,11 @@ export class CostTracker {
    * Track TTS (Text-to-Speech) costs
    */
   trackTTS(characters: number, metadata?: Record<string, any>): number {
+    // Don't charge for cached responses
+    if (metadata?.cacheHit) {
+      return 0;
+    }
+
     const cost = characters / CostTracker.PRICING.tts.charactersPerDollar;
 
     this.costs.push({

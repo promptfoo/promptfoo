@@ -16,6 +16,7 @@ export class ElevenLabsCache {
   private ttl: number;
   private maxSize: number;
   private currentSize: number = 0;
+  private sizesMap: Map<string, number> = new Map();
 
   constructor(options: CacheOptions) {
     this.enabled = options.enabled;
@@ -74,6 +75,7 @@ export class ElevenLabsCache {
 
     await cache.set(key, value, { ttl: this.ttl });
     this.currentSize += valueSize;
+    this.sizesMap.set(key, valueSize);
 
     logger.debug('[ElevenLabs Cache] Cached value', { key, ttl: this.ttl });
   }
@@ -89,6 +91,13 @@ export class ElevenLabsCache {
     const cache = getCache();
     await cache.del(key);
 
+    // Decrement size tracking
+    const size = this.sizesMap.get(key);
+    if (size !== undefined) {
+      this.currentSize -= size;
+      this.sizesMap.delete(key);
+    }
+
     logger.debug('[ElevenLabs Cache] Deleted from cache', { key });
   }
 
@@ -103,6 +112,7 @@ export class ElevenLabsCache {
     const cache = getCache();
     await cache.reset();
     this.currentSize = 0;
+    this.sizesMap.clear();
 
     logger.debug('[ElevenLabs Cache] Cache cleared');
   }

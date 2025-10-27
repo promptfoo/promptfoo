@@ -80,6 +80,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - docs(model-audit): improve accuracy and clarity of ModelAudit documentation (#6023)
 - docs(contributing): add changelog and GitHub Actions enforcement (#6012)
+- docs(providers): add ElevenLabs provider documentation and examples (#6022)
+- docs(guides): add ElevenLabs evaluation guide (#6022)
 - docs(providers): add OpenAI Agents provider documentation and example (#6009)
 - docs(providers): update AWS Bedrock model access documentation (#5953)
 - docs(providers): fix apiKey environment variable syntax across provider docs and examples (#6018)
@@ -96,6 +98,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Tests
 
 - test(providers): fix flaky latencyMs assertions in TrueFoundry provider tests (#6026)
+- test(providers): add ElevenLabs provider unit and integration tests (#6022)
 - test(providers): add unit test verifying assistant system prompt inclusion for simulated-user provider (#6020)
 - test(providers): add comprehensive tests for OpenAI Agents provider, loader, and tracing (#6009)
 - test(redteam): remove redteam constants mocks from unit tests (#6010)

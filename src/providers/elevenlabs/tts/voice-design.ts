@@ -206,23 +206,25 @@ export async function cloneVoice(
     throw new Error('At least one audio sample is required for voice cloning');
   }
 
-  // Build multipart form data
-  const additionalFields: Record<string, any> = {
-    name,
-  };
+  // Build multipart form data for multiple audio samples
+  const formData = new FormData();
+  formData.append('name', name);
 
   if (description) {
-    additionalFields.description = description;
+    formData.append('description', description);
   }
 
-  // For voice cloning, we need to upload multiple files
-  // The upload method needs to be enhanced or we use a custom implementation
-  // For now, we'll upload the first sample (API typically supports multiple via different approach)
+  // Add all audio samples with the field name 'files' (API expects this for multiple files)
+  for (let i = 0; i < audioSamples.length; i++) {
+    const sample = audioSamples[i];
+    const fileName = `sample_${i}.mp3`;
+    formData.append('files', new Blob([new Uint8Array(sample)], { type: 'audio/mpeg' }), fileName);
+  }
 
-  const response = await client.upload<{
+  const response = await client.post<{
     voice_id: string;
     name: string;
-  }>('/voices/add', audioSamples[0], `sample_0.mp3`, additionalFields);
+  }>('/voices/add', formData);
 
   logger.debug('[ElevenLabs Voice Clone] Voice cloned', {
     voiceId: response.voice_id,

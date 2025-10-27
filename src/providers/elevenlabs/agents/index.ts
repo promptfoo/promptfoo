@@ -143,7 +143,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       // Debug: Log the request being sent
       logger.debug('[ElevenLabs Agents] Request payload', {
         endpoint: `/convai/agents/${agentId}/simulate-conversation`,
-        payload: JSON.stringify(simulationRequest, null, 2),
+        payload: simulationRequest, // Auto-sanitized by logger
       });
 
       // Run simulation
