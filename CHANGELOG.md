@@ -49,6 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(fetch): include error details in final error message when rate limited (#6019)
+- fix(providers): simulated-user and mischievous-user now respect assistant system prompts in multi-turn conversations (#6020)
 - fix(providers): render environment variables in provider config at load time (#6007)
 
 ### Documentation
@@ -85,6 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
+- test(providers): add unit test verifying assistant system prompt inclusion for simulated-user provider (#6020)
 - test(providers): add comprehensive tests for OpenAI Agents provider, loader, and tracing (#6009)
 - tests: remove redteam constants mocks from unit tests (#6010)
 - test: CoverBot: Added tests for evaluation UI components and hooks (`src/app`) (#5981)
