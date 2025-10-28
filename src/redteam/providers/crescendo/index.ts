@@ -459,7 +459,6 @@ export class CrescendoProvider implements ApiProvider {
 
         logger.debug('[Crescendo] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
-        console.trace()
         logger.error(`[Crescendo] Error Running crescendo step`, { error });
       }
     }
