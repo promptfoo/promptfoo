@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -569,34 +570,31 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
  * linkedTargetId is a Promptfoo Cloud feature that links custom provider results
  * to an existing target instead of creating duplicates.
  *
- * Performs three checks:
- * 1. Type validation (must be string)
- * 2. Format validation (must be promptfoo://provider/{uuid})
- * 3. Existence validation (must exist in cloud, if cloud is enabled)
+ * Validates the prefix and checks existence in cloud. Format validation
+ * (e.g., UUID format) is deferred to the cloud API for simplicity.
  *
  * @param linkedTargetId - The linkedTargetId to validate
  * @throws Error if validation fails
  */
 export async function validateLinkedTargetId(linkedTargetId: string): Promise<void> {
-  // Type check (should already be string, but being defensive)
-  if (typeof linkedTargetId !== 'string') {
-    throw new Error(`Invalid linkedTargetId type: expected string, got ${typeof linkedTargetId}`);
-  }
-
-  // Validate format: promptfoo://provider/{uuid}
-  if (!linkedTargetId.startsWith(CLOUD_PROVIDER_PREFIX)) {
+  // Validate format: promptfoo://provider/{id}
+  if (!isCloudProvider(linkedTargetId)) {
     throw new Error(
-      `Invalid linkedTargetId format: "${linkedTargetId}". Expected format: ${CLOUD_PROVIDER_PREFIX}<uuid>`,
-    );
-  }
+      dedent`
+        Invalid linkedTargetId format: "${linkedTargetId}"
 
-  // Extract and validate UUID format (8-4-4-4-12 hex digits)
-  const uuid = linkedTargetId.slice(CLOUD_PROVIDER_PREFIX.length);
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        linkedTargetId must start with "${CLOUD_PROVIDER_PREFIX}" followed by a target ID.
+        Example: ${CLOUD_PROVIDER_PREFIX}12345678-1234-1234-1234-123456789abc
 
-  if (!uuidRegex.test(uuid)) {
-    throw new Error(
-      `Invalid linkedTargetId UUID: "${uuid}". Expected format: ${CLOUD_PROVIDER_PREFIX}<uuid>`,
+        linkedTargetId links custom provider results to an existing target in Promptfoo Cloud,
+        preventing duplicate targets from being created.
+
+        To get a valid linkedTargetId:
+        1. Log in to Promptfoo Cloud: https://www.promptfoo.dev/
+        2. Navigate to your Targets page
+        3. Find the target you want to link to and copy its ID
+        4. Format as: ${CLOUD_PROVIDER_PREFIX}<target-id>
+      `,
     );
   }
 
@@ -609,12 +607,13 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
     return;
   }
 
+  const providerId = getCloudDatabaseId(linkedTargetId);
   try {
     logger.debug('[Cloud] Validating linkedTargetId exists in cloud', {
       linkedTargetId,
-      uuid,
+      providerId,
     });
-    await getProviderFromCloud(uuid);
+    await getProviderFromCloud(providerId);
     logger.debug('[Cloud] linkedTargetId validation successful', {
       linkedTargetId,
     });
@@ -624,7 +623,23 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
       error,
     });
     throw new Error(
-      `Target ${linkedTargetId} not found in cloud or you don't have access to it. Please verify the target exists in your organization.`,
+      dedent`
+        linkedTargetId not found: "${linkedTargetId}"
+
+        This target doesn't exist in your Promptfoo Cloud organization or you don't have access to it.
+
+        Troubleshooting steps:
+        1. Verify you're logged in to the correct organization
+           Run: promptfoo auth status
+
+        2. Check that the target exists in your cloud dashboard:
+           https://www.promptfoo.dev/app/targets
+
+        3. Ensure you have permission to access this target
+           (Targets are scoped to your organization)
+
+        4. Verify the target ID is correct and hasn't been deleted
+      `,
     );
   }
 }

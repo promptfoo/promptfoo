@@ -1330,44 +1330,15 @@ describe('cloud utils', () => {
       expect(mockFetchWithProxy).not.toHaveBeenCalled();
     });
 
-    it('should throw error for non-string linkedTargetId', async () => {
-      await expect(validateLinkedTargetId(123 as any)).rejects.toThrow(
-        'Invalid linkedTargetId type: expected string, got number',
-      );
-
-      await expect(validateLinkedTargetId(null as any)).rejects.toThrow(
-        'Invalid linkedTargetId type: expected string, got object',
-      );
-
-      await expect(validateLinkedTargetId(undefined as any)).rejects.toThrow(
-        'Invalid linkedTargetId type: expected string, got undefined',
-      );
-    });
-
     it('should throw error for invalid prefix', async () => {
       const invalidPrefix = 'wrong://provider/12345678-1234-1234-1234-123456789abc';
 
-      await expect(validateLinkedTargetId(invalidPrefix)).rejects.toThrow(
-        'Invalid linkedTargetId format: "wrong://provider/12345678-1234-1234-1234-123456789abc". Expected format: promptfoo://provider/<uuid>',
-      );
-    });
+      const promise = validateLinkedTargetId(invalidPrefix);
 
-    it('should throw error for malformed UUID', async () => {
-      const malformedUuid1 = 'promptfoo://provider/not-a-uuid';
-      const malformedUuid2 = 'promptfoo://provider/12345678-1234-1234-1234';
-      const malformedUuid3 = 'promptfoo://provider/12345678-1234-1234-1234-123456789abcdef';
-
-      await expect(validateLinkedTargetId(malformedUuid1)).rejects.toThrow(
-        'Invalid linkedTargetId UUID: "not-a-uuid". Expected format: promptfoo://provider/<uuid>',
-      );
-
-      await expect(validateLinkedTargetId(malformedUuid2)).rejects.toThrow(
-        'Invalid linkedTargetId UUID: "12345678-1234-1234-1234". Expected format: promptfoo://provider/<uuid>',
-      );
-
-      await expect(validateLinkedTargetId(malformedUuid3)).rejects.toThrow(
-        'Invalid linkedTargetId UUID: "12345678-1234-1234-1234-123456789abcdef". Expected format: promptfoo://provider/<uuid>',
-      );
+      await expect(promise).rejects.toThrow('Invalid linkedTargetId format');
+      await expect(promise).rejects.toThrow(invalidPrefix);
+      await expect(promise).rejects.toThrow('promptfoo://provider/');
+      await expect(promise).rejects.toThrow('To get a valid linkedTargetId:');
     });
 
     it('should throw error when target does not exist in cloud', async () => {
@@ -1375,9 +1346,12 @@ describe('cloud utils', () => {
 
       mockFetchWithProxy.mockRejectedValueOnce(new Error('Not found'));
 
-      await expect(validateLinkedTargetId(validLinkedTargetId)).rejects.toThrow(
-        "Target promptfoo://provider/12345678-1234-1234-1234-123456789abc not found in cloud or you don't have access to it. Please verify the target exists in your organization.",
-      );
+      const promise = validateLinkedTargetId(validLinkedTargetId);
+
+      await expect(promise).rejects.toThrow('linkedTargetId not found');
+      await expect(promise).rejects.toThrow(validLinkedTargetId);
+      await expect(promise).rejects.toThrow('Troubleshooting steps');
+      await expect(promise).rejects.toThrow('promptfoo auth status');
     });
 
     it('should throw error when API returns non-ok response', async () => {
@@ -1389,41 +1363,37 @@ describe('cloud utils', () => {
         statusText: 'Not Found',
       } as Response);
 
-      await expect(validateLinkedTargetId(validLinkedTargetId)).rejects.toThrow(
-        "Target promptfoo://provider/12345678-1234-1234-1234-123456789abc not found in cloud or you don't have access to it. Please verify the target exists in your organization.",
+      const promise = validateLinkedTargetId(validLinkedTargetId);
+
+      await expect(promise).rejects.toThrow('linkedTargetId not found');
+      await expect(promise).rejects.toThrow(validLinkedTargetId);
+      await expect(promise).rejects.toThrow('Troubleshooting steps');
+    });
+
+    it('should accept any ID format after valid prefix (defers to cloud)', async () => {
+      // Cloud API will validate the actual format - we just check prefix
+      const linkedTargetId = 'promptfoo://provider/any-id-format-here';
+      const mockProvider = {
+        config: {
+          id: 'test-provider',
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockProvider),
+        ok: true,
+      } as Response);
+
+      await expect(validateLinkedTargetId(linkedTargetId)).resolves.toBeUndefined();
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/providers/any-id-format-here',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
       );
-    });
-
-    it('should accept UUIDs with uppercase letters', async () => {
-      const uppercaseUuid = 'promptfoo://provider/12345678-1234-1234-1234-123456789ABC';
-      const mockProvider = {
-        config: {
-          id: 'test-provider',
-        },
-      };
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        json: () => Promise.resolve(mockProvider),
-        ok: true,
-      } as Response);
-
-      await expect(validateLinkedTargetId(uppercaseUuid)).resolves.toBeUndefined();
-    });
-
-    it('should accept UUIDs with mixed case', async () => {
-      const mixedCaseUuid = 'promptfoo://provider/12345678-AbCd-1234-EfAb-123456789abc';
-      const mockProvider = {
-        config: {
-          id: 'test-provider',
-        },
-      };
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        json: () => Promise.resolve(mockProvider),
-        ok: true,
-      } as Response);
-
-      await expect(validateLinkedTargetId(mixedCaseUuid)).resolves.toBeUndefined();
     });
   });
 });
