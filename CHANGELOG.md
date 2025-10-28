@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- chore(config): update Biome configuration to use force-ignore patterns (`!!`) for better performance
+- chore(config): update Biome version and configuration to use force-ignore patterns (`!!`) for better performance
 
 ## [0.119.0] - 2025-10-27
 
