@@ -13,6 +13,7 @@ import {
   makeInlinePolicyId,
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
+import { type RedteamPluginObject } from '@promptfoo/types';
 
 /**
  * Returns the number of passing tests for each prompt.
@@ -67,13 +68,14 @@ export function usePassRates(): number[] {
 
 /**
  * Reads custom policies from the table store and returns a map of policy IDs to policy objects.
+ * For text-only "inline" policies, ensures a consistent name is used for the policy.
  *
+ * @param plugins - The plugins to read custom policies from.
  * @returns A map of policy IDs to policy objects.
  */
-export function useCustomPoliciesMap(): Record<PolicyObject['id'], PolicyObject> {
-  const { config } = useTableStore();
-  const plugins = config?.redteam?.plugins ?? [];
-
+export function useCustomPoliciesMap(
+  plugins: RedteamPluginObject[],
+): Record<PolicyObject['id'], PolicyObject> {
   return useMemo(() => {
     return (
       plugins

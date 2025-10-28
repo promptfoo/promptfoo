@@ -36,14 +36,14 @@ interface MetricRow {
 }
 
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
-  const { table, filters, addFilter } = useTableStore();
+  const { table, filters, addFilter, config } = useTableStore();
   const theme = useTheme();
 
   if (!table || !table.head || !table.head.prompts) {
     return null;
   }
 
-  const policiesById = useCustomPoliciesMap();
+  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   /**
    * Given the pass rate percentages, calculates the color and text color for the cell.
