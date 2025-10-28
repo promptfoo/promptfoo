@@ -15,15 +15,15 @@
       "**/*.json",
       "**/*.mjs",
       "**/*.cjs",
-      "!drizzle/**/*",
-      "!src/app/src/polyfills/**/*",
-      "!**/node_modules/**",
-      "!**/dist/**",
-      "!**/build/**",
-      "!**/public/**",
-      "!examples/adaline-gateway/**/prompt.json",
-      "!examples/multiple-turn-conversation/prompt.json",
-      "!examples/openai-chat-history/prompt.json"
+      "!!drizzle",
+      "!!src/app/src/polyfills",
+      "!!**/node_modules",
+      "!!**/dist",
+      "!!**/build",
+      "!!**/public",
+      "!!examples/adaline-gateway/**/prompt.json",
+      "!!examples/multiple-turn-conversation/prompt.json",
+      "!!examples/openai-chat-history/prompt.json"
     ]
   },
   "formatter": {
