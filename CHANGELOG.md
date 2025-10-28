@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- chore(deps): upgrade better-sqlite3 from 11.10.0 to 12.4.1 for Node.js v24 support
+- chore(deps): bump better-sqlite3 from 11.10.0 to 12.4.1 for Node.js v24 support (#6052) by @cdolek-twilio
 - chore(deps): update Biome version with force-include patterns (`!!`) for faster local linting/CI by @sklein12 (#TBD)
 - chore(redteam): categorize `jailbreak:meta` under agentic strategies and mark as remote-only for correct UI grouping and Cloud behavior (#6049)
 
