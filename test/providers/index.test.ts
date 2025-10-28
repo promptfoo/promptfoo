@@ -102,6 +102,7 @@ jest.mock('../../src/globalConfig/cloud', () => ({
 jest.mock('../../src/util/cloud', () => ({
   ...jest.requireActual('../../src/util/cloud'),
   getProviderFromCloud: jest.fn(),
+  validateLinkedTargetId: jest.fn(),
 }));
 
 const mockFetch = jest.mocked(jest.fn());
@@ -1050,9 +1051,9 @@ describe('loadApiProvider', () => {
       jest.clearAllMocks();
     });
 
-    it('should accept valid linkedTargetId format when cloud is disabled', async () => {
-      const { cloudConfig } = await import('../../src/globalConfig/cloud');
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    it('should accept valid linkedTargetId', async () => {
+      const { validateLinkedTargetId } = await import('../../src/util/cloud');
+      jest.mocked(validateLinkedTargetId).mockResolvedValue();
 
       const mockYamlContent = dedent`
         id: 'openai:gpt-4'
@@ -1063,36 +1064,20 @@ describe('loadApiProvider', () => {
 
       const provider = await loadApiProvider('file://path/to/provider.yaml');
       expect(provider.id()).toBe('openai:gpt-4');
+      expect(validateLinkedTargetId).toHaveBeenCalledWith(
+        'promptfoo://provider/12345678-1234-1234-1234-123456789abc',
+      );
     });
 
-    it('should validate linkedTargetId exists when cloud is enabled', async () => {
-      const { cloudConfig } = await import('../../src/globalConfig/cloud');
-      const { getProviderFromCloud } = await import('../../src/util/cloud');
-
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      jest.mocked(getProviderFromCloud).mockResolvedValue({
-        id: 'openai:gpt-4',
-        config: {},
-      });
-
-      const mockYamlContent = dedent`
-        id: 'openai:gpt-4'
-        config:
-          linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'`;
-      const mockReadFileSync = jest.mocked(fs.readFileSync);
-      mockReadFileSync.mockReturnValue(mockYamlContent);
-
-      const provider = await loadApiProvider('file://path/to/provider.yaml');
-      expect(provider.id()).toBe('openai:gpt-4');
-      expect(getProviderFromCloud).toHaveBeenCalledWith('12345678-1234-1234-1234-123456789abc');
-    });
-
-    it('should throw error when linkedTargetId does not exist in cloud', async () => {
-      const { cloudConfig } = await import('../../src/globalConfig/cloud');
-      const { getProviderFromCloud } = await import('../../src/util/cloud');
-
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      jest.mocked(getProviderFromCloud).mockRejectedValue(new Error('Provider not found in cloud'));
+    it('should throw error when linkedTargetId validation fails', async () => {
+      const { validateLinkedTargetId } = await import('../../src/util/cloud');
+      jest
+        .mocked(validateLinkedTargetId)
+        .mockRejectedValue(
+          new Error(
+            "Target promptfoo://provider/12345678-1234-1234-1234-123456789abc not found in cloud or you don't have access to it",
+          ),
+        );
 
       const mockYamlContent = dedent`
         id: 'openai:gpt-4'
@@ -1106,74 +1091,9 @@ describe('loadApiProvider', () => {
       );
     });
 
-    it('should accept linkedTargetId with uppercase UUID when cloud is disabled', async () => {
-      const { cloudConfig } = await import('../../src/globalConfig/cloud');
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-
-      const mockYamlContent = dedent`
-        id: 'openai:gpt-4'
-        config:
-          linkedTargetId: 'promptfoo://provider/12345678-ABCD-1234-ABCD-123456789ABC'`;
-      const mockReadFileSync = jest.mocked(fs.readFileSync);
-      mockReadFileSync.mockReturnValue(mockYamlContent);
-
-      const provider = await loadApiProvider('file://path/to/provider.yaml');
-      expect(provider.id()).toBe('openai:gpt-4');
-    });
-
-    it('should throw error for linkedTargetId with wrong prefix', async () => {
-      const mockYamlContent = dedent`
-        id: 'openai:gpt-4'
-        config:
-          linkedTargetId: 'wrong://provider/12345678-1234-1234-1234-123456789abc'`;
-      const mockReadFileSync = jest.mocked(fs.readFileSync);
-      mockReadFileSync.mockReturnValue(mockYamlContent);
-
-      await expect(loadApiProvider('file://path/to/provider.yaml')).rejects.toThrow(
-        'Invalid linkedTargetId format: "wrong://provider/12345678-1234-1234-1234-123456789abc". Expected format: promptfoo://provider/<uuid>',
-      );
-    });
-
-    it('should throw error for linkedTargetId with malformed UUID', async () => {
-      const mockYamlContent = dedent`
-        id: 'openai:gpt-4'
-        config:
-          linkedTargetId: 'promptfoo://provider/not-a-valid-uuid'`;
-      const mockReadFileSync = jest.mocked(fs.readFileSync);
-      mockReadFileSync.mockReturnValue(mockYamlContent);
-
-      await expect(loadApiProvider('file://path/to/provider.yaml')).rejects.toThrow(
-        'Invalid linkedTargetId UUID: "not-a-valid-uuid". Expected format: promptfoo://provider/<uuid>',
-      );
-    });
-
-    it('should throw error for linkedTargetId with incomplete UUID', async () => {
-      const mockYamlContent = dedent`
-        id: 'openai:gpt-4'
-        config:
-          linkedTargetId: 'promptfoo://provider/12345678-1234-1234'`;
-      const mockReadFileSync = jest.mocked(fs.readFileSync);
-      mockReadFileSync.mockReturnValue(mockYamlContent);
-
-      await expect(loadApiProvider('file://path/to/provider.yaml')).rejects.toThrow(
-        'Invalid linkedTargetId UUID: "12345678-1234-1234". Expected format: promptfoo://provider/<uuid>',
-      );
-    });
-
-    it('should throw error for linkedTargetId with non-string type', async () => {
-      await expect(
-        loadApiProvider('openai:gpt-4', {
-          options: {
-            id: 'openai:gpt-4',
-            config: {
-              linkedTargetId: 12345 as any,
-            },
-          },
-        }),
-      ).rejects.toThrow('Invalid linkedTargetId type: expected string, got number');
-    });
-
     it('should accept provider config without linkedTargetId', async () => {
+      const { validateLinkedTargetId } = await import('../../src/util/cloud');
+
       const mockYamlContent = dedent`
         id: 'openai:gpt-4'
         config:
@@ -1183,18 +1103,7 @@ describe('loadApiProvider', () => {
 
       const provider = await loadApiProvider('file://path/to/provider.yaml');
       expect(provider.id()).toBe('openai:gpt-4');
-    });
-
-    it('should accept provider config with undefined linkedTargetId', async () => {
-      const provider = await loadApiProvider('openai:gpt-4', {
-        options: {
-          id: 'openai:gpt-4',
-          config: {
-            linkedTargetId: undefined,
-          },
-        },
-      });
-      expect(provider.id()).toBe('openai:gpt-4');
+      expect(validateLinkedTargetId).not.toHaveBeenCalled();
     });
   });
 });

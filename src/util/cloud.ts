@@ -563,3 +563,68 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     throw new Error(`Failed to fetch policies from cloud.`);
   }
 }
+
+/**
+ * Validates linkedTargetId format and existence.
+ * linkedTargetId is a Promptfoo Cloud feature that links custom provider results
+ * to an existing target instead of creating duplicates.
+ *
+ * Performs three checks:
+ * 1. Type validation (must be string)
+ * 2. Format validation (must be promptfoo://provider/{uuid})
+ * 3. Existence validation (must exist in cloud, if cloud is enabled)
+ *
+ * @param linkedTargetId - The linkedTargetId to validate
+ * @throws Error if validation fails
+ */
+export async function validateLinkedTargetId(linkedTargetId: string): Promise<void> {
+  // Type check (should already be string, but being defensive)
+  if (typeof linkedTargetId !== 'string') {
+    throw new Error(`Invalid linkedTargetId type: expected string, got ${typeof linkedTargetId}`);
+  }
+
+  // Validate format: promptfoo://provider/{uuid}
+  if (!linkedTargetId.startsWith(CLOUD_PROVIDER_PREFIX)) {
+    throw new Error(
+      `Invalid linkedTargetId format: "${linkedTargetId}". Expected format: ${CLOUD_PROVIDER_PREFIX}<uuid>`,
+    );
+  }
+
+  // Extract and validate UUID format (8-4-4-4-12 hex digits)
+  const uuid = linkedTargetId.slice(CLOUD_PROVIDER_PREFIX.length);
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  if (!uuidRegex.test(uuid)) {
+    throw new Error(
+      `Invalid linkedTargetId UUID: "${uuid}". Expected format: ${CLOUD_PROVIDER_PREFIX}<uuid>`,
+    );
+  }
+
+  // Check existence in cloud (if enabled)
+  if (!cloudConfig.isEnabled()) {
+    logger.warn('[Cloud] linkedTargetId specified but cloud is not configured', {
+      linkedTargetId,
+      suggestion: "Run 'promptfoo auth login' to enable cloud features",
+    });
+    return;
+  }
+
+  try {
+    logger.debug('[Cloud] Validating linkedTargetId exists in cloud', {
+      linkedTargetId,
+      uuid,
+    });
+    await getProviderFromCloud(uuid);
+    logger.debug('[Cloud] linkedTargetId validation successful', {
+      linkedTargetId,
+    });
+  } catch (error) {
+    logger.error('[Cloud] linkedTargetId validation failed', {
+      linkedTargetId,
+      error,
+    });
+    throw new Error(
+      `Target ${linkedTargetId} not found in cloud or you don't have access to it. Please verify the target exists in your organization.`,
+    );
+  }
+}
