@@ -16,7 +16,7 @@ import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import useCloudConfig from '../../../hooks/useCloudConfig';
 import { useTableStore } from './store';
-import { useCustomPoliciesMap } from '@promptfoo/redteam/plugins/policy/hooks';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;

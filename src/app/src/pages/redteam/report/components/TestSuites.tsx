@@ -47,7 +47,7 @@ import {
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import { type TestResultStats } from './FrameworkComplianceUtils';
-import { useCustomPoliciesMap } from '@promptfoo/redteam/plugins/policy/hooks';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 
 interface TestSuitesProps {
   evalId: string;

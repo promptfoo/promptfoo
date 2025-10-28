@@ -21,7 +21,7 @@ import {
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { useTableStore } from './store';
-import { useCustomPoliciesMap } from '@promptfoo/redteam/plugins/policy/hooks';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 
 type MetricScore = {
   score: number;
