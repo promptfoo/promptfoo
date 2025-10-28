@@ -327,7 +327,7 @@ export const strategies: Strategy[] = [
     displayName: 'Layer',
     description: 'Compose multiple strategies',
     longDescription:
-      'Compose multiple red team strategies sequentially (e.g., base64 → rot13) to create sophisticated attack chains',
+      'Compose multiple red team strategies sequentially (e.g., jailbreak → prompt-injection) to create sophisticated attack chains',
     cost: 'Variable',
     asrIncrease: 'Cumulative',
     link: '/docs/red-team/strategies/layer/',
