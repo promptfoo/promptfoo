@@ -51,24 +51,6 @@ const COMMON_LANGUAGES = [
   'Swedish',
   'Turkish',
   'Vietnamese',
-  // ISO codes
-  'ar',
-  'bn',
-  'de',
-  'en',
-  'es',
-  'fr',
-  'hi',
-  'it',
-  'ja',
-  'ko',
-  'nl',
-  'pt',
-  'ru',
-  'sv',
-  'tr',
-  'vi',
-  'zh',
 ];
 
 const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
