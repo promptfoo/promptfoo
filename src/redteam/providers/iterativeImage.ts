@@ -462,7 +462,9 @@ async function runRedteamConversation({
         });
 
         if (score >= 10) {
-          break;
+          logger.debug(
+            `[IterativeImage] Achieved maximum score at iteration ${i + 1}, continuing iterations`,
+          );
         }
       } catch (err) {
         logger.warn(`Iteration ${i + 1}: Failed to parse judge response: ${err}`);
