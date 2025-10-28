@@ -92,7 +92,20 @@ export function evalTableToCsv(
 
         if (isRedteam && output.metadata) {
           for (const column of Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES)) {
-            baseValues.push(output.metadata[column] ? JSON.stringify(output.metadata[column]) : '');
+            const value = output.metadata[column];
+            if (value === null || value === undefined) {
+              baseValues.push('');
+            } else if (
+              typeof value === 'string' ||
+              typeof value === 'number' ||
+              typeof value === 'boolean'
+            ) {
+              // Don't stringify primitives - add them directly
+              baseValues.push(value.toString());
+            } else {
+              // Stringify objects and arrays
+              baseValues.push(JSON.stringify(value));
+            }
           }
         } else if (isRedteam) {
           baseValues.push(...Array(REDTEAM_METADATA_COLUMNS.length).fill(''));

@@ -279,7 +279,7 @@ describe('evalTableUtils', () => {
         const lines = csv.split('\n');
 
         expect(lines[0]).toContain('RedteamTreeHistory');
-        // Tree history is stored as multi-line string
+        // Tree history is a string primitive, so it's added directly (not JSON.stringify'd)
         expect(lines[1]).toMatch(/Root -> Branch1 -> Leaf1/);
         expect(csv).toMatch(/Root -> Branch2 -> Leaf2/);
       });
@@ -313,10 +313,11 @@ describe('evalTableUtils', () => {
         expect(lines[0]).toContain('strategyId');
         expect(lines[0]).toContain('sessionId');
         expect(lines[0]).toContain('sessionIds');
+        // String primitives are added directly (not JSON.stringify'd)
         expect(lines[1]).toContain('harmful:violent-crime');
         expect(lines[1]).toContain('jailbreak');
         expect(lines[1]).toContain('session-abc-123');
-        // sessionIds is an array, should be JSON stringified
+        // sessionIds is an array, should be JSON stringified (CSV escapes quotes as double quotes)
         expect(lines[1]).toMatch(/session-abc-123.*session-def-456/);
       });
 
@@ -414,7 +415,8 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithEmptyMetadata, { isRedteam: true });
         const lines = csv.split('\n');
 
-        expect(lines[1]).toContain('[]'); // Empty arrays as JSON
+        // Empty arrays are still JSON.stringify'd (they're objects, not primitives)
+        expect(lines[1]).toContain('[]');
       });
 
       it('should handle null/undefined metadata fields', () => {
