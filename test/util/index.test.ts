@@ -18,6 +18,7 @@ import {
   providerToIdentifier,
   readFilters,
   readOutput,
+  renderEnvOnlyInObject,
   renderVarsInObject,
   resultIsForTestCase,
   setupEnv,
@@ -1019,6 +1020,125 @@ describe('renderVarsInObject', () => {
       data: {
         items: ['{{ item1 }}', '{{ item2 }}'],
         metadata: { value: '{{ meta }}' },
+      },
+    });
+  });
+});
+
+describe('renderEnvOnlyInObject', () => {
+  beforeEach(() => {
+    delete process.env.TEST_ENV_VAR;
+    delete process.env.AZURE_ENDPOINT;
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+  });
+
+  afterEach(() => {
+    delete process.env.TEST_ENV_VAR;
+    delete process.env.AZURE_ENDPOINT;
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+  });
+
+  it('should render environment variables in strings', () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const str = '{{ env.TEST_ENV_VAR }}';
+    const rendered = renderEnvOnlyInObject(str);
+    expect(rendered).toBe('env_value');
+  });
+
+  it('should preserve vars templates while rendering env', () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const str = 'Env: {{ env.TEST_ENV_VAR }}, Var: {{ vars.myVar }}';
+    const rendered = renderEnvOnlyInObject(str);
+    expect(rendered).toBe('Env: env_value, Var: {{ vars.myVar }}');
+  });
+
+  it('should preserve prompt templates', () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const str = 'Env: {{ env.TEST_ENV_VAR }}, Prompt: {{ prompt }}';
+    const rendered = renderEnvOnlyInObject(str);
+    expect(rendered).toBe('Env: env_value, Prompt: {{ prompt }}');
+  });
+
+  it('should work with objects', () => {
+    process.env.AZURE_ENDPOINT = 'test.openai.azure.com';
+    const obj = {
+      apiHost: '{{ env.AZURE_ENDPOINT }}',
+      body: { message: '{{ vars.userMessage }}' },
+    };
+    const rendered = renderEnvOnlyInObject(obj);
+    expect(rendered).toEqual({
+      apiHost: 'test.openai.azure.com',
+      body: { message: '{{ vars.userMessage }}' },
+    });
+  });
+
+  it('should work with arrays', () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const arr = ['{{ env.TEST_ENV_VAR }}', '{{ vars.test }}', 42];
+    const rendered = renderEnvOnlyInObject(arr);
+    expect(rendered).toEqual(['env_value', '{{ vars.test }}', 42]);
+  });
+
+  it('should work with nested objects', () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const obj = {
+      level1: {
+        level2: {
+          env: '{{ env.TEST_ENV_VAR }}',
+          vars: '{{ vars.test }}',
+        },
+      },
+    };
+    const rendered = renderEnvOnlyInObject(obj);
+    expect(rendered).toEqual({
+      level1: {
+        level2: {
+          env: 'env_value',
+          vars: '{{ vars.test }}',
+        },
+      },
+    });
+  });
+
+  it('should leave template unchanged if env var not found', () => {
+    const str = '{{ env.NONEXISTENT }}';
+    const rendered = renderEnvOnlyInObject(str);
+    expect(rendered).toBe('{{ env.NONEXISTENT }}');
+  });
+
+  it('should support bracket notation for env vars', () => {
+    process.env['VAR-WITH-DASH'] = 'dash_value';
+    const str = "{{ env['VAR-WITH-DASH'] }}";
+    const rendered = renderEnvOnlyInObject(str);
+    expect(rendered).toBe('dash_value');
+  });
+
+  it('should return unchanged when PROMPTFOO_DISABLE_TEMPLATING is true', () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    process.env.TEST_ENV_VAR = 'env_value';
+    const str = '{{ env.TEST_ENV_VAR }}';
+    const rendered = renderEnvOnlyInObject(str);
+    expect(rendered).toBe('{{ env.TEST_ENV_VAR }}');
+  });
+
+  it('should handle mixed templates in Azure provider config', () => {
+    process.env.AZURE_ENDPOINT = 'test.openai.azure.com';
+    process.env.API_VERSION = '2024-02-15';
+    const config = {
+      apiHost: '{{ env.AZURE_ENDPOINT }}',
+      apiVersion: '{{ env.API_VERSION }}',
+      body: {
+        message: '{{ vars.userMessage }}',
+        user: '{{ vars.userId }}',
+      },
+    };
+    const rendered = renderEnvOnlyInObject(config);
+    expect(rendered).toEqual({
+      apiHost: 'test.openai.azure.com',
+      apiVersion: '2024-02-15',
+      body: {
+        message: '{{ vars.userMessage }}',
+        user: '{{ vars.userId }}',
       },
     });
   });

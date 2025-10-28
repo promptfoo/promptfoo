@@ -429,6 +429,51 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   return varsMatch(testVars, resultVars) && providersMatch;
 }
 
+/**
+ * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
+ * This allows env vars to be resolved at provider load time while preserving runtime var templates.
+ *
+ * Only replaces patterns like {{ env.VAR_NAME }} or {{ env['VAR_NAME'] }}.
+ * Preserves patterns like {{ vars.x }}, {{ prompt }}, etc. for runtime rendering.
+ *
+ * @param obj - The object to process
+ * @returns The object with only env templates rendered
+ */
+export function renderEnvOnlyInObject<T>(obj: T): T {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return obj;
+  }
+
+  if (typeof obj === 'string') {
+    // Get env globals same way as Nunjucks does
+    const nunjucks = getNunjucksEngine();
+    const envGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
+
+    // Replace {{ env.VAR_NAME }} and {{ env['VAR_NAME'] }} patterns
+    // Use regex to avoid triggering full Nunjucks rendering
+    return obj.replace(/\{\{\s*env\.(\w+)\s*\}\}|\{\{\s*env\['([^']+)'\]\s*\}\}/g, (match, dotVar, bracketVar) => {
+      const varName = dotVar || bracketVar;
+      const value = envGlobals?.[varName];
+      // If env var not found, leave the template as-is
+      return value !== undefined ? value : match;
+    }) as unknown as T;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => renderEnvOnlyInObject(item)) as unknown as T;
+  }
+
+  if (typeof obj === 'object' && obj !== null) {
+    const result: Record<string, unknown> = {};
+    for (const key in obj) {
+      result[key] = renderEnvOnlyInObject((obj as Record<string, unknown>)[key]);
+    }
+    return result as T;
+  }
+
+  return obj;
+}
+
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {

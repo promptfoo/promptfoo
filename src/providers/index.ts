@@ -8,6 +8,7 @@ import cliState from '../cliState';
 import logger from '../logger';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
+import { renderEnvOnlyInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
@@ -22,10 +23,17 @@ export async function loadApiProvider(
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
+
+  // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
+  // This allows constructors to access real env values while preserving runtime templates
+  // like {{ vars.* }} for per-test customization at callApi() time
+  const renderedConfig = options.config ? renderEnvOnlyInObject(options.config) : undefined;
+  const renderedId = options.id ? renderEnvOnlyInObject(options.id) : undefined;
+
   const providerOptions: ProviderOptions = {
-    id: options.id,
+    id: renderedId,
     config: {
-      ...options.config,
+      ...renderedConfig,
       basePath,
     },
     env,

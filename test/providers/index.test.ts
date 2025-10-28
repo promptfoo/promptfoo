@@ -968,6 +968,38 @@ describe('loadApiProvider', () => {
     expect(provider.label).toBe('foo');
   });
 
+  it('renders environment variables in provider config while preserving runtime vars', async () => {
+    process.env.MY_DEPLOYMENT = 'test-deployment';
+    process.env.AZURE_ENDPOINT = 'test.openai.azure.com';
+    process.env.API_VERSION = '2024-02-15';
+
+    const providerOptions = {
+      config: {
+        apiHost: '{{ env.AZURE_ENDPOINT }}',
+        apiVersion: '{{ env.API_VERSION }}',
+        // This should be preserved for runtime
+        body: { message: '{{ vars.userMessage }}' },
+      },
+    };
+
+    const provider = await loadApiProvider('azure:chat:{{ env.MY_DEPLOYMENT }}', {
+      options: providerOptions,
+    });
+
+    expect(provider).toBeInstanceOf(AzureChatCompletionProvider);
+    // Env vars should be rendered
+    expect((provider as AzureChatCompletionProvider).apiHost).toBe('test.openai.azure.com');
+    expect((provider as AzureChatCompletionProvider).config.apiVersion).toBe('2024-02-15');
+    // Vars templates should be preserved
+    expect((provider as AzureChatCompletionProvider).config.body).toEqual({
+      message: '{{ vars.userMessage }}',
+    });
+
+    delete process.env.MY_DEPLOYMENT;
+    delete process.env.AZURE_ENDPOINT;
+    delete process.env.API_VERSION;
+  });
+
   it('loadApiProvider with xai', async () => {
     const provider = await loadApiProvider('xai:grok-2');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
