@@ -38,7 +38,6 @@ import './TestSuites.css';
 import {
   formatPolicyIdentifierAsMetric,
   isValidPolicyObject,
-  makeDefaultPolicyName,
   makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import {
