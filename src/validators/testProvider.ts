@@ -130,13 +130,11 @@ export async function testHTTPProviderConnectivity(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          providerOptions: {
-            config: provider.config,
-            providerResponse: result.response?.raw,
-            parsedResponse: result.response?.output,
-            error: result.error,
-            headers: result.response?.metadata?.http?.headers,
-          },
+          config: provider.config,
+          providerResponse: result.response?.raw,
+          parsedResponse: result.response?.output,
+          error: result.error,
+          headers: result.response?.metadata?.http?.headers,
         }),
       });
 

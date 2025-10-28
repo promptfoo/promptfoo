@@ -374,4 +374,42 @@ describe('StrategyConfigDialog', () => {
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
+
+  it('should reset local state when switching between strategies', () => {
+    const { rerender } = render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="custom"
+        config={{ strategyText: 'Initial strategy', maxTurns: 4 }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'custom', name: 'Custom', description: 'A custom strategy' }}
+      />,
+    );
+
+    const customMaxTurnsInput = screen.getByLabelText('Max Turns');
+    expect(customMaxTurnsInput).toHaveValue(4);
+    fireEvent.change(customMaxTurnsInput, { target: { value: '12' } });
+    expect(customMaxTurnsInput).toHaveValue(12);
+
+    const customStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    expect(customStatefulSwitch).toBeChecked();
+
+    rerender(
+      <StrategyConfigDialog
+        open={true}
+        strategy="goat"
+        config={{ maxTurns: 3, stateful: false }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'goat', name: 'GOAT', description: 'A multi-turn strategy' }}
+      />,
+    );
+
+    const goatMaxTurnsInput = screen.getByLabelText('Max Turns');
+    expect(goatMaxTurnsInput).toHaveValue(3);
+
+    const goatStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    expect(goatStatefulSwitch).not.toBeChecked();
+  });
 });

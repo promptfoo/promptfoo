@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- chore(redteam): categorize `jailbreak:meta` under agentic strategies and mark as remote-only for correct UI grouping and Cloud behavior (#6049)
+
+### Fixed
+
+- fix(csv): handle primitive values directly in red team CSV export to avoid double-quoting strings (#6040)
+- fix(csv): fix column count mismatch in red team CSV export when rows have multiple outputs (#6040)
+
+### Chores
+
+- chore: improves support for custom policy metric names that should include strategy suffix (#6048)
+
+### Tests
+
+- test(redteam): add tests for `jailbreak:meta` strategy and iterative strategy config (#XXXX)
+
+## [0.119.0] - 2025-10-27
+
 ### Added
 
 - feat(webui): filtering eval results by metric values w/ numeric operators (e.g. EQ, GT, LTE, etc.) (#6011)
@@ -30,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- chore(internals): custom policy type def (#6037)
 - chore(changelog): organize and improve Unreleased section with consistent scoping and formatting (#6024)
 - chore(cli): show telemetryDisabled/telemetryDebug in `promptfoo debug` output (#6015)
 - chore(cli): improve error handling and error logging (#5930)
@@ -50,10 +70,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore(examples): consolidate Ollama examples into unified directory (#5977)
 - chore(deps): move dependencies to optional instead of peer (#5948)
 - chore(deps): move `natural` to optional dependency (#5946)
+- chore(redteam): improve GOAT and Crescendo error logs with additional error details for easier debugging (#6036)
 
 ### Fixed
 
 - fix(providers): revert eager template rendering that broke runtime variable substitution (5423f80)
+- fix(providers): improve Python provider reliability with automatic python3/python detection, worker cleanup, request count tracking, and reduced logging noise (#6034)
 - fix(providers): simulated-user and mischievous-user now respect assistant system prompts in multi-turn conversations (#6020)
 - fix(providers): improve MCP tool schema transformation for OpenAI compatibility (#5965)
 - fix(providers): sessionId now properly stored in metadata for providers that use server side generated sessionIds (#6016)
@@ -65,6 +87,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(webui): pass extensions config when running eval from UI (#6006)
 - fix(webui): in red team setup, reset config button hidden by version banner (#5896)
 - fix(webui): sync selected plugins to global config in red team setup UI (#5991)
+- fix(webui): HTTP test agent (#6033)
+- fix(webui): reset red team strategy config dialog when switching strategies (#6035)
 
 ### Dependencies
 
