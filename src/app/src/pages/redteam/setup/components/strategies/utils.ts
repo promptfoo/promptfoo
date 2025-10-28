@@ -35,6 +35,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'math-prompt': 1,
   'mischievous-user': 5,
   morse: 1,
+  multilingual: 1, // Deprecated: now handled by global language config
   'other-encodings': 1,
   emoji: 1,
   piglatin: 1,

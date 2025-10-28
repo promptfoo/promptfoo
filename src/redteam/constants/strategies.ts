@@ -76,6 +76,7 @@ export const ADDITIONAL_STRATEGIES = [
   'math-prompt',
   'mischievous-user',
   'morse',
+  'multilingual', // Deprecated: Use top-level language config instead
   'piglatin',
   'prompt-injection',
   'retry',
