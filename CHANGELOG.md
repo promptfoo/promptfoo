@@ -17,7 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Chores
 
-- chore: custom policy improvements (#6048)
+- chore: improves support for custom policy metric names that should include strategy suffix (#6048)
 
 ### Tests
 
