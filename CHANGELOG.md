@@ -6,9 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Dependencies
+### Changed
 
-- chore(deps): update Biome version with force-include patterns (`!!`) for faster local linting/CI by @sklein12 (#TBD)
+- chore(redteam): categorize `jailbreak:meta` under agentic strategies and mark as remote-only for correct UI grouping and Cloud behavior (#6049)
 
 ### Fixed
 
@@ -18,6 +18,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Chores
 
 - chore: custom policy improvements (#6048)
+
+### Tests
+
+- test(redteam): add tests for `jailbreak:meta` strategy and iterative strategy config (#XXXX)
 
 ## [0.119.0] - 2025-10-27
 
