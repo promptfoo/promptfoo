@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.2.6/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.1/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -15,15 +15,15 @@
       "**/*.json",
       "**/*.mjs",
       "**/*.cjs",
-      "!drizzle/**/*",
-      "!src/app/src/polyfills/**/*",
-      "!**/node_modules/**",
-      "!**/dist/**",
-      "!**/build/**",
-      "!**/public/**",
-      "!examples/adaline-gateway/**/prompt.json",
-      "!examples/multiple-turn-conversation/prompt.json",
-      "!examples/openai-chat-history/prompt.json"
+      "!!drizzle",
+      "!!src/app/src/polyfills",
+      "!!**/node_modules",
+      "!!**/dist",
+      "!!**/build",
+      "!!**/public",
+      "!!examples/adaline-gateway/**/prompt.json",
+      "!!examples/multiple-turn-conversation/prompt.json",
+      "!!examples/openai-chat-history/prompt.json"
     ]
   },
   "formatter": {

@@ -6,10 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Dependencies
+
+- chore(deps): update Biome version with force-include patterns (`!!`) for faster local linting/CI by @sklein12 (#TBD)
+
 ### Fixed
 
 - fix(csv): handle primitive values directly in red team CSV export to avoid double-quoting strings (#6040)
-- fix(csv): fix column count mismatch in red team CSV export when rows have multiple outputs (#6041)
+- fix(csv): fix column count mismatch in red team CSV export when rows have multiple outputs (#6040)
 
 ## [0.119.0] - 2025-10-27
 
