@@ -245,15 +245,6 @@ git commit -m "feat(providers): add new provider for XYZ"
 - Run build before committing: `npm run build`
 - Format and lint before committing: `npm run f && npm run l`
 
-### Pull Requests
-
-- Use `gh pr create --fill` to create PRs
-- PR titles must follow Conventional Commits syntax
-- Documentation PRs must use `docs:` prefix
-- Include tests for new features or bug fixes
-- Update documentation when adding features
-- Ensure CI checks pass before merging
-
 ## Project Conventions
 
 - Use CommonJS modules (type: "commonjs" in package.json)
@@ -264,3 +255,48 @@ git commit -m "feat(providers): add new provider for XYZ"
 - Keep code DRY and use existing utilities where possible
 - Use Drizzle ORM for database operations
 - Workspaces include src/app and site directories
+
+## Pull Requests
+
+### Workflow
+
+When creating a pull request, follow this sequence:
+
+1. Create a branch if not already on one (using your GitHub username):
+
+   ```bash
+   git checkout -b user-name/feature/your-branch-name
+   ```
+
+2. **Commit changes** with conventional commit message (no Claude co-authorship):
+
+   ```bash
+   git commit -m "type(scope): description"
+   ```
+
+3. **Push branch**:
+
+   ```bash
+   git push -u origin user-name/feature/your-branch-name
+   ```
+
+4. **Create PR** with descriptive title and summary:
+
+   ```bash
+   gh pr create --title "type(scope): description" --body "..."
+   ```
+
+5. **Update CHANGELOG.md** under [Unreleased] section:
+   - Add entry with conventional commit prefix and PR number
+   - Use appropriate category: Added, Changed, Fixed, Dependencies, Documentation, Tests
+
+6. **Commit and push changelog**:
+   ```bash
+   git add CHANGELOG.md && git commit -m "docs(changelog): add entry for X" && git push
+   ```
+
+### When looking to complete a pull request
+
+- Include tests for new features or bug fixes
+- Update documentation when adding features
+- Ensure CI checks pass before merging
