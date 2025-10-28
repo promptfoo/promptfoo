@@ -365,6 +365,208 @@ describe('evalTableUtils', () => {
         expect(lines[0]).toContain('sessionIds');
       });
 
+      it('should handle multiple outputs without redteam metadata', () => {
+        const tableWithMultipleOutputs = {
+          head: {
+            vars: ['var1'],
+            prompts: [
+              {
+                provider: 'openai:gpt-4',
+                label: 'Prompt 1',
+                raw: 'Test prompt 1',
+                display: 'Test prompt 1',
+              } as CompletedPrompt,
+              {
+                provider: 'anthropic:claude',
+                label: 'Prompt 2',
+                raw: 'Test prompt 2',
+                display: 'Test prompt 2',
+              } as CompletedPrompt,
+            ],
+          },
+          body: [
+            {
+              test: {
+                vars: { var1: 'value1' },
+              },
+              testIdx: 0,
+              vars: ['value1'],
+              outputs: [
+                {
+                  pass: true,
+                  text: 'First output',
+                  gradingResult: {
+                    pass: true,
+                    reason: 'Good response',
+                    comment: 'Well formatted',
+                  },
+                } as unknown as EvaluateTableOutput,
+                {
+                  pass: false,
+                  text: 'Second output',
+                  failureReason: ResultFailureReason.ASSERT,
+                  gradingResult: {
+                    pass: false,
+                    reason: 'Bad response',
+                    comment: 'Needs work',
+                  },
+                } as unknown as EvaluateTableOutput,
+              ],
+            },
+          ],
+        };
+
+        const csv = evalTableToCsv(tableWithMultipleOutputs); // No isRedteam flag
+        const lines = csv.split('\n').filter((line: string) => line.trim());
+
+        // Parse CSV to count columns
+        const parseCSVLine = (line: string): string[] => {
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+
+            if (char === '"' && nextChar === '"') {
+              current += '"';
+              i++;
+            } else if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              result.push(current);
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current);
+          return result;
+        };
+
+        const headerCols = parseCSVLine(lines[0]);
+        const dataCols = parseCSVLine(lines[1]);
+
+        // Header and data row should have the same number of columns
+        expect(headerCols.length).toBe(dataCols.length);
+
+        // Verify no redteam columns are present
+        expect(lines[0]).not.toContain('Messages');
+        expect(lines[0]).not.toContain('pluginId');
+        expect(lines[0]).not.toContain('strategyId');
+
+        // Both outputs should be present
+        expect(lines[1]).toContain('First output');
+        expect(lines[1]).toContain('Second output');
+        expect(lines[1]).toContain('Good response');
+        expect(lines[1]).toContain('Bad response');
+      });
+
+      it('should add redteam metadata columns once per row with multiple outputs', () => {
+        const tableWithMultipleOutputs = {
+          head: {
+            vars: ['var1'],
+            prompts: [
+              {
+                provider: 'openai:gpt-4',
+                label: 'Prompt 1',
+                raw: 'Test prompt 1',
+                display: 'Test prompt 1',
+              } as CompletedPrompt,
+              {
+                provider: 'anthropic:claude',
+                label: 'Prompt 2',
+                raw: 'Test prompt 2',
+                display: 'Test prompt 2',
+              } as CompletedPrompt,
+            ],
+          },
+          body: [
+            {
+              test: {
+                vars: { var1: 'value1' },
+              },
+              testIdx: 0,
+              vars: ['value1'],
+              outputs: [
+                {
+                  pass: true,
+                  text: 'First output',
+                  metadata: {
+                    messages: [{ role: 'user', content: 'First message' }],
+                    pluginId: 'plugin-1',
+                    strategyId: 'strategy-1',
+                    sessionId: 'session-1',
+                  },
+                } as unknown as EvaluateTableOutput,
+                {
+                  pass: false,
+                  text: 'Second output',
+                  metadata: {
+                    messages: [{ role: 'assistant', content: 'Second message' }],
+                    pluginId: 'plugin-2',
+                    strategyId: 'strategy-2',
+                    sessionId: 'session-2',
+                  },
+                } as unknown as EvaluateTableOutput,
+              ],
+            },
+          ],
+        };
+
+        const csv = evalTableToCsv(tableWithMultipleOutputs, { isRedteam: true });
+        const lines = csv.split('\n').filter((line: string) => line.trim());
+
+        // Parse CSV using a simple comma count approach for validation
+        // Count actual CSV fields by splitting on commas not inside quotes
+        const parseCSVLine = (line: string): string[] => {
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+
+            if (char === '"' && nextChar === '"') {
+              // Escaped quote
+              current += '"';
+              i++; // Skip next char
+            } else if (char === '"') {
+              // Toggle quote state
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              // Field separator
+              result.push(current);
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current); // Add last field
+          return result;
+        };
+
+        const headerCols = parseCSVLine(lines[0]);
+        const dataCols = parseCSVLine(lines[1]);
+
+        // Header and data row should have the same number of columns
+        expect(headerCols.length).toBe(dataCols.length);
+
+        // Verify redteam columns are present in header (added once, not per output)
+        expect(lines[0]).toContain('Messages');
+        expect(lines[0]).toContain('pluginId');
+        expect(lines[0]).toContain('strategyId');
+        expect(lines[0]).toContain('sessionId');
+
+        // Should use first output's metadata
+        expect(lines[1]).toContain('First output');
+        expect(lines[1]).toContain('Second output');
+        expect(lines[1]).toContain('plugin-1'); // From first output
+        expect(lines[1]).not.toContain('plugin-2'); // Second output's metadata should not be included
+      });
+
       it('should not add red team columns when config.redteam is not present', () => {
         const tableWithMetadata = {
           ...mockTable,
