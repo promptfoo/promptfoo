@@ -18,16 +18,32 @@ export function isPolicyMetric(metric: string): boolean {
  * @returns The policy ID.
  */
 export function deserializePolicyIdFromMetric(metric: string): PolicyObject['id'] {
-  return metric.replace(`${POLICY_METRIC_PREFIX}:`, '');
+  return (
+    metric
+      // Remove the metric prefix
+      .replace(`${POLICY_METRIC_PREFIX}:`, '')
+      // If the metric contains a strategy suffix, remove it
+      .split('/')[0]
+  );
 }
 
 /**
  * Formats a policy identifier as a metric.
  * @param identifier Either the reusable policy's name or the inline policy's content hash.
+ * @param originalMetric - An optional original metric string to extract the strategy suffix from.
  * @returns The formatted policy identifier.
  */
-export function formatPolicyIdentifierAsMetric(identifier: string): string {
-  return `Policy: ${identifier}`;
+export function formatPolicyIdentifierAsMetric(
+  identifier: string,
+  originalMetric?: string,
+): string {
+  // If the original metric contains a strategy suffix, persist it in the formatted metric
+  let suffix: string | undefined;
+  if (originalMetric?.includes('/')) {
+    suffix = originalMetric?.split('/')[1];
+  }
+  // Use the plugin/strategy format found elsewhere in the codebase
+  return `Policy${suffix ? `/${suffix}` : ''}: ${identifier}`;
 }
 
 /**
