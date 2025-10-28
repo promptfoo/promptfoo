@@ -111,6 +111,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'goat',
   'crescendo',
   'jailbreak',
+  'jailbreak:meta',
   'jailbreak:tree',
   'gcg',
   'citation',

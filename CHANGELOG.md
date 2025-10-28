@@ -6,9 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- feat(redteam): register `jailbreak:meta` in AGENTIC_STRATEGIES and STRATEGIES_REQUIRING_REMOTE for proper UI categorization and cloud-only behavior (#XXXX)
+- chore(redteam): categorize `jailbreak:meta` under agentic strategies and mark as remote-only for correct UI grouping and Cloud behavior (#6049)
 
 ### Fixed
 
