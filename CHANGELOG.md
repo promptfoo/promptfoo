@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- fix(csv): handle primitive values directly in red team CSV export to avoid double-quoting strings (#6040)
+
 ## [0.119.0] - 2025-10-27
 
 ### Added
