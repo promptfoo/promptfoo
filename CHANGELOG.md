@@ -6,14 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Dependencies
+### Added
 
-- chore(deps): update Biome version with force-include patterns (`!!`) for faster local linting/CI by @sklein12 (#TBD)
+- feat(redteam): register `jailbreak:meta` in AGENTIC_STRATEGIES and STRATEGIES_REQUIRING_REMOTE for proper UI categorization and cloud-only behavior (#XXXX)
 
 ### Fixed
 
 - fix(csv): handle primitive values directly in red team CSV export to avoid double-quoting strings (#6040)
 - fix(csv): fix column count mismatch in red team CSV export when rows have multiple outputs (#6040)
+
+### Tests
+
+- test(redteam): add tests for `jailbreak:meta` strategy and iterative strategy config (#XXXX)
 
 ## [0.119.0] - 2025-10-27
 
