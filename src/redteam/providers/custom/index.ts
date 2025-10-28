@@ -97,11 +97,7 @@ export interface CustomMetadata extends BaseRedteamMetadata {
   customBacktrackCount: number;
   customResult: boolean;
   customConfidence: number | null;
-  stopReason:
-    | 'Grader failed'
-    | 'Internal evaluator success'
-    | 'Max rounds reached'
-    | 'Max backtracks reached';
+  stopReason: 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached';
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -299,11 +295,8 @@ export class CustomProvider implements ApiProvider {
     let objectiveScore: { value: number; rationale: string } | undefined;
     let lastTargetError: string | undefined = undefined;
 
-    let exitReason:
-      | 'Grader failed'
-      | 'Internal evaluator success'
-      | 'Max rounds reached'
-      | 'Max backtracks reached' = 'Max rounds reached';
+    let exitReason: 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached' =
+      'Max rounds reached';
 
     const totalTokenUsage = createEmptyTokenUsage();
 
@@ -524,24 +517,9 @@ export class CustomProvider implements ApiProvider {
         if (evalPercentage === 100) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
 
-          storedGraderResult = {
-            pass: false,
-            score: 0,
-            reason: objectiveScore?.rationale || 'Jailbreak goal achieved',
-          };
-
-          // Only break early if continueAfterSuccess is false
-          if (this.config.continueAfterSuccess) {
-            logger.debug(
-              `[Custom] Jailbreak Successful via Internal Evaluator at ROUND ${roundNum}, continuing due to continueAfterSuccess`,
-            );
-          } else {
-            exitReason = 'Internal evaluator success';
-            logger.debug(
-              `[Custom] Jailbreak Successful via Internal Evaluator, EXITING at ROUND ${roundNum}`,
-            );
-            break;
-          }
+          logger.debug(
+            `[Custom] Jailbreak Successful via Internal Evaluator at ROUND ${roundNum}, continuing iterations`,
+          );
         }
 
         if (graderPassed === false) {
