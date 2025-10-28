@@ -157,7 +157,8 @@ export async function handleExampleDownload(
       });
       if (attemptDownload) {
         exampleName = await selectExample();
-      } else { // User declined to try downloading a different example
+      } else {
+        // User declined to try downloading a different example
         logger.info(
           dedent`
 
