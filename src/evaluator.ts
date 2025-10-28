@@ -270,6 +270,7 @@ export async function runEval({
   evaluateOptions,
   testIdx,
   promptIdx,
+  repeatIndex,
   conversations,
   registers,
   isRedteam,
@@ -359,7 +360,12 @@ export async function runEval({
         // All of these are removed in python and script providers, but every Javascript provider gets them
         logger: logger as unknown as winston.Logger,
         getCache,
+        repeatIndex,
       };
+
+      if (repeatIndex > 0) {
+        callApiContext.bustCache = true;
+      }
 
       // Only add trace context properties if tracing is enabled
       if (traceContext) {
