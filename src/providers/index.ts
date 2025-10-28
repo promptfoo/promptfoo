@@ -4,7 +4,9 @@ import path from 'path';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
+import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import cliState from '../cliState';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
@@ -15,6 +17,69 @@ import { providerMap } from './registry';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
+
+/**
+ * Validates the linkedTargetId format if present.
+ * linkedTargetId is a Promptfoo Cloud feature that links custom provider results
+ * to an existing target instead of creating duplicates.
+ */
+function validateLinkedTargetIdFormat(linkedTargetId: string): void {
+  // Validate format: promptfoo://provider/{uuid}
+  if (!linkedTargetId.startsWith(CLOUD_PROVIDER_PREFIX)) {
+    throw new Error(
+      `Invalid linkedTargetId format: "${linkedTargetId}". Expected format: ${CLOUD_PROVIDER_PREFIX}<uuid>`,
+    );
+  }
+
+  // Extract and validate UUID format (8-4-4-4-12 hex digits)
+  const uuid = linkedTargetId.slice(CLOUD_PROVIDER_PREFIX.length);
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  if (!uuidRegex.test(uuid)) {
+    throw new Error(
+      `Invalid linkedTargetId UUID: "${uuid}". Expected format: ${CLOUD_PROVIDER_PREFIX}<uuid>`,
+    );
+  }
+}
+
+/**
+ * Validates that the linkedTargetId points to an existing provider in the cloud.
+ * This is an async check that requires cloud authentication.
+ * If cloud is not configured, logs a warning but does not fail.
+ */
+async function validateLinkedTargetIdExists(linkedTargetId: string): Promise<void> {
+  // Extract UUID from linkedTargetId
+  const uuid = linkedTargetId.slice(CLOUD_PROVIDER_PREFIX.length);
+
+  // Check if cloud is configured
+  if (!cloudConfig.isEnabled()) {
+    logger.warn('[Provider] linkedTargetId specified but cloud is not configured', {
+      linkedTargetId,
+      suggestion: "Run 'promptfoo auth login' to enable cloud features",
+    });
+    return;
+  }
+
+  try {
+    // Verify the provider exists in cloud
+    logger.debug('[Provider] Validating linkedTargetId exists in cloud', {
+      linkedTargetId,
+      uuid,
+    });
+    await getProviderFromCloud(uuid);
+    logger.debug('[Provider] linkedTargetId validation successful', {
+      linkedTargetId,
+    });
+  } catch (error) {
+    logger.error('[Provider] linkedTargetId validation failed', {
+      linkedTargetId,
+      error,
+    });
+    throw new Error(
+      `Target ${linkedTargetId} not found in cloud or you don't have access to it. Please verify the target exists in your organization.`,
+    );
+  }
+}
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -30,6 +95,16 @@ export async function loadApiProvider(
     },
     env,
   };
+
+  // Validate linkedTargetId format and existence if present (Promptfoo Cloud feature)
+  const linkedTargetId = providerOptions.config?.linkedTargetId;
+  if (linkedTargetId) {
+    if (typeof linkedTargetId !== 'string') {
+      throw new Error(`Invalid linkedTargetId type: expected string, got ${typeof linkedTargetId}`);
+    }
+    validateLinkedTargetIdFormat(linkedTargetId);
+    await validateLinkedTargetIdExists(linkedTargetId);
+  }
 
   const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
 
