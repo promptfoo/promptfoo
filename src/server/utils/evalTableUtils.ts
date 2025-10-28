@@ -62,6 +62,9 @@ export function evalTableToCsv(
   }
   csvRows.push(headers);
 
+  // Compute stable key ordering for redteam metadata columns
+  const redteamKeys = Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
+
   // Process body rows with pass/fail prefixes and conversation data
   table.body.forEach((row) => {
     const rowValues: any[] = [
@@ -69,15 +72,10 @@ export function evalTableToCsv(
       ...row.vars,
       ...row.outputs.flatMap((output) => {
         if (!output) {
-          const emptyValues = ['', '', ''];
-          if (isRedteam) {
-            // handle message, redteamHistory, redteamTreeHistory columns
-            emptyValues.push(...Array(REDTEAM_METADATA_COLUMNS.length).fill(''));
-          }
-          return emptyValues;
+          return ['', '', ''];
         }
 
-        const baseValues = [
+        return [
           // Add pass/fail/error prefix to text
           (output.pass
             ? '[PASS] '
@@ -89,18 +87,30 @@ export function evalTableToCsv(
           // Add comment
           output.gradingResult?.comment || '',
         ];
-
-        if (isRedteam && output.metadata) {
-          for (const column of Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES)) {
-            baseValues.push(output.metadata[column] ? JSON.stringify(output.metadata[column]) : '');
-          }
-        } else if (isRedteam) {
-          baseValues.push(...Array(REDTEAM_METADATA_COLUMNS.length).fill(''));
-        }
-
-        return baseValues;
       }),
     ];
+
+    // Add redteam metadata once per row (using first output's metadata)
+    if (isRedteam) {
+      const firstOutputMetadata = row.outputs[0]?.metadata;
+      for (const key of redteamKeys) {
+        const value = firstOutputMetadata?.[key];
+        if (value === null || value === undefined) {
+          rowValues.push('');
+        } else if (
+          typeof value === 'string' ||
+          typeof value === 'number' ||
+          typeof value === 'boolean'
+        ) {
+          // Don't stringify primitives - add them directly
+          rowValues.push(value.toString());
+        } else {
+          // Stringify objects and arrays
+          rowValues.push(JSON.stringify(value));
+        }
+      }
+    }
+
     csvRows.push(rowValues);
   });
 
