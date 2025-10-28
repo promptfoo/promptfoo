@@ -1133,65 +1133,6 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                 </Box>
               </Box>
 
-              {/* Languages Configuration - Standalone Section */}
-              <Box sx={{ mt: 4 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
-                  Languages
-                </Typography>
-                <Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                    Test languages{' '}
-                    <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>(optional)</span>
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Specify languages to generate multilingual tests. This will create test cases in
-                    each specified language to test how your system handles prompts in different
-                    languages. Leave empty to generate tests only in English. Use ISO language codes
-                    (e.g., 'fr', 'de', 'es') or language names (e.g., 'French', 'German',
-                    'Spanish').
-                  </Typography>
-                  <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {Array.isArray(config.language) &&
-                      config.language.map((lang, index) => (
-                        <Chip
-                          key={index}
-                          label={lang}
-                          onDelete={() => {
-                            const languages = Array.isArray(config.language) ? config.language : [];
-                            updateConfig(
-                              'language',
-                              languages.filter((_, i) => i !== index),
-                            );
-                          }}
-                          color="primary"
-                          variant="outlined"
-                        />
-                      ))}
-                  </Box>
-                  <TextField
-                    fullWidth
-                    label="Add Language (press Enter)"
-                    placeholder="e.g., French, de, Hindi, zh"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const input = (e.target as HTMLInputElement).value.trim();
-                        if (input) {
-                          const currentLanguages = Array.isArray(config.language)
-                            ? config.language
-                            : config.language
-                              ? [config.language]
-                              : [];
-                          updateConfig('language', [...currentLanguages, input]);
-                          (e.target as HTMLInputElement).value = '';
-                        }
-                      }
-                    }}
-                    helperText="Press Enter to add a language. Use ISO codes (fr, de) or names (French, German)."
-                    variant="outlined"
-                  />
-                </Box>
-              </Box>
             </Stack>
           ) : (
             <Box>
