@@ -38,7 +38,6 @@ import './TestSuites.css';
 import {
   formatPolicyIdentifierAsMetric,
   isValidPolicyObject,
-  makeDefaultPolicyName,
   makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import {
@@ -48,6 +47,7 @@ import {
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import { type TestResultStats } from './FrameworkComplianceUtils';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 
 interface TestSuitesProps {
   evalId: string;
@@ -128,9 +128,9 @@ const TestSuites = ({
     );
   }, [plugins, pluginSeverityMap]);
 
-  const rows = React.useMemo(() => {
-    let customPolicyIndex = 0;
+  const customPoliciesById = useCustomPoliciesMap(plugins);
 
+  const rows = React.useMemo(() => {
     return (
       Object.entries(categoryStats)
         .filter(([_, stats]) => stats.total > 0)
@@ -174,22 +174,14 @@ const TestSuites = ({
           let description =
             subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '';
 
-          // Read custom policy metadata from `pluginsById`.
+          // Reads policy data from customPoliciesById
           if (plugin?.id === 'policy' && plugin?.config?.policy) {
-            if (isValidPolicyObject(plugin.config.policy)) {
-              type = formatPolicyIdentifierAsMetric(
-                plugin.config.policy.name ?? plugin.config.policy.id,
-              );
-              if (plugin.config.policy.text) {
-                description = plugin.config.policy.text;
-              }
+            const policy = customPoliciesById[pluginName];
+            if (policy) {
+              // Render w/o strategy suffix as rows are aggregates across strategies
+              type = formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
+              description = policy.text ?? '';
             }
-            // Backwards compatibility w/ text-only inline policies.
-            else {
-              type = formatPolicyIdentifierAsMetric(makeDefaultPolicyName(customPolicyIndex));
-              description = plugin.config?.policy as string;
-            }
-            customPolicyIndex++;
           }
 
           return {
@@ -211,7 +203,15 @@ const TestSuites = ({
         // Filter out rows where ASR = 0
         .filter((row) => row.successfulAttacks > 0)
     );
-  }, [categoryStats, plugins, failuresByPlugin, passesByPlugin, pluginsById, pluginSeverityMap]);
+  }, [
+    categoryStats,
+    plugins,
+    failuresByPlugin,
+    passesByPlugin,
+    pluginsById,
+    pluginSeverityMap,
+    customPoliciesById,
+  ]);
 
   const exportToCSV = React.useCallback(() => {
     // Format data for CSV
