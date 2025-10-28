@@ -178,6 +178,7 @@ const TestSuites = ({
           if (plugin?.id === 'policy' && plugin?.config?.policy) {
             const policy = customPoliciesById[pluginName];
             if (policy) {
+              // Render w/o strategy suffix as rows are aggregates across strategies
               type = formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
               description = policy.text ?? '';
             }
