@@ -633,7 +633,7 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
            Run: promptfoo auth status
 
         2. Check that the target exists in your cloud dashboard:
-           https://www.promptfoo.dev/app/targets
+           https://www.promptfoo.dev/redteam/targets
 
         3. Ensure you have permission to access this target
            (Targets are scoped to your organization)

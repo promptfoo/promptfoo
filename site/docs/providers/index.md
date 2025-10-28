@@ -290,17 +290,32 @@ For detailed MCP documentation and advanced configurations, see the [MCP Integra
 ### Linking Custom Providers to Existing Targets (Promptfoo Cloud)
 
 :::info Promptfoo Cloud Feature
-
 This feature is available in [Promptfoo Cloud](/docs/enterprise) deployments.
-
 :::
 
-Use `linkedTargetId` to link custom providers to existing cloud targets. Results from the custom provider appear under the linked target instead of creating duplicate entries.
+When running red team scans with custom providers ([Python](/docs/providers/python/), [JavaScript](/docs/providers/custom-api/), [HTTP](/docs/providers/http/)), use `linkedTargetId` to link results to an existing cloud target. Without this, each eval run creates a new duplicate target entry.
+
+**When to use:**
+
+- Multiple red team scans against the same custom provider
+- Tracking vulnerability trends over time
+- Maintaining a clean, organized targets list
+
+**Configuration:**
 
 ```yaml
 providers:
-  - id: 'custom-wrapper'
+  - id: 'file://my_provider.py'
     config:
-      linkedTargetId: 'promptfoo://provider/12345-abcd-uuid'
+      linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
       # other custom provider config...
 ```
+
+**How to get a linkedTargetId:**
+
+1. Log in to [Promptfoo Cloud](https://www.promptfoo.dev/)
+2. Navigate to your [Targets page](https://www.promptfoo.dev/redteam/targets)
+3. Find the target and copy its ID
+4. Format as: `promptfoo://provider/<target-id>`
+
+See [Preventing Duplicate Targets](/docs/red-team/troubleshooting/duplicate-targets/) for detailed setup and troubleshooting.

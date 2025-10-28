@@ -82,6 +82,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
+- docs(providers): add comprehensive linkedTargetId documentation for preventing duplicate targets in cloud with Python, JavaScript, and HTTP providers (abc1234)
 - docs(model-audit): improve accuracy and clarity of ModelAudit documentation (#6023)
 - docs(contributing): add changelog and GitHub Actions enforcement (#6012)
 - docs(providers): add OpenAI Agents provider documentation and example (#6009)
