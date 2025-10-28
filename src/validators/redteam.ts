@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import logger from '../logger';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
@@ -265,17 +266,17 @@ export const RedteamConfigSchema = z
       const strategyLanguages = multilingualStrategy.config?.languages;
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
-        // Include 'en' to represent original English tests explicitly
-        // ['en', 'hi', 'fr'] means: generate English + Hindi + French
-        const languagesWithOriginal = ['en', ...strategyLanguages];
+        logger.warn(
+          '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+        );
 
         if (data.language) {
-          // Global language exists, merge and deduplicate
+          // Global language exists, merge with strategy languages and deduplicate
           const existingLanguages = Array.isArray(data.language) ? data.language : [data.language];
-          data.language = [...new Set([...existingLanguages, ...languagesWithOriginal])];
+          data.language = [...new Set([...existingLanguages, ...strategyLanguages])];
         } else {
-          // No global language set, use multilingual strategy languages
-          data.language = languagesWithOriginal;
+          // No global language set, use only multilingual strategy languages
+          data.language = strategyLanguages;
         }
 
         // Remove multilingual strategy from array - it's now a pure config mechanism

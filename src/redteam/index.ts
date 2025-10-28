@@ -826,7 +826,11 @@ export async function synthesize({
 
       // If plugin has its own language, use that; otherwise use global language
       const languageConfig = plugin.config?.language ?? language;
-      const languages = Array.isArray(languageConfig) ? languageConfig : [languageConfig];
+      const languages = Array.isArray(languageConfig)
+        ? languageConfig
+        : languageConfig
+          ? [languageConfig]
+          : ['en'];
 
       logger.debug(
         `[Language Processing] Plugin: ${plugin.id}, Languages: ${JSON.stringify(languages)}, NumTests per language: ${plugin.numTests}${plugin.config?.language ? ' (plugin override)' : ''}`,
@@ -853,7 +857,7 @@ export async function synthesize({
           },
         });
         {
-          const langKey = lang || 'en';
+          const langKey = lang;
 
           if (Array.isArray(pluginTests) && pluginTests.length > 0) {
             // Add all metadata (language + plugin info) so strategies can access it
