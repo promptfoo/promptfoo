@@ -34,6 +34,7 @@ export const AGENTIC_STRATEGIES = [
   'goat',
   'custom',
   'jailbreak',
+  'jailbreak:meta',
   'jailbreak:tree',
   'mischievous-user',
   'simba',
