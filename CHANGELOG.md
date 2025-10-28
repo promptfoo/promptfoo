@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- docs(agents): document PR workflow steps (#6041)
+
 ## [0.119.0] - 2025-10-27
 
 ### Added
