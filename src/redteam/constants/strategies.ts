@@ -71,6 +71,7 @@ export const ADDITIONAL_STRATEGIES = [
   'jailbreak:likert',
   'jailbreak:meta',
   'jailbreak:tree',
+  'jailbreak:websearch',
   'layer',
   'leetspeak',
   'math-prompt',
@@ -183,4 +184,5 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'jailbreak:composite',
   'jailbreak:likert',
   'jailbreak:meta',
+  'jailbreak:websearch',
 ] as const;

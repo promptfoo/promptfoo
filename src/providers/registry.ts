@@ -14,6 +14,7 @@ import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
+import RedteamIterativeWebsearchProvider from '../redteam/providers/iterativeWebsearch';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
@@ -1274,6 +1275,16 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new RedteamIterativeMetaProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:websearch',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new RedteamIterativeWebsearchProvider(providerOptions.config);
     },
   },
   {

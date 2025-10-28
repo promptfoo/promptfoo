@@ -82,6 +82,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'jailbreak:meta':
     'Meta-agent that builds its own attack taxonomy and learns from full attack history',
   'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
+  'jailbreak:websearch':
+    'Iterative jailbreak strategy enhanced with web search capabilities for researching attack techniques',
   leetspeak: 'Tests handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
   'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
@@ -259,6 +261,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:meta': 'Meta-Agent Strategic Jailbreak',
   'jailbreak:tree': 'Tree-Based Attack Search',
+  'jailbreak:websearch': 'Web-Research Enhanced Jailbreak',
   leetspeak: 'Leetspeak Payload Encoding',
   'math-prompt': 'Mathematical Notation Attack',
   morse: 'Morse Code Encoding',
@@ -854,6 +857,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'jailbreak:meta':
     'Meta-agent that dynamically builds attack taxonomy and strategically learns from full attack history',
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
+  'jailbreak:websearch':
+    'Iterative jailbreak strategy that uses web research to discover and apply documented attack techniques',
   layer: 'Composes multiple strategies and applies them sequentially',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
@@ -892,6 +897,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:meta': 'Meta-Agent',
   'jailbreak:tree': 'Tree-based Optimization',
+  'jailbreak:websearch': 'Web-Research Enhanced',
   layer: 'Layer',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',

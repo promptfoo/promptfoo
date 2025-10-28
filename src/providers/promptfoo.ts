@@ -130,12 +130,14 @@ interface PromptfooChatCompletionOptions {
   id?: string;
   jsonOnly: boolean;
   preferSmallModel: boolean;
+  useWebTools?: boolean;
   task:
     | 'crescendo'
     | 'goat'
     | 'iterative'
     | 'iterative:image'
     | 'iterative:tree'
+    | 'iterative:websearch'
     | 'judge'
     | 'blocking-question-analysis'
     | 'meta-agent-decision';
@@ -183,6 +185,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     const body = {
       jsonOnly: this.options.jsonOnly,
       preferSmallModel: this.options.preferSmallModel,
+      useWebTools: this.options.useWebTools,
       prompt,
       step: context?.prompt.label,
       task: this.options.task,

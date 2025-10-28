@@ -3,7 +3,7 @@ import type { TestCase } from '../../types/index';
 export function addIterativeJailbreaks(
   testCases: TestCase[],
   injectVar: string,
-  strategy: 'iterative' | 'iterative:tree' | 'iterative:meta' = 'iterative',
+  strategy: 'iterative' | 'iterative:tree' | 'iterative:meta' | 'iterative:websearch' = 'iterative',
   config: Record<string, any>,
 ): TestCase[] {
   const providerName =
@@ -11,21 +11,27 @@ export function addIterativeJailbreaks(
       ? 'promptfoo:redteam:iterative'
       : strategy === 'iterative:tree'
         ? 'promptfoo:redteam:iterative:tree'
-        : 'promptfoo:redteam:iterative:meta';
+        : strategy === 'iterative:meta'
+          ? 'promptfoo:redteam:iterative:meta'
+          : 'promptfoo:redteam:iterative:websearch';
 
   const metricSuffix =
     strategy === 'iterative'
       ? 'Iterative'
       : strategy === 'iterative:tree'
         ? 'IterativeTree'
-        : 'IterativeMeta';
+        : strategy === 'iterative:meta'
+          ? 'IterativeMeta'
+          : 'IterativeWebsearch';
 
   const strategyId =
     strategy === 'iterative'
       ? 'jailbreak'
       : strategy === 'iterative:tree'
         ? 'jailbreak:tree'
-        : 'jailbreak:meta';
+        : strategy === 'iterative:meta'
+          ? 'jailbreak:meta'
+          : 'jailbreak:websearch';
 
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);

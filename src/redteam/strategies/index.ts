@@ -212,6 +212,20 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'jailbreak:websearch',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding websearch-enhanced jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addIterativeJailbreaks(
+        testCases,
+        injectVar,
+        'iterative:websearch',
+        config,
+      );
+      logger.debug(`Added ${newTestCases.length} websearch-enhanced jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'image',
     action: async (testCases, injectVar) => {
       logger.debug(`Adding image encoding to ${testCases.length} test cases`);
