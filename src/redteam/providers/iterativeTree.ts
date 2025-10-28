@@ -405,7 +405,7 @@ export interface TreeSearchOutput {
 interface TreeIterativeMetadata extends BaseRedteamMetadata {
   highestScore: number;
   redteamFinalPrompt?: string;
-  stopReason: 'TARGET_SCORE' | 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+  stopReason: 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
   attempts: number;
   redteamTreeHistory: TreeSearchOutput[];
   storedGraderResult?: GradingResult;
@@ -492,12 +492,8 @@ async function runRedteamConversation({
 
   let bestResponse = '';
 
-  let stoppingReason:
-    | 'TARGET_SCORE'
-    | 'MAX_ATTEMPTS'
-    | 'MAX_DEPTH'
-    | 'NO_IMPROVEMENT'
-    | 'GRADER_FAILED' = 'MAX_DEPTH';
+  let stoppingReason: 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED' =
+    'MAX_DEPTH';
 
   const treeOutputs: TreeSearchOutput[] = [];
   let lastResponse: TargetResponse | undefined = undefined;
@@ -652,26 +648,14 @@ async function runRedteamConversation({
           }
         }
 
-        if (score >= TARGET_SCORE || graderPassed === false) {
+        if (score >= TARGET_SCORE) {
           logger.debug(
-            `[Depth ${depth}, Attempt ${attempts}] Reached target score (${TARGET_SCORE}). Max score: ${maxScore}. Stopping.`,
+            `[Depth ${depth}, Attempt ${attempts}] Reached target score (${TARGET_SCORE}). Continuing exploration.`,
           );
+        }
 
-          // Set the appropriate stop reason
-          if (graderPassed === false) {
-            stoppingReason = 'GRADER_FAILED';
-          } else if (score >= TARGET_SCORE) {
-            stoppingReason = 'TARGET_SCORE';
-          }
-
-          // If we're exiting early due to high judge score and don't have a grader result, create one from the judge result
-          if (score >= TARGET_SCORE && !storedGraderResult) {
-            storedGraderResult = {
-              pass: false,
-              score: 0,
-              reason: explanation || 'Jailbreak goal achieved',
-            };
-          }
+        if (graderPassed === false) {
+          stoppingReason = 'GRADER_FAILED';
 
           treeOutputs.push({
             depth,
