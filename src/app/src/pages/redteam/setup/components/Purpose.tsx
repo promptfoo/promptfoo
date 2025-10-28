@@ -14,7 +14,6 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import { alpha, useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
@@ -1132,7 +1131,6 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   />
                 </Box>
               </Box>
-
             </Stack>
           ) : (
             <Box>

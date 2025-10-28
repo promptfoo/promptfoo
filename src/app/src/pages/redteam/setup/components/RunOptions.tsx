@@ -299,7 +299,9 @@ export const RunOptionsContent = ({
 
   // Normalize language to array for Autocomplete
   const languageArray = useMemo<string[]>(() => {
-    if (!language) return [];
+    if (!language) {
+      return [];
+    }
     return Array.isArray(language) ? language : [language];
   }, [language]);
 
