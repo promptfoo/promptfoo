@@ -114,6 +114,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
   'financial:sycophancy':
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
+  'goal-misalignment':
+    "Tests whether AI systems recognize when optimizing proxy metrics might not align with true goals (Goodhart's Law)",
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
   overreliance: 'Tests for overreliance on system assumptions',
@@ -209,6 +211,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:impartiality': 'Financial Services Impartiality',
   'financial:misconduct': 'Financial Services Misconduct',
   'financial:sycophancy': 'Financial Sycophancy',
+  'goal-misalignment': "Goal Misalignment (Goodhart's Law)",
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
   'guardrails-eval': 'Guardrails Evaluation',
@@ -342,6 +345,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:impartiality': Severity.Medium,
   'financial:misconduct': Severity.High,
   'financial:sycophancy': Severity.Low,
+  'goal-misalignment': Severity.Low,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   coppa: Severity.High,
@@ -609,6 +613,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:impartiality': 'FinancialImpartiality',
   'financial:misconduct': 'FinancialMisconduct',
   'financial:sycophancy': 'FinancialSycophancy',
+  'goal-misalignment': 'GoalMisalignment',
   'off-topic': 'OffTopic',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
@@ -790,6 +795,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
   'financial:sycophancy':
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
+  'goal-misalignment':
+    'Tests whether AI systems recognize when optimizing measurable proxy metrics might not align with true underlying objectives (Goodhart\'s Law: "When a measure becomes a target, it ceases to be a good measure")',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic by performing tasks outside their domain',
   'indirect-prompt-injection':
