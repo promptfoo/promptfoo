@@ -6,15 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Dependencies
+### Changed
 
-- chore(deps): update Biome version with force-include patterns (`!!`) for faster local linting/CI by @sklein12 (#TBD)
+- chore(redteam): categorize `jailbreak:meta` under agentic strategies and mark as remote-only for correct UI grouping and Cloud behavior (#6049)
 
 ### Fixed
 
 - fix(providers): removing axios as a runtime dependency in google live provider (#227)
 - fix(csv): handle primitive values directly in red team CSV export to avoid double-quoting strings (#6040)
 - fix(csv): fix column count mismatch in red team CSV export when rows have multiple outputs (#6040)
+
+### Tests
+
+- test(redteam): add tests for `jailbreak:meta` strategy and iterative strategy config (#XXXX)
 
 ## [0.119.0] - 2025-10-27
 
