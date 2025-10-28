@@ -140,7 +140,6 @@
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^6.0.3",
     "@types/uuid": "^10.0.0",
-    "axios": "^1.12.2",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.5",
