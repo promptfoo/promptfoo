@@ -2,11 +2,7 @@ import { renderHook } from '@testing-library/react';
 import type { PolicyObject, RedteamPluginObject } from '@promptfoo/redteam/types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  isValidPolicyObject,
-  makeDefaultPolicyName,
-  makeInlinePolicyId,
-} from '@promptfoo/redteam/plugins/policy/utils';
+import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
 import { useCustomPoliciesMap } from './useCustomPoliciesMap';
 
 describe('useCustomPoliciesMap', () => {
