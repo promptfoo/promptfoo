@@ -98,8 +98,8 @@ export default function StrategyConfigDialog({
     }
   };
 
-  const handleRemoveGoal = (goal: string) => {
-    setGoals((prev) => prev.filter((g) => g !== goal));
+  const handleRemoveGoal = (index: number) => {
+    setGoals((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleNumTestsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -437,7 +437,7 @@ export default function StrategyConfigDialog({
                     </Typography>
                     <IconButton
                       size="small"
-                      onClick={() => handleRemoveGoal(goal)}
+                      onClick={() => handleRemoveGoal(index)}
                       sx={{ mt: -0.5 }}
                       aria-label="delete goal"
                     >
