@@ -79,7 +79,7 @@ export async function downloadExample(exampleName: string, targetDir: string): P
       try {
         await fs.rm(targetDir, { recursive: true, force: true });
       } catch (error) {
-        console.error(`Failed to remove directory: ${error}`);
+        logger.error(`Failed to remove directory: ${error}`);
       }
     }
     throw new Error(
