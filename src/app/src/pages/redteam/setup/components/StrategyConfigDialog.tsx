@@ -63,15 +63,9 @@ export default function StrategyConfigDialog({
     const nextConfig = config ?? {};
 
     setLocalConfig({ ...nextConfig });
-    setLanguages(
-      Array.isArray(nextConfig.languages) && nextConfig.languages.length > 0
-        ? nextConfig.languages
-        : Object.keys(DEFAULT_LANGUAGES),
-    );
     setEnabled(nextConfig.enabled === undefined ? true : nextConfig.enabled);
     setNumTests(nextConfig.numTests !== undefined ? String(nextConfig.numTests) : '10');
     setError('');
-    setNewLanguage('');
     setNewGoal('');
     setGoals(
       strategy === 'simba' ? nextConfig.goals || DEFAULT_SIMBA_GOALS : nextConfig.goals || [],
