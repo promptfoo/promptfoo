@@ -116,6 +116,7 @@ const redTeamSidebar = [
         items: [
           'red-team/plugins/competitors',
           'red-team/plugins/excessive-agency',
+          'red-team/plugins/goal-misalignment',
           'red-team/plugins/hallucination',
           'red-team/plugins/imitation',
           'red-team/plugins/off-topic',
