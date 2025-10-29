@@ -7,6 +7,8 @@ export const VERSION = packageJson.version;
 
 export const DEFAULT_QUERY_LIMIT = 100;
 
+export const DEFAULT_MAX_CONCURRENCY = 4;
+
 // Default API base URL used for sharing and other API operations
 export const DEFAULT_API_BASE_URL = 'https://api.promptfoo.app';
 

@@ -312,6 +312,184 @@ Always follow this workflow:
 
 6. **Wait for review and CI checks** before merging
 
+## Changelog
+
+All user-facing changes must be documented in `CHANGELOG.md`. The changelog is enforced via GitHub Actions.
+
+### When to Update
+
+**IMPORTANT: ALL merged PRs must be documented in the changelog.**
+
+Update the changelog for EVERY pull request, including:
+
+- New features or functionality
+- Bug fixes
+- Breaking changes
+- API changes
+- Provider additions or updates
+- Configuration changes
+- Performance improvements
+- Deprecated features
+- Dependency updates
+- Test changes
+- Build configuration changes
+- Code style/formatting changes
+- CI/CD changes
+- Documentation updates
+
+### Bypass Labels
+
+PRs can bypass changelog requirements with one of these labels:
+
+1. `no-changelog` - For exceptional cases (automated bot PRs, reverts of unmerged changes)
+2. `dependencies` - For automated dependency updates (Dependabot, Renovate, etc.)
+
+### Changelog Format
+
+This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format:
+
+```markdown
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [Unreleased]
+
+### Added
+
+- New features go here (#PR_NUMBER)
+
+### Changed
+
+- Changes to existing functionality (#PR_NUMBER)
+
+### Fixed
+
+- Bug fixes (#PR_NUMBER)
+
+### Dependencies
+
+- Dependency updates (#PR_NUMBER)
+
+### Documentation
+
+- Documentation changes (#PR_NUMBER)
+
+### Tests
+
+- Test additions or changes (#PR_NUMBER)
+
+## [1.2.3] - 2025-10-15
+
+### Added
+
+- Feature that was added (#1234)
+```
+
+### Entry Format
+
+Each entry should:
+
+1. **Include reference**: Add PR number `(#1234)` when available; use short commit hash `(abc1234)` only if no PR exists
+2. **Use conventional commit prefix**: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`
+3. **Use `!` for breaking changes**: Add `!` after scope: `feat(api)!:`, `chore(cli)!:`
+4. **Include contributor attribution**: Add `by @username` before reference when contributor is known
+5. **Be concise**: One line describing the change
+6. **Be user-focused**: Describe what changed, not how
+
+### Recommended Scopes
+
+Use these standardized scopes for consistency (based on git history analysis):
+
+- **providers** - Provider implementations (OpenAI, Anthropic, LocalAI, etc.)
+- **webui** - Web interface and viewer
+- **cli** - Command-line interface
+- **assertions** - Assertion types and grading
+- **api** - Public API changes
+- **config** - Configuration handling
+- **deps** - Dependencies (or use Dependencies section)
+- **docs** - Documentation
+- **tests** - Test infrastructure
+- **examples** - Example configurations
+- **redteam** - Red team features (newer versions)
+- **site** - Documentation site
+
+### Categories
+
+- **Added**: New features
+- **Changed**: Changes to existing functionality (refactors, improvements, chores, CI/CD)
+- **Fixed**: Bug fixes
+- **Dependencies**: ALL dependency updates
+- **Documentation**: Documentation additions or updates
+- **Tests**: ALL test additions or changes
+- **Removed**: Removed features (rare, usually breaking)
+
+### Examples
+
+Good entries:
+
+```markdown
+### Added
+
+- feat(providers): add TrueFoundry LLM Gateway provider (#5839)
+- feat(redteam): add test button for request and response transforms in red-team setup UI (#5482)
+- feat(cli): add glob pattern support for prompts (a1b2c3d)
+- feat(api)!: simplify the API and support unified test suite definitions by @typpo (#14)
+
+### Fixed
+
+- fix(evaluator): support `defaultTest.options.provider` for model-graded assertions (#5931)
+- fix(webui): improve UI email validation handling when email is invalid; add better tests (#5932)
+- fix(cache): ensure cache directory exists before first use (423f375)
+
+### Changed
+
+- chore(providers): update Alibaba model support (#5919)
+- chore(env)!: rename `OPENAI_MAX_TEMPERATURE` to `OPENAI_TEMPERATURE` (4830557)
+- refactor(webui): improve EvalOutputPromptDialog with grouped dependency injection (#5845)
+```
+
+Bad entries (missing reference, too vague, inconsistent format):
+
+```markdown
+### Added
+
+- Added new feature
+- Updated provider
+- New feature here
+```
+
+### Adding Entries
+
+1. **Add to Unreleased section**: All new entries go under `## [Unreleased]` at the top of the file
+2. **Choose correct category**: Added, Changed, Fixed, Dependencies, Documentation, Tests
+3. **Include reference**: PR number `(#1234)` when available, or short commit hash `(abc1234)` if no PR
+4. **Keep conventional commit prefix**: feat:, fix:, chore:, docs:, test:
+5. **One line per change**: Brief and descriptive
+
+Example workflow:
+
+```bash
+# 1. Make your changes
+# 2. Before creating PR, update CHANGELOG.md
+
+# Add entry under ## [Unreleased] in appropriate category:
+- feat(providers): add new provider for XYZ (#PR_NUMBER)
+
+# 3. Commit changelog with your changes
+git add CHANGELOG.md
+git commit -m "feat(providers): add new provider for XYZ"
+```
+
+### Notes
+
+- Maintainers move entries from Unreleased to versioned sections during releases
+- Don't worry about version numbers - focus on the Unreleased section
+- If unsure about categorization, use Changed
+- ALL dependencies, tests, CI changes must be included (no exemptions)
+
 ## Dependency Management
 
 ### Safe Update Workflow

@@ -11,6 +11,12 @@ import { useMemo } from 'react';
 import type { PromptMetrics } from '@promptfoo/types';
 
 import { useTableStore } from './store';
+import { PolicyObject } from '@promptfoo/redteam/types';
+import {
+  isValidPolicyObject,
+  makeInlinePolicyId,
+  makeDefaultPolicyName,
+} from '@promptfoo/redteam/plugins/policy/utils';
 
 export interface MetricValue {
   total: number;
@@ -121,4 +127,41 @@ export function useMetricsGetter() {
       };
     };
   }, [table, filteredMetrics]);
+}
+
+/**
+ * Reads custom policies from the table store and returns a map of policy IDs to policy objects.
+ *
+ * @returns A map of policy IDs to policy objects.
+ */
+export function useCustomPoliciesMap(): Record<PolicyObject['id'], PolicyObject> {
+  const { config } = useTableStore();
+  const plugins = config?.redteam?.plugins ?? [];
+
+  return useMemo(() => {
+    return (
+      plugins
+        // Filter on the policy plugin type so that only custom policies are included in the
+        // reduce, ensuring stable indices for default name generation.
+        .filter((plugin) => typeof plugin !== 'string' && plugin.id === 'policy')
+        .reduce((map: Record<PolicyObject['id'], PolicyObject>, plugin, index) => {
+          const policy = plugin?.config?.policy;
+          if (policy) {
+            if (isValidPolicyObject(policy)) {
+              map[policy.id] = policy;
+            }
+            // Backwards compatibility w/ text-only inline policies.
+            else {
+              const id = makeInlinePolicyId(policy);
+              map[id] = {
+                id,
+                text: policy,
+                name: makeDefaultPolicyName(index),
+              };
+            }
+          }
+          return map;
+        }, {})
+    );
+  }, [plugins]);
 }

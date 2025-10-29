@@ -179,6 +179,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     let data;
     let cached = false;
+    let latencyMs: number | undefined;
 
     try {
       const url = config.dataSources
@@ -193,6 +194,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         data: responseData,
         cached: isCached,
         status,
+        latencyMs: fetchLatencyMs,
       } = await fetchWithCache(
         url,
         {
@@ -210,6 +212,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       );
 
       cached = isCached;
+      latencyMs = fetchLatencyMs;
 
       // Handle the response data
       if (typeof responseData === 'string') {
@@ -342,6 +345,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
                 : {}),
             },
         cached,
+        latencyMs,
         logProbs,
         finishReason,
         cost: calculateAzureCost(

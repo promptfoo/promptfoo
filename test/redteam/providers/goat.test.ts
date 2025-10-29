@@ -23,7 +23,11 @@ describe('RedteamGoatProvider', () => {
   let mockFetch: jest.Mock;
 
   // Helper function to create a mock target provider
-  const createMockTargetProvider = (outputValue: any = 'target response', tokenUsage: any = {}) => {
+  const createMockTargetProvider = (
+    outputValue: any = 'target response',
+    tokenUsage: any = {},
+    responseOverrides: Record<string, unknown> = {},
+  ) => {
     const targetProvider: ApiProvider = {
       id: () => 'test-provider',
       callApi: jest.fn() as any,
@@ -32,6 +36,7 @@ describe('RedteamGoatProvider', () => {
     (targetProvider.callApi as any).mockResolvedValue({
       output: outputValue,
       tokenUsage,
+      ...responseOverrides,
     });
 
     return targetProvider;
@@ -563,11 +568,11 @@ describe('RedteamGoatProvider', () => {
     let capturedAdditionalRubric: string | undefined;
     (mockGrader.getResult as any).mockImplementation(
       async (
-        prompt: string,
-        output: string,
-        test: any,
-        provider: any,
-        value: any,
+        _prompt: string,
+        _output: string,
+        _test: any,
+        _provider: any,
+        _value: any,
         additionalRubric?: string,
       ) => {
         capturedAdditionalRubric = additionalRubric;
@@ -925,6 +930,120 @@ describe('RedteamGoatProvider', () => {
       expect(result.tokenUsage?.prompt).toBe(75); // 30 + 45
       expect(result.tokenUsage?.completion).toBe(50); // 20 + 30
       expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+  });
+
+  describe('sessionId handling', () => {
+    it('should include sessionId from context.vars in metadata', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider('response');
+      const context = createMockContext(targetProvider, {
+        goal: 'test goal',
+        sessionId: 'test-session-123',
+      });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.sessionId).toBe('test-session-123');
+    });
+
+    it('should include sessionId from context vars when stateful is false', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider();
+      const context = createMockContext(targetProvider, {
+        goal: 'test goal',
+        sessionId: 'context-session-id',
+      });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.sessionId).toBe('context-session-id');
+    });
+
+    it('should include sessionId from target response when stateful is true', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+        stateful: true,
+      });
+
+      const targetProvider = createMockTargetProvider(
+        'target response',
+        {},
+        {
+          sessionId: 'response-session-id',
+        },
+      );
+      const context = createMockContext(targetProvider);
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.sessionId).toBe('response-session-id');
+    });
+
+    it('should handle missing sessionId gracefully', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider('response');
+      const context = createMockContext(targetProvider, { goal: 'test goal' });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.sessionId).toBeUndefined();
+    });
+
+    it('should stringify non-string sessionId', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider('response');
+      const context = createMockContext(targetProvider, {
+        goal: 'test goal',
+        sessionId: 123 as any, // Non-string sessionId
+      });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.sessionId).toBe('123');
+    });
+
+    it('should include sessionId in metadata along with other metadata fields', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider('response');
+      const testConfig = {
+        vars: {},
+        assert: [{ type: 'contains', value: 'harmful' }],
+        metadata: { pluginId: 'contains' },
+      } as AtomicTestCase;
+
+      const context = createMockContext(
+        targetProvider,
+        { goal: 'test goal', sessionId: 'session-with-metadata' },
+        testConfig,
+      );
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.sessionId).toBe('session-with-metadata');
+      expect(result.metadata?.stopReason).toBeDefined();
+      expect(result.metadata?.messages).toBeDefined();
     });
   });
 });

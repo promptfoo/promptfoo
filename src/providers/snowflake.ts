@@ -105,11 +105,11 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       apiBaseUrl: this.getApiUrl(),
     });
 
-    let data, status, statusText;
+    let data, status, statusText, latencyMs: number | undefined;
     let cached = false;
 
     try {
-      ({ data, cached, status, statusText } = await fetchWithCache(
+      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache(
         `${this.getApiUrl()}/api/v2/cortex/inference:complete`,
         {
           method: 'POST',
@@ -181,6 +181,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       output,
       tokenUsage: getTokenUsage(data, cached),
       cached,
+      latencyMs,
       cost: calculateOpenAICost(
         this.modelName,
         config,
