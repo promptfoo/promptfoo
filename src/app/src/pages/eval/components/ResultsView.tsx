@@ -37,6 +37,7 @@ import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
+import { EditEvalNameDialog } from './EditEvalNameDialog';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
@@ -337,6 +338,7 @@ export default function ResultsView({
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
+  const [editNameDialogOpen, setEditNameDialogOpen] = React.useState(false);
 
   const allColumns = React.useMemo(
     () => [
@@ -384,27 +386,23 @@ export default function ResultsView({
     [updateColumnVisibility],
   );
 
-  const handleDescriptionClick = async () => {
-    invariant(config, 'Config must be loaded before clicking its description');
-    const newDescription = window.prompt('Enter new description:', config.description);
-    if (newDescription !== null && newDescription !== config.description) {
-      const newConfig = { ...config, description: newDescription };
-      try {
-        const response = await callApi(`/eval/${evalId}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ config: newConfig }),
-        });
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        setConfig(newConfig);
-      } catch (error) {
-        console.error('Failed to update table:', error);
-      }
+  const handleSaveEvalName = async (newName: string) => {
+    invariant(config, 'Config must be loaded before updating its description');
+    const newConfig = { ...config, description: newName };
+
+    const response = await callApi(`/eval/${evalId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ config: newConfig }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to update eval name');
     }
+
+    setConfig(newConfig);
   };
 
   const handleDeleteEvalClick = async () => {
@@ -766,7 +764,7 @@ export default function ResultsView({
                     onClose={handleMenuClose}
                   >
                     <Tooltip title="Edit the name of this eval" placement="left">
-                      <MenuItem onClick={handleDescriptionClick}>
+                      <MenuItem onClick={() => setEditNameDialogOpen(true)}>
                         <ListItemIcon>
                           <EditIcon fontSize="small" />
                         </ListItemIcon>
@@ -864,6 +862,12 @@ export default function ResultsView({
         onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+      <EditEvalNameDialog
+        open={editNameDialogOpen}
+        onClose={() => setEditNameDialogOpen(false)}
+        currentName={config?.description || ''}
+        onSave={handleSaveEvalName}
+      />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
     </>
   );
