@@ -579,6 +579,9 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
 export async function validateLinkedTargetId(linkedTargetId: string): Promise<void> {
   // Validate format: promptfoo://provider/{id}
   if (!isCloudProvider(linkedTargetId)) {
+    const apiHost = cloudConfig.getApiHost();
+    const appHost = apiHost.replace('/api', '').replace(':3201', '');
+
     throw new Error(
       dedent`
         Invalid linkedTargetId format: "${linkedTargetId}"
@@ -586,12 +589,14 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
         linkedTargetId must start with "${CLOUD_PROVIDER_PREFIX}" followed by a target ID.
         Example: ${CLOUD_PROVIDER_PREFIX}12345678-1234-1234-1234-123456789abc
 
-        linkedTargetId links custom provider results to an existing target in Promptfoo Cloud,
-        preventing duplicate targets from being created.
+        linkedTargetId links your local provider configuration to a cloud target, allowing you to:
+        - Consolidate findings from multiple eval runs
+        - Track performance and vulnerabilities over time
+        - View comprehensive reporting in the cloud dashboard
 
         To get a valid linkedTargetId:
-        1. Log in to Promptfoo Cloud: https://www.promptfoo.dev/
-        2. Navigate to your Targets page
+        1. Log in to Promptfoo Cloud: ${appHost}
+        2. Navigate to Targets page: ${appHost}/redteam/targets
         3. Find the target you want to link to and copy its ID
         4. Format as: ${CLOUD_PROVIDER_PREFIX}<target-id>
       `,
@@ -622,6 +627,9 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
       linkedTargetId,
       error,
     });
+    const apiHost = cloudConfig.getApiHost();
+    const appHost = apiHost.replace('/api', '').replace(':3201', '');
+
     throw new Error(
       dedent`
         linkedTargetId not found: "${linkedTargetId}"
@@ -633,7 +641,7 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
            Run: promptfoo auth status
 
         2. Check that the target exists in your cloud dashboard:
-           https://www.promptfoo.dev/redteam/targets
+           ${appHost}/redteam/targets
 
         3. Ensure you have permission to access this target
            (Targets are scoped to your organization)

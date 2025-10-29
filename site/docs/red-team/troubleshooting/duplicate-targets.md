@@ -1,34 +1,18 @@
 ---
-sidebar_label: Duplicate Targets
-description: Prevent duplicate target creation in Promptfoo Cloud by linking custom providers to existing targets using linkedTargetId
+sidebar_label: Link to Cloud Targets
+description: Link local custom providers to cloud targets in Promptfoo Cloud using linkedTargetId to consolidate findings and track performance over time
 ---
 
-# Preventing Duplicate Targets
+# Linking Local Targets to Cloud
 
-When running red team scans with custom providers (Python, JavaScript, HTTP), each eval creates a new target entry in Promptfoo Cloud. Use `linkedTargetId` to link all results to a single target.
-
-## When to Use linkedTargetId
-
-Use `linkedTargetId` if:
-
-- Running multiple red team scans against the same custom provider
-- Want to track vulnerability trends over time for one target
-- Need a clean, organized targets list in cloud dashboard
-
-Without `linkedTargetId`, you'll see duplicate targets like:
-
-- `my-api` (Run 1)
-- `my-api` (Run 2)
-- `my-api` (Run 3)
-
-With `linkedTargetId`, all results appear under one target: `my-api`
+When using custom providers (Python, JavaScript, HTTP), link your local configuration to a cloud target using `linkedTargetId`. This consolidates findings from multiple eval runs into one dashboard, allowing you to track performance and vulnerabilities over time and view comprehensive reporting.
 
 ## How to Link Targets
 
 ### Step 1: Get the Target ID
 
-1. Log in to [Promptfoo Cloud](https://www.promptfoo.dev/)
-2. Navigate to your [Targets page](https://www.promptfoo.dev/redteam/targets)
+1. Log in to Promptfoo Cloud (https://www.promptfoo.app/ or your on-prem URL)
+2. Navigate to the Targets page: `/redteam/targets`
 3. Find the target you want to link to
 4. Copy its ID (looks like `12345678-1234-1234-1234-123456789abc`)
 
@@ -73,7 +57,7 @@ providers:
 
 ### Step 3: Run Your Eval
 
-Results will now appear under the linked target instead of creating a new one.
+Results will now consolidate under the linked cloud target.
 
 ## Troubleshooting
 
@@ -107,7 +91,7 @@ linkedTargetId: 'promptfoo://12345678-1234-1234-1234-123456789abc'
    ```
 
 2. **Check the target exists:**
-   - Visit https://www.promptfoo.dev/redteam/targets
+   - Visit your cloud dashboard `/redteam/targets` page
    - Verify the target ID is correct
    - Ensure target wasn't deleted
 
@@ -134,7 +118,7 @@ linkedTargetId only works when cloud features are enabled.
 
 **Q: Can I use linkedTargetId with built-in providers (OpenAI, Anthropic, etc.)?**
 
-Yes, linkedTargetId works with any provider type. However, it's most useful for custom providers (Python, JavaScript, HTTP) since they don't have a stable identifier. Built-in providers (like `openai:gpt-4`) already have consistent IDs, so they're less likely to create duplicates.
+Yes, linkedTargetId works with any provider type. However, it's most useful for custom providers (Python, JavaScript, HTTP) since they don't have a stable identifier. Built-in providers (like `openai:gpt-4`) already have consistent IDs, so they're less likely to need manual linking.
 
 **Q: What happens if I remove linkedTargetId after using it?**
 

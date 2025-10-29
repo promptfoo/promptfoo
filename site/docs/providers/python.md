@@ -397,25 +397,22 @@ providers:
         max_tokens: 100
 ```
 
-### Preventing Duplicate Targets
+### Link to Cloud Target
 
 :::info Promptfoo Cloud Feature
 Available in [Promptfoo Cloud](/docs/enterprise) deployments.
 :::
 
-When using custom Python providers, use `linkedTargetId` to link evaluation results to an existing target and prevent duplicate entries in your cloud dashboard:
+Link your local provider configuration to a cloud target using `linkedTargetId`:
 
 ```yaml
 providers:
   - id: 'file://my_provider.py'
     config:
       linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
-      # Your other config...
 ```
 
-Get the target ID from your [Targets page](https://www.promptfoo.dev/redteam/targets) in Promptfoo Cloud. This consolidates all scan results under one target, making it easier to track vulnerability trends over time.
-
-See [Preventing Duplicate Targets](/docs/red-team/troubleshooting/duplicate-targets/) for details.
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/duplicate-targets/) for setup instructions.
 
 ### Using External Configuration Files
 
