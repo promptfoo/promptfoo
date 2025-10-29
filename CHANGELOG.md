@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(providers): add linkedTargetId validation to prevent duplicate targets in Promptfoo Cloud with comprehensive error messages and troubleshooting guidance (abc1234)
+- feat(providers): add linkedTargetId validation with comprehensive error messages (#6053)
 - feat(webui): filtering eval results by metric values w/ numeric operators (e.g. EQ, GT, LTE, etc.) (#6011)
 - feat(providers): add Python provider persistence for 10-100x performance improvement with persistent worker pools (#5968)
 - feat(providers): add OpenAI Agents SDK integration with support for agents, tools, handoffs, and OTLP tracing (#6009)
@@ -83,7 +83,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
-- docs(providers): add comprehensive linkedTargetId documentation for preventing duplicate targets in cloud with Python, JavaScript, and HTTP providers (abc1234)
+- docs(providers): add linkedTargetId documentation and troubleshooting guide (#6053)
 - docs(model-audit): improve accuracy and clarity of ModelAudit documentation (#6023)
 - docs(contributing): add changelog and GitHub Actions enforcement (#6012)
 - docs(providers): add OpenAI Agents provider documentation and example (#6009)
