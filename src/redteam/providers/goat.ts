@@ -11,6 +11,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 
@@ -366,8 +367,8 @@ export default class GoatProvider implements ApiProvider {
             break;
           }
         }
-      } catch (err) {
-        logger.error(`Error in GOAT turn ${turn}: ${err}`);
+      } catch (error) {
+        logger.error(`[GOAT] Error in GOAT turn ${turn}`, { error });
       }
     }
 
@@ -384,6 +385,7 @@ export default class GoatProvider implements ApiProvider {
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult,
+        sessionId: getSessionId(lastTargetResponse, context),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

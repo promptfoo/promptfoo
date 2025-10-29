@@ -1,5 +1,6 @@
 import {
   ADDITIONAL_STRATEGIES,
+  AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
   getDefaultNFanout,
   isCustomStrategy,
@@ -9,16 +10,17 @@ import {
 
 describe('strategies constants', () => {
   it('should have all strategies sorted', () => {
-    const expectedStrategies = [
+    const expectedStrategies = new Set([
       'default',
       'basic',
       'jailbreak',
       'jailbreak:composite',
+      ...AGENTIC_STRATEGIES,
       ...ADDITIONAL_STRATEGIES,
       ...STRATEGY_COLLECTIONS,
-    ].sort();
+    ]);
 
-    expect(ALL_STRATEGIES).toEqual(expectedStrategies);
+    expect(ALL_STRATEGIES).toEqual(Array.from(expectedStrategies).sort());
   });
 
   it('should correctly identify custom strategies', () => {

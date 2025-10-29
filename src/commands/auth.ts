@@ -54,6 +54,12 @@ export function authCommand(program: Command) {
           // Set current organization context
           cloudConfig.setCurrentOrganization(organization.id);
 
+          // Display login success with user/org info
+          logger.info(chalk.green.bold('Successfully logged in'));
+          logger.info(`User: ${chalk.cyan(user.email)}`);
+          logger.info(`Organization: ${chalk.cyan(organization.name)}`);
+          logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
+
           // Set up default team (only if no team is already selected for this org)
           try {
             const allTeams = await getUserTeams();
@@ -64,13 +70,11 @@ export function authCommand(program: Command) {
               // Team already selected, keep it
               try {
                 const currentTeam = await getTeamById(existingTeamId);
-                logger.info(chalk.green('Successfully logged in'));
                 logger.info(`Team: ${chalk.cyan(currentTeam.name)}`);
               } catch (_error) {
                 // Stored team no longer valid, fall back to default
                 const defaultTeam = await getDefaultTeam();
                 cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
-                logger.info(chalk.green('Successfully logged in'));
                 logger.info(`Team: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
               }
             } else {
@@ -78,7 +82,6 @@ export function authCommand(program: Command) {
               const defaultTeam = await getDefaultTeam();
               cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
 
-              logger.info(chalk.green('Successfully logged in'));
               logger.info(`Team: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
               if (allTeams.length > 1) {
                 logger.info(chalk.dim(`Use 'promptfoo auth teams list' to see all teams`));
@@ -89,7 +92,6 @@ export function authCommand(program: Command) {
             logger.warn(
               `Could not set up team context: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
             );
-            logger.info(chalk.green('Successfully logged in'));
           }
           return;
         } else {

@@ -263,6 +263,7 @@ export const ADDITIONAL_PLUGINS = [
   'bola',
   'cca',
   'competitors',
+  'coppa',
   'cross-session-leak',
   'cyberseceval',
   'debug-access',
@@ -307,6 +308,7 @@ export const ADDITIONAL_PLUGINS = [
   'unsafebench',
   'unverifiable-claims',
   'vlguard',
+  'wordplay',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
@@ -366,3 +368,40 @@ export const PLUGIN_CATEGORIES = {
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
 } as const;
+
+// Plugins registered via createRemotePlugin() in plugins/index.ts
+// These have no local implementation and always call the remote API
+export const REMOTE_ONLY_PLUGIN_IDS = [
+  'agentic:memory-poisoning',
+  'ascii-smuggling',
+  'bfla',
+  'bola',
+  'cca',
+  'competitors',
+  'coppa',
+  'harmful:misinformation-disinformation',
+  'harmful:specialized-advice',
+  'hijacking',
+  'indirect-prompt-injection',
+  'mcp',
+  'off-topic',
+  'rag-document-exfiltration',
+  'rag-poisoning',
+  'reasoning-dos',
+  'religion',
+  'special-token-injection',
+  'ssrf',
+  'system-prompt-override',
+  'wordplay',
+  ...MEDICAL_PLUGINS,
+  ...FINANCIAL_PLUGINS,
+] as const;
+
+// Plugins that frontend should disable when remote generation is unavailable
+// Superset of REMOTE_ONLY_PLUGIN_IDS plus harm/bias plugins
+// Used by frontend UI to gray out plugins when PROMPTFOO_DISABLE_REMOTE_GENERATION is set
+export const UI_DISABLED_WHEN_REMOTE_UNAVAILABLE = [
+  ...Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS),
+  ...BIAS_PLUGINS,
+  ...REMOTE_ONLY_PLUGIN_IDS,
+] as const;

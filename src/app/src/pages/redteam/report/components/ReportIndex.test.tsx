@@ -26,6 +26,7 @@ const mockData: EvalSummary[] = [
     createdAt: new Date('2023-10-26T10:00:00.000Z').getTime(),
     passRate: 75.123,
     numTests: 100,
+    attackSuccessRate: 25,
     label: 'My First Redteam Report',
     isRedteam: true,
   },
@@ -37,6 +38,7 @@ const mockData: EvalSummary[] = [
     createdAt: new Date('2023-10-27T12:30:00.000Z').getTime(),
     passRate: 100,
     numTests: 50,
+    attackSuccessRate: 50,
     label: 'Another Security Scan',
     isRedteam: true,
   },
@@ -66,7 +68,7 @@ describe('ReportIndex', () => {
 
       expect(screen.getByText('GPT-4')).toBeInTheDocument();
       expect(screen.getByText(formatDataGridDate(mockData[0].createdAt))).toBeInTheDocument();
-      expect(screen.getByText('75.12%')).toBeInTheDocument();
+      expect(screen.getByText('25.00%')).toBeInTheDocument();
       const numTestsCell1 = screen.getAllByRole('gridcell', { name: '100' });
       expect(numTestsCell1.length).toBeGreaterThan(0);
       expect(screen.getByText('eval-1')).toBeInTheDocument();
@@ -74,7 +76,7 @@ describe('ReportIndex', () => {
       expect(screen.getByRole('link', { name: 'Another Security Scan' })).toBeInTheDocument();
       expect(screen.getByText('anthropic:claude-2')).toBeInTheDocument();
       expect(screen.getByText(formatDataGridDate(mockData[1].createdAt))).toBeInTheDocument();
-      expect(screen.getByText('100.00%')).toBeInTheDocument();
+      expect(screen.getByText('50.00%')).toBeInTheDocument();
       const numTestsCell2 = screen.getAllByRole('gridcell', { name: '50' });
       expect(numTestsCell2.length).toBeGreaterThan(0);
       expect(screen.getByText('eval-2')).toBeInTheDocument();
@@ -107,6 +109,7 @@ describe('ReportIndex', () => {
           createdAt: new Date('2023-10-26T10:00:00.000Z').getTime(),
           passRate: 75,
           numTests: 100,
+          attackSuccessRate: 25,
           label: 'Report with no providers',
           isRedteam: true,
         },
@@ -137,6 +140,7 @@ describe('ReportIndex', () => {
           createdAt: new Date('2023-11-15T15:00:00.000Z').getTime(),
           passRate: 60,
           numTests: 80,
+          attackSuccessRate: 25,
           label: 'Missing Description Report',
           isRedteam: true,
           description: '',

@@ -150,7 +150,6 @@ export interface RunEvalOptions {
   registers?: EvalRegisters;
   isRedteam: boolean;
 
-  allTests?: RunEvalOptions[];
   concurrency?: number;
 
   /**
@@ -1156,6 +1155,7 @@ export type EvalSummary = ResultLightweightWithLabel & {
     id: string;
     label: string | null;
   }[];
+  attackSuccessRate?: number;
 };
 
 export interface OutputMetadata {

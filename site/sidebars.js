@@ -32,14 +32,6 @@ const redTeamSidebar = [
   },
   {
     type: 'doc',
-    id: 'red-team/owasp-llm-top-10',
-  },
-  {
-    type: 'doc',
-    id: 'red-team/iso-42001',
-  },
-  {
-    type: 'doc',
     id: 'red-team/risk-scoring',
   },
   {
@@ -100,6 +92,7 @@ const redTeamSidebar = [
           },
           'red-team/plugins/beavertails',
           'red-team/plugins/contracts',
+          'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
           'red-team/plugins/harmbench',
@@ -112,6 +105,7 @@ const redTeamSidebar = [
           'red-team/plugins/toxic-chat',
           'red-team/plugins/unsafebench',
           'red-team/plugins/vlguard',
+          'red-team/plugins/wordplay',
           'red-team/plugins/xstest',
         ],
       },
@@ -181,6 +175,7 @@ const redTeamSidebar = [
           'red-team/strategies/multi-turn',
           'red-team/strategies/goat',
           'red-team/strategies/mischievous-user',
+          'red-team/strategies/simba',
         ],
       },
       {
@@ -219,6 +214,20 @@ const redTeamSidebar = [
         collapsed: true,
         items: ['red-team/strategies/retry'],
       },
+    ],
+  },
+  {
+    type: 'category',
+    label: 'Frameworks',
+    collapsed: true,
+    items: [
+      'red-team/nist-ai-rmf',
+      'red-team/owasp-llm-top-10',
+      'red-team/owasp-api-top-10',
+      'red-team/mitre-atlas',
+      'red-team/iso-42001',
+      'red-team/gdpr',
+      'red-team/eu-ai-act',
     ],
   },
   {

@@ -50,35 +50,29 @@ export interface SessionTestResult {
 type ValidationResult = { success: true } | { success: false; result: SessionTestResult };
 
 /**
- * Tests basic provider connectivity with "Hello, world!" prompt
+ * Tests basic provider connectivity with a prompt.
  * Extracted from POST /providers/test endpoint
+ * @param provider The provider to test
+ * @param prompt An optional prompt to test w/
  */
 export async function testHTTPProviderConnectivity(
   provider: ApiProvider,
+  prompt: string = 'Hello World!',
 ): Promise<ProviderTestResult> {
   const vars: Record<string, string> = {};
 
   // Generate a session ID for testing (works for both client sessions)
   // For server sessions, a value is provided by the server, and subsequent
   // requests will use the server-returned session ID
-  if (!provider.config.sessionParser) {
+  if (!provider?.config?.sessionParser) {
     vars['sessionId'] = uuidv4();
   }
 
   // Build TestSuite for evaluation (no assertions - we'll use agent endpoint for analysis)
   const testSuite: TestSuite = {
     providers: [provider],
-    prompts: [
-      {
-        raw: 'Hello, world!',
-        label: 'Connectivity Test',
-      },
-    ],
-    tests: [
-      {
-        vars,
-      },
-    ],
+    prompts: [{ raw: prompt, label: 'Connectivity Test' }],
+    tests: [{ vars }],
   };
 
   try {
@@ -167,7 +161,10 @@ export async function testHTTPProviderConnectivity(
       return {
         success: !testAnalyzerResponseObj.error && !testAnalyzerResponseObj.changes_needed,
         message:
-          testAnalyzerResponseObj.message || testAnalyzerResponseObj.error || 'Test completed',
+          testAnalyzerResponseObj.message ||
+          testAnalyzerResponseObj.error ||
+          errorMsg ||
+          "Test successfully completed. We've verified that the provider is working correctly.",
         error: errorMsg
           ? errorMsg.substring(0, 100) + (errorMsg.length > 100 ? '...' : '')
           : undefined,

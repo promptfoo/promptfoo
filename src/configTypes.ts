@@ -3,6 +3,8 @@ export interface GlobalConfig {
   hasHarmfulRedteamConsent?: boolean;
   account?: {
     email?: string;
+    emailNeedsValidation?: boolean;
+    emailValidated?: boolean;
   };
   cloud?: {
     appUrl?: string;

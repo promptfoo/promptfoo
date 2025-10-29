@@ -10,6 +10,7 @@ import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CcaGrader } from './plugins/contextComplianceAttack';
 import { ContractsGrader } from './plugins/contracts';
+import { CoppaGrader } from './plugins/compliance/coppa';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
@@ -79,6 +80,7 @@ import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
 import { VLGuardGrader } from './plugins/vlguard';
+import { WordplayGrader } from './plugins/wordplay';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
@@ -96,6 +98,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:cca': new CcaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
+  'promptfoo:redteam:coppa': new CoppaGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
@@ -176,6 +179,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
   'promptfoo:redteam:unverifiable-claims': new UnverifiableClaimsGrader(),
   'promptfoo:redteam:vlguard': new VLGuardGrader(),
+  'promptfoo:redteam:wordplay': new WordplayGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {

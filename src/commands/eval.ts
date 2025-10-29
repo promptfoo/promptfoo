@@ -9,8 +9,9 @@ import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
-import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { evaluate } from '../evaluator';
+import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -45,6 +46,7 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types/index';
+import { EMAIL_OK_STATUS } from '../types/email';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -389,8 +391,14 @@ export async function doEval(
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
-      await promptForEmailUnverified();
-      await checkEmailStatusOrExit();
+      // Prompt for email until we get a valid one
+      // Other status problems apart from bad emails (like 'exceeded_limit') just log and exit
+      let hasValidEmail = false;
+      while (!hasValidEmail) {
+        const { emailNeedsValidation } = await promptForEmailUnverified();
+        const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+        hasValidEmail = res === EMAIL_OK_STATUS;
+      }
     }
 
     if (!resumeEval) {
