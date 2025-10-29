@@ -59,7 +59,7 @@ function TrustBar() {
     'Nationwide 5G network operator',
     'Top European insurer',
     'Global ERP leader',
-    'Top 5 travel site',
+    'Top 3 travel site',
   ];
 
   return (
@@ -79,10 +79,12 @@ function TrustBar() {
             ))}
           </div>
         </div>
+        {/*
         <p className={styles.trustBarSubtext}>
           + Major financial institutions, technology companies, and{' '}
           {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide
         </p>
+        */}
       </div>
     </section>
   );

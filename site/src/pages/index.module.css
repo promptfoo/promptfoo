@@ -1471,34 +1471,7 @@ html {
   background: rgba(229, 58, 58, 0.06);
   border-radius: 8px;
   white-space: nowrap;
-  /* Add subtle scale animation on hover */
   transition: all var(--animation-speed-fast) var(--animation-ease-smooth);
-  position: relative;
-  overflow: hidden;
-}
-
-/* Add shimmer effect to marquee items */
-.marqueeItem::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-  animation: shimmerMarquee 3s ease-in-out infinite;
-  animation-delay: calc(var(--item-index, 0) * 0.2s);
-}
-
-@keyframes shimmerMarquee {
-  0%,
-  90% {
-    left: -100%;
-  }
-  95%,
-  100% {
-    left: 100%;
-  }
 }
 
 [data-theme='dark'] .marqueeItem {
