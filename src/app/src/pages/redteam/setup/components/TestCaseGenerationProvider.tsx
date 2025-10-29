@@ -115,40 +115,66 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
 
         // Run against target if configured
         if (redTeamConfig.target?.id) {
-          setIsRunningTest(true);
-          setTargetResponse(null);
+          // Validate target URL for HTTP providers
+          const targetConfig = redTeamConfig.target.config;
+          const isHttpProvider = redTeamConfig.target.id === 'http' || targetConfig?.type === 'http';
+          const targetUrl = targetConfig?.url;
 
-          try {
-            const testResponse = await callApi('/providers/test', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                providerOptions: redTeamConfig.target,
-                prompt: data.prompt,
-              }),
-              signal: AbortSignal.timeout(30000), // 30s timeout
-            });
-
-            if (!testResponse.ok) {
-              const errorData = await testResponse.json();
-              throw new Error(errorData.error || 'Failed to run test');
-            }
-
-            const testData = await testResponse.json();
-            setTargetResponse({
-              output: testData.providerResponse?.output || '',
-              error: testData.providerResponse?.error || testData.testResult?.error,
-            });
-          } catch (error) {
-            console.error('Failed to run test against target:', error);
+          if (isHttpProvider && (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http')) {
             setTargetResponse({
               output: '',
-              error: error instanceof Error ? error.message : 'Failed to run test against target',
+              error:
+                'Please configure a valid HTTP URL for your target before testing. Go to the Targets tab to set up your endpoint.',
             });
-          } finally {
-            setIsRunningTest(false);
+          } else {
+            setIsRunningTest(true);
+            setTargetResponse(null);
+
+            try {
+              const testResponse = await callApi('/providers/test', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  providerOptions: redTeamConfig.target,
+                  prompt: data.prompt,
+                }),
+                signal: AbortSignal.timeout(30000), // 30s timeout
+              });
+
+              if (!testResponse.ok) {
+                const errorData = await testResponse.json();
+                throw new Error(errorData.error || 'Failed to run test');
+              }
+
+              const testData = await testResponse.json();
+              setTargetResponse({
+                output: testData.providerResponse?.output || '',
+                error: testData.providerResponse?.error || testData.testResult?.error,
+              });
+            } catch (error) {
+              console.error('Failed to run test against target:', error);
+              let errorMessage = 'Failed to run test against target';
+              if (error instanceof Error) {
+                // Improve URL-related error messages
+                if (
+                  error.message.includes('Failed to parse URL') ||
+                  error.message.includes('Invalid URL')
+                ) {
+                  errorMessage =
+                    'Invalid target URL. Please configure a valid HTTP URL in the Targets tab.';
+                } else {
+                  errorMessage = error.message;
+                }
+              }
+              setTargetResponse({
+                output: '',
+                error: errorMessage,
+              });
+            } finally {
+              setIsRunningTest(false);
+            }
           }
         }
 
