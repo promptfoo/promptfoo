@@ -301,7 +301,7 @@ providers:
       linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
 ```
 
-See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/duplicate-targets/) for setup instructions.
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/) for setup instructions.
 
 ### Multiple Instances
 

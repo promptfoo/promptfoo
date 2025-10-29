@@ -660,7 +660,7 @@ targets:
 Alternatively, you can use a custom [Python](/docs/providers/python/), [Javascript](/docs/providers/custom-api/), or other [script](/docs/providers/custom-script/) in order to precisely construct your requests.
 
 :::tip Link to Cloud Targets
-When using custom providers for red team scans, add `linkedTargetId` to link results to an existing cloud target. See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/duplicate-targets/).
+When using custom providers for red team scans, add `linkedTargetId` to link results to an existing cloud target. See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/).
 :::
 
 For example, let's create a Python provider. Your config would look like this:
