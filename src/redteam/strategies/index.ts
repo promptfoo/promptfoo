@@ -1,12 +1,11 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
+import { strategyDisplayNames } from '../constants';
 import { isCustomStrategy } from '../constants/strategies';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
@@ -29,10 +28,13 @@ import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
+import { addSimbaTestCases } from './simba';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+
+import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
 
 export type { Strategy };
@@ -291,6 +293,17 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'simba',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(
+        `Adding ${strategyDisplayNames.simba} test cases to ${testCases.length} test cases`,
+      );
+      const newTestCases = await addSimbaTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} ${strategyDisplayNames.simba} test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'morse',
     action: async (testCases, injectVar) => {
       logger.debug(`Adding Morse code encoding to ${testCases.length} test cases`);
@@ -339,7 +352,10 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
 
     // Check if it's a custom strategy variant (e.g., custom:greeting-strategy)
     if (isCustomStrategy(strategy.id)) {
-      continue; // Custom strategies are always valid
+      if (!strategy.config?.strategyText || typeof strategy.config.strategyText !== 'string') {
+        throw new Error('Custom strategy requires strategyText in config');
+      }
+      continue;
     }
 
     if (!Strategies.map((s) => s.id).includes(strategy.id)) {

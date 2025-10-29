@@ -155,7 +155,6 @@ export interface RunEvalOptions {
   registers?: EvalRegisters;
   isRedteam: boolean;
 
-  allTests?: RunEvalOptions[];
   concurrency?: number;
 
   /**

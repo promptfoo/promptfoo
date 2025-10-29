@@ -196,7 +196,18 @@ export type ResultsFilterType =
   | 'severity'
   | 'policy';
 
-export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains' | 'exists';
+export type ResultsFilterOperator =
+  | 'equals'
+  | 'contains'
+  | 'not_contains'
+  | 'exists'
+  | 'is_defined'
+  | 'eq'
+  | 'neq'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte';
 
 export type ResultsFilter = {
   /**
@@ -208,7 +219,8 @@ export type ResultsFilter = {
   operator: ResultsFilterOperator;
   logicOperator: 'and' | 'or';
   /**
-   * For metadata filters, this is the field name in the metadata object
+   * For metadata filters, this is the field name in the metadata object.
+   * For metric filters, this is the metric key name.
    */
   field?: string;
   /**
@@ -418,7 +430,15 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
     // For other metadata operators, both field and value are required
     return Boolean(filter.value && filter.field);
   }
-  // For non-metadata filters, value is required
+  if (filter.type === 'metric') {
+    // For metric filters with is_defined operator, only field is required
+    if (filter.operator === 'is_defined') {
+      return Boolean(filter.field);
+    }
+    // For metric filters with comparison operators, both field and value are required
+    return Boolean(filter.value && filter.field);
+  }
+  // For non-metadata/non-metric filters, value is required
   return Boolean(filter.value);
 };
 

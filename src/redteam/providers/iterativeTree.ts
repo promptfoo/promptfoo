@@ -516,13 +516,14 @@ async function runRedteamConversation({
 
       for (let i = 0; i < BRANCHING_FACTOR; i++) {
         // Use the shared utility function to create iteration context
-        const { iterationVars, iterationContext } = await createIterationContext({
+        const iterationContext = await createIterationContext({
           originalVars,
           transformVarsConfig,
           context,
           iterationNumber: attempts + 1, // Using attempts + 1 as the iteration number
           loggerTag: '[IterativeTree]',
         });
+        const iterationVars = iterationContext?.vars || {};
 
         const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
           ...redteamHistory,
