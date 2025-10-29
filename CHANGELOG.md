@@ -8,25 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- chore(deps): bump better-sqlite3 from 11.10.0 to 12.4.1 for Node.js v24 support (#6052) by @cdolek-twilio
-- chore(deps): update Biome version with force-include patterns (`!!`) for faster local linting/CI by @sklein12 (#6042)
 - chore(redteam): categorize `jailbreak:meta` under agentic strategies and mark as remote-only for correct UI grouping and Cloud behavior (#6049)
+- chore(redteam): improve support for custom policy metric names that should include strategy suffix (#6048)
 
 ### Fixed
 
 - fix(redteam): validate custom strategy strategyText requirement to prevent confusing errors during test execution (#6046)
 - fix(init): include helpful error message and cleanup any directories created when example download fails (#6051)
-- fix(providers): removing axios as a runtime dependency in google live provider (#227)
+- fix(providers): removing axios as a runtime dependency in google live provider (#6050)
 - fix(csv): handle primitive values directly in red team CSV export to avoid double-quoting strings (#6040)
 - fix(csv): fix column count mismatch in red team CSV export when rows have multiple outputs (#6040)
 
-### Chores
+### Dependencies
 
-- chore: improves support for custom policy metric names that should include strategy suffix (#6048)
-
-### Tests
-
-- test(redteam): add tests for `jailbreak:meta` strategy and iterative strategy config (#XXXX)
+- chore(deps): bump better-sqlite3 from 11.10.0 to 12.4.1 for Node.js v24 support (#6052) by @cdolek-twilio
+- chore(deps): update Biome version with force-include patterns (`!!`) for faster local linting/CI by @sklein12 (#6042)
 
 ## [0.119.0] - 2025-10-27
 
