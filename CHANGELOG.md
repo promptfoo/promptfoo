@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(model-audit): add revision tracking and deduplication for model scans to prevent re-scanning unchanged models, saving ~99% time and bandwidth on duplicate scans (#6058)
+
 ## [0.119.1] - 2025-10-29
 
 ### Changed
