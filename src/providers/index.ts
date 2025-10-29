@@ -17,8 +17,8 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
 
-import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type { EnvOverrides } from '../types/env';
+import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
