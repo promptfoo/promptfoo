@@ -49,7 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(providers): render environment variables in provider config at load time (#6007)
-- fix(evaluator): force uncached provider calls for repeat iterations (#XXXX)
+- fix(evaluator): force uncached provider calls for repeat iterations (#6043)
 
 ### Documentation
 
