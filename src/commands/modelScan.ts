@@ -8,6 +8,12 @@ import type { Command } from 'commander';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
 import { parseModelAuditArgs, DEPRECATED_OPTIONS_MAP } from '../util/modelAuditCliParser';
+import {
+  getHuggingFaceMetadata,
+  isHuggingFaceModel,
+  parseHuggingFaceModel,
+} from '../util/huggingfaceMetadata';
+import logger from '../logger';
 import { z } from 'zod';
 
 export async function checkModelAuditInstalled(): Promise<boolean> {
@@ -53,6 +59,7 @@ export function modelScanCommand(program: Command): void {
 
     // Miscellaneous
     .option('-v, --verbose', 'Enable verbose output')
+    .option('--force', 'Force scan even if model was already scanned')
 
     .action(async (paths: string[], options) => {
       if (!paths || paths.length === 0) {
@@ -114,6 +121,39 @@ export function modelScanCommand(program: Command): void {
       // When saving to database (default), always use JSON format internally
       // Note: --no-write flag sets options.write to false
       const saveToDatabase = options.write === undefined || options.write === true;
+
+      // Check for duplicate scans (HuggingFace models only, before download)
+      // Only check if saving to database and not forcing
+      if (saveToDatabase && !options.force && paths.length === 1) {
+        const modelPath = paths[0];
+        if (isHuggingFaceModel(modelPath)) {
+          try {
+            const metadata = await getHuggingFaceMetadata(modelPath);
+            if (metadata) {
+              const parsed = parseHuggingFaceModel(modelPath);
+              const modelId = parsed ? `${parsed.owner}/${parsed.repo}` : modelPath;
+
+              // Check if already scanned with this revision
+              const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
+              if (existing) {
+                console.log(chalk.yellow('✓ Model already scanned'));
+                console.log(`  Model: ${modelId}`);
+                console.log(`  Revision: ${metadata.sha}`);
+                console.log(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
+                console.log(`  Scan ID: ${existing.id}`);
+                console.log(
+                  `\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`,
+                );
+                console.log(chalk.green(`  promptfoo view ${existing.id}`));
+                process.exit(0);
+              }
+            }
+          } catch (error) {
+            logger.debug(`Failed to check for existing scan: ${error}`);
+            // Continue with scan if metadata fetch fails
+          }
+        }
+      }
       const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
 
       // Prepare options for CLI parser, excluding output when saving to database
@@ -211,6 +251,33 @@ export function modelScanCommand(program: Command): void {
 
             const results: ModelAuditScanResults = JSON.parse(jsonOutput);
 
+            // Fetch revision tracking info if HuggingFace model
+            let revisionInfo: {
+              modelId?: string;
+              revisionSha?: string;
+              modelSource?: string;
+              sourceLastModified?: number;
+            } = {};
+
+            if (paths.length === 1) {
+              const modelPath = paths[0];
+              if (isHuggingFaceModel(modelPath)) {
+                try {
+                  const metadata = await getHuggingFaceMetadata(modelPath);
+                  if (metadata) {
+                    revisionInfo = {
+                      modelId: metadata.modelId,
+                      revisionSha: metadata.sha,
+                      modelSource: 'huggingface',
+                      sourceLastModified: new Date(metadata.lastModified).getTime(),
+                    };
+                  }
+                } catch (error) {
+                  logger.debug(`Failed to fetch revision info: ${error}`);
+                }
+              }
+            }
+
             // Create audit record in database
             const audit = await ModelAudit.create({
               name: options.name || `Model scan ${new Date().toISOString()}`,
@@ -232,6 +299,8 @@ export function modelScanCommand(program: Command): void {
                   progress: options.progress,
                 },
               },
+              // Revision tracking
+              ...revisionInfo,
             });
 
             // Display summary to user (unless they requested JSON format)
