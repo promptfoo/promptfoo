@@ -273,12 +273,12 @@ export const RedteamConfigSchema = z
         );
 
         if (data.language) {
-          // Global language exists, merge with strategy languages and deduplicate
+          // Global language exists, merge with 'en' and strategy languages, then deduplicate
           const existingLanguages = Array.isArray(data.language) ? data.language : [data.language];
-          data.language = [...new Set([...existingLanguages, ...strategyLanguages])];
+          data.language = [...new Set([...existingLanguages, 'en', ...strategyLanguages])];
         } else {
-          // No global language set, use only multilingual strategy languages
-          data.language = strategyLanguages;
+          // No global language set, prepend 'en' as default to multilingual strategy languages
+          data.language = ['en', ...strategyLanguages];
         }
 
         // Remove multilingual strategy from array - it's now a pure config mechanism
