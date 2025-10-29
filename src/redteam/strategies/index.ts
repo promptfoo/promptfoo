@@ -342,7 +342,10 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
 
     // Check if it's a custom strategy variant (e.g., custom:greeting-strategy)
     if (isCustomStrategy(strategy.id)) {
-      continue; // Custom strategies are always valid
+      if (!strategy.config?.strategyText || typeof strategy.config.strategyText !== 'string') {
+        throw new Error('Custom strategy requires strategyText in config');
+      }
+      continue;
     }
 
     if (!Strategies.map((s) => s.id).includes(strategy.id)) {

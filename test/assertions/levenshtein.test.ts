@@ -12,7 +12,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -40,7 +40,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -67,7 +67,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -94,7 +94,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -122,7 +122,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -150,7 +150,7 @@ describe('handleLevenshtein', () => {
           tokenUsage: {},
         },
         baseType: 'contains' as any,
-        context: {
+        assertionValueContext: {
           prompt: '',
           vars: {},
           test: {},
@@ -175,7 +175,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -202,7 +202,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
