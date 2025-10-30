@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import Alert from '@mui/material/Alert';
@@ -40,8 +40,46 @@ interface TestCaseDialogProps {
   onRegenerate: () => void;
 }
 
-const Section = ({ label, text, loading }: { label: string; text: string; loading: boolean }) => {
+const Section = ({
+  label,
+  text,
+  loading,
+  strategy,
+}: {
+  label: string;
+  text: string;
+  loading: boolean;
+  strategy: Strategy | null;
+}) => {
   const theme = useTheme();
+
+  const content = useMemo(() => {
+    if (strategy === 'audio') {
+      return (
+        <Box>
+          <audio controls style={{ width: '100%' }} data-testid="audio-player">
+            <source src={`data:audio/wav;base64,${text}`} type="audio/wav" />
+            Your browser does not support the audio element.
+          </audio>
+        </Box>
+      );
+    }
+    return (
+      <Box
+        sx={{
+          p: 2,
+          borderRadius: 1,
+          border: '1px solid',
+          borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+          backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+          minHeight: 51,
+        }}
+      >
+        {text}
+      </Box>
+    );
+  }, [text, strategy]);
+
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
@@ -58,18 +96,7 @@ const Section = ({ label, text, loading }: { label: string; text: string; loadin
         {loading ? (
           <Skeleton variant="rectangular" sx={{ p: 2, borderRadius: 1, height: 51 }} />
         ) : (
-          <Box
-            sx={{
-              p: 2,
-              borderRadius: 1,
-              border: '1px solid',
-              borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-              backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
-              minHeight: 51,
-            }}
-          >
-            {text}
-          </Box>
+          content
         )}
       </Box>
     </Box>
@@ -123,7 +150,12 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         </Box>
       </DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Section label="Prompt" text={generatedTestCase?.prompt ?? ''} loading={isGenerating} />
+        <Section
+          label="Prompt"
+          text={generatedTestCase?.prompt ?? ''}
+          loading={isGenerating}
+          strategy={strategy}
+        />
         <Section
           label="Target Response"
           text={targetResponse?.output ?? ''}
