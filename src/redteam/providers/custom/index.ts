@@ -89,6 +89,8 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
 
 `;
 
+type StopReason = 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached';
+
 /**
  * Represents metadata for the Custom conversation process.
  */
@@ -97,7 +99,7 @@ export interface CustomMetadata extends BaseRedteamMetadata {
   customBacktrackCount: number;
   customResult: boolean;
   customConfidence: number | null;
-  stopReason: 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached';
+  stopReason: StopReason;
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -295,8 +297,7 @@ export class CustomProvider implements ApiProvider {
     let objectiveScore: { value: number; rationale: string } | undefined;
     let lastTargetError: string | undefined = undefined;
 
-    let exitReason: 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached' =
-      'Max rounds reached';
+    let exitReason: StopReason = 'Max rounds reached';
 
     const totalTokenUsage = createEmptyTokenUsage();
 

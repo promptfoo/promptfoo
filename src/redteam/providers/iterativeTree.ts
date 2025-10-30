@@ -77,9 +77,6 @@ const getIterativeTreeGoalRubric = (goal: string | undefined): string => {
 /** Maximum number of attempts for the red team conversation */
 const MAX_ATTEMPTS = 250;
 
-/** Target score to achieve, at which point the conversation stops */
-const TARGET_SCORE = 10;
-
 /** Maximum depth of the search tree */
 const MAX_DEPTH = 25;
 
@@ -463,7 +460,7 @@ async function runRedteamConversation({
   let maxScore = 0;
 
   logger.debug(
-    `Starting red team conversation. Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHING_FACTOR=${BRANCHING_FACTOR}, MAX_ATTEMPTS=${MAX_ATTEMPTS}, TARGET_SCORE=${TARGET_SCORE} Goal: "${goal.substring(0, 50)}...".`,
+    `Starting red team conversation. Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHING_FACTOR=${BRANCHING_FACTOR}, MAX_ATTEMPTS=${MAX_ATTEMPTS} Goal: "${goal.substring(0, 50)}...".`,
   );
 
   const { redteamSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
@@ -647,12 +644,6 @@ async function runRedteamConversation({
             storedGraderResult = grade;
             graderPassed = grade.pass;
           }
-        }
-
-        if (score >= TARGET_SCORE) {
-          logger.debug(
-            `[Depth ${depth}, Attempt ${attempts}] Reached target score (${TARGET_SCORE}). Continuing exploration.`,
-          );
         }
 
         if (graderPassed === false) {
