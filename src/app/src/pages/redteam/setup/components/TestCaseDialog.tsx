@@ -27,6 +27,7 @@ import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 
 interface TestCaseDialogProps {
   open: boolean;
@@ -427,23 +428,36 @@ export const TestCaseGenerateButton: React.FC<{
   isGenerating?: boolean;
   size?: 'small' | 'medium';
   tooltipTitle?: string;
-}> = ({ onClick, disabled = false, isGenerating = false, size = 'small', tooltipTitle }) => (
-  <Tooltip title={tooltipTitle || 'Generate test case'}>
-    <span>
-      <IconButton
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick();
-        }}
-        disabled={disabled}
-        sx={{ color: 'text.secondary' }}
-      >
-        {isGenerating ? (
-          <CircularProgress size={size === 'small' ? 16 : 20} />
-        ) : (
-          <MagicWandIcon fontSize={size} />
-        )}
-      </IconButton>
-    </span>
-  </Tooltip>
-);
+}> = ({ onClick, disabled = false, isGenerating = false, size = 'small', tooltipTitle }) => {
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
+  const isRemoteDisabled = apiHealthStatus !== 'connected';
+
+  return (
+    <Tooltip
+      title={
+        isRemoteDisabled
+          ? 'Requires Promptfoo Cloud connection'
+          : tooltipTitle || 'Generate test case'
+      }
+    >
+      <span>
+        <IconButton
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          disabled={disabled || isRemoteDisabled}
+          sx={{ color: 'text.secondary' }}
+        >
+          {isGenerating ? (
+            <CircularProgress size={size === 'small' ? 16 : 20} />
+          ) : (
+            <MagicWandIcon fontSize={size} />
+          )}
+        </IconButton>
+      </span>
+    </Tooltip>
+  );
+};
