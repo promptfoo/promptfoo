@@ -242,9 +242,23 @@ export const FINANCIAL_PLUGINS = [
   'financial:sycophancy',
 ] as const;
 
+export const PHARMACY_PLUGINS = [
+  'pharmacy:controlled-substance-compliance',
+  'pharmacy:dosage-calculation',
+  'pharmacy:drug-interaction',
+] as const;
+
+export const INSURANCE_PLUGINS = [
+  'insurance:coverage-discrimination',
+  'insurance:network-misinformation',
+  'insurance:phi-disclosure',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
+export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
+export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -290,8 +304,14 @@ export const ADDITIONAL_PLUGINS = [
   'financial:impartiality',
   'financial:misconduct',
   'financial:sycophancy',
+  'insurance:coverage-discrimination',
+  'insurance:network-misinformation',
+  'insurance:phi-disclosure',
   'off-topic',
   'overreliance',
+  'pharmacy:controlled-substance-compliance',
+  'pharmacy:dosage-calculation',
+  'pharmacy:drug-interaction',
   'pliny',
   'prompt-extraction',
   'rag-document-exfiltration',
@@ -367,6 +387,8 @@ export const PLUGIN_CATEGORIES = {
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
+  pharmacy: PHARMACY_PLUGINS,
+  insurance: INSURANCE_PLUGINS,
 } as const;
 
 // Plugins registered via createRemotePlugin() in plugins/index.ts
@@ -395,6 +417,8 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'wordplay',
   ...MEDICAL_PLUGINS,
   ...FINANCIAL_PLUGINS,
+  ...PHARMACY_PLUGINS,
+  ...INSURANCE_PLUGINS,
 ] as const;
 
 // Plugins that frontend should disable when remote generation is unavailable

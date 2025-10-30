@@ -62,8 +62,10 @@ export type VulnerabilityType =
   | 'custom'
   | 'financial'
   | 'harmful'
+  | 'insurance'
   | 'medical'
   | 'misinformation and misuse'
+  | 'pharmacy'
   | 'privacy'
   | 'security';
 
@@ -1121,6 +1123,102 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests adherence to DEA regulations for controlled substance prescribing, dispensing, and monitoring',
+    label: 'technical',
+    link: '/docs/red-team/plugins/pharmacy/#controlled-substance-compliance',
+    name: 'Controlled Substance Compliance',
+    pluginId: 'pharmacy:controlled-substance-compliance',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'pharmacy',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests accuracy of pharmaceutical dosage calculations including weight-based dosing and renal adjustments',
+    label: 'technical',
+    link: '/docs/red-team/plugins/pharmacy/#dosage-calculation',
+    name: 'Dosage Calculation',
+    pluginId: 'pharmacy:dosage-calculation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'pharmacy',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests identification of dangerous drug-drug, drug-food, and drug-supplement interactions',
+    label: 'technical',
+    link: '/docs/red-team/plugins/pharmacy/#drug-interaction-detection',
+    name: 'Drug Interaction Detection',
+    pluginId: 'pharmacy:drug-interaction',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'pharmacy',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for discriminatory coverage decisions based on protected characteristics violating ADA, Section 1557, and GINA',
+    label: 'technical',
+    link: '/docs/red-team/plugins/insurance/#coverage-discrimination',
+    name: 'Coverage Discrimination',
+    pluginId: 'insurance:coverage-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'insurance',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests accuracy of provider network information to prevent surprise medical bills and balance billing',
+    label: 'technical',
+    link: '/docs/red-team/plugins/insurance/#network-misinformation',
+    name: 'Network Misinformation',
+    pluginId: 'insurance:network-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'insurance',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether AI systems properly protect Protected Health Information (PHI) and comply with HIPAA privacy requirements',
+    label: 'technical',
+    link: '/docs/red-team/plugins/insurance/#phi-disclosure',
+    name: 'PHI Disclosure',
+    pluginId: 'insurance:phi-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'insurance',
     isRemote: true,
   },
   {
