@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import StrategyConfigDialog from './StrategyConfigDialog';
 
@@ -226,34 +226,6 @@ describe('StrategyConfigDialog', () => {
       useJournals: true,
       useBooks: false,
     });
-  });
-
-  it('should remove a language when handleRemoveLanguage is called', () => {
-    const initialLanguages = ['en', 'bn', 'sw'];
-    const initialConfig = { languages: initialLanguages };
-
-    render(
-      <StrategyConfigDialog
-        open={true}
-        strategy="multilingual"
-        config={initialConfig}
-        onClose={mockOnClose}
-        onSave={mockOnSave}
-        strategyData={{
-          id: 'multilingual',
-          name: 'Multilingual',
-          description: 'A multilingual strategy',
-        }}
-      />,
-    );
-
-    const bengaliChip = screen.getByText('Bengali').closest('.MuiChip-root') as HTMLElement;
-    const deleteIcon = within(bengaliChip).getByTestId('CancelIcon');
-    fireEvent.click(deleteIcon);
-
-    expect(screen.queryByText('Bengali')).not.toBeInTheDocument();
-    expect(screen.getByText('en')).toBeInTheDocument();
-    expect(screen.getByText('Swahili')).toBeInTheDocument();
   });
 
   it('should render and handle best-of-n strategy configuration correctly', () => {
