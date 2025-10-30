@@ -109,8 +109,8 @@ export function usePassRates(): MetricValue[] {
 export function useMetricsGetter() {
   const { table, filteredMetrics } = useTableStore();
 
-  return useCallback(() => {
-    return (promptIdx: number): MetricsData => {
+  return useCallback(
+    (promptIdx: number): MetricsData => {
       if (!table || promptIdx < 0 || promptIdx >= table.head.prompts.length) {
         return { total: null, filtered: null };
       }
@@ -119,6 +119,7 @@ export function useMetricsGetter() {
         total: table.head.prompts[promptIdx].metrics ?? null,
         filtered: filteredMetrics?.[promptIdx] ?? null,
       };
-    };
-  }, [table, filteredMetrics]);
+    },
+    [table, filteredMetrics],
+  );
 }
