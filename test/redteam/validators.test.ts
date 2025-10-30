@@ -1252,6 +1252,119 @@ describe('RedteamConfigSchema transform', () => {
       ),
     ).toBe(true);
   });
+
+  describe('multilingual strategy lifting', () => {
+    it('should lift multilingual strategy languages to global language config', () => {
+      const input = {
+        plugins: ['overreliance'],
+        strategies: [
+          {
+            id: 'multilingual',
+            config: {
+              languages: ['hi', 'fr'],
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(input);
+
+      // Language should be lifted to global config with 'en' prepended as default
+      expect(result.language).toEqual(['en', 'hi', 'fr']);
+      // Multilingual should be removed from strategies array
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(false);
+    });
+
+    it('should merge multilingual languages with existing global language config', () => {
+      const input = {
+        plugins: ['overreliance'],
+        language: 'de',
+        strategies: [
+          {
+            id: 'multilingual',
+            config: {
+              languages: ['hi', 'fr'],
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(input);
+
+      // Should merge and deduplicate with 'en' added
+      expect(result.language).toEqual(['de', 'en', 'hi', 'fr']);
+      // Multilingual should be removed from strategies array
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(false);
+    });
+
+    it('should preserve other strategies when removing multilingual', () => {
+      const input = {
+        plugins: ['overreliance'],
+        strategies: [
+          'jailbreak',
+          {
+            id: 'multilingual',
+            config: {
+              languages: ['hi'],
+            },
+          },
+          'prompt-injection',
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(input);
+
+      expect(result.language).toEqual(['en', 'hi']);
+      // Should keep other strategies but remove multilingual
+      const strategyIds = result.strategies?.map((s) => (typeof s === 'string' ? s : s.id));
+      expect(strategyIds).toContain('jailbreak');
+      expect(strategyIds).toContain('prompt-injection');
+      expect(strategyIds).not.toContain('multilingual');
+    });
+
+    it('should handle multilingual as string (not lifting)', () => {
+      const input = {
+        plugins: ['overreliance'],
+        strategies: ['multilingual'],
+      };
+
+      const result = RedteamConfigSchema.parse(input);
+
+      // String form doesn't have config, so no lifting should occur
+      expect(result.language).toBeUndefined();
+      // Multilingual as string should be kept (no lifting occurred)
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(true);
+    });
+
+    it('should not lift if multilingual has no languages', () => {
+      const input = {
+        plugins: ['overreliance'],
+        strategies: [
+          {
+            id: 'multilingual',
+            config: {
+              languages: [],
+            },
+          },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(input);
+
+      // No lifting should occur with empty languages
+      expect(result.language).toBeUndefined();
+      // Multilingual should still be removed? Or kept? Let's keep it for empty config
+      expect(
+        result.strategies?.some((s) => (typeof s === 'string' ? s : s.id) === 'multilingual'),
+      ).toBe(true);
+    });
+  });
 });
 
 describe('RedteamStrategySchema', () => {

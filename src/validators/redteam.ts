@@ -96,6 +96,10 @@ export const RedteamPluginSchema = z.union([
 
 export const strategyIdSchema = z.union([
   z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+    // Allow 'multilingual' for backward compatibility - it will be migrated to language config
+    if (val === 'multilingual') {
+      return;
+    }
     if (!ALL_STRATEGIES.includes(val as Strategy)) {
       ctx.addIssue({
         code: z.ZodIssueCode.invalid_enum_value,
@@ -107,6 +111,10 @@ export const strategyIdSchema = z.union([
   }),
   z.string().refine(
     (value) => {
+      // Allow 'multilingual' for backward compatibility
+      if (value === 'multilingual') {
+        return true;
+      }
       return value.startsWith('file://') && isJavascriptFile(value);
     },
     {
@@ -160,7 +168,10 @@ export const RedteamGenerateOptionsSchema = z.object({
   envFile: z.string().optional().describe('Path to the environment file'),
   force: z.boolean().describe('Whether to force generation').default(false),
   injectVar: z.string().optional().describe('Variable to inject'),
-  language: z.string().optional().describe('Language of tests to generate'),
+  language: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .describe('Language(s) of tests to generate'),
   maxConcurrency: z
     .number()
     .int()
@@ -200,7 +211,10 @@ export const RedteamConfigSchema = z
       .describe('Additional instructions for test generation applied to each plugin'),
     provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
-    language: z.string().optional().describe('Language of tests ot generate for this plugin'),
+    language: z
+      .union([z.string(), z.array(z.string())])
+      .optional()
+      .describe('Language(s) of tests to generate for this plugin'),
     entities: z
       .array(z.string())
       .optional()
@@ -240,6 +254,41 @@ export const RedteamConfigSchema = z
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
     const strategySet = new Set<Strategy>();
+
+    // MIGRATION: Extract languages from multilingual strategy and merge into global language config
+    // This allows plugin-level language generation to work with multilingual strategy
+    const multilingualStrategy = data.strategies?.find(
+      (s) => (typeof s === 'string' ? s : s.id) === 'multilingual',
+    );
+
+    if (multilingualStrategy && typeof multilingualStrategy !== 'string') {
+      const strategyLanguages = multilingualStrategy.config?.languages;
+
+      if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
+        // Lazy require to avoid mock interference in tests during module initialization
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const logger = require('../logger').default;
+        logger.warn(
+          '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+        );
+
+        if (data.language) {
+          // Global language exists, merge with 'en' and strategy languages, then deduplicate
+          const existingLanguages = Array.isArray(data.language) ? data.language : [data.language];
+          data.language = [...new Set([...existingLanguages, 'en', ...strategyLanguages])];
+        } else {
+          // No global language set, prepend 'en' as default to multilingual strategy languages
+          data.language = ['en', ...strategyLanguages];
+        }
+
+        // Remove multilingual strategy from array - it's now a pure config mechanism
+        // Tests will be generated with language modifiers by plugins, not by the strategy
+        data.strategies = data.strategies?.filter((s) => {
+          const id = typeof s === 'string' ? s : s.id;
+          return id !== 'multilingual';
+        });
+      }
+    }
 
     const addPlugin = (
       id: string,

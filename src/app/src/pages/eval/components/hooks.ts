@@ -11,12 +11,6 @@ import { useMemo, useCallback } from 'react';
 import type { PromptMetrics } from '@promptfoo/types';
 
 import { useTableStore } from './store';
-import { PolicyObject } from '@promptfoo/redteam/types';
-import {
-  isValidPolicyObject,
-  makeInlinePolicyId,
-  makeDefaultPolicyName,
-} from '@promptfoo/redteam/plugins/policy/utils';
 
 export interface MetricValue {
   total: number;
@@ -97,71 +91,4 @@ export function usePassRates(): MetricValue[] {
       }),
     [numPassing, numTests],
   );
-}
-
-/**
- * Returns a function that gets the metrics for a specific prompt index, with both total and filtered metrics.
- *
- * This is useful for components that need to access metrics fields like cost, latency, namedScores, etc.
- *
- * @example
- * ```tsx
- * const getMetrics = useMetricsGetter();
- * const { total, filtered } = getMetrics(promptIdx);
- * console.log('Total cost:', total?.cost);
- * console.log('Filtered cost:', filtered?.cost);
- * ```
- */
-export function useMetricsGetter() {
-  const { table, filteredMetrics } = useTableStore();
-
-  return useCallback(() => {
-    return (promptIdx: number): MetricsData => {
-      if (!table || promptIdx < 0 || promptIdx >= table.head.prompts.length) {
-        return { total: null, filtered: null };
-      }
-
-      return {
-        total: table.head.prompts[promptIdx].metrics ?? null,
-        filtered: filteredMetrics?.[promptIdx] ?? null,
-      };
-    };
-  }, [table, filteredMetrics]);
-}
-
-/**
- * Reads custom policies from the table store and returns a map of policy IDs to policy objects.
- *
- * @returns A map of policy IDs to policy objects.
- */
-export function useCustomPoliciesMap(): Record<PolicyObject['id'], PolicyObject> {
-  const { config } = useTableStore();
-  const plugins = config?.redteam?.plugins ?? [];
-
-  return useMemo(() => {
-    return (
-      plugins
-        // Filter on the policy plugin type so that only custom policies are included in the
-        // reduce, ensuring stable indices for default name generation.
-        .filter((plugin) => typeof plugin !== 'string' && plugin.id === 'policy')
-        .reduce((map: Record<PolicyObject['id'], PolicyObject>, plugin, index) => {
-          const policy = plugin?.config?.policy;
-          if (policy) {
-            if (isValidPolicyObject(policy)) {
-              map[policy.id] = policy;
-            }
-            // Backwards compatibility w/ text-only inline policies.
-            else {
-              const id = makeInlinePolicyId(policy);
-              map[id] = {
-                id,
-                text: policy,
-                name: makeDefaultPolicyName(index),
-              };
-            }
-          }
-          return map;
-        }, {})
-    );
-  }, [plugins]);
 }
