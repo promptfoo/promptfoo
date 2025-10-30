@@ -31,7 +31,7 @@ class ProviderRegistry {
   private registerShutdownHandlers(): void {
     let shuttingDown = false;
 
-    const shutdown = async (signal: string) => {
+    const shutdown = async (signal: NodeJS.Signals | 'beforeExit') => {
       if (shuttingDown) {
         return; // Prevent duplicate shutdown
       }
@@ -50,8 +50,18 @@ class ProviderRegistry {
       logger.debug('Python provider shutdown complete');
     };
 
-    process.once('SIGINT', () => void shutdown('SIGINT'));
-    process.once('SIGTERM', () => void shutdown('SIGTERM'));
+    const handleSignal = (signal: NodeJS.Signals) => {
+      const exitCode = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : undefined;
+
+      void shutdown(signal).finally(() => {
+        if (exitCode !== undefined) {
+          process.exit(exitCode);
+        }
+      });
+    };
+
+    process.once('SIGINT', () => handleSignal('SIGINT'));
+    process.once('SIGTERM', () => handleSignal('SIGTERM'));
     // Use beforeExit for async cleanup (exit event cannot await)
     process.once('beforeExit', () => void shutdown('beforeExit'));
   }

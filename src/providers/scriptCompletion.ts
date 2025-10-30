@@ -102,7 +102,7 @@ export class ScriptCompletionProvider implements ApiProvider {
       ]);
       const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 
-      execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
+      const childProcess = execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
         if (error) {
           logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
           reject(error);
@@ -124,6 +124,23 @@ export class ScriptCompletionProvider implements ApiProvider {
           await cache.set(cacheKey, JSON.stringify(result));
         }
         resolve(result);
+      });
+
+      // Clean up child process on exit
+      const cleanup = () => {
+        if (childProcess && !childProcess.killed) {
+          childProcess.kill();
+        }
+      };
+      process.once('SIGINT', cleanup);
+      process.once('SIGTERM', cleanup);
+      process.once('exit', cleanup);
+
+      // Remove listeners when promise settles
+      childProcess.once('exit', () => {
+        process.removeListener('SIGINT', cleanup);
+        process.removeListener('SIGTERM', cleanup);
+        process.removeListener('exit', cleanup);
       });
     });
   }

@@ -476,65 +476,69 @@ export async function doEval(
         ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
         : new Eval(config, { runtimeOptions: options });
 
-    // Graceful pause support via Ctrl+C (only when writing to database)
-    // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
-    /*
     const abortController = new AbortController();
     const previousAbortSignal = evaluateOptions.abortSignal;
     evaluateOptions.abortSignal = previousAbortSignal
       ? AbortSignal.any([previousAbortSignal, abortController.signal])
       : abortController.signal;
-    let sigintHandler: ((...args: any[]) => void) | undefined;
-    let paused = false;
 
-    // Only set up pause/resume handler when writing to database
-    if (cmdObj.write !== false) {
-      sigintHandler = () => {
-        if (paused) {
-          // Second Ctrl+C: force exit
-          logger.warn('Force exiting...');
-          process.exit(130);
-        }
-        paused = true;
-        logger.info(
-          chalk.yellow('Pausing evaluation... Saving progress. Press Ctrl+C again to force exit.'),
-        );
-        abortController.abort();
-      };
-      process.once('SIGINT', sigintHandler);
-    }
-    */
+    let ret: Eval = evalRecord;
+    let wasCancelled = false;
 
-    // Run the evaluation!!!!!!
-    const ret = await evaluate(testSuite, evalRecord, {
-      ...options,
-      eventSource: 'cli',
-      abortSignal: evaluateOptions.abortSignal,
-      isRedteam: Boolean(config.redteam),
-    });
+    const sigintHandler = () => {
+      if (abortController.signal.aborted) {
+        logger.warn('Force exiting...');
+        process.exit(130);
+        return;
+      }
 
-    // Cleanup signal handler
-    /*
-    if (sigintHandler) {
+      logger.info(chalk.yellow('Received interrupt signal. Attempting to stop evaluation...'));
+      abortController.abort();
+    };
+
+    process.on('SIGINT', sigintHandler);
+
+    try {
+      // Run the evaluation!!!!!!
+      ret = await evaluate(testSuite, evalRecord, {
+        ...options,
+        eventSource: 'cli',
+        abortSignal: evaluateOptions.abortSignal,
+        isRedteam: Boolean(config.redteam),
+      });
+    } catch (err) {
+      if (abortController.signal.aborted || (err instanceof Error && err.message === 'Operation cancelled')) {
+        wasCancelled = true;
+        process.exitCode = 130;
+        logger.info(chalk.yellow('Evaluation cancelled. Cleaning up before exit.'));
+      } else {
+        throw err;
+      }
+    } finally {
       process.removeListener('SIGINT', sigintHandler);
+      evaluateOptions.abortSignal = previousAbortSignal;
     }
-    // Clear resume flag after run completes
-    cliState.resume = false;
-
-    // If paused, print minimal guidance and skip the rest of the reporting
-    if (paused && cmdObj.write !== false) {
-      printBorder();
-      logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
-      logger.info(
-        `» Resume with: ${chalk.greenBright.bold('promptfoo eval --resume ' + evalRecord.id)}`,
-      );
-      printBorder();
-      return ret;
-    }
-      */
 
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
+
+    const cleanupProviders = async () => {
+      if (testSuite.providers.length > 0) {
+        for (const provider of testSuite.providers) {
+          if (isApiProvider(provider)) {
+            const cleanup = provider?.cleanup?.();
+            if (cleanup instanceof Promise) {
+              await cleanup;
+            }
+          }
+        }
+      }
+    };
+
+    if (wasCancelled) {
+      await cleanupProviders();
+      return ret;
+    }
 
     // Check for explicit disable signals first
     const hasExplicitDisable =
@@ -874,16 +878,7 @@ export async function doEval(
     }
 
     // Clean up any WebSocket connections
-    if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (isApiProvider(provider)) {
-          const cleanup = provider?.cleanup?.();
-          if (cleanup instanceof Promise) {
-            await cleanup;
-          }
-        }
-      }
-    }
+    await cleanupProviders();
 
     return ret;
   };
