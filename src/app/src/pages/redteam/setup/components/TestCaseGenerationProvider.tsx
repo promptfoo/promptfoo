@@ -4,6 +4,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import type { Plugin } from '@promptfoo/redteam/constants';
+import { isHttpProvider } from '@promptfoo/util/httpProvider';
 import { TestCaseDialog } from './TestCaseDialog';
 
 interface GeneratedTestCase {
@@ -117,10 +118,9 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
         if (redTeamConfig.target?.id) {
           // Validate target URL for HTTP providers
           const targetConfig = redTeamConfig.target.config;
-          const isHttpProvider = redTeamConfig.target.id === 'http' || targetConfig?.type === 'http';
           const targetUrl = targetConfig?.url;
 
-          if (isHttpProvider && (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http')) {
+          if (isHttpProvider(redTeamConfig.target) && (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http')) {
             setTargetResponse({
               output: '',
               error:
