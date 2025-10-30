@@ -23,7 +23,6 @@ interface GenerateOptions {
   telemetryFeature?: string;
   onSuccess?: (testCase: GeneratedTestCase) => void;
   onError?: (error: Error) => void;
-  mode?: 'config' | 'result';
 }
 
 interface TargetPlugin {
@@ -68,7 +67,6 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [currentPlugin, setCurrentPlugin] = useState<Plugin | null>(null);
   const [currentStrategy, setCurrentStrategy] = useState<Strategy | null>(null);
-  const [dialogMode, setDialogMode] = useState<'config' | 'result'>('result');
 
   const { recordEvent } = useTelemetry();
   const toast = useToast();
@@ -79,7 +77,6 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
       setCurrentStrategy(strategy.id);
       setGeneratedTestCase(null);
       setIsGenerating(true);
-      setDialogMode(options.mode || 'result');
       setIsDialogOpen(true);
 
       try {
@@ -187,7 +184,6 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
     setGeneratedTestCase(null);
     setTargetResponse(null);
     setIsRunningTest(false);
-    setDialogMode('result');
   }, []);
 
   return (
@@ -209,7 +205,6 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
         generatedTestCase={generatedTestCase}
         targetResponse={targetResponse}
         isRunningTest={isRunningTest}
-        mode={dialogMode}
       />
     </TestCaseGenerationContext.Provider>
   );

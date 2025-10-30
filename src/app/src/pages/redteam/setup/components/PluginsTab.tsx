@@ -379,7 +379,6 @@ export default function PluginsTab({
           { id: 'basic', config: {} },
           {
             telemetryFeature: 'redteam_plugin_generate_test_case',
-            mode: 'result',
           },
         );
       }

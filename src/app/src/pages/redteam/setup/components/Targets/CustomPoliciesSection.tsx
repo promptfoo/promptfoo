@@ -460,7 +460,6 @@ export const CustomPoliciesSection = () => {
         { id: 'basic', config: {} },
         {
           telemetryFeature: 'redteam_policy_generate_test_case',
-          mode: 'result',
           onSuccess: () => {
             setGeneratingPolicyId(null);
           },
