@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(providers): correctly handle reasoning field in OpenAI-compatible models like gpt-oss-20b, extracting both reasoning and content instead of only reasoning (#TBD)
+- fix(providers): correctly handle reasoning field in OpenAI-compatible models like gpt-oss-20b, extracting both reasoning and content instead of only reasoning (#1)
 - fix(csv): handle primitive values directly in red team CSV export to avoid double-quoting strings (#6040)
 - fix(csv): fix column count mismatch in red team CSV export when rows have multiple outputs (#6040)
 
