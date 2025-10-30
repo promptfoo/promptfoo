@@ -92,3 +92,33 @@ export function usePassRates(): MetricValue[] {
     [numPassing, numTests],
   );
 }
+
+/**
+ * Returns a function that gets the metrics for a specific prompt index, with both total and filtered metrics.
+ *
+ * This is useful for components that need to access metrics fields like cost, latency, namedScores, etc.
+ *
+ * @example
+ * ```tsx
+ * const getMetrics = useMetricsGetter();
+ * const { total, filtered } = getMetrics(promptIdx);
+ * console.log('Total cost:', total?.cost);
+ * console.log('Filtered cost:', filtered?.cost);
+ * ```
+ */
+export function useMetricsGetter() {
+  const { table, filteredMetrics } = useTableStore();
+
+  return useCallback(() => {
+    return (promptIdx: number): MetricsData => {
+      if (!table || promptIdx < 0 || promptIdx >= table.head.prompts.length) {
+        return { total: null, filtered: null };
+      }
+
+      return {
+        total: table.head.prompts[promptIdx].metrics ?? null,
+        filtered: filteredMetrics?.[promptIdx] ?? null,
+      };
+    };
+  }, [table, filteredMetrics]);
+}
