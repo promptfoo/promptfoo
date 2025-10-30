@@ -91,9 +91,7 @@ export async function fetchHuggingFaceMetadata(modelId: string): Promise<Hugging
     );
 
     if (response.status !== 200) {
-      throw new Error(
-        `HuggingFace API returned status ${response.status}: ${response.statusText}`,
-      );
+      throw new Error(`HuggingFace API returned status ${response.status}: ${response.statusText}`);
     }
 
     const data = response.data;

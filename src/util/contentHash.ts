@@ -20,7 +20,9 @@ export async function hashFile(filePath: string): Promise<string> {
 
     stream.on('data', (chunk) => hash.update(chunk));
     stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', (err) => reject(new Error(`Failed to hash file ${filePath}: ${err.message}`)));
+    stream.on('error', (err) =>
+      reject(new Error(`Failed to hash file ${filePath}: ${err.message}`)),
+    );
   });
 }
 
