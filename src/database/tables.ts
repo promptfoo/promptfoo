@@ -366,12 +366,12 @@ export const modelAuditsTable = sqliteTable(
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>(),
 
     // Model revision tracking (dual-field approach for deduplication + security)
-    modelId: text('model_id'),                          // Normalized model identifier (e.g., "meta-llama/Llama-2-7b")
-    revisionSha: text('revision_sha'),                  // Native revision (HF Git SHA, S3 version ID, etc.) - nullable
-    contentHash: text('content_hash'),                  // SHA-256 of actual downloaded content - always present
-    modelSource: text('model_source'),                  // 'huggingface', 's3', 'gcs', 'local', etc.
+    modelId: text('model_id'), // Normalized model identifier (e.g., "meta-llama/Llama-2-7b")
+    revisionSha: text('revision_sha'), // Native revision (HF Git SHA, S3 version ID, etc.) - nullable
+    contentHash: text('content_hash'), // SHA-256 of actual downloaded content - always present
+    modelSource: text('model_source'), // 'huggingface', 's3', 'gcs', 'local', etc.
     sourceLastModified: integer('source_last_modified'), // Unix timestamp in milliseconds
-    scannerVersion: text('scanner_version'),            // ModelAudit version used (e.g., "0.2.14")
+    scannerVersion: text('scanner_version'), // ModelAudit version used (e.g., "0.2.14")
   },
   (table) => ({
     createdAtIdx: index('model_audits_created_at_idx').on(table.createdAt),
