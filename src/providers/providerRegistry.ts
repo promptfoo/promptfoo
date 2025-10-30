@@ -51,7 +51,7 @@ class ProviderRegistry {
     };
 
     const handleSignal = (signal: NodeJS.Signals) => {
-      const exitCode = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : undefined;
+      const exitCode = signal === 'SIGTERM' ? 143 : undefined;
 
       void shutdown(signal).finally(() => {
         if (exitCode !== undefined) {
@@ -60,7 +60,7 @@ class ProviderRegistry {
       });
     };
 
-    process.once('SIGINT', () => handleSignal('SIGINT'));
+    // SIGINT is handled by eval.ts to avoid conflicts with AbortController
     process.once('SIGTERM', () => handleSignal('SIGTERM'));
     // Use beforeExit for async cleanup (exit event cannot await)
     process.once('beforeExit', () => void shutdown('beforeExit'));

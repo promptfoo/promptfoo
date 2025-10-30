@@ -4,6 +4,17 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import logger from '../../logger';
 
+/**
+ * Error thrown when an operation is cancelled (e.g., via SIGINT/Ctrl+C).
+ * Used for type-safe cancellation detection instead of string matching.
+ */
+export class OperationCancelledError extends Error {
+  constructor(message = 'Operation cancelled') {
+    super(message);
+    this.name = 'OperationCancelledError';
+  }
+}
+
 function errorFileHasContents(filePath: string): boolean {
   try {
     return (

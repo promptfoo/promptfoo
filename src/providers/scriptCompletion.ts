@@ -102,9 +102,25 @@ export class ScriptCompletionProvider implements ApiProvider {
       ]);
       const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 
-      const childProcess = execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
+      let childProcess: ReturnType<typeof execFile>;
+
+      // Clean up child process on exit
+      const cleanup = () => {
+        if (childProcess && !childProcess.killed) {
+          childProcess.kill();
+        }
+      };
+
+      const removeListeners = () => {
+        process.removeListener('SIGINT', cleanup);
+        process.removeListener('SIGTERM', cleanup);
+        process.removeListener('exit', cleanup);
+      };
+
+      childProcess = execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
         if (error) {
           logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
+          removeListeners();
           reject(error);
           return;
         }
@@ -113,6 +129,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         if (errorOutput) {
           logger.debug(`Error output from script ${this.scriptPath}: ${errorOutput}`);
           if (!standardOutput) {
+            removeListeners();
             reject(new Error(errorOutput));
             return;
           }
@@ -126,22 +143,14 @@ export class ScriptCompletionProvider implements ApiProvider {
         resolve(result);
       });
 
-      // Clean up child process on exit
-      const cleanup = () => {
-        if (childProcess && !childProcess.killed) {
-          childProcess.kill();
-        }
-      };
       process.once('SIGINT', cleanup);
       process.once('SIGTERM', cleanup);
       process.once('exit', cleanup);
 
-      // Remove listeners when promise settles
-      childProcess.once('exit', () => {
-        process.removeListener('SIGINT', cleanup);
-        process.removeListener('SIGTERM', cleanup);
-        process.removeListener('exit', cleanup);
-      });
+      // Remove listeners when child process exits (if available)
+      if (childProcess && typeof childProcess.once === 'function') {
+        childProcess.once('exit', removeListeners);
+      }
     });
   }
 }

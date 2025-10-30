@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(cli): ensure Ctrl+C stops evaluations and exits cleanly (#PR_NUMBER)
+- fix(cli): ensure Ctrl+C stops evaluations and exits cleanly - prevent zombie processes, add resource cleanup, fix signal handler conflicts (#PR_NUMBER)
 - fix(init): include helpful error message and cleanup any directories created when example download fails (#6051)
 - fix(providers): removing axios as a runtime dependency in google live provider (#227)
 - fix(csv): handle primitive values directly in red team CSV export to avoid double-quoting strings (#6040)

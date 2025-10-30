@@ -36,6 +36,7 @@ import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
+import { OperationCancelledError } from '../util/errors';
 import type { Command } from 'commander';
 
 import type {
@@ -484,6 +485,38 @@ export async function doEval(
 
     let ret: Eval = evalRecord;
     let wasCancelled = false;
+    let hadError = false;
+
+    /**
+     * Cleanup providers with a timeout to prevent hanging on unresponsive cleanup operations.
+     */
+    const cleanupProviders = async () => {
+      if (testSuite.providers.length === 0) {
+        return;
+      }
+
+      const CLEANUP_TIMEOUT_MS = 5000;
+      const cleanupPromise = Promise.all(
+        testSuite.providers.map(async (provider) => {
+          if (isApiProvider(provider)) {
+            const cleanup = provider?.cleanup?.();
+            if (cleanup instanceof Promise) {
+              await cleanup;
+            }
+          }
+        }),
+      );
+
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        setTimeout(() => reject(new Error('Cleanup timeout')), CLEANUP_TIMEOUT_MS);
+      });
+
+      try {
+        await Promise.race([cleanupPromise, timeoutPromise]);
+      } catch (_error) {
+        logger.warn(`Provider cleanup did not complete within ${CLEANUP_TIMEOUT_MS}ms`);
+      }
+    };
 
     const sigintHandler = () => {
       if (abortController.signal.aborted) {
@@ -496,7 +529,7 @@ export async function doEval(
       abortController.abort();
     };
 
-    process.on('SIGINT', sigintHandler);
+    process.once('SIGINT', sigintHandler);
 
     try {
       // Run the evaluation!!!!!!
@@ -507,33 +540,30 @@ export async function doEval(
         isRedteam: Boolean(config.redteam),
       });
     } catch (err) {
-      if (abortController.signal.aborted || (err instanceof Error && err.message === 'Operation cancelled')) {
+      if (abortController.signal.aborted || err instanceof OperationCancelledError) {
         wasCancelled = true;
         process.exitCode = 130;
         logger.info(chalk.yellow('Evaluation cancelled. Cleaning up before exit.'));
       } else {
+        hadError = true;
+        logger.error(`Evaluation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        // Cleanup before re-throwing
+        await cleanupProviders();
         throw err;
       }
     } finally {
       process.removeListener('SIGINT', sigintHandler);
       evaluateOptions.abortSignal = previousAbortSignal;
+      // Always reset resume flag to prevent state pollution
+      if (cliState.resume) {
+        cliState.resume = false;
+      }
     }
 
     // Clear results from memory to avoid memory issues
-    evalRecord.clearResults();
-
-    const cleanupProviders = async () => {
-      if (testSuite.providers.length > 0) {
-        for (const provider of testSuite.providers) {
-          if (isApiProvider(provider)) {
-            const cleanup = provider?.cleanup?.();
-            if (cleanup instanceof Promise) {
-              await cleanup;
-            }
-          }
-        }
-      }
-    };
+    if (!hadError) {
+      evalRecord.clearResults();
+    }
 
     if (wasCancelled) {
       await cleanupProviders();
