@@ -185,7 +185,7 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
       // Capture generatedTestCase to avoid stale closure if state changes during async execution
       const testCase = generatedTestCase;
       // Guard: if test case was reset (e.g., by a new generation), abort execution
-      if (!testCase){
+      if (!testCase) {
         return;
       }
 
