@@ -63,21 +63,35 @@ const Section = ({
           </audio>
         </Box>
       );
+    } else if (strategy === 'image') {
+      return (
+        <Box
+          sx={{
+            p: 2,
+            borderRadius: 1,
+            border: '1px solid',
+            borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+          }}
+        >
+          <img src={`data:image/png;base64,${text}`} alt="Image" />
+        </Box>
+      );
+    } else {
+      return (
+        <Box
+          sx={{
+            p: 2,
+            borderRadius: 1,
+            border: '1px solid',
+            borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+            backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+            minHeight: 51,
+          }}
+        >
+          {text}
+        </Box>
+      );
     }
-    return (
-      <Box
-        sx={{
-          p: 2,
-          borderRadius: 1,
-          border: '1px solid',
-          borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-          backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
-          minHeight: 51,
-        }}
-      >
-        {text}
-      </Box>
-    );
   }, [text, strategy]);
 
   return (
