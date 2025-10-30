@@ -32,7 +32,7 @@ describe('handleSimilar', () => {
         assert: [],
         options: {},
       },
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -70,7 +70,7 @@ describe('handleSimilar', () => {
         assert: [],
         options: {},
       },
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -109,7 +109,7 @@ describe('handleSimilar', () => {
         assert: [],
         options: {},
       },
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -146,7 +146,7 @@ describe('handleSimilar', () => {
         assert: [],
         options: {},
       },
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -184,7 +184,7 @@ describe('handleSimilar', () => {
         assert: [],
         options: {},
       },
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -223,7 +223,7 @@ describe('handleSimilar', () => {
           assert: [],
           options: {},
         },
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: {},
           test: {

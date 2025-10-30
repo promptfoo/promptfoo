@@ -161,7 +161,6 @@ const redTeamSidebar = [
           'red-team/strategies/leetspeak',
           'red-team/strategies/likert',
           'red-team/strategies/math-prompt',
-          'red-team/strategies/multilingual',
           'red-team/strategies/other-encodings',
           'red-team/strategies/prompt-injection',
           'red-team/strategies/rot13',

@@ -23,7 +23,6 @@ import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
-import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
@@ -253,15 +252,6 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding MathPrompt encoding to ${testCases.length} test cases`);
       const newTestCases = await addMathPrompt(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} MathPrompt encoded test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'multilingual',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding multilingual test cases to ${testCases.length} test cases`);
-      const newTestCases = await addMultilingual(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} multilingual test cases`);
       return newTestCases;
     },
   },
