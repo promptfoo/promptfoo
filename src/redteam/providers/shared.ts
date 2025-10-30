@@ -20,7 +20,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { transform, type TransformContext, TransformInputType } from '../../util/transform';
+import { type TransformContext, TransformInputType, transform } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 async function loadRedteamProvider({
@@ -244,7 +244,7 @@ export async function getTargetResponse(
     Target returned malformed response: expected either \`output\` or \`error\` property to be set.
 
     Instead got: ${safeJsonStringify(targetRespRaw)}
-    
+
     Note: Empty strings are valid output values.
     `,
   );
@@ -342,10 +342,7 @@ export async function createIterationContext({
   context?: CallApiContextParams;
   iterationNumber: number;
   loggerTag?: string;
-}): Promise<{
-  iterationVars: Record<string, string | object>;
-  iterationContext?: CallApiContextParams;
-}> {
+}): Promise<CallApiContextParams | undefined> {
   let iterationVars = { ...originalVars };
 
   if (transformVarsConfig) {
@@ -385,7 +382,7 @@ export async function createIterationContext({
       }
     : undefined;
 
-  return { iterationVars, iterationContext };
+  return iterationContext;
 }
 
 /**

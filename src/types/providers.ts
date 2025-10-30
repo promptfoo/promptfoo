@@ -24,6 +24,7 @@ interface AtomicTestCase {
   score?: number;
   failureReason?: string;
   metadata?: Record<string, any>;
+  options?: Record<string, any>;
 }
 export interface ProviderModerationResponse {
   error?: string;
@@ -124,6 +125,7 @@ export interface ProviderResponse {
   cost?: number;
   error?: string;
   logProbs?: number[];
+  latencyMs?: number;
   metadata?: {
     redteamFinalPrompt?: string;
     http?: {
@@ -159,6 +161,7 @@ export interface ProviderEmbeddingResponse {
   cost?: number;
   error?: string;
   embedding?: number[];
+  latencyMs?: number;
   tokenUsage?: Partial<TokenUsage>;
   metadata?: {
     transformed?: boolean;

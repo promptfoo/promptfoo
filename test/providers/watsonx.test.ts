@@ -331,7 +331,8 @@ describe('WatsonXProvider', () => {
     });
 
     it('should return cached response if available', async () => {
-      const cachedResponse = {
+      // What's stored in the cache doesn't have cached: true
+      const storedCachedData = {
         error: undefined,
         output: 'Cached response',
         tokenUsage: {
@@ -344,9 +345,15 @@ describe('WatsonXProvider', () => {
         logProbs: undefined,
       };
 
+      // But the response should have cached: true added
+      const expectedResponse = {
+        ...storedCachedData,
+        cached: true,
+      };
+
       const cacheKey = `watsonx:${modelName}:${generateConfigHash(config)}:${prompt}`;
       const cache: Partial<any> = {
-        get: jest.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
+        get: jest.fn().mockResolvedValue(JSON.stringify(storedCachedData)),
         set: jest.fn(),
         wrap: jest.fn(),
         del: jest.fn(),
@@ -361,7 +368,7 @@ describe('WatsonXProvider', () => {
       const generateTextSpy = jest.spyOn(await provider.getClient(), 'generateText');
       const response = await provider.callApi(prompt);
       expect(cache.get).toHaveBeenCalledWith(cacheKey);
-      expect(response).toEqual(cachedResponse);
+      expect(response).toEqual(expectedResponse);
       expect(generateTextSpy).not.toHaveBeenCalled();
     });
 

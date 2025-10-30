@@ -16,7 +16,7 @@ import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import useCloudConfig from '../../../hooks/useCloudConfig';
 import { useTableStore } from './store';
-import { useCustomPoliciesMap } from './hooks';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
@@ -84,7 +84,7 @@ const CustomMetrics = ({
   onShowMore,
 }: CustomMetricsProps) => {
   const { data: cloudConfig } = useCloudConfig();
-  const { filters, addFilter } = useTableStore();
+  const { filters, addFilter, config } = useTableStore();
 
   if (!lookup || !Object.keys(lookup).length) {
     return null;
@@ -121,7 +121,7 @@ const CustomMetrics = ({
     [addFilter, filters.values],
   );
 
-  const policiesById = useCustomPoliciesMap();
+  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   return (
     <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>
@@ -135,7 +135,7 @@ const CustomMetrics = ({
             const policyId = deserializePolicyIdFromMetric(metric);
             const policy = policiesById[policyId];
             if (policy) {
-              displayLabel = formatPolicyIdentifierAsMetric(policy.name);
+              displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, metric);
               tooltipContent = (
                 <>
                   <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 600, mb: 1 }}>

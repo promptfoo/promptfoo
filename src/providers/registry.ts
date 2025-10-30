@@ -1,8 +1,9 @@
-import dedent from 'dedent';
 import path from 'path';
 
+import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
+import SimbaProvider from '../redteam/providers/simba';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
 import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
 import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
@@ -14,8 +15,6 @@ import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
-import type { LoadApiProviderContext } from '../types/index';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -102,6 +101,9 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
+
+import type { LoadApiProviderContext } from '../types/index';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -1222,6 +1224,16 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new RedteamMischievousUserProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:simba',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new SimbaProvider(providerOptions.config);
     },
   },
   {
