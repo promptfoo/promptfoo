@@ -22,6 +22,27 @@ import { type StrategyConfig, type RedteamStrategyObject } from '@promptfoo/redt
 
 const TEST_GENERATION_PLUGIN = 'harmful:hate';
 
+/**
+ * Checks if a strategy requires configuration and if it's currently missing.
+ * Returns true if the strategy requires config but it's not properly configured.
+ */
+function isRequiredConfigMissing(strategyId: string, config: StrategyConfig): boolean {
+  if (strategyId === 'custom') {
+    // Custom strategy requires strategyText
+    return (
+      !config.strategyText ||
+      typeof config.strategyText !== 'string' ||
+      config.strategyText.trim().length === 0
+    );
+  }
+  if (strategyId === 'simba') {
+    // Simba strategy requires goals array
+    return !config.goals || !Array.isArray(config.goals) || config.goals.length === 0;
+  }
+  // Other strategies don't have required config
+  return false;
+}
+
 interface StrategyItemProps {
   strategy: StrategyCardData;
   isSelected: boolean;
@@ -41,8 +62,6 @@ export function StrategyItem({
 }: StrategyItemProps) {
   const { config } = useRedTeamConfig();
 
-  const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
-
   const {
     generateTestCase,
     isGenerating: generatingTestCase,
@@ -58,6 +77,13 @@ export function StrategyItem({
       )?.config ?? {}
     );
   }, [config, strategy.id]) as StrategyConfig;
+
+  const requiresConfig = useMemo(() => {
+    return isRequiredConfigMissing(strategy.id, strategyConfig);
+  }, [strategy.id, strategyConfig]);
+
+  const hasSettingsButton =
+    requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any));
 
   const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(
@@ -81,29 +107,34 @@ export function StrategyItem({
     <Paper
       elevation={2}
       onClick={handleToggle}
-      sx={(theme) => ({
-        height: '100%',
-        display: 'flex',
-        cursor: isDisabled ? 'not-allowed' : 'pointer',
-        userSelect: 'none',
-        opacity: isDisabled ? 0.5 : 1,
-        border: isSelected ? `1px solid ${theme.palette.primary.main}` : undefined,
-        backgroundColor: isDisabled
-          ? theme.palette.action.disabledBackground
-          : isSelected
-            ? alpha(theme.palette.primary.main, 0.04)
-            : theme.palette.background.paper,
-        transition: 'all 0.2s ease-in-out',
-        '&:hover': {
+      sx={(theme) => {
+        const needsConfig = isSelected && requiresConfig;
+        return {
+          height: '100%',
+          display: 'flex',
+          cursor: isDisabled ? 'not-allowed' : 'pointer',
+          userSelect: 'none',
+          opacity: isDisabled ? 0.5 : 1,
+          border: isSelected
+            ? `1px solid ${needsConfig ? theme.palette.error.main : theme.palette.primary.main}`
+            : undefined,
           backgroundColor: isDisabled
             ? theme.palette.action.disabledBackground
             : isSelected
-              ? alpha(theme.palette.primary.main, 0.08)
-              : alpha(theme.palette.action.hover, 0.04),
-        },
-        p: 1,
-        gap: 2,
-      })}
+              ? alpha(needsConfig ? theme.palette.error.main : theme.palette.primary.main, 0.04)
+              : theme.palette.background.paper,
+          transition: 'all 0.2s ease-in-out',
+          '&:hover': {
+            backgroundColor: isDisabled
+              ? theme.palette.action.disabledBackground
+              : isSelected
+                ? alpha(needsConfig ? theme.palette.error.main : theme.palette.primary.main, 0.08)
+                : alpha(theme.palette.action.hover, 0.04),
+          },
+          p: 1,
+          gap: 2,
+        };
+      }}
     >
       {/* Checkbox container */}
       <Box
@@ -200,30 +231,48 @@ export function StrategyItem({
       <Box>
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
-          disabled={isDisabled || generatingTestCase}
+          disabled={isDisabled || generatingTestCase || requiresConfig}
           isGenerating={generatingTestCase && currentStrategy === strategy.id}
           size="small"
-          tooltipTitle={`Generate an example test case using the ${strategy.name} Strategy.`}
+          tooltipTitle={
+            requiresConfig
+              ? `Configuration required: ${strategy.id === 'custom' ? 'Strategy text is required' : strategy.id === 'simba' ? 'At least one goal is required' : 'Configuration is required'}. Click the settings icon to configure.`
+              : `Generate an example test case using the ${strategy.name} Strategy.`
+          }
         />
 
         {/* Settings button - positioned absolutely in the top-right corner */}
         {hasSettingsButton && (
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onConfigClick(strategy.id);
-            }}
-            sx={{
-              opacity: 0.6,
-              '&:hover': {
-                opacity: 1,
-                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-              },
-            }}
+          <Tooltip
+            title={
+              requiresConfig
+                ? `Configuration required: ${strategy.id === 'custom' ? 'Strategy text is required' : strategy.id === 'simba' ? 'At least one goal is required' : 'Configuration is required'}. Click to configure.`
+                : 'Configure strategy settings'
+            }
           >
-            <SettingsOutlinedIcon fontSize="small" />
-          </IconButton>
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                onConfigClick(strategy.id);
+              }}
+              sx={(theme) => {
+                const needsConfig = isSelected && requiresConfig;
+                return {
+                  opacity: requiresConfig ? 1 : 0.6,
+                  color: needsConfig ? theme.palette.error.main : 'inherit',
+                  '&:hover': {
+                    opacity: 1,
+                    backgroundColor: needsConfig
+                      ? alpha(theme.palette.error.main, 0.1)
+                      : alpha(theme.palette.primary.main, 0.08),
+                  },
+                };
+              }}
+            >
+              <SettingsOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
       </Box>
     </Paper>
