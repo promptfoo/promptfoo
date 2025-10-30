@@ -76,6 +76,18 @@ const Section = ({
           <img src={`data:image/png;base64,${text}`} alt="Image" />
         </Box>
       );
+    } else if (strategy === 'video') {
+      return (
+        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <video controls style={{ maxHeight: '200px' }}>
+            <source
+              src={text.startsWith('data:') ? text : `data:video/mp4;base64,${text}`}
+              type="video/mp4"
+            />
+            Your browser does not support the video element.
+          </video>
+        </Box>
+      );
     } else {
       return (
         <Box
@@ -174,6 +186,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           label="Target Response"
           text={targetResponse?.output ?? ''}
           loading={isRunningTest}
+          strategy={null}
         />
 
         {generatedTestCase && (
