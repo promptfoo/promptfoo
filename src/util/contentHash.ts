@@ -62,10 +62,12 @@ export async function hashDirectory(dirPath: string): Promise<string> {
 
   for (const file of files) {
     const relativePath = path.relative(dirPath, file);
+    // Normalize to POSIX separators for cross-platform consistency
+    const normalizedPath = relativePath.split(path.sep).join('/');
     const fileHash = await hashFile(file);
 
     // Combine relative path and file hash (similar to Git's approach)
-    hash.update(`${relativePath}\0${fileHash}\0`);
+    hash.update(`${normalizedPath}\0${fileHash}\0`);
   }
 
   return hash.digest('hex');

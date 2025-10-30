@@ -145,7 +145,8 @@ export function modelScanCommand(program: Command): void {
                   `\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`,
                 );
                 console.log(chalk.green(`  promptfoo view ${existing.id}`));
-                process.exit(0);
+                process.exitCode = 0;
+                return;
               }
             }
           } catch (error) {

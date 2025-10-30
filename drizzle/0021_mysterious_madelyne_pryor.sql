@@ -13,12 +13,38 @@ CREATE UNIQUE INDEX `idx_model_audits_unique_revision` ON `model_audits` (`model
 CREATE UNIQUE INDEX `idx_model_audits_unique_content` ON `model_audits` (`model_id`, `content_hash`) WHERE `revision_sha` IS NULL AND `content_hash` IS NOT NULL;--> statement-breakpoint
 
 -- Backfill model_id and model_source from existing model_path data
+-- Extract owner/repo (first 2 path segments) to match parseHuggingFaceModel() logic
 UPDATE `model_audits`
 SET
   `model_id` = CASE
-    WHEN `model_path` LIKE 'hf://%' THEN SUBSTR(`model_path`, 6)
+    -- hf://owner/repo[/tree/branch] -> owner/repo (first 2 segments after prefix)
+    WHEN `model_path` LIKE 'hf://%' THEN
+      CASE
+        -- If there's a 3rd slash, extract up to it; otherwise take everything
+        WHEN LENGTH(`model_path`) - LENGTH(REPLACE(SUBSTR(`model_path`, 6), '/', '')) >= 2 THEN
+          SUBSTR(SUBSTR(`model_path`, 6), 1,
+            INSTR(SUBSTR(`model_path`, 6 + INSTR(SUBSTR(`model_path`, 6), '/') + 1), '/') + INSTR(SUBSTR(`model_path`, 6), '/')
+          )
+        ELSE SUBSTR(`model_path`, 6)
+      END
+    -- https://huggingface.co/owner/repo[/tree/branch] -> owner/repo
     WHEN `model_path` LIKE 'https://huggingface.co/%' THEN
-      REPLACE(REPLACE(`model_path`, 'https://huggingface.co/', ''), '/tree/main', '')
+      CASE
+        WHEN LENGTH(`model_path`) - LENGTH(REPLACE(SUBSTR(`model_path`, 24), '/', '')) >= 2 THEN
+          SUBSTR(SUBSTR(`model_path`, 24), 1,
+            INSTR(SUBSTR(`model_path`, 24 + INSTR(SUBSTR(`model_path`, 24), '/') + 1), '/') + INSTR(SUBSTR(`model_path`, 24), '/')
+          )
+        ELSE SUBSTR(`model_path`, 24)
+      END
+    -- https://hf.co/owner/repo[/tree/branch] -> owner/repo
+    WHEN `model_path` LIKE 'https://hf.co/%' THEN
+      CASE
+        WHEN LENGTH(`model_path`) - LENGTH(REPLACE(SUBSTR(`model_path`, 15), '/', '')) >= 2 THEN
+          SUBSTR(SUBSTR(`model_path`, 15), 1,
+            INSTR(SUBSTR(`model_path`, 15 + INSTR(SUBSTR(`model_path`, 15), '/') + 1), '/') + INSTR(SUBSTR(`model_path`, 15), '/')
+          )
+        ELSE SUBSTR(`model_path`, 15)
+      END
     WHEN `model_path` LIKE 's3://%' THEN SUBSTR(`model_path`, 6)
     WHEN `model_path` LIKE 'gs://%' THEN SUBSTR(`model_path`, 6)
     ELSE `model_path`
@@ -26,6 +52,7 @@ SET
   `model_source` = CASE
     WHEN `model_path` LIKE 'hf://%' THEN 'huggingface'
     WHEN `model_path` LIKE 'https://huggingface.co/%' THEN 'huggingface'
+    WHEN `model_path` LIKE 'https://hf.co/%' THEN 'huggingface'
     WHEN `model_path` LIKE 's3://%' THEN 's3'
     WHEN `model_path` LIKE 'gs://%' THEN 'gcs'
     ELSE 'local'
