@@ -66,7 +66,7 @@ const mockTraceDataWithErrors: TraceData = {
 
 const defaultParams = {
   baseType: 'trace-error-spans' as const,
-  context: {
+  assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
     prompt: 'test prompt',
@@ -90,8 +90,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 0 },
       },
       renderedValue: { max_count: 0 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'no-errors',
           spans: [
@@ -119,8 +119,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 2 },
       },
       renderedValue: { max_count: 2 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceDataWithErrors,
       },
     };
@@ -143,8 +143,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 0 },
       },
       renderedValue: { max_count: 0 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'status-errors',
           spans: [
@@ -173,8 +173,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 0 },
       },
       renderedValue: { max_count: 0 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'attr-errors',
           spans: [
@@ -214,8 +214,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_percentage: 50 },
       },
       renderedValue: { max_percentage: 50 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceDataWithErrors, // 4 errors out of 6 spans = 66.7%
       },
     };
@@ -237,8 +237,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_percentage: 70 },
       },
       renderedValue: { max_percentage: 70 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceDataWithErrors,
       },
     };
@@ -260,8 +260,8 @@ describe('handleTraceErrorSpans', () => {
         value: { pattern: '*api*', max_count: 0 },
       },
       renderedValue: { pattern: '*api*', max_count: 0 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceDataWithErrors,
       },
     };
@@ -283,8 +283,8 @@ describe('handleTraceErrorSpans', () => {
         value: 1,
       },
       renderedValue: 1,
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceDataWithErrors,
       },
     };
@@ -307,8 +307,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 0 },
       },
       renderedValue: { max_count: 0 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'msg-errors',
           spans: [
@@ -364,8 +364,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 0 },
       },
       renderedValue: { max_count: 0 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: { traceId: 'empty-trace', spans: [] },
       },
     };
@@ -387,8 +387,8 @@ describe('handleTraceErrorSpans', () => {
         value: {},
       },
       renderedValue: {},
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceDataWithErrors,
       },
     };
@@ -411,8 +411,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 5, max_percentage: 50 },
       },
       renderedValue: { max_count: 5, max_percentage: 50 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceDataWithErrors, // 4 errors, 66.7%
       },
     };

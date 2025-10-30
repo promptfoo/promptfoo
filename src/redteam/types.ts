@@ -41,7 +41,7 @@ export type PluginConfig = {
     reason: string;
   }[];
   severity?: Severity;
-  language?: string;
+  language?: string | string[];
   prompt?: string;
   purpose?: string;
   modifiers?: Partial<Record<Modifier, unknown>>;
@@ -115,7 +115,7 @@ export interface PluginActionParams {
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
-  language?: string;
+  language?: string | string[];
   numTests?: number;
   plugins?: RedteamPluginObject[];
   provider?: string | ProviderOptions | ApiProvider;
@@ -159,7 +159,7 @@ export interface RedteamFileConfig extends CommonOptions {
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   entities?: string[];
-  language: string;
+  language?: string | string[];
   maxConcurrency?: number;
   numTests: number;
   plugins: (RedteamPluginObject & { id: string; numTests: number })[];
@@ -212,6 +212,7 @@ export interface SavedRedteamConfig {
   extensions?: string[];
   numTests?: number;
   maxConcurrency?: number;
+  language?: string | string[];
   applicationDefinition: {
     purpose?: string;
     features?: string;

@@ -47,7 +47,7 @@ describe('handleModelGradedClosedQa', () => {
     const params: AssertionParams = {
       assertion: { type: 'model-graded-closedqa' },
       baseType: 'model-graded-closedqa',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: { vars: {} },
@@ -76,7 +76,7 @@ describe('handleModelGradedClosedQa', () => {
     const params: AssertionParams = {
       assertion: { type: 'model-graded-closedqa' },
       baseType: 'model-graded-closedqa',
-      context: {
+      assertionValueContext: {
         prompt: undefined,
         vars: {},
         test: { vars: {} },
@@ -105,7 +105,7 @@ describe('handleModelGradedClosedQa', () => {
     const params: AssertionParams = {
       assertion: { type: 'model-graded-closedqa' },
       baseType: 'model-graded-closedqa',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: { vars: {} },
@@ -139,7 +139,7 @@ describe('handleModelGradedClosedQa', () => {
     const params: AssertionParams = {
       assertion: { type: 'model-graded-closedqa' },
       baseType: 'model-graded-closedqa',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { var: 'value' },
         test: { vars: { var: 'value' } },
@@ -174,7 +174,7 @@ describe('handleModelGradedClosedQa', () => {
     const params: AssertionParams = {
       assertion: { type: 'model-graded-closedqa' },
       baseType: 'model-graded-closedqa',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { var: 'value' },
         test: { vars: { var: 'value' } },
@@ -210,6 +210,7 @@ describe('handleModelGradedClosedQa', () => {
       {
         var: 'value',
       },
+      undefined,
     );
 
     expect(result).toEqual({

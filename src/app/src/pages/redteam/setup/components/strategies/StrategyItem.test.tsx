@@ -152,7 +152,7 @@ describe('StrategyItem', () => {
     it('does not show settings button when not selected', () => {
       const configurableStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'multilingual',
+        id: 'jailbreak',
       };
 
       render(
@@ -172,7 +172,7 @@ describe('StrategyItem', () => {
     it('shows settings button for configurable strategies when selected', () => {
       const configurableStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'multilingual',
+        id: 'jailbreak',
       };
 
       render(
@@ -254,7 +254,7 @@ describe('StrategyItem', () => {
     it('calls onConfigClick when settings button is clicked', () => {
       const configurableStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'multilingual',
+        id: 'jailbreak',
       };
 
       render(
@@ -272,7 +272,7 @@ describe('StrategyItem', () => {
       const settingsButton = buttons[buttons.length - 1]; // Last button is settings
       fireEvent.click(settingsButton);
 
-      expect(mockOnConfigClick).toHaveBeenCalledWith('multilingual');
+      expect(mockOnConfigClick).toHaveBeenCalledWith('jailbreak');
       expect(mockOnToggle).not.toHaveBeenCalled(); // Should not toggle
     });
   });
@@ -281,7 +281,7 @@ describe('StrategyItem', () => {
     it('applies padding to title section when settings button is present', () => {
       const configurableStrategy: StrategyCardData = {
         ...baseStrategy,
-        id: 'multilingual',
+        id: 'jailbreak',
       };
 
       render(
@@ -328,7 +328,7 @@ describe('StrategyItem', () => {
       const longStrategyName =
         'This is an extremely long strategy name that should not break the layout';
       const configurableStrategy: StrategyCardData = {
-        id: 'multilingual',
+        id: 'jailbreak',
         name: longStrategyName,
         description: 'Test description',
       };

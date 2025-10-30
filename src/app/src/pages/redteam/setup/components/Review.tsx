@@ -1063,6 +1063,7 @@ export default function Review({
                         });
                       }
                     }}
+                    language={config.language}
                   />
                 </AccordionDetails>
               </Accordion>

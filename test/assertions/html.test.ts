@@ -9,7 +9,7 @@ const mockProvider: ApiProvider = {
 
 const defaultParams = {
   baseType: 'contains-html' as const,
-  context: {
+  assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
     prompt: 'test prompt',

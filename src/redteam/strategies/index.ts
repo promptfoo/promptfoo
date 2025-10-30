@@ -23,7 +23,6 @@ import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
-import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
@@ -257,15 +256,6 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'multilingual',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding multilingual test cases to ${testCases.length} test cases`);
-      const newTestCases = await addMultilingual(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} multilingual test cases`);
-      return newTestCases;
-    },
-  },
-  {
     id: 'prompt-injection',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding prompt injections to ${testCases.length} test cases`);
@@ -352,7 +342,10 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
 
     // Check if it's a custom strategy variant (e.g., custom:greeting-strategy)
     if (isCustomStrategy(strategy.id)) {
-      continue; // Custom strategies are always valid
+      if (!strategy.config?.strategyText || typeof strategy.config.strategyText !== 'string') {
+        throw new Error('Custom strategy requires strategyText in config');
+      }
+      continue;
     }
 
     if (!Strategies.map((s) => s.id).includes(strategy.id)) {

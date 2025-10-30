@@ -10,6 +10,7 @@ export const handleModelGradedClosedQa = async ({
   outputString,
   test,
   prompt,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
@@ -25,6 +26,13 @@ export const handleModelGradedClosedQa = async ({
 
   return {
     assertion,
-    ...(await matchesClosedQa(prompt, renderedValue, outputString, test.options, test.vars)),
+    ...(await matchesClosedQa(
+      prompt,
+      renderedValue,
+      outputString,
+      test.options,
+      test.vars,
+      providerCallContext,
+    )),
   };
 };

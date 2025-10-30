@@ -25,7 +25,7 @@ describe('handleRougeScore', () => {
     renderedValue: 'expected text',
     outputString: 'actual text',
     inverse: false,
-    context: {
+    assertionValueContext: {
       prompt: 'test prompt',
       vars: {},
       test: { assert: [mockAssertion] },

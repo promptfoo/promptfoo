@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
-import { FormControlLabel, Switch } from '@mui/material';
+import { FormControlLabel, Switch, Autocomplete, TextField, Chip } from '@mui/material';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
@@ -25,7 +25,33 @@ export const RUNOPTIONS_TEXT = {
     helper: 'The maximum number of concurrent requests to make to the target.',
     error: 'Max number of concurrent requests must be greater than 0',
   },
+  languages: {
+    helper:
+      'Specify languages to generate multilingual tests. Leave empty to generate tests only in English.',
+    label: 'Test Languages',
+  },
 } as const;
+
+// Common language suggestions for autocomplete
+const COMMON_LANGUAGES = [
+  'Arabic',
+  'Bengali',
+  'Chinese',
+  'Dutch',
+  'English',
+  'French',
+  'German',
+  'Hindi',
+  'Italian',
+  'Japanese',
+  'Korean',
+  'Portuguese',
+  'Russian',
+  'Spanish',
+  'Swedish',
+  'Turkish',
+  'Vietnamese',
+];
 
 const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
   return (
@@ -41,6 +67,7 @@ interface RunOptionsProps {
   updateConfig: (section: keyof Config, value: any) => void;
   updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  language?: string | string[];
 }
 
 export interface NumberOfTestCasesInputProps {
@@ -253,6 +280,7 @@ export const RunOptionsContent = ({
   runOptions,
   updateConfig,
   updateRunOption,
+  language,
 }: RunOptionsProps) => {
   // These two settings are mutually exclusive
   const canSetDelay = Boolean(!runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1);
@@ -268,6 +296,23 @@ export const RunOptionsContent = ({
   const [maxConcurrencyInput, setMaxConcurrencyInput] = useState<string>(
     runOptions?.maxConcurrency !== undefined ? String(runOptions.maxConcurrency) : '1',
   );
+
+  // Normalize language to array for Autocomplete
+  const languageArray = useMemo<string[]>(() => {
+    if (!language) {
+      return [];
+    }
+    return Array.isArray(language) ? language : [language];
+  }, [language]);
+
+  // Handler for language changes
+  const handleLanguageChange = useCallback(
+    (_event: unknown, newValue: string[]) => {
+      updateConfig('language', newValue.length > 0 ? newValue : undefined);
+    },
+    [updateConfig],
+  );
+
   return (
     <Stack spacing={3}>
       <NumberOfTestCasesInput
@@ -314,6 +359,27 @@ export const RunOptionsContent = ({
             </Typography>
           </Box>
         }
+      />
+      <Autocomplete
+        multiple
+        freeSolo
+        options={COMMON_LANGUAGES}
+        value={languageArray}
+        onChange={handleLanguageChange}
+        renderTags={(value, getTagProps) =>
+          value.map((option, index) => {
+            const { key, ...tagProps } = getTagProps({ index });
+            return <Chip key={key} label={option} {...tagProps} />;
+          })
+        }
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={RUNOPTIONS_TEXT.languages.label}
+            placeholder="Type and press Enter to add a language"
+            helperText={RUNOPTIONS_TEXT.languages.helper}
+          />
+        )}
       />
     </Stack>
   );

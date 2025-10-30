@@ -13,6 +13,7 @@ const orderRedTeam = (redteam: any): any => {
     'plugins',
     'testGenerationInstructions',
     'strategies',
+    'language',
     'numTests',
     'maxConcurrency',
   ] as const;

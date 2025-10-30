@@ -1092,8 +1092,18 @@
               "description": "Number of tests to generate"
             },
             "language": {
-              "type": "string",
-              "description": "Language of tests ot generate for this plugin"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ],
+              "description": "Language(s) of tests to generate for this plugin"
             },
             "entities": {
               "type": "array",
@@ -1167,6 +1177,7 @@
                           "gdpr:art32",
                           "gdpr:art5",
                           "gdpr:art9",
+                          "goal-misalignment",
                           "guardrails-eval",
                           "hallucination",
                           "harmbench",
@@ -1379,6 +1390,7 @@
                               "gdpr:art32",
                               "gdpr:art5",
                               "gdpr:art9",
+                              "goal-misalignment",
                               "guardrails-eval",
                               "hallucination",
                               "harmbench",

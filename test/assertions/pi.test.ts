@@ -40,7 +40,7 @@ describe('handlePiScorer', () => {
     const params: AssertionParams = {
       assertion: { type: 'pi' },
       baseType: 'pi',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: { vars: {} },
@@ -69,7 +69,7 @@ describe('handlePiScorer', () => {
     const params: AssertionParams = {
       assertion: { type: 'pi' },
       baseType: 'pi',
-      context: {
+      assertionValueContext: {
         prompt: undefined,
         vars: {},
         test: { vars: {} },
@@ -98,7 +98,7 @@ describe('handlePiScorer', () => {
     const params: AssertionParams = {
       assertion: { type: 'pi', value: 'test question' },
       baseType: 'pi',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { var: 'value' },
         test: { vars: { var: 'value' } },

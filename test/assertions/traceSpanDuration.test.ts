@@ -46,7 +46,7 @@ const mockTraceData: TraceData = {
 
 const defaultParams = {
   baseType: 'trace-span-duration' as const,
-  context: {
+  assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
     prompt: 'test prompt',
@@ -70,8 +70,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1500 },
       },
       renderedValue: { max: 1500 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'fast-trace',
           spans: [
@@ -100,8 +100,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1000 },
       },
       renderedValue: { max: 1000 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -124,8 +124,8 @@ describe('handleTraceSpanDuration', () => {
         value: { pattern: '*llm*', max: 1000 },
       },
       renderedValue: { pattern: '*llm*', max: 1000 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -147,8 +147,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 2000, percentile: 90 },
       },
       renderedValue: { max: 2000, percentile: 90 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -172,8 +172,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1500, percentile: 50 },
       },
       renderedValue: { max: 1500, percentile: 50 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -196,8 +196,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1000 },
       },
       renderedValue: { max: 1000 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'incomplete-trace',
           spans: [
@@ -225,8 +225,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1000 },
       },
       renderedValue: { max: 1000 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: { traceId: 'empty-trace', spans: [] },
       },
     };
@@ -263,8 +263,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 100 },
       },
       renderedValue: { max: 100 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -284,8 +284,8 @@ describe('handleTraceSpanDuration', () => {
       ...defaultParams,
       assertion: { type: 'trace-span-duration', value: 'invalid' },
       renderedValue: 'invalid',
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -300,8 +300,8 @@ describe('handleTraceSpanDuration', () => {
       ...defaultParams,
       assertion: { type: 'trace-span-duration', value: { pattern: '*' } },
       renderedValue: { pattern: '*' },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -319,8 +319,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1000, percentile: 95 },
       },
       renderedValue: { max: 1000, percentile: 95 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'single-span',
           spans: [{ spanId: '1', name: 'single.op', startTime: 0, endTime: 750 }],

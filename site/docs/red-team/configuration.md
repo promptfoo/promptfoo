@@ -45,7 +45,7 @@ redteam:
   injectVar: string
   provider: string | ProviderOptions
   purpose: string
-  language: string
+  language: string | string[]
   testGenerationInstructions: string
 ```
 
@@ -59,7 +59,7 @@ redteam:
 | `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1`                |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
-| `language`                   | `string`                  | Language for generated tests                                             | English                         |
+| `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)      | English                         |
 | `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation     | Empty                           |
 
 ### Plugin Configuration
@@ -535,14 +535,41 @@ redteam:
 
 ### Language
 
-The `language` field allows you to specify the language for generated tests. If not provided, the default language is English. This can be useful for testing your model's behavior in different languages or for generating adversarial inputs in specific languages.
+The `language` field allows you to specify the language(s) for generated tests. If not provided, the default language is English. This setting applies globally to all plugins and strategies, ensuring consistent multilingual testing across your entire red team evaluation.
 
-Example usage:
+#### Single Language
+
+Test your application in a specific language:
 
 ```yaml
 redteam:
   language: 'German'
 ```
+
+#### Multiple Languages
+
+Test across multiple languages using an array. This is particularly valuable for identifying safety vulnerabilities, as [research](https://arxiv.org/abs/2307.02477) shows that many LLMs have weaker safety protections in non-English languages:
+
+```yaml
+redteam:
+  language:
+    - 'Spanish'
+    - 'French'
+    - 'German'
+```
+
+You can use full language names or ISO 639-1 language codes:
+
+```yaml
+redteam:
+  language: ['en', 'es', 'fr', 'de', 'zh']
+```
+
+When multiple languages are specified, test cases are generated for each language, significantly increasing coverage and the likelihood of discovering language-specific vulnerabilities.
+
+:::tip
+Testing in "low-resource" languages (languages with less training data) often reveals safety vulnerabilities that are well-defended in English. Consider including languages like Bengali (`bn`), Swahili (`sw`), or Javanese (`jv`) in your test suite.
+:::
 
 ## Providers
 
@@ -846,7 +873,7 @@ redteam:
     - 'competitors'
   strategies:
     - 'jailbreak'
-  language: 'Spanish'
+  language: ['en', 'es', 'fr'] # Test in English, Spanish, and French
 ```
 
 ### Advanced Configuration
@@ -856,7 +883,7 @@ redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
   provider: 'openai:chat:gpt-4.1'
-  language: 'French'
+  language: ['en', 'fr', 'es', 'de'] # Test in multiple languages
   numTests: 20
   testGenerationInstructions: |
     Focus on attacks that attempt to bypass content filters and safety measures.

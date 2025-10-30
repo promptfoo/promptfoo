@@ -114,19 +114,6 @@ redteam:
 
 ### Advanced Configuration
 
-Some strategies allow you to specify options in the configuration object. For example, the `multilingual` strategy allows you to specify the languages to use.
-
-```yaml title="promptfooconfig.yaml"
-redteam:
-  strategies:
-    - id: multilingual
-      config:
-        languages:
-          - french
-          - zh-CN # Chinese (IETF)
-          - de # German (ISO 639-1)
-```
-
 Strategies can be applied to specific plugins or the entire test suite. By default, strategies are applied to all plugins. You can override this by specifying the `plugins` option in the strategy which will only apply the strategy to the specified plugins.
 
 ```yaml title="promptfooconfig.yaml"
@@ -148,15 +135,15 @@ redteam:
     - id: layer
       config:
         steps:
-          - { id: multilingual, config: { languages: ['es', 'fr'] } }
-          - rot13
+          - base64 # First encode as base64
+          - rot13 # Then apply ROT13
 ```
 
 Notes:
 
 - Each step respects plugin targeting and exclusions.
-- Only the final step’s outputs are kept.
-- To avoid overcounting, don’t also include top‑level `multilingual` when it already exists inside a layer.
+- Only the final step's outputs are kept.
+- Transformations are applied in the order specified.
 
 ### Custom Strategies
 

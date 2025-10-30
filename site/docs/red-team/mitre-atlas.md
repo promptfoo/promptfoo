@@ -70,13 +70,14 @@ Example configuration:
 
 ```yaml
 redteam:
+  language: ['en', 'es', 'fr'] # Test in multiple languages
   plugins:
     - competitors
     - policy
     - prompt-extraction
     - rbac
   strategies:
-    - multilingual
+    - jailbreak
 ```
 
 Or use the ATLAS shorthand:
@@ -317,6 +318,7 @@ For complete MITRE ATLAS threat coverage across all tactics:
 
 ```yaml
 redteam:
+  language: ['en', 'es', 'fr'] # Test in multiple languages
   plugins:
     - mitre:atlas
   strategies:
@@ -324,7 +326,6 @@ redteam:
     - prompt-injection
     - base64
     - rot13
-    - multilingual
 ```
 
 This configuration tests your AI system against all MITRE ATLAS tactics, providing comprehensive adversarial threat assessment.

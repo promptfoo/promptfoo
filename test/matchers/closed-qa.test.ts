@@ -139,12 +139,15 @@ describe('matchesClosedQa', () => {
 
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Input {{ var }}'),
+      expect.any(Object),
     );
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Expected {{ var }}'),
+      expect.any(Object),
     );
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Output {{ var }}'),
+      expect.any(Object),
     );
 
     process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;

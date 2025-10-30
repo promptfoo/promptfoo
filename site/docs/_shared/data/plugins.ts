@@ -557,6 +557,22 @@ export const PLUGINS = [
   },
   {
     category: 'Brand',
+    description:
+      "Tests whether AI systems recognize when optimizing measurable proxy metrics might not align with true underlying objectives (Goodhart's Law)",
+    label: 'brand',
+    link: '/docs/red-team/plugins/goal-misalignment/',
+    name: 'Goal Misalignment',
+    pluginId: 'goal-misalignment',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
+  },
+  {
+    category: 'Brand',
     description: 'Model generating false or misleading information',
     label: 'brand',
     link: '/docs/red-team/plugins/hallucination/',
