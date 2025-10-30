@@ -26,6 +26,7 @@ import {
 } from './pluginDocumentationMap';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import Skeleton from '@mui/material/Skeleton';
+import Chip from '@mui/material/Chip';
 
 interface TestCaseDialogProps {
   open: boolean;
@@ -44,7 +45,7 @@ const Section = ({ label, text, loading }: { label: string; text: string; loadin
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
-        {label}:
+        {label}
       </Typography>
       <Box
         sx={{
@@ -97,11 +98,23 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        Test Case for {strategyDisplayName} / {pluginDisplayName}
+      <DialogTitle
+        sx={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1,
+        }}
+      >
+        <Typography variant="h6">Test Case</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Chip label={`Strategy: ${strategyDisplayName}`} />
+          <Chip label={`Plugin: ${pluginDisplayName}`} />
+        </Box>
       </DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Section label="Test Case" text={generatedTestCase?.prompt ?? ''} loading={isGenerating} />
+        <Section label="Prompt" text={generatedTestCase?.prompt ?? ''} loading={isGenerating} />
         <Section
           label="Target Response"
           text={targetResponse?.output ?? ''}
