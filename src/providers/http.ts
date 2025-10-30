@@ -596,6 +596,16 @@ const TokenEstimationConfigSchema = z.object({
   multiplier: z.number().min(0.01).default(1.3),
 });
 
+// Tool configuration for HTTP providers
+const ToolConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  toolsField: z.string().default('tools'),
+  toolCallsField: z.string().default('tool_calls'),
+  format: z
+    .enum(['openai-completions', 'openai-responses', 'anthropic', 'custom'])
+    .default('openai-completions'),
+});
+
 // Base signature auth fields
 const BaseSignatureAuthSchema = z.object({
   signatureValidityMs: z.number().default(300000),
@@ -772,6 +782,8 @@ export const HttpProviderConfigSchema = z.object({
   responseParser: z.union([z.string(), z.function()]).optional(),
   // Token estimation configuration
   tokenEstimation: TokenEstimationConfigSchema.optional(),
+  // Tool calling configuration for agent providers
+  toolConfig: ToolConfigSchema.optional(),
   // Digital Signature Authentication with support for multiple certificate types
   signatureAuth: z
     .union([
@@ -1545,16 +1557,44 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
+    let requestBody = determineRequestBody(
+      contentTypeIsJson(headers),
+      transformedPrompt,
+      this.config.body,
+      vars,
+    );
+
+    // Add tools to request if toolConfig is enabled and tools are provided
+    logger.debug(
+      `[HTTP Provider]: Tool config check - enabled: ${this.config.toolConfig?.enabled}, hasTools: ${!!vars.tools}, toolsCount: ${Array.isArray(vars.tools) ? vars.tools.length : 0}, bodyType: ${typeof requestBody}, isArray: ${Array.isArray(requestBody)}`,
+    );
+
+    if (this.config.toolConfig?.enabled && vars.tools) {
+      const toolsField = this.config.toolConfig.toolsField || 'tools';
+      if (typeof requestBody === 'object' && requestBody !== null && !Array.isArray(requestBody)) {
+        requestBody = {
+          ...requestBody,
+          [toolsField]: vars.tools,
+        };
+        logger.debug(
+          `[HTTP Provider]: Added ${Array.isArray(vars.tools) ? vars.tools.length : 0} tools to request body field "${toolsField}"`,
+        );
+      } else {
+        logger.warn(
+          `[HTTP Provider]: Cannot add tools to non-object request body. toolConfig.enabled: ${this.config.toolConfig?.enabled}, bodyType: ${typeof requestBody}, isArray: ${Array.isArray(requestBody)}`,
+        );
+      }
+    } else if (this.config.toolConfig?.enabled) {
+      logger.warn(
+        `[HTTP Provider]: toolConfig enabled but no tools provided in vars. hasVarsTools: ${!!vars.tools}`,
+      );
+    }
+
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
       method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
       headers,
-      body: determineRequestBody(
-        contentTypeIsJson(headers),
-        transformedPrompt,
-        this.config.body,
-        vars,
-      ),
+      body: requestBody,
       queryParams: this.config.queryParams
         ? Object.fromEntries(
             Object.entries(this.config.queryParams).map(([key, value]) => [
@@ -1691,6 +1731,28 @@ export class HttpProvider implements ApiProvider {
       );
       throw err;
     }
+
+    // Extract tool calls if toolConfig is enabled
+    if (this.config.toolConfig?.enabled && parsedData) {
+      try {
+        const toolCalls = this.parseToolCalls(parsedData, this.config.toolConfig);
+        if (toolCalls && toolCalls.length > 0) {
+          ret.metadata = ret.metadata || {};
+          ret.metadata.toolCalls = toolCalls;
+          logger.debug(
+            `[HTTP Provider]: Extracted ${toolCalls.length} tool call(s) from response, added to ret.metadata`,
+          );
+          logger.debug(`[HTTP Provider]: ret.metadata after adding toolCalls:`, {
+            metadata: ret.metadata,
+          });
+        } else {
+          logger.debug(`[HTTP Provider]: No tool calls found in response`);
+        }
+      } catch (err) {
+        logger.warn(`[HTTP Provider]: Failed to parse tool calls: ${String(err)}`);
+      }
+    }
+
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
@@ -1836,6 +1898,137 @@ export class HttpProvider implements ApiProvider {
   }
 
   /**
+   * Parses tool calls from response based on configured format
+   */
+  private parseToolCalls(
+    responseData: any,
+    toolConfig: { toolCallsField: string; format: string },
+  ): any[] | null {
+    if (!responseData || typeof responseData !== 'object') {
+      return null;
+    }
+
+    const format = toolConfig.format || 'openai-completions';
+
+    switch (format) {
+      case 'openai-completions': {
+        // OpenAI Chat Completions API format
+        // Tool calls in separate field: {tool_calls: [{id, type: "function", function: {name, arguments}}]}
+        const toolCallsField = toolConfig.toolCallsField || 'tool_calls';
+        const rawToolCalls = responseData[toolCallsField];
+
+        if (!rawToolCalls || !Array.isArray(rawToolCalls) || rawToolCalls.length === 0) {
+          return null;
+        }
+
+        return rawToolCalls.map((tc) => ({
+          id: tc.id,
+          type: tc.type || 'function',
+          function: {
+            name: tc.function?.name || tc.name,
+            arguments:
+              typeof tc.function?.arguments === 'string'
+                ? tc.function.arguments
+                : JSON.stringify(tc.function?.arguments || tc.arguments || {}),
+          },
+        }));
+      }
+
+      case 'openai-responses': {
+        // OpenAI Responses API format
+        // Tool calls in output array: {output: [{type: "function_call", call_id, name, arguments}]}
+        const outputField = toolConfig.toolCallsField || 'output';
+        const outputArray = responseData[outputField];
+
+        if (!outputArray || !Array.isArray(outputArray) || outputArray.length === 0) {
+          return null;
+        }
+
+        // Filter for function_call items
+        const functionCalls = outputArray.filter((item) => item.type === 'function_call');
+
+        if (functionCalls.length === 0) {
+          return null;
+        }
+
+        // Convert to standard format
+        return functionCalls.map((tc) => ({
+          id: tc.call_id || tc.id,
+          type: 'function',
+          function: {
+            name: tc.name,
+            arguments: typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments || {}),
+          },
+        }));
+      }
+
+      case 'anthropic': {
+        // Anthropic format: [{id, name, input, type: "tool_use"}]
+        const toolCallsField = toolConfig.toolCallsField || 'tool_calls';
+        const rawToolCalls = responseData[toolCallsField];
+
+        if (!rawToolCalls || !Array.isArray(rawToolCalls) || rawToolCalls.length === 0) {
+          return null;
+        }
+
+        return rawToolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function',
+          function: {
+            name: tc.name,
+            arguments: typeof tc.input === 'string' ? tc.input : JSON.stringify(tc.input || {}),
+          },
+        }));
+      }
+
+      case 'custom': {
+        // Custom format: flexible parsing
+        const toolCallsField = toolConfig.toolCallsField || 'tool_calls';
+        const rawToolCalls = responseData[toolCallsField];
+
+        if (!rawToolCalls || !Array.isArray(rawToolCalls) || rawToolCalls.length === 0) {
+          return null;
+        }
+
+        return rawToolCalls.map((tc: any) => {
+          // If it already looks like OpenAI format, use it
+          if (tc.function?.name || tc.type === 'function') {
+            return {
+              id: tc.id || `tool-${Math.random().toString(36).substring(7)}`,
+              type: tc.type || 'function',
+              function: {
+                name: tc.function?.name || tc.name,
+                arguments:
+                  typeof tc.function?.arguments === 'string'
+                    ? tc.function.arguments
+                    : JSON.stringify(tc.function?.arguments || tc.arguments || {}),
+              },
+            };
+          }
+          // Otherwise assume it's a simpler format with name and input/arguments
+          return {
+            id: tc.id || `tool-${Math.random().toString(36).substring(7)}`,
+            type: 'function',
+            function: {
+              name: tc.name,
+              arguments:
+                typeof tc.arguments === 'string'
+                  ? tc.arguments
+                  : typeof tc.input === 'string'
+                    ? tc.input
+                    : JSON.stringify(tc.input || tc.arguments || {}),
+            },
+          };
+        });
+      }
+
+      default:
+        logger.warn(`[HTTP Provider]: Unknown tool call format: ${format}`);
+        return null;
+    }
+  }
+
+  /**
    * Extracts completion text from parsed output with fallback to raw text
    */
   private getCompletionText(parsedOutput: any, rawText: string): string {
@@ -1870,6 +2063,11 @@ export class HttpProvider implements ApiProvider {
       const result = {
         ...ret,
         ...parsedOutput,
+        // Preserve metadata from ret (contains toolCalls if extracted)
+        metadata: {
+          ...parsedOutput.metadata,
+          ...ret.metadata,
+        },
       };
       // Add estimated token usage if available and not already present
       if (!result.tokenUsage) {

@@ -5107,6 +5107,287 @@ describe('HttpProvider - Sanitization', () => {
       expect(sanitizeUrl(undefined as any)).toBeUndefined();
     });
   });
+
+  describe('Tool Config Support', () => {
+    const mockUrl = 'http://example.com/api';
+
+    it('should include tools in request when toolConfig is enabled', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { prompt: '{{prompt}}' },
+          toolConfig: {
+            enabled: true,
+            toolsField: 'tools',
+            toolCallsField: 'tool_calls',
+            format: 'openai-completions',
+          },
+        },
+      });
+
+      const mockTools = [
+        {
+          type: 'function',
+          function: {
+            name: 'test_tool',
+            description: 'A test tool',
+            parameters: {
+              type: 'object',
+              properties: {},
+            },
+          },
+        },
+      ];
+
+      const mockResponse = {
+        data: JSON.stringify({ response: 'test' }),
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test' },
+        vars: { tools: mockTools },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalled();
+      const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
+      const fetchOptions = callArgs?.[1];
+      expect(fetchOptions).toBeDefined();
+      const requestBody = JSON.parse(fetchOptions!.body as string);
+
+      expect(requestBody.tools).toEqual(mockTools);
+      expect(requestBody.prompt).toBe('test prompt');
+    });
+
+    it('should parse tool calls from response in OpenAI Chat Completions format', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { prompt: '{{prompt}}' },
+          toolConfig: {
+            enabled: true,
+            toolsField: 'tools',
+            toolCallsField: 'tool_calls',
+            format: 'openai-completions',
+          },
+        },
+      });
+
+      const mockToolCalls = [
+        {
+          id: 'call_123',
+          type: 'function',
+          function: {
+            name: 'test_tool',
+            arguments: '{"param": "value"}',
+          },
+        },
+      ];
+
+      const mockResponse = {
+        data: JSON.stringify({
+          response: 'test response',
+          tool_calls: mockToolCalls,
+        }),
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.metadata?.toolCalls).toEqual(mockToolCalls);
+    });
+
+    it('should parse tool calls from response in OpenAI Responses API format', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { input: '{{messages}}' },
+          toolConfig: {
+            enabled: true,
+            toolsField: 'tools',
+            toolCallsField: 'output',
+            format: 'openai-responses',
+          },
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({
+          id: 'resp_123',
+          status: 'completed',
+          output: [
+            {
+              type: 'function_call',
+              call_id: 'call_456',
+              name: 'test_tool',
+              arguments: '{"param": "value"}',
+            },
+          ],
+        }),
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.metadata?.toolCalls).toBeDefined();
+      expect(result.metadata?.toolCalls?.[0]).toEqual({
+        id: 'call_456',
+        type: 'function',
+        function: {
+          name: 'test_tool',
+          arguments: '{"param": "value"}',
+        },
+      });
+    });
+
+    it('should parse tool calls from response in Anthropic format', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { prompt: '{{prompt}}' },
+          toolConfig: {
+            enabled: true,
+            toolsField: 'tools',
+            toolCallsField: 'tool_calls',
+            format: 'anthropic',
+          },
+        },
+      });
+
+      const mockAnthropicToolCalls = [
+        {
+          id: 'toolu_123',
+          type: 'tool_use',
+          name: 'test_tool',
+          input: { param: 'value' },
+        },
+      ];
+
+      const mockResponse = {
+        data: JSON.stringify({
+          content: 'test response',
+          tool_calls: mockAnthropicToolCalls,
+        }),
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.metadata?.toolCalls).toBeDefined();
+      expect(result.metadata?.toolCalls?.[0]).toEqual({
+        id: 'toolu_123',
+        type: 'function',
+        function: {
+          name: 'test_tool',
+          arguments: '{"param":"value"}',
+        },
+      });
+    });
+
+    it('should not include tools when toolConfig is disabled', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { prompt: '{{prompt}}' },
+          toolConfig: {
+            enabled: false,
+          },
+        },
+      });
+
+      const mockTools = [{ type: 'function', function: { name: 'test' } }];
+
+      const mockResponse = {
+        data: JSON.stringify({ response: 'test' }),
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test' },
+        vars: { tools: mockTools },
+      });
+
+      const callArgs = jest.mocked(fetchWithCache).mock.calls[0];
+      const fetchOptions = callArgs?.[1];
+      expect(fetchOptions).toBeDefined();
+      const requestBody = JSON.parse(fetchOptions!.body as string);
+
+      expect(requestBody.tools).toBeUndefined();
+    });
+
+    it('should handle custom tool format', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { prompt: '{{prompt}}' },
+          toolConfig: {
+            enabled: true,
+            toolsField: 'tools',
+            toolCallsField: 'tool_calls',
+            format: 'custom',
+          },
+        },
+      });
+
+      const mockCustomToolCalls = [
+        {
+          id: 'custom_123',
+          name: 'custom_tool',
+          input: { custom_param: 'custom_value' },
+        },
+      ];
+
+      const mockResponse = {
+        data: JSON.stringify({
+          response: 'test',
+          tool_calls: mockCustomToolCalls,
+        }),
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        cached: false,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.metadata?.toolCalls).toBeDefined();
+      expect(result.metadata?.toolCalls?.[0]).toMatchObject({
+        id: 'custom_123',
+        type: 'function',
+        function: {
+          name: 'custom_tool',
+          arguments: expect.stringContaining('custom_param'),
+        },
+      });
+    });
+  });
 });
 
 // Cleanup console mock
