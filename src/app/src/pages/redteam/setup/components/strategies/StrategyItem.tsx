@@ -207,7 +207,7 @@ export function StrategyItem({
           disabled={isDisabled || generatingTestCase}
           isGenerating={generatingTestCase && currentStrategy === strategy.id}
           size="small"
-          tooltipTitle={`Generate a test case for ${strategy.name} Strategy with ${TEST_GENERATION_PLUGIN_DISPLAY_NAME} plugin`}
+          tooltipTitle={`Generate an example test case using the ${strategy.name} Strategy.`}
         />
 
         {/* Settings button - positioned absolutely in the top-right corner */}
