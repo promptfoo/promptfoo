@@ -458,14 +458,11 @@ export const CustomPoliciesSection = () => {
       await generateTestCase(
         { id: 'policy', config: { policy: row.policyText } },
         { id: 'basic', config: {} },
-        {
-          telemetryFeature: 'redteam_policy_generate_test_case',
-          onSuccess: () => {
-            setGeneratingPolicyId(null);
-          },
-          onError: () => {
-            setGeneratingPolicyId(null);
-          },
+        function onSuccess() {
+          setGeneratingPolicyId(null);
+        },
+        function onError() {
+          setGeneratingPolicyId(null);
         },
       );
     },

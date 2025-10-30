@@ -376,10 +376,7 @@ export default function PluginsTab({
       else {
         await generateTestCase(
           { id: plugin, config: pluginConfig[plugin] ?? {} },
-          { id: 'basic', config: {} },
-          {
-            telemetryFeature: 'redteam_plugin_generate_test_case',
-          },
+          { id: 'basic', config: {} }
         );
       }
     },

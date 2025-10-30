@@ -45,7 +45,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   isGenerating,
   generatedTestCase,
   targetResponse,
-  isRunningTest = false
+  isRunningTest = false,
 }) => {
   const theme = useTheme();
 

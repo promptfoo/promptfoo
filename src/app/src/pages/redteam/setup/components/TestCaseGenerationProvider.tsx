@@ -19,12 +19,6 @@ interface TargetResponse {
   error?: string;
 }
 
-interface GenerateOptions {
-  telemetryFeature?: string;
-  onSuccess?: (testCase: GeneratedTestCase) => void;
-  onError?: (error: Error) => void;
-}
-
 interface TargetPlugin {
   id: Plugin;
   config: PluginConfig;
@@ -33,6 +27,9 @@ interface TargetStrategy {
   id: Strategy;
   config: StrategyConfig;
 }
+
+type OnGenerationSuccess = (testCase: GeneratedTestCase) => void;
+type OnGenerationError = (error: Error) => void;
 
 interface TestCaseGenerationContextValue {
   // State
@@ -43,7 +40,8 @@ interface TestCaseGenerationContextValue {
   generateTestCase: (
     plugin: TargetPlugin,
     strategy: TargetStrategy,
-    options?: GenerateOptions,
+    onSuccess?: OnGenerationSuccess,
+    onError?: OnGenerationError,
   ) => Promise<void>;
 }
 
@@ -72,7 +70,12 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
   const toast = useToast();
 
   const generateTestCase = useCallback(
-    async (plugin: TargetPlugin, strategy: TargetStrategy, options: GenerateOptions = {}) => {
+    async (
+      plugin: TargetPlugin,
+      strategy: TargetStrategy,
+      onSuccess?: OnGenerationSuccess,
+      onError?: OnGenerationError,
+    ) => {
       setCurrentPlugin(plugin.id);
       setCurrentStrategy(strategy.id);
       setGeneratedTestCase(null);
@@ -81,7 +84,7 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
 
       try {
         recordEvent('feature_used', {
-          feature: options.telemetryFeature || 'redteam_generate_test_case',
+          feature: 'redteam_generate_test_case',
           plugin: plugin.id,
           strategy: strategy.id,
         });
@@ -157,7 +160,7 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
           }
         }
 
-        options.onSuccess?.(testCase);
+        onSuccess?.(testCase);
       } catch (error) {
         console.error('Failed to generate test case:', error);
         const errorMessage =
@@ -170,7 +173,7 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
         toast.showToast(errorMessage, 'error');
         setIsDialogOpen(false);
         setCurrentPlugin(null);
-        options.onError?.(error as Error);
+        onError?.(error as Error);
       } finally {
         setIsGenerating(false);
       }

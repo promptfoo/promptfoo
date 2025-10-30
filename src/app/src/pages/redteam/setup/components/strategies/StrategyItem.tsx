@@ -65,8 +65,7 @@ export function StrategyItem({
   const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(
       { id: TEST_GENERATION_PLUGIN, config: {} },
-      { id: strategy.id, config: strategyConfig },
-      { telemetryFeature: 'redteam_strategy_generate_test_case' },
+      { id: strategy.id, config: strategyConfig }
     );
   }, [strategyConfig, generateTestCase, strategy.id]);
 
