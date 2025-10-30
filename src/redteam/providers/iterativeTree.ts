@@ -399,13 +399,15 @@ export interface TreeSearchOutput {
   sessionId?: string; // Session ID for this specific attempt
 }
 
+type StopReason = 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+
 /**
  * Represents metadata for the iterative tree search process.
  */
 interface TreeIterativeMetadata extends BaseRedteamMetadata {
   highestScore: number;
   redteamFinalPrompt?: string;
-  stopReason: 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+  stopReason: StopReason;
   attempts: number;
   redteamTreeHistory: TreeSearchOutput[];
   storedGraderResult?: GradingResult;
@@ -492,8 +494,7 @@ async function runRedteamConversation({
 
   let bestResponse = '';
 
-  let stoppingReason: 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED' =
-    'MAX_DEPTH';
+  let stoppingReason: StopReason = 'MAX_DEPTH';
 
   const treeOutputs: TreeSearchOutput[] = [];
   let lastResponse: TargetResponse | undefined = undefined;
