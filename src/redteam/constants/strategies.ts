@@ -35,6 +35,7 @@ export const AGENTIC_STRATEGIES = [
   'custom',
   'jailbreak',
   'jailbreak:tree',
+  'jailbreak:iterative-tools',
   'mischievous-user',
   'simba',
 ] as const;
@@ -68,6 +69,7 @@ export const ADDITIONAL_STRATEGIES = [
   'hex',
   'homoglyph',
   'image',
+  'jailbreak:iterative-tools',
   'jailbreak:likert',
   'jailbreak:meta',
   'jailbreak:tree',
@@ -112,6 +114,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'crescendo',
   'jailbreak',
   'jailbreak:tree',
+  'jailbreak:iterative-tools',
   'gcg',
   'citation',
   'custom',
@@ -184,5 +187,5 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'jailbreak:composite',
   'jailbreak:likert',
   'jailbreak:meta',
-  'jailbreak:websearch',
+  // Note: jailbreak:websearch supports both remote and local modes
 ] as const;

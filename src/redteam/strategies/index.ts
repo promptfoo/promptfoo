@@ -226,6 +226,15 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'jailbreak:iterative-tools',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding tool-enhanced iterative jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tools', config);
+      logger.debug(`Added ${newTestCases.length} tool-enhanced iterative jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'image',
     action: async (testCases, injectVar) => {
       logger.debug(`Adding image encoding to ${testCases.length} test cases`);

@@ -3,7 +3,12 @@ import type { TestCase } from '../../types/index';
 export function addIterativeJailbreaks(
   testCases: TestCase[],
   injectVar: string,
-  strategy: 'iterative' | 'iterative:tree' | 'iterative:meta' | 'iterative:websearch' = 'iterative',
+  strategy:
+    | 'iterative'
+    | 'iterative:tree'
+    | 'iterative:meta'
+    | 'iterative:websearch'
+    | 'iterative:tools' = 'iterative',
   config: Record<string, any>,
 ): TestCase[] {
   const providerName =
@@ -13,7 +18,9 @@ export function addIterativeJailbreaks(
         ? 'promptfoo:redteam:iterative:tree'
         : strategy === 'iterative:meta'
           ? 'promptfoo:redteam:iterative:meta'
-          : 'promptfoo:redteam:iterative:websearch';
+          : strategy === 'iterative:websearch'
+            ? 'promptfoo:redteam:iterative:websearch'
+            : 'promptfoo:redteam:iterative:tools';
 
   const metricSuffix =
     strategy === 'iterative'
@@ -22,7 +29,9 @@ export function addIterativeJailbreaks(
         ? 'IterativeTree'
         : strategy === 'iterative:meta'
           ? 'IterativeMeta'
-          : 'IterativeWebsearch';
+          : strategy === 'iterative:websearch'
+            ? 'IterativeWebsearch'
+            : 'IterativeTools';
 
   const strategyId =
     strategy === 'iterative'
@@ -31,7 +40,9 @@ export function addIterativeJailbreaks(
         ? 'jailbreak:tree'
         : strategy === 'iterative:meta'
           ? 'jailbreak:meta'
-          : 'jailbreak:websearch';
+          : strategy === 'iterative:websearch'
+            ? 'jailbreak:websearch'
+            : 'jailbreak:iterative-tools';
 
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
