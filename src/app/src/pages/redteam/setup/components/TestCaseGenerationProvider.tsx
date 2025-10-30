@@ -186,7 +186,7 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
       const testCase = generatedTestCase;
       // Guard: if test case was reset (e.g., by a new generation), abort execution
       if (!testCase) return;
-      
+
       // Run against target if configured
       setIsRunningTest(true);
       setTargetResponse(null);
@@ -295,10 +295,17 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
     [shouldEvaluateAgainstTarget, resetState],
   );
 
-  const closeDialog = useCallback(() => {
+  const handleCloseDialog = useCallback(() => {
     setIsDialogOpen(false);
     resetState();
   }, [resetState]);
+
+  /**
+   * Regenerates and optionally evaluates the plugin/strategy combination.
+   */
+  const handleRegenerate = useCallback(() => {
+    generateTestCase(plugin!, strategy!);
+  }, [generateTestCase, plugin, strategy]);
 
   return (
     <TestCaseGenerationContext.Provider
@@ -312,7 +319,8 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
       {children}
       <TestCaseDialog
         open={isDialogOpen}
-        onClose={closeDialog}
+        onClose={handleCloseDialog}
+        onRegenerate={handleRegenerate}
         plugin={plugin?.id ?? null}
         strategy={strategy?.id ?? null}
         isGenerating={isGenerating}

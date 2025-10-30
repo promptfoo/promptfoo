@@ -36,6 +36,7 @@ interface TestCaseDialogProps {
   generatedTestCase: { prompt: string; context?: string } | null;
   targetResponse?: { output: string; error?: string } | null;
   isRunningTest?: boolean;
+  onRegenerate: () => void;
 }
 
 const Section = ({ label, text, loading }: { label: string; text: string; loading: boolean }) => {
@@ -83,6 +84,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   generatedTestCase,
   targetResponse,
   isRunningTest = false,
+  onRegenerate,
 }) => {
   const pluginName = typeof plugin === 'string' ? plugin : plugin || '';
   const pluginDisplayName =
@@ -139,7 +141,12 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
             </Link>
           </Box>
         )}
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={onRegenerate} variant="contained" loading={isGenerating || isRunningTest}>
+          Regenerate
+        </Button>
+        <Button onClick={onClose} variant="outlined">
+          Close
+        </Button>
       </DialogActions>
     </Dialog>
   );
