@@ -7,7 +7,7 @@
  * both values (e.g., "15 passing (100 total)"). When no filters are active, filtered will be null.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { PromptMetrics } from '@promptfoo/types';
 
 import { useTableStore } from './store';
@@ -36,14 +36,14 @@ export interface MetricsData {
 export function usePassingTestCounts(): MetricValue[] {
   const { table, filteredMetrics } = useTableStore();
 
-  return table
-    ? useMemo(() => {
-        return table.head.prompts.map((prompt, idx) => ({
+  return useMemo(() => {
+    return table
+      ? table.head.prompts.map((prompt, idx) => ({
           total: prompt.metrics?.testPassCount || 0,
           filtered: filteredMetrics?.[idx]?.testPassCount ?? null,
-        }));
-      }, [table.head.prompts, filteredMetrics])
-    : [];
+        }))
+      : [];
+  }, [table, table?.head.prompts, filteredMetrics]);
 }
 
 /**
@@ -54,9 +54,9 @@ export function usePassingTestCounts(): MetricValue[] {
 export function useTestCounts(): MetricValue[] {
   const { table, filteredMetrics } = useTableStore();
 
-  return table
-    ? useMemo(() => {
-        return table.head.prompts.map((prompt, idx) => {
+  return useMemo(() => {
+    return table
+      ? table.head.prompts.map((prompt, idx) => {
           const totalCount =
             (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0);
           const filteredCount = filteredMetrics?.[idx]
@@ -67,9 +67,9 @@ export function useTestCounts(): MetricValue[] {
             total: totalCount,
             filtered: filteredCount,
           };
-        });
-      }, [table.head.prompts, filteredMetrics])
-    : [];
+        })
+      : [];
+  }, [table, table?.head.prompts, filteredMetrics]);
 }
 
 /**
@@ -115,7 +115,7 @@ export function usePassRates(): MetricValue[] {
 export function useMetricsGetter() {
   const { table, filteredMetrics } = useTableStore();
 
-  return useMemo(() => {
+  return useCallback(() => {
     return (promptIdx: number): MetricsData => {
       if (!table || promptIdx < 0 || promptIdx >= table.head.prompts.length) {
         return { total: null, filtered: null };
