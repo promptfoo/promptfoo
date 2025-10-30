@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useState, useEffect, useRef } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -34,8 +34,8 @@ type OnGenerationError = (error: Error) => void;
 interface TestCaseGenerationContextValue {
   // State
   isGenerating: boolean;
-  currentPlugin: Plugin | null;
-  currentStrategy: Strategy | null;
+  plugin: Plugin | null;
+  strategy: Strategy | null;
   // Methods
   generateTestCase: (
     plugin: TargetPlugin,
@@ -54,39 +54,51 @@ interface TestCaseGenerationProviderProps {
   redTeamConfig: Config;
 }
 
+/**
+ * Orchestrates test case generation and target test execution. Generation and execution are run in
+ * separate effects to allow for independent view updates at each stage.
+ */
 export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProps> = ({
   children,
   redTeamConfig,
 }) => {
+  // Test case generation state
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedTestCase, setGeneratedTestCase] = useState<GeneratedTestCase | null>(null);
+  // Target test execution state
   const [targetResponse, setTargetResponse] = useState<TargetResponse | null>(null);
   const [isRunningTest, setIsRunningTest] = useState(false);
+  // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [currentPlugin, setCurrentPlugin] = useState<Plugin | null>(null);
-  const [currentStrategy, setCurrentStrategy] = useState<Strategy | null>(null);
+
+  // Test case generation configuration state
+  const [plugin, setPlugin] = useState<TargetPlugin | null>(null);
+  const [strategy, setStrategy] = useState<TargetStrategy | null>(null);
 
   const { recordEvent } = useTelemetry();
   const toast = useToast();
 
-  const generateTestCase = useCallback(
-    async (
-      plugin: TargetPlugin,
-      strategy: TargetStrategy,
-      onSuccess?: OnGenerationSuccess,
-      onError?: OnGenerationError,
-    ) => {
-      setCurrentPlugin(plugin.id);
-      setCurrentStrategy(strategy.id);
-      setGeneratedTestCase(null);
-      setIsGenerating(true);
-      setIsDialogOpen(true);
+  const onSuccessRef = useRef<OnGenerationSuccess | null>(null);
+  const onErrorRef = useRef<OnGenerationError | null>(null);
 
+  const testGenerationAbortController = useRef<AbortController | null>(null);
+  const testExecutionAbortController = useRef<AbortController | null>(null);
+
+  const shouldEvaluateAgainstTarget = !!redTeamConfig.target?.id;
+
+  /**
+   * Test Case Generation
+   */
+  useEffect(() => {
+    const abortController = new AbortController();
+    testGenerationAbortController.current = abortController;
+
+    async function generate() {
       try {
         recordEvent('feature_used', {
           feature: 'redteam_generate_test_case',
-          plugin: plugin.id,
-          strategy: strategy.id,
+          plugin: plugin!.id,
+          strategy: strategy!.id,
         });
 
         const response = await callApi('/redteam/generate-test', {
@@ -105,7 +117,10 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
               },
             },
           }),
-          signal: AbortSignal.timeout(10000), // 10s timeout
+          signal: AbortSignal.any([
+            AbortSignal.timeout(10000), // 10s timeout
+            abortController.signal,
+          ]),
         });
 
         const data = await response.json();
@@ -114,55 +129,19 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
           throw new Error(data.error);
         }
 
-        const testCase: GeneratedTestCase = {
+        setGeneratedTestCase({
           prompt: data.prompt,
           context: data.context,
           metadata: data.metadata,
-        };
-        setGeneratedTestCase(testCase);
-
-        // Run against target if configured
-        if (redTeamConfig.target?.id) {
-          setIsRunningTest(true);
-          setTargetResponse(null);
-
-          try {
-            const testResponse = await callApi('/providers/test', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                providerOptions: redTeamConfig.target,
-                prompt: data.prompt,
-              }),
-              signal: AbortSignal.timeout(30000), // 30s timeout
-            });
-
-            if (!testResponse.ok) {
-              const errorData = await testResponse.json();
-              throw new Error(errorData.error || 'Failed to run test');
-            }
-
-            const testData = await testResponse.json();
-            setTargetResponse({
-              output: testData.providerResponse?.output || '',
-              error: testData.providerResponse?.error || testData.testResult?.error,
-            });
-          } catch (error) {
-            console.error('Failed to run test against target:', error);
-            setTargetResponse({
-              output: '',
-              error: error instanceof Error ? error.message : 'Failed to run test against target',
-            });
-          } finally {
-            setIsRunningTest(false);
-          }
+        });
+      } catch (error) {
+        // Ignore abort errors (these happen when a new generation is triggered)
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
         }
 
-        onSuccess?.(testCase);
-      } catch (error) {
         console.error('Failed to generate test case:', error);
+
         const errorMessage =
           error instanceof Error
             ? error.message.includes('timed out')
@@ -171,30 +150,162 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
             : 'Failed to generate test case';
 
         toast.showToast(errorMessage, 'error');
+
+        // If test case execution is planned, abort:
+        setIsRunningTest(false);
+
         setIsDialogOpen(false);
-        setCurrentPlugin(null);
-        onError?.(error as Error);
+
+        setPlugin(null);
+        setStrategy(null);
+
+        onErrorRef.current?.(error as Error);
       } finally {
         setIsGenerating(false);
       }
+    }
+    if (isGenerating && !!plugin && !!strategy) {
+      generate();
+    }
+
+    // Cleanup: abort when effect dependencies change or component unmounts
+    return () => {
+      abortController.abort();
+    };
+  }, [isGenerating, plugin, strategy, redTeamConfig, recordEvent, toast]);
+
+  /**
+   * On test case generation success, either trigger target test execution or call onSuccess callback.
+   */
+  useEffect(() => {
+    const abortController = new AbortController();
+    testExecutionAbortController.current = abortController;
+
+    async function executeTest() {
+      // Capture generatedTestCase to avoid stale closure if state changes during async execution
+      const testCase = generatedTestCase;
+      // Guard: if test case was reset (e.g., by a new generation), abort execution
+      if (!testCase) return;
+      
+      // Run against target if configured
+      setIsRunningTest(true);
+      setTargetResponse(null);
+
+      try {
+        const testResponse = await callApi('/providers/test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            providerOptions: redTeamConfig.target,
+            prompt: testCase.prompt,
+          }),
+          signal: AbortSignal.any([
+            AbortSignal.timeout(30000), // 30s timeout
+            abortController.signal,
+          ]),
+        });
+
+        if (!testResponse.ok) {
+          const errorData = await testResponse.json();
+          throw new Error(errorData.error || 'Failed to run test');
+        }
+
+        const testData = await testResponse.json();
+        setTargetResponse({
+          output: testData.providerResponse?.output || '',
+          error: testData.providerResponse?.error || testData.testResult?.error,
+        });
+
+        onSuccessRef.current?.(testCase);
+      } catch (error) {
+        // Ignore abort errors (these happen when a new generation is triggered)
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+
+        console.error('Failed to run test against target:', error);
+        setTargetResponse({
+          output: '',
+          error: error instanceof Error ? error.message : 'Failed to run test against target',
+        });
+        onErrorRef.current?.(error as Error);
+      } finally {
+        setIsRunningTest(false);
+      }
+    }
+    if (!!generatedTestCase) {
+      const testCase = generatedTestCase; // Capture to avoid stale closure
+      if (shouldEvaluateAgainstTarget) {
+        executeTest();
+      } else {
+        onSuccessRef.current?.(testCase);
+      }
+    }
+
+    // Cleanup: abort when effect dependencies change or component unmounts
+    return () => {
+      abortController.abort();
+    };
+  }, [generatedTestCase, shouldEvaluateAgainstTarget]);
+
+  const resetState = useCallback(() => {
+    setPlugin(null);
+    setStrategy(null);
+    setGeneratedTestCase(null);
+    setTargetResponse(null);
+    setIsRunningTest(false);
+    setIsGenerating(false);
+    onSuccessRef.current = null;
+    onErrorRef.current = null;
+  }, []);
+
+  /**
+   * Triggers test generation and optionally runs a target test.
+   */
+  const generateTestCase = useCallback(
+    async (
+      plugin: TargetPlugin,
+      strategy: TargetStrategy,
+      onSuccess?: OnGenerationSuccess,
+      onError?: OnGenerationError,
+    ) => {
+      // Abort any ongoing operations & reset state
+      testGenerationAbortController.current?.abort();
+      testExecutionAbortController.current?.abort();
+      resetState();
+
+      if (onSuccess) {
+        onSuccessRef.current = onSuccess;
+      }
+      if (onError) {
+        onErrorRef.current = onError;
+      }
+
+      // Start generation
+      setPlugin(plugin);
+      setStrategy(strategy);
+      setIsGenerating(true);
+      // If test execution will be run, trigger the loading state in the dialog
+      setIsRunningTest(shouldEvaluateAgainstTarget);
+      // Open dialog to show test case generation results
+      setIsDialogOpen(true);
     },
-    [redTeamConfig, recordEvent, toast],
+    [shouldEvaluateAgainstTarget, resetState],
   );
 
   const closeDialog = useCallback(() => {
     setIsDialogOpen(false);
-    setCurrentPlugin(null);
-    setGeneratedTestCase(null);
-    setTargetResponse(null);
-    setIsRunningTest(false);
-  }, []);
+    resetState();
+  }, [resetState]);
 
   return (
     <TestCaseGenerationContext.Provider
       value={{
         isGenerating,
-        currentPlugin,
-        currentStrategy,
+        plugin: plugin?.id ?? null,
+        strategy: strategy?.id ?? null,
         generateTestCase,
       }}
     >
@@ -202,8 +313,8 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
       <TestCaseDialog
         open={isDialogOpen}
         onClose={closeDialog}
-        plugin={currentPlugin}
-        strategy={currentStrategy}
+        plugin={plugin?.id ?? null}
+        strategy={strategy?.id ?? null}
         isGenerating={isGenerating}
         generatedTestCase={generatedTestCase}
         targetResponse={targetResponse}

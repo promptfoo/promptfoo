@@ -25,6 +25,7 @@ import {
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
 import { useApiHealth } from '@app/hooks/useApiHealth';
+import Skeleton from '@mui/material/Skeleton';
 
 interface TestCaseDialogProps {
   open: boolean;
@@ -37,6 +38,42 @@ interface TestCaseDialogProps {
   isRunningTest?: boolean;
 }
 
+const Section = ({ label, text, loading }: { label: string; text: string; loading: boolean }) => {
+  const theme = useTheme();
+  return (
+    <Box>
+      <Typography variant="subtitle2" gutterBottom>
+        {label}:
+      </Typography>
+      <Box
+        sx={{
+          fontFamily: 'monospace',
+          fontSize: '0.875rem',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}
+      >
+        {loading ? (
+          <Skeleton variant="rectangular" sx={{ p: 2, borderRadius: 1, height: 51 }} />
+        ) : (
+          <Box
+            sx={{
+              p: 2,
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+              backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+              minHeight: 51,
+            }}
+          >
+            {text}
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   open,
   onClose,
@@ -47,8 +84,6 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   targetResponse,
   isRunningTest = false,
 }) => {
-  const theme = useTheme();
-
   const pluginName = typeof plugin === 'string' ? plugin : plugin || '';
   const pluginDisplayName =
     displayNameOverrides[pluginName as Plugin] ||
@@ -61,89 +96,22 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
-        {isGenerating
-          ? 'Generating Test Case...'
-          : generatedTestCase
-            ? `Generated Test Case for ${pluginDisplayName} / ${strategyDisplayName}`
-            : 'Test Generation Failed'}
+        Test Case for {strategyDisplayName} / {pluginDisplayName}
       </DialogTitle>
-      <DialogContent>
-        {isGenerating ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
-            <CircularProgress sx={{ mb: 2 }} />
-            <Typography variant="body2" color="text.secondary">
-              Generating test case...
-            </Typography>
-          </Box>
-        ) : generatedTestCase ? (
-          <Box sx={{ pt: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              Test Case:
-            </Typography>
-            <Box
-              sx={{
-                p: 2,
-                backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
-                borderRadius: 1,
-                border: '1px solid',
-                borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                mb: 3,
-              }}
-            >
-              {generatedTestCase.prompt}
-            </Box>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Section label="Test Case" text={generatedTestCase?.prompt ?? ''} loading={isGenerating} />
+        <Section
+          label="Target Response"
+          text={targetResponse?.output ?? ''}
+          loading={isRunningTest}
+        />
 
-            {isRunningTest ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
-                <CircularProgress sx={{ mb: 2 }} />
-                <Typography variant="body2" color="text.secondary">
-                  Running test against target...
-                </Typography>
-              </Box>
-            ) : targetResponse ? (
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Target Response:
-                </Typography>
-                <Box
-                  sx={{
-                    p: 2,
-                    backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
-                    borderRadius: 1,
-                    border: '1px solid',
-                    borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
-                    fontFamily: 'monospace',
-                    fontSize: '0.875rem',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {targetResponse.error ? (
-                    <Box>
-                      <Typography color="error" variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                        Error:
-                      </Typography>
-                      <Typography variant="body2" color="error">
-                        {targetResponse.error}
-                      </Typography>
-                    </Box>
-                  ) : (
-                    targetResponse.output
-                  )}
-                </Box>
-              </Box>
-            ) : null}
-
-            <Alert severity="info" sx={{ mt: 2 }}>
-              Dissatisfied with the test case? Fine tune it by adjusting your{' '}
-              {pluginName === 'policy' ? 'policy' : 'application'} details.
-            </Alert>
-          </Box>
-        ) : null}
+        {generatedTestCase && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            Dissatisfied with the test case? Fine tune it by adjusting your{' '}
+            {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
+          </Alert>
+        )}
       </DialogContent>
       <DialogActions>
         {pluginName && hasSpecificPluginDocumentation(pluginName as Plugin) && (

@@ -12,8 +12,6 @@ import {
   CONFIGURABLE_STRATEGIES,
   DEFAULT_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
-  displayNameOverrides as pluginDisplayNames,
-  type Plugin,
 } from '@promptfoo/redteam/constants';
 import { TestCaseGenerateButton } from './../TestCaseDialog';
 import { useTestCaseGeneration } from './../TestCaseGenerationProvider';
@@ -23,7 +21,6 @@ import { useCallback, useMemo } from 'react';
 import { type StrategyConfig, type RedteamStrategyObject } from '@promptfoo/redteam/types';
 
 const TEST_GENERATION_PLUGIN = 'harmful:hate';
-const TEST_GENERATION_PLUGIN_DISPLAY_NAME = pluginDisplayNames[TEST_GENERATION_PLUGIN as Plugin];
 
 interface StrategyItemProps {
   strategy: StrategyCardData;
@@ -49,7 +46,7 @@ export function StrategyItem({
   const {
     generateTestCase,
     isGenerating: generatingTestCase,
-    currentStrategy,
+    strategy: currentStrategy,
   } = useTestCaseGeneration();
 
   const strategyConfig = useMemo(() => {
@@ -65,7 +62,7 @@ export function StrategyItem({
   const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(
       { id: TEST_GENERATION_PLUGIN, config: {} },
-      { id: strategy.id, config: strategyConfig }
+      { id: strategy.id, config: strategyConfig },
     );
   }, [strategyConfig, generateTestCase, strategy.id]);
 

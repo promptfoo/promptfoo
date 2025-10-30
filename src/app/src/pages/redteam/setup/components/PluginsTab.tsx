@@ -116,7 +116,7 @@ export default function PluginsTab({
   const {
     generateTestCase,
     isGenerating: generatingTestCase,
-    currentPlugin: generatingPlugin,
+    plugin: generatingPlugin,
   } = useTestCaseGeneration();
 
   // Presets
@@ -376,7 +376,7 @@ export default function PluginsTab({
       else {
         await generateTestCase(
           { id: plugin, config: pluginConfig[plugin] ?? {} },
-          { id: 'basic', config: {} }
+          { id: 'basic', config: {} },
         );
       }
     },
