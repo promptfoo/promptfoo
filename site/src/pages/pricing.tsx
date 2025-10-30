@@ -361,8 +361,7 @@ function FAQSection() {
     },
     {
       question: 'What is a probe?',
-      answer:
-        'A probe is a single request made to your target system during red team testing.',
+      answer: 'A probe is a single request made to your target system during red team testing.',
     },
     {
       question: 'Why are there usage limits on red teaming?',
