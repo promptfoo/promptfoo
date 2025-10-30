@@ -97,7 +97,16 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      sx={{
+        // Ensure the container is always rendered in front of tooltips
+        zIndex: 10000,
+      }}
+    >
       <DialogTitle
         sx={{
           display: 'flex',
