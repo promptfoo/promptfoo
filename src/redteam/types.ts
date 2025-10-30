@@ -15,8 +15,8 @@ export const PolicyObjectSchema = z.object({
   id: z
     .string()
     .refine(isValidPolicyId, { message: 'ID must be either a UUID or a 12-character hex string' }),
-  text: z.string(),
-  name: z.string(),
+  text: z.string().optional(),
+  name: z.string().optional(),
 });
 export type PolicyObject = z.infer<typeof PolicyObjectSchema>;
 export type Policy = string | PolicyObject; // Policy Text or Policy ID
@@ -49,6 +49,7 @@ export const PluginConfigSchema = z.object({
   language: z.string().optional(),
   prompt: z.string().optional(),
   purpose: z.string().optional(),
+  // TODO: should be z.record(Modifier, z.unknown())
   modifiers: z.record(z.unknown()).optional(),
   // BOLA
   targetIdentifiers: z.array(z.string()).optional(),
@@ -132,7 +133,7 @@ export interface PluginActionParams {
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
-  language?: string;
+  language?: string | string[];
   numTests?: number;
   plugins?: RedteamPluginObject[];
   provider?: string | ProviderOptions | ApiProvider;
@@ -176,7 +177,7 @@ export interface RedteamFileConfig extends CommonOptions {
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   entities?: string[];
-  language: string;
+  language?: string | string[];
   maxConcurrency?: number;
   numTests: number;
   plugins: (RedteamPluginObject & { id: string; numTests: number })[];
@@ -229,6 +230,7 @@ export interface SavedRedteamConfig {
   extensions?: string[];
   numTests?: number;
   maxConcurrency?: number;
+  language?: string | string[];
   applicationDefinition: {
     purpose?: string;
     features?: string;

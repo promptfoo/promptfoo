@@ -188,6 +188,7 @@ describe('useTableStore', () => {
         type: 'metric' as const,
         operator: 'equals' as const,
         value: 'test-metric-value',
+        field: 'test-metric',
       };
 
       act(() => {
@@ -207,6 +208,7 @@ describe('useTableStore', () => {
         id: mockFilterId,
         logicOperator: 'and',
         sortIndex: 0,
+        field: 'test-metric',
       });
     });
 
@@ -296,6 +298,7 @@ describe('useTableStore', () => {
         type: 'metric' as const,
         operator: 'equals' as const,
         value: 'test-metric-value',
+        field: 'test-metric',
         logicOperator: 'and' as const,
         sortIndex: 0,
       };

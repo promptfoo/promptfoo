@@ -59,13 +59,13 @@ const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
     'Standard testing without additional attack strategies. Tests prompts as-is to establish baseline behavior.',
 };
 
-const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter((id) => id !== 'default').map(
-  (id) => ({
-    id,
-    name: strategyDisplayNames[id] || id,
-    description: UI_STRATEGY_DESCRIPTIONS[id] || strategyDescriptions[id],
-  }),
-);
+const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
+  (id) => id !== 'default' && id !== 'multilingual', // multilingual is deprecated
+).map((id) => ({
+  id,
+  name: strategyDisplayNames[id] || id,
+  description: UI_STRATEGY_DESCRIPTIONS[id] || strategyDescriptions[id],
+}));
 
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();

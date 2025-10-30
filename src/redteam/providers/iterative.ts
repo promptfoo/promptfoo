@@ -175,13 +175,15 @@ export async function runRedteamConversation({
     logger.debug(`[Iterative] Starting iteration ${i + 1}/${numIterations}`);
 
     // Use the shared utility function to create iteration context
-    const { iterationVars, iterationContext } = await createIterationContext({
+    const iterationContext = await createIterationContext({
       originalVars,
       transformVarsConfig,
       context,
       iterationNumber: i + 1,
       loggerTag: '[Iterative]',
     });
+
+    const iterationVars = iterationContext?.vars || {};
 
     let shouldExitEarly = false;
 

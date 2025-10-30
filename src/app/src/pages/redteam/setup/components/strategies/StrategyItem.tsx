@@ -70,10 +70,21 @@ export function StrategyItem({
     );
   }, [strategyConfig, generateTestCase, strategy.id]);
 
+  const handleToggle = useCallback(() => {
+    // If selecting simba for the first time, auto-open config dialog
+    if (strategy.id === 'simba' && !isSelected && !isDisabled) {
+      onToggle(strategy.id);
+      // Use setTimeout to ensure the toggle completes before opening config
+      setTimeout(() => onConfigClick(strategy.id), 0);
+    } else {
+      onToggle(strategy.id);
+    }
+  }, [strategy.id, isSelected, isDisabled, onToggle, onConfigClick]);
+
   return (
     <Paper
       elevation={2}
-      onClick={() => onToggle(strategy.id)}
+      onClick={handleToggle}
       sx={(theme) => ({
         height: '100%',
         display: 'flex',
@@ -110,7 +121,7 @@ export function StrategyItem({
           disabled={isDisabled}
           onChange={(e) => {
             e.stopPropagation();
-            onToggle(strategy.id);
+            handleToggle();
           }}
           onClick={(e) => e.stopPropagation()}
           color="primary"
