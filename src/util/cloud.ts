@@ -1,8 +1,9 @@
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import { ProviderOptionsSchema } from '../validators/providers';
-import { fetchWithProxy } from './fetch';
+import { fetchWithRetries } from './fetch';
 import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
 
@@ -27,11 +28,15 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
   const apiKey = cloudConfig.getApiKey();
   const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
-    return fetchWithProxy(url, {
-      method,
-      body: JSON.stringify(body),
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    });
+    return fetchWithRetries(
+      url,
+      {
+        method,
+        body: JSON.stringify(body),
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      },
+      REQUEST_TIMEOUT_MS,
+    );
   } catch (e) {
     logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
     if ((e as any).cause) {
@@ -323,8 +328,17 @@ export async function resolveTeamFromIdentifier(
     };
   }
 
-  const availableTeams = teams.map((t) => t.name).join(', ');
-  throw new Error(`Team '${identifier}' not found. Available teams: ${availableTeams}`);
+  // Truncate team list for readability when there are many teams
+  const MAX_TEAMS_TO_SHOW = 10;
+  const teamNames = teams.map((t) => t.name);
+  const displayTeams = teamNames.slice(0, MAX_TEAMS_TO_SHOW).join(', ');
+  const remaining = teamNames.length - MAX_TEAMS_TO_SHOW;
+  const suffix =
+    remaining > 0
+      ? ` (and ${remaining} more - use 'promptfoo auth teams list' to see all)`
+      : '';
+
+  throw new Error(`Team '${identifier}' not found. Available teams: ${displayTeams}${suffix}`);
 }
 
 /**

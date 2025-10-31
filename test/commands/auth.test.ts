@@ -234,6 +234,198 @@ describe('auth command', () => {
       // Reset exitCode
       process.exitCode = 0;
     });
+
+    describe('--team flag', () => {
+      beforeEach(() => {
+        // Mock getUserTeams and team caching
+        const mockTeams = [
+          {
+            id: 'team-1',
+            name: 'Engineering',
+            slug: 'engineering',
+            organizationId: mockOrganization.id,
+            createdAt: '2023-01-01T00:00:00Z',
+          },
+          {
+            id: 'team-2',
+            name: 'Marketing',
+            slug: 'marketing',
+            organizationId: mockOrganization.id,
+            createdAt: '2023-01-02T00:00:00Z',
+          },
+        ];
+
+        jest.requireMock('../../src/util/cloud').getUserTeams = jest
+          .fn()
+          .mockResolvedValue(mockTeams);
+        jest.requireMock('../../src/util/cloud').resolveTeamFromIdentifier = jest.fn();
+      });
+
+      it('should set team when --team flag is provided with valid team name', async () => {
+        const mockTeam = {
+          id: 'team-1',
+          name: 'Engineering',
+          organizationId: mockOrganization.id,
+        };
+
+        jest
+          .requireMock('../../src/util/cloud')
+          .resolveTeamFromIdentifier.mockResolvedValueOnce(mockTeam);
+
+        const loginCmd = program.commands
+          .find((cmd) => cmd.name() === 'auth')
+          ?.commands.find((cmd) => cmd.name() === 'login');
+        await loginCmd?.parseAsync([
+          'node',
+          'test',
+          '--api-key',
+          'test-key',
+          '--team',
+          'Engineering',
+        ]);
+
+        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith(
+          'team-1',
+          mockOrganization.id,
+        );
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Team: Engineering'));
+      });
+
+      it('should set team when --team flag is provided with team slug', async () => {
+        const mockTeam = {
+          id: 'team-1',
+          name: 'Engineering',
+          organizationId: mockOrganization.id,
+        };
+
+        jest
+          .requireMock('../../src/util/cloud')
+          .resolveTeamFromIdentifier.mockResolvedValueOnce(mockTeam);
+
+        const loginCmd = program.commands
+          .find((cmd) => cmd.name() === 'auth')
+          ?.commands.find((cmd) => cmd.name() === 'login');
+        await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--team', 'engineering']);
+
+        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith(
+          'team-1',
+          mockOrganization.id,
+        );
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Team: Engineering'));
+      });
+
+      it('should set team when --team flag is provided with team ID', async () => {
+        const mockTeam = {
+          id: 'team-1',
+          name: 'Engineering',
+          organizationId: mockOrganization.id,
+        };
+
+        jest
+          .requireMock('../../src/util/cloud')
+          .resolveTeamFromIdentifier.mockResolvedValueOnce(mockTeam);
+
+        const loginCmd = program.commands
+          .find((cmd) => cmd.name() === 'auth')
+          ?.commands.find((cmd) => cmd.name() === 'login');
+        await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--team', 'team-1']);
+
+        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith(
+          'team-1',
+          mockOrganization.id,
+        );
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Team: Engineering'));
+      });
+
+      it('should handle invalid team name and fall back to default team', async () => {
+        const mockDefaultTeam = {
+          id: 'team-2',
+          name: 'Marketing',
+          organizationId: mockOrganization.id,
+          createdAt: '2023-01-02T00:00:00Z',
+        };
+
+        jest
+          .requireMock('../../src/util/cloud')
+          .resolveTeamFromIdentifier.mockRejectedValueOnce(new Error('Team not found'));
+        jest.requireMock('../../src/util/cloud').getDefaultTeam.mockResolvedValueOnce(mockDefaultTeam);
+        jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValueOnce(undefined);
+
+        const loginCmd = program.commands
+          .find((cmd) => cmd.name() === 'auth')
+          ?.commands.find((cmd) => cmd.name() === 'login');
+        await loginCmd?.parseAsync([
+          'node',
+          'test',
+          '--api-key',
+          'test-key',
+          '--team',
+          'InvalidTeamName',
+        ]);
+
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to set team "InvalidTeamName": Team not found'),
+        );
+        expect(logger.info).toHaveBeenCalledWith('Falling back to default team selection...');
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Marketing'));
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('(default)'));
+      });
+
+      it('should handle team name with special characters', async () => {
+        const mockTeam = {
+          id: 'team-3',
+          name: 'Product & Design',
+          organizationId: mockOrganization.id,
+        };
+
+        jest
+          .requireMock('../../src/util/cloud')
+          .resolveTeamFromIdentifier.mockResolvedValueOnce(mockTeam);
+
+        const loginCmd = program.commands
+          .find((cmd) => cmd.name() === 'auth')
+          ?.commands.find((cmd) => cmd.name() === 'login');
+        await loginCmd?.parseAsync([
+          'node',
+          'test',
+          '--api-key',
+          'test-key',
+          '--team',
+          'Product & Design',
+        ]);
+
+        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith(
+          'team-3',
+          mockOrganization.id,
+        );
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Product & Design'));
+      });
+
+      it('should handle non-Error team resolution failure', async () => {
+        const mockDefaultTeam = {
+          id: 'team-1',
+          name: 'Engineering',
+          organizationId: mockOrganization.id,
+          createdAt: '2023-01-01T00:00:00Z',
+        };
+
+        jest.requireMock('../../src/util/cloud').resolveTeamFromIdentifier.mockImplementationOnce(() => {
+          throw 'String error: unauthorized';
+        });
+        jest.requireMock('../../src/util/cloud').getDefaultTeam.mockResolvedValueOnce(mockDefaultTeam);
+        jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValueOnce(undefined);
+
+        const loginCmd = program.commands
+          .find((cmd) => cmd.name() === 'auth')
+          ?.commands.find((cmd) => cmd.name() === 'login');
+        await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--team', 'test']);
+
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to set team "test": String error: unauthorized'),
+        );
+        expect(logger.info).toHaveBeenCalledWith('Falling back to default team selection...');
+      });
+    });
   });
 
   describe('logout', () => {

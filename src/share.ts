@@ -8,7 +8,7 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { checkCloudPermissions, makeRequest as makeCloudRequest } from './util/cloud';
+import { checkCloudPermissions, makeRequest as makeCloudRequest, resolveTeamId } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 
 import type Eval from './models/eval';
@@ -439,10 +439,32 @@ export async function createShareableUrl(
   // 1. Handle email collection
   await handleEmailCollection(evalRecord);
 
-  // 2. Get API configuration
+  // 2. Auto-inject current team into metadata (if not already set)
+  try {
+    if (cloudConfig.isEnabled()) {
+      evalRecord.config.metadata = evalRecord.config.metadata || {};
+
+      // Only inject if not already set (explicit metadata takes precedence)
+      if (evalRecord.config.metadata.teamId) {
+        logger.debug('Team already set in metadata, skipping auto-injection');
+      } else {
+        const currentTeam = await resolveTeamId();
+        evalRecord.config.metadata.teamId = currentTeam.id;
+        logger.debug(`Auto-injecting current team into metadata: ${currentTeam.name}`);
+      }
+    }
+  } catch (error) {
+    // Team resolution failed - server will use default team
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    logger.warn(`Could not resolve team for sharing: ${errorMsg}`);
+    logger.warn('Your eval will be shared to your default team.');
+    logger.info('To specify a team explicitly, use: promptfoo share --team "TeamName"');
+  }
+
+  // 3. Get API configuration
   const { url } = await getApiConfig(evalRecord);
 
-  // 3. Determine if we can use new results format
+  // 4. Determine if we can use new results format
   const canUseNewResults = cloudConfig.isEnabled();
   logger.debug(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
