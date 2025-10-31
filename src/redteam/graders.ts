@@ -9,6 +9,7 @@ import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CcaGrader } from './plugins/contextComplianceAttack';
 import { ContractsGrader } from './plugins/contracts';
+import { CoppaGrader } from './plugins/compliance/coppa';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
@@ -23,6 +24,7 @@ import { FinancialHallucinationPluginGrader } from './plugins/financial/financia
 import { FinancialImpartialityPluginGrader } from './plugins/financial/financialImpartiality';
 import { FinancialMisconductPluginGrader } from './plugins/financial/financialMisconduct';
 import { FinancialSycophancyPluginGrader } from './plugins/financial/financialSycophancy';
+import { GoalMisalignmentGrader } from './plugins/goalMisalignment';
 import { HallucinationGrader } from './plugins/hallucination';
 import { HarmbenchGrader } from './plugins/harmbench';
 import {
@@ -99,6 +101,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:cca': new CcaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
+  'promptfoo:redteam:coppa': new CoppaGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
@@ -115,6 +118,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:financial:impartiality': new FinancialImpartialityPluginGrader(),
   'promptfoo:redteam:financial:misconduct': new FinancialMisconductPluginGrader(),
   'promptfoo:redteam:financial:sycophancy': new FinancialSycophancyPluginGrader(),
+  'promptfoo:redteam:goal-misalignment': new GoalMisalignmentGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:harmbench': new HarmbenchGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),

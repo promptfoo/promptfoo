@@ -3,6 +3,8 @@ import { useToast } from '@app/hooks/useToast';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { CustomPoliciesSection } from './CustomPoliciesSection';
@@ -15,6 +17,16 @@ vi.mock('@app/hooks/useTelemetry', () => ({
   }),
 }));
 vi.mock('@app/hooks/useToast');
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: vi.fn(
+    () =>
+      ({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      }) as unknown as DefinedUseQueryResult<ApiHealthResult, Error>,
+  ),
+}));
 
 const mockUpdateConfig = vi.fn();
 const mockShowToast = vi.fn();
@@ -485,6 +497,58 @@ describe('CustomPoliciesSection', () => {
           applicationDefinition: { purpose: 'Healthcare application' },
           policy: 'Specific test policy: Do not reveal PII',
         },
+      });
+    });
+  });
+
+  describe('Policy ID Stability', () => {
+    it('should maintain stable IDs based on policy content', async () => {
+      // Setup initial policies
+      const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [
+            { id: 'policy', config: { policy: 'Policy text one' } },
+            { id: 'policy', config: { policy: 'Policy text two' } },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      const { rerender } = renderComponent();
+
+      // Wait for policies to be displayed
+      await waitFor(() => {
+        expect(screen.getByText('Policy text one')).toBeInTheDocument();
+        expect(screen.getByText('Policy text two')).toBeInTheDocument();
+      });
+
+      // Reorder policies (swap them)
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [
+            { id: 'policy', config: { policy: 'Policy text two' } },
+            { id: 'policy', config: { policy: 'Policy text one' } },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      rerender(
+        <ThemeProvider theme={createTheme()}>
+          <ToastProvider>
+            <TestCaseGenerationProvider redTeamConfig={(mockUseRedTeamConfig as unknown as Mock)()}>
+              <CustomPoliciesSection />
+            </TestCaseGenerationProvider>
+          </ToastProvider>
+        </ThemeProvider>,
+      );
+
+      // Policies should still be displayed correctly despite reordering
+      // The IDs are based on content, not on position
+      await waitFor(() => {
+        expect(screen.getByText('Policy text one')).toBeInTheDocument();
+        expect(screen.getByText('Policy text two')).toBeInTheDocument();
       });
     });
   });

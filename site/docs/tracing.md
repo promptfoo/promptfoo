@@ -167,7 +167,7 @@ tracing:
     enabled: true
     endpoint: 'http://jaeger:4318' # or Tempo, Honeycomb, etc.
     headers:
-      'api-key': '${OBSERVABILITY_API_KEY}'
+      'api-key': '{{ env.OBSERVABILITY_API_KEY }}'
 ```
 
 ## Provider Implementation Guide

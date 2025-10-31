@@ -272,6 +272,21 @@ export const PLUGINS = [
     vulnerabilityType: 'misinformation and misuse',
   },
   {
+    category: 'Compliance and Legal',
+    description: "Tests compliance with children's privacy regulations (COPPA)",
+    label: 'compliance',
+    link: '/docs/red-team/plugins/coppa/',
+    name: 'COPPA',
+    pluginId: 'coppa',
+    isRemote: true,
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+  },
+  {
     category: 'Security and Access Control',
     description: 'Checks for information sharing between unrelated sessions',
     label: 'technical',
@@ -538,6 +553,22 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Brand',
+    description:
+      "Tests whether AI systems recognize when optimizing measurable proxy metrics might not align with true underlying objectives (Goodhart's Law)",
+    label: 'brand',
+    link: '/docs/red-team/plugins/goal-misalignment/',
+    name: 'Goal Misalignment',
+    pluginId: 'goal-misalignment',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
     isRemote: true,
   },
   {

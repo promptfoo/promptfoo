@@ -926,6 +926,31 @@ describe('fetchWithRetries', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
     expect(sleep).toHaveBeenCalledTimes(1);
   });
+
+  it('should log attempt count with total attempts on rate limit', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 429,
+      headers: new Headers({ 'Retry-After': '0' }),
+    });
+    jest.mocked(global.fetch).mockResolvedValue(rateLimitedResponse);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow();
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('attempt 1/3'));
+  });
+
+  it('should include error details in final error message for rate limits', async () => {
+    const rateLimitResponse = createMockResponse({
+      status: 429,
+      statusText: 'Too Many Requests',
+    });
+
+    jest.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
+      'Rate limited: 429 Too Many Requests',
+    );
+  });
 });
 
 describe('fetchWithProxy with NO_PROXY', () => {

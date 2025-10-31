@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import StrategyConfigDialog from './StrategyConfigDialog';
 
@@ -228,34 +228,6 @@ describe('StrategyConfigDialog', () => {
     });
   });
 
-  it('should remove a language when handleRemoveLanguage is called', () => {
-    const initialLanguages = ['en', 'bn', 'sw'];
-    const initialConfig = { languages: initialLanguages };
-
-    render(
-      <StrategyConfigDialog
-        open={true}
-        strategy="multilingual"
-        config={initialConfig}
-        onClose={mockOnClose}
-        onSave={mockOnSave}
-        strategyData={{
-          id: 'multilingual',
-          name: 'Multilingual',
-          description: 'A multilingual strategy',
-        }}
-      />,
-    );
-
-    const bengaliChip = screen.getByText('Bengali').closest('.MuiChip-root') as HTMLElement;
-    const deleteIcon = within(bengaliChip).getByTestId('CancelIcon');
-    fireEvent.click(deleteIcon);
-
-    expect(screen.queryByText('Bengali')).not.toBeInTheDocument();
-    expect(screen.getByText('en')).toBeInTheDocument();
-    expect(screen.getByText('Swahili')).toBeInTheDocument();
-  });
-
   it('should render and handle best-of-n strategy configuration correctly', () => {
     const initialConfig = {
       maxConcurrency: 3,
@@ -373,5 +345,43 @@ describe('StrategyConfigDialog', () => {
     });
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reset local state when switching between strategies', () => {
+    const { rerender } = render(
+      <StrategyConfigDialog
+        open={true}
+        strategy="custom"
+        config={{ strategyText: 'Initial strategy', maxTurns: 4 }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'custom', name: 'Custom', description: 'A custom strategy' }}
+      />,
+    );
+
+    const customMaxTurnsInput = screen.getByLabelText('Max Turns');
+    expect(customMaxTurnsInput).toHaveValue(4);
+    fireEvent.change(customMaxTurnsInput, { target: { value: '12' } });
+    expect(customMaxTurnsInput).toHaveValue(12);
+
+    const customStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    expect(customStatefulSwitch).toBeChecked();
+
+    rerender(
+      <StrategyConfigDialog
+        open={true}
+        strategy="goat"
+        config={{ maxTurns: 3, stateful: false }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'goat', name: 'GOAT', description: 'A multi-turn strategy' }}
+      />,
+    );
+
+    const goatMaxTurnsInput = screen.getByLabelText('Max Turns');
+    expect(goatMaxTurnsInput).toHaveValue(3);
+
+    const goatStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    expect(goatStatefulSwitch).not.toBeChecked();
   });
 });

@@ -14,24 +14,10 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
-import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  TokenUsage,
-} from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -39,7 +25,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import type { BaseRedteamMetadata } from '../types';
+import { getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -52,6 +38,21 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+import type { Environment } from 'nunjucks';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  TokenUsage,
+} from '../../types';
+import type { BaseRedteamMetadata } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -515,13 +516,14 @@ async function runRedteamConversation({
 
       for (let i = 0; i < BRANCHING_FACTOR; i++) {
         // Use the shared utility function to create iteration context
-        const { iterationVars, iterationContext } = await createIterationContext({
+        const iterationContext = await createIterationContext({
           originalVars,
           transformVarsConfig,
           context,
           iterationNumber: attempts + 1, // Using attempts + 1 as the iteration number
           loggerTag: '[IterativeTree]',
         });
+        const iterationVars = iterationContext?.vars || {};
 
         const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
           ...redteamHistory,
@@ -568,11 +570,7 @@ async function runRedteamConversation({
             score: 0,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           continue;
         }
@@ -685,11 +683,7 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: targetResponse.output,
@@ -722,11 +716,7 @@ async function runRedteamConversation({
             parentId: node.id,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
@@ -760,11 +750,7 @@ async function runRedteamConversation({
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
@@ -805,11 +791,7 @@ async function runRedteamConversation({
           score,
           wasSelected: true,
           guardrails: targetResponse.guardrails,
-          sessionId:
-            targetResponse.sessionId ||
-            (typeof iterationContext?.vars?.sessionId === 'string'
-              ? iterationContext.vars.sessionId
-              : undefined),
+          sessionId: getSessionId(targetResponse, iterationContext),
         });
       }
     }
@@ -855,7 +837,7 @@ async function runRedteamConversation({
     parentId: bestNode.id,
     wasSelected: false,
     guardrails: finalTargetResponse.guardrails,
-    sessionId: finalTargetResponse.sessionId,
+    sessionId: getSessionId(finalTargetResponse, context),
   });
   return {
     output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),

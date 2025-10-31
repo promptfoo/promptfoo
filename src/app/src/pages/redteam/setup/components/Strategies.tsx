@@ -58,20 +58,22 @@ const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
     'Standard testing without additional attack strategies. Tests prompts as-is to establish baseline behavior.',
 };
 
-const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter((id) => id !== 'default').map(
-  (id) => ({
-    id,
-    name: strategyDisplayNames[id] || id,
-    description: UI_STRATEGY_DESCRIPTIONS[id] || strategyDescriptions[id],
-  }),
-);
+const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
+  (id) => id !== 'default' && id !== 'multilingual', // multilingual is deprecated
+).map((id) => ({
+  id,
+  name: strategyDisplayNames[id] || id,
+  description: UI_STRATEGY_DESCRIPTIONS[id] || strategyDescriptions[id],
+}));
 
 export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const theme = useTheme();
   const toast = useToast();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
   const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
@@ -84,10 +86,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
   }, [recordEvent]);
-
-  useEffect(() => {
-    checkHealth();
-  }, [checkHealth]);
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 

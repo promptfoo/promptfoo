@@ -1092,8 +1092,18 @@
               "description": "Number of tests to generate"
             },
             "language": {
-              "type": "string",
-              "description": "Language of tests ot generate for this plugin"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ],
+              "description": "Language(s) of tests to generate for this plugin"
             },
             "entities": {
               "type": "array",
@@ -1125,6 +1135,7 @@
                           "cca",
                           "competitors",
                           "contracts",
+                          "coppa",
                           "cross-session-leak",
                           "cyberseceval",
                           "debug-access",
@@ -1166,6 +1177,7 @@
                           "gdpr:art32",
                           "gdpr:art5",
                           "gdpr:art9",
+                          "goal-misalignment",
                           "guardrails-eval",
                           "hallucination",
                           "harmbench",
@@ -1337,6 +1349,7 @@
                               "cca",
                               "competitors",
                               "contracts",
+                              "coppa",
                               "cross-session-leak",
                               "cyberseceval",
                               "debug-access",
@@ -1378,6 +1391,7 @@
                               "gdpr:art32",
                               "gdpr:art5",
                               "gdpr:art9",
+                              "goal-misalignment",
                               "guardrails-eval",
                               "hallucination",
                               "harmbench",
@@ -1580,6 +1594,7 @@
                           "jailbreak",
                           "jailbreak:composite",
                           "jailbreak:likert",
+                          "jailbreak:meta",
                           "jailbreak:tree",
                           "layer",
                           "leetspeak",
@@ -1592,6 +1607,7 @@
                           "prompt-injection",
                           "retry",
                           "rot13",
+                          "simba",
                           "video"
                         ]
                       },
@@ -1620,7 +1636,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, simba, video",
               "default": ["default"]
             },
             "maxConcurrency": {
