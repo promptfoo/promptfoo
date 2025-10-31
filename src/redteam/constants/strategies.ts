@@ -157,7 +157,6 @@ export const LANGUAGE_DISALLOWED_STRATEGIES = new Set([
   'audio',
   'video',
   'image',
-  'layer',
   'math-prompt',
 ]);
 
