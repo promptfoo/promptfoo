@@ -24,6 +24,17 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/custom/',
   },
   {
+    category: 'Custom',
+    strategy: 'custom-strategy',
+    displayName: 'Custom Strategy',
+    description: 'Custom prompt-based multi-turn strategy',
+    longDescription:
+      'Write natural language instructions to create powerful multi-turn red team strategies. No coding required.',
+    cost: 'Variable',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/custom-strategy/',
+  },
+  {
     category: 'Dynamic (Single-Turn)',
     strategy: 'best-of-n',
     displayName: 'Best-of-N',
