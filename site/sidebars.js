@@ -422,6 +422,7 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },
         { type: 'doc', id: 'enterprise/findings' },
+        { type: 'doc', id: 'enterprise/remediation-reports' },
         { type: 'doc', id: 'enterprise/webhooks' },
         { type: 'doc', id: 'enterprise/audit-logging' },
         {
@@ -459,6 +460,7 @@ const sidebars = {
     { type: 'doc', id: 'enterprise/teams' },
     { type: 'doc', id: 'enterprise/red-teams' },
     { type: 'doc', id: 'enterprise/findings' },
+    { type: 'doc', id: 'enterprise/remediation-reports' },
     { type: 'doc', id: 'enterprise/webhooks' },
     { type: 'doc', id: 'enterprise/audit-logging' },
     {
