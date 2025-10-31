@@ -1,4 +1,5 @@
 ---
+title: SharePoint Integration
 sidebar_label: SharePoint
 description: Import LLM test cases from Microsoft SharePoint. Configure certificate-based authentication and load test data from SharePoint CSV files.
 ---
@@ -57,11 +58,11 @@ description: 'SharePoint CSV Import Example'
 prompts:
   - 'Please translate the following text to {{language}}: {{input}}'
 providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
-  - openai:chat:gpt-4.1
-// highlight-start
+  - openai:gpt-5
+  - anthropic:claude-sonnet-4-5-20250929
+# highlight-start
 tests: https://yourcompany.sharepoint.com/sites/yoursite/Shared%20Documents/test-cases.csv
-// highlight-end
+# highlight-end
 ```
 
 The SharePoint CSV file should be structured with columns that define the test cases:
@@ -93,8 +94,8 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
-  - openai:chat:gpt-4.1-mini
+  - openai:gpt-5
+  - anthropic:claude-sonnet-4-5-20250929
 tests: https://yourcompany.sharepoint.com/sites/yoursite/Shared%20Documents/test-cases.csv
 defaultTest:
   options:

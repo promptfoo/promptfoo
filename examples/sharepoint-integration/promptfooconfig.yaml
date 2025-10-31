@@ -6,7 +6,9 @@ prompts:
   - 'Please translate the following text to {{language}}: {{input}}'
 
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5
+  - openai:gpt-5-mini
+  - anthropic:claude-sonnet-4-5-20250929
 
 # Replace with your SharePoint URL to the CSV file
 tests: https://yourcompany.sharepoint.com/sites/yoursite/Shared%20Documents/test-cases.csv
@@ -15,5 +17,5 @@ tests: https://yourcompany.sharepoint.com/sites/yoursite/Shared%20Documents/test
 #   options:
 #     provider:
 #       text:
-#         id: openai:gpt-4.1-mini
+#         id: openai:gpt-5-mini
 

@@ -10,9 +10,9 @@ let cca: ConfidentialClientApplication | null = null;
 
 /**
  * Fetches CSV data from a SharePoint file using certificate-based authentication.
- * Requires environment variables: SHAREPOINT_CLIENT_ID, SHAREPOINT_TENANT_ID, 
+ * Requires environment variables: SHAREPOINT_CLIENT_ID, SHAREPOINT_TENANT_ID,
  * SHAREPOINT_CERT_PATH, and SHAREPOINT_BASE_URL.
- * 
+ *
  * @param url - Full SharePoint URL to the CSV file
  * @returns Array of CSV rows as objects
  */
@@ -27,13 +27,19 @@ export async function fetchCsvFromSharepoint(url: string): Promise<CsvRow[]> {
 
   const accessToken = await getSharePointAccessToken();
 
-  const fileRelativeUrl = url.replace(sharepointBaseUrl, '');
-  const apiUrl = `${sharepointBaseUrl}/_api/web/GetFileByServerRelativeUrl('${encodeURIComponent(fileRelativeUrl)}')/$value`;
-  
+  const normalizedBaseUrl = sharepointBaseUrl.replace(/\/+$/, '');
+  const fileRelativeUrl = url.startsWith(normalizedBaseUrl)
+    ? url.slice(normalizedBaseUrl.length)
+    : url;
+  const serverRelativeUrl = fileRelativeUrl.startsWith('/')
+    ? fileRelativeUrl
+    : `/${fileRelativeUrl}`;
+  const apiUrl = `${normalizedBaseUrl}/_api/web/GetFileByServerRelativeUrl('${encodeURI(serverRelativeUrl)}')/$value`;
+
   logger.debug(`Fetching CSV from SharePoint: ${apiUrl}`);
 
   const response = await fetchWithProxy(apiUrl, {
-    headers: { 
+    headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'text/csv',
     },
@@ -48,7 +54,7 @@ export async function fetchCsvFromSharepoint(url: string): Promise<CsvRow[]> {
 
   const csvData = await response.text();
   const { parse: parseCsv } = await import('csv-parse/sync');
-  
+
   try {
     return parseCsv(csvData, { columns: true });
   } catch (error) {
@@ -84,36 +90,42 @@ function getConfidentialClient(): ConfidentialClientApplication {
     try {
       pemContent = fs.readFileSync(certPath, 'utf8');
     } catch (error) {
-      throw new Error(
-        `Failed to read certificate from path: ${certPath}. Error: ${error}`,
-      );
+      throw new Error(`Failed to read certificate from path: ${certPath}. Error: ${error}`);
     }
-    
+
     // Extract private key
-    const privateKeyMatch = pemContent.match(/-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/);
+    const privateKeyMatch = pemContent.match(
+      /-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/,
+    );
     const privateKey = privateKeyMatch ? privateKeyMatch[0] : pemContent;
-    
+
     // Extract certificate for thumbprint calculation
-    const certMatch = pemContent.match(/-----BEGIN CERTIFICATE-----\n([\s\S]+?)\n-----END CERTIFICATE-----/);
+    const certMatch = pemContent.match(
+      /-----BEGIN CERTIFICATE-----\n([\s\S]+?)\n-----END CERTIFICATE-----/,
+    );
     if (!certMatch) {
       throw new Error(
         `Certificate not found in PEM file at ${certPath}. The PEM file must contain both private key and certificate.`,
       );
     }
-    
+
     // Calculate SHA-256 thumbprint from the certificate
     const certDer = Buffer.from(certMatch[1].replace(/\s/g, ''), 'base64');
-    const thumbprintSha256 = crypto.createHash('sha256').update(certDer).digest('hex').toUpperCase();
+    const thumbprintSha256 = crypto
+      .createHash('sha256')
+      .update(certDer)
+      .digest('hex')
+      .toUpperCase();
 
     const msalConfig = {
       auth: {
         clientId,
         authority: `https://login.microsoftonline.com/${tenantId}`,
-        clientCertificate: { 
+        clientCertificate: {
           thumbprintSha256,
-          privateKey
-        }
-      }
+          privateKey,
+        },
+      },
     };
 
     cca = new ConfidentialClientApplication(msalConfig);
@@ -124,7 +136,7 @@ function getConfidentialClient(): ConfidentialClientApplication {
 export async function getSharePointAccessToken() {
   const client = getConfidentialClient();
   const baseUrl = getEnvString('SHAREPOINT_BASE_URL');
-  
+
   if (!baseUrl) {
     throw new Error(
       'SHAREPOINT_BASE_URL environment variable is required. Please set it to your SharePoint base URL (e.g., https://yourcompany.sharepoint.com).',
@@ -132,14 +144,14 @@ export async function getSharePointAccessToken() {
   }
 
   const tokenResult = await client.acquireTokenByClientCredential({
-    scopes: [`${baseUrl}/.default`]
+    scopes: [`${baseUrl}/.default`],
   });
-  
+
   if (!tokenResult?.accessToken) {
     throw new Error(
       'Failed to acquire SharePoint access token. Please check your authentication configuration.',
     );
   }
-  
+
   return tokenResult.accessToken;
 }

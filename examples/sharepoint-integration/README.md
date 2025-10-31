@@ -1,4 +1,4 @@
-# SharePoint Integration Example
+# sharepoint-integration (SharePoint Integration Example)
 
 This example demonstrates how to use promptfoo with Microsoft SharePoint to import test cases from CSV files stored in SharePoint.
 
@@ -42,6 +42,9 @@ This example demonstrates how to use promptfoo with Microsoft SharePoint to impo
 # Install dependencies
 npm install
 
-# Run the evaluation
+# Scaffold the example
+npx promptfoo@latest init --example sharepoint-integration
+
+# Run the eval
 npx promptfoo eval
 ```
