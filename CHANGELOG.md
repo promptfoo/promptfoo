@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(redteam): add pharmacy plugins for controlled substance compliance, dosage calculation, and drug interaction detection (#6064)
+- feat(redteam): add insurance plugins for coverage discrimination, network misinformation, and PHI disclosure (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 
 ## [0.119.1] - 2025-10-29
