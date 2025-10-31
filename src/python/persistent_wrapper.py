@@ -108,6 +108,7 @@ def main():
 
 def handle_call(command_line, user_module, default_function_name):
     """Handle a CALL command."""
+    response_file = None
     try:
         # Parse command: "CALL:<function_name>:<request_file>:<response_file>"
         # or legacy: "CALL:<request_file>:<response_file>"
@@ -174,7 +175,27 @@ def handle_call(command_line, user_module, default_function_name):
     except Exception as e:
         print(f"ERROR handling call: {e}", file=sys.stderr, flush=True)
         print(traceback.format_exc(), file=sys.stderr, flush=True)
-        # Still try to signal done to avoid hanging
+
+        # Write error response if we have response_file
+        if response_file:
+            try:
+                error_response = {
+                    "type": "error",
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                }
+                with open(response_file, "w", encoding="utf-8") as f:
+                    json.dump(error_response, f, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+            except Exception as write_error:
+                print(
+                    f"ERROR: Failed to write error response: {write_error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+        # Signal done after attempting to write error
         print("DONE", flush=True)
 
 

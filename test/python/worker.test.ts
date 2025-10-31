@@ -161,4 +161,21 @@ def call_api(prompt, options, context):
     },
     TEST_TIMEOUT,
   );
+
+  it(
+    'should handle calling non-existent function gracefully',
+    async () => {
+      const nonexistentPath = path.join(__dirname, 'fixtures', 'test_nonexistent_function.py');
+
+      worker = new PythonWorker(nonexistentPath, 'call_api');
+      await worker.initialize();
+
+      // Try to call a function that doesn't exist
+      // This should throw an error about the function not existing, not ENOENT
+      await expect(worker.call('call_nonexistent_api', ['test', {}])).rejects.toThrow(
+        /has no attribute|AttributeError/,
+      );
+    },
+    TEST_TIMEOUT,
+  );
 });
