@@ -61,11 +61,11 @@ The process continues with the meta-agent strategically selecting and refining a
 
 ## Comparison with Other Strategies
 
-| Strategy | Approach | Cost | Best For |
-|----------|----------|------|----------|
-| `jailbreak` | Simple iterative refinement | Medium | General testing |
-| `jailbreak:tree` | Branching exploration | High | Systematic coverage |
-| `jailbreak:meta` | Strategic planning | High | Sophisticated targets |
+| Strategy         | Approach                    | Cost   | Best For              |
+| ---------------- | --------------------------- | ------ | --------------------- |
+| `jailbreak`      | Simple iterative refinement | Medium | General testing       |
+| `jailbreak:tree` | Branching exploration       | High   | Systematic coverage   |
+| `jailbreak:meta` | Strategic planning          | High   | Sophisticated targets |
 
 ## Importance in Gen AI Red Teaming
 
@@ -83,4 +83,3 @@ The meta-agent jailbreak strategy simulates a sophisticated attacker who underst
 - [Multi-turn Jailbreaks](multi-turn.md)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
-
