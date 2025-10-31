@@ -1773,17 +1773,17 @@ describe('Language configuration', () => {
     });
 
     it('should support multilingual test cases for layer strategy', async () => {
-      const mockLayerAction = jest.fn().mockImplementation((testCases) => {
+      const mockJailbreakAction = jest.fn().mockImplementation((testCases) => {
         return testCases.map((tc: any) => ({
           ...tc,
-          vars: { ...tc.vars, query: `layered: ${tc.vars.query}` },
-          metadata: { ...tc.metadata, strategyId: 'layer' },
+          vars: { ...tc.vars, query: `jailbreak: ${tc.vars.query}` },
+          metadata: { ...tc.metadata, strategyId: 'jailbreak' },
         }));
       });
 
       jest.spyOn(Strategies, 'find').mockReturnValue({
-        id: 'layer',
-        action: mockLayerAction,
+        id: 'jailbreak',
+        action: mockJailbreakAction,
       });
 
       const result = await synthesize({
@@ -1791,16 +1791,16 @@ describe('Language configuration', () => {
         numTests: 2,
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
-        strategies: [{ id: 'layer', config: { steps: ['base64', 'rot13'] } }],
+        strategies: [{ id: 'jailbreak' }],
         targetLabels: ['test-provider'],
       });
 
       // Layer strategy now supports multiple languages
       // Base tests: 2 tests * 2 languages = 4
-      // Layer strategy tests: 4 tests (applies to all base tests)
+      // Jailbreak strategy tests: 4 tests (applies to all base tests)
       // Total: 8 tests
-      const layerTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'layer');
-      expect(layerTests.length).toBe(4);
+      const jailbreakTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'jailbreak');
+      expect(jailbreakTests.length).toBe(4);
       expect(result.testCases.length).toBe(8);
     });
 
