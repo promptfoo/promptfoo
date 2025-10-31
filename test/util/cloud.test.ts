@@ -22,6 +22,7 @@ jest.mock('../../src/util/cloud', () => ({
 }));
 
 describe('cloud utils', () => {
+  const EXPECTED_TIMEOUT_MS = 300_000;
   const mockFetchWithRetries = jest.mocked(fetchWithRetries);
   const mockCloudConfig = cloudConfig as jest.Mocked<typeof cloudConfig>;
   const mockCheckServerFeatureSupport = jest.mocked(checkServerFeatureSupport);
@@ -55,7 +56,7 @@ describe('cloud utils', () => {
           body: JSON.stringify(body),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -72,7 +73,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -91,7 +92,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer undefined', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -108,7 +109,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -123,7 +124,7 @@ describe('cloud utils', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/test/path',
         expect.any(Object),
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -138,7 +139,7 @@ describe('cloud utils', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/test/path',
         expect.any(Object),
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -155,7 +156,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -181,7 +182,7 @@ describe('cloud utils', () => {
           body: JSON.stringify(body),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -199,7 +200,7 @@ describe('cloud utils', () => {
           body: JSON.stringify(body),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -215,7 +216,7 @@ describe('cloud utils', () => {
           body: 'null',
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
 
       await makeRequest(path, method, undefined);
@@ -226,7 +227,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
   });
@@ -259,7 +260,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -329,7 +330,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -356,7 +357,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -661,7 +662,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -759,7 +760,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -887,7 +888,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -981,7 +982,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -1022,7 +1023,7 @@ describe('cloud utils', () => {
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -1142,7 +1143,7 @@ describe('cloud utils', () => {
           body: JSON.stringify({ config: { providers: ['test-provider'] } }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -1306,7 +1307,7 @@ describe('cloud utils', () => {
           body: JSON.stringify({ config: complexConfig }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
 
@@ -1332,7 +1333,7 @@ describe('cloud utils', () => {
           body: JSON.stringify({ config: { providers: [] } }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
-        300_000,
+        EXPECTED_TIMEOUT_MS,
       );
     });
   });
