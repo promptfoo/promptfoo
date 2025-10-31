@@ -86,7 +86,7 @@ export const ConfirmEvalNameDialog = ({
     }
   };
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
+  const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleConfirm();
@@ -120,7 +120,7 @@ export const ConfirmEvalNameDialog = ({
           label={label}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyDown}
           margin="normal"
           error={!!error}
           helperText={

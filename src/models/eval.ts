@@ -1069,12 +1069,13 @@ export default class Eval {
         }
 
         // Map to new eval with new IDs and timestamps
+        const now = Date.now();
         const copiedResults = batch.map((result) => ({
           ...result,
           id: randomUUID(),
           evalId: newEvalId,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
+          createdAt: now,
+          updatedAt: now,
         }));
 
         // Insert batch
