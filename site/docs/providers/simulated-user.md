@@ -95,34 +95,6 @@ tests:
           content: Yes, that works for me
 ```
 
-You can also load initial messages from a JSON file using `file://`:
-
-```yaml
-tests:
-  - vars:
-      instructions: You've selected a flight and want to pay with travel certificates
-      initialMessages: file://./conversation-history.json
-```
-
-Where `conversation-history.json` contains:
-
-```json
-[
-  {
-    "role": "user",
-    "content": "I need a flight from New York to Seattle on May 20th"
-  },
-  {
-    "role": "assistant",
-    "content": "I found a direct flight for $325. Would you like to book it?"
-  },
-  {
-    "role": "user",
-    "content": "Yes, that works for me"
-  }
-]
-```
-
 ### Using `config.initialMessages`
 
 Define shared initial messages at the provider level when multiple tests start from the same state:
@@ -152,19 +124,6 @@ tests:
             content: Great! How would you like to pay?
     vars:
       instructions: Ask about adding extra baggage
-```
-
-You can also load from a file:
-
-```yaml
-tests:
-  - provider:
-      id: 'promptfoo:simulated-user'
-      config:
-        maxTurns: 3
-        initialMessages: file://./shared-conversation-state.json
-    vars:
-      instructions: Ask to use travel certificates
 ```
 
 ### Hybrid Approach
@@ -197,6 +156,57 @@ tests:
 ```
 
 **Note:** `vars.initialMessages` takes precedence over `config.initialMessages`.
+
+### Loading from Files
+
+For longer conversation histories, you can load initial messages from JSON files using `file://`:
+
+```yaml
+tests:
+  - vars:
+      instructions: You've selected a flight and want to pay with travel certificates
+      initialMessages: file://./conversation-history.json
+```
+
+Where `conversation-history.json` contains:
+
+```json
+[
+  {
+    "role": "user",
+    "content": "I need a flight from New York to Seattle on May 20th"
+  },
+  {
+    "role": "assistant",
+    "content": "I'd be happy to help! May I have your user ID?"
+  },
+  {
+    "role": "user",
+    "content": "It's mia_li_3668"
+  },
+  {
+    "role": "assistant",
+    "content": "Thank you! I found a direct economy flight for $325. Would you like to book this?"
+  },
+  {
+    "role": "user",
+    "content": "Yes, that works for me"
+  }
+]
+```
+
+This works for both `vars.initialMessages` and `config.initialMessages`:
+
+```yaml
+tests:
+  - provider:
+      id: 'promptfoo:simulated-user'
+      config:
+        maxTurns: 3
+        initialMessages: file://./shared-conversation-state.json
+    vars:
+      instructions: Ask to use travel certificates
+```
 
 :::info How maxTurns Works with Initial Messages
 
