@@ -33,14 +33,14 @@ describe('SharePoint Integration', () => {
     jest.clearAllMocks();
 
     // Setup default environment variables
-    jest.mocked(getEnvString).mockImplementation((key: string) => {
+    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       const values: Record<string, string> = {
         SHAREPOINT_BASE_URL: TEST_BASE_URL,
         SHAREPOINT_CLIENT_ID: 'test-client-id',
         SHAREPOINT_TENANT_ID: 'test-tenant-id',
         SHAREPOINT_CERT_PATH: '/path/to/cert.pem',
       };
-      return values[key];
+      return values[key] || defaultValue;
     });
 
     // Mock certificate file reading with valid PEM content
@@ -116,9 +116,9 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
     });
 
     it('should throw error when SHAREPOINT_BASE_URL is missing', async () => {
-      jest.mocked(getEnvString).mockImplementation((key: string) => {
+      jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
         if (key === 'SHAREPOINT_BASE_URL') {
-          return undefined;
+          return defaultValue;
         }
         return 'mock-value';
       });
@@ -208,14 +208,14 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
     });
 
     it('should normalize trailing slashes in base URL', async () => {
-      jest.mocked(getEnvString).mockImplementation((key: string) => {
+      jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
         const values: Record<string, string> = {
           SHAREPOINT_BASE_URL: 'https://yourcompany.sharepoint.com/', // Trailing slash
           SHAREPOINT_CLIENT_ID: 'test-client-id',
           SHAREPOINT_TENANT_ID: 'test-tenant-id',
           SHAREPOINT_CERT_PATH: '/path/to/cert.pem',
         };
-        return values[key];
+        return values[key] || defaultValue;
       });
 
       const mockCsvData = 'header1,header2\nvalue1,value2';
