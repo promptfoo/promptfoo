@@ -749,7 +749,13 @@ const TlsCertificateSchema = z
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
-  maxRetries: z.number().min(0).optional(),
+  maxRetries: z
+    .number()
+    .min(0)
+    .optional()
+    .describe(
+      'Number of retry attempts for HTTP calls; can be overridden by PROMPTFOO_HTTP_MAX_RETRIES',
+    ),
   method: z.string().optional(),
   queryParams: z.record(z.string()).optional(),
   request: z.string().optional(),
@@ -1309,6 +1315,23 @@ export class HttpProvider implements ApiProvider {
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
+    // Allow environment variable to override maxRetries if not explicitly set in config
+    try {
+      const envMax = Number(getEnvString('PROMPTFOO_HTTP_MAX_RETRIES'));
+      if (!Number.isNaN(envMax)) {
+        // Only apply the env override if the config didn't set it
+        if (this.config.maxRetries == null) {
+          this.config.maxRetries = envMax;
+        }
+      }
+    } catch (_e) {
+      // ignore missing env
+    }
+    logger.debug(
+      `[HTTP Provider] maxRetries resolved to: ${
+        this.config.maxRetries == null ? 'default (fetchWithCache)' : this.config.maxRetries
+      }`,
+    );
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
