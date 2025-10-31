@@ -5,7 +5,7 @@ description: Guide for multi-turn attacks, focusing on custom providers
 
 # Multi-Turn Conversations
 
-Multi-turn conversations create unique attack vectors because the conversation history and memory can significantly impact how AI systems generate responses. Attack strategies like GOAT and Crescendo exploit this by building context over multiple exchanges, where earlier messages can influence the model's behavior in later turns. This creates opportunities for attacks that wouldn't be possible in single-turn scenarios, such as gradually escalating requests, building false premises, or exploiting accumulated context to bypass safety measures. To learn more about each of the multi-turn strategies available in Promptfoo, refer to [the multi-turn strategy documentation](/docs/red-team/strategies/multi-turn/). When using custom providers, additional configuration is necessary to handle multi-turn conversations. The purpose of this document is to provide details on how to manage this.
+Multi-turn conversations create unique attack vectors because the conversation history and memory can significantly impact how AI systems generate responses. Attack strategies like GOAT and Crescendo exploit this by building context over multiple exchanges, where earlier messages can influence the model's behavior in later turns. This creates opportunities for attacks that wouldn't be possible in single-turn scenarios, such as gradually escalating requests, building false premises, or exploiting accumulated context to bypass safety measures. To learn more about each of the multi-turn strategies available in Promptfoo, refer to [the multi-turn strategy documentation](/docs/red-team/strategies/multi-turn/).
 
 ## Session Management
 
@@ -114,10 +114,6 @@ _*Example Custom Python Provider*_
 import json
 import re
 import requests
-import urllib3
-
-# Suppress SSL warnings since we're using verify=False for the example
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 url = "https://customer-service-chatbot-example.promptfoo.app"
 
@@ -193,3 +189,132 @@ def call_api(prompt, options, context):
 ```
 
 Complete code for this example can be found [in our github](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-custom-provider-multi-turn).
+
+## Stateful Example
+
+Some providers, like the OpenAI Responses endpoint, store the conversation history associated with the conversation ID. You can use the session ID and pass it to these providers in order to avoid having to send the full conversation history with each request. The following example demonstrates how this can be done using the OpenAI Responses API.
+
+```python
+from openai import AsyncOpenAI, OpenAI
+
+async_client = AsyncOpenAI()
+client = OpenAI()
+
+
+def call_api(prompt, options, context):
+    # Get config values
+    # some_option = options.get("config").get("someOption")
+
+    # Get the session ID from the context
+    session_id = context.get("vars", {}).get("sessionId", "")
+
+    response = client.responses.create(
+        model="gpt-4.1-mini",
+        conversation: session_id,
+        input=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt,
+                    }
+                ],
+            },
+        ],
+        metadata={"sessionId": session_id} if session_id else None,
+    )
+
+    # Extract token usage information from the response
+    token_usage = None
+    if getattr(response, "usage", None):
+        token_usage = {
+            "total": response.usage.total_tokens,
+            "prompt": response.usage.prompt_tokens,
+            "completion": response.usage.completion_tokens,
+        }
+
+    return {
+        "output": response.output_text,
+        "tokenUsage": token_usage,
+        "metadata": {
+            "config": options.get("config", {}),
+        },
+    }
+
+
+def some_other_function(prompt, options, context):
+    return call_api(prompt + "\nWrite in ALL CAPS", options, context)
+
+
+async def async_provider(prompt, options, context):
+    response = await async_client.responses.create(
+        model="gpt-4o",
+        input=[
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are a marketer working for a startup called Bananamax.",
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt,
+                    }
+                ],
+            },
+        ],
+    )
+
+    # Extract token usage information from the async response
+    token_usage = None
+    if getattr(response, "usage", None):
+        token_usage = {
+            "total": response.usage.total_tokens,
+            "prompt": response.usage.prompt_tokens,
+            "completion": response.usage.completion_tokens,
+        }
+
+    return {
+        "output": response.output_text,
+        "tokenUsage": token_usage,
+    }
+
+
+if __name__ == "__main__":
+    # Example usage showing prompt, options with config, and context with vars
+    prompt = "What is the weather in San Francisco?"
+    options = {"config": {"optionFromYaml": 123}}
+    context = {"vars": {"location": "San Francisco"}}
+
+    print(call_api(prompt, options, context))
+```
+
+## Creating Session IDs using Hooks
+
+Some applications use a custom endpoint to establish the unique identifier for the conversation. The recommended approach is to use a beforeEach hook to establish the session id before each test. You can refer to the [the reference guide on configuring hooks](/docs/configuration/reference/#session-management-in-hooks). An example hook is showing below:
+
+Example Configuration:
+
+```yaml
+extensions:
+  - file://path/to/your/extension.js:extensionHook
+```
+
+Example Hook:
+
+```javascript
+export async function extensionHook(hookName, context) {
+  if (hookName === 'beforeEach') {
+    const res = await fetch('http://localhost:8080/session');
+    const sessionId = await res.text();
+    return { test: { ...context.test, vars: { ...context.test.vars, sessionId } } }; // Scope the session id to the current test case
+  }
+}
+```
