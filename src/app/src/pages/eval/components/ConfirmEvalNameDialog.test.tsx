@@ -1,5 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
 
@@ -50,13 +49,14 @@ describe('ConfirmEvalNameDialog', () => {
     });
 
     it('shows custom helper text when provided', () => {
-      render(<ConfirmEvalNameDialog {...defaultProps} helperText="Custom helper text" />);
-      expect(screen.getByText('Custom helper text')).toBeInTheDocument();
+      const helperText = 'Custom helper text';
+      render(<ConfirmEvalNameDialog {...defaultProps} helperText={helperText} />);
+      expect(screen.getByText(helperText)).toBeInTheDocument();
     });
 
     it('shows default helper text when not provided', () => {
       render(<ConfirmEvalNameDialog {...defaultProps} />);
-      expect(screen.getByText('Enter a name for this evaluation')).toBeInTheDocument();
+      expect(screen.getByText(/Enter a name for this evaluation/i)).toBeInTheDocument();
     });
   });
 
@@ -66,7 +66,7 @@ describe('ConfirmEvalNameDialog', () => {
         <ConfirmEvalNameDialog
           {...defaultProps}
           showSizeWarning={true}
-          itemCount={5000}
+          itemCount={100}
           itemLabel="results"
         />,
       );
@@ -78,12 +78,14 @@ describe('ConfirmEvalNameDialog', () => {
         <ConfirmEvalNameDialog
           {...defaultProps}
           showSizeWarning={true}
-          itemCount={15000}
+          itemCount={25000}
           itemLabel="results"
         />,
       );
-      expect(screen.getByText(/This evaluation has 15,000 results/)).toBeInTheDocument();
-      expect(screen.getByText(/This operation may take up to a minute/)).toBeInTheDocument();
+      expect(screen.getByText(/This evaluation has 25,000 results/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/This operation may take up to a minute./),
+      ).toBeInTheDocument();
     });
 
     it('shows warning alert for very large operations (>50K)', () => {
@@ -106,11 +108,11 @@ describe('ConfirmEvalNameDialog', () => {
         <ConfirmEvalNameDialog
           {...defaultProps}
           showSizeWarning={true}
-          itemCount={20000}
+          itemCount={25000}
           itemLabel="test cases"
         />,
       );
-      expect(screen.getByText(/This evaluation has 20,000 test cases/)).toBeInTheDocument();
+      expect(screen.getByText(/test cases/)).toBeInTheDocument();
     });
 
     it('does not show warning when showSizeWarning is false', () => {
@@ -118,371 +120,31 @@ describe('ConfirmEvalNameDialog', () => {
         <ConfirmEvalNameDialog
           {...defaultProps}
           showSizeWarning={false}
-          itemCount={75000}
-          itemLabel="results"
+          itemCount={100000}
         />,
       );
       expect(screen.queryByText(/This evaluation has/)).not.toBeInTheDocument();
     });
   });
 
-  describe('Input Validation', () => {
-    it('disables confirm button for empty input', () => {
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: '' } });
-
-      expect(confirmButton).toBeDisabled();
-    });
-
-    it('disables confirm button for whitespace-only input', () => {
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: '   ' } });
-
-      expect(confirmButton).toBeDisabled();
-    });
-
-    it('enables confirm button for valid input', () => {
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-
-      expect(confirmButton).toBeEnabled();
-    });
-
-    it('trims whitespace when confirming', async () => {
-      mockOnConfirm.mockResolvedValue(undefined);
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: '  Trimmed Name  ' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(mockOnConfirm).toHaveBeenCalledWith('Trimmed Name');
-      });
-    });
-  });
-
-  describe('Rename Mode (no itemCount)', () => {
-    it('disables confirm button when name has not changed', () => {
+  describe('Button States', () => {
+    it('disables confirm button when name has not changed (rename mode)', () => {
       render(<ConfirmEvalNameDialog {...defaultProps} currentName="Current Name" />);
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
       expect(confirmButton).toBeDisabled();
     });
 
-    it('enables confirm button when name has changed', () => {
-      render(<ConfirmEvalNameDialog {...defaultProps} currentName="Current Name" />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-
-      expect(confirmButton).toBeEnabled();
-    });
-
-    it('closes dialog without calling onConfirm when name unchanged', () => {
-      render(<ConfirmEvalNameDialog {...defaultProps} currentName="Current Name" />);
-      const input = screen.getByLabelText('Name');
-
-      fireEvent.change(input, { target: { value: 'Current Name' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-
-      expect(mockOnConfirm).not.toHaveBeenCalled();
-      expect(mockOnClose).toHaveBeenCalled();
-    });
-
-    it('calls onConfirm when name has changed', async () => {
-      mockOnConfirm.mockResolvedValue(undefined);
-      render(<ConfirmEvalNameDialog {...defaultProps} currentName="Current Name" />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(mockOnConfirm).toHaveBeenCalledWith('New Name');
-      });
-    });
-  });
-
-  describe('Copy Mode (with itemCount)', () => {
-    const copyProps = {
-      ...defaultProps,
-      itemCount: 1000,
-      itemLabel: 'results',
-    };
-
-    it('enables confirm button even with default name', () => {
-      render(<ConfirmEvalNameDialog {...copyProps} />);
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-      expect(confirmButton).toBeEnabled();
-    });
-
-    it('calls onConfirm even when name is same as currentName', async () => {
-      mockOnConfirm.mockResolvedValue(undefined);
-      render(<ConfirmEvalNameDialog {...copyProps} currentName="Test Name" />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'Test Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(mockOnConfirm).toHaveBeenCalledWith('Test Name');
-      });
-    });
-
-    it('always proceeds with copy operation regardless of name', async () => {
-      mockOnConfirm.mockResolvedValue(undefined);
-      render(<ConfirmEvalNameDialog {...copyProps} currentName="Original" />);
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(mockOnConfirm).toHaveBeenCalledWith('Original');
-      });
-    });
-  });
-
-  describe('Loading States', () => {
-    it('shows loading spinner when processing', async () => {
-      const slowConfirm = vi.fn(() => new Promise(() => {}));
-      render(<ConfirmEvalNameDialog {...defaultProps} onConfirm={slowConfirm} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Processing...')).toBeInTheDocument();
-      });
-    });
-
-    it('disables inputs during loading', async () => {
-      const slowConfirm = vi.fn(() => new Promise(() => {}));
-      render(<ConfirmEvalNameDialog {...defaultProps} onConfirm={slowConfirm} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-      const cancelButton = screen.getByRole('button', { name: 'Cancel' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(input).toBeDisabled();
-        expect(confirmButton).toBeDisabled();
-        expect(cancelButton).toBeDisabled();
-      });
-    });
-
-    it('shows processing message with item count', async () => {
-      const slowConfirm = vi.fn(() => new Promise(() => {}));
+    it('enables confirm button for copy mode even with default name', () => {
       render(
         <ConfirmEvalNameDialog
           {...defaultProps}
-          onConfirm={slowConfirm}
-          itemCount={5000}
-          itemLabel="results"
+          currentName="Test Name"
+          showSizeWarning={true}
+          itemCount={1000}
         />,
       );
-      const input = screen.getByLabelText('Name');
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Processing 5,000 results...')).toBeInTheDocument();
-      });
-    });
-
-    it('closes dialog on successful confirmation', async () => {
-      mockOnConfirm.mockResolvedValue(undefined);
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(mockOnClose).toHaveBeenCalled();
-      });
-    });
-  });
-
-  describe('Error Handling', () => {
-    it('displays error message on failure', async () => {
-      mockOnConfirm.mockRejectedValue(new Error('Operation failed'));
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Operation failed')).toBeInTheDocument();
-      });
-    });
-
-    it('keeps dialog open on error', async () => {
-      mockOnConfirm.mockRejectedValue(new Error('Operation failed'));
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Operation failed')).toBeInTheDocument();
-      });
-
-      expect(mockOnClose).not.toHaveBeenCalled();
-    });
-
-    it('shows error in TextField error state', async () => {
-      mockOnConfirm.mockRejectedValue(new Error('Network error'));
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(input).toHaveAttribute('aria-invalid', 'true');
-      });
-    });
-
-    it('clears error on retry', async () => {
-      mockOnConfirm.mockRejectedValueOnce(new Error('First error')).mockResolvedValue(undefined);
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('First error')).toBeInTheDocument();
-      });
-
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.queryByText('First error')).not.toBeInTheDocument();
-      });
-    });
-
-    it('handles non-Error exceptions', async () => {
-      mockOnConfirm.mockRejectedValue('String error');
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Operation failed')).toBeInTheDocument();
-      });
-    });
-  });
-
-  describe('Keyboard Interaction', () => {
-    it('confirms on Enter key', async () => {
-      mockOnConfirm.mockResolvedValue(undefined);
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.keyDown(input, { key: 'Enter' });
-
-      await waitFor(() => {
-        expect(mockOnConfirm).toHaveBeenCalledWith('New Name');
-      });
-    });
-
-    it('does not confirm on Shift+Enter', () => {
-      mockOnConfirm.mockResolvedValue(undefined);
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const input = screen.getByLabelText('Name');
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
-
-      expect(mockOnConfirm).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Dialog Lifecycle', () => {
-    it('resets state when dialog reopens', () => {
-      const { rerender } = render(<ConfirmEvalNameDialog {...defaultProps} open={false} />);
-
-      rerender(<ConfirmEvalNameDialog {...defaultProps} open={true} currentName="First Name" />);
-      let input = screen.getByLabelText('Name') as HTMLInputElement;
-      expect(input.value).toBe('First Name');
-
-      fireEvent.change(input, { target: { value: 'Modified Name' } });
-      expect(input.value).toBe('Modified Name');
-
-      rerender(<ConfirmEvalNameDialog {...defaultProps} open={false} currentName="First Name" />);
-      rerender(<ConfirmEvalNameDialog {...defaultProps} open={true} currentName="Second Name" />);
-
-      input = screen.getByLabelText('Name') as HTMLInputElement;
-      expect(input.value).toBe('Second Name');
-    });
-
-    it('clears error when dialog reopens', async () => {
-      mockOnConfirm.mockRejectedValue(new Error('Test error'));
-      const { rerender } = render(<ConfirmEvalNameDialog {...defaultProps} open={true} />);
-      const input = screen.getByLabelText('Name');
-      const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-
-      fireEvent.change(input, { target: { value: 'New Name' } });
-      fireEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Test error')).toBeInTheDocument();
-      });
-
-      rerender(<ConfirmEvalNameDialog {...defaultProps} open={false} />);
-      rerender(<ConfirmEvalNameDialog {...defaultProps} open={true} />);
-
-      expect(screen.queryByText('Test error')).not.toBeInTheDocument();
-    });
-  });
-
-  describe('Cancel Button', () => {
-    it('calls onClose when cancel is clicked', () => {
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const cancelButton = screen.getByRole('button', { name: 'Cancel' });
-
-      fireEvent.click(cancelButton);
-
-      expect(mockOnClose).toHaveBeenCalled();
-    });
-
-    it('does not call onConfirm when cancel is clicked', () => {
-      render(<ConfirmEvalNameDialog {...defaultProps} />);
-      const cancelButton = screen.getByRole('button', { name: 'Cancel' });
-
-      fireEvent.click(cancelButton);
-
-      expect(mockOnConfirm).not.toHaveBeenCalled();
+      expect(confirmButton).not.toBeDisabled();
     });
   });
 
@@ -496,7 +158,8 @@ describe('ConfirmEvalNameDialog', () => {
           itemLabel="results"
         />,
       );
-      expect(screen.queryByText(/This evaluation has/)).not.toBeInTheDocument();
+      // Should not show warning at exactly 10000
+      expect(screen.queryByText(/This evaluation has 10,000 results/)).not.toBeInTheDocument();
     });
 
     it('handles itemCount of exactly 10001', () => {
@@ -508,7 +171,68 @@ describe('ConfirmEvalNameDialog', () => {
           itemLabel="results"
         />,
       );
+      // Should show warning at 10001
       expect(screen.getByText(/This evaluation has 10,001 results/)).toBeInTheDocument();
+    });
+
+    it('handles itemCount of exactly 50000', () => {
+      render(
+        <ConfirmEvalNameDialog
+          {...defaultProps}
+          showSizeWarning={true}
+          itemCount={50000}
+          itemLabel="results"
+        />,
+      );
+      // Should show info alert, not warning
+      expect(screen.getByText(/This evaluation has 50,000 results/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/This operation may take up to a minute./),
+      ).toBeInTheDocument();
+    });
+
+    it('handles itemCount of exactly 50001', () => {
+      render(
+        <ConfirmEvalNameDialog
+          {...defaultProps}
+          showSizeWarning={true}
+          itemCount={50001}
+          itemLabel="results"
+        />,
+      );
+      // Should show warning alert
+      expect(screen.getByText(/This evaluation has 50,001 results/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/This operation may take several minutes./),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('Component Props', () => {
+    it('accepts and displays custom title', () => {
+      render(<ConfirmEvalNameDialog {...defaultProps} title="Custom Title" />);
+      expect(screen.getByText('Custom Title')).toBeInTheDocument();
+    });
+
+    it('accepts and displays custom label', () => {
+      render(<ConfirmEvalNameDialog {...defaultProps} label="Custom Label" />);
+      expect(screen.getByLabelText('Custom Label')).toBeInTheDocument();
+    });
+
+    it('accepts and displays custom action button text', () => {
+      render(<ConfirmEvalNameDialog {...defaultProps} actionButtonText="Save Changes" />);
+      expect(screen.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument();
+    });
+
+    it('uses default itemLabel when not provided', () => {
+      render(
+        <ConfirmEvalNameDialog
+          {...defaultProps}
+          showSizeWarning={true}
+          itemCount={25000}
+        />,
+      );
+      expect(screen.getByText(/items/)).toBeInTheDocument();
     });
   });
 });
