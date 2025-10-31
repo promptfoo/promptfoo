@@ -41,7 +41,7 @@ export const handlePython = async ({
   assertion,
   renderedValue,
   valueFromScript,
-  context,
+  assertionValueContext,
   output,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
@@ -72,7 +72,7 @@ ${
     : `    return ${renderedValue}`
 }
 `;
-      result = await runPythonCode(pythonScript, 'main', [output, context]);
+      result = await runPythonCode(pythonScript, 'main', [output, assertionValueContext]);
     } else {
       result = valueFromScript;
     }

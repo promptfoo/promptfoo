@@ -6,23 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
+
+### Changed
+
+- chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings
+
+## [0.119.1] - 2025-10-29
+
 ### Changed
 
 - chore(redteam): categorize `jailbreak:meta` under agentic strategies and mark as remote-only for correct UI grouping and Cloud behavior (#6049)
+- chore(redteam): improve support for custom policy metric names that should include strategy suffix (#6048)
 
 ### Fixed
 
-- fix(providers): removing axios as a runtime dependency in google live provider (#227)
+- fix(redteam): validate custom strategy strategyText requirement to prevent confusing errors during test execution (#6046)
+- fix(init): include helpful error message and cleanup any directories created when example download fails (#6051)
+- fix(providers): removing axios as a runtime dependency in google live provider (#6050)
 - fix(csv): handle primitive values directly in red team CSV export to avoid double-quoting strings (#6040)
 - fix(csv): fix column count mismatch in red team CSV export when rows have multiple outputs (#6040)
+- fix(internals): propagate originalProvider context to all model-graded assertions (#5973)
 
-### Chores
+### Dependencies
 
-- chore: improves support for custom policy metric names that should include strategy suffix (#6048)
-
-### Tests
-
-- test(redteam): add tests for `jailbreak:meta` strategy and iterative strategy config (#XXXX)
+- chore(deps): bump better-sqlite3 from 11.10.0 to 12.4.1 for Node.js v24 support (#6052) by @cdolek-twilio
+- chore(deps): update Biome version with force-include patterns (`!!`) for faster local linting/CI by @sklein12 (#6042)
 
 ## [0.119.0] - 2025-10-27
 
@@ -52,6 +63,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - chore(internals): custom policy type def (#6037)
 - chore(changelog): organize and improve Unreleased section with consistent scoping and formatting (#6024)
+- refactor(redteam): migrate multilingual from per-strategy config to global language configuration; plugins now generate tests directly in target languages without post-generation translation (#5984)
 - chore(cli): show telemetryDisabled/telemetryDebug in `promptfoo debug` output (#6015)
 - chore(cli): improve error handling and error logging (#5930)
 - chore(cli): revert "feat: Improved error handling in CLI and error logging" (#5939)
@@ -104,6 +116,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - docs(model-audit): improve accuracy and clarity of ModelAudit documentation (#6023)
 - docs(contributing): add changelog and GitHub Actions enforcement (#6012)
+- docs(redteam): add global language configuration section to red team configuration docs; remove multilingual strategy documentation (#5984)
 - docs(providers): add OpenAI Agents provider documentation and example (#6009)
 - docs(providers): update AWS Bedrock model access documentation (#5953)
 - docs(providers): fix apiKey environment variable syntax across provider docs and examples (#6018)
@@ -123,6 +136,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - test(providers): fix flaky latencyMs assertions in TrueFoundry provider tests (#6026)
 - test(providers): add unit test verifying assistant system prompt inclusion for simulated-user provider (#6020)
 - test(providers): add comprehensive tests for OpenAI Agents provider, loader, and tracing (#6009)
+- test(redteam): update strategy and frontend tests for global language configuration migration (#5984)
 - test(redteam): remove redteam constants mocks from unit tests (#6010)
 - test(webui): add tests for evaluation UI components and hooks (#5981)
 

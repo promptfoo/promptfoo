@@ -49,7 +49,7 @@ describe('handleModeration', () => {
     outputString: 'output',
     prompt: 'prompt',
     baseType: 'moderation',
-    context: mockContext,
+    assertionValueContext: mockContext,
     inverse: false,
     output: 'output',
     providerResponse: { output: 'output' },
