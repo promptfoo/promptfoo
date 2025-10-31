@@ -66,7 +66,7 @@ function a11yProps(index: number) {
   };
 }
 
-const HttpAdvancedConfiguration = ({
+const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
   selectedTarget,
   defaultRequestTransform,
   updateCustomTarget,

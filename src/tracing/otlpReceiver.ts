@@ -102,15 +102,47 @@ export class OTLPReceiver {
         traces = this.parseOTLPJSONRequest(req.body);
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
 
-        // Group spans by trace ID
+        // Group spans by trace ID and extract metadata
         const spansByTrace = new Map<string, SpanData[]>();
+        const traceInfoById = new Map<string, { evaluationId?: string; testCaseId?: string }>();
+
         for (const trace of traces) {
           if (!spansByTrace.has(trace.traceId)) {
             spansByTrace.set(trace.traceId, []);
+
+            // Extract optional evaluation and test case IDs from span attributes
+            const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
+            const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
+
+            // Store info for this trace (even if IDs are missing)
+            const info = traceInfoById.get(trace.traceId) ?? {};
+            if (evaluationId) {
+              info.evaluationId = evaluationId;
+            }
+            if (testCaseId) {
+              info.testCaseId = testCaseId;
+            }
+            traceInfoById.set(trace.traceId, info);
           }
           spansByTrace.get(trace.traceId)!.push(trace.span);
         }
         logger.debug(`[OtlpReceiver] Grouped spans into ${spansByTrace.size} traces`);
+
+        // Create trace records for all traces (required for foreign key constraints)
+        // Include optional metadata when available
+        for (const [traceId, info] of traceInfoById) {
+          try {
+            logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
+            await this.traceStore.createTrace({
+              traceId,
+              evaluationId: info.evaluationId || '',
+              testCaseId: info.testCaseId || '',
+            });
+          } catch (error) {
+            // Trace might already exist, which is fine
+            logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
+          }
+        }
 
         // Store spans for each trace
         for (const [traceId, spans] of spansByTrace) {

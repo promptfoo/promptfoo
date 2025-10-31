@@ -5,7 +5,9 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
+import { strategyDisplayNames } from '../constants';
 import { isCustomStrategy } from '../constants/strategies';
+import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
@@ -21,11 +23,11 @@ import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
-import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
+import { addSimbaTestCases } from './simba';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
@@ -133,6 +135,19 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'authoritative-markup-injection',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Authoritative Markup Injection to ${testCases.length} test cases`);
+      const newTestCases = await addAuthoritativeMarkupInjectionTestCases(
+        testCases,
+        injectVar,
+        config,
+      );
+      logger.debug(`Added ${newTestCases.length} Authoritative Markup Injection test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'mischievous-user',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding mischievous user test cases to ${testCases.length} test cases`);
@@ -187,6 +202,15 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'jailbreak:meta',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
+      logger.debug(`Added ${newTestCases.length} meta-agent jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
     id: 'image',
     action: async (testCases, injectVar) => {
       logger.debug(`Adding image encoding to ${testCases.length} test cases`);
@@ -232,15 +256,6 @@ export const Strategies: Strategy[] = [
     },
   },
   {
-    id: 'multilingual',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding multilingual test cases to ${testCases.length} test cases`);
-      const newTestCases = await addMultilingual(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} multilingual test cases`);
-      return newTestCases;
-    },
-  },
-  {
     id: 'prompt-injection',
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding prompt injections to ${testCases.length} test cases`);
@@ -264,6 +279,17 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding ROT13 encoding to ${testCases.length} test cases`);
       const newTestCases = addRot13(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'simba',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(
+        `Adding ${strategyDisplayNames.simba} test cases to ${testCases.length} test cases`,
+      );
+      const newTestCases = await addSimbaTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} ${strategyDisplayNames.simba} test cases`);
       return newTestCases;
     },
   },
@@ -316,7 +342,10 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
 
     // Check if it's a custom strategy variant (e.g., custom:greeting-strategy)
     if (isCustomStrategy(strategy.id)) {
-      continue; // Custom strategies are always valid
+      if (!strategy.config?.strategyText || typeof strategy.config.strategyText !== 'string') {
+        throw new Error('Custom strategy requires strategyText in config');
+      }
+      continue;
     }
 
     if (!Strategies.map((s) => s.id).includes(strategy.id)) {

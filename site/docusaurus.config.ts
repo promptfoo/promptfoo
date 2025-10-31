@@ -208,7 +208,7 @@ const config: Config = {
             },
           ],
         },
-        { to: '/pricing/', label: 'Enterprise', position: 'left' },
+        { to: '/pricing/', label: 'Pricing', position: 'left' },
         {
           to: 'https://promptfoo.app',
           position: 'right',
@@ -292,7 +292,7 @@ const config: Config = {
             },
             {
               label: 'Minimizing Hallucinations',
-              to: '/docs/guides/prevent-llm-hallucations',
+              to: '/docs/guides/prevent-llm-hallucinations',
             },
             {
               label: 'Config Validator',
@@ -424,6 +424,10 @@ const config: Config = {
           {
             from: '/vegas-contact',
             to: 'https://triangular-manchego-867.notion.site/2395ae153a138028a8bef35f6889f6e6?pvs=105',
+          },
+          {
+            from: '/docs/guides/prevent-llm-hallucations',
+            to: '/docs/guides/prevent-llm-hallucinations',
           },
         ],
       },

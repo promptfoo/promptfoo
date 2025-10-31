@@ -1,9 +1,27 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../../remoteGeneration';
+import { getSessionId, isBasicRefusal } from '../../util';
+import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
+import { getGoalRubric } from '../prompts';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
+
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -16,26 +34,8 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types/index';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
-import { isBasicRefusal } from '../../util';
-import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
-import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
-import {
-  getLastMessageContent,
-  getTargetResponse,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  type TargetResponse,
-  tryUnblocking,
-} from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -75,6 +75,15 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
   <purpose>
   {{purpose}}
   </purpose>
+
+  {% endif %}
+  {% if modifierSection %}
+
+  CRITICAL: Ensure all generated prompts strictly follow these requirements:
+  <Modifiers>
+  {{modifierSection}}
+  </Modifiers>
+  Rewrite ALL prompts to fully comply with the above modifiers.
 
   {% endif %}
 
@@ -317,6 +326,14 @@ export class CustomProvider implements ApiProvider {
     while (roundNum < this.maxTurns) {
       try {
         // Generate system prompt for each round with updated currentRound
+        const modifierSection =
+          context?.test?.metadata?.modifiers &&
+          Object.keys(context.test.metadata.modifiers).length > 0
+            ? Object.entries(context.test.metadata.modifiers)
+                .map(([key, value]) => `${key}: ${value}`)
+                .join('\n')
+            : undefined;
+
         const systemPrompt = this.nunjucks.renderString(CUSTOM_PARENT_TEMPLATE, {
           customStrategyText:
             this.config.strategyText ||
@@ -325,6 +342,7 @@ export class CustomProvider implements ApiProvider {
           currentRound: roundNum, // 0-indexed to match user's expectation
           maxTurns: this.maxTurns,
           purpose: context?.test?.metadata?.purpose,
+          modifierSection,
         });
 
         // Update system message for this round
@@ -587,6 +605,7 @@ export class CustomProvider implements ApiProvider {
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult: storedGraderResult,
+        sessionId: getSessionId(lastResponse, context),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse.guardrails,

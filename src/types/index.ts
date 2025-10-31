@@ -17,7 +17,12 @@ import type {
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
 import type { Prompt, PromptFunction } from './prompts';
-import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 import type { TraceData } from './tracing';
 
@@ -150,7 +155,6 @@ export interface RunEvalOptions {
   registers?: EvalRegisters;
   isRedteam: boolean;
 
-  allTests?: RunEvalOptions[];
   concurrency?: number;
 
   /**
@@ -578,7 +582,10 @@ export type AssertionValueFunctionResult = boolean | number | GradingResult;
 export interface AssertionParams {
   assertion: Assertion;
   baseType: AssertionType;
-  context: AssertionValueFunctionContext;
+  /** Context passed to provider.callApi() for model-graded assertions */
+  providerCallContext?: CallApiContextParams;
+  /** Context passed to assertion value functions */
+  assertionValueContext: AssertionValueFunctionContext;
   cost?: number;
   inverse: boolean;
   logProbs?: number[];
@@ -1156,6 +1163,7 @@ export type EvalSummary = ResultLightweightWithLabel & {
     id: string;
     label: string | null;
   }[];
+  attackSuccessRate?: number;
 };
 
 export interface OutputMetadata {

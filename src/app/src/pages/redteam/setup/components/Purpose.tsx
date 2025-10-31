@@ -130,7 +130,10 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   const theme = useTheme();
   const { config, updateApplicationDefinition, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+    refetch: checkHealth,
+  } = useApiHealth();
   const [testMode, setTestMode] = useState<'application' | 'model'>('application');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['Core Application Details']), // Expand the first section by default since it has required fields

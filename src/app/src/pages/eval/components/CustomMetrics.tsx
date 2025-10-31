@@ -3,12 +3,10 @@ import {
   determinePolicyTypeFromId,
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
-  isValidPolicyObject,
   makeCustomPolicyCloudUrl,
-  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
@@ -18,8 +16,7 @@ import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import useCloudConfig from '../../../hooks/useCloudConfig';
 import { useTableStore } from './store';
-import type { PolicyObject } from '@promptfoo/redteam/types';
-
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
@@ -124,23 +121,7 @@ const CustomMetrics = ({
     [addFilter, filters.values],
   );
 
-  const policiesById = useMemo(() => {
-    const map: Record<PolicyObject['id'], PolicyObject> = {};
-    config?.redteam?.plugins?.forEach((plugin) => {
-      if (typeof plugin !== 'string' && plugin.id === 'policy') {
-        const policy = plugin?.config?.policy;
-        if (policy) {
-          if (isValidPolicyObject(policy)) {
-            map[policy.id] = policy;
-          } else {
-            const id = makeInlinePolicyId(policy);
-            map[id] = { id, text: policy };
-          }
-        }
-      }
-    });
-    return map;
-  }, [config]);
+  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   return (
     <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>
@@ -154,7 +135,7 @@ const CustomMetrics = ({
             const policyId = deserializePolicyIdFromMetric(metric);
             const policy = policiesById[policyId];
             if (policy) {
-              displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
+              displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, metric);
               tooltipContent = (
                 <>
                   <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 600, mb: 1 }}>

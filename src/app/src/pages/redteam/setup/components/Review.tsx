@@ -35,7 +35,6 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { isFoundationModelProvider } from '@promptfoo/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
@@ -49,9 +48,15 @@ import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
 import type { RedteamRunOptions } from '@promptfoo/types';
-import { getEstimatedDuration } from './strategies/utils';
-import type { RedteamPlugin } from '@promptfoo/redteam/types';
+
+import type { RedteamPlugin, Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
+import EstimationsDisplay from './EstimationsDisplay';
+import Tooltip from '@mui/material/Tooltip';
+import {
+  isValidPolicyObject,
+  makeDefaultPolicyName,
+} from '@promptfoo/redteam/plugins/policy/utils';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -62,9 +67,7 @@ interface ReviewProps {
 
 interface PolicyPlugin {
   id: 'policy';
-  config: {
-    policy: string;
-  };
+  config: { policy: Policy };
 }
 
 interface JobStatusResponse {
@@ -81,7 +84,10 @@ export default function Review({
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+    isLoading: isCheckingApiHealth,
+  } = useApiHealth();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
@@ -183,11 +189,6 @@ export default function Review({
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
-
-  // Check API health on mount
-  useEffect(() => {
-    checkHealth();
-  }, [checkHealth]);
 
   // Sync local maxConcurrency state with config
   useEffect(() => {
@@ -586,54 +587,74 @@ export default function Review({
                 <Typography variant="h6" gutterBottom>
                   Custom Policies ({customPolicies.length})
                 </Typography>
-                <Stack spacing={1}>
-                  {customPolicies.map((policy, index) => (
-                    <Box
-                      key={index}
-                      sx={{
-                        p: 1.5,
-                        borderRadius: 1,
-                        bgcolor: theme.palette.action.hover,
-                        position: 'relative',
-                      }}
-                    >
-                      <Typography
-                        variant="body2"
+                <Stack spacing={1} sx={{ maxHeight: 400, overflowY: 'auto' }}>
+                  {customPolicies.map((policy, index) => {
+                    const isPolicyObject = isValidPolicyObject(policy.config.policy);
+                    return (
+                      <Box
+                        key={index}
                         sx={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          paddingRight: '24px',
+                          p: 1.5,
+                          borderRadius: 1,
+                          bgcolor: theme.palette.action.hover,
+                          position: 'relative',
+                          display: 'flex',
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
                         }}
                       >
-                        {policy.config.policy}
-                      </Typography>
-                      <IconButton
-                        size="small"
-                        onClick={() => {
-                          const newPlugins = config.plugins.filter(
-                            (p, _i) =>
-                              !(
-                                typeof p === 'object' &&
-                                p.id === 'policy' &&
-                                p.config?.policy === policy.config.policy
-                              ),
-                          );
-                          updateConfig('plugins', newPlugins);
-                        }}
-                        sx={{
-                          position: 'absolute',
-                          right: 4,
-                          top: 4,
-                          padding: '2px',
-                        }}
-                      >
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  ))}
+                        <Box>
+                          <Typography gutterBottom>
+                            {isPolicyObject
+                              ? (policy.config.policy as PolicyObject).name
+                              : // Backwards compatibility w/ text-only inline policies.
+                                makeDefaultPolicyName(index)}
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              paddingRight: '24px',
+                            }}
+                          >
+                            {typeof policy.config.policy === 'string'
+                              ? policy.config.policy
+                              : policy.config.policy?.text || ''}
+                          </Typography>
+                        </Box>
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            const policyToMatch =
+                              // Backwards compatibility for policies w/o object config
+                              typeof policy.config.policy === 'string'
+                                ? policy.config.policy
+                                : policy.config.policy?.id;
+
+                            const newPlugins = config.plugins.filter(
+                              (p, _i) =>
+                                !(
+                                  typeof p === 'object' &&
+                                  p.id === 'policy' &&
+                                  ((typeof p.config?.policy === 'string' &&
+                                    p.config.policy === policyToMatch) ||
+                                    (typeof p.config?.policy === 'object' &&
+                                      p.config.policy?.id === policyToMatch))
+                                ),
+                            );
+                            updateConfig('plugins', newPlugins);
+                          }}
+                        >
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    );
+                  })}
                 </Stack>
               </Paper>
             </Grid>
@@ -1042,6 +1063,7 @@ export default function Review({
                         });
                       }
                     }}
+                    language={config.language}
                   />
                 </AccordionDetails>
               </Accordion>
@@ -1055,30 +1077,7 @@ export default function Review({
           Run Your Scan
         </Typography>
 
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            mb: 3,
-            p: 2,
-            borderRadius: 1,
-            backgroundColor: theme.palette.background.paper,
-            border: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography variant="body1" color="text.secondary">
-              Estimated Duration:
-            </Typography>
-          </Box>
-          <Typography variant="body1" fontWeight="bold" color="primary.main">
-            {getEstimatedDuration(config)}
-          </Typography>
-          <Tooltip title="Estimated time includes test generation and probe execution. Actual time may vary based on target response times and network conditions.">
-            <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
-          </Tooltip>
-        </Box>
+        <EstimationsDisplay config={config} />
 
         <Paper elevation={2} sx={{ p: 3 }}>
           <Box sx={{ mb: 4 }}>
@@ -1123,7 +1122,7 @@ export default function Review({
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
             </Typography>
-            {apiHealthStatus !== 'connected' && apiHealthStatus !== 'loading' && (
+            {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert severity="warning" sx={{ mb: 2 }}>
                 {apiHealthStatus === 'blocked'
                   ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'

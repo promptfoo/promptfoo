@@ -44,6 +44,7 @@ import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerforma
 import EvalResult from './evalResult';
 
 import type { EvalResultsFilterMode } from '../types/index';
+import { calculateAttackSuccessRate } from '../redteam/metrics';
 
 interface FilteredCountRow {
   count: number | null;
@@ -542,11 +543,46 @@ export default class Eval {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
-        if (type === 'metric' && operator === 'equals') {
-          const escapedValue = escapeJsonPathKey(value);
-          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
-          // in double quotes.
-          condition = `json_extract(named_scores, '$."${escapedValue}"') IS NOT NULL`;
+        if (type === 'metric') {
+          // For backward compatibility: old filters use 'value' for metric name with 'equals' operator
+          // New filters use 'field' for metric name with comparison operators
+          const metricKey = field || value;
+          if (!metricKey) {
+            // Skip invalid metric filters
+            return;
+          }
+
+          const escapedField = escapeJsonPathKey(metricKey);
+
+          // Value must be a number
+          const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
+          if (!Number.isFinite(numericValue)) {
+            return;
+          }
+
+          if (operator === 'is_defined' || (operator === 'equals' && !field)) {
+            // 'is_defined': new operator that checks if metric exists
+            // 'equals' without field: old format for backward compatibility
+            condition = `json_extract(named_scores, '$."${escapedField}"') IS NOT NULL`;
+          } else if (operator === 'eq') {
+            // Numeric equality
+            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${numericValue}`;
+          } else if (operator === 'neq') {
+            // Numeric inequality
+            condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${numericValue})`;
+          } else if (operator === 'gt') {
+            // Greater than
+            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${numericValue}`;
+          } else if (operator === 'gte') {
+            // Greater than or equal
+            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${numericValue}`;
+          } else if (operator === 'lt') {
+            // Less than
+            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${numericValue}`;
+          } else if (operator === 'lte') {
+            // Less than or equal
+            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${numericValue}`;
+          }
         } else if (type === 'metadata' && field) {
           const sanitizedValue = sanitizeValue(value);
           const escapedField = escapeJsonPathKey(field);
@@ -970,6 +1006,11 @@ export async function getEvalSummaries(
         return memo + (prompt.metrics?.testPassCount ?? 0);
       }, 0) ?? 0;
 
+    const failCount =
+      result.prompts?.reduce((memo, prompt) => {
+        return memo + (prompt.metrics?.testFailCount ?? 0);
+      }, 0) ?? 0;
+
     // All prompts should have the same number of test cases:
     const testCounts = result.prompts?.map((p) => {
       return (
@@ -1035,9 +1076,11 @@ export async function getEvalSummaries(
       numTests: testCount,
       datasetId: result.datasetId,
       isRedteam: result.isRedteam,
-      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0, // ASR
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,
+      attackSuccessRate:
+        type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
     };
   });
 }

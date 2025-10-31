@@ -11,6 +11,7 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'owasp:agentic': 'OWASP Agentic v1.0',
   'eu:ai-act': 'EU AI Act',
   'iso:42001': 'ISO/IEC 42001',
+  gdpr: 'GDPR',
 };
 
 export const OWASP_LLM_TOP_10_NAMES = [
@@ -40,6 +41,16 @@ export const OWASP_API_TOP_10_NAMES = [
 ];
 
 export const OWASP_AGENTIC_NAMES = ['T1: Memory Poisoning'];
+
+export const GDPR_ARTICLE_NAMES = [
+  'Principles of Processing Personal Data',
+  'Special Categories of Personal Data',
+  'Right of Access',
+  'Right to Erasure',
+  'Automated Decision-Making',
+  'Data Protection by Design',
+  'Security of Processing',
+];
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<
   string,
@@ -224,7 +235,6 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'goat',
       'prompt-injection',
       'best-of-n',
-      'multilingual',
     ],
   },
 
@@ -273,15 +283,7 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'indirect-prompt-injection',
       'hijacking',
     ],
-    strategies: [
-      'jailbreak',
-      'jailbreak:tree',
-      'jailbreak:composite',
-      'crescendo',
-      'goat',
-      'multilingual',
-      'gcg',
-    ],
+    strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak:composite', 'crescendo', 'goat', 'gcg'],
   },
 
   /**
@@ -425,7 +427,7 @@ export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
   'mitre:atlas:reconnaissance': {
     plugins: ['competitors', 'policy', 'prompt-extraction', 'rbac'],
-    strategies: ['multilingual'],
+    strategies: [],
   },
   'mitre:atlas:resource-development': {
     plugins: ['harmful:cybercrime', 'harmful:illegal-drugs', 'harmful:indiscriminate-weapons'],
@@ -559,6 +561,95 @@ export const ISO_42001_MAPPING: Record<string, { plugins: Plugin[]; strategies: 
   },
 };
 
+/**
+ * EU General Data Protection Regulation (GDPR)
+ * Maps key GDPR articles to relevant Promptfoo plugins for testing AI/LLM systems
+ * for compliance with data protection requirements.
+ *
+ * Sources:
+ *  * GDPR full text: https://gdpr-info.eu/
+ */
+export const GDPR_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'gdpr:art5': {
+    // Article 5 - Principles relating to processing of personal data
+    // (lawfulness, fairness, transparency, purpose limitation, data minimization, accuracy)
+    plugins: [
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'hallucination',
+      'harmful:misinformation-disinformation',
+    ],
+    strategies: [],
+  },
+  'gdpr:art9': {
+    // Article 9 - Processing of special categories of personal data
+    // (sensitive data like health, biometric, genetic data, racial/ethnic origin)
+    plugins: [
+      'pii:direct',
+      'pii:social',
+      'harmful:privacy',
+      'bias:age',
+      'bias:disability',
+      'bias:gender',
+      'bias:race',
+    ],
+    strategies: [],
+  },
+  'gdpr:art15': {
+    // Article 15 - Right of access by the data subject
+    plugins: ['pii:api-db', 'pii:session', 'rbac', 'bola', 'bfla'],
+    strategies: [],
+  },
+  'gdpr:art17': {
+    // Article 17 - Right to erasure ("right to be forgotten")
+    plugins: ['pii:api-db', 'pii:direct', 'pii:session', 'harmful:privacy', 'cross-session-leak'],
+    strategies: [],
+  },
+  'gdpr:art22': {
+    // Article 22 - Automated individual decision-making, including profiling
+    plugins: [
+      'bias:age',
+      'bias:disability',
+      'bias:gender',
+      'bias:race',
+      'harmful:hate',
+      'overreliance',
+      'hallucination',
+    ],
+    strategies: [],
+  },
+  'gdpr:art25': {
+    // Article 25 - Data protection by design and by default
+    plugins: [
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'prompt-extraction',
+      // 'cross-session-leak',
+    ],
+    strategies: [],
+  },
+  'gdpr:art32': {
+    // Article 32 - Security of processing
+    plugins: [
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+      'debug-access',
+      'harmful:cybercrime',
+      'rbac',
+      'bfla',
+      'bola',
+    ],
+    strategies: [],
+  },
+};
+
 // Aliased plugins are like collections, except they are hidden from the standard plugin list.
 export const ALIASED_PLUGINS = [
   'mitre:atlas',
@@ -578,6 +669,7 @@ export const ALIASED_PLUGINS = [
   'tool-discovery:multi-turn',
   'eu:ai-act',
   'iso:42001',
+  'gdpr',
   ...Object.keys(MITRE_ATLAS_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
@@ -585,6 +677,7 @@ export const ALIASED_PLUGINS = [
   ...Object.keys(OWASP_AGENTIC_REDTEAM_MAPPING),
   ...Object.keys(EU_AI_ACT_MAPPING),
   ...Object.keys(ISO_42001_MAPPING),
+  ...Object.keys(GDPR_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
@@ -599,6 +692,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'owasp:agentic:redteam': OWASP_AGENTIC_REDTEAM_MAPPING,
   'eu:ai-act': EU_AI_ACT_MAPPING,
   'iso:42001': ISO_42001_MAPPING,
+  gdpr: GDPR_MAPPING,
   'tool-discovery:multi-turn': {
     'tool-discovery:multi-turn': {
       plugins: ['tool-discovery'],

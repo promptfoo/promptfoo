@@ -47,6 +47,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Dynamic (Single-Turn)',
+    strategy: 'authoritative-markup-injection',
+    displayName: 'Authoritative Markup Injection',
+    description: 'Structured format authority',
+    longDescription:
+      'Tests vulnerability to authoritative formatting by embedding prompts in structured markup that exploits trust in formatted content',
+    cost: 'Medium',
+    asrIncrease: '40-60%',
+    link: '/docs/red-team/strategies/authoritative-markup-injection/',
+  },
+  {
+    category: 'Dynamic (Single-Turn)',
     strategy: 'jailbreak:composite',
     displayName: 'Composite Jailbreaks',
     description: 'Combined techniques',
@@ -146,6 +157,17 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/mischievous-user/',
   },
   {
+    category: 'Multi-turn',
+    strategy: 'simba',
+    displayName: 'Simba',
+    description: 'Autonomous red team agent',
+    longDescription:
+      'Autonomous multi-phase agent that conducts reconnaissance, probing, and targeted attacks with adaptive learning to systematically discover vulnerabilities',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/simba/',
+  },
+  {
     category: 'Static (Single-Turn)',
     strategy: 'video',
     displayName: 'Video Encoding',
@@ -235,17 +257,6 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
-    strategy: 'multilingual',
-    displayName: 'Multilingual',
-    description: 'Cross-language testing',
-    longDescription:
-      'Tests handling of inputs across multiple languages, focusing on low-resource languages that may bypass content filters',
-    cost: 'Low',
-    asrIncrease: '30-40%',
-    link: '/docs/red-team/strategies/multilingual/',
-  },
-  {
-    category: 'Static (Single-Turn)',
     strategy: 'prompt-injection',
     displayName: 'Prompt Injection',
     description: 'Direct system prompts',
@@ -316,7 +327,7 @@ export const strategies: Strategy[] = [
     displayName: 'Layer',
     description: 'Compose multiple strategies',
     longDescription:
-      'Compose multiple red team strategies sequentially (e.g., multilingual → rot13) to create sophisticated attack chains',
+      'Compose multiple red team strategies sequentially (e.g., jailbreak → prompt-injection) to create sophisticated attack chains',
     cost: 'Variable',
     asrIncrease: 'Cumulative',
     link: '/docs/red-team/strategies/layer/',

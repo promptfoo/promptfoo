@@ -12,6 +12,12 @@ interface CliState {
 
   // Indicates an evaluation is running in resume mode
   resume?: boolean;
+
+  // debug log file
+  debugLogFile?: string;
+
+  // error log file
+  errorLogFile?: string;
 }
 
 const state: CliState = {};

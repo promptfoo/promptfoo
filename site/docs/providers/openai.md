@@ -1356,7 +1356,7 @@ providers:
   - id: openai:responses:gpt-4.1
     config:
       apiHost: 'your-resource.openai.azure.com'
-      apiKey: '${AZURE_API_KEY}'
+      apiKey: '{{ env.AZURE_API_KEY }}' # or set OPENAI_API_KEY env var
       temperature: 0.7
       instructions: 'You are a helpful assistant.'
       response_format: file://./response-schema.json
@@ -1390,15 +1390,15 @@ To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY
 
 ## Agents SDK Integration
 
-Promptfoo supports evaluation of OpenAI's Agents SDK, which enables building multi-agent systems with specialized agents, handoffs, and persistent context. You can integrate the Agents SDK as a [Python provider](./python.md).
+Test multi-turn agentic workflows with the [OpenAI Agents provider](/docs/providers/openai-agents). This provider supports the [@openai/agents](https://github.com/openai/openai-agents-js) SDK with tools, handoffs, and tracing.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - file://agent_provider.py:call_api
+  - openai:agents:my-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      tools: file://./tools/support-tools.ts
+      maxTurns: 10
 ```
 
-For a complete working example of an airline customer service system with multiple agents, see the [OpenAI Agents SDK example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) or initialize it with:
-
-```bash
-npx promptfoo@latest init --example openai-agents
-```
+See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options and examples.
