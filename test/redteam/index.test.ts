@@ -1772,7 +1772,7 @@ describe('Language configuration', () => {
       expect(result.testCases.length).toBe(4);
     });
 
-    it('should filter multilingual test cases for layer strategy', async () => {
+    it('should support multilingual test cases for layer strategy', async () => {
       const mockLayerAction = jest.fn().mockImplementation((testCases) => {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -1795,13 +1795,13 @@ describe('Language configuration', () => {
         targetLabels: ['test-provider'],
       });
 
-      // With layer strategy present, language is forced to 'en' early in synthesize
-      // Base tests: 2 tests * 1 language = 2
-      // Layer strategy tests: 2 tests
-      // Total: 4 tests
+      // Layer strategy now supports multiple languages
+      // Base tests: 2 tests * 2 languages = 4
+      // Layer strategy tests: 4 tests (applies to all base tests)
+      // Total: 8 tests
       const layerTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'layer');
-      expect(layerTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      expect(layerTests.length).toBe(4);
+      expect(result.testCases.length).toBe(8);
     });
 
     it('should filter multilingual test cases for math-prompt strategy', async () => {
