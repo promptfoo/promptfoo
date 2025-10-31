@@ -241,59 +241,6 @@ def call_api(prompt, options, context):
             "config": options.get("config", {}),
         },
     }
-
-
-def some_other_function(prompt, options, context):
-    return call_api(prompt + "\nWrite in ALL CAPS", options, context)
-
-
-async def async_provider(prompt, options, context):
-    response = await async_client.responses.create(
-        model="gpt-4o",
-        input=[
-            {
-                "role": "system",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "You are a marketer working for a startup called Bananamax.",
-                    }
-                ],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": prompt,
-                    }
-                ],
-            },
-        ],
-    )
-
-    # Extract token usage information from the async response
-    token_usage = None
-    if getattr(response, "usage", None):
-        token_usage = {
-            "total": response.usage.total_tokens,
-            "prompt": response.usage.prompt_tokens,
-            "completion": response.usage.completion_tokens,
-        }
-
-    return {
-        "output": response.output_text,
-        "tokenUsage": token_usage,
-    }
-
-
-if __name__ == "__main__":
-    # Example usage showing prompt, options with config, and context with vars
-    prompt = "What is the weather in San Francisco?"
-    options = {"config": {"optionFromYaml": 123}}
-    context = {"vars": {"location": "San Francisco"}}
-
-    print(call_api(prompt, options, context))
 ```
 
 ## Creating Session IDs using Hooks
