@@ -939,7 +939,7 @@ export default function ResultsView({
         onClose={() => setCopyDialogOpen(false)}
         title="Copy Evaluation"
         label="Description"
-        currentName={`Copy of ${config?.description || 'Evaluation'}`}
+        currentName={`${config?.description || 'Evaluation'} (Copy)`}
         actionButtonText="Create Copy"
         onConfirm={handleCopyEval}
         showSizeWarning={totalResultsCount > 10000}
