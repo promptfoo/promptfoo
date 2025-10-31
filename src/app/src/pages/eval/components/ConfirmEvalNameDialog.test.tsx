@@ -83,9 +83,7 @@ describe('ConfirmEvalNameDialog', () => {
         />,
       );
       expect(screen.getByText(/This evaluation has 25,000 results/)).toBeInTheDocument();
-      expect(
-        screen.getByText(/This operation may take up to a minute./),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/This operation may take up to a minute./)).toBeInTheDocument();
     });
 
     it('shows warning alert for very large operations (>50K)', () => {
@@ -117,11 +115,7 @@ describe('ConfirmEvalNameDialog', () => {
 
     it('does not show warning when showSizeWarning is false', () => {
       render(
-        <ConfirmEvalNameDialog
-          {...defaultProps}
-          showSizeWarning={false}
-          itemCount={100000}
-        />,
+        <ConfirmEvalNameDialog {...defaultProps} showSizeWarning={false} itemCount={100000} />,
       );
       expect(screen.queryByText(/This evaluation has/)).not.toBeInTheDocument();
     });
@@ -186,9 +180,7 @@ describe('ConfirmEvalNameDialog', () => {
       );
       // Should show info alert, not warning
       expect(screen.getByText(/This evaluation has 50,000 results/)).toBeInTheDocument();
-      expect(
-        screen.getByText(/This operation may take up to a minute./),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/This operation may take up to a minute./)).toBeInTheDocument();
     });
 
     it('handles itemCount of exactly 50001', () => {
@@ -202,9 +194,7 @@ describe('ConfirmEvalNameDialog', () => {
       );
       // Should show warning alert
       expect(screen.getByText(/This evaluation has 50,001 results/)).toBeInTheDocument();
-      expect(
-        screen.getByText(/This operation may take several minutes./),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/This operation may take several minutes./)).toBeInTheDocument();
     });
   });
 
@@ -225,13 +215,7 @@ describe('ConfirmEvalNameDialog', () => {
     });
 
     it('uses default itemLabel when not provided', () => {
-      render(
-        <ConfirmEvalNameDialog
-          {...defaultProps}
-          showSizeWarning={true}
-          itemCount={25000}
-        />,
-      );
+      render(<ConfirmEvalNameDialog {...defaultProps} showSizeWarning={true} itemCount={25000} />);
       expect(screen.getByText(/items/)).toBeInTheDocument();
     });
   });
