@@ -67,6 +67,8 @@ jest.mock('../src/globalConfig/accounts', () => ({
 jest.mock('../src/util/cloud', () => ({
   makeRequest: jest.fn(),
   checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+  resolveTeamId: jest.fn(),
+  resolveTeamFromIdentifier: jest.fn(),
 }));
 
 jest.mock('../src/envars', () => ({
@@ -540,5 +542,176 @@ describe('hasEvalBeenShared', () => {
 
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(false);
+  });
+});
+
+describe('createShareableUrl - team auto-injection', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
+    jest.requireMock('../src/envars').isCI.mockReturnValue(false);
+    jest.requireMock('../src/envars').getEnvBool.mockReturnValue(false);
+    mockFetch.mockReset();
+    process.stdout.isTTY = false;
+  });
+
+  it('auto-injects current team when cloud is enabled and no teamId in metadata', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
+
+    const mockTeam = {
+      id: 'team-123',
+      name: 'Engineering',
+    };
+
+    jest.requireMock('../src/util/cloud').resolveTeamId.mockResolvedValueOnce(mockTeam);
+
+    const mockEval = buildMockEval();
+    mockEval.config = {}; // No metadata
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'mock-eval-id' }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // Verify teamId was injected
+    expect(mockEval.config.metadata?.teamId).toBe('team-123');
+  });
+
+  it('does not override existing teamId in metadata', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
+
+    const mockEval = buildMockEval();
+    mockEval.config = {
+      metadata: {
+        teamId: 'existing-team-id',
+      },
+    };
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'mock-eval-id' }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // Verify teamId was NOT changed
+    expect(mockEval.config.metadata?.teamId).toBe('existing-team-id');
+    // resolveTeamId should not have been called because teamId already exists
+    expect(jest.requireMock('../src/util/cloud').resolveTeamId).not.toHaveBeenCalled();
+  });
+
+  it('gracefully handles team resolution failure', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
+
+    jest
+      .requireMock('../src/util/cloud')
+      .resolveTeamId.mockRejectedValueOnce(new Error('No teams available'));
+
+    const mockEval = buildMockEval();
+    mockEval.config = {};
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'mock-eval-id' }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    // Should not throw, should continue with sharing
+    const result = await createShareableUrl(mockEval as Eval);
+
+    expect(result).toBe('https://app.example.com/eval/mock-eval-id');
+    // Team was not injected due to error
+    expect(mockEval.config.metadata?.teamId).toBeUndefined();
+  });
+
+  it('does not inject team when cloud is not enabled', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+
+    const mockEval = buildMockEval();
+    mockEval.config = {};
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: mockEval.id }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // resolveTeamId should not have been called
+    expect(jest.requireMock('../src/util/cloud').resolveTeamId).not.toHaveBeenCalled();
+    expect(mockEval.config.metadata?.teamId).toBeUndefined();
+  });
+
+  it('initializes metadata object if undefined', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
+
+    const mockTeam = {
+      id: 'team-456',
+      name: 'Product',
+    };
+
+    jest.requireMock('../src/util/cloud').resolveTeamId.mockResolvedValueOnce(mockTeam);
+
+    const mockEval = buildMockEval();
+    // Explicitly set config without metadata
+    mockEval.config = { sharing: true };
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'mock-eval-id' }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // Verify metadata was created and teamId was set
+    expect(mockEval.config.metadata).toBeDefined();
+    expect(mockEval.config.metadata?.teamId).toBe('team-456');
   });
 });

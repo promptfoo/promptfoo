@@ -18,6 +18,7 @@ import {
 } from '../share';
 import telemetry from '../telemetry';
 import { loadDefaultConfig } from '../util/config/default';
+import { resolveTeamFromIdentifier } from '../util/cloud';
 import type { Command } from 'commander';
 
 export function notCloudEnabledShareInstructions(): void {
@@ -81,6 +82,7 @@ export function shareCommand(program: Command) {
       'Flag does nothing (maintained for backwards compatibility only - shares are now private by default)',
       false,
     )
+    .option('-t, --team <team>', 'Team name, slug, or ID to share to (overrides current team)')
     .action(
       async (
         id: string | undefined,
@@ -88,6 +90,7 @@ export function shareCommand(program: Command) {
           yes: boolean;
           envPath?: string;
           showAuth: boolean;
+          team?: string;
         } & Command,
       ) => {
         telemetry.record('command_used', {
@@ -155,6 +158,22 @@ export function shareCommand(program: Command) {
             }
           } catch (err) {
             logger.debug(`Could not load config: ${err}`);
+          }
+
+          // Handle --team flag: inject team into metadata before sharing
+          if (cmdObj.team) {
+            try {
+              const selectedTeam = await resolveTeamFromIdentifier(cmdObj.team);
+              eval_.config.metadata = eval_.config.metadata || {};
+              eval_.config.metadata.teamId = selectedTeam.id;
+              logger.info(`Sharing to team: ${chalk.cyan(selectedTeam.name)}`);
+            } catch (error) {
+              logger.error(
+                `Failed to resolve team "${cmdObj.team}": ${error instanceof Error ? error.message : String(error)}`,
+              );
+              process.exitCode = 1;
+              return;
+            }
           }
 
           if (eval_.prompts.length === 0) {
