@@ -148,10 +148,11 @@ If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory
 
 Create a URL that can be shared online.
 
-| Option        | Description                                     |
-| ------------- | ----------------------------------------------- |
-| `--show-auth` | Include auth info in the shared URL             |
-| `-y, --yes`   | Skip confirmation before creating shareable URL |
+| Option             | Description                                       |
+| ------------------ | ------------------------------------------------- |
+| `--team <name>`    | Specify team to share to (name, slug, or ID)     |
+| `--show-auth`      | Include auth info in the shared URL               |
+| `-y, --yes`        | Skip confirmation before creating shareable URL   |
 
 ## `promptfoo cache`
 
@@ -330,8 +331,9 @@ Login to the promptfoo cloud.
 | `-o, --org <orgId>`   | The organization ID to login to                                            |
 | `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
 | `-k, --api-key <key>` | Login using an API key                                                     |
+| `--team <name>`       | Specify team to use (name, slug, or ID)                                    |
 
-After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
+After login, if you have multiple teams, you can switch between them using the `teams` subcommand or specify a team during login with the `--team` flag.
 
 ### `promptfoo auth logout`
 
