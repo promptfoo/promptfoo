@@ -16,6 +16,7 @@ export function viewCommand(program: Command) {
     .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file, --env-path <path>', 'Path to .env file')
+    .option('--print-url', 'Print the viewer URL to stdout (implies no auto-open)')
     .action(
       async (
         directory: string | undefined,
@@ -23,6 +24,7 @@ export function viewCommand(program: Command) {
           port: number;
           yes: boolean;
           no: boolean;
+          printUrl?: boolean;
           apiBaseUrl?: string;
           envPath?: string;
           filterDescription?: string;
@@ -41,6 +43,15 @@ export function viewCommand(program: Command) {
 
         if (directory) {
           setConfigDirectoryPath(directory);
+        }
+        // If --print-url is set, suppress auto-open and emit the URL for scripts/CI
+        if (cmdObj.printUrl) {
+          cmdObj.yes = false;
+          cmdObj.no = true;
+          const portNum = Number(cmdObj.port) || getDefaultPort();
+          // Print only the URL so it can be captured easily
+          // eslint-disable-next-line no-console
+          console.log(`http://localhost:${portNum}`);
         }
         // Block indefinitely on server
         const browserBehavior = cmdObj.yes
