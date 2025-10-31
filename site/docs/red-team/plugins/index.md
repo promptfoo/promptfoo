@@ -53,7 +53,7 @@ Click on a plugin to see its documentation.
 
 <PluginTable shouldGroupByCategory showRemoteStatus />
 
-_🌐 indicates that plugin uses remote inference_
+_🌐 indicates that plugin uses remote inference in Promptfoo Community edition_
 
 Some plugins point to your own LLM provider to generate adversarial probes (like `policy` and `intent`), while others must point to Promptfoo's remote generation endpoint for specialized attack generation (like `harmful:*` and security-focused plugins).
 
@@ -177,10 +177,10 @@ plugins:
 
 ### Setting Languages
 
-You can set a top-level language that affects all plugins. You can also implement the [multi-lingual strategy](/docs/red-team/strategies/multilingual) to generate probes in specified languages.
+You can set a top-level language that affects all plugins. For more information, see the [language configuration](/docs/red-team/configuration/#language) section.
 
 ```yaml
-language: 'Spanish' # Top level language setting
+language: ['Spanish', 'French', 'German'] # Test in multiple languages
 plugins:
   - id: 'harmful:hate'
   - id: 'contracts'

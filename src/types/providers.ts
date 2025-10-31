@@ -24,6 +24,7 @@ interface AtomicTestCase {
   score?: number;
   failureReason?: string;
   metadata?: Record<string, any>;
+  options?: Record<string, any>;
 }
 export interface ProviderModerationResponse {
   error?: string;

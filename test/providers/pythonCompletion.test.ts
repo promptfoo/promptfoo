@@ -286,6 +286,7 @@ describe('PythonProvider', () => {
         tokenUsage: {
           cached: 25,
           total: 25,
+          numRequests: 1,
         },
       });
     });
@@ -316,6 +317,7 @@ describe('PythonProvider', () => {
           prompt: 12,
           completion: 18,
           total: 30,
+          numRequests: 1,
         },
       });
     });
@@ -364,6 +366,7 @@ describe('PythonProvider', () => {
       expect(result.tokenUsage).toEqual({
         cached: 0,
         total: 0,
+        numRequests: 1,
       });
       expect(result.cached).toBe(true);
     });

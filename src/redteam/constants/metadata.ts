@@ -86,7 +86,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
   'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
-  multilingual: 'Tests handling of attacks across multiple languages',
+  multilingual:
+    '[DEPRECATED] Tests handling of attacks across multiple languages. Use top-level language config instead.',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information',
@@ -114,6 +115,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
   'financial:sycophancy':
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
+  'goal-misalignment':
+    "Tests whether AI systems recognize when optimizing proxy metrics might not align with true goals (Goodhart's Law)",
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
   overreliance: 'Tests for overreliance on system assumptions',
@@ -140,6 +143,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
   'shell-injection': 'Tests for command injection vulnerabilities',
+  simba: `Simulates a human red teamer with planning, adversarial reasoning, and dynamic attacks`,
   'special-token-injection':
     'Tests vulnerability to token injection attacks using format-specific delimiters',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
@@ -165,7 +169,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
-  layer: 'Strategy Layer',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
   beavertails: 'BeaverTails Dataset',
@@ -191,6 +194,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'excessive-agency': 'Excessive Agency',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
+  layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
   'medical:hallucination': 'Medical Hallucination',
@@ -208,6 +212,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:impartiality': 'Financial Services Impartiality',
   'financial:misconduct': 'Financial Services Misconduct',
   'financial:sycophancy': 'Financial Sycophancy',
+  'goal-misalignment': "Goal Misalignment (Goodhart's Law)",
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
   'guardrails-eval': 'Guardrails Evaluation',
@@ -261,7 +266,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   leetspeak: 'Leetspeak Payload Encoding',
   'math-prompt': 'Mathematical Notation Attack',
   morse: 'Morse Code Encoding',
-  multilingual: 'Cross-Language Attack',
+  multilingual: 'Multilingual Translation [DEPRECATED]',
   'other-encodings': 'Collection of Text Encodings',
   overreliance: 'Overreliance',
   piglatin: 'Pig Latin Encoding',
@@ -284,6 +289,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
+  simba: 'Simba Red Team Agent',
   'special-token-injection': 'Special Token Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
@@ -340,6 +346,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:impartiality': Severity.Medium,
   'financial:misconduct': Severity.High,
   'financial:sycophancy': Severity.Low,
+  'goal-misalignment': Severity.Low,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   coppa: Severity.High,
@@ -504,6 +511,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   Brand: [
     'competitors',
     'excessive-agency',
+    'goal-misalignment',
     'hallucination',
     'harmful:misinformation-disinformation',
     'hijacking',
@@ -607,6 +615,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:impartiality': 'FinancialImpartiality',
   'financial:misconduct': 'FinancialMisconduct',
   'financial:sycophancy': 'FinancialSycophancy',
+  'goal-misalignment': 'GoalMisalignment',
   'off-topic': 'OffTopic',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
@@ -788,6 +797,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
   'financial:sycophancy':
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
+  'goal-misalignment':
+    'Tests whether AI systems recognize when optimizing measurable proxy metrics might not align with true underlying objectives (Goodhart\'s Law: "When a measure becomes a target, it ceases to be a good measure")',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic by performing tasks outside their domain',
   'indirect-prompt-injection':
@@ -828,7 +839,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
-  layer: 'Composes multiple strategies and applies them sequentially',
   audio: 'Tests detection and handling of audio-based malicious payloads',
   'authoritative-markup-injection':
     'Tests detection and handling of authoritative markup injection attacks',
@@ -853,22 +863,24 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'jailbreak:meta':
     'Meta-agent that dynamically builds attack taxonomy and strategically learns from full attack history',
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
+  layer: 'Composes multiple strategies and applies them sequentially',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
   'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse: 'Tests detection and handling of text encoded in Morse code',
-  multilingual: 'Evaluates cross-language attack vector handling',
+  multilingual:
+    '[DEPRECATED] Tests handling of attacks across multiple languages. Use top-level language config instead.',
   'other-encodings':
     'Collection of alternative text transformation strategies for testing evasion techniques',
   piglatin: 'Tests detection and handling of text transformed into Pig Latin',
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
+  simba: `Simulates a human red teamer with planning, adversarial reasoning, and dynamic attacks`,
   video: 'Tests detection and handling of video-based malicious payloads',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
-  layer: 'Layer',
   audio: 'Audio',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Encoding',
@@ -890,16 +902,18 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:meta': 'Meta-Agent',
   'jailbreak:tree': 'Tree-based Optimization',
+  layer: 'Layer',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
   'mischievous-user': 'Mischievous User',
   morse: 'Morse Code',
-  multilingual: 'Multilingual Translation',
+  multilingual: 'Cross-Language Attack [DEPRECATED]',
   'other-encodings': 'Collection of Text Encodings',
   piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
+  simba: 'Simba Red Team Agent',
   video: 'Video',
 };
 

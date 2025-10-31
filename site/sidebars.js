@@ -116,6 +116,7 @@ const redTeamSidebar = [
         items: [
           'red-team/plugins/competitors',
           'red-team/plugins/excessive-agency',
+          'red-team/plugins/goal-misalignment',
           'red-team/plugins/hallucination',
           'red-team/plugins/imitation',
           'red-team/plugins/off-topic',
@@ -161,7 +162,6 @@ const redTeamSidebar = [
           'red-team/strategies/leetspeak',
           'red-team/strategies/likert',
           'red-team/strategies/math-prompt',
-          'red-team/strategies/multilingual',
           'red-team/strategies/other-encodings',
           'red-team/strategies/prompt-injection',
           'red-team/strategies/rot13',
@@ -175,6 +175,7 @@ const redTeamSidebar = [
           'red-team/strategies/multi-turn',
           'red-team/strategies/goat',
           'red-team/strategies/mischievous-user',
+          'red-team/strategies/simba',
         ],
       },
       {
