@@ -80,6 +80,7 @@ The iterative jailbreak strategy creates refined single-shot jailbreaks that con
 ## Related Concepts
 
 - [Prompt Injections](prompt-injection.md)
+- [Meta-Agent Jailbreaks](meta.md)
 - [Tree-based Jailbreaks](tree.md)
 - [Multi-turn Jailbreaks](multi-turn.md)
 

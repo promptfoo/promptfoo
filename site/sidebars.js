@@ -184,6 +184,7 @@ const redTeamSidebar = [
         collapsed: true,
         items: [
           'red-team/strategies/iterative',
+          'red-team/strategies/meta',
           'red-team/strategies/tree',
           'red-team/strategies/composite-jailbreaks',
         ],
