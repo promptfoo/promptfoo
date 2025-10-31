@@ -39,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.119.0] - 2025-10-27
 
 ### Added
+
 - feat(webui): filtering eval results by metric values w/ numeric operators (e.g. EQ, GT, LTE, etc.) (#6011)
 - feat(providers): add Python provider persistence for 10-100x performance improvement with persistent worker pools (#5968)
 - feat(providers): add OpenAI Agents SDK integration with support for agents, tools, handoffs, and OTLP tracing (#6009)
