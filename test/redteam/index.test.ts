@@ -1799,7 +1799,9 @@ describe('Language configuration', () => {
       // Base tests: 2 tests * 2 languages = 4
       // Jailbreak strategy tests: 4 tests (applies to all base tests)
       // Total: 8 tests
-      const jailbreakTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'jailbreak');
+      const jailbreakTests = result.testCases.filter(
+        (tc) => tc.metadata?.strategyId === 'jailbreak',
+      );
       expect(jailbreakTests.length).toBe(4);
       expect(result.testCases.length).toBe(8);
     });
