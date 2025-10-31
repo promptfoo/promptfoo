@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **HTTP provider**: Automatic retry for transient network/HTTP failures (e.g., 408/429/5xx, ECONNRESET, ETIMEDOUT) now defaults to **1** retry.
+  - Configure via `PROMPTFOO_HTTP_MAX_RETRIES` (set to `0` to disable).
+
+### Docs
+
+- Documented `PROMPTFOO_HTTP_MAX_RETRIES` in **Command line** usage: sets how many times promptfoo retries transient HTTP errors in the `http` provider.
+
+### Added
+
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 
 ### Changed
