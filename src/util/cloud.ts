@@ -334,9 +334,7 @@ export async function resolveTeamFromIdentifier(
   const displayTeams = teamNames.slice(0, MAX_TEAMS_TO_SHOW).join(', ');
   const remaining = teamNames.length - MAX_TEAMS_TO_SHOW;
   const suffix =
-    remaining > 0
-      ? ` (and ${remaining} more - use 'promptfoo auth teams list' to see all)`
-      : '';
+    remaining > 0 ? ` (and ${remaining} more - use 'promptfoo auth teams list' to see all)` : '';
 
   throw new Error(`Team '${identifier}' not found. Available teams: ${displayTeams}${suffix}`);
 }

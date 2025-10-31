@@ -8,7 +8,11 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { checkCloudPermissions, makeRequest as makeCloudRequest, resolveTeamId } from './util/cloud';
+import {
+  checkCloudPermissions,
+  makeRequest as makeCloudRequest,
+  resolveTeamId,
+} from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 
 import type Eval from './models/eval';

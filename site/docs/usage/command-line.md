@@ -148,11 +148,11 @@ If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory
 
 Create a URL that can be shared online.
 
-| Option             | Description                                       |
-| ------------------ | ------------------------------------------------- |
-| `--team <name>`    | Specify team to share to (name, slug, or ID)     |
-| `--show-auth`      | Include auth info in the shared URL               |
-| `-y, --yes`        | Skip confirmation before creating shareable URL   |
+| Option          | Description                                     |
+| --------------- | ----------------------------------------------- |
+| `--team <name>` | Specify team to share to (name, slug, or ID)    |
+| `--show-auth`   | Include auth info in the shared URL             |
+| `-y, --yes`     | Skip confirmation before creating shareable URL |
 
 ## `promptfoo cache`
 

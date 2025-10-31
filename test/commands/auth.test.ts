@@ -284,10 +284,7 @@ describe('auth command', () => {
           'Engineering',
         ]);
 
-        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith(
-          'team-1',
-          mockOrganization.id,
-        );
+        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-1', mockOrganization.id);
         expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Team: Engineering'));
       });
 
@@ -305,12 +302,16 @@ describe('auth command', () => {
         const loginCmd = program.commands
           .find((cmd) => cmd.name() === 'auth')
           ?.commands.find((cmd) => cmd.name() === 'login');
-        await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--team', 'engineering']);
+        await loginCmd?.parseAsync([
+          'node',
+          'test',
+          '--api-key',
+          'test-key',
+          '--team',
+          'engineering',
+        ]);
 
-        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith(
-          'team-1',
-          mockOrganization.id,
-        );
+        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-1', mockOrganization.id);
         expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Team: Engineering'));
       });
 
@@ -330,10 +331,7 @@ describe('auth command', () => {
           ?.commands.find((cmd) => cmd.name() === 'login');
         await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--team', 'team-1']);
 
-        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith(
-          'team-1',
-          mockOrganization.id,
-        );
+        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-1', mockOrganization.id);
         expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Team: Engineering'));
       });
 
@@ -348,7 +346,9 @@ describe('auth command', () => {
         jest
           .requireMock('../../src/util/cloud')
           .resolveTeamFromIdentifier.mockRejectedValueOnce(new Error('Team not found'));
-        jest.requireMock('../../src/util/cloud').getDefaultTeam.mockResolvedValueOnce(mockDefaultTeam);
+        jest
+          .requireMock('../../src/util/cloud')
+          .getDefaultTeam.mockResolvedValueOnce(mockDefaultTeam);
         jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValueOnce(undefined);
 
         const loginCmd = program.commands
@@ -394,10 +394,7 @@ describe('auth command', () => {
           'Product & Design',
         ]);
 
-        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith(
-          'team-3',
-          mockOrganization.id,
-        );
+        expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-3', mockOrganization.id);
         expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Product & Design'));
       });
 
@@ -409,10 +406,14 @@ describe('auth command', () => {
           createdAt: '2023-01-01T00:00:00Z',
         };
 
-        jest.requireMock('../../src/util/cloud').resolveTeamFromIdentifier.mockImplementationOnce(() => {
-          throw 'String error: unauthorized';
-        });
-        jest.requireMock('../../src/util/cloud').getDefaultTeam.mockResolvedValueOnce(mockDefaultTeam);
+        jest
+          .requireMock('../../src/util/cloud')
+          .resolveTeamFromIdentifier.mockImplementationOnce(() => {
+            throw 'String error: unauthorized';
+          });
+        jest
+          .requireMock('../../src/util/cloud')
+          .getDefaultTeam.mockResolvedValueOnce(mockDefaultTeam);
         jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValueOnce(undefined);
 
         const loginCmd = program.commands
