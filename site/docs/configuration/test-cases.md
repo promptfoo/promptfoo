@@ -452,10 +452,16 @@ tests:
         threshold: 1000 # milliseconds
 ```
 
-## Loading from Google Sheets
+## External Data Sources
 
-See [Google Sheets integration](/docs/configuration/guide#loading-tests-from-csv) for details on loading test data directly from spreadsheets.
+### Google Sheets
 
-## Loading from HuggingFace datasets
+See [Google Sheets integration](/docs/integrations/google-sheets) for details on loading test data directly from spreadsheets.
+
+### SharePoint
+
+See [SharePoint integration](/docs/integrations/sharepoint) for details on loading test data from Microsoft SharePoint document libraries.
+
+### HuggingFace Datasets
 
 See [HuggingFace Datasets](/docs/configuration/huggingface-datasets) for instructions on importing test cases from existing datasets.

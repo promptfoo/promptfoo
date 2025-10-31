@@ -317,6 +317,12 @@ type EnvVars = {
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
 
+  // SharePoint
+  SHAREPOINT_BASE_URL?: string;
+  SHAREPOINT_CERT_PATH?: string;
+  SHAREPOINT_CLIENT_ID?: string;
+  SHAREPOINT_TENANT_ID?: string;
+
   // Slack
   SLACK_BOT_TOKEN?: string;
 
