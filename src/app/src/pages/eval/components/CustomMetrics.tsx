@@ -93,6 +93,21 @@ const CustomMetrics = ({
   const metrics = Object.entries(lookup);
   const displayMetrics = metrics.slice(0, truncationCount);
 
+  /**
+   * Applies a given metric as a filter.
+   * 
+   * TODO:
+   * The current filtering mechanism leaves at least the following edge cases unaddressed:
+   * - Custom Policies w/ Strategies 
+   * Moreover, the row-level filter pills are not great (e.g. filtering on a Plugin will only display that Plugin's Metric).
+   * 
+   * Ideally, metrics are applied as >=1 more filters i.e.:
+   * - Non-redteam: Apply a metric filter
+   * - Plugin/Strategy: Apply a plugin filter and a strategy filter
+   * - Policy/Strategy: Apply a policy filter and a strategy filter
+   * 
+   * This requires mapping metrics to plugins and strategies, which is presently non-trivial.
+   */
   const handleClick = useCallback(
     (value: string) => {
       const asPolicy = isPolicyMetric(value);
