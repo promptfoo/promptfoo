@@ -41,7 +41,7 @@ export const handleRuby = async ({
   assertion,
   renderedValue,
   valueFromScript,
-  context,
+  assertionValueContext,
   output,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(typeof renderedValue === 'string', 'ruby assertion must have a string value');
@@ -73,7 +73,7 @@ ${
 }
 end
 `;
-      result = await runRubyCode(rubyScript, 'main', [output, context]);
+      result = await runRubyCode(rubyScript, 'main', [output, assertionValueContext]);
     } else {
       result = valueFromScript;
     }
