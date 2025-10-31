@@ -357,6 +357,7 @@ export type EvalTableDTO = {
   table: EvaluateTable;
   totalCount: number;
   filteredCount: number;
+  filteredMetrics: PromptMetrics[] | null;
   config: Partial<UnifiedConfig>;
   author: string | null;
   version: number;

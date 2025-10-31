@@ -17,6 +17,7 @@ import type {
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTable,
+  PromptMetrics,
   RedteamPluginObject,
   ResultsFile,
   UnifiedConfig,
@@ -254,6 +255,14 @@ interface TableState {
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
 
+  /**
+   * Filtered metrics calculated on the backend for the currently filtered dataset.
+   * null when no filters are active or when the feature is disabled.
+   * When present, components should use these metrics instead of prompt.metrics.
+   */
+  filteredMetrics: PromptMetrics[] | null;
+  setFilteredMetrics: (metrics: PromptMetrics[] | null) => void;
+
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   isStreaming: boolean;
@@ -444,7 +453,7 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 
 export const useTableStore = create<TableState>()((set, get) => ({
   evalId: null,
-  setEvalId: (evalId: string) => set(() => ({ evalId })),
+  setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
 
   author: null,
   setAuthor: (author: string | null) => set(() => ({ author })),
@@ -509,6 +518,10 @@ export const useTableStore = create<TableState>()((set, get) => ({
   setFilteredResultsCount: (count: number) => set(() => ({ filteredResultsCount: count })),
   totalResultsCount: 0,
   setTotalResultsCount: (count: number) => set(() => ({ totalResultsCount: count })),
+
+  filteredMetrics: null,
+  setFilteredMetrics: (metrics: PromptMetrics[] | null) =>
+    set(() => ({ filteredMetrics: metrics })),
 
   highlightedResultsCount: 0,
 
@@ -603,6 +616,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
           evalId: skipSettingEvalId ? get().evalId : id,
           isFetching: skipLoadingState ? prevState.isFetching : false,
           shouldHighlightSearchText: searchText !== '',
+          // Store filtered metrics from backend (null when no filters or feature disabled)
+          filteredMetrics: data.filteredMetrics || null,
           filters: {
             ...prevState.filters,
             options: {
