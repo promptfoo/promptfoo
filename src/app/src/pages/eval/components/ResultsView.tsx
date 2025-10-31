@@ -6,6 +6,7 @@ import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ClearIcon from '@mui/icons-material/Clear';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -35,6 +36,7 @@ import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
+import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
@@ -337,6 +339,8 @@ export default function ResultsView({
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
+  const [editNameDialogOpen, setEditNameDialogOpen] = React.useState(false);
+  const [copyDialogOpen, setCopyDialogOpen] = React.useState(false);
 
   const allColumns = React.useMemo(
     () => [
@@ -384,12 +388,12 @@ export default function ResultsView({
     [updateColumnVisibility],
   );
 
-  const handleDescriptionClick = async () => {
-    invariant(config, 'Config must be loaded before clicking its description');
-    const newDescription = window.prompt('Enter new description:', config.description);
-    if (newDescription !== null && newDescription !== config.description) {
-      const newConfig = { ...config, description: newDescription };
+  const handleSaveEvalName = React.useCallback(
+    async (newName: string) => {
       try {
+        invariant(config, 'Config must be loaded before updating its description');
+        const newConfig = { ...config, description: newName };
+
         const response = await callApi(`/eval/${evalId}`, {
           method: 'PATCH',
           headers: {
@@ -397,15 +401,59 @@ export default function ResultsView({
           },
           body: JSON.stringify({ config: newConfig }),
         });
+
         if (!response.ok) {
-          throw new Error('Network response was not ok');
+          throw new Error('Failed to update eval name');
         }
+
         setConfig(newConfig);
       } catch (error) {
-        console.error('Failed to update table:', error);
+        console.error('Failed to update eval name:', error);
+        showToast(
+          `Failed to update eval name: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          'error',
+        );
+        throw error;
       }
-    }
-  };
+    },
+    [config, evalId, setConfig, showToast],
+  );
+
+  const handleCopyEval = React.useCallback(
+    async (description: string) => {
+      try {
+        invariant(evalId, 'Eval ID must be set before copying');
+
+        const response = await callApi(`/eval/${evalId}/copy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ description }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to copy evaluation');
+        }
+
+        const { id: newEvalId, distinctTestCount } = await response.json();
+
+        // Open in new tab (Google Docs pattern)
+        window.open(`/eval/${newEvalId}`, '_blank');
+
+        // Show success toast
+        showToast(`Copied ${distinctTestCount.toLocaleString()} results successfully`, 'success');
+      } catch (error) {
+        console.error('Failed to copy evaluation:', error);
+        showToast(
+          `Failed to copy evaluation: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          'error',
+        );
+        throw error;
+      }
+    },
+    [evalId, showToast],
+  );
 
   const handleDeleteEvalClick = async () => {
     if (window.confirm('Are you sure you want to delete this evaluation?')) {
@@ -766,7 +814,7 @@ export default function ResultsView({
                     onClose={handleMenuClose}
                   >
                     <Tooltip title="Edit the name of this eval" placement="left">
-                      <MenuItem onClick={handleDescriptionClick}>
+                      <MenuItem onClick={() => setEditNameDialogOpen(true)}>
                         <ListItemIcon>
                           <EditIcon fontSize="small" />
                         </ListItemIcon>
@@ -799,6 +847,19 @@ export default function ResultsView({
                       </MenuItem>
                     </Tooltip>
                     <DownloadMenu />
+                    <Tooltip title="Create a copy of this evaluation" placement="left">
+                      <MenuItem
+                        onClick={() => {
+                          handleMenuClose();
+                          setCopyDialogOpen(true);
+                        }}
+                      >
+                        <ListItemIcon>
+                          <ContentCopyIcon fontSize="small" />
+                        </ListItemIcon>
+                        Copy
+                      </MenuItem>
+                    </Tooltip>
                     <Tooltip title="Generate a unique URL that others can access" placement="left">
                       <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
                         <ListItemIcon>
@@ -864,6 +925,27 @@ export default function ResultsView({
         onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+      <ConfirmEvalNameDialog
+        open={editNameDialogOpen}
+        onClose={() => setEditNameDialogOpen(false)}
+        title="Edit Eval Name"
+        label="Description"
+        currentName={config?.description || ''}
+        actionButtonText="Save"
+        onConfirm={handleSaveEvalName}
+      />
+      <ConfirmEvalNameDialog
+        open={copyDialogOpen}
+        onClose={() => setCopyDialogOpen(false)}
+        title="Copy Evaluation"
+        label="Description"
+        currentName={`${config?.description || 'Evaluation'} (Copy)`}
+        actionButtonText="Create Copy"
+        onConfirm={handleCopyEval}
+        showSizeWarning={totalResultsCount > 10000}
+        itemCount={totalResultsCount}
+        itemLabel="results"
+      />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
     </>
   );
