@@ -11,8 +11,8 @@ vi.mock('../../../store/providersStore', () => ({
 }));
 
 const mockProviders = [
-  { id: 'provider1', config: { temperature: 0.5 } },
-  { id: 'provider2', config: { temperature: 0.75 } },
+  { id: 'openai:gpt-4', config: { temperature: 0.5 } },
+  { id: 'anthropic:claude-3', config: { temperature: 0.75 } },
 ];
 
 const mockOnChange = vi.fn();
@@ -24,7 +24,7 @@ describe('ProviderSelector', () => {
   });
 
   it('renders the component correctly', () => {
-    expect(screen.getByPlaceholderText('Select LLM providers')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search and select LLM providers...')).toBeInTheDocument();
   });
 
   it('displays the correct number of providers', () => {
@@ -36,26 +36,25 @@ describe('ProviderSelector', () => {
 
   it('calls onChange when a provider is selected', () => {
     const providerToSelect = mockProviders[0].id;
-    fireEvent.change(screen.getByPlaceholderText('Select LLM providers'), {
+    fireEvent.change(screen.getByPlaceholderText('Search and select LLM providers...'), {
       target: { value: providerToSelect },
     });
-    fireEvent.keyDown(screen.getByPlaceholderText('Select LLM providers'), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByPlaceholderText('Search and select LLM providers...'), {
+      key: 'Enter',
+    });
 
     expect(mockOnChange).toHaveBeenCalledWith([
-      { id: 'provider1', config: { temperature: 0.5 } },
-      { id: 'provider2', config: { temperature: 0.75 } },
-      { id: 'provider1' }, // This is the selected provider without config
+      { id: 'openai:gpt-4', config: { temperature: 0.5 } },
+      { id: 'anthropic:claude-3', config: { temperature: 0.75 } },
+      { id: 'openai:gpt-4' }, // This is the selected provider without config
     ]);
   });
 
   it('opens the config dialog when a provider is clicked', () => {
     const providerChip = screen.getByText(mockProviders[0].id);
     fireEvent.click(providerChip);
-    expect(
-      screen.getByText(
-        'Click a provider to configure its settings. Hover over chips to see model IDs.',
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Provider Configuration')).toBeInTheDocument();
   });
 
   it('closes the config dialog when Cancel is clicked', async () => {
@@ -123,18 +122,27 @@ describe('ProviderSelector', () => {
     const providerChip = screen.getByText(mockProviders[0].id);
     fireEvent.click(providerChip);
 
-    // Find and modify a config field (assuming temperature exists)
-    const temperatureInput = screen.getByLabelText(/temperature/i);
-    fireEvent.change(temperatureInput, { target: { value: '0.8' } });
+    // Wait for dialog to open
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    // Find and modify the JSON config
+    const jsonInput = screen.getByLabelText(/Configuration \(JSON\)/i);
+    fireEvent.change(jsonInput, {
+      target: { value: JSON.stringify({ temperature: 0.8 }) },
+    });
 
     // Save the config
     const saveButton = screen.getByRole('button', { name: /save/i });
     fireEvent.click(saveButton);
 
     // Verify the onChange was called with updated config
-    expect(mockOnChange).toHaveBeenCalledWith([
-      { ...mockProviders[0], config: { temperature: 0.8 } },
-      mockProviders[1],
-    ]);
+    await waitFor(() => {
+      expect(mockOnChange).toHaveBeenCalledWith([
+        { ...mockProviders[0], config: { temperature: 0.8 } },
+        mockProviders[1],
+      ]);
+    });
   });
 });

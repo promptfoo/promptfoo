@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import ProviderConfigDialog from '@app/pages/eval-creator/components/ProviderConfigDialog';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
-import TextareaAutosize from '@mui/material/TextareaAutosize';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
@@ -19,11 +21,10 @@ interface CustomTargetConfigurationProps {
 const CustomTargetConfiguration = ({
   selectedTarget,
   updateCustomTarget,
-  rawConfigJson,
   setRawConfigJson,
-  bodyError,
 }: CustomTargetConfigurationProps) => {
   const [targetId, setTargetId] = useState(selectedTarget.id?.replace('file://', '') || '');
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
   useEffect(() => {
     setTargetId(selectedTarget.id?.replace('file://', '') || '');
@@ -46,8 +47,17 @@ const CustomTargetConfiguration = ({
     updateCustomTarget('id', idToSave);
   };
 
+  const handleConfigSave = (_providerId: string, config: Record<string, any>) => {
+    updateCustomTarget('config', config);
+    setRawConfigJson(JSON.stringify(config, null, 2));
+    setConfigDialogOpen(false);
+  };
+
   return (
     <Box mt={2}>
+      <Typography variant="h6" gutterBottom>
+        Custom Target Configuration
+      </Typography>
       <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
         <TextField
           fullWidth
@@ -68,33 +78,53 @@ const CustomTargetConfiguration = ({
           }
         />
 
-        <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-          Custom Configuration
-        </Typography>
-        <TextField
-          fullWidth
-          label="Configuration (JSON)"
-          value={rawConfigJson}
-          onChange={(e) => {
-            setRawConfigJson(e.target.value);
-            try {
-              const config = JSON.parse(e.target.value);
-              updateCustomTarget('config', config);
-            } catch (error) {
-              console.error('Invalid JSON configuration:', error);
-            }
-          }}
-          margin="normal"
-          multiline
-          minRows={4}
-          maxRows={10}
-          error={!!bodyError}
-          helperText={bodyError || 'Enter your custom configuration as JSON'}
-          InputProps={{
-            inputComponent: TextareaAutosize,
-          }}
-        />
+        <Box sx={{ mt: 3, mb: 2 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Provider Configuration
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Configure authentication, API endpoints, and other provider-specific settings.
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<SettingsIcon />}
+            onClick={() => setConfigDialogOpen(true)}
+            fullWidth
+          >
+            Configure Provider Settings
+          </Button>
+        </Box>
+
+        {selectedTarget.config && Object.keys(selectedTarget.config).length > 0 && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="caption" color="text.secondary">
+              Current Configuration:
+            </Typography>
+            <Box
+              sx={{
+                mt: 1,
+                p: 1,
+                bgcolor: 'grey.100',
+                borderRadius: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {JSON.stringify(selectedTarget.config, null, 2)}
+            </Box>
+          </Box>
+        )}
       </Box>
+
+      <ProviderConfigDialog
+        open={configDialogOpen}
+        providerId={targetId || 'custom'}
+        config={selectedTarget.config || {}}
+        onClose={() => setConfigDialogOpen(false)}
+        onSave={handleConfigSave}
+      />
     </Box>
   );
 };

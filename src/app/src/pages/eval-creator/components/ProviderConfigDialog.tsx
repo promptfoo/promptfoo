@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import JsonTextField from '@app/components/JsonTextField';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import TextField from '@mui/material/TextField';
+import Link from '@mui/material/Link';
+import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
 interface ProviderConfigDialogProps {
@@ -19,6 +21,33 @@ interface ProviderConfigDialogProps {
   onSave: (providerId: string, config: Record<string, any>) => void;
 }
 
+// Common config templates for quick starts
+const CONFIG_TEMPLATES: Record<string, Record<string, any>> = {
+  'openai:': {
+    temperature: 0.7,
+    max_tokens: 2048,
+  },
+  'anthropic:': {
+    temperature: 0.7,
+    max_tokens: 4096,
+  },
+  'azure:': {
+    deployment_id: 'your-deployment-name',
+    api_version: '2024-02-01',
+  },
+};
+
+// Provider documentation links
+const PROVIDER_DOCS: Record<string, string> = {
+  openai: 'https://www.promptfoo.dev/docs/providers/openai/',
+  anthropic: 'https://www.promptfoo.dev/docs/providers/anthropic/',
+  azure: 'https://www.promptfoo.dev/docs/providers/azure/',
+  bedrock: 'https://www.promptfoo.dev/docs/providers/aws-bedrock/',
+  vertex: 'https://www.promptfoo.dev/docs/providers/vertex/',
+  ollama: 'https://www.promptfoo.dev/docs/providers/ollama/',
+  replicate: 'https://www.promptfoo.dev/docs/providers/replicate/',
+};
+
 const ProviderConfigDialog = ({
   open,
   providerId,
@@ -26,203 +55,142 @@ const ProviderConfigDialog = ({
   onClose,
   onSave,
 }: ProviderConfigDialogProps) => {
-  const [localConfig, setLocalConfig] = useState<Record<string, any>>(config);
-  const isAzureProvider = providerId.startsWith('azure:');
-  const isBedrockAgentProvider = providerId.startsWith('bedrock-agent:');
+  const [localConfig, setLocalConfig] = useState<Record<string, any>>({});
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
-  // Helper function to check if a value has content
-  const hasContent = (val: any): boolean => {
-    return val !== undefined && val !== null && val !== '';
-  };
+  // Extract provider type from ID (e.g., "openai:gpt-4" -> "openai")
+  const providerType = providerId.split(':')[0];
+  const docUrl = PROVIDER_DOCS[providerType];
 
-  const isDeploymentIdValid = !isAzureProvider || hasContent(localConfig.deployment_id);
-  const isAgentIdValid = !isBedrockAgentProvider || hasContent(localConfig.agentId);
-  const isAgentAliasIdValid = !isBedrockAgentProvider || hasContent(localConfig.agentAliasId);
+  const [configKey, setConfigKey] = useState(0);
 
-  // Reset local config when the dialog opens or providerId changes
   useEffect(() => {
-    setLocalConfig(config);
+    if (open) {
+      setLocalConfig({ ...config });
+      setJsonError(null);
+      setConfigKey((prev) => prev + 1);
+    }
   }, [open, providerId, config]);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
+    if (jsonError) {
+      return;
+    }
     onSave(providerId, localConfig);
+    onClose();
+  }, [jsonError, providerId, localConfig, onSave, onClose]);
+
+  const handleUseTemplate = (templateKey: string) => {
+    const template = CONFIG_TEMPLATES[templateKey];
+    setLocalConfig({ ...localConfig, ...template });
+    setConfigKey((prev) => prev + 1);
   };
 
-  // Create an ordered list of keys with important fields first
-  const configKeys = React.useMemo(() => {
-    const keys = Object.keys(localConfig);
-    if (isAzureProvider) {
-      return ['deployment_id', ...keys.filter((key) => key !== 'deployment_id')];
-    }
-    if (isBedrockAgentProvider) {
-      // Prioritize important bedrock-agent fields
-      const priorityFields = ['agentId', 'agentAliasId', 'region', 'enableTrace'];
-      const remaining = keys.filter((key) => !priorityFields.includes(key));
-      return [...priorityFields.filter((field) => keys.includes(field)), ...remaining];
-    }
-    return keys;
-  }, [localConfig, isAzureProvider, isBedrockAgentProvider]);
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!open) {
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, handleSave, onClose]);
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>
-        Provider Configuration
-        <Typography
-          variant="subtitle1"
-          color="text.secondary"
-          sx={{ mt: 1, fontSize: '0.9rem', fontFamily: 'monospace' }}
-        >
-          {providerId}
-        </Typography>
+        <Box>
+          <Typography variant="h6">Provider Configuration</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+            {providerId}
+          </Typography>
+        </Box>
       </DialogTitle>
+
       <DialogContent>
-        {isAzureProvider && (
-          <Box mb={2}>
-            <Alert severity={isDeploymentIdValid ? 'info' : 'warning'}>
-              {isDeploymentIdValid
-                ? 'Azure OpenAI requires a deployment ID that matches your deployment name in the Azure portal.'
-                : 'You must specify a deployment ID for Azure OpenAI models. This is the name you gave your model deployment in the Azure portal.'}
-            </Alert>
+        {docUrl && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              View the{' '}
+              <Link href={docUrl} target="_blank" rel="noopener">
+                {providerType} provider documentation
+              </Link>{' '}
+              for all available configuration options.
+            </Typography>
+          </Alert>
+        )}
+
+        {Object.keys(CONFIG_TEMPLATES).some((key) => providerId.startsWith(key)) && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              Quick start templates:
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              {Object.keys(CONFIG_TEMPLATES)
+                .filter((key) => providerId.startsWith(key))
+                .map((key) => (
+                  <Chip
+                    key={key}
+                    label={`Use ${key.replace(':', '')} defaults`}
+                    onClick={() => handleUseTemplate(key)}
+                    size="small"
+                    variant="outlined"
+                  />
+                ))}
+            </Stack>
           </Box>
         )}
 
-        {isBedrockAgentProvider && (
-          <Box mb={2}>
-            <Alert severity={isAgentIdValid && isAgentAliasIdValid ? 'info' : 'warning'}>
-              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-                Amazon Bedrock Agent Configuration
-              </Typography>
-              {isAgentIdValid && isAgentAliasIdValid ? (
-                <Box component="ul" sx={{ m: 0, pl: 2 }}>
-                  <li>
-                    <strong>Agent ID:</strong> {localConfig.agentId || 'Not specified'}
-                  </li>
-                  {localConfig.agentAliasId && (
-                    <li>
-                      <strong>Agent Alias:</strong> {localConfig.agentAliasId}
-                    </li>
-                  )}
-                  {localConfig.region && (
-                    <li>
-                      <strong>Region:</strong> {localConfig.region}
-                    </li>
-                  )}
-                  {localConfig.knowledgeBaseConfigurations && (
-                    <li>
-                      <strong>Knowledge Bases:</strong>{' '}
-                      {Array.isArray(localConfig.knowledgeBaseConfigurations)
-                        ? localConfig.knowledgeBaseConfigurations
-                            .map((kb: any) => kb.knowledgeBaseId || 'Unknown')
-                            .join(', ')
-                        : 'Configured'}
-                    </li>
-                  )}
-                  {localConfig.enableTrace && (
-                    <li>
-                      <strong>Tracing:</strong> Enabled
-                    </li>
-                  )}
-                </Box>
-              ) : (
-                <Typography variant="body2">
-                  You must specify both agentId and agentAliasId for Bedrock Agents. These are the
-                  agent ID and alias ID of your deployed agent in the AWS console.
-                </Typography>
-              )}
-            </Alert>
-          </Box>
+        {jsonError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {jsonError}
+          </Alert>
         )}
 
-        {configKeys.map((key) => {
-          const value = localConfig[key];
-          let handleChange;
-          const isDeploymentId = isAzureProvider && key === 'deployment_id';
-          const isAgentId = isBedrockAgentProvider && key === 'agentId';
-          const isAgentAliasId = isBedrockAgentProvider && key === 'agentAliasId';
-          const isRequired = isDeploymentId || isAgentId || isAgentAliasId;
-          const isValid = !isRequired || hasContent(value);
-
-          if (
-            typeof value === 'number' ||
-            typeof value === 'boolean' ||
-            typeof value === 'string'
-          ) {
-            if (typeof value === 'number') {
-              handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-                setLocalConfig({ ...localConfig, [key]: Number.parseFloat(e.target.value) });
-            } else if (typeof value === 'boolean') {
-              handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-                setLocalConfig({ ...localConfig, [key]: e.target.value === 'true' });
+        <JsonTextField
+          key={configKey}
+          label="Configuration (JSON)"
+          defaultValue={JSON.stringify(localConfig, null, 2)}
+          onChange={(parsed, error) => {
+            if (error) {
+              setJsonError(error);
             } else {
-              handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-                const trimmed = e.target.value.trim();
-                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                  try {
-                    setLocalConfig({ ...localConfig, [key]: JSON.parse(trimmed) });
-                  } catch {
-                    setLocalConfig({ ...localConfig, [key]: trimmed });
-                  }
-                } else if (trimmed === 'null') {
-                  setLocalConfig({ ...localConfig, [key]: null });
-                } else if (trimmed === 'undefined') {
-                  setLocalConfig({ ...localConfig, [key]: undefined });
-                } else {
-                  setLocalConfig({ ...localConfig, [key]: trimmed });
-                }
-              };
+              setJsonError(null);
+              setLocalConfig(parsed);
             }
-
-            return (
-              <Box key={key} my={2}>
-                <TextField
-                  label={isRequired ? `${key} (Required)` : key}
-                  value={value === undefined ? '' : value}
-                  onChange={handleChange}
-                  fullWidth
-                  required={isRequired}
-                  error={isRequired && !isValid}
-                  helperText={
-                    isRequired && !isValid
-                      ? isDeploymentId
-                        ? 'This field is required for Azure OpenAI'
-                        : isAgentId || isAgentAliasId
-                          ? 'This field is required for Bedrock Agents'
-                          : 'This field is required'
-                      : ''
-                  }
-                  InputLabelProps={{ shrink: true }}
-                  type={typeof value === 'number' ? 'number' : 'text'}
-                  variant={isRequired ? 'outlined' : undefined}
-                  color={isRequired ? 'primary' : undefined}
-                  focused={isRequired && !isValid}
-                />
-              </Box>
-            );
-          } else {
-            return (
-              <Box key={key} my={2}>
-                <JsonTextField
-                  label={key}
-                  defaultValue={JSON.stringify(value)}
-                  onChange={(parsed) => {
-                    setLocalConfig({ ...localConfig, [key]: parsed });
-                  }}
-                  fullWidth
-                  multiline
-                  minRows={2}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Box>
-            );
+          }}
+          fullWidth
+          multiline
+          minRows={15}
+          maxRows={30}
+          error={!!jsonError}
+          helperText={
+            jsonError ||
+            'Enter your provider configuration as JSON. Press Ctrl+S to save, Escape to cancel.'
           }
-        })}
+        />
+
+        {Object.keys(localConfig).length > 0 && !jsonError && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="caption" color="text.secondary">
+              Configured fields: {Object.keys(localConfig).join(', ')}
+            </Typography>
+          </Box>
+        )}
       </DialogContent>
+
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button
-          onClick={handleSave}
-          disabled={!isDeploymentIdValid || !isAgentIdValid || !isAgentAliasIdValid}
-        >
+        <Button onClick={handleSave} variant="contained" disabled={!!jsonError}>
           Save
         </Button>
       </DialogActions>
