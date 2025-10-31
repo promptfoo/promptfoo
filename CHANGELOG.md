@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - feat(model-audit): add revision tracking and deduplication for model scans to prevent re-scanning unchanged models, saving ~99% time and bandwidth on duplicate scans (#6058)
+- feat(model-audit): add `--scan-and-delete` flag to use modelaudit's native content hash generation instead of computing it in promptfoo (#6058)
 
 ## [0.119.1] - 2025-10-29
 
