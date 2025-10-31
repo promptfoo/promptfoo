@@ -397,6 +397,23 @@ providers:
         max_tokens: 100
 ```
 
+### Link to Cloud Target
+
+:::info Promptfoo Cloud Feature
+Available in [Promptfoo Cloud](/docs/enterprise) deployments.
+:::
+
+Link your local provider configuration to a cloud target using `linkedTargetId`:
+
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
+```
+
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/) for setup instructions.
+
 ### Using External Configuration Files
 
 You can load configuration from external files:

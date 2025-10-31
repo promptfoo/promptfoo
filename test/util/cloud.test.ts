@@ -9,6 +9,7 @@ import {
   getPoliciesFromCloud,
   getProviderFromCloud,
   makeRequest,
+  validateLinkedTargetId,
 } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
@@ -1282,6 +1283,114 @@ describe('cloud utils', () => {
         {
           method: 'POST',
           body: JSON.stringify({ config: { providers: [] } }),
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+  });
+
+  describe('validateLinkedTargetId', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should accept valid linkedTargetId when cloud is enabled', async () => {
+      const validLinkedTargetId = 'promptfoo://provider/12345678-1234-1234-1234-123456789abc';
+      const mockProvider = {
+        config: {
+          id: 'test-provider',
+          label: 'Test Provider',
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockProvider),
+        ok: true,
+      } as Response);
+
+      await expect(validateLinkedTargetId(validLinkedTargetId)).resolves.toBeUndefined();
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/providers/12345678-1234-1234-1234-123456789abc',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should warn but not fail when cloud is disabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+      const validLinkedTargetId = 'promptfoo://provider/12345678-1234-1234-1234-123456789abc';
+
+      await expect(validateLinkedTargetId(validLinkedTargetId)).resolves.toBeUndefined();
+
+      // Should not make API call when cloud is disabled
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('should throw error for invalid prefix', async () => {
+      const invalidPrefix = 'wrong://provider/12345678-1234-1234-1234-123456789abc';
+
+      const promise = validateLinkedTargetId(invalidPrefix);
+
+      await expect(promise).rejects.toThrow('Invalid linkedTargetId format');
+      await expect(promise).rejects.toThrow(invalidPrefix);
+      await expect(promise).rejects.toThrow('promptfoo://provider/');
+      await expect(promise).rejects.toThrow('To get a valid linkedTargetId:');
+    });
+
+    it('should throw error when target does not exist in cloud', async () => {
+      const validLinkedTargetId = 'promptfoo://provider/12345678-1234-1234-1234-123456789abc';
+
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('Not found'));
+
+      const promise = validateLinkedTargetId(validLinkedTargetId);
+
+      await expect(promise).rejects.toThrow('linkedTargetId not found');
+      await expect(promise).rejects.toThrow(validLinkedTargetId);
+      await expect(promise).rejects.toThrow('Troubleshooting steps');
+      await expect(promise).rejects.toThrow('promptfoo auth status');
+    });
+
+    it('should throw error when API returns non-ok response', async () => {
+      const validLinkedTargetId = 'promptfoo://provider/12345678-1234-1234-1234-123456789abc';
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      } as Response);
+
+      const promise = validateLinkedTargetId(validLinkedTargetId);
+
+      await expect(promise).rejects.toThrow('linkedTargetId not found');
+      await expect(promise).rejects.toThrow(validLinkedTargetId);
+      await expect(promise).rejects.toThrow('Troubleshooting steps');
+    });
+
+    it('should accept any ID format after valid prefix (defers to cloud)', async () => {
+      // Cloud API will validate the actual format - we just check prefix
+      const linkedTargetId = 'promptfoo://provider/any-id-format-here';
+      const mockProvider = {
+        config: {
+          id: 'test-provider',
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockProvider),
+        ok: true,
+      } as Response);
+
+      await expect(validateLinkedTargetId(linkedTargetId)).resolves.toBeUndefined();
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/providers/any-id-format-here',
+        {
+          method: 'GET',
+          body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
