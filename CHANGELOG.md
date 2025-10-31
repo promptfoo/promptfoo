@@ -17,8 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(webui): eval copy transaction atomicity to prevent orphaned records on failure (#6079)
-- fix(webui): eval copy dialog logic for small evaluations with default names (#6079)
+- fix(webui): eval copy atomicity and dialog logic bugs (#6079)
 
 ## [0.119.1] - 2025-10-29
 
