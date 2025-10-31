@@ -56,6 +56,10 @@ export function modelScanCommand(program: Command): void {
     .option('--no-cache', 'Force disable caching (overrides smart detection)')
     .option('--quiet', 'Silence detection messages')
     .option('--progress', 'Force enable progress reporting (auto-detected by default)')
+    .option(
+      '--scan-and-delete',
+      'Scan and delete downloaded files immediately after scan (generates content hash)',
+    )
 
     // Miscellaneous
     .option('-v, --verbose', 'Enable verbose output')
@@ -164,6 +168,7 @@ export function modelScanCommand(program: Command): void {
         format: outputFormat,
         output: options.output && !saveToDatabase ? options.output : undefined,
         timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+        scanAndDelete: options.scanAndDelete,
       };
 
       // Use centralized CLI argument parser with error handling
@@ -256,6 +261,7 @@ export function modelScanCommand(program: Command): void {
             let revisionInfo: {
               modelId?: string;
               revisionSha?: string;
+              contentHash?: string;
               modelSource?: string;
               sourceLastModified?: number;
             } = {};
@@ -276,6 +282,12 @@ export function modelScanCommand(program: Command): void {
                 } catch (error) {
                   logger.debug(`Failed to fetch revision info: ${error}`);
                 }
+              }
+
+              // Extract content_hash from modelaudit output if available (--scan-and-delete mode)
+              if (results.content_hash) {
+                logger.debug(`Using content_hash from modelaudit output: ${results.content_hash}`);
+                revisionInfo.contentHash = results.content_hash;
               }
             }
 
@@ -298,6 +310,7 @@ export function modelScanCommand(program: Command): void {
                   cache: options.cache,
                   quiet: options.quiet,
                   progress: options.progress,
+                  scanAndDelete: options.scanAndDelete,
                 },
               },
               // Revision tracking
