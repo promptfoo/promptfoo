@@ -95,6 +95,34 @@ tests:
           content: Yes, that works for me
 ```
 
+You can also load initial messages from a JSON file using `file://`:
+
+```yaml
+tests:
+  - vars:
+      instructions: You've selected a flight and want to pay with travel certificates
+      initialMessages: file://./conversation-history.json
+```
+
+Where `conversation-history.json` contains:
+
+```json
+[
+  {
+    "role": "user",
+    "content": "I need a flight from New York to Seattle on May 20th"
+  },
+  {
+    "role": "assistant",
+    "content": "I found a direct flight for $325. Would you like to book it?"
+  },
+  {
+    "role": "user",
+    "content": "Yes, that works for me"
+  }
+]
+```
+
 ### Using `config.initialMessages`
 
 Define shared initial messages at the provider level when multiple tests start from the same state:
@@ -124,6 +152,19 @@ tests:
             content: Great! How would you like to pay?
     vars:
       instructions: Ask about adding extra baggage
+```
+
+You can also load from a file:
+
+```yaml
+tests:
+  - provider:
+      id: 'promptfoo:simulated-user'
+      config:
+        maxTurns: 3
+        initialMessages: file://./shared-conversation-state.json
+    vars:
+      instructions: Ask to use travel certificates
 ```
 
 ### Hybrid Approach

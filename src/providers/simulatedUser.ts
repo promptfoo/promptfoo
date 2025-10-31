@@ -1,6 +1,7 @@
 import logger from '../logger';
 import { getSessionId } from '../redteam/util';
 import invariant from '../util/invariant';
+import { maybeLoadConfigFromExternalFile } from '../util/file';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -26,7 +27,7 @@ type AgentProviderOptions = ProviderOptions & {
     instructions?: string;
     maxTurns?: number;
     stateful?: boolean;
-    initialMessages?: Message[];
+    initialMessages?: Message[] | string; // Array of messages or file:// path
   };
 };
 
@@ -39,7 +40,7 @@ export class SimulatedUser implements ApiProvider {
   private readonly maxTurns: number;
   private readonly rawInstructions: string;
   private readonly stateful: boolean;
-  private readonly configInitialMessages?: Message[];
+  private readonly configInitialMessages?: Message[] | string;
 
   /**
    * Because the SimulatedUser is inherited by the RedteamMischievousUserProvider, and different
@@ -57,6 +58,62 @@ export class SimulatedUser implements ApiProvider {
 
   id() {
     return this.identifier;
+  }
+
+  /**
+   * Resolves initial messages from either an array or a file:// path.
+   * Supports loading messages from JSON files.
+   */
+  private resolveInitialMessages(
+    initialMessages: Message[] | string | undefined,
+  ): Message[] {
+    if (!initialMessages) {
+      return [];
+    }
+
+    // If it's already an array, return it
+    if (Array.isArray(initialMessages)) {
+      return initialMessages;
+    }
+
+    // If it's a string, handle different cases
+    if (typeof initialMessages === 'string') {
+      // Case 1: file:// reference that hasn't been loaded yet
+      if (initialMessages.startsWith('file://')) {
+        const resolved = maybeLoadConfigFromExternalFile(initialMessages);
+        if (Array.isArray(resolved)) {
+          return resolved as Message[];
+        }
+        logger.warn(
+          `[SimulatedUser] Expected array of messages from file, got: ${typeof resolved}. Value: ${JSON.stringify(resolved).substring(0, 200)}`,
+        );
+        return [];
+      }
+
+      // Case 2: Stringified JSON array (happens when file was already loaded but then stringified for storage/transport)
+      if (initialMessages.trim().startsWith('[')) {
+        try {
+          const parsed = JSON.parse(initialMessages);
+          if (Array.isArray(parsed)) {
+            return parsed as Message[];
+          }
+          logger.warn(
+            `[SimulatedUser] Parsed JSON but got ${typeof parsed} instead of array`,
+          );
+        } catch (error) {
+          logger.warn(
+            `[SimulatedUser] Failed to parse initialMessages as JSON: ${error}. Value: ${initialMessages.substring(0, 200)}`,
+          );
+        }
+      }
+
+      logger.warn(
+        `[SimulatedUser] initialMessages is a string but could not be resolved: ${initialMessages.substring(0, 200)}`,
+      );
+      return [];
+    }
+
+    return [];
   }
 
   private async sendMessageToUser(
@@ -149,7 +206,11 @@ export class SimulatedUser implements ApiProvider {
 
     // Support initial messages from either vars.initialMessages (per-test) or config.initialMessages (provider-level)
     // vars.initialMessages takes precedence over config.initialMessages
-    const initialMessages = (context?.vars?.initialMessages as Message[] | undefined) || this.configInitialMessages || [];
+    // Both can be arrays or file:// paths
+    const varsInitialMessages = context?.vars?.initialMessages as Message[] | string | undefined;
+    const initialMessages = this.resolveInitialMessages(
+      varsInitialMessages || this.configInitialMessages,
+    );
     const messages: Message[] = [...initialMessages];
 
     if (initialMessages.length > 0) {

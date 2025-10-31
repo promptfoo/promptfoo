@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add `initialMessages` support to simulated user provider for starting conversations from specific states, with support for loading from JSON files via `file://` syntax
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 
 ### Changed
