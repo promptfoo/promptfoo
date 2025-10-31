@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
+- feat(cli): add `--print-url` flag to `promptfoo view` to print the local web UI URL without opening a browser
 
 ## [0.119.1] - 2025-10-29
 
