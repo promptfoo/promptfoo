@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 
+### Fixed
+
+- fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
+
 ## [0.119.1] - 2025-10-29
 
 ### Changed
