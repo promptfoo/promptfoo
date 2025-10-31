@@ -56,12 +56,14 @@ const getIterativeGoalRubric = (goal: string | undefined): string => {
   `;
 };
 
+type StopReason = 'Grader failed' | 'Max iterations reached';
+
 interface IterativeMetadata {
   finalIteration: number;
   highestScore: number;
   redteamFinalPrompt?: string;
   storedGraderResult?: GradingResult;
-  stopReason: 'Grader failed' | 'Judge success' | 'Max iterations reached';
+  stopReason: StopReason;
   redteamHistory: {
     prompt: string;
     output: string;
@@ -153,8 +155,7 @@ export async function runRedteamConversation({
   let bestInjectVar: string | undefined = undefined;
   let targetPrompt: string | null = null;
   let storedGraderResult: GradingResult | undefined = undefined;
-  let stopReason: 'Grader failed' | 'Judge success' | 'Max iterations reached' =
-    'Max iterations reached';
+  let stopReason: StopReason = 'Max iterations reached';
 
   const sessionIds: string[] = [];
 
@@ -408,24 +409,9 @@ export async function runRedteamConversation({
       }
 
       // Check if we should exit early (but don't break yet)
-      if (currentScore >= 10 || storedGraderResult?.pass === false) {
+      if (storedGraderResult?.pass === false) {
         shouldExitEarly = true;
-
-        // Set the appropriate stop reason
-        if (storedGraderResult?.pass === false) {
-          stopReason = 'Grader failed';
-        } else if (currentScore >= 10) {
-          stopReason = 'Judge success';
-        }
-
-        // If we're exiting early due to high judge score and don't have a grader result, create one from the judge result
-        if (currentScore >= 10 && !storedGraderResult) {
-          storedGraderResult = {
-            pass: false,
-            score: 0,
-            reason: parsed.currentResponse.explanation || 'Jailbreak goal achieved',
-          };
-        }
+        stopReason = 'Grader failed';
       }
 
       // Update the user message to include both scores
