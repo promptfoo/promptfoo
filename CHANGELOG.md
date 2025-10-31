@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings
 
+### Fixed
+
+- fix(redteam): enable layer strategy with multilingual language support; plugins now generate tests in multiple languages even when layer strategy is present (#6084)
+- fix(redteam): reduce multilingual deprecation logging noise by moving from warn to debug level (#6084)
+
 ## [0.119.1] - 2025-10-29
 
 ### Changed
