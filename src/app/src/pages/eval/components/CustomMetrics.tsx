@@ -126,7 +126,8 @@ const CustomMetrics = ({
             field: value,
             logicOperator: 'or' as const,
           };
-
+      
+      // If this filter is already applied, do not re-apply it.
       if (
         Object.values(filters.values).find(
           (f) =>
