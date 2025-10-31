@@ -621,11 +621,11 @@ evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Get distinct test count for response
+    // Get distinct test count for response and pass to copy to avoid duplicate query
     const distinctTestCount = await sourceEval.getResultsCount();
 
     // Create copy
-    const newEval = await sourceEval.copy(description);
+    const newEval = await sourceEval.copy(description, distinctTestCount);
 
     logger.info('Eval copied via API', {
       sourceEvalId: id,

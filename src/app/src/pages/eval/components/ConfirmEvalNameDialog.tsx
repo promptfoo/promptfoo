@@ -66,8 +66,9 @@ export const ConfirmEvalNameDialog = ({
       return;
     }
 
-    // For rename, if name hasn't changed, just close
-    if (name.trim() === currentName && !showSizeWarning) {
+    // For rename (no itemCount), if name hasn't changed, just close
+    // For copy operations (has itemCount), always proceed even with default name
+    if (name.trim() === currentName && itemCount === undefined) {
       onClose();
       return;
     }
@@ -138,7 +139,9 @@ export const ConfirmEvalNameDialog = ({
         <Button
           onClick={handleConfirm}
           variant="contained"
-          disabled={isLoading || !name.trim() || (name.trim() === currentName && !showSizeWarning)}
+          disabled={
+            isLoading || !name.trim() || (name.trim() === currentName && itemCount === undefined)
+          }
           startIcon={isLoading ? <CircularProgress size={20} /> : null}
         >
           {isLoading ? 'Processing...' : actionButtonText}

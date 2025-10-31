@@ -943,18 +943,20 @@ export default class Eval {
   /**
    * Creates a deep copy of this eval including all results.
    * Uses batching to avoid memory exhaustion on large evals.
+   * @param description - Optional description for the new eval
+   * @param distinctTestCount - Optional pre-computed test count to avoid duplicate query
    */
-  async copy(description?: string): Promise<Eval> {
+  async copy(description?: string, distinctTestCount?: number): Promise<Eval> {
     const newEvalId = createEvalId(new Date());
     const copyDescription = description || `${this.description || 'Evaluation'} (Copy)`;
 
     // Get distinct test count for logging and progress tracking
-    const distinctTestCount = await this.getResultsCount();
+    const testCount = distinctTestCount ?? (await this.getResultsCount());
 
     logger.info('Starting eval copy', {
       sourceEvalId: this.id,
       targetEvalId: newEvalId,
-      distinctTestCount,
+      distinctTestCount: testCount,
     });
 
     // Deep clone to prevent mutation issues
@@ -967,25 +969,26 @@ export default class Eval {
 
     const db = getDb();
 
-    // Create the new eval record first
-    db.insert(evalsTable)
-      .values({
-        id: newEvalId,
-        createdAt: Date.now(),
-        author,
-        description: copyDescription,
-        config: newConfig,
-        results: {},
-        prompts: newPrompts,
-        vars: newVars,
-        runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
-        isRedteam: Boolean(newConfig.redteam),
-      })
-      .run();
-
-    // Copy results and relationships within transaction for atomicity
+    // Copy eval, results, and relationships within transaction for atomicity
     let copiedCount = 0;
     await db.transaction(async (tx) => {
+      // Create the new eval record first
+      await tx
+        .insert(evalsTable)
+        .values({
+          id: newEvalId,
+          createdAt: Date.now(),
+          author,
+          description: copyDescription,
+          config: newConfig,
+          results: {},
+          prompts: newPrompts,
+          vars: newVars,
+          runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+          isRedteam: Boolean(newConfig.redteam),
+        })
+        .run();
+
       // Copy prompts relationships
       const promptRels = await tx
         .select()
@@ -1085,7 +1088,7 @@ export default class Eval {
           targetEvalId: newEvalId,
           batchSize: batch.length,
           rowsCopied: copiedCount,
-          distinctTestCount,
+          distinctTestCount: testCount,
         });
       }
     });
@@ -1094,7 +1097,7 @@ export default class Eval {
       sourceEvalId: this.id,
       targetEvalId: newEvalId,
       rowsCopied: copiedCount,
-      distinctTestCount,
+      distinctTestCount: testCount,
     });
 
     return (await Eval.findById(newEvalId)) as Eval;
