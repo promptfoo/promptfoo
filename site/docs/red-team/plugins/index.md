@@ -53,7 +53,7 @@ Click on a plugin to see its documentation.
 
 <PluginTable shouldGroupByCategory showRemoteStatus />
 
-_🌐 indicates that plugin uses remote inference_
+_🌐 indicates that plugin uses remote inference in Promptfoo Community edition_
 
 Some plugins point to your own LLM provider to generate adversarial probes (like `policy` and `intent`), while others must point to Promptfoo's remote generation endpoint for specialized attack generation (like `harmful:*` and security-focused plugins).
 
