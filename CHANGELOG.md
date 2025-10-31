@@ -8,18 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(cli): add `--team` flag to `promptfoo share` and `promptfoo auth login` commands for team-specific sharing (#6076)
+- feat(cli): add `--team` flag to `promptfoo share` and `promptfoo auth login` for team-specific sharing with improved reliability and UX (#6076)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 
 ### Changed
 
-- chore(cli): improve cloud API reliability by using retry logic with exponential backoff (#6076)
-- chore(cli): truncate team list in error messages when user has 100+ teams for better readability (#6076)
 - chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings
-
-### Documentation
-
-- docs(cli): add team flag documentation for sharing and authentication commands (#6076)
 
 ## [0.119.1] - 2025-10-29
 
