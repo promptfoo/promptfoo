@@ -16,7 +16,7 @@ keywords:
 
 # Remediation Reports
 
-Promptfoo Enterprise automatically generates AI-powered remediation reports after each red team scan. These reports provide actionable security recommendations with implementation guidance, helping you quickly address vulnerabilities discovered during testing.
+Promptfoo Enterprise automatically generates remediation reports after each red team scan. These reports provide actionable security recommendations with implementation guidance.
 
 ## Overview
 
