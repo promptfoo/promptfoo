@@ -248,6 +248,14 @@ describe('CustomProvider', () => {
 
   describe('Unblocking functionality', () => {
     it('should detect blocking question and send unblocking response', async () => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Custom strategy for testing',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+
       const prompt = 'test prompt';
       const context = {
         originalProvider: mockTargetProvider,
@@ -289,7 +297,7 @@ describe('CustomProvider', () => {
         }),
       });
 
-      const result = await customProvider.callApi(prompt, context);
+      const result = await provider.callApi(prompt, context);
 
       expect(tryUnblocking).toHaveBeenCalledWith({
         messages: expect.any(Array),
@@ -299,10 +307,18 @@ describe('CustomProvider', () => {
       });
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2); // Original + unblocking response
-      expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
     });
 
     it('should continue without unblocking when no blocking question detected', async () => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Custom strategy for testing',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+
       const prompt = 'test prompt';
       const context = {
         originalProvider: mockTargetProvider,
@@ -335,14 +351,14 @@ describe('CustomProvider', () => {
         }),
       });
 
-      const result = await customProvider.callApi(prompt, context);
+      const result = await provider.callApi(prompt, context);
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1); // Only original call
-      expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
     });
   });
 
-  it('should succeed via internal evaluator when eval score is 100', async () => {
+  it('should record internal evaluator success without exiting early', async () => {
     // Set up grader to pass (not detect jailbreak) so we don't fail via grader
     jest.mocked(getGraderById).mockReturnValue({
       getResult: jest.fn(async () => ({
@@ -356,7 +372,7 @@ describe('CustomProvider', () => {
     const testProvider = new CustomProvider({
       injectVar: 'objective',
       strategyText: 'Custom strategy for testing',
-      maxTurns: 2, // Use smaller max turns
+      maxTurns: 1, // Limit iterations to avoid additional calls
       maxBacktracks: 10,
       redteamProvider: mockRedTeamProvider,
       stateful: false,
@@ -403,7 +419,7 @@ describe('CustomProvider', () => {
     const result = await testProvider.callApi(prompt, context);
 
     expect(mockScoringProvider.callApi).toHaveBeenCalledTimes(2);
-    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.customResult).toBe(true);
     expect(result.metadata?.customConfidence).toBe(100);
   });
@@ -700,7 +716,7 @@ describe('CustomProvider', () => {
     const testProvider = new CustomProvider({
       injectVar: 'objective',
       strategyText: 'Stateful strategy test',
-      maxTurns: 2,
+      maxTurns: 1,
       stateful: true,
       redteamProvider: mockRedTeamProvider,
     });
@@ -736,7 +752,7 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
     // Verify sessionId was set in context vars
     expect((context.vars as any).sessionId).toBe('test-session-123');
   });
@@ -895,7 +911,7 @@ describe('CustomProvider', () => {
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
   });
 
-  it('should store synthetic grader result when internal evaluator succeeds', async () => {
+  it('should not create synthetic grader result when internal evaluator succeeds', async () => {
     const testProvider = new CustomProvider({
       injectVar: 'objective',
       maxTurns: 1,
@@ -960,14 +976,11 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Should exit early due to internal evaluator success
-    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
-
-    // Should store a synthetic grader result
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.storedGraderResult).toEqual({
-      pass: false,
-      score: 0,
-      reason: 'Goal fully achieved - sensitive data extracted',
+      pass: true,
+      score: 1,
+      reason: 'No jailbreak detected',
     });
   });
 
