@@ -26,6 +26,7 @@ type AgentProviderOptions = ProviderOptions & {
     instructions?: string;
     maxTurns?: number;
     stateful?: boolean;
+    initialMessages?: Message[];
   };
 };
 
@@ -38,6 +39,7 @@ export class SimulatedUser implements ApiProvider {
   private readonly maxTurns: number;
   private readonly rawInstructions: string;
   private readonly stateful: boolean;
+  private readonly configInitialMessages?: Message[];
 
   /**
    * Because the SimulatedUser is inherited by the RedteamMischievousUserProvider, and different
@@ -50,6 +52,7 @@ export class SimulatedUser implements ApiProvider {
     this.maxTurns = config.maxTurns ?? 10;
     this.rawInstructions = config.instructions || '{{instructions}}';
     this.stateful = config.stateful ?? false;
+    this.configInitialMessages = config.initialMessages;
   }
 
   id() {
@@ -143,7 +146,16 @@ export class SimulatedUser implements ApiProvider {
     const userProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
-    const messages: Message[] = [];
+
+    // Support initial messages from either vars.initialMessages (per-test) or config.initialMessages (provider-level)
+    // vars.initialMessages takes precedence over config.initialMessages
+    const initialMessages = (context?.vars?.initialMessages as Message[] | undefined) || this.configInitialMessages || [];
+    const messages: Message[] = [...initialMessages];
+
+    if (initialMessages.length > 0) {
+      logger.debug(`[SimulatedUser] Starting with ${initialMessages.length} initial messages`);
+    }
+
     const maxTurns = this.maxTurns;
 
     const tokenUsage = createEmptyTokenUsage();

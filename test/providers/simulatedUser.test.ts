@@ -342,4 +342,128 @@ describe('SimulatedUser', () => {
       expect(secondPrompt[0]).toEqual({ role: 'user', content: 'user response' });
     });
   });
+
+  describe('initialMessages', () => {
+    it('should start conversation with vars.initialMessages', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Hello' },
+        { role: 'assistant' as const, content: 'Hi there!' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Hello');
+      expect(result.output).toContain('Hi there!');
+    });
+
+    it('should start conversation with config.initialMessages', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Need help' },
+        { role: 'assistant' as const, content: 'Sure, how can I help?' },
+      ];
+
+      const userWithConfigInitial = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          initialMessages,
+        },
+      });
+
+      const result = await userWithConfigInitial.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Need help');
+      expect(result.output).toContain('Sure, how can I help?');
+    });
+
+    it('should prioritize vars.initialMessages over config.initialMessages', async () => {
+      const configInitialMessages = [
+        { role: 'user' as const, content: 'Config message' },
+        { role: 'assistant' as const, content: 'Config response' },
+      ];
+
+      const varsInitialMessages = [
+        { role: 'user' as const, content: 'Vars message' },
+        { role: 'assistant' as const, content: 'Vars response' },
+      ];
+
+      const userWithBoth = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          initialMessages: configInitialMessages,
+        },
+      });
+
+      const result = await userWithBoth.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: varsInitialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Vars message');
+      expect(result.output).toContain('Vars response');
+      expect(result.output).not.toContain('Config message');
+      expect(result.output).not.toContain('Config response');
+    });
+
+    it('should work without initial messages (backwards compatibility)', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('should pass initial messages to user provider in flipped format', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'User says hello' },
+        { role: 'assistant' as const, content: 'Assistant responds' },
+      ];
+
+      await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Check that sendMessageToUser was called with initial messages included
+      const userProviderCalls = mockUserProviderCallApi.mock.calls;
+      expect(userProviderCalls.length).toBeGreaterThan(0);
+
+      // First call should include the initial messages (flipped)
+      const firstCallArg = JSON.parse(userProviderCalls[0][0]);
+      expect(firstCallArg).toContainEqual({
+        role: 'assistant', // Flipped from 'user'
+        content: 'User says hello',
+      });
+      expect(firstCallArg).toContainEqual({
+        role: 'user', // Flipped from 'assistant'
+        content: 'Assistant responds',
+      });
+    });
+  });
 });
