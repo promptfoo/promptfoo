@@ -232,6 +232,13 @@ export function sanitizeUrl(url: string): string {
       return url;
     }
 
+    // Check if URL contains template variables (e.g., {{ variable }})
+    // These are configuration templates, not runtime secrets, so skip sanitization
+    // When actually used, Nunjucks renders them first, then sanitization happens on the real URL
+    if (/\{\{.*?\}\}/.test(url)) {
+      return url;
+    }
+
     const parsedUrl = new URL(url);
 
     // Create a copy for sanitization to avoid modifying the original URL
