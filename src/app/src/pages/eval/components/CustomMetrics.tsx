@@ -96,21 +96,30 @@ const CustomMetrics = ({
   const handleClick = useCallback(
     (value: string) => {
       const asPolicy = isPolicyMetric(value);
-      const filter = {
-        type: asPolicy ? ('policy' as const) : ('metric' as const),
-        operator: 'equals' as const,
-        value: asPolicy ? deserializePolicyIdFromMetric(value) : value,
-        logicOperator: 'or' as const,
-      };
+      const filter = asPolicy
+        ? {
+            type: 'policy' as const,
+            operator: 'equals' as const,
+            value: deserializePolicyIdFromMetric(value),
+            field: undefined,
+            logicOperator: 'or' as const,
+          }
+        : {
+            type: 'metric' as const,
+            operator: 'is_defined' as const,
+            value: '',
+            field: value,
+            logicOperator: 'or' as const,
+          };
 
-      // If this filter is already applied, do not re-apply it.
       if (
         Object.values(filters.values).find(
           (f) =>
             f.type === filter.type &&
             f.value === filter.value &&
             f.operator === filter.operator &&
-            f.logicOperator === filter.logicOperator,
+            f.logicOperator === filter.logicOperator &&
+            f.field === filter.field,
         )
       ) {
         return;

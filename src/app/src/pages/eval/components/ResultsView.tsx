@@ -671,7 +671,7 @@ export default function ResultsView({
                         };
                         const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
                         if (filter.operator === 'is_defined') {
-                          label = `${filter.field} ${operatorDisplay}`;
+                          label = `Metric: ${filter.field}`;
                         } else {
                           label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
                         }
