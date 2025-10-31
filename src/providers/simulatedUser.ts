@@ -61,6 +61,35 @@ export class SimulatedUser implements ApiProvider {
   }
 
   /**
+   * Validates that a message has the required structure.
+   */
+  private isValidMessage(msg: any): msg is Message {
+    return (
+      msg &&
+      typeof msg === 'object' &&
+      typeof msg.content === 'string' &&
+      (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
+    );
+  }
+
+  /**
+   * Validates and filters an array of messages, logging warnings for invalid entries.
+   */
+  private validateMessages(messages: any[]): Message[] {
+    const validMessages: Message[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (this.isValidMessage(messages[i])) {
+        validMessages.push(messages[i]);
+      } else {
+        logger.warn(
+          `[SimulatedUser] Invalid message at index ${i}, skipping. Expected {role: 'user'|'assistant'|'system', content: string}, got: ${JSON.stringify(messages[i]).substring(0, 100)}`,
+        );
+      }
+    }
+    return validMessages;
+  }
+
+  /**
    * Resolves initial messages from either an array or a file:// path.
    * Supports loading messages from JSON files.
    */
@@ -71,9 +100,9 @@ export class SimulatedUser implements ApiProvider {
       return [];
     }
 
-    // If it's already an array, return it
+    // If it's already an array, validate and return it
     if (Array.isArray(initialMessages)) {
-      return initialMessages;
+      return this.validateMessages(initialMessages);
     }
 
     // If it's a string, handle different cases
@@ -82,7 +111,7 @@ export class SimulatedUser implements ApiProvider {
       if (initialMessages.startsWith('file://')) {
         const resolved = maybeLoadConfigFromExternalFile(initialMessages);
         if (Array.isArray(resolved)) {
-          return resolved as Message[];
+          return this.validateMessages(resolved);
         }
         logger.warn(
           `[SimulatedUser] Expected array of messages from file, got: ${typeof resolved}. Value: ${JSON.stringify(resolved).substring(0, 200)}`,
@@ -95,7 +124,7 @@ export class SimulatedUser implements ApiProvider {
         try {
           const parsed = JSON.parse(initialMessages);
           if (Array.isArray(parsed)) {
-            return parsed as Message[];
+            return this.validateMessages(parsed);
           }
           logger.warn(
             `[SimulatedUser] Parsed JSON but got ${typeof parsed} instead of array`,

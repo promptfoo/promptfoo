@@ -56,11 +56,11 @@ For each turn:
 
 ## Configuration Options
 
-| Option            | Type      | Description                                                                                  |
-| ----------------- | --------- | -------------------------------------------------------------------------------------------- |
-| `instructions`    | string    | Template for user instructions. Supports Nunjucks templating with access to test variables. |
-| `maxTurns`        | number    | Maximum number of conversation turns. Defaults to 10.                                        |
-| `initialMessages` | Message[] | Optional. Pre-defined conversation history to start from instead of empty conversation.      |
+| Option            | Type                 | Description                                                                                                        |
+| ----------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `instructions`    | string               | Template for user instructions. Supports Nunjucks templating with access to test variables.                       |
+| `maxTurns`        | number               | Maximum number of conversation turns. Defaults to 10.                                                              |
+| `initialMessages` | Message[] or string  | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path to JSON. |
 
 ## Starting from a Specific Conversation State
 

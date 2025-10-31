@@ -465,5 +465,121 @@ describe('SimulatedUser', () => {
         content: 'Assistant responds',
       });
     });
+
+    it('should handle stringified JSON array for initialMessages', async () => {
+      const stringifiedMessages = JSON.stringify([
+        { role: 'user', content: 'Hello from JSON' },
+        { role: 'assistant', content: 'Response from JSON' },
+      ]);
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: stringifiedMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Hello from JSON');
+      expect(result.output).toContain('Response from JSON');
+    });
+
+    it('should skip invalid messages and continue with valid ones', async () => {
+      const mixedMessages = [
+        { role: 'user', content: 'Valid message' },
+        { foo: 'bar' }, // Invalid: missing role and content
+        { role: 'assistant', content: 'Another valid message' },
+        { role: 'user' }, // Invalid: missing content
+        { role: 'invalid-role', content: 'Bad role' }, // Invalid: bad role
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: mixedMessages as any,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Valid message');
+      expect(result.output).toContain('Another valid message');
+      // Invalid messages should be skipped
+      expect(result.output).not.toContain('foo');
+      expect(result.output).not.toContain('bar');
+    });
+
+    it('should return empty array for malformed JSON string', async () => {
+      const malformedJson = '{ not valid json [';
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: malformedJson,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Should proceed without initial messages
+      expect(result.output).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(2); // Standard 2 turns without initial messages
+    });
+
+    it('should return empty array for non-array JSON', async () => {
+      const nonArrayJson = JSON.stringify({ role: 'user', content: 'Not an array' });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: nonArrayJson,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Should proceed without initial messages
+      expect(result.output).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('should handle empty string initialMessages', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: '',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Empty string should be treated as no initial messages
+      expect(result.output).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('should validate message content is a string', async () => {
+      const invalidMessages = [
+        { role: 'user', content: 123 }, // content is not a string
+        { role: 'assistant', content: 'Valid message' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: invalidMessages as any,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should only include the valid message
+      expect(result.output).toContain('Valid message');
+      expect(result.output).not.toContain('123');
+    });
   });
 });
