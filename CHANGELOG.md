@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- chore(webui): expand language autocomplete options in run settings to include 486 ISO 639-2 standard languages for comprehensive multilingual testing support (maintains parity with cloud)
+
 ## [0.119.1] - 2025-10-29
 
 ### Changed
