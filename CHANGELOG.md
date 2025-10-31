@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
+- feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#XXXX)
+- docs(redteam): add dedicated documentation page for meta-agent jailbreaks strategy (#XXXX)
 
 ### Changed
 
