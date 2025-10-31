@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- feat(guardrails): add provider-agnostic guardrails with unified error handling and retry logic
+- feat(errors): unify EvalErrorInfo to a single source of truth; export canonical types from result.ts
+- docs(types): document new error taxonomy and guardrail integration
+
 ### Added
 
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
