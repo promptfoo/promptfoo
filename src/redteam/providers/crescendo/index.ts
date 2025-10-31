@@ -452,13 +452,9 @@ export class CrescendoProvider implements ApiProvider {
 
         if (evalPercentage === 100) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
-
-          logger.debug(
-            `[Crescendo] Jailbreak Successful via Internal Evaluator at ROUND ${roundNum}, continuing iterations`,
-          );
+          logger.debug(`[Crescendo] Jailbreak recorded during round ${roundNum}`);
         }
-
-        logger.debug('[Crescendo] Jailbreak Unsuccessful, continuing to next round');
+        logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
         logger.error(`[Crescendo] Error Running crescendo step`, { error });
       }
