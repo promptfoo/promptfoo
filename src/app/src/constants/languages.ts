@@ -318,6 +318,7 @@ export const LANGUAGES: LanguageInfo[] = [
   { name: 'Nahuatl languages', iso6392: 'nah' },
   { name: 'Nauru', iso6391: 'na', iso6392: 'nau' },
   { name: 'Navajo', iso6391: 'nv', iso6392: 'nav' },
+  { name: 'Ndonga', iso6391: 'ng', iso6392: 'ndo' },
   { name: 'Neapolitan', iso6392: 'nap' },
   { name: 'Nepal Bhasa', iso6392: 'new' },
   { name: 'Nepali', iso6391: 'ne', iso6392: 'nep' },
