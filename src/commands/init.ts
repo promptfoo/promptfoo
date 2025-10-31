@@ -64,10 +64,24 @@ export async function downloadDirectory(dirPath: string, targetDir: string): Pro
 }
 
 export async function downloadExample(exampleName: string, targetDir: string): Promise<void> {
+  let dirAlreadyExists = false;
+  try {
+    await fs.access(targetDir);
+    dirAlreadyExists = true;
+  } catch {
+    // Directory doesn't exist, continue
+  }
   try {
     await fs.mkdir(targetDir, { recursive: true });
     await downloadDirectory(exampleName, targetDir);
   } catch (error) {
+    if (!dirAlreadyExists) {
+      try {
+        await fs.rm(targetDir, { recursive: true, force: true });
+      } catch (error) {
+        logger.error(`Failed to remove directory: ${error}`);
+      }
+    }
     throw new Error(
       `Failed to download example: ${error instanceof Error ? error.message : error}`,
     );
@@ -116,7 +130,7 @@ async function selectExample(): Promise<string> {
   return selectedExample;
 }
 
-async function handleExampleDownload(
+export async function handleExampleDownload(
   directory: string | null,
   example: string | boolean | undefined,
 ): Promise<string | undefined> {
@@ -143,6 +157,19 @@ async function handleExampleDownload(
       });
       if (attemptDownload) {
         exampleName = await selectExample();
+      } else {
+        // User declined to try downloading a different example
+        logger.info(
+          dedent`
+
+          No example downloaded. To get started, try:
+
+            ${chalk.bold('promptfoo init --example')}    (browse and select an example)
+            ${chalk.bold('promptfoo init')}              (create a basic project)
+
+           `,
+        );
+        return exampleName;
       }
     }
   }

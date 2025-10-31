@@ -1760,11 +1760,14 @@ describe('FiltersForm', () => {
       // Click to open the dropdown
       fireEvent.mouseDown(operatorDropdown);
 
-      // Check that only "Equals" option is available for metric filters
-      const equalsOption = screen.getByRole('option', { name: 'Equals' });
-      expect(equalsOption).toBeInTheDocument();
+      // Check that "Is Defined" and comparison operators are available for metric filters
+      const isDefinedOption = screen.getByRole('option', { name: 'Is Defined' });
+      expect(isDefinedOption).toBeInTheDocument();
 
-      // Check that "Exists" option is NOT available
+      const eqOption = screen.getByRole('option', { name: '==' });
+      expect(eqOption).toBeInTheDocument();
+
+      // Check that "Exists" option is NOT available (it's for metadata filters)
       const existsOption = screen.queryByRole('option', { name: 'Exists' });
       expect(existsOption).not.toBeInTheDocument();
     });
@@ -1918,7 +1921,7 @@ describe('FiltersForm', () => {
       expect(valueInput).toBeInTheDocument();
     });
 
-    it('should reset operator to "equals" and show value input when changing filter type from metadata with "exists" operator selected', async () => {
+    it('should reset operator to "is_defined" when changing filter type from metadata with "exists" operator to metric', async () => {
       const initialFilter: ResultsFilter = {
         id: 'filter-1',
         type: 'metadata',
@@ -1969,9 +1972,9 @@ describe('FiltersForm', () => {
       expect(mockUpdateFilter).toHaveBeenCalledWith({
         ...initialFilter,
         type: 'metric',
-        operator: 'equals',
+        operator: 'is_defined',
         value: '',
-        field: undefined,
+        field: 'testField',
       });
 
       const operatorDropdown = screen.getByRole('combobox', { name: /Operator/i });

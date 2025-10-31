@@ -21,7 +21,7 @@ import {
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { useTableStore } from './store';
-import { useCustomPoliciesMap } from './hooks';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 
 type MetricScore = {
   score: number;
@@ -36,14 +36,14 @@ interface MetricRow {
 }
 
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
-  const { table, filters, addFilter } = useTableStore();
+  const { table, filters, addFilter, config } = useTableStore();
   const theme = useTheme();
 
   if (!table || !table.head || !table.head.prompts) {
     return null;
   }
 
-  const policiesById = useCustomPoliciesMap();
+  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   /**
    * Given the pass rate percentages, calculates the color and text color for the cell.
@@ -156,7 +156,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             if (!policy) {
               return value;
             }
-            return formatPolicyIdentifierAsMetric(policy.name);
+            return formatPolicyIdentifierAsMetric(policy.name ?? policy.id, value);
           } else {
             return value;
           }

@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 
 import glob from 'glob';
-import { FILE_METADATA_KEY } from '../src/constants';
+import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from '../src/constants';
 import {
   evaluate,
   formatVarsForDisplay,
@@ -14,6 +14,7 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
+import { strategyDisplayNames } from '../src/redteam/constants/metadata';
 import {
   type ApiProvider,
   type Prompt,
@@ -29,7 +30,7 @@ jest.mock('../src/util/transform', () => ({
     OUTPUT: 'output',
     VARS: 'vars',
   },
-  transform: jest.fn().mockImplementation(async (code, input, context, skipWrap, inputType) => {
+  transform: jest.fn().mockImplementation(async (code, input, context, _skipWrap, _inputType) => {
     if (typeof code === 'string' && code.includes('vars.transformed = true')) {
       return { ...input, transformed: true };
     }
@@ -199,7 +200,7 @@ jest.mock('../src/esm');
 
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
-  runExtensionHook: jest.fn().mockImplementation((extensions, hookName, context) => context),
+  runExtensionHook: jest.fn().mockImplementation((_extensions, _hookName, context) => context),
 }));
 
 jest.mock('../src/cliState', () => ({
@@ -233,7 +234,7 @@ jest.mock('../src/util/functions/loadFunction', () => ({
   ...jest.requireActual('../src/util/functions/loadFunction'),
   loadFunction: jest.fn().mockImplementation((options) => {
     if (options.filePath.includes('scoring')) {
-      return Promise.resolve((metrics: Record<string, number>) => ({
+      return Promise.resolve((_metrics: Record<string, number>) => ({
         pass: true,
         score: 0.75,
         reason: 'Custom scoring reason',
@@ -378,6 +379,87 @@ describe('evaluator', () => {
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  it('runs Simba test cases after other providers during evaluate', async () => {
+    const callOrder: string[] = [];
+
+    const normalProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('normal-provider'),
+      label: 'Normal provider',
+      delay: 0,
+      callApi: jest.fn().mockImplementation(async () => {
+        callOrder.push('normal');
+        return {
+          output: 'normal output',
+          tokenUsage: {
+            total: 1,
+            prompt: 1,
+            completion: 0,
+            cached: 0,
+            numRequests: 1,
+            completionDetails: {
+              reasoning: 0,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+            },
+          },
+        };
+      }),
+    };
+
+    const runResults = [
+      {
+        promptIdx: -1,
+        testIdx: -1,
+        testCase: { assert: [] },
+        promptId: 'simba-case',
+        provider: {
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
+        },
+        prompt: {
+          raw: 'Test prompt',
+          label: strategyDisplayNames.simba,
+        },
+        vars: {},
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 5,
+        namedScores: {},
+      },
+    ];
+
+    const agentProvider = {
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
+      delay: 0,
+      callApi: jest.fn(),
+      runSimba: jest.fn().mockImplementation(async () => {
+        callOrder.push('simba');
+        return runResults.map((result) => ({ ...result }));
+      }),
+    } as unknown as ApiProvider & { runSimba: jest.Mock };
+
+    const testSuite: TestSuite = {
+      providers: [normalProvider, agentProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const addResultSpy = jest.spyOn(evalRecord, 'addResult');
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(callOrder).toEqual(['normal', 'simba']);
+    expect(normalProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(agentProvider.runSimba as jest.Mock).toHaveBeenCalledTimes(1);
+    expect(agentProvider.callApi as jest.Mock).not.toHaveBeenCalled();
+    expect(addResultSpy).toHaveBeenCalledTimes(2);
+    expect(addResultSpy.mock.calls[0][0].provider.id).toBe('normal-provider');
+    expect(addResultSpy.mock.calls[1][0].provider.id).toBe('promptfoo:redteam:simba');
   });
 
   it('evaluate with vars - no escaping', async () => {
@@ -2331,7 +2413,7 @@ describe('evaluator', () => {
   it('should maintain separate conversation histories based on metadata.conversationId', async () => {
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockImplementation((prompt) => ({
+      callApi: jest.fn().mockImplementation((_prompt) => ({
         output: 'Test output',
       })),
     };
@@ -2893,7 +2975,7 @@ describe('evaluator', () => {
     let capturedContext: any;
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
       }
@@ -2931,7 +3013,7 @@ describe('evaluator', () => {
     let capturedContext: any;
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
       }
@@ -2969,7 +3051,7 @@ describe('evaluator', () => {
     let capturedContext: any;
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
       }
@@ -3007,7 +3089,7 @@ describe('evaluator', () => {
     let capturedContext: any;
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
       }
@@ -3052,7 +3134,7 @@ describe('evaluator', () => {
     let capturedContext: any;
 
     const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
       }
@@ -3078,47 +3160,6 @@ describe('evaluator', () => {
 
     expect(capturedContext).toBeDefined();
     expect(capturedContext.result.metadata.sessionIds).toEqual([]);
-  });
-
-  it('should ignore non-string sessionId in vars', async () => {
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
-        output: 'Test output',
-        // No sessionId in response
-      }),
-    };
-
-    const mockExtension = 'file://test-extension.js';
-    let capturedContext: any;
-
-    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
-    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
-      if (hookName === 'afterEach') {
-        capturedContext = context;
-      }
-      return context;
-    });
-
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          vars: {
-            var1: 'value1',
-            sessionId: { invalid: 'object' }, // Non-string sessionId
-          },
-        },
-      ],
-      extensions: [mockExtension],
-    };
-
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
-
-    expect(capturedContext).toBeDefined();
-    expect(capturedContext.result.metadata.sessionId).toBeUndefined();
   });
 });
 
@@ -3283,6 +3324,151 @@ describe('runEval', () => {
     expect(conversations).toHaveProperty('test-provider:custom-id:conv1');
   });
 
+  it('should include sessionId from response in result metadata', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const providerWithSession: ApiProvider = {
+      id: jest.fn().mockReturnValue('session-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        sessionId: 'response-session-123',
+        metadata: { existing: 'value' },
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: providerWithSession,
+      prompt: { raw: 'Test prompt', label: 'session-label' },
+      test: { vars: {} },
+      conversations,
+      registers: {},
+    });
+
+    const [result] = results;
+    expect(result?.metadata).toMatchObject({
+      sessionId: 'response-session-123',
+      existing: 'value',
+    });
+  });
+
+  it('should include sessionId from vars in result metadata when response lacks sessionId', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const providerWithoutSession: ApiProvider = {
+      id: jest.fn().mockReturnValue('vars-session-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: providerWithoutSession,
+      prompt: { raw: 'Test prompt', label: 'vars-session-label' },
+      test: { vars: { sessionId: 'vars-session-456' } },
+      conversations,
+      registers: {},
+    });
+
+    const [result] = results;
+
+    expect(result.metadata).toMatchObject({ sessionId: 'vars-session-456' });
+  });
+
+  it('should include sessionId from response metadata when top-level sessionId is absent', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const providerWithMetadataSession: ApiProvider = {
+      id: jest.fn().mockReturnValue('metadata-session-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { sessionId: 'metadata-session-789', existing: 'keep-me' },
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: providerWithMetadataSession,
+      prompt: { raw: 'Test prompt', label: 'metadata-session-label' },
+      test: { vars: {} },
+      conversations,
+      registers: {},
+    });
+
+    expect(result.metadata).toMatchObject({
+      sessionId: 'metadata-session-789',
+      existing: 'keep-me',
+    });
+  });
+
+  it('should prioritize response metadata sessionId over vars sessionId', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const providerWithMetadataSession: ApiProvider = {
+      id: jest.fn().mockReturnValue('metadata-session-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { sessionId: 'metadata-session-priority' },
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: providerWithMetadataSession,
+      prompt: { raw: 'Test prompt', label: 'metadata-session-label' },
+      test: { vars: { sessionId: 'vars-session-ignored' } },
+      conversations,
+      registers: {},
+    });
+
+    expect(result.metadata).toMatchObject({ sessionId: 'metadata-session-priority' });
+  });
+
+  it('should include sessionIds from response metadata without adding sessionId fallback', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const providerWithSessionIds: ApiProvider = {
+      id: jest.fn().mockReturnValue('metadata-session-ids-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { sessionIds: ['session-a', 'session-b'] },
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: providerWithSessionIds,
+      prompt: { raw: 'Test prompt', label: 'metadata-session-ids-label' },
+      test: { vars: {} },
+      conversations,
+      registers: {},
+    });
+
+    expect(result.metadata).toMatchObject({ sessionIds: ['session-a', 'session-b'] });
+    expect(result.metadata).not.toHaveProperty('sessionId');
+  });
+
+  it('should include sessionId from test metadata when provider omits session details', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-metadata-session-label' },
+      test: { metadata: { sessionId: 'test-metadata-session' } },
+      conversations,
+      registers: {},
+    });
+
+    expect(result?.metadata).toMatchObject({ sessionId: 'test-metadata-session' });
+  });
+
   it('should handle registers', async () => {
     const registers = { savedValue: 'stored data' };
 
@@ -3409,6 +3595,189 @@ describe('runEval', () => {
 
     expect(results[0].success).toBe(true);
     expect(results[0].response?.output).toBe('original-provider-test');
+  });
+
+  it('delegates Simba providers to runSimba using evaluateOptions maxConcurrency', async () => {
+    const runSimbaResults = [
+      {
+        promptIdx: -1,
+        testIdx: -1,
+        testCase: { assert: [] },
+        promptId: 'simba-case',
+        provider: {
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
+        },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
+        vars: {},
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 50,
+        namedScores: {},
+      },
+    ];
+
+    const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
+    const agentProvider = {
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
+      delay: 0,
+      callApi: jest.fn(),
+      runSimba: runSimbaMock,
+    } as unknown as ApiProvider & { runSimba: jest.Mock };
+
+    const options = {
+      ...defaultOptions,
+      testIdx: 5,
+      promptIdx: 2,
+      evaluateOptions: { maxConcurrency: 7 },
+      concurrency: 99,
+    };
+
+    const results = await runEval({
+      ...options,
+      provider: agentProvider,
+      prompt: { raw: 'Simba prompt', label: 'simba-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(runSimbaMock).toHaveBeenCalledTimes(1);
+    expect(runSimbaMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Simba prompt',
+        context: expect.objectContaining({ vars: {} }),
+        options: undefined,
+        concurrency: 7,
+      }),
+    );
+    expect(agentProvider.callApi as jest.Mock).not.toHaveBeenCalled();
+    expect(results).toHaveLength(1);
+    expect(results[0].promptIdx).toBe(2);
+    expect(results[0].testIdx).toBe(5);
+    expect(results[0].success).toBe(true);
+  });
+
+  it('uses default Simba concurrency when evaluateOptions are not provided', async () => {
+    const runSimbaResults = [
+      {
+        promptIdx: -1,
+        testIdx: -1,
+        testCase: { assert: [] },
+        promptId: 'simba-case',
+        provider: {
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
+        },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
+        vars: {},
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 50,
+        namedScores: {},
+      },
+    ];
+
+    const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
+    const agentProvider = {
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
+      delay: 0,
+      callApi: jest.fn(),
+      runSimba: runSimbaMock,
+    } as unknown as ApiProvider & { runSimba: jest.Mock };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: agentProvider,
+      prompt: { raw: 'Simba prompt', label: 'simba-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(runSimbaMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Simba prompt',
+        context: expect.any(Object),
+        options: undefined,
+        concurrency: DEFAULT_MAX_CONCURRENCY,
+      }),
+    );
+    expect(results[0].promptIdx).toBe(defaultOptions.promptIdx);
+    expect(results[0].testIdx).toBe(defaultOptions.testIdx);
+  });
+
+  it('assigns sequential test indices when runSimba returns multiple results', async () => {
+    const runSimbaResults = [
+      {
+        promptIdx: -1,
+        testIdx: -1,
+        testCase: { assert: [] },
+        promptId: 'simba-case-1',
+        provider: {
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
+        },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
+        vars: {},
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 10,
+        namedScores: {},
+      },
+      {
+        promptIdx: -1,
+        testIdx: -1,
+        testCase: { assert: [] },
+        promptId: 'simba-case-2',
+        provider: {
+          id: 'promptfoo:redteam:simba',
+          label: strategyDisplayNames.simba,
+        },
+        prompt: { raw: 'Simba prompt', label: 'simba-label' },
+        vars: {},
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 0.5,
+        latencyMs: 20,
+        namedScores: {},
+      },
+    ];
+
+    const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
+    const agentProvider = {
+      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
+      label: strategyDisplayNames.simba,
+      delay: 0,
+      callApi: jest.fn(),
+      runSimba: runSimbaMock,
+    } as unknown as ApiProvider & { runSimba: jest.Mock };
+
+    const results = await runEval({
+      ...defaultOptions,
+      testIdx: 10,
+      promptIdx: 3,
+      provider: agentProvider,
+      prompt: { raw: 'Simba prompt', label: 'simba-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(runSimbaMock).toHaveBeenCalledTimes(1);
+    expect(results).toHaveLength(2);
+    expect(results[0].testIdx).toBe(10);
+    expect(results[0].promptIdx).toBe(3);
+    expect(results[1].testIdx).toBe(11);
+    expect(results[1].promptIdx).toBe(3);
   });
 
   it('should accumulate token usage correctly', async () => {

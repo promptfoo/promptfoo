@@ -1,5 +1,4 @@
 import { addIterativeJailbreaks } from '../../../src/redteam/strategies/iterative';
-
 import type { TestCase } from '../../../src/types';
 
 describe('addIterativeJailbreaks', () => {
@@ -165,6 +164,35 @@ describe('addIterativeJailbreaks', () => {
       metadata: {
         existingKey: 'existingValue',
         strategyId: 'jailbreak',
+        originalText: 'test value',
+      },
+    });
+  });
+
+  it('should transform test cases correctly for iterative:meta strategy', () => {
+    const result = addIterativeJailbreaks(mockTestCases, 'testVar', 'iterative:meta', {
+      configKey: 'configValue',
+    });
+
+    expect(result[0]).toEqual({
+      ...mockTestCases[0],
+      provider: {
+        id: 'promptfoo:redteam:iterative:meta',
+        config: {
+          injectVar: 'testVar',
+          configKey: 'configValue',
+        },
+      },
+      assert: [
+        {
+          type: 'contains-all',
+          metric: 'test-metric/IterativeMeta',
+          value: 'test-value',
+        },
+      ],
+      metadata: {
+        existingKey: 'existingValue',
+        strategyId: 'jailbreak:meta',
         originalText: 'test value',
       },
     });

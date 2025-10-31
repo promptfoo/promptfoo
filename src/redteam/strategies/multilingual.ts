@@ -2,17 +2,37 @@ import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
-
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
-import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
+import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { TestCase } from '../../types/index';
 import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
+
+import type { TestCase } from '../../types/index';
+
+/**
+ * ⚠️ DEPRECATED: This strategy is deprecated and will be removed in a future version.
+ *
+ * Use the top-level `language` configuration option instead to generate multilingual test cases.
+ * The global language config applies to all plugins and strategies, providing the same functionality
+ * with a simpler architecture.
+ *
+ * Migration guide: https://www.promptfoo.dev/docs/red-team/configuration/#language
+ *
+ * Example:
+ * ```yaml
+ * redteam:
+ *   language: ['es', 'fr', 'de']  # Use this instead of multilingual strategy
+ *   plugins:
+ *     - harmful
+ *   strategies:
+ *     - jailbreak  # Remove multilingual from strategies
+ * ```
+ */
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 
@@ -507,6 +527,26 @@ export async function addMultilingual(
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
+  // Deprecation warning - this strategy will be removed in a future version
+  logger.warn(
+    '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+  );
+
+  // Check if tests were already generated with language modifiers
+  // This happens when multilingual strategy was migrated to global language config
+  const hasLanguageModifiers = testCases.some((t) => t.metadata?.modifiers?.language);
+
+  if (hasLanguageModifiers) {
+    // Tests already generated in multiple languages at plugin level
+    // Just return them - no translation needed
+    logger.debug(
+      `Multilingual strategy: ${testCases.length} tests already generated with language support`,
+    );
+    return testCases;
+  }
+
+  // Fallback: No language modifiers found - use old translation logic
+  // This maintains backward compatibility for users who specify language differently
   if (shouldGenerateRemote()) {
     const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
     if (multilingualTestCases.length > 0) {
