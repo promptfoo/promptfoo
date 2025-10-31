@@ -1,10 +1,10 @@
-import { ConfidentialClientApplication } from '@azure/msal-node';
 import { fetchWithProxy } from './util/fetch/index';
 import { getEnvString } from './envars';
 import logger from './logger';
 import type { CsvRow } from './types';
 import fs from 'fs';
 import crypto from 'crypto';
+import type { ConfidentialClientApplication } from '@azure/msal-node';
 
 let cca: ConfidentialClientApplication | null = null;
 
@@ -62,8 +62,10 @@ export async function fetchCsvFromSharepoint(url: string): Promise<CsvRow[]> {
   }
 }
 
-function getConfidentialClient(): ConfidentialClientApplication {
+async function getConfidentialClient(): Promise<ConfidentialClientApplication> {
   if (!cca) {
+    const { ConfidentialClientApplication: MsalClient } = await import('@azure/msal-node');
+
     const clientId = getEnvString('SHAREPOINT_CLIENT_ID');
     const tenantId = getEnvString('SHAREPOINT_TENANT_ID');
     const certPath = getEnvString('SHAREPOINT_CERT_PATH');
@@ -128,13 +130,13 @@ function getConfidentialClient(): ConfidentialClientApplication {
       },
     };
 
-    cca = new ConfidentialClientApplication(msalConfig);
+    cca = new MsalClient(msalConfig);
   }
   return cca;
 }
 
 export async function getSharePointAccessToken() {
-  const client = getConfidentialClient();
+  const client = await getConfidentialClient();
   const baseUrl = getEnvString('SHAREPOINT_BASE_URL');
 
   if (!baseUrl) {
