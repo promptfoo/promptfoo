@@ -121,6 +121,7 @@ const redTeamSidebar = [
           'red-team/plugins/imitation',
           'red-team/plugins/off-topic',
           'red-team/plugins/overreliance',
+          'red-team/plugins/sycophancy',
           'red-team/plugins/unverifiable-claims',
         ],
       },

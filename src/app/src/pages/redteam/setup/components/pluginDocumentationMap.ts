@@ -73,6 +73,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   imitation: `${BASE_DOCS_URL}/imitation/`,
   intent: `${BASE_DOCS_URL}/intent/`,
   overreliance: `${BASE_DOCS_URL}/overreliance/`,
+  sycophancy: `${BASE_DOCS_URL}/sycophancy/`,
   policy: `${BASE_DOCS_URL}/custom/`,
   politics: `${BASE_DOCS_URL}/politics/`,
   religion: `${BASE_DOCS_URL}/religion/`,
