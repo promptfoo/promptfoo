@@ -56,6 +56,8 @@ import './ResultsView.css';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Switch from '@mui/material/Switch';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
@@ -160,6 +162,97 @@ const SearchInputField = React.memo(
   },
 );
 
+// Inline compare view that reuses the diff viewer pieces
+import type { Row as DiffRow } from '../diff/lib/types';
+import { useRunSummary as useDiffRunSummary } from '../diff/hooks/useRunSummary';
+import { useRunComparison as useDiffRunComparison } from '../diff/hooks/useRunComparison';
+import { ResultsTable as DiffResultsTable } from '../diff/components/ResultsTable';
+import { DiffDrawer } from '../diff/components/DiffDrawer';
+
+function CompareDiffViewInline({ baselineParam, currentParam }: { baselineParam: string; currentParam: string }) {
+  const { data: baseline, error: bErr } = useDiffRunSummary(baselineParam);
+  const { data: current,  error: cErr } = useDiffRunSummary(currentParam);
+
+  const [changedOnly, setChangedOnly] = React.useState(true);
+  const [q, setQ] = React.useState('');
+  const { filtered, summary } = useDiffRunComparison(baseline, current, {
+    statuses: null,
+    tags: null,
+    changedOnly,
+    q,
+  });
+
+  const [selected, setSelected] = React.useState<string | null>(null);
+  const selectedRow = React.useMemo(() => filtered.find((r) => r.key === selected), [filtered, selected]);
+
+  if (bErr || cErr) {
+    return (
+      <Box p={2} className="text-sm" sx={{ color: 'error.main' }}>
+        Failed to load one or both runs.
+      </Box>
+    );
+  }
+  if (!baseline || !current) {
+    return (
+      <Box p={2} className="text-sm" sx={{ color: 'text.secondary' }}>
+        Loading comparison…
+      </Box>
+    );
+  }
+
+  return (
+    <Box p={2} pt={2} display="flex" flexDirection="column" gap={2}>
+      <Box display="flex" alignItems="center" gap={1} sx={{ mt: 1.5, mb: 2.5 }}>
+        <Box component="h2" sx={{ fontSize: 16, fontWeight: 600, m: 0 }}>
+          Comparison
+        </Box>
+        <Box sx={{ ml: 'auto' }}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Chip size="small" variant="outlined" label={`Improved: ${summary.improved}`} />
+            <Chip size="small" variant="outlined" label={`Regressed: ${summary.regressed}`} />
+            <Chip size="small" variant="outlined" label={`Changed: ${summary.changed}`} />
+            <Chip size="small" variant="outlined" label={`Added: ${summary.added}`} />
+            <Chip size="small" variant="outlined" label={`Removed: ${summary.removed}`} />
+            <Chip size="small" variant="outlined" label={`Unchanged: ${summary.same}`} />
+          </Stack>
+        </Box>
+      </Box>
+
+      <Box display="flex" alignItems="center" gap={1}>
+        <TextField
+          size="small"
+          label="Baseline id or path"
+          value={baseline.runId}
+          InputProps={{ readOnly: true }}
+          sx={{ minWidth: 280 }}
+        />
+        <TextField
+          size="small"
+          label="Current id or path"
+          value={current.runId}
+          InputProps={{ readOnly: true }}
+          sx={{ minWidth: 280 }}
+        />
+        <Box sx={{ ml: 'auto' }} />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={changedOnly}
+              onChange={() => setChangedOnly((v) => !v)}
+              size="small"
+            />
+          }
+          label="Show only changed"
+        />
+        <TextField size="small" label="Search name/id/tag" value={q} onChange={(e) => setQ(e.target.value)} />
+      </Box>
+
+      <DiffResultsTable rows={filtered as any} onSelect={(k) => setSelected(k)} />
+      <DiffDrawer row={selectedRow as any} onClose={() => setSelected(null)} />
+    </Box>
+  );
+}
+
 export default function ResultsView({
   recentEvals,
   onRecentEvalSelected,
@@ -167,6 +260,13 @@ export default function ResultsView({
 }: ResultsViewProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // If URL contains baseline & current, render the richer diff view inline
+  const baselineParam = searchParams.get('baseline');
+  const currentParam  = searchParams.get('current');
+  if (baselineParam && currentParam) {
+    return <CompareDiffViewInline baselineParam={baselineParam} currentParam={currentParam} />;
+  }
 
   const {
     author,
@@ -293,9 +393,12 @@ export default function ResultsView({
 
   const handleComparisonEvalSelected = async (compareEvalId: string) => {
     setAnchorEl(null);
-
-    setInComparisonMode(true);
-    setComparisonEvalIds([...comparisonEvalIds, compareEvalId]);
+    const currentEvalId = evalId || defaultEvalId;
+    if (!currentEvalId) return;
+    const qp = new URLSearchParams(searchParams);
+    qp.set('baseline', currentEvalId);
+    qp.set('current', compareEvalId);
+    navigate({ search: qp.toString() }, { replace: false });
   };
 
   const hasAnyDescriptions = React.useMemo(
