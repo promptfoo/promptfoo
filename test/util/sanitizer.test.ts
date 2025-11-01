@@ -934,6 +934,48 @@ describe('sanitizeUrl', () => {
       const url = 'invalid://example.com';
       expect(sanitizeUrl(url)).toBe(url);
     });
+
+    it('should handle URLs with Nunjucks template variables', () => {
+      const url = '{{ api_base }}/api/v1/endpoint';
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should handle URLs with template variables in path', () => {
+      const url = 'https://example.com/{{ path }}/endpoint';
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should handle URLs with template variables in query params', () => {
+      const url = 'https://example.com/api?key={{ api_key }}';
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should handle URLs with multiple template variables', () => {
+      const url = '{{ protocol }}://{{ host }}/{{ path }}?key={{ api_key }}';
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should skip sanitization for URLs with template variables', () => {
+      // Template URLs are configuration, not runtime secrets
+      // They get rendered by Nunjucks before actual use, then sanitized
+      const url = '{{ api_base }}/api?token=secret123&user_id=42';
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should skip sanitization for URLs with templates and credentials', () => {
+      const url = 'https://user:pass@{{ host }}/api';
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should skip sanitization for mixed template and sensitive params', () => {
+      const url = 'https://admin:secret@{{ api_base }}/api?api_key=key123&data=public';
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should skip sanitization for templates with sensitive param names', () => {
+      const url = 'https://example.com/{{ path }}?password={{ user_password }}&data=public';
+      expect(sanitizeUrl(url)).toBe(url);
+    });
   });
 
   describe('basic authentication', () => {
