@@ -788,11 +788,11 @@ describe('CustomProvider', () => {
     jest.mocked(getGraderById).mockReturnValue({
       getResult: jest.fn(
         async (
-          prompt: string,
-          output: string,
-          test: any,
-          provider: any,
-          value: any,
+          _prompt: string,
+          _output: string,
+          _test: any,
+          _provider: any,
+          _value: any,
           additionalRubric?: string,
         ) => {
           capturedAdditionalRubric = additionalRubric;
