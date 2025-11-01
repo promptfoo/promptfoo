@@ -116,7 +116,7 @@ export default function PluginsTab({
   const {
     generateTestCase,
     isGenerating: generatingTestCase,
-    currentPlugin: generatingPlugin,
+    plugin: generatingPlugin,
   } = useTestCaseGeneration();
 
   // Presets
@@ -374,10 +374,10 @@ export default function PluginsTab({
       }
       // Directly generate test case
       else {
-        await generateTestCase(plugin, pluginConfig[plugin] || {}, {
-          telemetryFeature: 'redteam_plugin_generate_test_case',
-          mode: 'result',
-        });
+        await generateTestCase(
+          { id: plugin, config: pluginConfig[plugin] ?? {} },
+          { id: 'basic', config: {} },
+        );
       }
     },
     [pluginConfig],

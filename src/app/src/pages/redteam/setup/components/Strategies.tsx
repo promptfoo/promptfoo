@@ -33,6 +33,7 @@ import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
 import EstimationsDisplay from './EstimationsDisplay';
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 import Divider from '@mui/material/Divider';
+import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -527,121 +528,123 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         </Alert>
       )}
 
-      <Box>
-        <EstimationsDisplay config={config} />
+      <TestCaseGenerationProvider redTeamConfig={config}>
+        <Box>
+          <EstimationsDisplay config={config} />
 
-        <Divider sx={{ my: 4 }} />
+          <Divider sx={{ my: 4 }} />
 
-        {/* Preset Selector */}
-        <PresetSelector
-          presets={Object.values(STRATEGY_PRESETS)}
-          selectedPreset={selectedPreset}
-          onSelect={handlePresetSelect}
-        />
-
-        {/* Recommended-specific options */}
-        {selectedPresetHasAgenticStrategies && (
-          <RecommendedOptions
-            isMultiTurnEnabled={isMultiTurnEnabled}
-            isStatefulValue={isStatefulValue}
-            onMultiTurnChange={handleMultiTurnChange}
-            onStatefulChange={handleStatefulChange}
+          {/* Preset Selector */}
+          <PresetSelector
+            presets={Object.values(STRATEGY_PRESETS)}
+            selectedPreset={selectedPreset}
+            onSelect={handlePresetSelect}
           />
-        )}
 
-        {/* Recommended strategies */}
-        {categorizedStrategies.recommended.length > 0 && (
-          <StrategySection
-            title="Recommended Strategies"
-            description="Core strategies that provide comprehensive coverage for most use cases"
-            strategies={categorizedStrategies.recommended}
-            selectedIds={selectedStrategyIds}
-            onToggle={handleStrategyToggle}
-            onConfigClick={handleConfigClick}
-            onSelectNone={handleSelectNoneInSection}
-            isStrategyDisabled={isStrategyDisabled}
-            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+          {/* Recommended-specific options */}
+          {selectedPresetHasAgenticStrategies && (
+            <RecommendedOptions
+              isMultiTurnEnabled={isMultiTurnEnabled}
+              isStatefulValue={isStatefulValue}
+              onMultiTurnChange={handleMultiTurnChange}
+              onStatefulChange={handleStatefulChange}
+            />
+          )}
+
+          {/* Recommended strategies */}
+          {categorizedStrategies.recommended.length > 0 && (
+            <StrategySection
+              title="Recommended Strategies"
+              description="Core strategies that provide comprehensive coverage for most use cases"
+              strategies={categorizedStrategies.recommended}
+              selectedIds={selectedStrategyIds}
+              onToggle={handleStrategyToggle}
+              onConfigClick={handleConfigClick}
+              onSelectNone={handleSelectNoneInSection}
+              isStrategyDisabled={isStrategyDisabled}
+              isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            />
+          )}
+
+          {/* Agentic strategies grouped */}
+          {(categorizedStrategies.agenticSingleTurn.length > 0 ||
+            categorizedStrategies.agenticMultiTurn.length > 0) && (
+            <AgenticStrategiesGroup
+              singleTurnStrategies={categorizedStrategies.agenticSingleTurn}
+              multiTurnStrategies={categorizedStrategies.agenticMultiTurn}
+              selectedIds={selectedStrategyIds}
+              onToggle={handleStrategyToggle}
+              onConfigClick={handleConfigClick}
+              onSelectNone={handleSelectNoneInSection}
+              isStrategyDisabled={isStrategyDisabled}
+              isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            />
+          )}
+
+          {/* Multi-modal strategies */}
+          {categorizedStrategies.multiModal.length > 0 && (
+            <StrategySection
+              title="Multi-modal Strategies"
+              description="Test handling of non-text content including audio, video, and images"
+              strategies={categorizedStrategies.multiModal}
+              selectedIds={selectedStrategyIds}
+              onToggle={handleStrategyToggle}
+              onConfigClick={handleConfigClick}
+              onSelectNone={handleSelectNoneInSection}
+              isStrategyDisabled={isStrategyDisabled}
+              isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            />
+          )}
+
+          {/* Other strategies */}
+          {categorizedStrategies.other.length > 0 && (
+            <StrategySection
+              title="Other Strategies"
+              description="Additional specialized strategies for specific attack vectors and edge cases"
+              strategies={categorizedStrategies.other}
+              selectedIds={selectedStrategyIds}
+              onToggle={handleStrategyToggle}
+              onConfigClick={handleConfigClick}
+              onSelectNone={handleSelectNoneInSection}
+              isStrategyDisabled={isStrategyDisabled}
+              isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            />
+          )}
+
+          {/* Additional system config section, if needed */}
+          {showSystemConfig && !selectedPresetHasAgenticStrategies && (
+            <SystemConfiguration
+              isStatefulValue={isStatefulValue}
+              onStatefulChange={handleStatefulChange}
+            />
+          )}
+
+          {/* Config Dialog */}
+          <StrategyConfigDialog
+            open={configDialog.isOpen}
+            strategy={configDialog.selectedStrategy}
+            config={
+              configDialog.selectedStrategy
+                ? ((
+                    config.strategies.find(
+                      (s) => getStrategyId(s) === configDialog.selectedStrategy,
+                    ) as RedteamStrategyObject
+                  )?.config ?? {})
+                : {}
+            }
+            onClose={() =>
+              setConfigDialog({
+                isOpen: false,
+                selectedStrategy: null,
+              })
+            }
+            onSave={updateStrategyConfig}
+            strategyData={
+              availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
+            }
           />
-        )}
-
-        {/* Agentic strategies grouped */}
-        {(categorizedStrategies.agenticSingleTurn.length > 0 ||
-          categorizedStrategies.agenticMultiTurn.length > 0) && (
-          <AgenticStrategiesGroup
-            singleTurnStrategies={categorizedStrategies.agenticSingleTurn}
-            multiTurnStrategies={categorizedStrategies.agenticMultiTurn}
-            selectedIds={selectedStrategyIds}
-            onToggle={handleStrategyToggle}
-            onConfigClick={handleConfigClick}
-            onSelectNone={handleSelectNoneInSection}
-            isStrategyDisabled={isStrategyDisabled}
-            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-          />
-        )}
-
-        {/* Multi-modal strategies */}
-        {categorizedStrategies.multiModal.length > 0 && (
-          <StrategySection
-            title="Multi-modal Strategies"
-            description="Test handling of non-text content including audio, video, and images"
-            strategies={categorizedStrategies.multiModal}
-            selectedIds={selectedStrategyIds}
-            onToggle={handleStrategyToggle}
-            onConfigClick={handleConfigClick}
-            onSelectNone={handleSelectNoneInSection}
-            isStrategyDisabled={isStrategyDisabled}
-            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-          />
-        )}
-
-        {/* Other strategies */}
-        {categorizedStrategies.other.length > 0 && (
-          <StrategySection
-            title="Other Strategies"
-            description="Additional specialized strategies for specific attack vectors and edge cases"
-            strategies={categorizedStrategies.other}
-            selectedIds={selectedStrategyIds}
-            onToggle={handleStrategyToggle}
-            onConfigClick={handleConfigClick}
-            onSelectNone={handleSelectNoneInSection}
-            isStrategyDisabled={isStrategyDisabled}
-            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-          />
-        )}
-
-        {/* Additional system config section, if needed */}
-        {showSystemConfig && !selectedPresetHasAgenticStrategies && (
-          <SystemConfiguration
-            isStatefulValue={isStatefulValue}
-            onStatefulChange={handleStatefulChange}
-          />
-        )}
-
-        {/* Config Dialog */}
-        <StrategyConfigDialog
-          open={configDialog.isOpen}
-          strategy={configDialog.selectedStrategy}
-          config={
-            configDialog.selectedStrategy
-              ? ((
-                  config.strategies.find(
-                    (s) => getStrategyId(s) === configDialog.selectedStrategy,
-                  ) as RedteamStrategyObject
-                )?.config ?? {})
-              : {}
-          }
-          onClose={() =>
-            setConfigDialog({
-              isOpen: false,
-              selectedStrategy: null,
-            })
-          }
-          onSave={updateStrategyConfig}
-          strategyData={
-            availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
-          }
-        />
-      </Box>
+        </Box>
+      </TestCaseGenerationProvider>
     </PageWrapper>
   );
 }

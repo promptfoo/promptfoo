@@ -455,12 +455,12 @@ describe('AgenticStrategiesGroup', () => {
     it('handles strategies with special characters in IDs', () => {
       const specialStrategies: StrategyCardData[] = [
         {
-          id: 'strategy-with-dash',
+          id: 'base64',
           name: 'Strategy With Dash',
           description: 'Test strategy',
         },
         {
-          id: 'strategy:with:colon',
+          id: 'jailbreak:tree',
           name: 'Strategy With Colon',
           description: 'Test strategy',
         },
@@ -472,7 +472,7 @@ describe('AgenticStrategiesGroup', () => {
           isRemoteGenerationDisabled={false}
           singleTurnStrategies={specialStrategies}
           multiTurnStrategies={[]}
-          selectedIds={['strategy-with-dash']}
+          selectedIds={['base64']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
@@ -489,7 +489,7 @@ describe('AgenticStrategiesGroup', () => {
     it('handles very long strategy names and descriptions', () => {
       const longStrategies: StrategyCardData[] = [
         {
-          id: 'long-strategy',
+          id: 'prompt-injection',
           name: 'This is a very long strategy name that might cause layout issues in the UI',
           description:
             'This is an extremely long description that goes on and on and on to test how the component handles text overflow and wrapping in various screen sizes',

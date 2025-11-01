@@ -1,5 +1,6 @@
+import { type Strategy } from '@promptfoo/redteam/constants';
 export interface StrategyCardData {
-  id: string;
+  id: Strategy;
   name: string;
   description: string;
 }
