@@ -18,8 +18,11 @@ function matchesPattern(spanName: string, pattern: string): boolean {
   return regex.test(spanName);
 }
 
-export const handleTraceSpanCount = ({ assertion, context }: AssertionParams): GradingResult => {
-  if (!context.trace || !context.trace.spans) {
+export const handleTraceSpanCount = ({
+  assertion,
+  assertionValueContext,
+}: AssertionParams): GradingResult => {
+  if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-count assertion');
   }
 
@@ -29,7 +32,7 @@ export const handleTraceSpanCount = ({ assertion, context }: AssertionParams): G
   }
 
   const { pattern, min, max } = value;
-  const spans = context.trace.spans as TraceSpan[];
+  const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Count spans matching the pattern
   const matchingSpans = spans.filter((span) => matchesPattern(span.name, pattern));

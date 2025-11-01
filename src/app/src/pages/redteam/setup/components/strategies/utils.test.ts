@@ -54,48 +54,35 @@ describe('getEstimatedProbes', () => {
     expect(getEstimatedProbes(config)).toBe(60); // (5*1) + (5*1*(1+10))
   });
 
-  it('should handle multilingual strategy with specified languages', () => {
+  it('should handle global language configuration with multiple languages', () => {
     const config = {
       ...baseConfig,
       numTests: 5,
       plugins: ['plugin1'],
-      strategies: [
-        {
-          id: 'multilingual',
-          config: {
-            languages: ['en', 'es', 'fr'],
-          },
-        },
-      ],
+      strategies: [],
+      language: ['en', 'es', 'fr'],
     } as Config;
     expect(getEstimatedProbes(config)).toBe(15); // (5*1) * 3 languages
   });
 
-  it('should handle multilingual strategy without specified languages', () => {
+  it('should handle global language configuration with single language', () => {
     const config = {
       ...baseConfig,
       numTests: 5,
       plugins: ['plugin1'],
-      strategies: ['multilingual'],
+      strategies: [],
+      language: 'en',
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(5); // (5*1) * 1 language (no config)
+    expect(getEstimatedProbes(config)).toBe(5); // (5*1) * 1 language
   });
 
-  it('should handle complex configuration with multiple strategies', () => {
+  it('should handle complex configuration with multiple strategies and languages', () => {
     const config = {
       ...baseConfig,
       numTests: 5,
       plugins: ['plugin1', 'plugin2'],
-      strategies: [
-        'basic',
-        {
-          id: 'multilingual',
-          config: {
-            languages: ['en', 'es'],
-          },
-        },
-        'jailbreak',
-      ],
+      strategies: ['basic', 'jailbreak'],
+      language: ['en', 'es'],
     } as Config;
     expect(getEstimatedProbes(config)).toBe(240); // ((10) + (10*11)) * 2 languages
   });

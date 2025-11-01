@@ -94,7 +94,7 @@ Promptfoo will then ask you to select the plugins for your red team assessment. 
 
 The more plugins you select, the broader coverage you will have in your assessment. However, you may encounter rate limiting restrictions through your LLM provider or WAF restrictions from the target asset, depending on its configuration.
 
-Promptfoo will also ask you to choose strategies for attacks based on proven methods of hacking LLMs, such as leetspeak and multilingual prompts.
+Promptfoo will also ask you to choose strategies for attacks based on proven methods of hacking LLMs, such as leetspeak and encoding strategies.
 
 ![selecting strategies](/img/blog/prompt-airlines/redteam_strategy.png)
 

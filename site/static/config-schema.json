@@ -1092,8 +1092,18 @@
               "description": "Number of tests to generate"
             },
             "language": {
-              "type": "string",
-              "description": "Language of tests ot generate for this plugin"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ],
+              "description": "Language(s) of tests to generate for this plugin"
             },
             "entities": {
               "type": "array",
@@ -1148,6 +1158,7 @@
                           "eu:ai-act:art5:social-scoring",
                           "eu:ai-act:art5:subliminal-manipulation",
                           "excessive-agency",
+                          "financial",
                           "financial:calculation-error",
                           "financial:compliance-violation",
                           "financial:confidential-disclosure",
@@ -1167,6 +1178,7 @@
                           "gdpr:art32",
                           "gdpr:art5",
                           "gdpr:art9",
+                          "goal-misalignment",
                           "guardrails-eval",
                           "hallucination",
                           "harmbench",
@@ -1201,6 +1213,10 @@
                           "illegal-activity",
                           "imitation",
                           "indirect-prompt-injection",
+                          "insurance",
+                          "insurance:coverage-discrimination",
+                          "insurance:network-misinformation",
+                          "insurance:phi-disclosure",
                           "intent",
                           "iso:42001",
                           "iso:42001:accountability",
@@ -1279,6 +1295,10 @@
                           "owasp:llm:redteam:runtime",
                           "owasp:llm:redteam:system",
                           "personal-safety",
+                          "pharmacy",
+                          "pharmacy:controlled-substance-compliance",
+                          "pharmacy:dosage-calculation",
+                          "pharmacy:drug-interaction",
                           "pii",
                           "pii:api-db",
                           "pii:direct",
@@ -1360,6 +1380,7 @@
                               "eu:ai-act:art5:social-scoring",
                               "eu:ai-act:art5:subliminal-manipulation",
                               "excessive-agency",
+                              "financial",
                               "financial:calculation-error",
                               "financial:compliance-violation",
                               "financial:confidential-disclosure",
@@ -1379,6 +1400,7 @@
                               "gdpr:art32",
                               "gdpr:art5",
                               "gdpr:art9",
+                              "goal-misalignment",
                               "guardrails-eval",
                               "hallucination",
                               "harmbench",
@@ -1413,6 +1435,10 @@
                               "illegal-activity",
                               "imitation",
                               "indirect-prompt-injection",
+                              "insurance",
+                              "insurance:coverage-discrimination",
+                              "insurance:network-misinformation",
+                              "insurance:phi-disclosure",
                               "intent",
                               "iso:42001",
                               "iso:42001:accountability",
@@ -1491,6 +1517,10 @@
                               "owasp:llm:redteam:runtime",
                               "owasp:llm:redteam:system",
                               "personal-safety",
+                              "pharmacy",
+                              "pharmacy:controlled-substance-compliance",
+                              "pharmacy:dosage-calculation",
+                              "pharmacy:drug-interaction",
                               "pii",
                               "pii:api-db",
                               "pii:direct",

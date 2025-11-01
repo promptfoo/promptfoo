@@ -12,7 +12,7 @@ export async function addLayerTestCases(
   loadStrategy: (strategyPath: string) => Promise<Strategy>,
 ): Promise<TestCase[]> {
   // Compose strategies in-order. Config example:
-  // { steps: [ 'multilingual', { id: 'rot13' } ] }
+  // { steps: [ 'base64', { id: 'rot13' } ] }
   const steps: Array<string | { id: string; config?: Record<string, any> }> = Array.isArray(
     config?.steps,
   )

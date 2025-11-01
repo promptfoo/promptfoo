@@ -270,6 +270,7 @@ export async function runEval({
   evaluateOptions,
   testIdx,
   promptIdx,
+  repeatIndex,
   conversations,
   registers,
   isRedteam,
@@ -359,7 +360,12 @@ export async function runEval({
         // All of these are removed in python and script providers, but every Javascript provider gets them
         logger: logger as unknown as winston.Logger,
         getCache,
+        repeatIndex,
       };
+
+      if (repeatIndex > 0) {
+        callApiContext.bustCache = true;
+      }
 
       // Only add trace context properties if tracing is enabled
       if (traceContext) {
@@ -1567,10 +1573,25 @@ class Evaluator {
       ) as Assertion;
       if (compareAssertion) {
         const outputs = resultsToCompare.map((r) => r.response?.output || '');
+
+        // Provide context for grading providers that need originalProvider.
+        // For example, simulated-user requires originalProvider to access the target provider's configuration.
+        const firstResult = resultsToCompare[0];
+        const providerId = firstResult.provider.id;
+        const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
+        const callApiContext = originalProvider
+          ? {
+              originalProvider,
+              prompt: firstResult.prompt,
+              vars: firstResult.testCase.vars || {},
+            }
+          : undefined;
+
         const gradingResults = await runCompareAssertion(
           resultsToCompare[0].testCase,
           compareAssertion,
           outputs,
+          callApiContext,
         );
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];

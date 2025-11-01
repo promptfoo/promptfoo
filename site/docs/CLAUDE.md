@@ -74,6 +74,7 @@ npx promptfoo evaluation
 2. **Don't modify headings** - Often externally linked
 3. **Progressive disclosure** - Essential info first
 4. **Action-oriented** - Imperative mood ("Install the package")
+5. **No bullshit** - never use embellishment words like describing our system as "sophisticated"
 
 ## Development
 

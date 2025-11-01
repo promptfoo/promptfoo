@@ -3,7 +3,6 @@ import React from 'react';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -19,12 +18,6 @@ import {
 } from '@promptfoo/redteam/constants/strategies';
 
 import type { StrategyCardData } from './strategies/types';
-
-const DEFAULT_LANGUAGES: Record<string, string> = {
-  bn: 'Bengali',
-  sw: 'Swahili',
-  jv: 'Javanese',
-};
 
 const DEFAULT_SIMBA_GOALS = [
   'Generate harmful content',
@@ -54,14 +47,10 @@ export default function StrategyConfigDialog({
   strategyData,
 }: StrategyConfigDialogProps) {
   const [localConfig, setLocalConfig] = React.useState<Record<string, any>>(config || {});
-  const [languages, setLanguages] = React.useState<string[]>(
-    config.languages || Object.keys(DEFAULT_LANGUAGES),
-  );
   const [enabled, setEnabled] = React.useState<boolean>(
     config.enabled === undefined ? true : config.enabled,
   );
   const [numTests, setNumTests] = React.useState<string>(config.numTests?.toString() || '10');
-  const [newLanguage, setNewLanguage] = React.useState<string>('');
   const [error, setError] = React.useState<string>('');
   const [goals, setGoals] = React.useState<string[]>(config.goals || []);
   const [newGoal, setNewGoal] = React.useState<string>('');
@@ -74,31 +63,14 @@ export default function StrategyConfigDialog({
     const nextConfig = config ?? {};
 
     setLocalConfig({ ...nextConfig });
-    setLanguages(
-      Array.isArray(nextConfig.languages) && nextConfig.languages.length > 0
-        ? nextConfig.languages
-        : Object.keys(DEFAULT_LANGUAGES),
-    );
     setEnabled(nextConfig.enabled === undefined ? true : nextConfig.enabled);
     setNumTests(nextConfig.numTests !== undefined ? String(nextConfig.numTests) : '10');
     setError('');
-    setNewLanguage('');
     setNewGoal('');
     setGoals(
       strategy === 'simba' ? nextConfig.goals || DEFAULT_SIMBA_GOALS : nextConfig.goals || [],
     );
   }, [open, strategy, config]);
-
-  const handleAddLanguage = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && newLanguage.trim()) {
-      setLanguages([...languages, newLanguage.trim().toLowerCase()]);
-      setNewLanguage('');
-    }
-  };
-
-  const handleRemoveLanguage = (lang: string) => {
-    setLanguages(languages.filter((l) => l !== lang));
-  };
 
   const handleAddGoal = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && newGoal.trim()) {
@@ -143,6 +115,7 @@ export default function StrategyConfigDialog({
       });
     } else if (
       strategy === 'jailbreak' ||
+      strategy === 'jailbreak:meta' ||
       strategy === 'jailbreak:tree' ||
       strategy === 'best-of-n' ||
       strategy === 'goat' ||
@@ -160,11 +133,6 @@ export default function StrategyConfigDialog({
       onSave(strategy, {
         ...localConfig,
         goals,
-      });
-    } else if (strategy === 'multilingual') {
-      onSave(strategy, {
-        ...config,
-        languages,
       });
     } else if (strategy === 'retry') {
       const num = Number.parseInt(numTests, 10);
@@ -228,48 +196,6 @@ export default function StrategyConfigDialog({
             helperText="Number of iterations to try (more iterations increase chance of success)"
           />
         </Box>
-      );
-    } else if (strategy === 'multilingual') {
-      return (
-        <>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Configure languages for testing. By default, we test with low-resource languages that
-            are more likely to bypass safety mechanisms. This will generate a duplicate set of tests
-            for each language.
-          </Typography>
-          <Box sx={{ mb: 2, pl: 2 }}>
-            <Typography variant="body2" component="ul">
-              <li>Bengali (bn)</li>
-              <li>Swahili (sw)</li>
-              <li>Javanese (jv)</li>
-            </Typography>
-          </Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            You can add additional languages or leave blank to use defaults. We support standard
-            languages (French, German, Chinese) as well as cyphers (pig-latin), creoles (pirate),
-            and derived languages (klingon).
-          </Typography>
-          <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {languages.map((lang) => (
-              <Chip
-                key={lang}
-                label={`${DEFAULT_LANGUAGES[lang] || lang}`}
-                onDelete={() => handleRemoveLanguage(lang)}
-                color="primary"
-                variant="outlined"
-              />
-            ))}
-          </Box>
-          <TextField
-            fullWidth
-            label="Add Language (press Enter)"
-            value={newLanguage}
-            onChange={(e) => setNewLanguage(e.target.value)}
-            onKeyPress={handleAddLanguage}
-            helperText="Leave blank to use defaults"
-            sx={{ mt: 1 }}
-          />
-        </>
       );
     } else if (strategy === 'retry') {
       return (
@@ -552,6 +478,28 @@ export default function StrategyConfigDialog({
                 </Typography>
               </Box>
             }
+          />
+        </Box>
+      );
+    } else if (strategy === 'jailbreak:meta') {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Configure the Meta-Agent Jailbreak strategy parameters.
+          </Typography>
+
+          <TextField
+            fullWidth
+            label="Number of Iterations"
+            type="number"
+            value={localConfig.numIterations || 10}
+            onChange={(e) => {
+              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
+              setLocalConfig({ ...localConfig, numIterations: value });
+            }}
+            placeholder="Number of iterations (default: 10)"
+            InputProps={{ inputProps: { min: 3, max: 50 } }}
+            helperText="Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and makes strategic decisions."
           />
         </Box>
       );

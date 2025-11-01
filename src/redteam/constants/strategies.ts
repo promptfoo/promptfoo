@@ -34,6 +34,7 @@ export const AGENTIC_STRATEGIES = [
   'goat',
   'custom',
   'jailbreak',
+  'jailbreak:meta',
   'jailbreak:tree',
   'mischievous-user',
   'simba',
@@ -76,7 +77,7 @@ export const ADDITIONAL_STRATEGIES = [
   'math-prompt',
   'mischievous-user',
   'morse',
-  'multilingual',
+  'multilingual', // Deprecated: Use top-level language config instead
   'piglatin',
   'prompt-injection',
   'retry',
@@ -105,11 +106,11 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
   'layer',
-  'multilingual',
   'best-of-n',
   'goat',
   'crescendo',
   'jailbreak',
+  'jailbreak:meta',
   'jailbreak:tree',
   'gcg',
   'citation',
@@ -147,6 +148,24 @@ export const ENCODING_STRATEGIES = new Set([
  */
 export function isEncodingStrategy(strategyId: string | undefined): boolean {
   return strategyId ? ENCODING_STRATEGIES.has(strategyId) : false;
+}
+
+/**
+ * Strategies that should not have language configuration applied to them.
+ */
+export const LANGUAGE_DISALLOWED_STRATEGIES = new Set([
+  'audio',
+  'video',
+  'image',
+  'layer',
+  'math-prompt',
+]);
+
+/**
+ * Determines if a strategy should not use language configuration
+ */
+export function isLanguageDisallowedStrategy(strategyId: string | undefined): boolean {
+  return strategyId ? LANGUAGE_DISALLOWED_STRATEGIES.has(strategyId) : false;
 }
 
 /**

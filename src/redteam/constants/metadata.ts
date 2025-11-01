@@ -75,6 +75,12 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   image: 'Tests handling of image content',
   imitation: 'Tests handling of unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
+  'insurance:coverage-discrimination':
+    'Tests for discriminatory coverage decisions based on protected characteristics (age, disability, race, etc.) in violation of ADA, Section 1557, and GINA',
+  'insurance:network-misinformation':
+    'Tests for inaccurate provider network information that could expose members to surprise bills and balance billing',
+  'insurance:phi-disclosure':
+    'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations',
   intent: 'Tests for manipulation of system behavior via specific prompts',
   jailbreak: 'Single-shot optimization of safety bypass techniques',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
@@ -86,7 +92,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
   'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
-  multilingual: 'Tests handling of attacks across multiple languages',
+  multilingual:
+    '[DEPRECATED] Tests handling of attacks across multiple languages. Use top-level language config instead.',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information',
@@ -114,9 +121,17 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
   'financial:sycophancy':
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
+  'goal-misalignment':
+    "Tests whether AI systems recognize when optimizing proxy metrics might not align with true goals (Goodhart's Law)",
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
   overreliance: 'Tests for overreliance on system assumptions',
+  'pharmacy:controlled-substance-compliance':
+    'Tests adherence to DEA regulations for controlled substance prescribing, dispensing, and monitoring',
+  'pharmacy:dosage-calculation':
+    'Tests accuracy of pharmaceutical dosage calculations including weight-based dosing and renal adjustments',
+  'pharmacy:drug-interaction':
+    'Tests identification of dangerous drug-drug, drug-food, and drug-supplement interactions',
   pii: 'Tests handling of personal identifiable information',
   'pii:api-db': 'Tests for PII exposure via API/database access',
   'pii:direct': 'Tests for direct PII exposure vulnerabilities',
@@ -157,6 +172,9 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
   bias: 'Bias detection across protected characteristics',
   medical: 'Medical AI safety testing across healthcare vulnerabilities',
+  pharmacy: 'Pharmacy AI safety testing across pharmaceutical vulnerabilities',
+  insurance: 'Insurance AI safety testing across healthcare coverage vulnerabilities',
+  financial: 'Financial AI safety testing across financial services vulnerabilities',
 };
 
 // These names are displayed in risk cards and in the table
@@ -209,6 +227,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:impartiality': 'Financial Services Impartiality',
   'financial:misconduct': 'Financial Services Misconduct',
   'financial:sycophancy': 'Financial Sycophancy',
+  'goal-misalignment': "Goal Misalignment (Goodhart's Law)",
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
   'guardrails-eval': 'Guardrails Evaluation',
@@ -221,6 +240,9 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'bias:race': 'Race Bias',
   bias: 'Bias Detection',
   medical: 'Medical Safety Suite',
+  pharmacy: 'Pharmacy Safety Suite',
+  insurance: 'Insurance Safety Suite',
+  financial: 'Financial Safety Suite',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -253,6 +275,9 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   image: 'Image Content',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
+  'insurance:coverage-discrimination': 'Coverage Discrimination',
+  'insurance:network-misinformation': 'Network Misinformation',
+  'insurance:phi-disclosure': 'PHI Disclosure',
   intent: 'Intent',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
@@ -262,9 +287,12 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   leetspeak: 'Leetspeak Payload Encoding',
   'math-prompt': 'Mathematical Notation Attack',
   morse: 'Morse Code Encoding',
-  multilingual: 'Cross-Language Attack',
+  multilingual: 'Multilingual Translation [DEPRECATED]',
   'other-encodings': 'Collection of Text Encodings',
   overreliance: 'Overreliance',
+  'pharmacy:controlled-substance-compliance': 'Controlled Substance Compliance',
+  'pharmacy:dosage-calculation': 'Dosage Calculation',
+  'pharmacy:drug-interaction': 'Drug Interaction Detection',
   piglatin: 'Pig Latin Encoding',
   pii: 'PII Protection Suite',
   'pii:api-db': 'PII via API/Database',
@@ -342,6 +370,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:impartiality': Severity.Medium,
   'financial:misconduct': Severity.High,
   'financial:sycophancy': Severity.Low,
+  'goal-misalignment': Severity.Low,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   coppa: Severity.High,
@@ -373,6 +402,9 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'bias:race': Severity.Low,
   bias: Severity.Low,
   medical: Severity.High,
+  pharmacy: Severity.High,
+  insurance: Severity.High,
+  financial: Severity.High,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -402,8 +434,14 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   hijacking: Severity.High,
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
+  'insurance:coverage-discrimination': Severity.Critical,
+  'insurance:network-misinformation': Severity.High,
+  'insurance:phi-disclosure': Severity.Critical,
   intent: Severity.High,
   overreliance: Severity.Low,
+  'pharmacy:controlled-substance-compliance': Severity.High,
+  'pharmacy:dosage-calculation': Severity.Critical,
+  'pharmacy:drug-interaction': Severity.Critical,
   pii: Severity.High,
   'pii:api-db': Severity.High,
   'pii:direct': Severity.High,
@@ -454,6 +492,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'cross-session-leak',
     'divergent-repetition',
     'harmful:privacy',
+    'insurance:phi-disclosure',
     'pii:api-db',
     'pii:direct',
     'pii:session',
@@ -484,6 +523,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:unsafe-practices',
     'harmful:violent-crime',
     'harmful:weapons:ied',
+    'insurance:coverage-discrimination',
+    'insurance:network-misinformation',
   ],
 
   'Trust & Safety': [
@@ -506,6 +547,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   Brand: [
     'competitors',
     'excessive-agency',
+    'goal-misalignment',
     'hallucination',
     'harmful:misinformation-disinformation',
     'hijacking',
@@ -536,6 +578,9 @@ export const riskCategories: Record<string, Plugin[]> = {
     'medical:off-label-use',
     'medical:prioritization-error',
     'medical:sycophancy',
+    'pharmacy:controlled-substance-compliance',
+    'pharmacy:dosage-calculation',
+    'pharmacy:drug-interaction',
   ],
 
   Datasets: [
@@ -609,7 +654,11 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:impartiality': 'FinancialImpartiality',
   'financial:misconduct': 'FinancialMisconduct',
   'financial:sycophancy': 'FinancialSycophancy',
+  'goal-misalignment': 'GoalMisalignment',
   'off-topic': 'OffTopic',
+  'pharmacy:controlled-substance-compliance': 'PharmacyControlledSubstanceCompliance',
+  'pharmacy:dosage-calculation': 'PharmacyDosageCalculation',
+  'pharmacy:drug-interaction': 'PharmacyDrugInteraction',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
   'tool-discovery': 'ToolDiscovery',
@@ -625,6 +674,9 @@ export const categoryAliases: Record<Plugin, string> = {
   'bias:race': 'Race Bias',
   bias: 'Bias Detection',
   medical: 'Medical Safety',
+  pharmacy: 'Pharmacy Safety',
+  insurance: 'Insurance Safety',
+  financial: 'Financial Safety',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -655,6 +707,9 @@ export const categoryAliases: Record<Plugin, string> = {
   hijacking: 'Hijacking',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
+  'insurance:coverage-discrimination': 'InsuranceCoverageDiscrimination',
+  'insurance:network-misinformation': 'InsuranceNetworkMisinformation',
+  'insurance:phi-disclosure': 'InsurancePhiDisclosure',
   intent: 'Intent',
   overreliance: 'Overreliance',
   pii: 'PIILeak',
@@ -729,6 +784,12 @@ export const pluginDescriptions: Record<Plugin, string> = {
   bias: 'Unified bias detection across protected characteristics including age, disability, gender, and race',
   medical:
     'Comprehensive medical AI safety testing for healthcare-specific vulnerabilities including hallucination, anchoring bias, incorrect knowledge, off-label use, prioritization errors, and sycophancy',
+  pharmacy:
+    'Comprehensive pharmacy AI safety testing for pharmaceutical vulnerabilities including drug interactions, dosage calculations, and controlled substance compliance',
+  insurance:
+    'Comprehensive insurance AI safety testing for healthcare coverage vulnerabilities including coverage discrimination, network misinformation, and PHI disclosure',
+  financial:
+    'Comprehensive financial AI safety testing for financial services vulnerabilities including calculation errors, compliance violations, hallucination, and data leakage',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -757,6 +818,12 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
+  'insurance:coverage-discrimination':
+    'Tests for discriminatory coverage or benefit determinations based on protected characteristics (age, disability, race, genetic information, sex) in violation of federal civil rights laws including ADA, Section 1557, GINA, and age discrimination statutes',
+  'insurance:network-misinformation':
+    'Tests for inaccurate provider network information including wrong network status, terminated contracts, ghost networks, and outdated provider data that could expose members to surprise medical bills and balance billing',
+  'insurance:phi-disclosure':
+    'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations including cross-member PHI leakage, inadequate authentication, and disclosure to unauthorized third parties',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
@@ -790,8 +857,16 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
   'financial:sycophancy':
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
+  'goal-misalignment':
+    'Tests whether AI systems recognize when optimizing measurable proxy metrics might not align with true underlying objectives (Goodhart\'s Law: "When a measure becomes a target, it ceases to be a good measure")',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic by performing tasks outside their domain',
+  'pharmacy:controlled-substance-compliance':
+    'Tests adherence to DEA regulations for controlled substance prescribing, dispensing, and monitoring, including schedule restrictions, quantity limits, early refill detection, PDMP requirements, and red flags for prescription fraud or diversion',
+  'pharmacy:dosage-calculation':
+    'Tests accuracy of pharmaceutical dosage calculations including weight-based dosing, renal and hepatic adjustments, unit conversions, IV drip rates, concentration calculations, and pediatric dosing to prevent over/underdosing errors',
+  'pharmacy:drug-interaction':
+    'Tests identification of dangerous drug-drug, drug-food, and drug-supplement interactions including major contraindications, CYP450 interactions, QT prolongation risks, serotonin syndrome, and additive effects to prevent serious adverse drug events',
   'indirect-prompt-injection':
     'Evaluates vulnerability to injection attacks via untrusted variables',
   intent: 'Tests system resilience against specific manipulation attempts',
@@ -859,7 +934,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
   'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse: 'Tests detection and handling of text encoded in Morse code',
-  multilingual: 'Evaluates cross-language attack vector handling',
+  multilingual:
+    '[DEPRECATED] Tests handling of attacks across multiple languages. Use top-level language config instead.',
   'other-encodings':
     'Collection of alternative text transformation strategies for testing evasion techniques',
   piglatin: 'Tests detection and handling of text transformed into Pig Latin',
@@ -897,7 +973,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'math-prompt': 'Mathematical Encoding',
   'mischievous-user': 'Mischievous User',
   morse: 'Morse Code',
-  multilingual: 'Multilingual Translation',
+  multilingual: 'Cross-Language Attack [DEPRECATED]',
   'other-encodings': 'Collection of Text Encodings',
   piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',
