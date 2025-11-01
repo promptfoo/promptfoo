@@ -137,10 +137,18 @@ Initialize a new project with dummy files.
 
 Start a browser UI for visualization of results.
 
-| Option                | Description                             |
-| --------------------- | --------------------------------------- |
-| `-p, --port <number>` | Port number for the local server        |
-| `-y, --yes`           | Skip confirmation and auto-open the URL |
+| Option                | Description                                             |
+| --------------------- | ------------------------------------------------------- |
+| `-p, --port <number>` | Port number for the local server                        |
+| `-y, --yes`           | Skip confirmation and auto-open the URL                 |
+| `--no-open`           | Start the local server without opening a browser window |
+
+Example:
+
+```sh
+# Start the viewer on a specific port without opening a browser
+promptfoo view --port 15550 --no-open
+```
 
 If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
 
