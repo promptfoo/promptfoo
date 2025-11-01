@@ -32,6 +32,19 @@ export type PoliciesById = Map<
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
+export interface TracingConfig {
+  enabled?: boolean;
+  includeInAttack?: boolean;
+  includeInGrading?: boolean;
+  includeInternalSpans?: boolean;
+  maxSpans?: number;
+  maxDepth?: number;
+  maxRetries?: number;
+  retryDelayMs?: number;
+  spanFilter?: string[];
+  sanitizeAttributes?: boolean;
+  strategies?: Record<string, TracingConfig>;
+}
 export type PluginConfig = {
   examples?: string[];
   graderExamples?: {
@@ -127,6 +140,7 @@ type CommonOptions = {
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   testGenerationInstructions?: string;
   maxConcurrency?: number;
+  tracing?: TracingConfig;
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema

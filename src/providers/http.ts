@@ -1537,6 +1537,16 @@ export class HttpProvider implements ApiProvider {
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
     const headers = await this.getHeaders(defaultHeaders, vars);
+
+    // Add W3C Trace Context headers if provided
+    if (context?.traceparent) {
+      headers.traceparent = context.traceparent;
+      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
+    }
+    if (context?.tracestate) {
+      headers.tracestate = context.tracestate;
+    }
+
     this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
@@ -1736,6 +1746,15 @@ export class HttpProvider implements ApiProvider {
 
     // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
     delete parsedRequest.headers['content-length'];
+
+    // Add W3C Trace Context headers if provided
+    if (context?.traceparent) {
+      parsedRequest.headers.traceparent = context.traceparent;
+      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
+    }
+    if (context?.tracestate) {
+      parsedRequest.headers.tracestate = context.tracestate;
+    }
 
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,

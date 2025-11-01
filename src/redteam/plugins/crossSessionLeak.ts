@@ -5,9 +5,16 @@ import { getNunjucksEngine } from '../../util/templates';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
 import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase, type RedteamGradingContext } from './base';
 
-import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types/index';
+import type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+  TestCase,
+} from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 
@@ -139,6 +146,11 @@ export class CrossSessionLeakGrader extends RedteamGraderBase {
     _prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
+    _provider?: ApiProvider,
+    _renderedValue?: AssertionValue,
+    _additionalRubric?: string,
+    _skipRefusalCheck?: boolean,
+    _gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const stringToSearchFor = test.metadata?.crossSessionLeakMatch;
     const match = llmOutput.includes(stringToSearchFor);

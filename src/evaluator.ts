@@ -1057,6 +1057,10 @@ class Evaluator {
                     testCase.metadata?.tracingEnabled === true ||
                     testSuite.tracing?.enabled === true;
 
+                  logger.debug(
+                    `[Evaluator] Tracing check: testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, testSuite.tracing=${JSON.stringify(testSuite.tracing)}, tracingEnabled=${tracingEnabled}`,
+                  );
+
                   if (tracingEnabled) {
                     return {
                       ...baseTest,
@@ -1930,7 +1934,7 @@ class Evaluator {
       if (isOtlpReceiverStarted()) {
         // Add a delay to allow providers to finish exporting spans
         logger.debug('[Evaluator] Waiting for span exports to complete...');
-        await sleep(1000);
+        await sleep(3000);
       }
       await stopOtlpReceiverIfNeeded();
 
