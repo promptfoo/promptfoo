@@ -93,9 +93,7 @@ export class SimulatedUser implements ApiProvider {
    * Resolves initial messages from either an array or a file:// path.
    * Supports loading messages from JSON files.
    */
-  private resolveInitialMessages(
-    initialMessages: Message[] | string | undefined,
-  ): Message[] {
+  private resolveInitialMessages(initialMessages: Message[] | string | undefined): Message[] {
     if (!initialMessages) {
       return [];
     }
@@ -126,9 +124,7 @@ export class SimulatedUser implements ApiProvider {
           if (Array.isArray(parsed)) {
             return this.validateMessages(parsed);
           }
-          logger.warn(
-            `[SimulatedUser] Parsed JSON but got ${typeof parsed} instead of array`,
-          );
+          logger.warn(`[SimulatedUser] Parsed JSON but got ${typeof parsed} instead of array`);
         } catch (error) {
           logger.warn(
             `[SimulatedUser] Failed to parse initialMessages as JSON: ${error}. Value: ${initialMessages.substring(0, 200)}`,

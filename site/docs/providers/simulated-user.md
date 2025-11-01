@@ -56,11 +56,11 @@ For each turn:
 
 ## Configuration Options
 
-| Option            | Type                 | Description                                                                                                        |
-| ----------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `instructions`    | string               | Template for user instructions. Supports Nunjucks templating with access to test variables.                       |
-| `maxTurns`        | number               | Maximum number of conversation turns. Defaults to 10.                                                              |
-| `initialMessages` | Message[] or string  | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path to JSON. |
+| Option            | Type                | Description                                                                                                        |
+| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                        |
+| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                              |
+| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path to JSON. |
 
 ## Starting from a Specific Conversation State
 
@@ -144,11 +144,11 @@ defaultTest:
 
 tests:
   - vars:
-      instructions: Ask to change flight date  # Uses default initialMessages
+      instructions: Ask to change flight date # Uses default initialMessages
 
   - vars:
       instructions: Request refund for canceled flight
-      initialMessages:  # Overrides default
+      initialMessages: # Overrides default
         - role: user
           content: My flight was canceled
         - role: assistant
