@@ -519,7 +519,13 @@ export async function matchesLlmRubric(
     );
   }
 
-  if (!grading.rubricPrompt && cliState.config?.redteam && shouldGenerateRemote()) {
+  // Use remote grading only if no provider is explicitly configured and remote generation is enabled
+  if (
+    !grading.rubricPrompt &&
+    !grading.provider &&
+    cliState.config?.redteam &&
+    shouldGenerateRemote()
+  ) {
     return {
       ...(await doRemoteGrading({
         task: 'llm-rubric',

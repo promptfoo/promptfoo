@@ -587,7 +587,9 @@ Your choice of attack provider is extremely important for the quality of your re
 
 ### How attacks are generated
 
-By default, Promptfoo uses your local OpenAI key for redteam attack generation. If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
+By default, Promptfoo uses your local OpenAI key for redteam attack generation and grading. If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
+
+The `redteam.provider` configuration controls both attack generation and grading. For details on configuring grading behavior, see [Configuring the Grader](/docs/red-team/troubleshooting/grading-results/).
 
 You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
 
