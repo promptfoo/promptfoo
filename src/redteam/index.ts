@@ -14,11 +14,15 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
+  FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   getDefaultNFanout,
   HARM_PLUGINS,
+  INSURANCE_PLUGINS,
   isFanoutStrategy,
   isLanguageDisallowedStrategy,
+  MEDICAL_PLUGINS,
+  PHARMACY_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
@@ -151,6 +155,10 @@ const categories = {
   harmful: Object.keys(HARM_PLUGINS),
   bias: BIAS_PLUGINS,
   pii: PII_PLUGINS,
+  medical: MEDICAL_PLUGINS,
+  pharmacy: PHARMACY_PLUGINS,
+  insurance: INSURANCE_PLUGINS,
+  financial: FINANCIAL_PLUGINS,
 } as const;
 
 /**

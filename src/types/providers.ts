@@ -67,6 +67,7 @@ export interface CallApiContextParams {
   // Evaluation metadata (for manual correlation if needed)
   evaluationId?: string;
   testCaseId?: string;
+  repeatIndex?: number;
 }
 
 export interface CallApiOptionsParams {

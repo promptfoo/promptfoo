@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(evaluator): force uncached provider calls for repeat iterations (#6043)
+- fix(webui): handle plugin generation when target URL is not set (#6055)
 - fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
 - fix(providers): ensure Python worker writes error response before signaling completion to prevent ENOENT errors when function calls fail (#6073)
 - fix(providers): improve Python error messages with available function list, expected function names, fuzzy matching suggestions, and documentation links (#6073)
@@ -40,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(providers): render environment variables in provider config at load time (#6007)
 - fix(redteam): validate custom strategy strategyText requirement to prevent confusing errors during test execution (#6046)
 - fix(init): include helpful error message and cleanup any directories created when example download fails (#6051)
 - fix(providers): removing axios as a runtime dependency in google live provider (#6050)
