@@ -24,15 +24,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(evaluator): force uncached provider calls for repeat iterations (#6043)
 - fix(webui): handle plugin generation when target URL is not set (#6055)
 - fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
-- fix(providers): ensure Python worker writes error response before signaling completion to prevent ENOENT errors when function calls fail (#6073)
-- fix(providers): improve Python error messages with available function list, expected function names, fuzzy matching suggestions, and documentation links (#6073)
-- fix(providers): remove premature function validation from Python worker initialization to support embeddings-only and classification-only providers without requiring call_api (#6073)
+- fix(providers): fix Python worker ENOENT errors by ensuring error responses are written before completion signal, improving error messages with function suggestions and fuzzy matching, and removing premature function validation to support embeddings-only and classification-only providers (#6073)
 
 ### Tests
 
-- test(providers): add regression test ensuring Python worker writes error response file on exceptions and returns AttributeError instead of ENOENT when calling non-existent functions (#6073)
-- test(providers): add test verifying helpful error messages with function name suggestions for common Python function naming mistakes (#6073)
-- test(providers): add test for embeddings-only Python provider without call_api function to verify specialized providers work correctly (#6073)
+- test(providers): add Python worker regression tests for ENOENT prevention, helpful error messages with function name suggestions, and embeddings-only provider support without call_api function (#6073)
 
 ## [0.119.1] - 2025-10-29
 
