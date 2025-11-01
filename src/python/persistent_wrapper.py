@@ -124,8 +124,11 @@ def main():
     # Load user module once
     try:
         user_module = load_user_module(script_path)
-        # Verify default function exists (for backward compatibility)
-        default_callable = get_callable(user_module, function_name)
+        # Note: We don't validate the default function exists at initialization.
+        # With the persistent worker protocol supporting dynamic function calls per request,
+        # users may only define specific functions (e.g., call_embedding_api for embeddings-only).
+        # Functions are validated when actually called in handle_call(), providing clear
+        # error messages with available functions and suggestions.
     except Exception as e:
         print(f"ERROR: Failed to load module: {e}", file=sys.stderr, flush=True)
         print(traceback.format_exc(), file=sys.stderr, flush=True)
