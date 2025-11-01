@@ -433,8 +433,19 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
  * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
  * This allows env vars to be resolved at provider load time while preserving runtime var templates.
  *
- * Only replaces patterns like {{ env.VAR_NAME }} or {{ env['VAR_NAME'] }}.
- * Preserves patterns like {{ vars.x }}, {{ prompt }}, etc. for runtime rendering.
+ * Supports full Nunjucks syntax for env vars including filters and expressions:
+ * - {{ env.VAR_NAME }}
+ * - {{ env['VAR-NAME'] }}
+ * - {{ env["VAR-NAME"] }}
+ * - {{ env.VAR | default('fallback') }}
+ * - {{ env.VAR | upper }}
+ *
+ * Preserves non-env templates for runtime rendering:
+ * - {{ vars.x }} - preserved as literal
+ * - {{ prompt }} - preserved as literal
+ *
+ * Implementation: Uses regex to find env templates, delegates to Nunjucks for rendering.
+ * This ensures full Nunjucks feature support while preserving non-env templates.
  *
  * @param obj - The object to process
  * @returns The object with only env templates rendered
@@ -445,17 +456,40 @@ export function renderEnvOnlyInObject<T>(obj: T): T {
   }
 
   if (typeof obj === 'string') {
-    // Get env globals same way as Nunjucks does
     const nunjucks = getNunjucksEngine();
     const envGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
 
-    // Replace {{ env.VAR_NAME }} and {{ env['VAR_NAME'] }} patterns
-    // Use regex to avoid triggering full Nunjucks rendering
-    return obj.replace(/\{\{\s*env\.(\w+)\s*\}\}|\{\{\s*env\['([^']+)'\]\s*\}\}/g, (match, dotVar, bracketVar) => {
-      const varName = dotVar || bracketVar;
-      const value = envGlobals?.[varName];
-      // If env var not found, leave the template as-is
-      return value !== undefined ? value : match;
+    // Match ALL Nunjucks templates {{ ... }}
+    // The pattern (?:[^}]|\}(?!\}))* matches content that may contain } but not }}
+    return obj.replace(/\{\{(?:[^}]|\}(?!\}))*\}\}/g, (match) => {
+      // Only process templates that reference env
+      if (!match.match(/\benv\.|env\[/)) {
+        return match; // Not an env template, preserve as-is
+      }
+
+      // Extract the variable name to check if it exists
+      const varMatch = match.match(/env\.(\w+)|env\[['"]([^'"]+)['"]\]/);
+      const varName = varMatch?.[1] || varMatch?.[2];
+
+      // Check if template contains a filter (indicated by |)
+      // Filters often handle undefined values (e.g., default filter)
+      const hasFilter = match.includes('|');
+
+      // Render if:
+      // 1. Template has a filter (let Nunjucks handle undefined with filter logic)
+      // 2. Variable exists (even if it's an empty string)
+      if (hasFilter || (varName && varName in envGlobals)) {
+        try {
+          // Use Nunjucks to render the template (supports filters, expressions, etc.)
+          return nunjucks.renderString(match, { env: envGlobals });
+        } catch (_error) {
+          // On render error, preserve the template
+          return match;
+        }
+      }
+
+      // Variable doesn't exist and no filter - preserve template for potential runtime resolution
+      return match;
     }) as unknown as T;
   }
 

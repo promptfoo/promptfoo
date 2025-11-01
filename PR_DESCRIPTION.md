@@ -65,8 +65,8 @@ npm test -- test/util/index.test.ts --coverage --randomize
 providers:
   - id: azure:chat:gpt-4
     config:
-      apiHost: '{{ env.AZURE_ENDPOINT }}'  # ✅ Resolved at load time
-      apiVersion: '{{ env.API_VERSION }}'  # ✅ Resolved at load time
+      apiHost: '{{ env.AZURE_ENDPOINT }}' # ✅ Resolved at load time
+      apiVersion: '{{ env.API_VERSION }}' # ✅ Resolved at load time
 ```
 
 ### HTTP Provider (Runtime vars for per-test customization)
@@ -76,19 +76,19 @@ providers:
   - id: http://localhost:3000/api
     config:
       body:
-        message: '{{ vars.userMessage }}'  # ✅ Preserved for runtime
-        userId: '{{ vars.userId }}'        # ✅ Preserved for runtime
+        message: '{{ vars.userMessage }}' # ✅ Preserved for runtime
+        userId: '{{ vars.userId }}' # ✅ Preserved for runtime
 ```
 
 ### Mixed Templates (Both env and vars)
 
 ```yaml
 providers:
-  - id: azure:chat:{{ env.MY_DEPLOYMENT }}  # ✅ Env resolved at load
+  - id: azure:chat:{{ env.MY_DEPLOYMENT }} # ✅ Env resolved at load
     config:
-      apiHost: '{{ env.AZURE_ENDPOINT }}'   # ✅ Env resolved at load
+      apiHost: '{{ env.AZURE_ENDPOINT }}' # ✅ Env resolved at load
       body:
-        query: '{{ vars.userQuery }}'       # ✅ Vars preserved for runtime
+        query: '{{ vars.userQuery }}' # ✅ Vars preserved for runtime
 ```
 
 ## Files Changed
