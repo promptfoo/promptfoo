@@ -42,12 +42,64 @@ def load_user_module(script_path):
 
 def get_callable(module, method_name):
     """Get the callable method from module, supporting 'Class.method' syntax."""
-    if "." in method_name:
-        class_name, classmethod_name = method_name.split(".", 1)
-        cls = getattr(module, class_name)
-        return getattr(cls, classmethod_name)
-    else:
-        return getattr(module, method_name)
+    try:
+        if "." in method_name:
+            class_name, classmethod_name = method_name.split(".", 1)
+            cls = getattr(module, class_name)
+            return getattr(cls, classmethod_name)
+        else:
+            return getattr(module, method_name)
+    except AttributeError as e:
+        # Provide helpful error message when function not found
+        available_funcs = [
+            name
+            for name in dir(module)
+            if callable(getattr(module, name, None)) and not name.startswith("_")
+        ]
+
+        error_lines = [
+            f"Function '{method_name}' not found in module '{module.__name__}'",
+            "",
+            f"Available functions in your module: {', '.join(available_funcs) if available_funcs else '(none)'}",
+            "",
+            "Expected function names for promptfoo:",
+            "  • call_api(prompt, options, context) - for chat/completions",
+            "  • call_embedding_api(prompt, options) - for embeddings",
+            "  • call_classification_api(prompt, options) - for classification",
+            "",
+        ]
+
+        # Fuzzy match suggestion
+        if available_funcs:
+            # Check for common mistakes
+            method_lower = method_name.lower()
+            for func in available_funcs:
+                func_lower = func.lower()
+                # Check if user used 'get_' instead of 'call_'
+                if method_lower.replace("call_", "") == func_lower.replace("get_", ""):
+                    error_lines.append(
+                        f"💡 Did you mean to rename '{func}' to '{method_name}'?"
+                    )
+                    break
+                # Check if function name is similar (missing 'call_' prefix)
+                elif method_lower.replace("call_", "") == func_lower:
+                    error_lines.append(
+                        f"💡 Did you mean to rename '{func}' to '{method_name}'?"
+                    )
+                    break
+                # Check if it's just a typo (Levenshtein-like)
+                elif (
+                    len(set(method_lower) & set(func_lower)) > len(method_lower) * 0.6
+                    and abs(len(method_lower) - len(func_lower)) <= 3
+                ):
+                    error_lines.append(f"💡 Did you mean '{func}'?")
+                    break
+
+        error_lines.append(
+            "\nSee https://www.promptfoo.dev/docs/providers/python/ for details."
+        )
+
+        raise AttributeError("\n".join(error_lines)) from e
 
 
 def call_method(method_callable, args):
