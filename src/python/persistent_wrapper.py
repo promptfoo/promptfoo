@@ -114,12 +114,17 @@ def handle_call(command_line, user_module, default_function_name):
         # or legacy: "CALL:<request_file>:<response_file>"
         parts = command_line.split(":", 3)
 
+        # Extract response_file first (always the last part) so it's available even if validation fails
+        # This ensures we can write an error response file if command format is invalid
+        if len(parts) >= 3:
+            response_file = parts[-1]
+
         if len(parts) == 4:
             # New format: CALL:<function_name>:<request_file>:<response_file>
-            _, function_name, request_file, response_file = parts
+            _, function_name, request_file, _ = parts
         elif len(parts) == 3:
             # Legacy format: CALL:<request_file>:<response_file>
-            _, request_file, response_file = parts
+            _, request_file, _ = parts
             function_name = default_function_name
         else:
             raise ValueError(f"Invalid CALL command format: {command_line}")
@@ -177,6 +182,9 @@ def handle_call(command_line, user_module, default_function_name):
         print(traceback.format_exc(), file=sys.stderr, flush=True)
 
         # Write error response if we have response_file
+        # This ensures Node.js always has a file to read, preventing ENOENT errors
+        # when errors occur before the normal response file write (e.g., invalid command,
+        # non-existent function, file I/O errors)
         if response_file:
             try:
                 error_response = {
