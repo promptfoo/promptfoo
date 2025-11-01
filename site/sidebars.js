@@ -246,6 +246,10 @@ const redTeamSidebar = [
         id: 'red-team/discovery',
       },
       {
+        type: 'doc',
+        id: 'red-team/guardrails',
+      },
+      {
         type: 'category',
         label: 'Model Scanner',
         collapsed: true,
