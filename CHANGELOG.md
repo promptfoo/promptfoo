@@ -25,6 +25,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
 - fix(evaluator): force uncached provider calls for repeat iterations (#6043)
 
+### Changed
+
+- chore(cli): display organization context when sharing evals to prevent accidental shares to wrong organization (#6070)
+
 ## [0.119.1] - 2025-10-29
 
 ### Changed

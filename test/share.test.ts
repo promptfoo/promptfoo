@@ -303,11 +303,17 @@ describe('createShareableUrl', () => {
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
     jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
     jest.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
 
     const mockEval = buildMockEval();
     mockEval.author = 'original@example.com';
 
+    // Mock the /api/v1/users/me call (for org display)
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ organization: { id: 'org-123', name: 'Test Org' } }),
+    });
     // Mock the initial eval send
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -328,12 +334,18 @@ describe('createShareableUrl', () => {
     jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
     jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
     const originalId = randomUUID();
     const newId = randomUUID();
     const mockEval = buildMockEval();
     mockEval.id = originalId;
 
+    // Mock the /api/v1/users/me call (for org display)
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ organization: { id: 'org-123', name: 'Test Org' } }),
+    });
     // Mock the initial eval send
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -350,6 +362,11 @@ describe('createShareableUrl', () => {
 
     // Verify idempotency
     // Mock the calls again for the second attempt
+    // Mock the /api/v1/users/me call (for org display)
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ organization: { id: 'org-123', name: 'Test Org' } }),
+    });
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ id: newId }),
@@ -414,9 +431,17 @@ describe('createShareableUrl', () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
       // Set up mock responses
       mockFetch
+        .mockImplementationOnce((url, options) => {
+          // /api/v1/users/me call (for org display)
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ organization: { id: 'org-123', name: 'Test Org' } }),
+          });
+        })
         .mockImplementationOnce((url, options) => {
           // Initial eval data
           return Promise.resolve({

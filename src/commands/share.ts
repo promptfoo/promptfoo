@@ -18,6 +18,7 @@ import {
 } from '../share';
 import telemetry from '../telemetry';
 import { loadDefaultConfig } from '../util/config/default';
+import { fetchWithProxy } from '../util/fetch/index';
 import type { Command } from 'commander';
 
 export function notCloudEnabledShareInstructions(): void {
@@ -136,11 +137,47 @@ export function shareCommand(program: Command) {
           if (evalTime > auditTime) {
             isEval = true;
             eval_ = latestEval;
-            logger.info(`Sharing latest eval (${eval_!.id})`);
           } else {
             audit = latestAudit;
-            logger.info(`Sharing latest model audit (${audit!.id})`);
           }
+        }
+
+        // Display org context at top (Git-style) - do this before any other output
+        if (cloudConfig.isEnabled()) {
+          try {
+            const response = await fetchWithProxy(`${cloudConfig.getApiHost()}/api/v1/users/me`, {
+              headers: { Authorization: `Bearer ${cloudConfig.getApiKey()}` },
+            });
+            if (response.ok) {
+              const { organization } = await response.json();
+              const currentTeamId = cloudConfig.getCurrentTeamId(organization.id);
+
+              let orgContext = organization.name;
+
+              if (currentTeamId) {
+                try {
+                  const { getTeamById } = await import('../util/cloud');
+                  const team = await getTeamById(currentTeamId);
+                  if (team.name !== organization.name) {
+                    orgContext = `${organization.name} > ${team.name}`;
+                  }
+                } catch {
+                  // Team lookup failed, use just org name
+                }
+              }
+
+              logger.info(chalk.dim(`On ${chalk.cyan(orgContext)}`));
+            }
+          } catch {
+            // Continue without org info
+          }
+        }
+
+        // Now show what we're sharing
+        if (isEval && eval_) {
+          logger.info(`Sharing eval ${eval_!.id}`);
+        } else if (audit) {
+          logger.info(`Sharing model audit ${audit!.id}`);
         }
 
         // Handle evaluation sharing (prioritized since evals are more important)
@@ -188,9 +225,24 @@ export function shareCommand(program: Command) {
               eval_.id,
               cmdObj.showAuth,
             );
-            const shouldContinue = await confirm({
-              message: `This eval is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
-            });
+
+            logger.info('');
+            let shouldContinue = false;
+            try {
+              shouldContinue = await confirm({
+                message: dedent`
+                  Already shared at:
+                    ${chalk.cyan(url)}
+
+                  Re-share (will overwrite existing data)?
+                `,
+              });
+            } catch {
+              // User pressed Ctrl+C or cancelled
+              process.exitCode = 0;
+              return;
+            }
+
             if (!shouldContinue) {
               process.exitCode = 0;
               return;
