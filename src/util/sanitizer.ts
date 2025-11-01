@@ -233,10 +233,19 @@ export function sanitizeUrl(url: string): string {
     }
 
     // Check if URL contains template variables (e.g., {{ variable }})
-    // These are configuration templates, not runtime secrets, so skip sanitization
-    // When actually used, Nunjucks renders them first, then sanitization happens on the real URL
-    // Use [^}]* instead of .*? to prevent ReDoS with malicious input
-    if (/\{\{[^}]*\}\}/.test(url)) {
+    // These are configuration templates, not runtime secrets, so skip sanitization entirely.
+    //
+    // Important trade-off: URLs with both templates AND real sensitive params
+    // (e.g., "https://example.com/{{ path }}?api_key=secret") will NOT be sanitized.
+    // This is acceptable because:
+    // 1. Template URLs come from config files (version-controlled, not runtime)
+    // 2. Secrets should be in environment variables, not hardcoded in config
+    // 3. Attempting to parse/sanitize would URL-encode template syntax ({{ → %7B%7B),
+    //    breaking Nunjucks rendering
+    // 4. When templates render to real URLs at runtime, those URLs get sanitized normally
+    //
+    // Use simple string check instead of regex to avoid ReDoS vulnerability
+    if (url.includes('{{') && url.includes('}}')) {
       return url;
     }
 
