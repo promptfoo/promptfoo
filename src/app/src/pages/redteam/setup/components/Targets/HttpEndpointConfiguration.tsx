@@ -152,19 +152,21 @@ Content-Type: application/json
     setIsTestRunning(true);
     setTestResult(null);
 
-    // Validate URL before testing
-    const targetUrl = selectedTarget.config?.url;
-    if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
-      setTestResult({
-        success: false,
-        message:
-          'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
-      });
-      setIsTestRunning(false);
-      if (onTargetTested) {
-        onTargetTested(false);
+    // Validate URL before testing (skip validation for raw request mode)
+    if (!selectedTarget.config?.request) {
+      const targetUrl = selectedTarget.config?.url;
+      if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
+        setTestResult({
+          success: false,
+          message:
+            'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
+        });
+        setIsTestRunning(false);
+        if (onTargetTested) {
+          onTargetTested(false);
+        }
+        return;
       }
-      return;
     }
 
     try {

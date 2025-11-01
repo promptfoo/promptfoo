@@ -116,11 +116,15 @@ export const TestCaseGenerationProvider: React.FC<TestCaseGenerationProviderProp
 
         // Run against target if configured
         if (redTeamConfig.target?.id) {
-          // Validate target URL for HTTP providers
+          // Validate target URL for HTTP providers (skip validation for raw request mode)
           const targetConfig = redTeamConfig.target.config;
           const targetUrl = targetConfig?.url;
 
-          if (isHttpProvider(redTeamConfig.target) && (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http')) {
+          if (
+            isHttpProvider(redTeamConfig.target) &&
+            !targetConfig?.request &&
+            (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http')
+          ) {
             setTargetResponse({
               output: '',
               error:
