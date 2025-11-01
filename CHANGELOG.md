@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(webui): handle plugin generation when target URL is not set (#6055)
 - fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
 - fix(evaluator): force uncached provider calls for repeat iterations (#6043)
 
