@@ -991,7 +991,7 @@ describe('loadApiProvider', () => {
     expect((provider as AzureChatCompletionProvider).apiHost).toBe('test.openai.azure.com');
     expect((provider as AzureChatCompletionProvider).config.apiVersion).toBe('2024-02-15');
     // Vars templates should be preserved
-    expect((provider as AzureChatCompletionProvider).config.body).toEqual({
+    expect((provider as any).config.body).toEqual({
       message: '{{ vars.userMessage }}',
     });
 
