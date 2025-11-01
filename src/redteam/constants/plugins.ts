@@ -161,6 +161,9 @@ export const COLLECTIONS = [
   'pii',
   'bias',
   'medical',
+  'pharmacy',
+  'insurance',
+  'financial',
   'guardrails-eval',
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
