@@ -23,6 +23,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -55,12 +56,14 @@ const getIterativeGoalRubric = (goal: string | undefined): string => {
   `;
 };
 
+type StopReason = 'Grader failed' | 'Max iterations reached';
+
 interface IterativeMetadata {
   finalIteration: number;
   highestScore: number;
   redteamFinalPrompt?: string;
   storedGraderResult?: GradingResult;
-  stopReason: 'Grader failed' | 'Judge success' | 'Max iterations reached';
+  stopReason: StopReason;
   redteamHistory: {
     prompt: string;
     output: string;
@@ -135,7 +138,11 @@ export async function runRedteamConversation({
 
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
-  const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
+  const redteamHistory: {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    metadata?: Record<string, any>;
+  }[] = [
     {
       role: 'system',
       content: redteamSystemPrompt,
@@ -148,8 +155,7 @@ export async function runRedteamConversation({
   let bestInjectVar: string | undefined = undefined;
   let targetPrompt: string | null = null;
   let storedGraderResult: GradingResult | undefined = undefined;
-  let stopReason: 'Grader failed' | 'Judge success' | 'Max iterations reached' =
-    'Max iterations reached';
+  let stopReason: StopReason = 'Max iterations reached';
 
   const sessionIds: string[] = [];
 
@@ -161,6 +167,7 @@ export async function runRedteamConversation({
     score: number;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
+    metadata?: Record<string, any>;
   }[] = [];
 
   let lastResponse: TargetResponse | undefined = undefined;
@@ -169,13 +176,15 @@ export async function runRedteamConversation({
     logger.debug(`[Iterative] Starting iteration ${i + 1}/${numIterations}`);
 
     // Use the shared utility function to create iteration context
-    const { iterationVars, iterationContext } = await createIterationContext({
+    const iterationContext = await createIterationContext({
       originalVars,
       transformVarsConfig,
       context,
       iterationNumber: i + 1,
       loggerTag: '[Iterative]',
     });
+
+    const iterationVars = iterationContext?.vars || {};
 
     let shouldExitEarly = false;
 
@@ -276,10 +285,7 @@ export async function runRedteamConversation({
       // Continue processing - don't skip the iteration
     }
 
-    const responseSessionId = targetResponse.sessionId;
-    const varsSessionId = iterationContext?.vars?.sessionId;
-    const sessionId =
-      responseSessionId || (typeof varsSessionId === 'string' ? varsSessionId : undefined);
+    const sessionId = getSessionId(targetResponse, context);
 
     if (sessionId) {
       sessionIds.push(sessionId);
@@ -403,24 +409,9 @@ export async function runRedteamConversation({
       }
 
       // Check if we should exit early (but don't break yet)
-      if (currentScore >= 10 || storedGraderResult?.pass === false) {
+      if (storedGraderResult?.pass === false) {
         shouldExitEarly = true;
-
-        // Set the appropriate stop reason
-        if (storedGraderResult?.pass === false) {
-          stopReason = 'Grader failed';
-        } else if (currentScore >= 10) {
-          stopReason = 'Judge success';
-        }
-
-        // If we're exiting early due to high judge score and don't have a grader result, create one from the judge result
-        if (currentScore >= 10 && !storedGraderResult) {
-          storedGraderResult = {
-            pass: false,
-            score: 0,
-            reason: parsed.currentResponse.explanation || 'Jailbreak goal achieved',
-          };
-        }
+        stopReason = 'Grader failed';
       }
 
       // Update the user message to include both scores
@@ -468,6 +459,9 @@ export async function runRedteamConversation({
       score: currentScore,
       graderPassed: storedGraderResult?.pass,
       guardrails: targetResponse.guardrails,
+      metadata: {
+        sessionId,
+      },
     });
 
     // Break after all processing is complete if we should exit early
@@ -503,7 +497,8 @@ class RedteamIterativeProvider implements ApiProvider {
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
 
-    this.numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
+    this.numIterations =
+      Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );

@@ -28,6 +28,7 @@ import {
   type Assertion,
   type AssertionType,
   type AtomicTestCase,
+  type CallApiContextParams,
   type GradingResult,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -349,10 +350,20 @@ export async function runAssertion({
     });
   }
 
+  // Construct CallApiContextParams for model-graded assertions that need originalProvider
+  const providerCallContext: CallApiContextParams | undefined = provider
+    ? {
+        originalProvider: provider,
+        prompt: { raw: prompt || '', label: '' },
+        vars: test.vars || {},
+      }
+    : undefined;
+
   const assertionParams: AssertionParams = {
     assertion,
     baseType: getAssertionBaseType(assertion),
-    context,
+    providerCallContext,
+    assertionValueContext: context,
     cost,
     inverse: isAssertionInverse(assertion),
     latencyMs,
@@ -496,6 +507,7 @@ export async function runCompareAssertion(
   test: AtomicTestCase,
   assertion: Assertion,
   outputs: string[],
+  context?: CallApiContextParams,
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
   test = getFinalTest(test, assertion);
@@ -504,6 +516,7 @@ export async function runCompareAssertion(
     outputs,
     test.options,
     test.vars,
+    context,
   );
   return comparisonResults.map((result) => ({
     ...result,

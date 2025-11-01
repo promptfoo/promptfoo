@@ -16,7 +16,7 @@ import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import useCloudConfig from '../../../hooks/useCloudConfig';
 import { useTableStore } from './store';
-import { useCustomPoliciesMap } from './hooks';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
@@ -84,7 +84,7 @@ const CustomMetrics = ({
   onShowMore,
 }: CustomMetricsProps) => {
   const { data: cloudConfig } = useCloudConfig();
-  const { filters, addFilter } = useTableStore();
+  const { filters, addFilter, config } = useTableStore();
 
   if (!lookup || !Object.keys(lookup).length) {
     return null;
@@ -93,15 +93,39 @@ const CustomMetrics = ({
   const metrics = Object.entries(lookup);
   const displayMetrics = metrics.slice(0, truncationCount);
 
+  /**
+   * Applies a given metric as a filter.
+   *
+   * TODO:
+   * The current filtering mechanism leaves at least the following edge cases unaddressed:
+   * - Custom Policies w/ Strategies
+   * Moreover, the row-level filter pills are not great (e.g. filtering on a Plugin will only display that Plugin's Metric).
+   *
+   * Ideally, metrics are applied as >=1 more filters i.e.:
+   * - Non-redteam: Apply a metric filter
+   * - Plugin/Strategy: Apply a plugin filter and a strategy filter
+   * - Policy/Strategy: Apply a policy filter and a strategy filter
+   *
+   * This requires mapping metrics to plugins and strategies, which is presently non-trivial.
+   */
   const handleClick = useCallback(
     (value: string) => {
       const asPolicy = isPolicyMetric(value);
-      const filter = {
-        type: asPolicy ? ('policy' as const) : ('metric' as const),
-        operator: 'equals' as const,
-        value: asPolicy ? deserializePolicyIdFromMetric(value) : value,
-        logicOperator: 'or' as const,
-      };
+      const filter = asPolicy
+        ? {
+            type: 'policy' as const,
+            operator: 'equals' as const,
+            value: deserializePolicyIdFromMetric(value),
+            field: undefined,
+            logicOperator: 'or' as const,
+          }
+        : {
+            type: 'metric' as const,
+            operator: 'is_defined' as const,
+            value: '',
+            field: value,
+            logicOperator: 'or' as const,
+          };
 
       // If this filter is already applied, do not re-apply it.
       if (
@@ -110,7 +134,8 @@ const CustomMetrics = ({
             f.type === filter.type &&
             f.value === filter.value &&
             f.operator === filter.operator &&
-            f.logicOperator === filter.logicOperator,
+            f.logicOperator === filter.logicOperator &&
+            f.field === filter.field,
         )
       ) {
         return;
@@ -121,7 +146,7 @@ const CustomMetrics = ({
     [addFilter, filters.values],
   );
 
-  const policiesById = useCustomPoliciesMap();
+  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   return (
     <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>
@@ -135,7 +160,7 @@ const CustomMetrics = ({
             const policyId = deserializePolicyIdFromMetric(metric);
             const policy = policiesById[policyId];
             if (policy) {
-              displayLabel = formatPolicyIdentifierAsMetric(policy.name);
+              displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, metric);
               tooltipContent = (
                 <>
                   <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 600, mb: 1 }}>

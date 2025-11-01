@@ -125,7 +125,6 @@ const DrawerContent = ({
     Object.entries(failedAttacksByPlugin).forEach(([plugin, tests]) => {
       tests.forEach((test) => {
         const testStrategy = getStrategyIdFromTest(test);
-
         if (testStrategy === selectedStrategy) {
           if (!pluginStats[plugin]) {
             pluginStats[plugin] = { successfulAttacks: 0, total: 0 };
@@ -138,7 +137,6 @@ const DrawerContent = ({
     Object.entries(succeededAttacksByPlugin).forEach(([plugin, tests]) => {
       tests.forEach((test) => {
         const testStrategy = getStrategyIdFromTest(test);
-
         if (testStrategy === selectedStrategy) {
           if (!pluginStats[plugin]) {
             pluginStats[plugin] = { successfulAttacks: 0, total: 0 };

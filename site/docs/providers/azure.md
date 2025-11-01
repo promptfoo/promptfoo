@@ -99,7 +99,7 @@ providers:
   - id: openai:responses:gpt-4.1
     config:
       apiHost: 'your-resource.openai.azure.com'
-      apiKey: '${AZURE_API_KEY}'
+      apiKey: '{{ env.AZURE_API_KEY }}' # or set OPENAI_API_KEY env var
       temperature: 0.7
       instructions: 'You are a helpful assistant.'
 ```
@@ -180,7 +180,7 @@ config:
       server_url: https://example.com/mcp-server
       require_approval: never
       headers:
-        Authorization: 'Bearer ${MCP_API_KEY}'
+        Authorization: 'Bearer {{ env.MCP_API_KEY }}'
 ```
 
 **Code Interpreter**: Enable code execution capabilities:

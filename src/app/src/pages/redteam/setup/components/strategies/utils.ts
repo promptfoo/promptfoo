@@ -1,5 +1,5 @@
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
 import type { Config } from '../../types';
@@ -9,6 +9,7 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 }
 
 const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
+  simba: 10,
   audio: 1,
   'authoritative-markup-injection': 1,
   base64: 1,
@@ -27,13 +28,14 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   jailbreak: 10,
   'jailbreak:composite': 5,
   'jailbreak:likert': 1,
+  'jailbreak:meta': 10,
   'jailbreak:tree': 150,
   layer: 1,
   leetspeak: 1,
   'math-prompt': 1,
   'mischievous-user': 5,
   morse: 1,
-  multilingual: 3, // This won't matter, we multiply all probes by number of languages
+  multilingual: 1, // Deprecated: now handled by global language config
   'other-encodings': 1,
   emoji: 1,
   piglatin: 1,
@@ -51,18 +53,14 @@ export function getEstimatedProbes(config: Config) {
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
-    // Don't add 1 since we handle multilingual separately
-    return total + (strategyId === 'multilingual' ? 0 : STRATEGY_PROBE_MULTIPLIER[strategyId]);
+    return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
   }, 0);
 
-  // Find if multilingual strategy is present and get number of languages
-  const multilingualStrategy = config.strategies.find(
-    (s) => (typeof s === 'string' ? s : s.id) === 'multilingual',
-  );
-
-  const numLanguages =
-    multilingualStrategy && typeof multilingualStrategy !== 'string'
-      ? ((multilingualStrategy.config?.languages as string[]) || []).length || 3
+  // Get number of languages from global language config
+  const numLanguages = Array.isArray(config.language)
+    ? config.language.length
+    : config.language
+      ? 1
       : 1;
 
   const strategyProbes = strategyMultiplier * baseProbes;
