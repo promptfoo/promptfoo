@@ -161,4 +161,76 @@ def call_api(prompt, options, context):
     },
     TEST_TIMEOUT,
   );
+
+  it(
+    'should handle calling non-existent function gracefully',
+    async () => {
+      const nonexistentPath = path.join(__dirname, 'fixtures', 'test_nonexistent_function.py');
+
+      worker = new PythonWorker(nonexistentPath, 'call_api');
+      await worker.initialize();
+
+      // Try to call a function that doesn't exist
+      // This should throw an error about the function not existing, not ENOENT
+      await expect(worker.call('call_nonexistent_api', ['test', {}])).rejects.toThrow(
+        /has no attribute|AttributeError/,
+      );
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should provide helpful error message with function name suggestions',
+    async () => {
+      const wrongNamePath = path.join(__dirname, 'fixtures', 'test_wrong_function_name.py');
+
+      worker = new PythonWorker(wrongNamePath, 'call_api');
+      await worker.initialize();
+
+      // User has 'get_embedding_api' but we're looking for 'call_embedding_api'
+      try {
+        await worker.call('call_embedding_api', ['test', {}]);
+        fail('Should have thrown an error');
+      } catch (error: any) {
+        const errorMessage = error.message;
+
+        // Should include helpful information
+        expect(errorMessage).toContain("Function 'call_embedding_api' not found");
+        expect(errorMessage).toContain('Available functions in your module');
+        expect(errorMessage).toContain('get_embedding_api'); // Shows what they have
+        expect(errorMessage).toContain('Expected function names for promptfoo');
+        expect(errorMessage).toContain('call_api'); // Shows valid options
+        expect(errorMessage).toContain('call_embedding_api');
+        expect(errorMessage).toContain('call_classification_api');
+        expect(errorMessage).toContain('Did you mean to rename'); // Fuzzy match suggestion
+        expect(errorMessage).toContain('promptfoo.dev/docs/providers/python'); // Doc link
+
+        // Should NOT be generic ENOENT error
+        expect(errorMessage).not.toContain('ENOENT');
+        expect(errorMessage).not.toContain('no such file or directory');
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should support embeddings-only provider without call_api defined',
+    async () => {
+      const embeddingsOnlyPath = path.join(__dirname, 'fixtures', 'test_embeddings_only.py');
+
+      // Initialize worker with default function name (call_api)
+      // This should NOT fail even though call_api doesn't exist
+      worker = new PythonWorker(embeddingsOnlyPath, 'call_api');
+      await worker.initialize();
+
+      // Call the embedding function directly
+      const result = await worker.call('call_embedding_api', ['test prompt', {}]);
+
+      // Should return valid embedding
+      expect(result).toHaveProperty('embedding');
+      expect(Array.isArray(result.embedding)).toBe(true);
+      expect(result.embedding.length).toBeGreaterThan(0);
+    },
+    TEST_TIMEOUT,
+  );
 });
