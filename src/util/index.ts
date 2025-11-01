@@ -456,6 +456,16 @@ export function renderEnvOnlyInObject<T>(obj: T): T {
   }
 
   if (typeof obj === 'string') {
+    // Prevent ReDoS: Skip regex matching on extremely long strings
+    // The regex pattern has nested quantifiers that can cause exponential backtracking
+    const MAX_STRING_LENGTH = 50000; // Reasonable limit for config strings
+    if (obj.length > MAX_STRING_LENGTH) {
+      logger.warn(
+        `String too long (${obj.length} chars) for template matching. Skipping env var rendering.`,
+      );
+      return obj as unknown as T;
+    }
+
     const nunjucks = getNunjucksEngine();
     const envGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
 

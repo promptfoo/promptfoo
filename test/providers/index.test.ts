@@ -314,7 +314,7 @@ describe('call provider apis', () => {
   describe.each([
     ['Array format', [{ generated_text: 'Test output' }]], // Array format
     ['Object format', { generated_text: 'Test output' }], // Object format
-  ])('HuggingfaceTextGenerationProvider callApi with %s', (format, mockedData) => {
+  ])('HuggingfaceTextGenerationProvider callApi with %s', (_format, mockedData) => {
     it('returns expected output', async () => {
       const mockResponse = {
         ...defaultMockResponse,
@@ -390,9 +390,9 @@ describe('call provider apis', () => {
         .spyOn(child_process, 'execFile')
         .mockImplementation(
           (
-            file: string,
-            args: readonly string[] | null | undefined,
-            options: child_process.ExecFileOptions | null | undefined,
+            _file: string,
+            _args: readonly string[] | null | undefined,
+            _options: child_process.ExecFileOptions | null | undefined,
             callback?:
               | null
               | ((
