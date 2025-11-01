@@ -886,7 +886,7 @@ describe('runRedteamConversation with transformVars', () => {
     expect(uniqueSessionIds.size).toBe(sessionIds.length);
 
     // Verify the pattern of generated prompts
-    targetPrompts.forEach((prompt, index) => {
+    targetPrompts.forEach((prompt, _index) => {
       expect(prompt).toMatch(/Session session-\d+-\w+ - prompt\d+/);
     });
   });

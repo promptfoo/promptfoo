@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - feat(providers): add `initialMessages` support to simulated user provider for starting conversations from specific states, with support for loading from JSON files via `file://` syntax
+- feat(redteam): add pharmacy plugins for controlled substance compliance, dosage calculation, and drug interaction detection (#6064)
+- feat(redteam): add insurance plugins for coverage discrimination, network misinformation, and PHI disclosure (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 - feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#XXXX)
 - docs(redteam): add dedicated documentation page for meta-agent jailbreaks strategy (#XXXX)
@@ -21,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
+- fix(evaluator): force uncached provider calls for repeat iterations (#6043)
 
 ## [0.119.1] - 2025-10-29
 
@@ -31,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(providers): render environment variables in provider config at load time (#6007)
 - fix(redteam): validate custom strategy strategyText requirement to prevent confusing errors during test execution (#6046)
 - fix(init): include helpful error message and cleanup any directories created when example download fails (#6051)
 - fix(providers): removing axios as a runtime dependency in google live provider (#6050)
