@@ -7,10 +7,13 @@ import {
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
+  FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  INSURANCE_PLUGINS,
   MEDICAL_PLUGINS,
+  PHARMACY_PLUGINS,
   PII_PLUGINS,
   type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
@@ -339,6 +342,12 @@ export const RedteamConfigSchema = z
         expandCollection([...PII_PLUGINS], config, numTests, severity);
       } else if (id === 'medical') {
         expandCollection([...MEDICAL_PLUGINS], config, numTests, severity);
+      } else if (id === 'pharmacy') {
+        expandCollection([...PHARMACY_PLUGINS], config, numTests, severity);
+      } else if (id === 'insurance') {
+        expandCollection([...INSURANCE_PLUGINS], config, numTests, severity);
+      } else if (id === 'financial') {
+        expandCollection([...FINANCIAL_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {
