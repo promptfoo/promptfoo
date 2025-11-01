@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(util): handle Nunjucks template variables in URL sanitization to prevent parsing errors during share (#XXXX)
 - fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
 
 ## [0.119.1] - 2025-10-29
