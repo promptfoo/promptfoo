@@ -106,6 +106,7 @@ export function useApplyFilterFromMetric() {
 
       // If this filter is already applied, do not re-apply it.
       if (
+        filters?.values &&
         Object.values(filters.values).find(
           (f) =>
             f.type === filter.type &&
@@ -120,6 +121,6 @@ export function useApplyFilterFromMetric() {
 
       addFilter(filter);
     },
-    [addFilter, filters.values],
+    [addFilter, filters?.values],
   );
 }
