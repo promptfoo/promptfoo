@@ -2872,6 +2872,53 @@ describe('evaluator', () => {
     });
   });
 
+  it('forces cache busting for repeat iterations', async () => {
+    const contexts: Array<Record<string, any> | undefined> = [];
+    const provider: ApiProvider = {
+      id: () => 'mock-provider',
+      callApi: jest
+        .fn()
+        .mockImplementation(async (_prompt: string, context?: Record<string, any>) => {
+          contexts.push(context);
+          return {
+            output: 'result',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+    };
+
+    const baseOptions = {
+      provider,
+      prompt: { raw: 'Test prompt', label: 'test-label' } as Prompt,
+      delay: 0,
+      nunjucksFilters: undefined,
+      evaluateOptions: {},
+      testIdx: 0,
+      promptIdx: 0,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    };
+
+    await runEval({
+      ...baseOptions,
+      test: { assert: [] },
+      repeatIndex: 0,
+    });
+
+    expect(contexts[0]?.bustCache).toBeFalsy();
+
+    contexts.length = 0;
+
+    await runEval({
+      ...baseOptions,
+      test: { assert: [] },
+      repeatIndex: 1,
+    });
+
+    expect(contexts[0]?.bustCache).toBe(true);
+  });
+
   it('should NOT include assertion tokens in main token totals', async () => {
     // Mock provider that returns fixed token usage
     const providerWithTokens: ApiProvider = {

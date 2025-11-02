@@ -208,7 +208,7 @@ const config: Config = {
             },
           ],
         },
-        { to: '/pricing/', label: 'Enterprise', position: 'left' },
+        { to: '/pricing/', label: 'Pricing', position: 'left' },
         {
           to: 'https://promptfoo.app',
           position: 'right',

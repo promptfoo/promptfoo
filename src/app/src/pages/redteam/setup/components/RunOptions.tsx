@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 
 import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { COMMON_LANGUAGE_NAMES, normalizeLanguage } from '@app/constants/languages';
 import { FormControlLabel, Switch, Autocomplete, TextField, Chip } from '@mui/material';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -27,32 +28,11 @@ export const RUNOPTIONS_TEXT = {
   },
   languages: {
     helper:
-      'Specify languages to generate multilingual tests. Leave empty to generate tests only in English.',
+      'Specify languages for multilingual test generation. Supports ISO 639-1, ISO 639-2/T, and ISO 639-2/B codes.',
     label: 'Test Languages',
+    placeholder: "Type language name or ISO code (e.g., 'French' or 'fr')",
   },
 } as const;
-
-// Common language suggestions for autocomplete
-const COMMON_LANGUAGES = [
-  'Arabic',
-  'Bengali',
-  'Chinese',
-  'Dutch',
-  'English',
-  'French',
-  'German',
-  'Hindi',
-  'Italian',
-  'Japanese',
-  'Korean',
-  'Portuguese',
-  'Russian',
-  'Spanish',
-  'Swedish',
-  'Turkish',
-  'Vietnamese',
-];
-
 const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
   return (
     <Tooltip title={tooltip}>
@@ -308,7 +288,9 @@ export const RunOptionsContent = ({
   // Handler for language changes
   const handleLanguageChange = useCallback(
     (_event: unknown, newValue: string[]) => {
-      updateConfig('language', newValue.length > 0 ? newValue : undefined);
+      // Normalize all language inputs (converts ISO codes to full names)
+      const normalized = newValue.map((lang) => normalizeLanguage(lang));
+      updateConfig('language', normalized.length > 0 ? normalized : undefined);
     },
     [updateConfig],
   );
@@ -363,7 +345,7 @@ export const RunOptionsContent = ({
       <Autocomplete
         multiple
         freeSolo
-        options={COMMON_LANGUAGES}
+        options={COMMON_LANGUAGE_NAMES}
         value={languageArray}
         onChange={handleLanguageChange}
         renderTags={(value, getTagProps) =>
@@ -376,7 +358,7 @@ export const RunOptionsContent = ({
           <TextField
             {...params}
             label={RUNOPTIONS_TEXT.languages.label}
-            placeholder="Type and press Enter to add a language"
+            placeholder={RUNOPTIONS_TEXT.languages.placeholder}
             helperText={RUNOPTIONS_TEXT.languages.helper}
           />
         )}
