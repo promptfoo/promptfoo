@@ -81,7 +81,7 @@ const CustomMetrics = ({
   lookup,
   counts,
   metricTotals,
-  truncationCount = 5,
+  truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
   const applyFilterFromMetric = useApplyFilterFromMetric();
