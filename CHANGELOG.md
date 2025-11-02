@@ -26,6 +26,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(webui): handle plugin generation when target URL is not set (#6055)
 - fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
 - fix(evaluator): force uncached provider calls for repeat iterations (#6043)
+- fix(providers): fix Python worker ENOENT errors by ensuring error responses are written before completion signal, improving error messages with function suggestions and fuzzy matching, and removing premature function validation to support embeddings-only and classification-only providers (#6073)
+
+### Tests
+
+- test(providers): add Python worker regression tests for ENOENT prevention, helpful error messages with function name suggestions, and embeddings-only provider support without call_api function (#6073)
 
 ### Documentation
 
