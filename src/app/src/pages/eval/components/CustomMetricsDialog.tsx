@@ -103,7 +103,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   const handleMetricFilterClick = (metric: string) => {
     applyFilterFromMetric(metric);
     onClose();
-  }
+  };
 
   // Extract aggregated metric names from prompts
   const promptMetricNames = React.useMemo(() => {

@@ -70,7 +70,6 @@ export function usePassRates(): number[] {
 export function useApplyFilterFromMetric() {
   const { filters, addFilter } = useTableStore();
 
-
   /**
    * Applies a given metric as a filter.
    *
