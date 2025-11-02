@@ -105,6 +105,10 @@ export class SimulatedUser implements ApiProvider {
 
     // If it's a string, handle different cases
     if (typeof initialMessages === 'string') {
+      if (initialMessages.trim() === '') {
+        return [];
+      }
+
       // Case 1: file:// reference that hasn't been loaded yet
       if (initialMessages.startsWith('file://')) {
         const resolved = maybeLoadConfigFromExternalFile(initialMessages);
@@ -124,7 +128,9 @@ export class SimulatedUser implements ApiProvider {
           if (Array.isArray(parsed)) {
             return this.validateMessages(parsed);
           }
-          logger.warn(`[SimulatedUser] Parsed JSON but got ${typeof parsed} instead of array`);
+          logger.warn(
+            `[SimulatedUser] Parsed JSON but got ${typeof parsed} instead of array. Value: ${initialMessages.substring(0, 200)}`,
+          );
         } catch (error) {
           logger.warn(
             `[SimulatedUser] Failed to parse initialMessages as JSON: ${error}. Value: ${initialMessages.substring(0, 200)}`,
@@ -247,6 +253,17 @@ export class SimulatedUser implements ApiProvider {
     const tokenUsage = createEmptyTokenUsage();
 
     let agentResponse: ProviderResponse | undefined;
+
+    // If initial messages end with user message, agent needs to respond first to avoid consecutive user messages
+    const lastInitialRole = messages.length > 0 ? messages[messages.length - 1].role : null;
+    if (lastInitialRole === 'user') {
+      logger.debug(
+        '[SimulatedUser] Initial messages end with user message, getting agent response first',
+      );
+      agentResponse = await this.sendMessageToAgent(messages, context.originalProvider, context);
+      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+      accumulateResponseTokenUsage(tokenUsage, agentResponse);
+    }
 
     for (let i = 0; i < maxTurns; i++) {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);

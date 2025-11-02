@@ -581,5 +581,49 @@ describe('SimulatedUser', () => {
       expect(result.output).toContain('Valid message');
       expect(result.output).not.toContain('123');
     });
+
+    it('should handle initialMessages ending with user role correctly', async () => {
+      // This is the documented example case - initial messages end with user message
+      // The agent should respond first to avoid consecutive user messages
+      const initialMessages = [
+        { role: 'user' as const, content: 'I need a flight from NYC to Seattle' },
+        { role: 'assistant' as const, content: 'I found a direct flight for $325. Book it?' },
+        { role: 'user' as const, content: 'Yes, that works for me' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+
+      // Verify initial messages are included
+      expect(result.output).toContain('I need a flight from NYC to Seattle');
+      expect(result.output).toContain('I found a direct flight for $325');
+      expect(result.output).toContain('Yes, that works for me');
+
+      // Verify the agent was called to respond to the last user message
+      expect(originalProvider.callApi).toHaveBeenCalled();
+
+      // The first call to the agent should include all 3 initial messages
+      const firstAgentCall = jest.mocked(originalProvider.callApi).mock.calls[0];
+      const firstAgentPrompt = JSON.parse(firstAgentCall[0] as string);
+
+      // Should contain system prompt + all 3 initial messages
+      expect(firstAgentPrompt).toContainEqual({
+        role: 'user',
+        content: 'I need a flight from NYC to Seattle',
+      });
+      expect(firstAgentPrompt).toContainEqual({
+        role: 'assistant',
+        content: 'I found a direct flight for $325. Book it?',
+      });
+      expect(firstAgentPrompt).toContainEqual({ role: 'user', content: 'Yes, that works for me' });
+    });
   });
 });
