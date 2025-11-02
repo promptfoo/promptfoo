@@ -8,8 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(redteam): add pharmacy plugins for controlled substance compliance, dosage calculation, and drug interaction detection (#6064)
-- feat(redteam): add insurance plugins for coverage discrimination, network misinformation, and PHI disclosure (#6064)
+- feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 - feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#6086)
 
@@ -21,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- fix(core): handle Nunjucks template variables in URL sanitization to prevent parsing errors when sharing evals (#6089)
+- fix(core): handle Nunjucks template variables in URL sanitization to prevent parsing errors when sharing evals; add unit tests covering sanitizer behavior for Nunjucks template URLs (#6089)
 - fix(webui): handle plugin generation when target URL is not set (#6055)
 - fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
 - fix(evaluator): force uncached provider calls for repeat iterations (#6043)
@@ -29,10 +28,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Documentation
 
 - docs(redteam): add comprehensive documentation for `jailbreak:meta` strategy including usage guide, comparison with other jailbreak strategies, and integration into strategy tables (#6088)
-
-### Tests
-
-- test(core): add unit tests covering sanitizer behavior for Nunjucks template URLs (#6089)
 
 ## [0.119.1] - 2025-10-29
 
