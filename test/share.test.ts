@@ -67,6 +67,7 @@ jest.mock('../src/globalConfig/accounts', () => ({
 jest.mock('../src/util/cloud', () => ({
   makeRequest: jest.fn(),
   checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+  getOrgContext: jest.fn().mockResolvedValue(null),
 }));
 
 jest.mock('../src/envars', () => ({
@@ -309,11 +310,6 @@ describe('createShareableUrl', () => {
     const mockEval = buildMockEval();
     mockEval.author = 'original@example.com';
 
-    // Mock the /api/v1/users/me call (for org display)
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ organization: { id: 'org-123', name: 'Test Org' } }),
-    });
     // Mock the initial eval send
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -341,11 +337,6 @@ describe('createShareableUrl', () => {
     const mockEval = buildMockEval();
     mockEval.id = originalId;
 
-    // Mock the /api/v1/users/me call (for org display)
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ organization: { id: 'org-123', name: 'Test Org' } }),
-    });
     // Mock the initial eval send
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -362,11 +353,6 @@ describe('createShareableUrl', () => {
 
     // Verify idempotency
     // Mock the calls again for the second attempt
-    // Mock the /api/v1/users/me call (for org display)
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ organization: { id: 'org-123', name: 'Test Org' } }),
-    });
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ id: newId }),
@@ -435,13 +421,6 @@ describe('createShareableUrl', () => {
 
       // Set up mock responses
       mockFetch
-        .mockImplementationOnce((url, options) => {
-          // /api/v1/users/me call (for org display)
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({ organization: { id: 'org-123', name: 'Test Org' } }),
-          });
-        })
         .mockImplementationOnce((url, options) => {
           // Initial eval data
           return Promise.resolve({

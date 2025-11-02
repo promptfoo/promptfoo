@@ -8,7 +8,11 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { checkCloudPermissions, getTeamById, makeRequest as makeCloudRequest } from './util/cloud';
+import {
+  checkCloudPermissions,
+  getOrgContext,
+  makeRequest as makeCloudRequest,
+} from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 
 import type Eval from './models/eval';
@@ -437,35 +441,12 @@ export async function createShareableUrl(
   }
 
   // Show org/team context before uploading (only when cloud is enabled)
-  if (cloudConfig.isEnabled()) {
-    try {
-      const apiHost = cloudConfig.getApiHost();
-      const apiKey = cloudConfig.getApiKey();
-      const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (response.ok) {
-        const { organization } = await response.json();
-        const currentTeamId = cloudConfig.getCurrentTeamId(organization.id);
-
-        // Only show team if it differs from org name (reduces noise)
-        let teamSuffix = '';
-        if (currentTeamId) {
-          try {
-            const team = await getTeamById(currentTeamId);
-            if (team.name !== organization.name) {
-              teamSuffix = ` > ${team.name}`;
-            }
-          } catch {
-            // Team lookup failed, continue without team name
-          }
-        }
-
-        logger.info(`${chalk.dim('Sharing to:')} ${chalk.cyan(organization.name)}${teamSuffix}`);
-      }
-    } catch {
-      // If we can't fetch user info, continue silently
-    }
+  const orgContext = await getOrgContext();
+  if (orgContext) {
+    const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
+    logger.info(
+      `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
+    );
   }
 
   // 1. Handle email collection
