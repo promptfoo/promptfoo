@@ -17,10 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore(telemetry): defer PostHog identify() to first telemetry event to keep module initialization synchronous (#6094)
 - refactor(redteam): Prevent early (evaluator-based) exits in Jailbreak, Crescendo, and Custom Strategies (#6047)
 - chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings (#6069)
+- chore(app): larger eval selector dialog (#6063)
 
 ### Fixed
 
 - fix(core): handle Nunjucks template variables in URL sanitization to prevent parsing errors when sharing evals; add unit tests covering sanitizer behavior for Nunjucks template URLs (#6089)
+- fix(app): Fixes the metric is defined filter (#6082)
 - fix(webui): handle plugin generation when target URL is not set (#6055)
 - fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
 - fix(evaluator): force uncached provider calls for repeat iterations (#6043)
@@ -28,6 +30,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Documentation
 
 - docs(redteam): add comprehensive documentation for `jailbreak:meta` strategy including usage guide, comparison with other jailbreak strategies, and integration into strategy tables (#6088)
+- docs(site): add remediation reports documentation (#6083)
+- docs(site): add custom strategy to the strategies reference table (#6081)
+- docs(site): pricing page updates (#6068)
+- docs(site): clarify remote inference in Community edition (#6065)
+
+### Dependencies
+
+- chore(deps): bump the github-actions group with 4 updates (#6092)
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.920.0 to 3.921.0 (#6075)
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.919.0 to 3.920.0 (#6060)
 
 ## [0.119.1] - 2025-10-29
 
