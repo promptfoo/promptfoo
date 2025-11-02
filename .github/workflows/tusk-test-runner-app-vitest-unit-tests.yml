@@ -37,7 +37,7 @@ jobs:
           ref: ${{ github.event.inputs.commitSha }} # Required for Tusk to access files for the commit being tested
 
       - name: Use Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
