@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 - feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#6086)
+- feat(redteam): OpenTelemetry traces feed back into red team strategies
 
 ### Changed
 
