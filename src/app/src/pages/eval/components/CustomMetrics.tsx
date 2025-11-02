@@ -6,7 +6,6 @@ import {
   makeCustomPolicyCloudUrl,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
-import { useCallback } from 'react';
 
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
