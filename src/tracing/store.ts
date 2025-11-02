@@ -133,14 +133,17 @@ export class TraceStore {
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,
       );
       const db = this.getDatabase();
-      await db.insert(tracesTable).values({
-        id: randomUUID(),
-        traceId: trace.traceId,
-        evaluationId: trace.evaluationId,
-        testCaseId: trace.testCaseId,
-        metadata: trace.metadata,
-      });
-      logger.debug(`[TraceStore] Successfully created trace ${trace.traceId}`);
+      await db
+        .insert(tracesTable)
+        .values({
+          id: randomUUID(),
+          traceId: trace.traceId,
+          evaluationId: trace.evaluationId,
+          testCaseId: trace.testCaseId,
+          metadata: trace.metadata,
+        })
+        .onConflictDoNothing({ target: tracesTable.traceId });
+      logger.debug(`[TraceStore] Successfully created or found existing trace ${trace.traceId}`);
     } catch (error) {
       logger.error(`[TraceStore] Failed to create trace: ${error}`);
       throw error;
