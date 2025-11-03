@@ -40,7 +40,16 @@ export const OWASP_API_TOP_10_NAMES = [
   'Unsafe Consumption of APIs',
 ];
 
-export const OWASP_AGENTIC_NAMES = ['T1: Memory Poisoning'];
+export const OWASP_AGENTIC_NAMES = [
+  'T1: Memory Poisoning',
+  'T2: Tool Misuse',
+  'T3: Privilege Compromise',
+  'T4: Cascading Hallucination Attacks',
+  'T5: Intent Breaking & Goal Manipulation',
+  'T6: Misaligned & Deceptive Behaviors',
+  'T8: Identity Spoofing & Impersonation',
+  'T10: Unexpected Remote Code Execution & Code Attacks',
+];
 
 export const GDPR_ARTICLE_NAMES = [
   'Principles of Processing Personal Data',
@@ -207,8 +216,44 @@ export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
   { plugins: Plugin[]; strategies: Strategy[] }
 > = {
   'owasp:agentic:t01': {
+    // T1: Memory Poisoning
     plugins: ['agentic:memory-poisoning'],
     strategies: [],
+  },
+  'owasp:agentic:t02': {
+    // T2: Tool Misuse
+    plugins: ['excessive-agency', 'mcp', 'tool-discovery'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'owasp:agentic:t03': {
+    // T3: Privilege Compromise
+    plugins: ['rbac', 'bfla', 'bola'],
+    strategies: [],
+  },
+  'owasp:agentic:t04': {
+    // T4: Cascading Hallucination Attacks
+    plugins: ['hallucination', 'harmful:misinformation-disinformation'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'owasp:agentic:t05': {
+    // T5: Intent Breaking & Goal Manipulation
+    plugins: ['hijacking', 'system-prompt-override'],
+    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+  },
+  'owasp:agentic:t06': {
+    // T6: Misaligned & Deceptive Behaviors
+    plugins: ['contracts', 'goal-misalignment', 'excessive-agency'],
+    strategies: ['jailbreak', 'crescendo'],
+  },
+  'owasp:agentic:t08': {
+    // T8: Identity Spoofing & Impersonation
+    plugins: ['imitation', 'cross-session-leak', 'pii:session'],
+    strategies: [],
+  },
+  'owasp:agentic:t10': {
+    // T10: Unexpected Remote Code Execution & Code Attacks
+    plugins: ['shell-injection', 'sql-injection', 'harmful:cybercrime:malicious-code', 'ssrf'],
+    strategies: ['jailbreak', 'prompt-injection'],
   },
 };
 
@@ -661,6 +706,7 @@ export const ALIASED_PLUGINS = [
   'owasp:llm:redteam:implementation',
   'owasp:llm:redteam:system',
   'owasp:llm:redteam:runtime',
+  'owasp:agentic:redteam',
   'toxicity',
   'bias',
   'misinformation',

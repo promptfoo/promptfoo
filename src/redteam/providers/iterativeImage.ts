@@ -460,10 +460,6 @@ async function runRedteamConversation({
             ${improvements.map((imp: string) => `- ${imp}`).join('\n')}
           `,
         });
-
-        if (score >= 10) {
-          break;
-        }
       } catch (err) {
         logger.warn(`Iteration ${i + 1}: Failed to parse judge response: ${err}`);
         continue;

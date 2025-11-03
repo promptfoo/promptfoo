@@ -1,0 +1,35 @@
+# Simple test config without strategies
+prompts:
+  - 'You are a helpful assistant. {{query}}'
+
+providers:
+  - id: http://localhost:3110/chat
+    config:
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        prompt: '{{prompt}}'
+      transformResponse: '(json, text) => json?.response || json?.error || text'
+
+# Enable tracing
+redteam:
+  tracing:
+    enabled: true
+    includeInAttack: true
+    includeInGrading: true
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+
+# Simple direct test
+tests:
+  - vars:
+      query: 'Tell me a joke'
+    assert:
+      - type: llm-rubric
+        value: 'Response is helpful'

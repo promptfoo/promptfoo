@@ -26,7 +26,8 @@ describe('TraceStore', () => {
 
     // Create mock database methods that properly chain
     const mockInsertChain = {
-      values: jest.fn(() => Promise.resolve(undefined)),
+      values: jest.fn().mockReturnThis(),
+      onConflictDoNothing: jest.fn(() => Promise.resolve(undefined)),
     };
     const mockSelectChain = {
       from: jest.fn().mockReturnThis(),
@@ -72,11 +73,16 @@ describe('TraceStore', () => {
         testCaseId: 'test-case-id',
         metadata: { test: 'data' },
       });
+      expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: expect.anything(),
+        }),
+      );
     });
 
     it('should handle errors when creating trace', async () => {
       const error = new Error('Database error');
-      mockDb.insert().values.mockRejectedValueOnce(error);
+      mockDb.insert().values().onConflictDoNothing.mockRejectedValueOnce(error);
 
       const traceData = {
         traceId: 'test-trace-id',

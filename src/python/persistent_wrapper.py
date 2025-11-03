@@ -42,12 +42,64 @@ def load_user_module(script_path):
 
 def get_callable(module, method_name):
     """Get the callable method from module, supporting 'Class.method' syntax."""
-    if "." in method_name:
-        class_name, classmethod_name = method_name.split(".", 1)
-        cls = getattr(module, class_name)
-        return getattr(cls, classmethod_name)
-    else:
-        return getattr(module, method_name)
+    try:
+        if "." in method_name:
+            class_name, classmethod_name = method_name.split(".", 1)
+            cls = getattr(module, class_name)
+            return getattr(cls, classmethod_name)
+        else:
+            return getattr(module, method_name)
+    except AttributeError as e:
+        # Provide helpful error message when function not found
+        available_funcs = [
+            name
+            for name in dir(module)
+            if callable(getattr(module, name, None)) and not name.startswith("_")
+        ]
+
+        error_lines = [
+            f"Function '{method_name}' not found in module '{module.__name__}'",
+            "",
+            f"Available functions in your module: {', '.join(available_funcs) if available_funcs else '(none)'}",
+            "",
+            "Expected function names for promptfoo:",
+            "  • call_api(prompt, options, context) - for chat/completions",
+            "  • call_embedding_api(prompt, options) - for embeddings",
+            "  • call_classification_api(prompt, options) - for classification",
+            "",
+        ]
+
+        # Fuzzy match suggestion
+        if available_funcs:
+            # Check for common mistakes
+            method_lower = method_name.lower()
+            for func in available_funcs:
+                func_lower = func.lower()
+                # Check if user used 'get_' instead of 'call_'
+                if method_lower.replace("call_", "") == func_lower.replace("get_", ""):
+                    error_lines.append(
+                        f"💡 Did you mean to rename '{func}' to '{method_name}'?"
+                    )
+                    break
+                # Check if function name is similar (missing 'call_' prefix)
+                elif method_lower.replace("call_", "") == func_lower:
+                    error_lines.append(
+                        f"💡 Did you mean to rename '{func}' to '{method_name}'?"
+                    )
+                    break
+                # Check if it's just a typo (Levenshtein-like)
+                elif (
+                    len(set(method_lower) & set(func_lower)) > len(method_lower) * 0.6
+                    and abs(len(method_lower) - len(func_lower)) <= 3
+                ):
+                    error_lines.append(f"💡 Did you mean '{func}'?")
+                    break
+
+        error_lines.append(
+            "\nSee https://www.promptfoo.dev/docs/providers/python/ for details."
+        )
+
+        raise AttributeError("\n".join(error_lines)) from e
 
 
 def call_method(method_callable, args):
@@ -72,8 +124,11 @@ def main():
     # Load user module once
     try:
         user_module = load_user_module(script_path)
-        # Verify default function exists (for backward compatibility)
-        default_callable = get_callable(user_module, function_name)
+        # Note: We don't validate the default function exists at initialization.
+        # With the persistent worker protocol supporting dynamic function calls per request,
+        # users may only define specific functions (e.g., call_embedding_api for embeddings-only).
+        # Functions are validated when actually called in handle_call(), providing clear
+        # error messages with available functions and suggestions.
     except Exception as e:
         print(f"ERROR: Failed to load module: {e}", file=sys.stderr, flush=True)
         print(traceback.format_exc(), file=sys.stderr, flush=True)
@@ -108,17 +163,23 @@ def main():
 
 def handle_call(command_line, user_module, default_function_name):
     """Handle a CALL command."""
+    response_file = None
     try:
         # Parse command: "CALL:<function_name>:<request_file>:<response_file>"
         # or legacy: "CALL:<request_file>:<response_file>"
         parts = command_line.split(":", 3)
 
+        # Extract response_file first (always the last part) so it's available even if validation fails
+        # This ensures we can write an error response file if command format is invalid
+        if len(parts) >= 3:
+            response_file = parts[-1]
+
         if len(parts) == 4:
             # New format: CALL:<function_name>:<request_file>:<response_file>
-            _, function_name, request_file, response_file = parts
+            _, function_name, request_file, _ = parts
         elif len(parts) == 3:
             # Legacy format: CALL:<request_file>:<response_file>
-            _, request_file, response_file = parts
+            _, request_file, _ = parts
             function_name = default_function_name
         else:
             raise ValueError(f"Invalid CALL command format: {command_line}")
@@ -174,7 +235,30 @@ def handle_call(command_line, user_module, default_function_name):
     except Exception as e:
         print(f"ERROR handling call: {e}", file=sys.stderr, flush=True)
         print(traceback.format_exc(), file=sys.stderr, flush=True)
-        # Still try to signal done to avoid hanging
+
+        # Write error response if we have response_file
+        # This ensures Node.js always has a file to read, preventing ENOENT errors
+        # when errors occur before the normal response file write (e.g., invalid command,
+        # non-existent function, file I/O errors)
+        if response_file:
+            try:
+                error_response = {
+                    "type": "error",
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                }
+                with open(response_file, "w", encoding="utf-8") as f:
+                    json.dump(error_response, f, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+            except Exception as write_error:
+                print(
+                    f"ERROR: Failed to write error response: {write_error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+        # Signal done after attempting to write error
         print("DONE", flush=True)
 
 

@@ -563,3 +563,53 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     throw new Error(`Failed to fetch policies from cloud.`);
   }
 }
+
+/**
+ * Fetches the current organization and optional team context for display.
+ * Returns null if cloud is not enabled or if fetching fails.
+ * @returns Promise resolving to organization name and optional team name, or null
+ */
+export async function getOrgContext(): Promise<{
+  organizationName: string;
+  teamName?: string;
+} | null> {
+  if (!cloudConfig.isEnabled()) {
+    return null;
+  }
+
+  try {
+    const apiHost = cloudConfig.getApiHost();
+    const apiKey = cloudConfig.getApiKey();
+    const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const { organization } = await response.json();
+    const currentTeamId = cloudConfig.getCurrentTeamId(organization.id);
+
+    // Only include team name if it differs from organization name
+    let teamName: string | undefined;
+    if (currentTeamId) {
+      try {
+        const team = await getTeamById(currentTeamId);
+        if (team.name !== organization.name) {
+          teamName = team.name;
+        }
+      } catch {
+        // Team lookup failed, continue without team name
+      }
+    }
+
+    return {
+      organizationName: organization.name,
+      teamName,
+    };
+  } catch {
+    // Silently fail and return null
+    return null;
+  }
+}
