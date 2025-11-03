@@ -990,28 +990,34 @@ export default class Eval {
         })
         .run();
 
-      // Insert prompts into prompts table first (required for foreign key constraint)
-      for (const prompt of newPrompts) {
-        const label = prompt.label || prompt.display || prompt.raw;
-        const promptId = hashPrompt(prompt);
-
-        await tx
-          .insert(promptsTable)
-          .values({
-            id: promptId,
-            prompt: label,
-          })
-          .onConflictDoNothing()
-          .run();
-      }
-
       // Copy prompts relationships
       const promptRels = await tx
         .select()
         .from(evalsToPromptsTable)
         .where(eq(evalsToPromptsTable.evalId, this.id));
 
+      // Ensure all referenced prompts exist in prompts table (required for foreign key constraint)
       for (const rel of promptRels) {
+        // Get the actual prompt from the prompts table
+        const existingPrompt = await tx
+          .select()
+          .from(promptsTable)
+          .where(eq(promptsTable.id, rel.promptId))
+          .limit(1);
+
+        if (existingPrompt.length > 0) {
+          // Insert the prompt (onConflictDoNothing handles if it already exists)
+          await tx
+            .insert(promptsTable)
+            .values({
+              id: existingPrompt[0].id,
+              prompt: existingPrompt[0].prompt,
+            })
+            .onConflictDoNothing()
+            .run();
+        }
+
+        // Create the relationship for the new eval
         await tx
           .insert(evalsToPromptsTable)
           .values({
