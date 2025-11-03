@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- feat(providers): add `initialMessages` support to simulated-user provider for starting conversations from specific states, with support for loading from JSON files via `file://` syntax (#6090)
+- feat(providers): add `initialMessages` support to simulated-user provider for starting conversations from specific states, with support for loading from JSON/YAML/CSV/JavaScript/Python files via `file://` syntax with dynamic variable substitution (#6090)
 - feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 - feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#6086)
@@ -32,12 +32,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
-- test(providers): add coverage for simulated-user initialMessages (vars/config precedence, file:// history load, validation, conversation flow when ending with user role) (#6090)
+- test(providers): add coverage for simulated-user initialMessages (vars/config precedence, file:// loading from JSON/YAML/JS/Python with variable substitution, validation, conversation flow when ending with user role) (#6090)
 - test(providers): add Python worker regression tests for ENOENT prevention, helpful error messages with function name suggestions, and embeddings-only provider support without call_api function (#6073)
 
 ### Documentation
 
-- docs(providers): document simulated-user initialMessages, per-test vs provider precedence, and file:// loading (#6090)
+- docs(providers): document simulated-user initialMessages with per-test vs provider precedence, file:// loading from JSON/YAML/JavaScript/Python, and dynamic variable substitution examples (#6090)
 - docs(redteam): add comprehensive documentation for `jailbreak:meta` strategy including usage guide, comparison with other jailbreak strategies, and integration into strategy tables (#6088)
 - docs(site): add remediation reports documentation (#6083)
 - docs(site): add custom strategy to the strategies reference table (#6081)
