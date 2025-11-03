@@ -137,21 +137,52 @@ describe('Telemetry', () => {
     expect(foundVersion).toBe(true);
   });
 
-  it('should include version and CI status in telemetry events', () => {
+  it('should include version and CI status in telemetry events', async () => {
+    jest.useRealTimers(); // Temporarily use real timers for this test
+
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
+    delete process.env.IS_TESTING; // Clear IS_TESTING to allow fetch calls
 
     const isCI = jest.requireMock('../src/envars').isCI;
     isCI.mockReturnValue(true);
+    fetchWithProxySpy.mockClear();
 
     const _telemetry = new Telemetry();
     _telemetry.record('feature_used', { test: 'value' });
 
-    // Verify sendEvent was called with the correct properties
-    expect(sendEventSpy).toHaveBeenCalledWith('feature_used', { test: 'value' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // The actual event should include CI status and version in the request body
-    // (verified by integration tests and the sendEvent implementation)
+    const fetchCalls = fetchWithProxySpy.mock.calls;
+    expect(fetchCalls.length).toBeGreaterThan(0);
+
+    let foundExpectedProperties = false;
+
+    for (const call of fetchCalls) {
+      if (call[1] && call[1].body && typeof call[1].body === 'string') {
+        try {
+          const data = JSON.parse(call[1].body);
+
+          // Check for the structure sent to R_ENDPOINT
+          if (data.meta) {
+            if (
+              data.meta.test === 'value' &&
+              data.meta.packageVersion === '1.0.0' &&
+              data.meta.isRunningInCi === true
+            ) {
+              foundExpectedProperties = true;
+              break;
+            }
+          }
+        } catch {
+          // Skip JSON parse errors
+        }
+      }
+    }
+
+    expect(foundExpectedProperties).toBe(true);
     isCI.mockReset();
+    process.env.IS_TESTING = 'true'; // Reset IS_TESTING
+    jest.useFakeTimers(); // Restore fake timers
   });
 
   it('should save consent successfully', async () => {
@@ -197,19 +228,12 @@ describe('Telemetry', () => {
 
     jest.resetModules();
 
-    // Re-mock fetch utilities after resetModules
-    jest.doMock('../src/util/fetch/index.ts', () => ({
-      fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-      fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
-    }));
-
     const telemetryModule = await import('../src/telemetry');
     const telemetryInstance = telemetryModule.default;
 
     telemetryInstance.record('eval_ran', { foo: 'bar' });
 
-    // The spy won't work after resetModules, but we can verify it doesn't throw
-    expect(() => telemetryInstance.record('eval_ran', { foo: 'bar' })).not.toThrow();
+    expect(sendEventSpy).toHaveBeenCalledTimes(0);
   });
 
   describe('PostHog client initialization', () => {
@@ -225,13 +249,6 @@ describe('Telemetry', () => {
       }));
 
       jest.resetModules();
-
-      // Re-mock fetch utilities after resetModules
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
-      }));
-
       jest.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
       }));
@@ -239,7 +256,7 @@ describe('Telemetry', () => {
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
 
-      await _telemetry.identify();
+      _telemetry.identify();
 
       expect(mockPostHog).toHaveBeenCalledWith('test-posthog-key', {
         host: 'https://a.promptfoo.app',
@@ -284,12 +301,6 @@ describe('Telemetry', () => {
       // Clear all modules and re-mock
       jest.resetModules();
       jest.clearAllMocks();
-
-      // Re-mock fetch utilities after resetModules
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
-      }));
 
       jest.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
@@ -437,98 +448,6 @@ describe('Telemetry', () => {
       sendEventSpy.mockClear();
       _telemetry.record('command_used', { name: 'test' });
       expect(sendEventSpy).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('lazy identification', () => {
-    let mockPostHogInstance: any;
-    let mockPostHog: jest.Mock;
-
-    beforeEach(() => {
-      mockPostHogInstance = {
-        identify: jest.fn(),
-        capture: jest.fn(),
-        flush: jest.fn().mockResolvedValue(undefined),
-        on: jest.fn(),
-      };
-      mockPostHog = jest.fn().mockImplementation(() => mockPostHogInstance);
-
-      jest.resetModules();
-      jest.clearAllMocks();
-
-      // Re-mock fetch utilities after resetModules
-      jest.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: jest.fn().mockResolvedValue({ ok: true }),
-      }));
-
-      jest.doMock('posthog-node', () => ({
-        PostHog: mockPostHog,
-      }));
-    });
-
-    it('should not call identify() in constructor', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
-
-      const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
-
-      // identify should not have been called yet
-      expect(mockPostHogInstance.identify).not.toHaveBeenCalled();
-    });
-
-    it('should call identify() on first record() call', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
-
-      const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
-
-      // identify should not have been called yet
-      expect(mockPostHogInstance.identify).not.toHaveBeenCalled();
-
-      // Now record an event
-      _telemetry.record('eval_ran', { test: 'value' });
-
-      // identify should have been called once
-      expect(mockPostHogInstance.identify).toHaveBeenCalledTimes(1);
-      expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
-        distinctId: 'test-user-id',
-        properties: { email: 'test@example.com', isLoggedIntoCloud: false, isRunningInCi: false },
-      });
-    });
-
-    it('should only call identify() once across multiple record() calls', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
-
-      const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
-
-      // Record multiple events
-      _telemetry.record('eval_ran', { test: 'value1' });
-      _telemetry.record('command_used', { name: 'eval' });
-      _telemetry.record('feature_used', { feature: 'redteam' });
-
-      // identify should have been called exactly once (on first record)
-      expect(mockPostHogInstance.identify).toHaveBeenCalledTimes(1);
-    });
-
-    it('should not call identify() when telemetry is disabled', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
-
-      const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
-
-      _telemetry.record('eval_ran', { test: 'value' });
-
-      // identify should never be called when telemetry is disabled
-      expect(mockPostHogInstance.identify).not.toHaveBeenCalled();
     });
   });
 
