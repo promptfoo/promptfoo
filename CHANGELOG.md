@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(providers): add `initialMessages` support to simulated-user provider for starting conversations from specific states, with support for loading from JSON/YAML files via `file://` syntax (#6090)
 - feat(providers): add local config override support for cloud providers - merge local configuration with cloud provider settings for per-eval customization while keeping API keys centralized (#6100)
 - feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
@@ -37,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Tests
 
+- test(providers): add coverage for simulated-user initialMessages (vars/config precedence, file:// loading from JSON/YAML, validation, conversation flow when ending with user role) (#6090)
 - test(providers): add Python worker regression tests for ENOENT prevention, helpful error messages with function name suggestions, and embeddings-only provider support without call_api function (#6073)
 
 ### Documentation
