@@ -479,6 +479,7 @@ export async function doGenerateRedteam(
           ...(existingDefaultTest?.metadata || {}),
           purpose,
           entities,
+          ...(parsedConfig.data.grader ? { grader: parsedConfig.data.grader } : {}),
         },
       },
       tests: redteamTests,

@@ -253,6 +253,33 @@ export const RedteamConfigSchema = z
       .boolean()
       .optional()
       .describe('Whether to exclude target output from the agentific attack generation process'),
+    grader: z
+      .object({
+        provider: z
+          .enum(['default', 'gpt-oss-safeguard'])
+          .optional()
+          .describe(
+            'Grader provider to use (default uses standard LLM rubric, gpt-oss-safeguard uses OpenRouter GPT OSS Safeguard)',
+          ),
+        config: z
+          .object({
+            model: z.string().optional().describe('GPT OSS Safeguard model to use'),
+            reasoningLevel: z
+              .enum(['low', 'medium', 'high'])
+              .optional()
+              .describe('Reasoning depth for GPT OSS Safeguard'),
+            outputFormat: z
+              .enum(['binary', 'simple', 'detailed'])
+              .optional()
+              .describe('Output format for GPT OSS Safeguard'),
+            temperature: z.number().optional().describe('Temperature for GPT OSS Safeguard'),
+            apiKey: z.string().optional().describe('API key for GPT OSS Safeguard (OpenRouter)'),
+          })
+          .optional()
+          .describe('Grader-specific configuration'),
+      })
+      .optional()
+      .describe('Configuration for grading redteam test results'),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();

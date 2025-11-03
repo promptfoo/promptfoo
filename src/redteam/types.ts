@@ -154,6 +154,16 @@ export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
   severity?: Record<Plugin, Severity>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  grader?: {
+    provider?: 'default' | 'gpt-oss-safeguard';
+    config?: {
+      model?: string;
+      reasoningLevel?: 'low' | 'medium' | 'high';
+      outputFormat?: 'binary' | 'simple' | 'detailed';
+      temperature?: number;
+      apiKey?: string;
+    };
+  };
 }
 
 export interface SynthesizeOptions extends CommonOptions {
