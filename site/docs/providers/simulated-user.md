@@ -56,11 +56,11 @@ For each turn:
 
 ## Configuration Options
 
-| Option            | Type                | Description                                                                                                                        |
-| ----------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                        |
-| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                              |
-| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML/CSV formats). |
+| Option            | Type                | Description                                                                                                                    |
+| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                    |
+| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                          |
+| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats). |
 
 ## Starting from a Specific Conversation State
 
@@ -159,13 +159,13 @@ tests:
 
 ### Loading from Files
 
-For longer conversation histories, you can load initial messages from external files using `file://`. Supported formats include JSON, YAML, and CSV:
+For longer conversation histories, you can load initial messages from external files using `file://`. Supported formats include JSON and YAML:
 
 ```yaml
 tests:
   - vars:
       instructions: You've selected a flight and want to pay with travel certificates
-      initialMessages: file://./conversation-history.json # or .yaml/.yml/.csv
+      initialMessages: file://./conversation-history.json # or .yaml/.yml
 ```
 
 #### JSON Format

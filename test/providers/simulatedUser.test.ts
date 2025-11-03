@@ -625,5 +625,50 @@ describe('SimulatedUser', () => {
       });
       expect(firstAgentPrompt).toContainEqual({ role: 'user', content: 'Yes, that works for me' });
     });
+
+    it('should load initialMessages from JSON file', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: 'file://./test/fixtures/initialMessages.json',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('I need a flight from New York to Seattle');
+      expect(result.output).toContain('I can help with that! What date?');
+    });
+
+    it('should load initialMessages from YAML file', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: 'file://./test/fixtures/initialMessages.yaml',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Hello, I need assistance');
+      expect(result.output).toContain("Hi! I'm here to help");
+    });
+
+    it('should handle file loading errors gracefully', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: 'file://./test/fixtures/nonexistent.json',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Should proceed without initial messages when file fails to load
+      expect(result.output).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(2); // Standard 2 turns
+    });
   });
 });

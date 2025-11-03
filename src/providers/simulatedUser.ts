@@ -27,7 +27,12 @@ type AgentProviderOptions = ProviderOptions & {
     instructions?: string;
     maxTurns?: number;
     stateful?: boolean;
-    initialMessages?: Message[] | string; // Array of messages or file:// path
+    /**
+     * Pre-defined conversation history to start from.
+     * Can be an array of Message objects or a file:// path to JSON/YAML.
+     * Useful for testing specific conversation states or reproducing bugs.
+     */
+    initialMessages?: Message[] | string;
   };
 };
 
@@ -111,13 +116,19 @@ export class SimulatedUser implements ApiProvider {
 
       // Case 1: file:// reference (JSON/YAML)
       if (initialMessages.startsWith('file://')) {
-        const resolved = maybeLoadConfigFromExternalFile(initialMessages);
-        if (Array.isArray(resolved)) {
-          return this.validateMessages(resolved);
+        try {
+          const resolved = maybeLoadConfigFromExternalFile(initialMessages);
+          if (Array.isArray(resolved)) {
+            return this.validateMessages(resolved);
+          }
+          logger.warn(
+            `[SimulatedUser] Expected array of messages from file, got: ${typeof resolved}. Value: ${JSON.stringify(resolved).substring(0, 200)}`,
+          );
+        } catch (error) {
+          logger.warn(
+            `[SimulatedUser] Failed to load initialMessages from file: ${error instanceof Error ? error.message : error}`,
+          );
         }
-        logger.warn(
-          `[SimulatedUser] Expected array of messages from file, got: ${typeof resolved}. Value: ${JSON.stringify(resolved).substring(0, 200)}`,
-        );
         return [];
       }
 
