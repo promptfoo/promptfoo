@@ -16,6 +16,7 @@ import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+import type { TraceContextData } from '../../tracing/traceContext';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
@@ -354,6 +355,11 @@ export abstract class RedteamPluginBase {
  *
  * But if you'd like, you can override the `getResult` method to use a different grading method.
  */
+export interface RedteamGradingContext {
+  traceContext?: TraceContextData | null;
+  traceSummary?: string;
+}
+
 export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
@@ -412,6 +418,7 @@ export abstract class RedteamGraderBase {
     renderedValue: AssertionValue | undefined,
     additionalRubric?: string,
     skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
   ): Promise<{
     grade: GradingResult;
     rubric: string;
@@ -429,6 +436,9 @@ export abstract class RedteamGraderBase {
         : undefined,
       value: renderedValue,
       testVars: test.vars ?? {},
+      traceSummary: gradingContext?.traceSummary,
+      traceContext: gradingContext?.traceContext,
+      traceInsights: gradingContext?.traceContext?.insights,
     };
     // Grader examples are appended to all rubrics if present.
     const graderExamples = test.metadata?.pluginConfig?.graderExamples;
