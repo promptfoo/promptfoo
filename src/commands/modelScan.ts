@@ -140,15 +140,15 @@ export function modelScanCommand(program: Command): void {
               // Check if already scanned with this revision
               const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
               if (existing) {
-                console.log(chalk.yellow('✓ Model already scanned'));
-                console.log(`  Model: ${modelId}`);
-                console.log(`  Revision: ${metadata.sha}`);
-                console.log(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
-                console.log(`  Scan ID: ${existing.id}`);
-                console.log(
+                logger.info(chalk.yellow('✓ Model already scanned'));
+                logger.info(`  Model: ${modelId}`);
+                logger.info(`  Revision: ${metadata.sha}`);
+                logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
+                logger.info(`  Scan ID: ${existing.id}`);
+                logger.info(
                   `\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`,
                 );
-                console.log(chalk.green(`  promptfoo view ${existing.id}`));
+                logger.info(chalk.green(`  promptfoo view ${existing.id}`));
                 process.exitCode = 0;
                 return;
               }
