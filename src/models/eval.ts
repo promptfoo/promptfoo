@@ -990,6 +990,21 @@ export default class Eval {
         })
         .run();
 
+      // Insert prompts into prompts table first (required for foreign key constraint)
+      for (const prompt of newPrompts) {
+        const label = prompt.label || prompt.display || prompt.raw;
+        const promptId = hashPrompt(prompt);
+
+        await tx
+          .insert(promptsTable)
+          .values({
+            id: promptId,
+            prompt: label,
+          })
+          .onConflictDoNothing()
+          .run();
+      }
+
       // Copy prompts relationships
       const promptRels = await tx
         .select()
