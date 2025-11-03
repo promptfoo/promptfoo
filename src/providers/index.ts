@@ -36,13 +36,47 @@ export async function loadApiProvider(
   if (isCloudProvider(renderedProviderPath)) {
     const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
 
-    const provider = await getProviderFromCloud(cloudDatabaseId);
-    if (isCloudProvider(provider.id)) {
+    const cloudProvider = await getProviderFromCloud(cloudDatabaseId);
+    if (isCloudProvider(cloudProvider.id)) {
       throw new Error(
-        `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${provider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
+        `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${cloudProvider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
       );
     }
-    return loadApiProvider(provider.id, { ...context, options: provider });
+
+    // Merge local config overrides with cloud provider config
+    // Local config takes precedence to allow per-eval customization
+    const mergedOptions: ProviderOptions = {
+      ...cloudProvider,
+      config: {
+        ...cloudProvider.config,
+        ...options.config,
+      },
+      // Allow local overrides for these fields
+      label: options.label ?? cloudProvider.label,
+      transform: options.transform ?? cloudProvider.transform,
+      delay: options.delay ?? cloudProvider.delay,
+      prompts: options.prompts ?? cloudProvider.prompts,
+      env:
+        cloudProvider.env || options.env
+          ? {
+              ...cloudProvider.env,
+              ...options.env,
+            }
+          : undefined,
+    };
+
+    logger.debug(
+      `[Cloud Provider] Loaded ${cloudDatabaseId}, resolved to ${cloudProvider.id}${options.config ? ' with local config overrides' : ''}`,
+    );
+
+    // Merge env from both options and context
+    const mergedContext = {
+      ...context,
+      options: mergedOptions,
+      env: mergedOptions.env || env,
+    };
+
+    return loadApiProvider(cloudProvider.id, mergedContext);
   }
 
   if (
