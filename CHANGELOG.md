@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.119.2] - 2025-11-03
+
 ### Added
 
 - feat(integrations): add Microsoft SharePoint dataset support with certificate-based authentication for importing CSV files (#6080)
