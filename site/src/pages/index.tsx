@@ -138,7 +138,7 @@ function HomepageWalkthrough() {
       description: (
         <>
           <p className={styles.walkthroughHeading}>Automated red teaming for agents & RAGs</p>
-          <p>Dynamically simulate real users to uncover application-specific vulnerabilities:</p>
+          <p>Promptfoo simulates real users to uncover application-specific vulnerabilities:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest redteam setup</code>
           </pre>
@@ -894,7 +894,7 @@ export default function Home(): JSX.Element {
         <FAQSection />
         */}
         <FinalCTA />
-        <NewsletterForm />
+        {/*<NewsletterForm />*/}
       </main>
     </Layout>
   );
