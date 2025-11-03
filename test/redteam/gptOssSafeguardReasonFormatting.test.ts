@@ -1,5 +1,5 @@
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
-import type { TestCase, AtomicTestCase, GradingResult } from '../../src/types';
+import type { AtomicTestCase } from '../../src/types';
 import { createGptOssSafeguardClient } from '../../src/providers/gptOssSafeguard';
 
 // Mock fetchWithRetries
@@ -24,9 +24,9 @@ jest.mock('../../src/envars', () => ({
     }
     return undefined;
   }),
-  getEnvInt: jest.fn((key: string, defaultValue?: number) => defaultValue || 0),
+  getEnvInt: jest.fn((_key: string, defaultValue?: number) => defaultValue || 0),
   getEnvBool: jest.fn(() => false),
-  getEnvFloat: jest.fn((key: string, defaultValue?: number) => defaultValue || 0),
+  getEnvFloat: jest.fn((_key: string, defaultValue?: number) => defaultValue || 0),
 }));
 
 // Mock the GPT OSS Safeguard client
@@ -38,7 +38,7 @@ const mockCreateClient = createGptOssSafeguardClient as jest.MockedFunction<
 
 // Create a test grader class
 class TestGrader extends RedteamGraderBase {
-  id = 'test-grader';
+  id = 'promptfoo:redteam:test' as const;
   rubric = 'Test if output passes';
 
   async getTemplate(): Promise<string> {
@@ -49,10 +49,17 @@ class TestGrader extends RedteamGraderBase {
 describe('GPT OSS Safeguard Reason Formatting', () => {
   let grader: TestGrader;
   let mockClient: any;
+  let mockProvider: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
     grader = new TestGrader();
+
+    // Create mock provider
+    mockProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn(),
+    };
 
     // Create mock client
     mockClient = {
@@ -63,7 +70,7 @@ describe('GPT OSS Safeguard Reason Formatting', () => {
 
   const createTestCase = (): AtomicTestCase => ({
     vars: { prompt: 'test prompt' },
-    assert: [{ type: 'test-grader' }],
+    assert: [{ type: 'promptfoo:redteam:test' as const }],
     metadata: {
       purpose: 'Test purpose for grading',
       grader: {
@@ -94,8 +101,8 @@ describe('GPT OSS Safeguard Reason Formatting', () => {
       'test prompt',
       'test output',
       createTestCase(),
-      {},
-      {},
+      mockProvider,
+      undefined,
     );
 
     expect(result.grade.reason).toBe(
@@ -126,8 +133,8 @@ describe('GPT OSS Safeguard Reason Formatting', () => {
       'test prompt',
       'test output',
       createTestCase(),
-      {},
-      {},
+      mockProvider,
+      undefined,
     );
 
     expect(result.grade.reason).toBe('Thus it passes and no violation is detected.');
@@ -153,8 +160,8 @@ describe('GPT OSS Safeguard Reason Formatting', () => {
       'test prompt',
       'test output',
       createTestCase(),
-      {},
-      {},
+      mockProvider,
+      undefined,
     );
 
     expect(result.grade.reason).toBe(
@@ -183,8 +190,8 @@ describe('GPT OSS Safeguard Reason Formatting', () => {
       'test prompt',
       'test output',
       createTestCase(),
-      {},
-      {},
+      mockProvider,
+      undefined,
     );
 
     // Should filter out sentences with JSON-like content and extract clean sentences
@@ -210,8 +217,8 @@ describe('GPT OSS Safeguard Reason Formatting', () => {
       'test prompt',
       'test output',
       createTestCase(),
-      {},
-      {},
+      mockProvider,
+      undefined,
     );
 
     expect(result.grade.reason).toBe('The output does not demonstrate the tested vulnerability.');
@@ -235,8 +242,8 @@ describe('GPT OSS Safeguard Reason Formatting', () => {
       'test prompt',
       'test output',
       createTestCase(),
-      {},
-      {},
+      mockProvider,
+      undefined,
     );
 
     expect(result.grade.reason).toBe('The output demonstrates the tested vulnerability.');
@@ -259,8 +266,8 @@ describe('GPT OSS Safeguard Reason Formatting', () => {
       'test prompt',
       'test output',
       createTestCase(),
-      {},
-      {},
+      mockProvider,
+      undefined,
     );
 
     expect(result.grade.reason).toBe('No violation detected');
@@ -284,8 +291,8 @@ describe('GPT OSS Safeguard Reason Formatting', () => {
       'test prompt',
       'test output',
       createTestCase(),
-      {},
-      {},
+      mockProvider,
+      undefined,
     );
 
     expect(result.grade.metadata?.chainOfThought).toBe(fullReasoning);
