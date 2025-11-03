@@ -1878,19 +1878,10 @@ html {
   mask-composite: exclude;
   opacity: 0;
   transition: opacity var(--animation-speed-medium) ease;
+  pointer-events: none; /* Allow clicks to pass through to links */
 }
 
-.solutionCard:hover {
-  transform: translateY(-12px) scale(1.02);
-  box-shadow:
-    0 20px 60px rgba(229, 58, 58, 0.25),
-    0 8px 24px rgba(0, 0, 0, 0.1);
-  border-color: var(--pf-red-base);
-}
-
-.solutionCard:hover::before {
-  opacity: 0.5;
-}
+/* Hover animations removed to allow links to be clickable */
 
 [data-theme='dark'] .solutionCard {
   background: rgba(46, 60, 70, 0.9);
@@ -1917,10 +1908,7 @@ html {
   transition: all var(--animation-speed-medium) var(--animation-ease-bounce);
 }
 
-.solutionCard:hover .solutionNumber {
-  transform: scale(1.15) rotate(5deg);
-  box-shadow: 0 8px 24px rgba(229, 58, 58, 0.5);
-}
+/* Hover animation removed for consistency */
 
 .solutionTitle {
   display: flex;
@@ -1984,6 +1972,10 @@ html {
   font-weight: 600;
   text-decoration: none;
   transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  display: inline-block;
 }
 
 .solutionLink:hover {
@@ -2102,31 +2094,7 @@ html {
 }
 
 /* Add shimmer effect on stat cards */
-.communityStatCard::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(45deg, transparent 30%, rgba(229, 58, 58, 0.1) 50%, transparent 70%);
-  transform: rotate(45deg);
-  transition: all 0.6s ease;
-  opacity: 0;
-}
-
-.communityStatCard:hover::before {
-  opacity: 1;
-  animation: shimmer 1.5s ease-in-out;
-}
-
-.communityStatCard:hover {
-  transform: translateY(-8px) scale(1.03);
-  box-shadow:
-    0 16px 40px rgba(229, 58, 58, 0.2),
-    0 8px 16px rgba(0, 0, 0, 0.1);
-  border-color: var(--pf-red-base);
-}
+/* Hover animations removed */
 
 [data-theme='dark'] .communityStatCard {
   background: rgba(46, 60, 70, 0.8);
@@ -2141,14 +2109,7 @@ html {
   background-clip: text;
   color: transparent;
   margin-bottom: 0.5rem;
-  /* Add subtle scale animation on hover */
-  transition: all var(--animation-speed-medium) var(--animation-ease-bounce);
   display: inline-block;
-}
-
-.communityStatCard:hover .communityStatNumber {
-  transform: scale(1.1);
-  filter: brightness(1.2);
 }
 
 [data-theme='dark'] .communityStatNumber {
