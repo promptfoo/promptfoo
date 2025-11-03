@@ -200,6 +200,7 @@ export interface RedteamRunOptions {
   filterTargets?: string;
   verbose?: boolean;
   progressBar?: boolean;
+  yes?: boolean;
 
   // Used by webui
   liveRedteamConfig?: any;

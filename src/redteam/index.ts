@@ -532,6 +532,8 @@ export async function synthesize({
   entities: string[];
   testCases: TestCaseWithPlugin[];
   injectVar: string;
+  pluginResults: Record<string, { requested: number; generated: number }>;
+  strategyResults: Record<string, { requested: number; generated: number }>;
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -1067,5 +1069,12 @@ export async function synthesize({
 
   logger.info(generateReport(pluginResults, strategyResults));
 
-  return { purpose, entities, testCases: finalTestCases, injectVar };
+  return {
+    purpose,
+    entities,
+    testCases: finalTestCases,
+    injectVar,
+    pluginResults,
+    strategyResults,
+  };
 }
