@@ -661,9 +661,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
       // If no existing filters, default to 'and'
       const inheritedLogicOperator =
         existingFilters.length > 0
-          ? existingFilters.find((f) => f.sortIndex === 1)?.logicOperator ??
+          ? (existingFilters.find((f) => f.sortIndex === 1)?.logicOperator ??
             existingFilters[0].logicOperator ??
-            'and'
+            'and')
           : 'and';
 
       return {
