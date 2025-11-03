@@ -195,6 +195,7 @@ function addLanguageToPluginMetadata(
   lang: string | undefined,
   plugin: RedteamPluginObject,
   testGenerationInstructions?: string,
+  grader?: CommonOptions['grader'],
 ): TestCase {
   const existingLanguage = getLanguageForTestCase(test);
   const languageToAdd = lang && !existingLanguage ? { language: lang } : {};
@@ -215,6 +216,8 @@ function addLanguageToPluginMetadata(
       ...test.metadata,
       // Hoist language to top-level metadata for backward compatibility and easier access
       ...languageToAdd,
+      // Add grader config for use during evaluation
+      ...(grader ? { grader } : {}),
     },
   };
 }
@@ -515,6 +518,7 @@ export async function synthesize({
   abortSignal,
   delay,
   entities: entitiesOverride,
+  grader,
   injectVar,
   language,
   maxConcurrency = 1,
@@ -870,7 +874,7 @@ export async function synthesize({
           if (Array.isArray(pluginTests) && pluginTests.length > 0) {
             // Add all metadata (language + plugin info) so strategies can access it
             const testsWithMetadata = pluginTests.map((test) =>
-              addLanguageToPluginMetadata(test, lang, plugin, testGenerationInstructions),
+              addLanguageToPluginMetadata(test, lang, plugin, testGenerationInstructions, grader),
             );
 
             return {

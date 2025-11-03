@@ -9,6 +9,11 @@ export interface GptOssSafeguardConfig {
   temperature?: number;
   maxTokens?: number;
   apiKey?: string;
+  // Support for multiple grader configurations
+  multiGrader?: Array<{
+    model: string;
+    reasoning_effort?: 'low' | 'medium' | 'minimal' | null;
+  }>;
 }
 
 export interface GptOssSafeguardResponse {
@@ -254,6 +259,102 @@ ${outputFormatInstructions}`;
       });
       throw error;
     }
+  }
+
+  /**
+   * Classifies content using multiple grader configurations in parallel
+   */
+  async classifyMulti(
+    policy: string,
+    content: string,
+    graderConfigs: Array<{ model: string; reasoning_effort?: 'low' | 'medium' | 'minimal' | null }>,
+  ): Promise<Array<GptOssSafeguardResponse & { graderModel: string; reasoningEffort: string | null }>> {
+    const formattedPolicy = this.formatPolicy(policy);
+
+    logger.debug('[GPT OSS Safeguard Multi] Calling API with multiple graders', {
+      graderCount: graderConfigs.length,
+      models: graderConfigs.map(g => `${g.model}${g.reasoning_effort ? `(${g.reasoning_effort})` : ''}`),
+    });
+
+    const promises = graderConfigs.map(async (graderConfig) => {
+      const requestBody: any = {
+        model: `openai/${graderConfig.model}`,
+        messages: [
+          {
+            role: 'system',
+            content: formattedPolicy,
+          },
+          {
+            role: 'user',
+            content,
+          },
+        ],
+        temperature: this.temperature,
+        max_tokens: this.maxTokens,
+      };
+
+      // Add reasoning_effort if specified
+      if (graderConfig.reasoning_effort) {
+        requestBody.reasoning_effort = graderConfig.reasoning_effort;
+      }
+
+      try {
+        const response = await fetchWithRetries(
+          `${this.baseUrl}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.apiKey}`,
+              'HTTP-Referer': 'https://promptfoo.dev',
+              'X-Title': 'Promptfoo RedTeam Multi-Grader',
+            },
+            body: JSON.stringify(requestBody),
+          },
+          10000,
+          2,
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API error (${response.status}): ${errorText}`);
+        }
+
+        const rawResponse = await response.json();
+        const responseContent = rawResponse.choices?.[0]?.message?.content;
+
+        if (!responseContent) {
+          throw new Error('API returned empty response');
+        }
+
+        const parsed = this.parseResponse(responseContent, rawResponse);
+        return {
+          ...parsed,
+          graderModel: graderConfig.model,
+          reasoningEffort: graderConfig.reasoning_effort || null,
+        };
+      } catch (error) {
+        logger.error(`[GPT OSS Safeguard Multi] Failed for ${graderConfig.model}`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Return a failed response instead of throwing
+        return {
+          violation: 1 as 0 | 1,
+          chain_of_thought: undefined,
+          output: {
+            violation: 1 as 0 | 1,
+            confidence: 'low' as const,
+            rationale: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            policy_category: null,
+          },
+          raw_response: {},
+          graderModel: graderConfig.model,
+          reasoningEffort: graderConfig.reasoning_effort || null,
+        };
+      }
+    });
+
+    return Promise.all(promises);
   }
 }
 

@@ -127,6 +127,20 @@ type CommonOptions = {
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   testGenerationInstructions?: string;
   maxConcurrency?: number;
+  grader?: {
+    provider?: 'default' | 'gpt-oss-safeguard';
+    config?: {
+      model?: string;
+      reasoningLevel?: 'low' | 'medium' | 'high';
+      outputFormat?: 'binary' | 'simple' | 'detailed';
+      temperature?: number;
+      apiKey?: string;
+      multiGrader?: Array<{
+        model: string;
+        reasoning_effort?: 'low' | 'medium' | 'minimal' | null;
+      }>;
+    };
+  };
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
@@ -162,6 +176,10 @@ export interface RedteamFileConfig extends CommonOptions {
       outputFormat?: 'binary' | 'simple' | 'detailed';
       temperature?: number;
       apiKey?: string;
+      multiGrader?: Array<{
+        model: string;
+        reasoning_effort?: 'low' | 'medium' | 'minimal' | null;
+      }>;
     };
   };
 }

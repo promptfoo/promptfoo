@@ -472,6 +472,16 @@ export async function doGenerateRedteam(
       : {};
     const existingDefaultTest =
       typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
+    // Debug: Log the grader config before writing to YAML
+    logger.debug('[RedTeam Generate] Grader config from parsedConfig', {
+      hasGrader: !!parsedConfig.data.grader,
+      graderProvider: parsedConfig.data.grader?.provider,
+      hasConfig: !!parsedConfig.data.grader?.config,
+      hasMultiGrader: !!parsedConfig.data.grader?.config?.multiGrader,
+      multiGraderLength: parsedConfig.data.grader?.config?.multiGrader?.length,
+      fullGraderConfig: JSON.stringify(parsedConfig.data.grader, null, 2),
+    });
+
     const updatedYaml: Partial<UnifiedConfig> = {
       ...existingYaml,
       defaultTest: {

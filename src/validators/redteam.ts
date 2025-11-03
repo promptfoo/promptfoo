@@ -274,6 +274,19 @@ export const RedteamConfigSchema = z
               .describe('Output format for GPT OSS Safeguard'),
             temperature: z.number().optional().describe('Temperature for GPT OSS Safeguard'),
             apiKey: z.string().optional().describe('API key for GPT OSS Safeguard (OpenRouter)'),
+            multiGrader: z
+              .array(
+                z.object({
+                  model: z.string().describe('Model to use for this grader'),
+                  reasoning_effort: z
+                    .enum(['low', 'medium', 'minimal'])
+                    .nullable()
+                    .optional()
+                    .describe('Reasoning effort level for this grader'),
+                }),
+              )
+              .optional()
+              .describe('Array of grader configurations for multi-grader testing'),
           })
           .optional()
           .describe('Grader-specific configuration'),
