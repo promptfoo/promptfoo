@@ -30,7 +30,7 @@ function HomepageHeader() {
             in development
           </h1>
           <p className={styles.heroSubtitle}>
-            Security for apps & agents trusted by 200,000+ users
+            Security for apps & agents trusted by 200,000+ developers
           </p>
           <div className={styles.heroButtons}>
             <Link className="button button--primary button--lg" to="/contact/">
@@ -700,7 +700,7 @@ function PersonaSection() {
         {
           title: 'Fast and unblocking',
           description:
-            'Run tests locally in seconds. Parallel execution for fast CI/CD. Incremental testing (only changed prompts).',
+            'Run incremental tests locally in seconds.',
         },
       ],
       cta: { text: 'View Documentation', link: '/docs/intro/' },
