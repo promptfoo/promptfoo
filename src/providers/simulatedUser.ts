@@ -1,11 +1,7 @@
-import { importModule } from '../esm';
 import logger from '../logger';
-import { runPython } from '../python/pythonUtils';
 import { getSessionId } from '../redteam/util';
 import invariant from '../util/invariant';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
-import { isJavascriptFile } from '../util/fileExtensions';
-import { parseFileUrl } from '../util/functions/loadFunction';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -94,71 +90,10 @@ export class SimulatedUser implements ApiProvider {
   }
 
   /**
-   * Loads messages from a JavaScript file.
-   */
-  private async loadMessagesFromJavaScriptFile(
-    filePath: string,
-    functionName: string | undefined,
-    context?: CallApiContextParams,
-  ): Promise<Message[]> {
-    try {
-      const fn = await importModule(filePath, functionName);
-      const result = await fn({ vars: context?.vars || {} });
-      if (Array.isArray(result)) {
-        return this.validateMessages(result);
-      }
-      logger.warn(
-        `[SimulatedUser] JavaScript file ${filePath} did not return an array, got: ${typeof result}`,
-      );
-      return [];
-    } catch (error) {
-      logger.warn(
-        `[SimulatedUser] Failed to load JavaScript file ${filePath}: ${error instanceof Error ? error.message : error}`,
-      );
-      return [];
-    }
-  }
-
-  /**
-   * Loads messages from a Python file.
-   */
-  private async loadMessagesFromPythonFile(
-    filePath: string,
-    functionName: string | undefined,
-    context?: CallApiContextParams,
-  ): Promise<Message[]> {
-    if (!functionName) {
-      logger.warn(
-        `[SimulatedUser] Python file ${filePath} requires a function name (e.g., file://${filePath}:get_messages)`,
-      );
-      return [];
-    }
-
-    try {
-      const result = await runPython(filePath, functionName, [{ vars: context?.vars || {} }]);
-      if (Array.isArray(result)) {
-        return this.validateMessages(result);
-      }
-      logger.warn(
-        `[SimulatedUser] Python file ${filePath}:${functionName} did not return an array, got: ${typeof result}`,
-      );
-      return [];
-    } catch (error) {
-      logger.warn(
-        `[SimulatedUser] Failed to load Python file ${filePath}: ${error instanceof Error ? error.message : error}`,
-      );
-      return [];
-    }
-  }
-
-  /**
    * Resolves initial messages from either an array or a file:// path.
-   * Supports loading messages from JSON, YAML, CSV, JavaScript, and Python files.
+   * Supports loading messages from JSON and YAML files.
    */
-  private async resolveInitialMessages(
-    initialMessages: Message[] | string | undefined,
-    context?: CallApiContextParams,
-  ): Promise<Message[]> {
+  private resolveInitialMessages(initialMessages: Message[] | string | undefined): Message[] {
     if (!initialMessages) {
       return [];
     }
@@ -174,21 +109,8 @@ export class SimulatedUser implements ApiProvider {
         return [];
       }
 
-      // Case 1: file:// reference
+      // Case 1: file:// reference (JSON/YAML)
       if (initialMessages.startsWith('file://')) {
-        const { filePath, functionName } = parseFileUrl(initialMessages);
-
-        // Case 1a: JavaScript file
-        if (isJavascriptFile(filePath)) {
-          return this.loadMessagesFromJavaScriptFile(filePath, functionName, context);
-        }
-
-        // Case 1b: Python file
-        if (filePath.endsWith('.py')) {
-          return this.loadMessagesFromPythonFile(filePath, functionName, context);
-        }
-
-        // Case 1c: JSON/YAML/CSV file (handled by maybeLoadConfigFromExternalFile)
         const resolved = maybeLoadConfigFromExternalFile(initialMessages);
         if (Array.isArray(resolved)) {
           return this.validateMessages(resolved);
@@ -317,9 +239,8 @@ export class SimulatedUser implements ApiProvider {
     // vars.initialMessages takes precedence over config.initialMessages
     // Both can be arrays or file:// paths
     const varsInitialMessages = context?.vars?.initialMessages as Message[] | string | undefined;
-    const initialMessages = await this.resolveInitialMessages(
+    const initialMessages = this.resolveInitialMessages(
       varsInitialMessages || this.configInitialMessages,
-      context,
     );
     const messages: Message[] = [...initialMessages];
 

@@ -56,11 +56,11 @@ For each turn:
 
 ## Configuration Options
 
-| Option            | Type                | Description                                                                                                                                  |
-| ----------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                                  |
-| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                                        |
-| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML/CSV/JavaScript/Python). |
+| Option            | Type                | Description                                                                                                                        |
+| ----------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                        |
+| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                              |
+| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML/CSV formats). |
 
 ## Starting from a Specific Conversation State
 
@@ -159,13 +159,13 @@ tests:
 
 ### Loading from Files
 
-For longer conversation histories, you can load initial messages from external files using `file://`. Supported formats include JSON, YAML, CSV, JavaScript, and Python:
+For longer conversation histories, you can load initial messages from external files using `file://`. Supported formats include JSON, YAML, and CSV:
 
 ```yaml
 tests:
   - vars:
       instructions: You've selected a flight and want to pay with travel certificates
-      initialMessages: file://./conversation-history.json # or .yaml/.yml/.js/.py
+      initialMessages: file://./conversation-history.json # or .yaml/.yml/.csv
 ```
 
 #### JSON Format
@@ -213,63 +213,6 @@ tests:
 - role: user
   content: Yes, that works for me
 ```
-
-#### JavaScript Format
-
-JavaScript files allow dynamic message generation using test variables. The function receives `{ vars }` as context:
-
-**File:** `conversation-history.js`
-
-```javascript
-module.exports = function ({ vars }) {
-  return [
-    {
-      role: 'user',
-      content: `Hello, my name is ${vars.userName || 'Anonymous'}`,
-    },
-    {
-      role: 'assistant',
-      content: `Hi ${vars.userName || 'there'}! How can I help you today?`,
-    },
-  ];
-};
-```
-
-**Usage:**
-
-```yaml
-tests:
-  - vars:
-      userName: 'Alice'
-      initialMessages: file://./conversation-history.js
-```
-
-#### Python Format
-
-Python files work similarly to JavaScript but require an explicit function name:
-
-**File:** `conversation-history.py`
-
-```python
-def get_messages(context):
-    vars = context.get('vars', {})
-    user_name = vars.get('userName', 'Anonymous')
-    return [
-        {'role': 'user', 'content': f'Hello, my name is {user_name}'},
-        {'role': 'assistant', 'content': f'Hi {user_name}! How can I help you today?'},
-    ]
-```
-
-**Usage:**
-
-```yaml
-tests:
-  - vars:
-      userName: 'Bob'
-      initialMessages: file://./conversation-history.py:get_messages
-```
-
-**Note:** Python files require the function name after a colon (e.g., `file://path.py:function_name`).
 
 #### File Loading Summary
 
