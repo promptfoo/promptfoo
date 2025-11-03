@@ -304,3 +304,40 @@ providers:
       linkedTargetId: 'promptfoo://provider/12345-abcd-uuid'
       # other custom provider config...
 ```
+
+### Using Cloud Targets with Local Config Overrides
+
+:::info Promptfoo Cloud Feature
+
+This feature is available in [Promptfoo Cloud](/docs/enterprise) deployments.
+
+:::
+
+Cloud targets store provider configurations (API keys, base settings) in Promptfoo Cloud. Reference them using the `promptfoo://provider/` protocol and optionally override specific config values locally.
+
+**Basic usage:**
+
+```yaml
+providers:
+  - promptfoo://provider/12345-abcd-uuid
+```
+
+**Override cloud config locally:**
+
+```yaml
+providers:
+  - id: promptfoo://provider/12345-abcd-uuid
+    config:
+      temperature: 0.9 # Override cloud temperature
+      max_tokens: 2000 # Override cloud max_tokens
+    label: 'Custom Label' # Override display name
+```
+
+Local config takes precedence, allowing you to:
+
+- Store API keys centrally in the cloud
+- Override model parameters per eval (temperature, max_tokens, etc.)
+- Test different configurations without modifying the cloud target
+- Customize labels and other metadata locally
+
+All fields from the cloud provider are preserved unless explicitly overridden.
