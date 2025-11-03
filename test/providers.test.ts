@@ -335,6 +335,47 @@ describe('loadApiProvider', () => {
     );
   });
 
+  it('should merge context env, cloud provider env, and local env overrides', async () => {
+    jest.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'file://integrations/external_api.py:query',
+      config: {
+        apiKey: 'test-key',
+      },
+      env: {
+        ANTHROPIC_API_KEY: 'cloud-anthropic-key',
+        OPENAI_API_KEY: 'cloud-openai-key',
+      },
+    });
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      env: {
+        MISTRAL_API_KEY: 'context-mistral-key',
+        OPENAI_API_KEY: 'context-openai-key', // Will be overridden by cloud
+      },
+      options: {
+        env: {
+          OPENAI_API_KEY: 'local-openai-key', // Highest priority - overrides both
+          GOOGLE_API_KEY: 'local-google-key', // Added by local
+        },
+      },
+    });
+
+    expect(provider).toBeDefined();
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/external_api\.py/),
+      expect.objectContaining({
+        config: expect.any(Object),
+        env: {
+          MISTRAL_API_KEY: 'context-mistral-key', // From context
+          ANTHROPIC_API_KEY: 'cloud-anthropic-key', // From cloud
+          OPENAI_API_KEY: 'local-openai-key', // Local wins (overrides cloud and context)
+          GOOGLE_API_KEY: 'local-google-key', // From local
+        },
+        id: 'file://integrations/external_api.py:query',
+      }),
+    );
+  });
+
   it('should preserve cloud provider config when no local overrides provided', async () => {
     jest.mocked(getProviderFromCloud).mockResolvedValue({
       id: 'file://enterprise/secure_llm.py:invoke',

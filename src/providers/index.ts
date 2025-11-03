@@ -56,24 +56,22 @@ export async function loadApiProvider(
       transform: options.transform ?? cloudProvider.transform,
       delay: options.delay ?? cloudProvider.delay,
       prompts: options.prompts ?? cloudProvider.prompts,
-      env:
-        cloudProvider.env || options.env
-          ? {
-              ...cloudProvider.env,
-              ...options.env,
-            }
-          : undefined,
+      // Merge all three env sources: context (base) -> cloud -> local (highest priority)
+      env: {
+        ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
+        ...cloudProvider.env, // Cloud provider env overrides context
+        ...options.env, // Local env overrides everything
+      },
     };
 
     logger.debug(
       `[Cloud Provider] Loaded ${cloudDatabaseId}, resolved to ${cloudProvider.id}${options.config ? ' with local config overrides' : ''}`,
     );
 
-    // Merge env from both options and context
     const mergedContext = {
       ...context,
       options: mergedOptions,
-      env: mergedOptions.env || env,
+      env: mergedOptions.env,
     };
 
     return loadApiProvider(cloudProvider.id, mergedContext);
