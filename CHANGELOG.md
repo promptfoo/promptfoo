@@ -48,6 +48,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.920.0 to 3.921.0 (#6075)
 - chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.919.0 to 3.920.0 (#6060)
 
+### Fixed
+
+- fix(redteam): ensure grader config flows through to test metadata during generation (389ffa5)
+
 ## [0.119.1] - 2025-10-29
 
 ### Changed
