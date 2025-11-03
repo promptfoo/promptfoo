@@ -22,6 +22,7 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { useTableStore } from './store';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { useApplyFilterFromMetric } from './hooks';
 
 type MetricScore = {
   score: number;
@@ -36,8 +37,9 @@ interface MetricRow {
 }
 
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
-  const { table, filters, addFilter, config } = useTableStore();
+  const { table, config } = useTableStore();
   const theme = useTheme();
+  const applyFilterFromMetric = useApplyFilterFromMetric();
 
   if (!table || !table.head || !table.head.prompts) {
     return null;
@@ -96,39 +98,12 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   }
 
   /**
-   * Applies the metric as a filter and switches to the results tab.
+   * Applies the metric as a filter and closes the dialog.
    */
-  const handleMetricFilterClick = React.useCallback(
-    (metric: string | null) => {
-      if (!metric) {
-        return;
-      }
-      const asPolicy = isPolicyMetric(metric);
-      const filter = {
-        type: asPolicy ? ('policy' as const) : ('metric' as const),
-        operator: 'equals' as const,
-        value: asPolicy ? deserializePolicyIdFromMetric(metric) : metric,
-        logicOperator: 'or' as const,
-      };
-
-      // If this filter is already applied, do not re-apply it.
-      if (
-        Object.values(filters.values).find(
-          (f) =>
-            f.type === filter.type &&
-            f.value === filter.value &&
-            f.operator === filter.operator &&
-            f.logicOperator === filter.logicOperator,
-        )
-      ) {
-        return;
-      }
-
-      addFilter(filter);
-      onClose();
-    },
-    [addFilter, filters.values],
-  );
+  const handleMetricFilterClick = (metric: string) => {
+    applyFilterFromMetric(metric);
+    onClose();
+  };
 
   // Extract aggregated metric names from prompts
   const promptMetricNames = React.useMemo(() => {
