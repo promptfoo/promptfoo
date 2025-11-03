@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- fix(python): use REQUEST_TIMEOUT_MS for consistent timeout behavior across providers (300s default, previously 120s) (#6098)
 - chore(telemetry): defer PostHog identify() to first telemetry event to keep module initialization synchronous (#6094)
 - refactor(redteam): Prevent early (evaluator-based) exits in Jailbreak, Crescendo, and Custom Strategies (#6047)
 - chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings (#6069)
@@ -37,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
+- docs(python): update timeout documentation with REQUEST_TIMEOUT_MS environment variable and add retry logic example for handling rate limits (#6098)
 - docs(redteam): add comprehensive documentation for `jailbreak:meta` strategy including usage guide, comparison with other jailbreak strategies, and integration into strategy tables (#6088)
 - docs(site): add remediation reports documentation (#6083)
 - docs(site): add custom strategy to the strategies reference table (#6081)
