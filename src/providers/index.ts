@@ -6,14 +6,19 @@ import dedent from 'dedent';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import logger from '../logger';
-import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud';
+import {
+  getCloudDatabaseId,
+  getProviderFromCloud,
+  isCloudProvider,
+  validateLinkedTargetId,
+} from '../util/cloud';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
 
-import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type { EnvOverrides } from '../types/env';
+import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
@@ -30,6 +35,11 @@ export async function loadApiProvider(
     },
     env,
   };
+
+  // Validate linkedTargetId if present (Promptfoo Cloud feature)
+  if (providerOptions.config?.linkedTargetId) {
+    await validateLinkedTargetId(providerOptions.config.linkedTargetId);
+  }
 
   const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
 

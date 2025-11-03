@@ -287,23 +287,22 @@ For detailed MCP documentation and advanced configurations, see the [MCP Integra
 
 ## Advanced Usage
 
-### Linking Custom Providers to Existing Targets (Promptfoo Cloud)
+### Linking Custom Providers to Cloud Targets (Promptfoo Cloud)
 
 :::info Promptfoo Cloud Feature
-
 This feature is available in [Promptfoo Cloud](/docs/enterprise) deployments.
-
 :::
 
-Use `linkedTargetId` to link custom providers to existing cloud targets. Results from the custom provider appear under the linked target instead of creating duplicate entries.
+Link custom providers ([Python](/docs/providers/python/), [JavaScript](/docs/providers/custom-api/), [HTTP](/docs/providers/http/)) to cloud targets using `linkedTargetId`. This consolidates findings from multiple eval runs into one dashboard, allowing you to track performance over time and view comprehensive reporting.
 
 ```yaml
 providers:
-  - id: 'custom-wrapper'
+  - id: 'file://my_provider.py'
     config:
-      linkedTargetId: 'promptfoo://provider/12345-abcd-uuid'
-      # other custom provider config...
+      linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
 ```
+
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/) for setup instructions.
 
 ### Using Cloud Targets with Local Config Overrides
 
