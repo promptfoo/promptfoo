@@ -1,6 +1,7 @@
 import logger from '../logger';
 import { getSessionId } from '../redteam/util';
 import invariant from '../util/invariant';
+import { maybeLoadConfigFromExternalFile } from '../util/file';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -26,6 +27,12 @@ type AgentProviderOptions = ProviderOptions & {
     instructions?: string;
     maxTurns?: number;
     stateful?: boolean;
+    /**
+     * Pre-defined conversation history to start from.
+     * Can be an array of Message objects or a file:// path to JSON/YAML.
+     * Useful for testing specific conversation states or reproducing bugs.
+     */
+    initialMessages?: Message[] | string;
   };
 };
 
@@ -38,6 +45,7 @@ export class SimulatedUser implements ApiProvider {
   private readonly maxTurns: number;
   private readonly rawInstructions: string;
   private readonly stateful: boolean;
+  private readonly configInitialMessages?: Message[] | string;
 
   /**
    * Because the SimulatedUser is inherited by the RedteamMischievousUserProvider, and different
@@ -50,10 +58,104 @@ export class SimulatedUser implements ApiProvider {
     this.maxTurns = config.maxTurns ?? 10;
     this.rawInstructions = config.instructions || '{{instructions}}';
     this.stateful = config.stateful ?? false;
+    this.configInitialMessages = config.initialMessages;
   }
 
   id() {
     return this.identifier;
+  }
+
+  /**
+   * Validates that a message has the required structure.
+   */
+  private isValidMessage(msg: any): msg is Message {
+    return (
+      msg &&
+      typeof msg === 'object' &&
+      typeof msg.content === 'string' &&
+      (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
+    );
+  }
+
+  /**
+   * Validates and filters an array of messages, logging warnings for invalid entries.
+   */
+  private validateMessages(messages: any[]): Message[] {
+    const validMessages: Message[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (this.isValidMessage(messages[i])) {
+        validMessages.push(messages[i]);
+      } else {
+        logger.warn(
+          `[SimulatedUser] Invalid message at index ${i}, skipping. Expected {role: 'user'|'assistant'|'system', content: string}, got: ${JSON.stringify(messages[i]).substring(0, 100)}`,
+        );
+      }
+    }
+    return validMessages;
+  }
+
+  /**
+   * Resolves initial messages from either an array or a file:// path.
+   * Supports loading messages from JSON and YAML files.
+   */
+  private resolveInitialMessages(initialMessages: Message[] | string | undefined): Message[] {
+    if (!initialMessages) {
+      return [];
+    }
+
+    // If it's already an array, validate and return it
+    if (Array.isArray(initialMessages)) {
+      return this.validateMessages(initialMessages);
+    }
+
+    // If it's a string, handle different cases
+    if (typeof initialMessages === 'string') {
+      if (initialMessages.trim() === '') {
+        return [];
+      }
+
+      // Case 1: file:// reference (JSON/YAML)
+      if (initialMessages.startsWith('file://')) {
+        try {
+          const resolved = maybeLoadConfigFromExternalFile(initialMessages);
+          if (Array.isArray(resolved)) {
+            return this.validateMessages(resolved);
+          }
+          logger.warn(
+            `[SimulatedUser] Expected array of messages from file, got: ${typeof resolved}. Value: ${JSON.stringify(resolved).substring(0, 200)}`,
+          );
+        } catch (error) {
+          logger.warn(
+            `[SimulatedUser] Failed to load initialMessages from file: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+        return [];
+      }
+
+      // Case 2: Stringified JSON array (happens when file was already loaded but then stringified for storage/transport)
+      if (initialMessages.trim().startsWith('[')) {
+        try {
+          const parsed = JSON.parse(initialMessages);
+          if (Array.isArray(parsed)) {
+            return this.validateMessages(parsed);
+          }
+          logger.warn(
+            `[SimulatedUser] Parsed JSON but got ${typeof parsed} instead of array. Value: ${initialMessages.substring(0, 200)}`,
+          );
+        } catch (error) {
+          logger.warn(
+            `[SimulatedUser] Failed to parse initialMessages as JSON: ${error}. Value: ${initialMessages.substring(0, 200)}`,
+          );
+        }
+      }
+
+      logger.warn(
+        `[SimulatedUser] initialMessages is a string but could not be resolved: ${initialMessages.substring(0, 200)}`,
+      );
+      return [];
+    }
+
+    return [];
   }
 
   private async sendMessageToUser(
@@ -143,12 +245,36 @@ export class SimulatedUser implements ApiProvider {
     const userProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
-    const messages: Message[] = [];
+
+    // Support initial messages from either vars.initialMessages (per-test) or config.initialMessages (provider-level)
+    // vars.initialMessages takes precedence over config.initialMessages
+    // Both can be arrays or file:// paths
+    const varsInitialMessages = context?.vars?.initialMessages as Message[] | string | undefined;
+    const initialMessages = this.resolveInitialMessages(
+      varsInitialMessages || this.configInitialMessages,
+    );
+    const messages: Message[] = [...initialMessages];
+
+    if (initialMessages.length > 0) {
+      logger.debug(`[SimulatedUser] Starting with ${initialMessages.length} initial messages`);
+    }
+
     const maxTurns = this.maxTurns;
 
     const tokenUsage = createEmptyTokenUsage();
 
     let agentResponse: ProviderResponse | undefined;
+
+    // If initial messages end with user message, agent needs to respond first to avoid consecutive user messages
+    const lastInitialRole = messages.length > 0 ? messages[messages.length - 1].role : null;
+    if (lastInitialRole === 'user') {
+      logger.debug(
+        '[SimulatedUser] Initial messages end with user message, getting agent response first',
+      );
+      agentResponse = await this.sendMessageToAgent(messages, context.originalProvider, context);
+      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+      accumulateResponseTokenUsage(tokenUsage, agentResponse);
+    }
 
     for (let i = 0; i < maxTurns; i++) {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);

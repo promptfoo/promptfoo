@@ -342,4 +342,333 @@ describe('SimulatedUser', () => {
       expect(secondPrompt[0]).toEqual({ role: 'user', content: 'user response' });
     });
   });
+
+  describe('initialMessages', () => {
+    it('should start conversation with vars.initialMessages', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Hello' },
+        { role: 'assistant' as const, content: 'Hi there!' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Hello');
+      expect(result.output).toContain('Hi there!');
+    });
+
+    it('should start conversation with config.initialMessages', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'Need help' },
+        { role: 'assistant' as const, content: 'Sure, how can I help?' },
+      ];
+
+      const userWithConfigInitial = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          initialMessages,
+        },
+      });
+
+      const result = await userWithConfigInitial.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Need help');
+      expect(result.output).toContain('Sure, how can I help?');
+    });
+
+    it('should prioritize vars.initialMessages over config.initialMessages', async () => {
+      const configInitialMessages = [
+        { role: 'user' as const, content: 'Config message' },
+        { role: 'assistant' as const, content: 'Config response' },
+      ];
+
+      const varsInitialMessages = [
+        { role: 'user' as const, content: 'Vars message' },
+        { role: 'assistant' as const, content: 'Vars response' },
+      ];
+
+      const userWithBoth = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          initialMessages: configInitialMessages,
+        },
+      });
+
+      const result = await userWithBoth.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: varsInitialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Vars message');
+      expect(result.output).toContain('Vars response');
+      expect(result.output).not.toContain('Config message');
+      expect(result.output).not.toContain('Config response');
+    });
+
+    it('should work without initial messages (backwards compatibility)', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('should pass initial messages to user provider in flipped format', async () => {
+      const initialMessages = [
+        { role: 'user' as const, content: 'User says hello' },
+        { role: 'assistant' as const, content: 'Assistant responds' },
+      ];
+
+      await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Check that sendMessageToUser was called with initial messages included
+      const userProviderCalls = mockUserProviderCallApi.mock.calls;
+      expect(userProviderCalls.length).toBeGreaterThan(0);
+
+      // First call should include the initial messages (flipped)
+      const firstCallArg = JSON.parse(userProviderCalls[0][0]);
+      expect(firstCallArg).toContainEqual({
+        role: 'assistant', // Flipped from 'user'
+        content: 'User says hello',
+      });
+      expect(firstCallArg).toContainEqual({
+        role: 'user', // Flipped from 'assistant'
+        content: 'Assistant responds',
+      });
+    });
+
+    it('should handle stringified JSON array for initialMessages', async () => {
+      const stringifiedMessages = JSON.stringify([
+        { role: 'user', content: 'Hello from JSON' },
+        { role: 'assistant', content: 'Response from JSON' },
+      ]);
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: stringifiedMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Hello from JSON');
+      expect(result.output).toContain('Response from JSON');
+    });
+
+    it('should skip invalid messages and continue with valid ones', async () => {
+      const mixedMessages = [
+        { role: 'user', content: 'Valid message' },
+        { foo: 'bar' }, // Invalid: missing role and content
+        { role: 'assistant', content: 'Another valid message' },
+        { role: 'user' }, // Invalid: missing content
+        { role: 'invalid-role', content: 'Bad role' }, // Invalid: bad role
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: mixedMessages as any,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Valid message');
+      expect(result.output).toContain('Another valid message');
+      // Invalid messages should be skipped
+      expect(result.output).not.toContain('foo');
+      expect(result.output).not.toContain('bar');
+    });
+
+    it('should return empty array for malformed JSON string', async () => {
+      const malformedJson = '{ not valid json [';
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: malformedJson,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Should proceed without initial messages
+      expect(result.output).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(2); // Standard 2 turns without initial messages
+    });
+
+    it('should return empty array for non-array JSON', async () => {
+      const nonArrayJson = JSON.stringify({ role: 'user', content: 'Not an array' });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: nonArrayJson,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Should proceed without initial messages
+      expect(result.output).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('should handle empty string initialMessages', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: '',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Empty string should be treated as no initial messages
+      expect(result.output).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('should validate message content is a string', async () => {
+      const invalidMessages = [
+        { role: 'user', content: 123 }, // content is not a string
+        { role: 'assistant', content: 'Valid message' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: invalidMessages as any,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      // Should only include the valid message
+      expect(result.output).toContain('Valid message');
+      expect(result.output).not.toContain('123');
+    });
+
+    it('should handle initialMessages ending with user role correctly', async () => {
+      // This is the documented example case - initial messages end with user message
+      // The agent should respond first to avoid consecutive user messages
+      const initialMessages = [
+        { role: 'user' as const, content: 'I need a flight from NYC to Seattle' },
+        { role: 'assistant' as const, content: 'I found a direct flight for $325. Book it?' },
+        { role: 'user' as const, content: 'Yes, that works for me' },
+      ];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+
+      // Verify initial messages are included
+      expect(result.output).toContain('I need a flight from NYC to Seattle');
+      expect(result.output).toContain('I found a direct flight for $325');
+      expect(result.output).toContain('Yes, that works for me');
+
+      // Verify the agent was called to respond to the last user message
+      expect(originalProvider.callApi).toHaveBeenCalled();
+
+      // The first call to the agent should include all 3 initial messages
+      const firstAgentCall = jest.mocked(originalProvider.callApi).mock.calls[0];
+      const firstAgentPrompt = JSON.parse(firstAgentCall[0] as string);
+
+      // Should contain system prompt + all 3 initial messages
+      expect(firstAgentPrompt).toContainEqual({
+        role: 'user',
+        content: 'I need a flight from NYC to Seattle',
+      });
+      expect(firstAgentPrompt).toContainEqual({
+        role: 'assistant',
+        content: 'I found a direct flight for $325. Book it?',
+      });
+      expect(firstAgentPrompt).toContainEqual({ role: 'user', content: 'Yes, that works for me' });
+    });
+
+    it('should load initialMessages from JSON file', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: 'file://./test/fixtures/initialMessages.json',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('I need a flight from New York to Seattle');
+      expect(result.output).toContain('I can help with that! What date?');
+    });
+
+    it('should load initialMessages from YAML file', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: 'file://./test/fixtures/initialMessages.yaml',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('Hello, I need assistance');
+      expect(result.output).toContain("Hi! I'm here to help");
+    });
+
+    it('should handle file loading errors gracefully', async () => {
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages: 'file://./test/fixtures/nonexistent.json',
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Should proceed without initial messages when file fails to load
+      expect(result.output).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(2); // Standard 2 turns
+    });
+  });
 });

@@ -556,32 +556,33 @@ export default class Eval {
 
           // Value must be a number
           const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
-          if (!Number.isFinite(numericValue)) {
-            return;
-          }
 
           if (operator === 'is_defined' || (operator === 'equals' && !field)) {
             // 'is_defined': new operator that checks if metric exists
             // 'equals' without field: old format for backward compatibility
             condition = `json_extract(named_scores, '$."${escapedField}"') IS NOT NULL`;
-          } else if (operator === 'eq') {
-            // Numeric equality
-            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${numericValue}`;
-          } else if (operator === 'neq') {
-            // Numeric inequality
-            condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${numericValue})`;
-          } else if (operator === 'gt') {
-            // Greater than
-            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${numericValue}`;
-          } else if (operator === 'gte') {
-            // Greater than or equal
-            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${numericValue}`;
-          } else if (operator === 'lt') {
-            // Less than
-            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${numericValue}`;
-          } else if (operator === 'lte') {
-            // Less than or equal
-            condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${numericValue}`;
+          }
+          // For the numeric operators, validate that the value is a number
+          else if (Number.isFinite(numericValue)) {
+            if (operator === 'eq') {
+              // Numeric equality
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${numericValue}`;
+            } else if (operator === 'neq') {
+              // Numeric inequality
+              condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${numericValue})`;
+            } else if (operator === 'gt') {
+              // Greater than
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${numericValue}`;
+            } else if (operator === 'gte') {
+              // Greater than or equal
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${numericValue}`;
+            } else if (operator === 'lt') {
+              // Less than
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${numericValue}`;
+            } else if (operator === 'lte') {
+              // Less than or equal
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${numericValue}`;
+            }
           }
         } else if (type === 'metadata' && field) {
           const sanitizedValue = sanitizeValue(value);

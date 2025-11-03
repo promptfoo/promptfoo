@@ -8,12 +8,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- feat(integrations): add Microsoft SharePoint dataset support with certificate-based authentication for importing CSV files (#6080)
+- feat(providers): add `initialMessages` support to simulated-user provider for starting conversations from specific states, with support for loading from JSON/YAML files via `file://` syntax (#6090)
+- feat(providers): add local config override support for cloud providers - merge local configuration with cloud provider settings for per-eval customization while keeping API keys centralized (#6100)
+- feat(providers): add linkedTargetId validation with comprehensive error messages (#6053)
 - feat(webui): add eval copy functionality to duplicate evaluations with all results, configuration, and relationships via UI menu (#6079)
+- feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
+- feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#6086)
+- feat(redteam): OpenTelemetry traces feed back into red team strategies
+- feat(redteam): expand OWASP Agentic preset to cover 8/10 threats with 20 plugins; add 'owasp:agentic:redteam' alias for easy selection (#6099)
+- fix: max concurrency run options override scan template settings
 
 ### Changed
 
-- chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings
+- fix(python): use REQUEST_TIMEOUT_MS for consistent timeout behavior across providers (300s default, previously 120s) (#6098)
+- chore(telemetry): defer PostHog identify() to first telemetry event to keep module initialization synchronous (#6094)
+- refactor(redteam): Prevent early (evaluator-based) exits in Jailbreak, Crescendo, and Custom Strategies (#6047)
+- chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings (#6069)
+- chore(app): larger eval selector dialog (#6063)
+- refactor(app): Adds useApplyFilterFromMetric hook (#6095)
+- refactor(cli): extract duplicated organization context display logic into shared utility function to fix dynamic import issue and improve code maintainability (#6070)
+
+### Fixed
+
+- fix(core): handle Nunjucks template variables in URL sanitization to prevent parsing errors when sharing evals; add unit tests covering sanitizer behavior for Nunjucks template URLs (#6089)
+- fix(app): Fixes the metric is defined filter (#6082)
+- fix(webui): handle plugin generation when target URL is not set (#6055)
+- fix(redteam): improve image strategy text wrapping to handle long lines and prevent overflow (#6066)
+- fix(evaluator): force uncached provider calls for repeat iterations (#6043)
+- fix(providers): fix Python worker ENOENT errors by ensuring error responses are written before completion signal, improving error messages with function suggestions and fuzzy matching, and removing premature function validation to support embeddings-only and classification-only providers (#6073)
+
+### Tests
+
+- test(providers): add coverage for simulated-user initialMessages (vars/config precedence, file:// loading from JSON/YAML, validation, conversation flow when ending with user role) (#6090)
+- test(providers): add Python worker regression tests for ENOENT prevention, helpful error messages with function name suggestions, and embeddings-only provider support without call_api function (#6073)
+
+### Documentation
+
+- docs(python): update timeout documentation with REQUEST_TIMEOUT_MS environment variable and add retry logic example for handling rate limits (#6098)
+- docs(redteam): add comprehensive documentation for `jailbreak:meta` strategy including usage guide, comparison with other jailbreak strategies, and integration into strategy tables (#6088)
+- docs(site): add remediation reports documentation (#6083)
+- docs(site): add custom strategy to the strategies reference table (#6081)
+- docs(site): pricing page updates (#6068)
+- docs(site): clarify remote inference in Community edition (#6065)
+
+### Dependencies
+
+- chore(deps): bump the github-actions group with 4 updates (#6092)
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.920.0 to 3.921.0 (#6075)
+- chore(deps): bump @aws-sdk/client-bedrock-runtime from 3.919.0 to 3.920.0 (#6060)
 
 ## [0.119.1] - 2025-10-29
 
@@ -24,6 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- fix(providers): render environment variables in provider config at load time (#6007)
 - fix(redteam): validate custom strategy strategyText requirement to prevent confusing errors during test execution (#6046)
 - fix(init): include helpful error message and cleanup any directories created when example download fails (#6051)
 - fix(providers): removing axios as a runtime dependency in google live provider (#6050)

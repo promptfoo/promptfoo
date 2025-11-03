@@ -657,6 +657,15 @@ export const useTableStore = create<TableState>()((set, get) => ({
         existingFilters.length > 0 ? Math.max(...existingFilters.map((f) => f.sortIndex)) : -1;
       const nextSortIndex = maxSortIndex + 1;
 
+      // Inherit logic operator from existing filters (use the one from the filter with sortIndex 1)
+      // If no existing filters, default to 'and'
+      const inheritedLogicOperator =
+        existingFilters.length > 0
+          ? (existingFilters.find((f) => f.sortIndex === 1)?.logicOperator ??
+            existingFilters[0].logicOperator ??
+            'and')
+          : 'and';
+
       return {
         filters: {
           ...prevState.filters,
@@ -665,8 +674,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
             [filterId]: {
               ...filter,
               id: filterId,
-              // Default to 'and' logic operator if not provided.
-              logicOperator: filter.logicOperator ?? 'and',
+              // Use provided logicOperator, or inherit from existing filters, or default to 'and'
+              logicOperator: filter.logicOperator ?? inheritedLogicOperator,
               // Include field for metadata filters
               field: filter.field,
               sortIndex: nextSortIndex,
