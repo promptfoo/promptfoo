@@ -128,12 +128,14 @@ ${outputFormatInstructions}`;
             },
             raw_response: rawResponse,
           };
-        } catch (_error) {
-          logger.warn('[GPT OSS Safeguard] Failed to parse simple JSON response, defaulting to 0');
+        } catch (error) {
+          logger.warn('[GPT OSS Safeguard] Failed to parse simple JSON response, treating as violation', {
+            parseError: error instanceof Error ? error.message : String(error),
+          });
           return {
-            violation: 0,
+            violation: 1,
             chain_of_thought: chainOfThought,
-            output: { violation: 0 },
+            output: { violation: 1, policy_category: null },
             raw_response: rawResponse,
           };
         }
@@ -154,14 +156,14 @@ ${outputFormatInstructions}`;
             },
             raw_response: rawResponse,
           };
-        } catch (_error) {
-          logger.warn(
-            '[GPT OSS Safeguard] Failed to parse detailed JSON response, defaulting to 0',
-          );
+        } catch (error) {
+          logger.warn('[GPT OSS Safeguard] Failed to parse detailed JSON response, treating as violation', {
+            parseError: error instanceof Error ? error.message : String(error),
+          });
           return {
-            violation: 0,
+            violation: 1,
             chain_of_thought: chainOfThought,
-            output: { violation: 0, confidence: 'low', rationale: 'Failed to parse response' },
+            output: { violation: 1, confidence: 'low', rationale: 'Failed to parse response', policy_category: null },
             raw_response: rawResponse,
           };
         }
