@@ -972,10 +972,9 @@ export default class Eval {
 
     // Copy eval, results, and relationships within transaction for atomicity
     let copiedCount = 0;
-    await db.transaction(async (tx) => {
+    db.transaction(() => {
       // Create the new eval record first
-      await tx
-        .insert(evalsTable)
+      db.insert(evalsTable)
         .values({
           id: newEvalId,
           createdAt: Date.now(),
@@ -993,14 +992,14 @@ export default class Eval {
       // Copy prompts relationships
       // Note: prompts already exist in promptsTable from when the source eval was created
       // We just need to create new relationships pointing to those same prompts
-      const promptRels = await tx
+      const promptRels = db
         .select()
         .from(evalsToPromptsTable)
-        .where(eq(evalsToPromptsTable.evalId, this.id));
+        .where(eq(evalsToPromptsTable.evalId, this.id))
+        .all();
 
       if (promptRels.length > 0) {
-        await tx
-          .insert(evalsToPromptsTable)
+        db.insert(evalsToPromptsTable)
           .values(
             promptRels.map((rel) => ({
               evalId: newEvalId,
@@ -1016,8 +1015,7 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(this.config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          await tx
-            .insert(tagsTable)
+          db.insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -1026,8 +1024,7 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          await tx
-            .insert(evalsToTagsTable)
+          db.insert(evalsToTagsTable)
             .values({
               evalId: newEvalId,
               tagId,
@@ -1038,15 +1035,15 @@ export default class Eval {
       }
 
       // Copy dataset relationship
-      const datasetRel = await tx
+      const datasetRel = db
         .select()
         .from(evalsToDatasetsTable)
         .where(eq(evalsToDatasetsTable.evalId, this.id))
-        .limit(1);
+        .limit(1)
+        .all();
 
       if (datasetRel.length > 0) {
-        await tx
-          .insert(evalsToDatasetsTable)
+        db.insert(evalsToDatasetsTable)
           .values({
             evalId: newEvalId,
             datasetId: datasetRel[0].datasetId,
@@ -1061,13 +1058,14 @@ export default class Eval {
 
       while (true) {
         // Fetch batch from source eval
-        const batch = await tx
+        const batch = db
           .select()
           .from(evalResultsTable)
           .where(eq(evalResultsTable.evalId, this.id))
           .orderBy(evalResultsTable.id)
           .limit(BATCH_SIZE)
-          .offset(offset);
+          .offset(offset)
+          .all();
 
         if (batch.length === 0) {
           break;
@@ -1084,7 +1082,7 @@ export default class Eval {
         }));
 
         // Insert batch
-        await tx.insert(evalResultsTable).values(copiedResults).run();
+        db.insert(evalResultsTable).values(copiedResults).run();
 
         copiedCount += batch.length;
         offset += BATCH_SIZE;
