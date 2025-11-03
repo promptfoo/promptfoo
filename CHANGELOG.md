@@ -9,17 +9,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - feat(providers): add `initialMessages` support to simulated-user provider for starting conversations from specific states, with support for loading from JSON/YAML files via `file://` syntax (#6090)
+- feat(providers): add local config override support for cloud providers - merge local configuration with cloud provider settings for per-eval customization while keeping API keys centralized (#6100)
 - feat(redteam): add pharmacy plugins (controlled substance compliance, dosage calculation, drug interaction) and insurance plugins (coverage discrimination, network misinformation, PHI disclosure) (#6064)
 - feat(redteam): add goal-misalignment plugin for detecting Goodhart's Law vulnerabilities (#6045)
 - feat(webui): add jailbreak:meta strategy configuration UI in red team setup with numIterations parameter (#6086)
 - feat(redteam): OpenTelemetry traces feed back into red team strategies
+- feat(redteam): expand OWASP Agentic preset to cover 8/10 threats with 20 plugins; add 'owasp:agentic:redteam' alias for easy selection (#6099)
+- fix: max concurrency run options override scan template settings
 
 ### Changed
 
+- fix(python): use REQUEST_TIMEOUT_MS for consistent timeout behavior across providers (300s default, previously 120s) (#6098)
 - chore(telemetry): defer PostHog identify() to first telemetry event to keep module initialization synchronous (#6094)
 - refactor(redteam): Prevent early (evaluator-based) exits in Jailbreak, Crescendo, and Custom Strategies (#6047)
 - chore(webui): expand language options to 486 ISO 639-2 languages with support for all 687 ISO codes (639-1, 639-2/T, 639-2/B) in red team run settings (#6069)
 - chore(app): larger eval selector dialog (#6063)
+- refactor(app): Adds useApplyFilterFromMetric hook (#6095)
 - refactor(cli): extract duplicated organization context display logic into shared utility function to fix dynamic import issue and improve code maintainability (#6070)
 
 ### Fixed
@@ -38,7 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documentation
 
-- docs(providers): document simulated-user initialMessages with per-test vs provider precedence and file:// loading from JSON/YAML (#6090)
+- docs(python): update timeout documentation with REQUEST_TIMEOUT_MS environment variable and add retry logic example for handling rate limits (#6098)
 - docs(redteam): add comprehensive documentation for `jailbreak:meta` strategy including usage guide, comparison with other jailbreak strategies, and integration into strategy tables (#6088)
 - docs(site): add remediation reports documentation (#6083)
 - docs(site): add custom strategy to the strategies reference table (#6081)
