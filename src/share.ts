@@ -8,7 +8,11 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { checkCloudPermissions, makeRequest as makeCloudRequest } from './util/cloud';
+import {
+  checkCloudPermissions,
+  getOrgContext,
+  makeRequest as makeCloudRequest,
+} from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 
 import type Eval from './models/eval';
@@ -434,6 +438,15 @@ export async function createShareableUrl(
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
     logger.debug('Sharing is explicitly disabled, returning null');
     return null;
+  }
+
+  // Show org/team context before uploading (only when cloud is enabled)
+  const orgContext = await getOrgContext();
+  if (orgContext) {
+    const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
+    logger.info(
+      `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
+    );
   }
 
   // 1. Handle email collection
