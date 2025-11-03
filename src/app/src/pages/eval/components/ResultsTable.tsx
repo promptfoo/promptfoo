@@ -1031,14 +1031,60 @@ function ResultsTable({
     return null;
   }, [body, maxTextLength]);
 
+  const graderInfoColumn = React.useMemo(() => {
+    // Check if any row has multi-grader results
+    const hasMultiGrader = body.some((row) => {
+      const firstOutput = row.outputs?.[0];
+      return (
+        firstOutput?.gradingResult?.componentResults &&
+        firstOutput.gradingResult.componentResults.length > 0 &&
+        firstOutput.gradingResult.componentResults[0]?.metadata?.graderModel
+      );
+    });
+
+    if (hasMultiGrader) {
+      return {
+        accessorFn: (row: EvaluateTableRow) => {
+          const firstOutput = row.outputs?.[0];
+          if (
+            firstOutput?.gradingResult?.componentResults &&
+            firstOutput.gradingResult.componentResults.length > 0
+          ) {
+            const graders = firstOutput.gradingResult.componentResults
+              .map((result: any) => {
+                const model = result.metadata?.graderModel || 'unknown';
+                const effort = result.metadata?.reasoningEffort;
+                return effort ? `${model} (${effort})` : model;
+              })
+              .join(', ');
+            return graders;
+          }
+          return '';
+        },
+        id: 'grader-info',
+        header: () => <span className="font-bold">Graders</span>,
+        cell: (info: CellContext<EvaluateTableRow, unknown>) => (
+          <div className="cell">
+            <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
+          </div>
+        ),
+        size: VARIABLE_COLUMN_SIZE_PX,
+      };
+    }
+    return null;
+  }, [body, maxTextLength]);
+
   const columns = React.useMemo(() => {
     const cols: ColumnDef<EvaluateTableRow, unknown>[] = [];
     if (descriptionColumn) {
       cols.push(descriptionColumn);
     }
+    if (graderInfoColumn) {
+      cols.push(graderInfoColumn);
+    }
     cols.push(...variableColumns, ...promptColumns);
     return cols;
-  }, [descriptionColumn, variableColumns, promptColumns]);
+  }, [descriptionColumn, graderInfoColumn, variableColumns, promptColumns]);
 
   const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
   const reactTable = useReactTable({
