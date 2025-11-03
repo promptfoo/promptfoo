@@ -315,7 +315,6 @@ export async function runRedteamConversation({
 
       if (traceId) {
         traceContext = await fetchTraceContext(traceId, {
-        traceContext = await fetchTraceContext(traceId, {
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,
           maxSpans: tracingOptions.maxSpans,
