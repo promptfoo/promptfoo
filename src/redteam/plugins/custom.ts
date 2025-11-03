@@ -6,7 +6,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { RedteamPluginBase } from './base';
 
-import type { ApiProvider, Assertion } from '../../types/index';
+import type { ApiProvider, Assertion, TestCase } from '../../types/index';
 
 const CustomPluginDefinitionSchema = z
   .object({
@@ -76,5 +76,16 @@ export class CustomPlugin extends RedteamPluginBase {
     }
 
     return [assertion];
+  }
+
+  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
+    const tests = await super.generateTests(n, delayMs);
+    return tests.map((test) => ({
+      ...test,
+      metadata: {
+        purpose: this.purpose,
+        ...(test.metadata ?? {}),
+      },
+    }));
   }
 }
