@@ -306,16 +306,16 @@ describe('loadApiProvider', () => {
         apiKey: 'test-key',
       },
       env: {
-        CLOUD_VAR: 'cloud-value',
-        SHARED_VAR: 'cloud-shared',
+        ANTHROPIC_API_KEY: 'cloud-anthropic-key',
+        OPENAI_API_KEY: 'cloud-openai-key',
       },
     });
 
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
       options: {
         env: {
-          LOCAL_VAR: 'local-value',
-          SHARED_VAR: 'local-shared', // Override
+          OPENAI_API_KEY: 'local-openai-key', // Override
+          GOOGLE_API_KEY: 'local-google-key', // Add new
         },
       },
     });
@@ -326,9 +326,9 @@ describe('loadApiProvider', () => {
       expect.objectContaining({
         config: expect.any(Object),
         env: {
-          CLOUD_VAR: 'cloud-value', // Preserved
-          LOCAL_VAR: 'local-value', // Added
-          SHARED_VAR: 'local-shared', // Overridden
+          ANTHROPIC_API_KEY: 'cloud-anthropic-key', // Preserved
+          OPENAI_API_KEY: 'local-openai-key', // Overridden
+          GOOGLE_API_KEY: 'local-google-key', // Added
         },
         id: 'file://integrations/external_api.py:query',
       }),
