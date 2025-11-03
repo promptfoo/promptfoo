@@ -47,7 +47,7 @@ function RedTeamingHeader() {
         <div className={styles.heroContent}>
           <h1 className={styles.heroTitle}>Red Teaming for AI Applications</h1>
           <p className={styles.heroSubtitle}>
-            Application-specific security testing trusted by Fortune 100 companies and 200,000+
+            Application-specific security testing trusted by Fortune 500 companies and 200,000+
             developers
           </p>
           <div className={styles.heroButtons}>
@@ -150,7 +150,7 @@ function DifferentiatorsSection() {
         <div className={styles.sectionEyebrow}>THE PROMPTFOO ADVANTAGE</div>
         <h2 className={styles.sectionTitle}>Why teams choose Promptfoo for red teaming</h2>
         <p className={styles.sectionSubtitle}>
-          Battle-tested technology that scales from startups to Fortune 100 enterprises
+          Battle-tested technology that scales from startups to Fortune 500 enterprises
         </p>
         <div className={styles.benefitsList}>
           <div className={styles.benefitItem}>
@@ -158,7 +158,7 @@ function DifferentiatorsSection() {
             <div className={styles.benefitContent}>
               <h3>Battle-tested with wide industry adoption</h3>
               <p>
-                Used by foundation model labs, Fortune 50 enterprises, and{' '}
+                Used by foundation model labs, large enterprises, and{' '}
                 {SITE_CONSTANTS.USER_COUNT_DISPLAY} open source users - we're the closest thing to
                 an industry standard tool for AI security testing.
               </p>
@@ -353,7 +353,7 @@ function CallToActionSection() {
       <div className="container">
         <h2 className={styles.finalCTATitle}>Start securing your AI applications today</h2>
         <p className={styles.finalCTASubtitle}>
-          Join Fortune 100 companies and 200,000+ developers building secure AI applications from
+          Join Fortune 500 companies and 200,000+ developers building secure AI applications from
           day one.
         </p>
         <div className={styles.finalCTAButtons}>
@@ -368,7 +368,7 @@ function CallToActionSection() {
           </Link>
         </div>
         <div className={styles.finalCTATrust}>
-          <p>✓ 200,000+ users • ✓ Fortune 100 trusted • ✓ Open source foundation</p>
+          <p>✓ 200,000+ users • ✓ Enterprise trusted • ✓ Open source foundation</p>
         </div>
       </div>
     </section>

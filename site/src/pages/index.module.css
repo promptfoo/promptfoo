@@ -426,7 +426,7 @@ html {
 
 .walkthroughContainer {
   max-width: min(1400px, 95%);
-  margin: 4rem auto;
+  margin: 1rem auto 4rem;
   padding: 3rem 2rem;
   /* Use subtle white overlay instead of gradient */
   background: rgba(255, 255, 255, 0.85);
@@ -437,11 +437,12 @@ html {
   backdrop-filter: blur(10px);
   position: relative;
   overflow: hidden;
+  animation: fadeInUpScroll 0.8s var(--animation-ease-smooth) 1.4s backwards;
 }
 
 @media screen and (max-width: 768px) {
   .walkthroughContainer {
-    margin: 2rem auto;
+    margin: 0.5rem auto 2rem;
     padding: 1.5rem 1rem;
     border-radius: 16px;
   }
@@ -1322,17 +1323,230 @@ html {
   }
 }
 
-/* Trust Bar */
-.trustBar {
-  padding: var(--section-spacing-md) 0;
+/* Bridge Section - Connects Hero to Products */
+.bridgeSection {
+  padding: 1.5rem 0 1.5rem;
   text-align: center;
   background: transparent;
-  border-bottom: 1px solid rgba(229, 58, 58, 0.1);
+  position: relative;
+  overflow: visible;
+  animation: fadeInUpScroll 0.8s var(--animation-ease-smooth) 1s backwards;
+}
+
+.bridgeStatement {
+  font-size: 1.75rem;
+  line-height: 1.6;
+  color: var(--ifm-font-color-base);
+  max-width: 900px;
+  margin: 0 auto 1rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+[data-theme='dark'] .bridgeStatement {
+  color: #e0e0e0;
+}
+
+.bridgeSubheading {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  color: var(--pf-dark-base);
+  opacity: 0.85;
+  max-width: 800px;
+  margin: 0 auto 2rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+[data-theme='dark'] .bridgeSubheading {
+  color: #e0e0e0;
+  opacity: 0.8;
+}
+
+.fortuneHighlight {
+  font-weight: 700;
+  color: var(--pf-red-darker);
+  position: relative;
+  display: inline-block;
+}
+
+.securityHighlight {
+  font-weight: 700;
+  color: var(--pf-red-darker);
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  position: relative;
+  display: inline-block;
+  transition: all 0.3s ease;
+}
+
+/*
+.securityHighlight::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--pf-red-base), transparent);
+  animation: underlinePulse 2s ease-in-out infinite;
+}
+  */
+
+@keyframes underlinePulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scaleX(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+[data-theme='dark'] .securityHighlight {
+  color: var(--pf-red-lighter);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(229, 58, 58, 0.2) 30%,
+    rgba(229, 58, 58, 0.2) 70%,
+    transparent 100%
+  );
+}
+
+.howStatement {
+  font-size: 2.5rem;
+  font-weight: 900;
+  text-align: center;
+  margin: 2rem auto 1.5rem;
+  background: linear-gradient(135deg, var(--pf-red-darker), var(--pf-red-base));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.02em;
+  position: relative;
+  display: inline-block;
+  animation: fadeInUpScroll 0.6s var(--animation-ease-smooth) 1s backwards;
+}
+
+[data-theme='dark'] .howStatement {
+  background: linear-gradient(135deg, var(--pf-red-light), var(--pf-red-lighter));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.flowIndicator {
+  position: relative;
+  width: 100%;
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1rem;
+  animation: fadeIn 0.8s ease 1.2s backwards;
+}
+
+.flowLine {
+  width: 2px;
+  height: 40px;
+  background: linear-gradient(180deg, var(--pf-red-base), transparent);
+  position: relative;
+  animation: flowLineGrow 1.5s ease-in-out infinite;
+}
+
+@keyframes flowLineGrow {
+  0%,
+  100% {
+    height: 40px;
+    opacity: 0.6;
+  }
+  50% {
+    height: 50px;
+    opacity: 1;
+  }
+}
+
+.flowDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--pf-red-base);
+  box-shadow: 0 0 20px rgba(229, 58, 58, 0.6);
+  position: absolute;
+  bottom: 0;
+  animation: flowDotPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes flowDotPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(229, 58, 58, 0.6);
+  }
+  50% {
+    transform: scale(1.3);
+    box-shadow: 0 0 30px rgba(229, 58, 58, 0.8);
+  }
+}
+
+[data-theme='dark'] .flowLine {
+  background: linear-gradient(180deg, var(--pf-red-light), transparent);
+}
+
+[data-theme='dark'] .flowDot {
+  background: var(--pf-red-light);
+}
+
+@media screen and (max-width: 768px) {
+  .trustBar {
+    padding: 1.5rem 0 1.25rem;
+  }
+
+  .bridgeSection {
+    padding: 1.25rem 0 1.5rem;
+  }
+
+  .bridgeStatement {
+    font-size: 1.375rem;
+    padding: 0 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .bridgeSubheading {
+    font-size: 1.125rem;
+    padding: 0 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .howStatement {
+    font-size: 2rem;
+    margin: 1.5rem auto 1rem;
+  }
+
+  .flowIndicator {
+    height: 50px;
+    margin-top: 0.75rem;
+  }
+
+  .flowLine {
+    height: 30px;
+  }
+}
+
+/* Trust Bar - Now flows into Bridge Section */
+.trustBar {
+  padding: 0 0 4rem;
+  text-align: center;
+  background: transparent;
+  border-bottom: none;
 }
 
 [data-theme='dark'] .trustBar {
   background: transparent;
-  border-bottom-color: rgba(229, 58, 58, 0.2);
 }
 
 .trustBarTitle {
@@ -1812,13 +2026,27 @@ html {
 
 /* Walkthrough Section */
 .walkthroughSection {
-  padding: var(--section-spacing-xl) 0;
+  padding: 1rem 0 var(--section-spacing-xl);
   background: transparent;
+  position: relative;
+}
+
+/* Add subtle fade-in from bridge section */
+.walkthroughSection::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 0;
+  background: linear-gradient(180deg, var(--pf-red-base), transparent);
+  opacity: 0;
 }
 
 @media screen and (max-width: 768px) {
   .walkthroughSection {
-    padding: var(--section-spacing-lg) 0;
+    padding: 0.5rem 0 var(--section-spacing-lg);
   }
 }
 

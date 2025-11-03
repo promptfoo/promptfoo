@@ -30,7 +30,7 @@ function HomepageHeader() {
             in development
           </h1>
           <p className={styles.heroSubtitle}>
-            Security for apps & agents trusted by 200,000+ developers
+            Security for apps & agents trusted by 85 of the Fortune 500
           </p>
           <div className={styles.heroButtons}>
             <Link className="button button--primary button--lg" to="/contact/">
@@ -52,12 +52,13 @@ function HomepageHeader() {
 function TrustBar() {
   const marqueeItems = [
     'Top 5 global retailer',
-    'Tier-1 telecom',
+    'Top 3 U.S. wireless carrier',
     'Top 3 global strategy consultancy',
-    'Large public legal firm',
+    'Public legal & tax provider',
     'Top 5 U.S. healthcare company',
     'Nationwide 5G network operator',
-    'Top European insurer',
+    'Top U.S. foundation model lab',
+    'Top 3 U.K. insurance provider',
     'Global ERP leader',
     'Top 3 travel site',
   ];
@@ -65,7 +66,6 @@ function TrustBar() {
   return (
     <section className={styles.trustBar}>
       <div className="container">
-        <h3 className={styles.trustBarTitle}>TRUSTED BY 85 OF THE FORTUNE 500</h3>
         <div
           className={styles.marquee}
           role="region"
@@ -79,12 +79,21 @@ function TrustBar() {
             ))}
           </div>
         </div>
-        {/*
-        <p className={styles.trustBarSubtext}>
-          + Major financial institutions, technology companies, and{' '}
-          {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide
-        </p>
-        */}
+      </div>
+    </section>
+  );
+}
+
+function BridgeSection() {
+  return (
+    <section className={styles.bridgeSection}>
+      <div className="container">
+        <div className={styles.bridgeStatement}>
+          <span className={styles.securityHighlight}>Secure AI starts in development</span>
+        </div>
+        <div className={styles.bridgeSubheading}>
+          Catch vulnerabilities where you build, not in production
+        </div>
       </div>
     </section>
   );
@@ -128,14 +137,12 @@ function HomepageWalkthrough() {
       image2x: '/img/riskreport-1@2x.png',
       description: (
         <>
-          <p className={styles.walkthroughHeading}>Red teaming that targets agents & RAGs</p>
-          <p>Generate customized attacks for your use case:</p>
+          <p className={styles.walkthroughHeading}>Automated red teaming for agents & RAGs</p>
+          <p>Dynamically simulate real users to uncover application-specific vulnerabilities:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest redteam setup</code>
           </pre>
-          <p>
-            Attacks dynamically simulate real users to uncover application-specific vulnerabilities:
-          </p>
+          <p>Custom attacks generated for your target:</p>
           <ul>
             <li>Direct and indirect prompt injections</li>
             <li>Jailbreaks tailored to your guardrails</li>
@@ -301,12 +308,6 @@ function HomepageWalkthrough() {
   return (
     <section className={styles.walkthroughSection}>
       <div className="container">
-        <div className={styles.sectionEyebrow}>OUR SOLUTIONS</div>
-        <h2 className={styles.sectionTitle}>Secure AI from prompt to production</h2>
-        <p className={styles.sectionSubtitle}>
-          Comprehensive protection that starts with developers.
-        </p>
-
         <div className={styles.walkthroughContainer}>
           <div
             className={clsx(styles.walkthroughTabs, showScrollIndicator && styles.scrollable)}
@@ -699,8 +700,7 @@ function PersonaSection() {
         },
         {
           title: 'Fast and unblocking',
-          description:
-            'Run incremental tests locally in seconds.',
+          description: 'Run incremental tests locally in seconds.',
         },
       ],
       cta: { text: 'View Documentation', link: '/docs/intro/' },
@@ -778,6 +778,7 @@ function PersonaSection() {
   );
 }
 
+/*
 function FAQSection() {
   const [openFaq, setOpenFaq] = React.useState<number | null>(0);
 
@@ -836,6 +837,7 @@ function FAQSection() {
     </section>
   );
 }
+*/
 
 function FinalCTA() {
   return (
@@ -843,8 +845,8 @@ function FinalCTA() {
       <div className="container">
         <h2 className={styles.finalCTATitle}>Ship AI with confidence</h2>
         <p className={styles.finalCTASubtitle}>
-          Join 85 of the Fortune 500 and {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers building
-          secure AI applications from day one.
+          Join hundreds of enterprises and {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers securing
+          AI applications from day one.
         </p>
         <div className={styles.finalCTAButtons}>
           <Link className="button button--primary button--lg" to="/contact/">
@@ -881,6 +883,7 @@ export default function Home(): JSX.Element {
       </Head>
       <HomepageHeader />
       <TrustBar />
+      <BridgeSection />
       <HomepageWalkthrough />
       <main>
         <SolutionSection />
