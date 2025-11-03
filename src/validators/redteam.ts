@@ -488,6 +488,7 @@ export const RedteamConfigSchema = z
               data.excludeTargetOutputFromAgenticAttackGeneration,
           }
         : {}),
+      ...(data.grader ? { grader: data.grader } : {}),
     };
   });
 

@@ -383,6 +383,7 @@ export async function doGenerateRedteam(
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
       redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
+    grader: redteamConfig?.grader,
     ...(redteamConfig?.testGenerationInstructions
       ? { testGenerationInstructions: redteamConfig.testGenerationInstructions }
       : {}),
@@ -556,6 +557,7 @@ export async function doGenerateRedteam(
         ...(existingConfigDefaultTest?.metadata || {}),
         purpose,
         entities,
+        ...(parsedConfig.data.grader ? { grader: parsedConfig.data.grader } : {}),
       },
     };
     existingConfig.tests = [...testsArray, ...redteamTests];
