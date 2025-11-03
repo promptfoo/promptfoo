@@ -51,6 +51,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - fix(redteam): ensure grader config flows through to test metadata during generation (389ffa5)
+- fix(redteam): improve GPT OSS Safeguard reason formatting for better UX (471bf71)
+
+### Tests
+
+- test(redteam): add comprehensive tests for GPT OSS Safeguard reason formatting (42fe2d7)
 
 ## [0.119.1] - 2025-10-29
 
