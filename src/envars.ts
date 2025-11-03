@@ -302,6 +302,9 @@ type EnvVars = {
   // OpenRouter
   OPENROUTER_API_KEY?: string;
 
+  // GPT OSS Safeguard
+  GPT_OSS_SAFEGUARD_API_KEY?: string;
+
   // Portkey
   PORTKEY_API_BASE_URL?: string;
   PORTKEY_API_KEY?: string;

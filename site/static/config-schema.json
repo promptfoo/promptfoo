@@ -1668,6 +1668,47 @@
             "excludeTargetOutputFromAgenticAttackGeneration": {
               "type": "boolean",
               "description": "Whether to exclude target output from the agentific attack generation process"
+            },
+            "grader": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "enum": ["default", "gpt-oss-safeguard"],
+                  "description": "Grader provider to use (default uses standard LLM rubric, gpt-oss-safeguard uses OpenRouter GPT OSS Safeguard)"
+                },
+                "config": {
+                  "type": "object",
+                  "properties": {
+                    "model": {
+                      "type": "string",
+                      "description": "GPT OSS Safeguard model to use"
+                    },
+                    "reasoningLevel": {
+                      "type": "string",
+                      "enum": ["low", "medium", "high"],
+                      "description": "Reasoning depth for GPT OSS Safeguard"
+                    },
+                    "outputFormat": {
+                      "type": "string",
+                      "enum": ["binary", "simple", "detailed"],
+                      "description": "Output format for GPT OSS Safeguard"
+                    },
+                    "temperature": {
+                      "type": "number",
+                      "description": "Temperature for GPT OSS Safeguard"
+                    },
+                    "apiKey": {
+                      "type": "string",
+                      "description": "API key for GPT OSS Safeguard (OpenRouter)"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Grader-specific configuration"
+                }
+              },
+              "additionalProperties": false,
+              "description": "Configuration for grading redteam test results"
             }
           },
           "additionalProperties": false
