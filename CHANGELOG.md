@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- docs: document `promptfoo view --no` flag in command-line docs (#6067)
+
 ## [0.119.2] - 2025-11-03
 
 ### Added
