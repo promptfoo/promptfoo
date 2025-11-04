@@ -338,12 +338,14 @@ describe('ConfirmEvalNameDialog', () => {
       mockOnConfirm.mockImplementation(() => Promise.reject(new Error('Test Error')));
       render(<ConfirmEvalNameDialog {...defaultProps} />);
 
+      const input = screen.getByLabelText('Name') as HTMLInputElement;
+      fireEvent.change(input, { target: { value: 'Changed Name' } });
+
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
       fireEvent.click(confirmButton);
 
       await screen.findByText('Test Error');
 
-      const input = screen.getByLabelText('Name') as HTMLInputElement;
       fireEvent.change(input, { target: { value: 'New Name' } });
 
       expect(screen.queryByText('Test Error')).toBeNull();

@@ -52,6 +52,7 @@ export const ConfirmEvalNameDialog = ({
     if (open) {
       setName(currentName);
       setError(null);
+      setIsLoading(false);
       // Auto-focus and select text after dialog opens
       setTimeout(() => {
         inputRef.current?.focus();
@@ -119,7 +120,10 @@ export const ConfirmEvalNameDialog = ({
           fullWidth
           label={label}
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            setError(null);
+          }}
           onKeyDown={handleKeyDown}
           margin="normal"
           error={!!error}
