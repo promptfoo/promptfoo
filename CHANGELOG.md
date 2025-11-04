@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - chore(app): larger eval selector dialog (#6063)
 - refactor(app): Adds useApplyFilterFromMetric hook (#6095)
 - refactor(cli): extract duplicated organization context display logic into shared utility function to fix dynamic import issue and improve code maintainability (#6070)
+- refactor(redteam): Adds purpose to plugins missing it (#6107)
 
 ### Fixed
 
