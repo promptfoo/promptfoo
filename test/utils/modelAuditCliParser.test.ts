@@ -298,6 +298,7 @@ describe('ModelAudit CLI Parser', () => {
         '--max-size',
         '--dry-run',
         '--no-cache',
+        '--stream',
       ];
 
       expectedOptions.forEach((option) => {

@@ -84,7 +84,6 @@ export const DEPRECATED_OPTIONS_MAP: Record<string, string | null> = {
   '--preview': '--dry-run',
   '--all-files': null, // No equivalent
   '--selective': null, // No equivalent
-  '--scan-and-delete': '--stream',
   '--skip-files': null, // No equivalent
   '--no-skip-files': null, // No equivalent
   '--strict-license': '--strict',
