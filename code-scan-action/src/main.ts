@@ -10,7 +10,7 @@ import * as github from '@actions/github';
 import * as fs from 'fs';
 import { generateConfigFile } from './config';
 import { getGitHubContext } from './github';
-import { type Comment, type ScanResponse } from '../../src/types/codeScan';
+import { type Comment, type ScanResponse, SeverityLevel } from '../../src/types/codeScan';
 
 /**
  * Get emoji and rank for severity level
@@ -110,19 +110,6 @@ async function run(): Promise<void> {
       core.warning('Git diff may fail if base branch is not available');
     }
 
-    // Install promptfoo globally from git (until code-scans command is published)
-    // TODO: Replace with 'npm install -g promptfoo' once the code-scans command is released
-    core.info('📦 Installing promptfoo from git...');
-
-    // Use sudo in container environments (like ACT) to avoid permission issues
-    const isContainer = process.env.ACT === 'true' || process.env.RUNNER_ENVIRONMENT === 'github-hosted';
-    if (isContainer) {
-      await exec.exec('sudo', ['npm', 'install', '-g', 'git+https://github.com/promptfoo/promptfoo.git#']);
-    } else {
-      await exec.exec('npm', ['install', '-g', 'git+https://github.com/promptfoo/promptfoo.git#']);
-    }
-    core.info('✅ Promptfoo installed successfully');
-
     // Build CLI command
     const repoPath = process.env.GITHUB_WORKSPACE || process.cwd();
     const cliArgs = [
@@ -136,38 +123,86 @@ async function run(): Promise<void> {
       '--github-pr', `${context.owner}/${context.repo}#${context.number}`, // Pass PR context for server-side comment posting
     ];
 
-    core.info(`🚀 Running promptfoo code-scans run...`);
-
-    // Run promptfoo CLI and capture output
-    let scanOutput = '';
-    let scanError = '';
-
-    const exitCode = await exec.exec('promptfoo', cliArgs, {
-      listeners: {
-        stdout: (data: Buffer) => {
-          scanOutput += data.toString();
-        },
-        stderr: (data: Buffer) => {
-          scanError += data.toString();
-        },
-      },
-      ignoreReturnCode: true,
-    });
-
-    if (exitCode !== 0) {
-      core.error(`CLI exited with code ${exitCode}`);
-      core.error(`Error output: ${scanError}`);
-      throw new Error(`Code scan failed with exit code ${exitCode}`);
-    }
-
-    core.info('✅ Scan completed successfully');
-
     // Parse JSON output from CLI (full ScanResponse object)
     let scanResponse: ScanResponse;
-    try {
-      scanResponse = JSON.parse(scanOutput);
-    } catch (error) {
-      throw new Error(`Failed to parse CLI output as JSON: ${error instanceof Error ? error.message : String(error)}`);
+
+    if (process.env.ACT === 'true') {
+      // In ACT mode, use mock data to test action logic without running real scans
+      core.info('🧪 Running in ACT mode - using mock scan data for testing');
+      core.info('📊 Mock scan simulates finding 2 security issues');
+
+      // Mock scan response with sample findings
+      scanResponse = {
+        success: true,
+        phases: {
+          inventory: 'completed',
+          tracing: 'completed',
+          analysis: 'completed',
+          filtering: 'completed',
+          fixes: 'completed',
+          comments: 'completed',
+        },
+        comments: [
+          {
+            file: 'src/example.ts',
+            line: 42,
+            finding: 'Potential security issue: API key hardcoded in source code',
+            severity: SeverityLevel.HIGH,
+            fix: 'Move API key to environment variable and use process.env.API_KEY instead',
+            aiAgentPrompt: 'Review the API key storage and suggest secure alternatives',
+          },
+          {
+            file: 'src/auth.ts',
+            line: 15,
+            startLine: 10,
+            finding: 'SQL injection vulnerability: User input not sanitized before query',
+            severity: SeverityLevel.CRITICAL,
+            fix: 'Use parameterized queries or an ORM to prevent SQL injection',
+          },
+        ],
+        commentsPosted: false,
+        review: '🔍 **Security Scan Results**\n\nFound 2 potential security issues. Please review the inline comments for details.',
+      };
+
+      core.info('✅ Mock scan completed successfully');
+    } else {
+      // Run real scan in production
+      core.info('📦 Installing promptfoo from git...');
+      await exec.exec('npm', ['install', '-g', 'git+https://github.com/promptfoo/promptfoo.git#']);
+      core.info('✅ Promptfoo installed successfully');
+
+      core.info(`🚀 Running promptfoo code-scans run...`);
+
+      // Run promptfoo CLI and capture output
+      let scanOutput = '';
+      let scanError = '';
+
+      const exitCode = await exec.exec('promptfoo', cliArgs, {
+        listeners: {
+          stdout: (data: Buffer) => {
+            scanOutput += data.toString();
+          },
+          stderr: (data: Buffer) => {
+            scanError += data.toString();
+          },
+        },
+        ignoreReturnCode: true,
+      });
+
+      if (exitCode !== 0) {
+        core.error(`CLI exited with code ${exitCode}`);
+        core.error(`Error output: ${scanError}`);
+        throw new Error(`Code scan failed with exit code ${exitCode}`);
+      }
+
+      core.info('✅ Scan completed successfully');
+
+      // Parse JSON output from CLI
+      try {
+        scanResponse = JSON.parse(scanOutput);
+      } catch (error) {
+        throw new Error(`Failed to parse CLI output as JSON: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
 
     const { comments, commentsPosted, review } = scanResponse;

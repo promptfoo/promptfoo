@@ -12,7 +12,6 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    container: catthehacker/ubuntu:full-latest  # Full image with build tools for native dependencies
 
     steps:
       - name: Checkout code
